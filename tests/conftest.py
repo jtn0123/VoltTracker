@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import uuid
 
 # Add receiver to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 
 from app import app as flask_app
 from models import Base, TelemetryRaw, Trip, FuelEvent, SocTransition
@@ -57,9 +57,9 @@ def sample_torque_data():
 
 
 @pytest.fixture
-def sample_torque_data_gas_mode():
+def sample_torque_data_gas_mode(sample_torque_data):
     """Sample Torque Pro data with engine running (gas mode)."""
-    data = sample_torque_data()
+    data = sample_torque_data.copy()
     data['kc'] = '1500'            # Engine running
     data['k22005b'] = '15.0'       # Low SOC
     return data

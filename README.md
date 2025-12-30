@@ -289,7 +289,7 @@ Run the test suite:
 ./scripts/dev.sh test-cov
 
 # Run specific test file
-./scripts/dev.sh test receiver/tests/test_calculations.py
+./scripts/dev.sh test tests/test_calculations.py
 
 # Run tests matching a pattern
 ./scripts/dev.sh test -k "test_mpg"
