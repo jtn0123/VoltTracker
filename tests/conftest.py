@@ -11,7 +11,10 @@ import uuid
 # Add receiver to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 
-from app import app as flask_app
+# Set DATABASE_URL BEFORE importing app to use SQLite for tests
+os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
+
+from app import app as flask_app, Session, engine
 from models import Base, TelemetryRaw, Trip, FuelEvent, SocTransition
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -21,14 +24,29 @@ from sqlalchemy.orm import sessionmaker
 def app():
     """Create application for testing."""
     flask_app.config['TESTING'] = True
-    flask_app.config['DATABASE_URL'] = 'sqlite:///:memory:'
-    return flask_app
+
+    # Create all tables in the test database
+    Base.metadata.create_all(engine)
+
+    yield flask_app
+
+    # Clean up tables after test
+    Base.metadata.drop_all(engine)
 
 
 @pytest.fixture
 def client(app):
     """Create test client."""
     return app.test_client()
+
+
+@pytest.fixture
+def db_session(app):
+    """Provide a database session for tests."""
+    session = Session()
+    yield session
+    session.rollback()
+    Session.remove()
 
 
 @pytest.fixture

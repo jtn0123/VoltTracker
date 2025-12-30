@@ -1,14 +1,64 @@
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, BigInteger, String, Float, Boolean,
-    DateTime, ForeignKey, Text, create_engine
+    Column, Integer, String, Float, Boolean,
+    DateTime, ForeignKey, Text, create_engine, JSON
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-import uuid
+from sqlalchemy import TypeDecorator
+import uuid as uuid_module
+
 
 Base = declarative_base()
+
+
+# Custom UUID type that works with both PostgreSQL and SQLite
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+
+    Uses PostgreSQL's UUID type when available, otherwise stores as String(36).
+    """
+    impl = String(36)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(UUID(as_uuid=True))
+        else:
+            return dialect.type_descriptor(String(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        elif dialect.name == 'postgresql':
+            return value
+        else:
+            return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        elif isinstance(value, uuid_module.UUID):
+            return value
+        else:
+            return uuid_module.UUID(value)
+
+
+# Custom JSON type that works with both PostgreSQL (JSONB) and SQLite (JSON)
+class JSONType(TypeDecorator):
+    """Platform-independent JSON type.
+
+    Uses PostgreSQL's JSONB type when available, otherwise uses JSON.
+    """
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(JSONB)
+        else:
+            return dialect.type_descriptor(JSON)
 
 
 class TelemetryRaw(Base):
@@ -16,8 +66,8 @@ class TelemetryRaw(Base):
 
     __tablename__ = 'telemetry_raw'
 
-    id = Column(BigInteger, primary_key=True)
-    session_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(GUID(), nullable=False, index=True)
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     latitude = Column(Float)
     longitude = Column(Float)
@@ -32,7 +82,7 @@ class TelemetryRaw(Base):
     battery_voltage = Column(Float)
     ambient_temp_f = Column(Float)
     odometer_miles = Column(Float)
-    raw_data = Column(JSONB)
+    raw_data = Column(JSONType())
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     def to_dict(self):
@@ -62,7 +112,7 @@ class Trip(Base):
     __tablename__ = 'trips'
 
     id = Column(Integer, primary_key=True)
-    session_id = Column(UUID(as_uuid=True), unique=True, nullable=False)
+    session_id = Column(GUID(), unique=True, nullable=False)
     start_time = Column(DateTime(timezone=True), nullable=False, index=True)
     end_time = Column(DateTime(timezone=True))
     start_odometer = Column(Float)
