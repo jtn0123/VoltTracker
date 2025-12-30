@@ -190,6 +190,41 @@ cmd_reset() {
     fi
 }
 
+cmd_test() {
+    print_header
+    echo -e "${BLUE}Running tests...${NC}"
+    echo ""
+
+    # Check if pytest is installed
+    if ! command -v pytest &> /dev/null; then
+        echo -e "${YELLOW}Installing test dependencies...${NC}"
+        pip install -r receiver/requirements-dev.txt
+    fi
+
+    # Run pytest from project root
+    cd "$PROJECT_DIR"
+    pytest "$@"
+}
+
+cmd_test_cov() {
+    print_header
+    echo -e "${BLUE}Running tests with coverage...${NC}"
+    echo ""
+
+    # Check if pytest-cov is installed
+    if ! python3 -c "import pytest_cov" 2>/dev/null; then
+        echo -e "${YELLOW}Installing test dependencies...${NC}"
+        pip install -r receiver/requirements-dev.txt
+    fi
+
+    # Run pytest with coverage
+    cd "$PROJECT_DIR"
+    pytest --cov=receiver --cov-report=term-missing --cov-report=html "$@"
+
+    echo ""
+    echo -e "${GREEN}Coverage report saved to htmlcov/index.html${NC}"
+}
+
 cmd_help() {
     print_header
     echo ""
@@ -205,6 +240,8 @@ cmd_help() {
     echo "  simulate   Run the data simulator (pass --help for options)"
     echo "  db         Connect to PostgreSQL CLI"
     echo "  reset      Reset database (deletes all data)"
+    echo "  test       Run pytest tests"
+    echo "  test-cov   Run tests with coverage report"
     echo "  help       Show this help message"
     echo ""
     echo "Phone Hotspot Setup:"
@@ -227,6 +264,8 @@ case "${1:-help}" in
     simulate) shift; cmd_simulate "$@" ;;
     db)       cmd_db ;;
     reset)    cmd_reset ;;
+    test)     shift; cmd_test "$@" ;;
+    test-cov) shift; cmd_test_cov "$@" ;;
     help|--help|-h) cmd_help ;;
     *)
         echo -e "${RED}Unknown command: $1${NC}"

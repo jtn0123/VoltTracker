@@ -277,6 +277,29 @@ The schema is initialized via `db/init.sql`. For schema changes:
 ./scripts/dev.sh start
 ```
 
+### Testing
+
+Run the test suite:
+
+```bash
+# Run all tests
+./scripts/dev.sh test
+
+# Run tests with coverage report
+./scripts/dev.sh test-cov
+
+# Run specific test file
+./scripts/dev.sh test receiver/tests/test_calculations.py
+
+# Run tests matching a pattern
+./scripts/dev.sh test -k "test_mpg"
+```
+
+Tests are organized by module:
+- `test_torque_parser.py` - Torque Pro data parsing
+- `test_calculations.py` - MPG, SOC, and efficiency calculations
+- `test_api.py` - Flask API endpoints
+
 ## Future Roadmap
 
 - [ ] Individual battery cell voltage tracking
