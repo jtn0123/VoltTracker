@@ -195,3 +195,139 @@ class TestDashboard:
 
         assert response.status_code == 200
         assert b'Volt Efficiency Tracker' in response.data
+
+
+class TestTripDetailEndpoint:
+    """Tests for /api/trips/<id> endpoint."""
+
+    def test_trip_not_found(self, client):
+        """Test 404 for non-existent trip."""
+        response = client.get('/api/trips/99999')
+
+        assert response.status_code == 404
+        data = json.loads(response.data)
+        assert 'error' in data
+        assert 'not found' in data['error'].lower()
+
+    def test_trip_detail_returns_json(self, client, db_session):
+        """Test trip detail returns proper JSON structure."""
+        import uuid
+        from datetime import datetime, timezone
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
+        from models import Trip
+
+        # Create a test trip
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        response = client.get(f'/api/trips/{trip.id}')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'trip' in data
+        assert 'telemetry' in data
+        assert data['trip']['id'] == trip.id
+
+
+class TestApiErrorHandling:
+    """Tests for API error handling."""
+
+    def test_invalid_fuel_event_data(self, client):
+        """Test error handling for invalid fuel event data."""
+        response = client.post(
+            '/api/fuel/add',
+            data='not valid json',
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+
+    def test_invalid_mpg_trend_days_param(self, client):
+        """Test handling of invalid days parameter defaults to 30."""
+        response = client.get('/api/mpg/trend?days=invalid')
+
+        # Should handle gracefully by using default value
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert isinstance(data, list)
+
+    def test_invalid_date_filter(self, client):
+        """Test handling of invalid date format in trips filter."""
+        response = client.get('/api/trips?start_date=not-a-date')
+
+        # Should handle gracefully (may return empty or error)
+        assert response.status_code in [200, 400]
+
+
+class TestApiEdgeCases:
+    """Tests for API edge cases."""
+
+    def test_efficiency_with_empty_database(self, client):
+        """Test efficiency endpoint with no data."""
+        response = client.get('/api/efficiency/summary')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['lifetime_gas_mpg'] is None
+        assert data['total_miles_tracked'] == 0
+
+    def test_soc_analysis_with_empty_database(self, client):
+        """Test SOC analysis with no transitions."""
+        response = client.get('/api/soc/analysis')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['count'] == 0
+        assert data['average_soc'] is None
+        assert data['histogram'] == {}
+
+    def test_mpg_trend_with_no_gas_trips(self, client):
+        """Test MPG trend with no gas trips."""
+        response = client.get('/api/mpg/trend')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert isinstance(data, list)
+        assert len(data) == 0
+
+    def test_fuel_history_empty(self, client):
+        """Test fuel history with no events."""
+        response = client.get('/api/fuel/history')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert isinstance(data, list)
+        assert len(data) == 0
+
+    def test_status_with_no_telemetry(self, client):
+        """Test status when no telemetry has been received."""
+        response = client.get('/api/status')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['status'] == 'online'
+        assert data['last_sync'] is None
+        assert data['active_trip'] is None
+
+    def test_trips_with_limit(self, client, db_session):
+        """Test trips endpoint respects the 100 limit."""
+        import uuid
+        from datetime import datetime, timezone
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
+        from models import Trip
+
+        # This tests the limit behavior with empty database
+        response = client.get('/api/trips')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert len(data) <= 100

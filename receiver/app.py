@@ -528,7 +528,10 @@ def get_mpg_trend():
     """
     db = get_db()
 
-    days = int(request.args.get('days', 30))
+    try:
+        days = int(request.args.get('days', 30))
+    except (ValueError, TypeError):
+        days = 30
     start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
     trips = db.query(Trip).filter(

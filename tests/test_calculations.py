@@ -300,3 +300,247 @@ class TestAnalyzeSocFloor:
         result = analyze_soc_floor(transitions)
 
         assert result['temperature_correlation'] is None
+
+
+class TestCalculateGasMpgBoundary:
+    """Boundary value tests for MPG calculation."""
+
+    def test_exactly_one_mile_trip(self):
+        """Test MPG calculation at minimum threshold (exactly 1 mile)."""
+        # 1 mile with 0.5% fuel use = 0.0466 gallons (above 0.01 threshold)
+        result = calculate_gas_mpg(
+            start_odometer=50000,
+            end_odometer=50001,  # Exactly 1 mile
+            start_fuel_level=80.0,
+            end_fuel_level=79.5,  # 0.5% = 0.0466 gallons
+        )
+        # Should return a value since it's >= 1 mile and fuel use > 0.01 gal
+        assert result is not None
+
+    def test_just_under_one_mile_trip(self):
+        """Test MPG returns None for trip just under 1 mile."""
+        result = calculate_gas_mpg(
+            start_odometer=50000,
+            end_odometer=50000.99,
+            start_fuel_level=80.0,
+            end_fuel_level=79.0,  # Significant fuel use but trip too short
+        )
+        assert result is None
+
+    def test_minimal_fuel_use_returns_none(self):
+        """Test that very small fuel use (< 0.01 gal) returns None."""
+        # 10 miles, 0.1% fuel = 0.1% of 9.3122 gal = 0.0093 gal < 0.01 threshold
+        result = calculate_gas_mpg(
+            start_odometer=50000,
+            end_odometer=50010,
+            start_fuel_level=80.0,
+            end_fuel_level=79.9,
+        )
+        # Should return None due to noise threshold
+        assert result is None
+
+    def test_good_mpg_calculation(self):
+        """Test typical good MPG calculation."""
+        # 40 miles, 1% fuel = 0.093 gallons
+        # MPG = 40 / 0.093 = ~430 MPG (unrealistic but valid)
+        result = calculate_gas_mpg(
+            start_odometer=50000,
+            end_odometer=50040,
+            start_fuel_level=80.0,
+            end_fuel_level=79.0,
+        )
+        assert result is not None
+        assert result > 40  # Should be high MPG
+
+    def test_very_low_mpg(self):
+        """Test calculation with very low MPG (heavy fuel use)."""
+        # 5 miles, 20% fuel = 20% of 9.3122 gal = 1.86 gal
+        # MPG = 5 / 1.86 = ~2.7 MPG
+        result = calculate_gas_mpg(
+            start_odometer=50000,
+            end_odometer=50005,
+            start_fuel_level=80.0,
+            end_fuel_level=60.0,
+        )
+        assert result is not None
+        assert result < 10
+
+    def test_zero_values(self):
+        """Test handling of zero odometer values."""
+        result = calculate_gas_mpg(
+            start_odometer=0,
+            end_odometer=10,
+            start_fuel_level=80.0,
+            end_fuel_level=75.0,
+        )
+        # Should work with zero start odometer
+        assert result is not None
+
+
+class TestDetectGasModeEdgeCases:
+    """Edge case tests for gas mode detection."""
+
+    def test_very_brief_rpm_spike(self):
+        """Test that a single-reading RPM spike is ignored."""
+        points = [
+            {'engine_rpm': 0, 'state_of_charge': 20},
+            {'engine_rpm': 2000, 'state_of_charge': 18},  # Single spike
+            {'engine_rpm': 0, 'state_of_charge': 18},
+        ]
+        result = detect_gas_mode_entry(points)
+        assert result is None
+
+    def test_intermittent_rpm(self):
+        """Test intermittent RPM doesn't trigger gas mode."""
+        points = [
+            {'engine_rpm': 0, 'state_of_charge': 20},
+            {'engine_rpm': 1000, 'state_of_charge': 19},
+            {'engine_rpm': 0, 'state_of_charge': 18},
+            {'engine_rpm': 1000, 'state_of_charge': 17},
+            {'engine_rpm': 0, 'state_of_charge': 16},
+        ]
+        result = detect_gas_mode_entry(points)
+        # Intermittent RPM shouldn't be detected as gas mode
+        assert result is None
+
+    def test_high_soc_with_rpm_is_regenerative(self):
+        """Test that RPM with high SOC (regenerative braking) isn't gas mode."""
+        points = [
+            {'engine_rpm': 0, 'state_of_charge': 85},
+            {'engine_rpm': 500, 'state_of_charge': 86},  # SOC increasing = regen
+            {'engine_rpm': 0, 'state_of_charge': 87},
+        ]
+        result = detect_gas_mode_entry(points)
+        assert result is None
+
+    def test_very_low_rpm_threshold(self):
+        """Test detection with low but sustained RPM."""
+        points = [
+            {'engine_rpm': 0, 'state_of_charge': 20},
+            {'engine_rpm': 500, 'state_of_charge': 18},  # Low RPM
+            {'engine_rpm': 600, 'state_of_charge': 17},  # Sustained low RPM
+            {'engine_rpm': 700, 'state_of_charge': 16},
+        ]
+        result = detect_gas_mode_entry(points)
+        # Low but sustained RPM should be detected
+        assert result is not None
+
+
+class TestRefuelEdgeCases:
+    """Edge case tests for refuel detection."""
+
+    def test_exact_threshold_increase(self):
+        """Test refuel detection at exact threshold."""
+        # Default threshold is 10%
+        result = detect_refuel_event(70.0, 60.0)  # Exactly 10% increase
+        # Depends on whether threshold is >= or > 10
+        # Test the boundary behavior
+        assert isinstance(result, bool)
+
+    def test_large_fuel_increase(self):
+        """Test detection of large fuel increase (full tank fill)."""
+        result = detect_refuel_event(95.0, 20.0)  # 75% increase
+        assert result is True
+
+    def test_fuel_sensor_noise(self):
+        """Test small fluctuations aren't detected as refuel."""
+        # Fuel sensors can fluctuate 1-2%
+        result = detect_refuel_event(62.0, 60.0)
+        assert result is False
+
+        result = detect_refuel_event(65.0, 60.0)
+        assert result is False
+
+
+class TestSmoothFuelEdgeCases:
+    """Edge case tests for fuel level smoothing."""
+
+    def test_extreme_outlier(self):
+        """Test that extreme outliers are filtered."""
+        readings = [75.0, 74.0, 150.0, 73.0, 72.0]  # 150 is extreme outlier
+        result = smooth_fuel_level(readings, window_size=5)
+        # Median should not be affected much by outlier
+        assert 72.0 <= result <= 75.0
+
+    def test_all_same_values(self):
+        """Test with all identical readings."""
+        readings = [50.0, 50.0, 50.0, 50.0, 50.0]
+        result = smooth_fuel_level(readings, window_size=5)
+        assert result == 50.0
+
+    def test_window_larger_than_data(self):
+        """Test when window size exceeds available data."""
+        readings = [70.0, 72.0]
+        result = smooth_fuel_level(readings, window_size=10)
+        # Should use all available data
+        assert result == 71.0  # Median of [70, 72]
+
+    def test_negative_values(self):
+        """Test handling of negative values (invalid sensor data)."""
+        readings = [75.0, 74.0, -10.0, 73.0, 72.0]
+        result = smooth_fuel_level(readings, window_size=5)
+        # Function should still return something reasonable
+        assert isinstance(result, float)
+
+
+class TestElectricMilesEdgeCases:
+    """Edge case tests for electric miles calculation."""
+
+    def test_gas_at_trip_start(self):
+        """Test when gas mode starts immediately."""
+        electric, gas = calculate_electric_miles(
+            gas_entry_odometer=50000,  # Same as start
+            trip_start_odometer=50000,
+            trip_end_odometer=50020,
+        )
+        assert electric == 0
+        assert gas == 20
+
+    def test_gas_at_trip_end(self):
+        """Test when gas mode starts at very end."""
+        electric, gas = calculate_electric_miles(
+            gas_entry_odometer=50019,
+            trip_start_odometer=50000,
+            trip_end_odometer=50020,
+        )
+        assert electric == 19
+        assert gas == 1
+
+    def test_gas_entry_after_trip_end(self):
+        """Test edge case where gas entry is after trip end (data error)."""
+        electric, gas = calculate_electric_miles(
+            gas_entry_odometer=50025,
+            trip_start_odometer=50000,
+            trip_end_odometer=50020,
+        )
+        # Should handle gracefully
+        assert electric is not None
+
+
+class TestTemperatureEdgeCases:
+    """Edge case tests for temperature calculations."""
+
+    def test_extreme_temperatures(self):
+        """Test with extreme temperature values."""
+        points = [
+            {'ambient_temp_f': -40.0},  # Very cold
+            {'ambient_temp_f': 120.0},  # Very hot
+        ]
+        result = calculate_average_temp(points)
+        assert result == 40.0  # Average of -40 and 120
+
+    def test_single_reading(self):
+        """Test with single temperature reading."""
+        points = [{'ambient_temp_f': 72.0}]
+        result = calculate_average_temp(points)
+        assert result == 72.0
+
+    def test_missing_temp_key(self):
+        """Test with points missing temperature key."""
+        points = [
+            {'speed_mph': 45.0},  # No temp key
+            {'ambient_temp_f': 70.0},
+        ]
+        result = calculate_average_temp(points)
+        # Should only average the one valid reading
+        assert result == 70.0
