@@ -1,0 +1,23 @@
+# Docker Compose override for development
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+version: '3.8'
+
+services:
+  receiver:
+    build:
+      context: ./receiver
+      dockerfile: Dockerfile
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "1"
+      LOG_LEVEL: DEBUG
+    volumes:
+      # Mount source code for live reload
+      - ./receiver:/app
+      # Prevent overwriting installed packages
+      - /app/__pycache__
+    # Use Flask development server instead of gunicorn for auto-reload
+    command: python app.py
+    # Restart on crash during development
+    restart: "no"

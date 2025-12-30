@@ -1,0 +1,23 @@
+Name,ShortName,ModeAndPID,Equation,Min Value,Max Value,Units,Header
+Fuel Level Percent,FuelPct,22002F,(A*100)/255,0,100,%,7E4
+State of Charge,SOC,22005B,A/2.55,0,100,%,7E4
+Fuel Remaining Gallons,FuelGal,22002F,(A/255)*9.3122,0,10,gal,7E4
+High Voltage Battery Voltage,HVBattV,220009,(A*256+B)/100,0,500,V,7E4
+High Voltage Battery Current,HVBattA,22000A,((A*256+B)-32768)/100,-300,300,A,7E4
+High Voltage Battery Power,HVBattKW,22000B,((A*256+B)-32768)/100,-150,150,kW,7E4
+Battery Coolant Temp,BattCool,220038,(A-40),−40,120,°C,7E4
+Transmission Fluid Temp,TransTmp,220047,(A-40),-40,215,°C,7E4
+Engine Coolant Temp,EngCool,220049,(A-40),-40,215,°C,7E4
+Ambient Air Temp,AmbTemp,22004F,(A-40),-40,100,°C,7E4
+Generator Speed,GenRPM,220053,(A*256+B)/4,0,10000,RPM,7E4
+Motor A Speed,MotARPM,220051,(A*256+B)/4,0,10000,RPM,7E4
+Motor B Speed,MotBRPM,220052,(A*256+B)/4,0,10000,RPM,7E4
+Engine Running,EngRun,221930,A,0,1,,7E0
+Charger Status,ChgStat,220057,A,0,10,,7E4
+Charger Power,ChgPwr,22006E,(A*256+B)/1000,0,10,kW,7E4
+Distance to Empty Electric,DTE_EV,22430A,(A*256+B)/10,0,100,mi,7E4
+Distance to Empty Gas,DTE_Gas,22430C,(A*256+B)/10,0,400,mi,7E4
+Lifetime Miles Electric,LfMiEV,224322,(A*16777216+B*65536+C*256+D)/10,0,999999,mi,7E4
+Lifetime Miles Gas,LfMiGas,224323,(A*16777216+B*65536+C*256+D)/10,0,999999,mi,7E4
+Lifetime Fuel Used,LfFuel,224324,(A*16777216+B*65536+C*256+D)/1000,0,99999,gal,7E4
+Lifetime kWh Used,LfkWh,224325,(A*16777216+B*65536+C*256+D)/10,0,999999,kWh,7E4

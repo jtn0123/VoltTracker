@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: volt-tracker-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-volt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-volt_tracker}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U volt -d volt_tracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  receiver:
+    build: ./receiver
+    container_name: volt-tracker-receiver
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-volt}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-volt_tracker}
+      FLASK_ENV: ${FLASK_ENV:-production}
+      SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+
+volumes:
+  postgres_data:

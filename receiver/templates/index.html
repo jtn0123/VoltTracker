@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volt Efficiency Tracker</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>Volt Efficiency Tracker</h1>
+        <div class="status-bar">
+            <div class="status-indicator">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="last-sync">Loading...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Summary Cards -->
+        <section class="cards-grid">
+            <div class="card">
+                <div class="card-label">Lifetime Gas MPG</div>
+                <div class="card-value" id="lifetime-mpg">--</div>
+                <div class="card-subtitle" id="lifetime-miles">Loading...</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Current Tank MPG</div>
+                <div class="card-value" id="tank-mpg">--</div>
+                <div class="card-subtitle" id="tank-miles">Loading...</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Avg SOC Floor</div>
+                <div class="card-value" id="soc-floor">--</div>
+                <div class="card-subtitle" id="soc-count">Loading...</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Total Miles Tracked</div>
+                <div class="card-value" id="total-miles">--</div>
+                <div class="card-subtitle">All trips</div>
+            </div>
+        </section>
+
+        <!-- MPG Trend Chart -->
+        <section class="chart-section">
+            <div class="chart-header">
+                <h2 class="chart-title">Gas MPG Trend</h2>
+                <div class="timeframe-selector">
+                    <button class="timeframe-btn" data-days="7" onclick="setTimeframe(7)">7 Days</button>
+                    <button class="timeframe-btn active" data-days="30" onclick="setTimeframe(30)">30 Days</button>
+                    <button class="timeframe-btn" data-days="90" onclick="setTimeframe(90)">90 Days</button>
+                    <button class="timeframe-btn" data-days="365" onclick="setTimeframe(365)">All Time</button>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="mpg-chart"></canvas>
+            </div>
+        </section>
+
+        <!-- Recent Trips -->
+        <section class="trips-section">
+            <h2 class="section-title">Recent Trips</h2>
+
+            <!-- Desktop Table -->
+            <div class="trips-table-wrapper">
+                <table class="trips-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Total</th>
+                            <th>Electric</th>
+                            <th>Gas</th>
+                            <th>MPG</th>
+                            <th>SOC at Switch</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trips-table-body">
+                        <tr>
+                            <td colspan="6">
+                                <div class="loading">
+                                    <div class="spinner"></div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Mobile Cards -->
+            <div class="trip-cards" id="trip-cards">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SOC Analysis -->
+        <section class="soc-section">
+            <div class="soc-stats">
+                <h2 class="section-title">SOC Floor Analysis</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
+                    Battery state of charge when the engine starts. Higher values over time may indicate battery degradation.
+                </p>
+                <div class="stat-row">
+                    <span class="stat-label">Average SOC</span>
+                    <span class="stat-value" id="soc-avg">--</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Minimum SOC</span>
+                    <span class="stat-value" id="soc-min">--</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Maximum SOC</span>
+                    <span class="stat-value" id="soc-max">--</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Cold Weather (&lt;50°F)</span>
+                    <span class="stat-value" id="soc-cold">--</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Warm Weather (≥50°F)</span>
+                    <span class="stat-value" id="soc-warm">--</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Trend</span>
+                    <span class="stat-value" id="soc-trend">--</span>
+                </div>
+            </div>
+            <div class="soc-histogram">
+                <h2 class="section-title">SOC Distribution</h2>
+                <div class="chart-container" style="height: 200px;">
+                    <canvas id="soc-histogram-chart"></canvas>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
