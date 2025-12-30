@@ -13,6 +13,8 @@
 #   simulate  - Run the data simulator
 #   db        - Connect to PostgreSQL CLI
 #   reset     - Reset database (WARNING: deletes all data)
+#   test      - Run pytest tests
+#   test-cov  - Run tests with coverage report
 #
 
 set -e
