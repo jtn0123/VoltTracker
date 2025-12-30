@@ -331,3 +331,237 @@ class TestApiEdgeCases:
         assert response.status_code == 200
         data = json.loads(response.data)
         assert len(data) <= 100
+
+
+class TestExportEndpoints:
+    """Tests for data export endpoints."""
+
+    def test_export_trips_csv(self, client, db_session):
+        """Test exporting trips as CSV."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        # Create a test trip
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            distance_miles=25.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        response = client.get('/api/export/trips')
+
+        assert response.status_code == 200
+        assert response.content_type == 'text/csv; charset=utf-8'
+        assert b'id,session_id,start_time' in response.data
+
+    def test_export_trips_json(self, client):
+        """Test exporting trips as JSON."""
+        response = client.get('/api/export/trips?format=json')
+
+        assert response.status_code == 200
+        assert response.content_type == 'application/json'
+        data = json.loads(response.data)
+        assert isinstance(data, list)
+
+    def test_export_fuel_csv(self, client):
+        """Test exporting fuel events as CSV."""
+        response = client.get('/api/export/fuel')
+
+        assert response.status_code == 200
+        assert response.content_type == 'text/csv; charset=utf-8'
+        assert b'id,timestamp,odometer_miles' in response.data
+
+    def test_export_fuel_json(self, client):
+        """Test exporting fuel events as JSON."""
+        response = client.get('/api/export/fuel?format=json')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert isinstance(data, list)
+
+    def test_export_all(self, client, db_session):
+        """Test exporting all data as JSON."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        # Create test data
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        response = client.get('/api/export/all')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'exported_at' in data
+        assert 'trips' in data
+        assert 'fuel_events' in data
+        assert 'soc_transitions' in data
+        assert 'summary' in data
+        assert len(data['trips']) == 1
+
+
+class TestTripManagement:
+    """Tests for trip management endpoints."""
+
+    def test_delete_trip(self, client, db_session):
+        """Test deleting a trip."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+        trip_id = trip.id
+
+        response = client.delete(f'/api/trips/{trip_id}')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'deleted successfully' in data['message']
+
+        # Verify trip is gone
+        response = client.get(f'/api/trips/{trip_id}')
+        assert response.status_code == 404
+
+    def test_delete_trip_not_found(self, client):
+        """Test deleting non-existent trip."""
+        response = client.delete('/api/trips/99999')
+
+        assert response.status_code == 404
+        data = json.loads(response.data)
+        assert 'not found' in data['error'].lower()
+
+    def test_update_trip(self, client, db_session):
+        """Test updating trip fields."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            gas_mpg=35.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        response = client.patch(
+            f'/api/trips/{trip.id}',
+            data=json.dumps({'gas_mpg': 42.5}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['gas_mpg'] == 42.5
+
+    def test_update_trip_not_found(self, client):
+        """Test updating non-existent trip."""
+        response = client.patch(
+            '/api/trips/99999',
+            data=json.dumps({'gas_mpg': 42.5}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 404
+
+    def test_update_trip_no_data(self, client, db_session):
+        """Test updating trip with no data."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        response = client.patch(
+            f'/api/trips/{trip.id}',
+            data='',
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+
+
+class TestFuelEventManagement:
+    """Tests for fuel event management endpoints."""
+
+    def test_delete_fuel_event(self, client, db_session):
+        """Test deleting a fuel event."""
+        from datetime import datetime, timezone
+        from models import FuelEvent
+
+        event = FuelEvent(
+            timestamp=datetime.now(timezone.utc),
+            gallons_added=8.0,
+        )
+        db_session.add(event)
+        db_session.commit()
+        event_id = event.id
+
+        response = client.delete(f'/api/fuel/{event_id}')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'deleted successfully' in data['message']
+
+    def test_delete_fuel_event_not_found(self, client):
+        """Test deleting non-existent fuel event."""
+        response = client.delete('/api/fuel/99999')
+
+        assert response.status_code == 404
+
+    def test_update_fuel_event(self, client, db_session):
+        """Test updating fuel event."""
+        from datetime import datetime, timezone
+        from models import FuelEvent
+
+        event = FuelEvent(
+            timestamp=datetime.now(timezone.utc),
+            gallons_added=8.0,
+            price_per_gallon=3.50,
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        response = client.patch(
+            f'/api/fuel/{event.id}',
+            data=json.dumps({'price_per_gallon': 3.75, 'notes': 'Updated price'}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['price_per_gallon'] == 3.75
+        assert data['notes'] == 'Updated price'
+
+    def test_update_fuel_event_not_found(self, client):
+        """Test updating non-existent fuel event."""
+        response = client.patch(
+            '/api/fuel/99999',
+            data=json.dumps({'notes': 'test'}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 404

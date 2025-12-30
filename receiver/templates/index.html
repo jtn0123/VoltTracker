@@ -11,7 +11,18 @@
     <!-- Header -->
     <header class="header">
         <h1>Volt Efficiency Tracker</h1>
-        <div class="status-bar">
+        <div class="header-actions">
+            <div class="export-dropdown">
+                <button class="export-btn" onclick="toggleExportMenu()">
+                    Export ▾
+                </button>
+                <div class="export-menu" id="export-menu">
+                    <a href="/api/export/trips" download="trips.csv">Trips (CSV)</a>
+                    <a href="/api/export/trips?format=json" download="trips.json">Trips (JSON)</a>
+                    <a href="/api/export/fuel" download="fuel_events.csv">Fuel Events (CSV)</a>
+                    <a href="/api/export/all" download="volttracker_backup.json">Full Backup (JSON)</a>
+                </div>
+            </div>
             <div class="status-indicator">
                 <span class="status-dot" id="status-dot"></span>
                 <span id="last-sync">Loading...</span>
@@ -76,11 +87,12 @@
                             <th>Gas</th>
                             <th>MPG</th>
                             <th>SOC at Switch</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="trips-table-body">
                         <tr>
-                            <td colspan="6">
+                            <td colspan="7">
                                 <div class="loading">
                                     <div class="spinner"></div>
                                 </div>

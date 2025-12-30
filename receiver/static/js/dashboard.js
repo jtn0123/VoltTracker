@@ -234,6 +234,9 @@ async function loadTrips() {
                 </td>
                 <td>${trip.gas_mpg ? trip.gas_mpg + ' MPG' : '--'}</td>
                 <td>${trip.soc_at_gas_transition ? trip.soc_at_gas_transition.toFixed(1) + '%' : '--'}</td>
+                <td>
+                    <button class="btn-delete" onclick="deleteTrip(${trip.id})" title="Delete trip">×</button>
+                </td>
             </tr>
         `).join('');
 
@@ -420,4 +423,50 @@ function formatDateTime(date) {
  */
 function setTimeframe(days) {
     loadMpgTrend(days);
+}
+
+/**
+ * Toggle export dropdown menu
+ */
+function toggleExportMenu() {
+    const menu = document.getElementById('export-menu');
+    menu.classList.toggle('show');
+}
+
+// Close export menu when clicking outside
+document.addEventListener('click', (event) => {
+    const menu = document.getElementById('export-menu');
+    const dropdown = document.querySelector('.export-dropdown');
+    if (menu && dropdown && !dropdown.contains(event.target)) {
+        menu.classList.remove('show');
+    }
+});
+
+/**
+ * Delete a trip
+ */
+async function deleteTrip(tripId) {
+    if (!confirm('Are you sure you want to delete this trip? This will also delete all associated telemetry data.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/trips/${tripId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            // Reload trips and summary
+            loadTrips();
+            loadSummary();
+            loadMpgTrend(currentTimeframe);
+            loadSocAnalysis();
+        } else {
+            const data = await response.json();
+            alert(`Failed to delete trip: ${data.error || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('Failed to delete trip:', error);
+        alert('Failed to delete trip. Please try again.');
+    }
 }

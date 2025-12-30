@@ -5,8 +5,10 @@ Receives telemetry from Torque Pro and provides API for dashboard.
 """
 
 import logging
+import io
+import csv
 from datetime import datetime, timedelta, timezone
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response
 from sqlalchemy import func, desc
 from sqlalchemy.orm import scoped_session, sessionmaker
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -567,6 +569,259 @@ def get_status():
         'active_trip': active_trip.to_dict() if active_trip else None,
         'database': 'connected'
     })
+
+
+# ============================================================================
+# Export Endpoints
+# ============================================================================
+
+@app.route('/api/export/trips', methods=['GET'])
+def export_trips():
+    """
+    Export trips as CSV or JSON.
+
+    Query params:
+        format: 'csv' (default) or 'json'
+        start_date: Filter trips after this date
+        end_date: Filter trips before this date
+        gas_only: If true, only export trips with gas usage
+    """
+    db = get_db()
+    export_format = request.args.get('format', 'csv').lower()
+
+    query = db.query(Trip).filter(Trip.is_closed == True)
+
+    # Apply filters
+    start_date = request.args.get('start_date')
+    if start_date:
+        query = query.filter(Trip.start_time >= start_date)
+
+    end_date = request.args.get('end_date')
+    if end_date:
+        query = query.filter(Trip.start_time <= end_date)
+
+    gas_only = request.args.get('gas_only', '').lower() == 'true'
+    if gas_only:
+        query = query.filter(Trip.gas_mode_entered == True)
+
+    trips = query.order_by(desc(Trip.start_time)).all()
+
+    if export_format == 'json':
+        return jsonify([t.to_dict() for t in trips])
+
+    # CSV export
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Header row
+    writer.writerow([
+        'id', 'session_id', 'start_time', 'end_time',
+        'distance_miles', 'electric_miles', 'gas_miles',
+        'start_soc', 'soc_at_gas_transition', 'gas_mpg',
+        'fuel_used_gallons', 'ambient_temp_avg_f'
+    ])
+
+    # Data rows
+    for t in trips:
+        writer.writerow([
+            t.id, str(t.session_id),
+            t.start_time.isoformat() if t.start_time else '',
+            t.end_time.isoformat() if t.end_time else '',
+            t.distance_miles or '', t.electric_miles or '', t.gas_miles or '',
+            t.start_soc or '', t.soc_at_gas_transition or '', t.gas_mpg or '',
+            t.fuel_used_gallons or '', t.ambient_temp_avg_f or ''
+        ])
+
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=trips.csv'}
+    )
+
+
+@app.route('/api/export/fuel', methods=['GET'])
+def export_fuel():
+    """
+    Export fuel events as CSV or JSON.
+
+    Query params:
+        format: 'csv' (default) or 'json'
+    """
+    db = get_db()
+    export_format = request.args.get('format', 'csv').lower()
+
+    events = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp)).all()
+
+    if export_format == 'json':
+        return jsonify([e.to_dict() for e in events])
+
+    # CSV export
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow([
+        'id', 'timestamp', 'odometer_miles', 'gallons_added',
+        'fuel_level_before', 'fuel_level_after',
+        'price_per_gallon', 'total_cost', 'notes'
+    ])
+
+    for e in events:
+        writer.writerow([
+            e.id, e.timestamp.isoformat() if e.timestamp else '',
+            e.odometer_miles or '', e.gallons_added or '',
+            e.fuel_level_before or '', e.fuel_level_after or '',
+            e.price_per_gallon or '', e.total_cost or '', e.notes or ''
+        ])
+
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=fuel_events.csv'}
+    )
+
+
+@app.route('/api/export/all', methods=['GET'])
+def export_all():
+    """
+    Export all data as JSON for backup.
+
+    Returns trips, fuel events, SOC transitions, and summary stats.
+    """
+    db = get_db()
+
+    trips = db.query(Trip).order_by(desc(Trip.start_time)).all()
+    fuel_events = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp)).all()
+    soc_transitions = db.query(SocTransition).order_by(SocTransition.timestamp).all()
+
+    return jsonify({
+        'exported_at': datetime.now(timezone.utc).isoformat(),
+        'trips': [t.to_dict() for t in trips],
+        'fuel_events': [e.to_dict() for e in fuel_events],
+        'soc_transitions': [s.to_dict() for s in soc_transitions],
+        'summary': {
+            'total_trips': len(trips),
+            'total_fuel_events': len(fuel_events),
+            'total_soc_transitions': len(soc_transitions)
+        }
+    })
+
+
+# ============================================================================
+# Trip Management Endpoints
+# ============================================================================
+
+@app.route('/api/trips/<int:trip_id>', methods=['DELETE'])
+def delete_trip(trip_id):
+    """Delete a trip and its associated data."""
+    db = get_db()
+
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        return jsonify({'error': 'Trip not found'}), 404
+
+    # Delete associated SOC transitions
+    db.query(SocTransition).filter(SocTransition.trip_id == trip_id).delete()
+
+    # Delete associated telemetry
+    db.query(TelemetryRaw).filter(TelemetryRaw.session_id == trip.session_id).delete()
+
+    # Delete the trip
+    db.delete(trip)
+    db.commit()
+
+    logger.info(f"Deleted trip {trip_id}")
+    return jsonify({'message': f'Trip {trip_id} deleted successfully'})
+
+
+@app.route('/api/trips/<int:trip_id>', methods=['PATCH'])
+def update_trip(trip_id):
+    """
+    Update trip fields (for manual corrections).
+
+    Allowed fields:
+        - gas_mpg: Override calculated MPG
+        - gas_miles: Override gas miles
+        - electric_miles: Override electric miles
+        - fuel_used_gallons: Override fuel used
+        - notes: Add notes to trip
+    """
+    db = get_db()
+
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        return jsonify({'error': 'Trip not found'}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    # Only allow specific fields to be updated
+    allowed_fields = ['gas_mpg', 'gas_miles', 'electric_miles', 'fuel_used_gallons']
+
+    for field in allowed_fields:
+        if field in data:
+            setattr(trip, field, data[field])
+
+    db.commit()
+
+    logger.info(f"Updated trip {trip_id}: {data}")
+    return jsonify(trip.to_dict())
+
+
+# ============================================================================
+# Fuel Event Management Endpoints
+# ============================================================================
+
+@app.route('/api/fuel/<int:fuel_id>', methods=['DELETE'])
+def delete_fuel_event(fuel_id):
+    """Delete a fuel event."""
+    db = get_db()
+
+    event = db.query(FuelEvent).filter(FuelEvent.id == fuel_id).first()
+    if not event:
+        return jsonify({'error': 'Fuel event not found'}), 404
+
+    db.delete(event)
+    db.commit()
+
+    logger.info(f"Deleted fuel event {fuel_id}")
+    return jsonify({'message': f'Fuel event {fuel_id} deleted successfully'})
+
+
+@app.route('/api/fuel/<int:fuel_id>', methods=['PATCH'])
+def update_fuel_event(fuel_id):
+    """
+    Update a fuel event.
+
+    Allowed fields:
+        - odometer_miles
+        - gallons_added
+        - price_per_gallon
+        - total_cost
+        - notes
+    """
+    db = get_db()
+
+    event = db.query(FuelEvent).filter(FuelEvent.id == fuel_id).first()
+    if not event:
+        return jsonify({'error': 'Fuel event not found'}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    allowed_fields = ['odometer_miles', 'gallons_added', 'price_per_gallon', 'total_cost', 'notes']
+
+    for field in allowed_fields:
+        if field in data:
+            setattr(event, field, data[field])
+
+    db.commit()
+
+    logger.info(f"Updated fuel event {fuel_id}: {data}")
+    return jsonify(event.to_dict())
 
 
 # ============================================================================
