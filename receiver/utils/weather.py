@@ -6,6 +6,7 @@ for correlation with trip efficiency.
 """
 
 import requests
+import time
 from datetime import datetime
 from typing import Optional, Dict, Any
 import logging
@@ -14,6 +15,60 @@ logger = logging.getLogger(__name__)
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_HISTORICAL_URL = "https://archive-api.open-meteo.com/v1/archive"
+
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_DELAY_SECONDS = 1  # Base delay, doubles each retry (exponential backoff)
+
+
+def _request_with_retry(
+    url: str,
+    params: Dict[str, Any],
+    timeout: int
+) -> Optional[Dict[str, Any]]:
+    """
+    Make an HTTP GET request with retry logic and exponential backoff.
+
+    Args:
+        url: API endpoint URL
+        params: Query parameters
+        timeout: Request timeout in seconds
+
+    Returns:
+        JSON response as dict, or None if all retries failed
+    """
+    last_error = None
+    delay = RETRY_DELAY_SECONDS
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = requests.get(url, params=params, timeout=timeout)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.Timeout as e:
+            last_error = e
+            logger.warning(f"Weather API timeout (attempt {attempt + 1}/{MAX_RETRIES})")
+        except requests.exceptions.ConnectionError as e:
+            last_error = e
+            logger.warning(f"Weather API connection error (attempt {attempt + 1}/{MAX_RETRIES})")
+        except requests.exceptions.HTTPError as e:
+            # Don't retry on 4xx client errors (bad request, not found, etc.)
+            if e.response is not None and 400 <= e.response.status_code < 500:
+                logger.warning(f"Weather API client error: {e}")
+                return None
+            last_error = e
+            logger.warning(f"Weather API HTTP error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Weather API error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+
+        # Wait before retrying (exponential backoff)
+        if attempt < MAX_RETRIES - 1:
+            time.sleep(delay)
+            delay *= 2  # Double delay for next attempt
+
+    logger.warning(f"Weather API failed after {MAX_RETRIES} attempts: {last_error}")
+    return None
 
 
 def get_weather_for_location(
@@ -61,7 +116,7 @@ def _get_forecast_weather(
     timestamp: datetime,
     timeout: int
 ) -> Optional[Dict[str, Any]]:
-    """Fetch weather from forecast API."""
+    """Fetch weather from forecast API with retry logic."""
     params = {
         'latitude': latitude,
         'longitude': longitude,
@@ -72,9 +127,9 @@ def _get_forecast_weather(
         'timezone': 'auto'
     }
 
-    response = requests.get(OPEN_METEO_URL, params=params, timeout=timeout)
-    response.raise_for_status()
-    data = response.json()
+    data = _request_with_retry(OPEN_METEO_URL, params, timeout)
+    if data is None:
+        return None
 
     return _parse_weather_response(data, timestamp)
 
@@ -85,7 +140,7 @@ def _get_historical_weather(
     timestamp: datetime,
     timeout: int
 ) -> Optional[Dict[str, Any]]:
-    """Fetch weather from historical archive API."""
+    """Fetch weather from historical archive API with retry logic."""
     date_str = timestamp.strftime('%Y-%m-%d')
 
     params = {
@@ -100,9 +155,9 @@ def _get_historical_weather(
         'timezone': 'auto'
     }
 
-    response = requests.get(OPEN_METEO_HISTORICAL_URL, params=params, timeout=timeout)
-    response.raise_for_status()
-    data = response.json()
+    data = _request_with_retry(OPEN_METEO_HISTORICAL_URL, params, timeout)
+    if data is None:
+        return None
 
     return _parse_weather_response(data, timestamp)
 

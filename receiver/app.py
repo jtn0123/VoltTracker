@@ -342,6 +342,12 @@ def finalize_trip(db, trip: Trip):
     """
     Finalize a trip by calculating statistics.
 
+    Orchestrates the trip finalization process by calling specialized helpers:
+    - _calculate_trip_basics: End time, distance, temperature
+    - _process_gas_mode: Gas/electric split, MPG, SOC transition
+    - _calculate_electric_efficiency: kWh used, efficiency
+    - _fetch_trip_weather: Weather conditions during trip
+
     Args:
         db: Database session
         trip: Trip to finalize
@@ -355,102 +361,22 @@ def finalize_trip(db, trip: Trip):
         trip.is_closed = True
         return
 
-    # Convert to dicts for processing
+    # Convert to dicts for calculation functions
     points = [t.to_dict() for t in telemetry]
 
-    # Set end time and odometer
-    trip.end_time = telemetry[-1].timestamp
-    trip.end_odometer = telemetry[-1].odometer_miles
+    # Calculate basic trip metrics
+    _calculate_trip_basics(trip, telemetry)
 
-    if trip.start_odometer and trip.end_odometer:
-        trip.distance_miles = trip.end_odometer - trip.start_odometer
+    # Process gas mode entry and related calculations
+    _process_gas_mode(db, trip, telemetry, points)
 
-    # Calculate average temperature
-    trip.ambient_temp_avg_f = calculate_average_temp(points)
+    # Calculate electric efficiency
+    _calculate_electric_efficiency(trip, points)
 
-    # Detect gas mode entry
-    gas_entry = detect_gas_mode_entry(points)
+    # Fetch weather data
+    _fetch_trip_weather(trip, points)
 
-    if gas_entry:
-        trip.gas_mode_entered = True
-        # Parse timestamp if it's a string (from to_dict())
-        entry_time = gas_entry.get('timestamp')
-        if isinstance(entry_time, str):
-            entry_time = datetime.fromisoformat(entry_time.replace('Z', '+00:00'))
-        trip.gas_mode_entry_time = normalize_datetime(entry_time)
-        trip.soc_at_gas_transition = gas_entry.get('state_of_charge')
-        trip.fuel_level_at_gas_entry = gas_entry.get('fuel_level_percent')
-        trip.fuel_level_at_end = telemetry[-1].fuel_level_percent
-
-        # Calculate electric and gas miles
-        if gas_entry.get('odometer_miles') and trip.start_odometer:
-            trip.electric_miles, trip.gas_miles = calculate_electric_miles(
-                gas_entry.get('odometer_miles'),
-                trip.start_odometer,
-                trip.end_odometer or gas_entry.get('odometer_miles')
-            )
-
-        # Calculate gas MPG
-        if trip.gas_miles and trip.gas_miles >= 1.0:
-            trip.gas_mpg = calculate_gas_mpg(
-                gas_entry.get('odometer_miles'),
-                trip.end_odometer,
-                trip.fuel_level_at_gas_entry,
-                trip.fuel_level_at_end
-            )
-
-            if trip.gas_mpg and trip.fuel_level_at_gas_entry and trip.fuel_level_at_end:
-                trip.fuel_used_gallons = (
-                    (trip.fuel_level_at_gas_entry - trip.fuel_level_at_end) / 100
-                    * Config.TANK_CAPACITY_GALLONS
-                )
-
-        # Record SOC transition
-        if trip.soc_at_gas_transition:
-            soc_transition = SocTransition(
-                trip_id=trip.id,
-                timestamp=trip.gas_mode_entry_time,
-                soc_at_transition=trip.soc_at_gas_transition,
-                ambient_temp_f=gas_entry.get('ambient_temp_f'),
-                odometer_miles=gas_entry.get('odometer_miles')
-            )
-            db.add(soc_transition)
-    else:
-        # Entire trip was electric
-        if trip.start_odometer and trip.end_odometer:
-            trip.electric_miles = trip.distance_miles
-
-    # Calculate electric efficiency (kWh)
-    if trip.electric_miles and trip.electric_miles > 0.5:
-        trip.electric_kwh_used = calculate_electric_kwh(points)
-        if trip.electric_kwh_used:
-            trip.kwh_per_mile = calculate_kwh_per_mile(
-                trip.electric_kwh_used, trip.electric_miles
-            )
-
-    # Fetch weather data for the trip
-    try:
-        # Get first point with GPS data
-        gps_point = next(
-            (p for p in points if p.get('latitude') and p.get('longitude')),
-            None
-        )
-        if gps_point and trip.start_time:
-            weather = get_weather_for_location(
-                gps_point['latitude'],
-                gps_point['longitude'],
-                trip.start_time
-            )
-            if weather:
-                trip.weather_temp_f = weather.get('temperature_f')
-                trip.weather_precipitation_in = weather.get('precipitation_in')
-                trip.weather_wind_mph = weather.get('wind_speed_mph')
-                trip.weather_conditions = weather.get('conditions')
-                trip.weather_impact_factor = get_weather_impact_factor(weather)
-                logger.debug(f"Weather for trip {trip.id}: {weather.get('conditions')}, {weather.get('temperature_f')}°F")
-    except Exception as e:
-        logger.warning(f"Failed to fetch weather for trip {trip.id}: {e}")
-
+    # Mark trip as complete
     trip.is_closed = True
     logger.info(
         f"Trip {trip.id} finalized: {(trip.distance_miles or 0):.1f} mi "
@@ -1148,9 +1074,7 @@ def _calculate_trip_stats(
 
     # Calculate gas usage if fuel data available
     start_fuel = None
-    if trip and trip.start_fuel_level:
-        start_fuel = float(trip.start_fuel_level)
-    elif first.fuel_level_percent:
+    if first.fuel_level_percent:
         start_fuel = float(first.fuel_level_percent)
 
     current_fuel = float(latest.fuel_level_percent) if latest.fuel_level_percent else None
@@ -1183,8 +1107,9 @@ def get_latest_telemetry() -> Response:
         return jsonify({'active': False})
 
     # Check if the latest data is recent (within timeout period)
-    cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS)
-    if latest_telemetry.timestamp < cutoff_time:
+    cutoff_time = utc_now() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS)
+    latest_ts = normalize_datetime(latest_telemetry.timestamp)
+    if latest_ts < cutoff_time:
         return jsonify({'active': False})
 
     # Get the trip for this session

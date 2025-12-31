@@ -24,13 +24,13 @@ class TestTelemetryLatestEndpoint:
         response = client.get('/api/telemetry/latest')
         assert response.status_code == 200
         data = response.get_json()
-        assert data['status'] == 'inactive'
-        assert data['vehicle_status'] == 'Inactive'
+        assert data['active'] is False
 
     def test_latest_returns_inactive_when_data_stale(self, client, db_session):
-        """Stale telemetry (>5 min old) returns inactive status."""
+        """Stale telemetry (>2 min old) returns inactive status."""
         session_id = uuid.uuid4()
-        stale_time = datetime.utcnow() - timedelta(minutes=10)
+        # Stale time - more than TRIP_TIMEOUT_SECONDS (120s) ago
+        stale_time = datetime.now(timezone.utc) - timedelta(minutes=5)
 
         telemetry = TelemetryRaw(
             session_id=session_id,
@@ -44,7 +44,7 @@ class TestTelemetryLatestEndpoint:
         response = client.get('/api/telemetry/latest')
         assert response.status_code == 200
         data = response.get_json()
-        assert data['status'] == 'inactive'
+        assert data['active'] is False
 
     def test_latest_returns_active_with_recent_data(self, client, db_session):
         """Recent telemetry returns active status with data."""
@@ -53,7 +53,7 @@ class TestTelemetryLatestEndpoint:
         # Create trip for the session
         trip = Trip(
             session_id=session_id,
-            start_time=datetime.utcnow() - timedelta(minutes=30),
+            start_time=datetime.now(timezone.utc) - timedelta(minutes=30),
             start_odometer=50000.0,
             start_soc=80.0,
             is_closed=False,
@@ -62,7 +62,7 @@ class TestTelemetryLatestEndpoint:
 
         telemetry = TelemetryRaw(
             session_id=session_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             speed_mph=55.0,
             state_of_charge=70.0,
             engine_rpm=0,
@@ -74,8 +74,8 @@ class TestTelemetryLatestEndpoint:
         response = client.get('/api/telemetry/latest')
         assert response.status_code == 200
         data = response.get_json()
-        assert data['status'] == 'active'
-        assert 'telemetry' in data
+        assert data['active'] is True
+        assert 'data' in data
 
     def test_latest_includes_trip_stats(self, client, db_session):
         """Response includes trip statistics when driving."""
@@ -83,7 +83,7 @@ class TestTelemetryLatestEndpoint:
 
         trip = Trip(
             session_id=session_id,
-            start_time=datetime.utcnow() - timedelta(minutes=30),
+            start_time=datetime.now(timezone.utc) - timedelta(minutes=30),
             start_odometer=50000.0,
             start_soc=80.0,
             is_closed=False,
@@ -92,7 +92,7 @@ class TestTelemetryLatestEndpoint:
 
         telemetry = TelemetryRaw(
             session_id=session_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             speed_mph=55.0,
             state_of_charge=65.0,
             engine_rpm=0,
@@ -103,7 +103,8 @@ class TestTelemetryLatestEndpoint:
 
         response = client.get('/api/telemetry/latest')
         data = response.get_json()
-        assert 'trip_stats' in data or data['status'] == 'active'
+        assert data['active'] is True
+        assert 'trip_stats' in data
 
     def test_latest_detects_electric_mode(self, client, db_session):
         """Detects electric mode when RPM is 0."""
@@ -111,7 +112,7 @@ class TestTelemetryLatestEndpoint:
 
         trip = Trip(
             session_id=session_id,
-            start_time=datetime.utcnow() - timedelta(minutes=10),
+            start_time=datetime.now(timezone.utc) - timedelta(minutes=10),
             start_odometer=50000.0,
             is_closed=False,
         )
@@ -119,7 +120,7 @@ class TestTelemetryLatestEndpoint:
 
         telemetry = TelemetryRaw(
             session_id=session_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             speed_mph=45.0,
             state_of_charge=60.0,
             engine_rpm=0,  # Electric mode
@@ -128,8 +129,9 @@ class TestTelemetryLatestEndpoint:
         db_session.commit()
 
         response = client.get('/api/telemetry/latest')
-        data = response.get_json()
         assert response.status_code == 200
+        data = response.get_json()
+        assert data['active'] is True
 
     def test_latest_detects_gas_mode(self, client, db_session):
         """Detects gas mode when RPM > 0 and SOC low."""
@@ -137,7 +139,7 @@ class TestTelemetryLatestEndpoint:
 
         trip = Trip(
             session_id=session_id,
-            start_time=datetime.utcnow() - timedelta(minutes=10),
+            start_time=datetime.now(timezone.utc) - timedelta(minutes=10),
             start_odometer=50000.0,
             is_closed=False,
         )
@@ -145,7 +147,7 @@ class TestTelemetryLatestEndpoint:
 
         telemetry = TelemetryRaw(
             session_id=session_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             speed_mph=65.0,
             state_of_charge=15.0,
             engine_rpm=1500,  # Gas mode
@@ -154,8 +156,9 @@ class TestTelemetryLatestEndpoint:
         db_session.commit()
 
         response = client.get('/api/telemetry/latest')
-        data = response.get_json()
         assert response.status_code == 200
+        data = response.get_json()
+        assert data['active'] is True
 
 
 class TestBatteryHealthEndpoint:
