@@ -35,6 +35,12 @@ function initTheme() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
     updateThemeIcon(savedTheme);
+
+    // Set initial aria-pressed for theme toggle button
+    const themeBtn = document.querySelector('.theme-toggle');
+    if (themeBtn) {
+        themeBtn.setAttribute('aria-pressed', savedTheme === 'dark' ? 'true' : 'false');
+    }
 }
 
 /**
@@ -46,6 +52,12 @@ function toggleTheme() {
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
     updateThemeIcon(newTheme);
+
+    // Update aria-pressed for theme toggle button
+    const themeBtn = document.querySelector('.theme-toggle');
+    if (themeBtn) {
+        themeBtn.setAttribute('aria-pressed', newTheme === 'dark' ? 'true' : 'false');
+    }
 }
 
 /**
@@ -359,7 +371,14 @@ async function loadTrips() {
 async function openTripModal(tripId) {
     const modal = document.getElementById('trip-modal');
     modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
+
+    // Focus the close button for keyboard users
+    const closeBtn = modal.querySelector('.modal-close');
+    if (closeBtn) {
+        setTimeout(() => closeBtn.focus(), 100);
+    }
 
     try {
         const response = await fetch(`/api/trips/${tripId}`);
@@ -412,7 +431,10 @@ async function openTripModal(tripId) {
  */
 function closeTripModal() {
     const modal = document.getElementById('trip-modal');
+    if (!modal.classList.contains('show')) return;
+
     modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
 
     // Clean up charts
@@ -939,12 +961,19 @@ function formatChargingDuration(startTime, endTime) {
 function openAddChargingModal() {
     const modal = document.getElementById('charging-modal');
     modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
 
     // Set default start time to now
     const now = new Date();
     const localDateTime = now.toISOString().slice(0, 16);
     document.getElementById('charge-start').value = localDateTime;
+
+    // Focus the first input for keyboard users
+    const firstInput = document.getElementById('charge-start');
+    if (firstInput) {
+        setTimeout(() => firstInput.focus(), 100);
+    }
 }
 
 /**
@@ -952,7 +981,10 @@ function openAddChargingModal() {
  */
 function closeChargingModal() {
     const modal = document.getElementById('charging-modal');
+    if (!modal.classList.contains('show')) return;
+
     modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
 
     // Reset form
