@@ -14,9 +14,12 @@ from services.trip_service import (
 )
 from services.charging_service import (
     detect_and_finalize_charging_session,
+    start_charging_session,
+    update_charging_session,
 )
 from services.scheduler import (
     init_scheduler,
+    shutdown_scheduler,
     close_stale_trips,
     check_refuel_events,
     check_charging_sessions,
@@ -31,8 +34,11 @@ __all__ = [
     'fetch_trip_weather',
     # Charging service
     'detect_and_finalize_charging_session',
+    'start_charging_session',
+    'update_charging_session',
     # Scheduler
     'init_scheduler',
+    'shutdown_scheduler',
     'close_stale_trips',
     'check_refuel_events',
     'check_charging_sessions',
