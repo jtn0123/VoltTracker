@@ -16,6 +16,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 
 from models import TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession  # noqa: E402
 from config import Config  # noqa: E402
+from database import SessionLocal as Session  # noqa: E402
+from services.scheduler import close_stale_trips, check_refuel_events, check_charging_sessions  # noqa: E402
 
 
 class TestCloseStaleTrips:
@@ -28,14 +30,13 @@ class TestCloseStaleTrips:
 
     def test_close_stale_trips_runs_without_error(self, app, db_session):
         """close_stale_trips runs without crashing even with no data."""
-        from app import close_stale_trips
 
         # Should not raise
         close_stale_trips()
 
     def test_open_trip_with_recent_telemetry_stays_open(self, app, db_session):
         """Trip with recent telemetry (<TRIP_TIMEOUT_SECONDS) remains open."""
-        from app import close_stale_trips, Session
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         recent_time = datetime.utcnow() - timedelta(seconds=30)
@@ -64,7 +65,7 @@ class TestCloseStaleTrips:
 
     def test_finalize_trip_handles_empty_telemetry(self, app, db_session):
         """Trip with no telemetry points remains open."""
-        from app import close_stale_trips, Session
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
@@ -88,7 +89,7 @@ class TestCloseStaleTrips:
 
     def test_close_stale_trip_after_timeout(self, app, db_session):
         """Trip with no telemetry for > TRIP_TIMEOUT_SECONDS gets closed."""
-        from app import close_stale_trips, Session
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
@@ -119,7 +120,7 @@ class TestCloseStaleTrips:
 
     def test_finalize_trip_calculates_distance(self, app, db_session):
         """Closed trip has distance_miles calculated from odometer."""
-        from app import close_stale_trips, Session
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         # Make all telemetry timestamps in the past (beyond timeout)
@@ -158,7 +159,7 @@ class TestCloseStaleTrips:
 
     def test_finalize_trip_detects_gas_mode_entry(self, app, db_session):
         """Trip that entered gas mode has gas_mode_entered=True."""
-        from app import close_stale_trips, Session
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         # All timestamps in the past (beyond timeout)
@@ -214,7 +215,7 @@ class TestCloseStaleTrips:
 
     def test_finalize_trip_records_soc_transition(self, app, db_session):
         """SocTransition record created when gas mode detected."""
-        from app import close_stale_trips, Session
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         # All timestamps in the past (beyond timeout)
@@ -272,7 +273,7 @@ class TestCloseStaleTrips:
 
     def test_finalize_trip_electric_only(self, app, db_session):
         """Electric-only trip has electric_miles equal to distance_miles."""
-        from app import close_stale_trips, Session
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         # All timestamps in the past (beyond timeout)
@@ -319,7 +320,7 @@ class TestCheckRefuelEvents:
 
     def test_detect_refuel_creates_fuel_event(self, app, db_session):
         """Fuel level jump of 10%+ creates FuelEvent record."""
-        from app import check_refuel_events
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
@@ -350,7 +351,7 @@ class TestCheckRefuelEvents:
 
     def test_no_duplicate_fuel_events(self, app, db_session):
         """Same refuel event not recorded twice (idempotent)."""
-        from app import check_refuel_events
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
@@ -380,7 +381,7 @@ class TestCheckRefuelEvents:
 
     def test_small_fuel_fluctuation_ignored(self, app, db_session):
         """Fuel level changes <10% don't trigger refuel detection."""
-        from app import check_refuel_events
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
@@ -408,7 +409,7 @@ class TestCheckRefuelEvents:
 
     def test_fuel_decrease_not_detected_as_refuel(self, app, db_session):
         """Decreasing fuel level is not flagged as refuel."""
-        from app import check_refuel_events
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
@@ -436,7 +437,7 @@ class TestCheckRefuelEvents:
 
     def test_refuel_calculates_gallons_added(self, app, db_session):
         """gallons_added calculated correctly from level change."""
-        from app import check_refuel_events
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
@@ -467,7 +468,7 @@ class TestCheckRefuelEvents:
 
     def test_handles_null_fuel_levels(self, app, db_session):
         """NULL fuel_level_percent values are handled gracefully."""
-        from app import check_refuel_events
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
@@ -486,7 +487,7 @@ class TestCheckRefuelEvents:
 
     def test_insufficient_telemetry_no_error(self, app, db_session):
         """Less than 2 telemetry points doesn't raise error."""
-        from app import check_refuel_events
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
@@ -509,7 +510,7 @@ class TestCheckChargingSessions:
 
     def test_detect_charging_creates_session(self, app, db_session):
         """Charger connected with power creates ChargingSession."""
-        from app import check_charging_sessions, Session
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         now = datetime.utcnow()
@@ -536,7 +537,7 @@ class TestCheckChargingSessions:
 
     def test_closes_session_when_charger_disconnects(self, app, db_session):
         """Session marked complete when charger_connected=False."""
-        from app import check_charging_sessions, Session
+        # Imports moved to top of file
 
         # Create an active session
         session = ChargingSession(
@@ -558,7 +559,7 @@ class TestCheckChargingSessions:
 
     def test_handles_no_charger_data(self, app, db_session):
         """No charger_connected=True telemetry doesn't crash."""
-        from app import check_charging_sessions
+        # Imports moved to top of file
 
         session_id = uuid.uuid4()
         telemetry = TelemetryRaw(
@@ -574,7 +575,7 @@ class TestCheckChargingSessions:
 
     def test_calculates_kwh_added(self, app, db_session):
         """kwh_added calculated from SOC change on session close."""
-        from app import check_charging_sessions, Session
+        # Imports moved to top of file
 
         # Create an active session with SOC data
         session = ChargingSession(
@@ -600,7 +601,7 @@ class TestCheckChargingSessions:
 
     def test_updates_existing_active_session(self, app, db_session):
         """Ongoing charging updates existing ChargingSession."""
-        from app import check_charging_sessions, Session
+        # Imports moved to top of file
 
         telem_session_id = uuid.uuid4()
         now = datetime.utcnow()

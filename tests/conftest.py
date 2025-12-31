@@ -15,7 +15,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 os.environ['FLASK_TESTING'] = 'true'
 
-from app import app as flask_app, Session, engine, init_cache  # noqa: E402
+from app import app as flask_app, init_cache  # noqa: E402
+from database import SessionLocal as Session, engine  # noqa: E402
 from models import Base, TelemetryRaw, Trip  # noqa: E402
 from datetime import timedelta  # noqa: E402
 

@@ -153,16 +153,10 @@ def add_security_headers(response):
 # Initialize database
 init_db(app)
 
-# Register all blueprints
-register_blueprints(app)
-
-# Apply rate limiting exemption to torque upload endpoint
-# (done after blueprint registration)
+# Configure blueprint hooks before registration
 from routes.telemetry import telemetry_bp
-limiter.exempt(telemetry_bp)
-
-# Apply auth to dashboard route
 from routes.dashboard import dashboard_bp
+from routes.trips import trips_bp
 
 
 @dashboard_bp.before_request
@@ -176,10 +170,6 @@ def require_auth():
             return auth_result
 
 
-# Apply caching to efficiency endpoint
-from routes.trips import trips_bp
-
-
 @trips_bp.after_request
 def cache_efficiency(response):
     """Apply caching to efficiency summary endpoint."""
@@ -189,6 +179,14 @@ def cache_efficiency(response):
     elif request.endpoint == 'trips.get_soc_analysis':
         response.cache_control.max_age = 60
     return response
+
+
+# Register all blueprints
+register_blueprints(app)
+
+# Apply rate limiting exemption to torque upload endpoint
+# (done after blueprint registration)
+limiter.exempt(telemetry_bp)
 
 
 # Initialize background scheduler
