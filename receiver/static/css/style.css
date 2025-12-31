@@ -932,23 +932,42 @@ body {
 /* SOC Analysis */
 .soc-section {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    grid-template-columns: 1fr;
+    gap: var(--space-lg);
+    margin-bottom: var(--space-xl);
+}
+
+@media (min-width: 1024px) {
+    .soc-section {
+        grid-template-columns: 2fr 3fr;
+    }
 }
 
 .soc-stats {
-    background-color: var(--bg-card);
-    border-radius: 12px;
-    padding: 1.5rem;
+    background: linear-gradient(145deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.85) 100%);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
     border: 1px solid var(--border-color);
+    position: relative;
+    overflow: hidden;
+}
+
+.soc-stats::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
 }
 
 .stat-row {
     display: flex;
     justify-content: space-between;
-    padding: 0.75rem 0;
-    border-bottom: 1px solid var(--border-color);
+    align-items: center;
+    padding: 0.875rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .stat-row:last-child {
@@ -956,18 +975,43 @@ body {
 }
 
 .stat-label {
-    color: var(--text-secondary);
+    color: var(--text-muted);
+    font-size: 0.875rem;
 }
 
 .stat-value {
     font-weight: 600;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+@media (min-width: 1024px) {
+    .stat-row {
+        padding: 1rem 0;
+    }
+
+    .stat-value {
+        font-size: 1.25rem;
+    }
 }
 
 .soc-histogram {
-    background-color: var(--bg-card);
-    border-radius: 12px;
-    padding: 1.5rem;
+    background: linear-gradient(145deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.85) 100%);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
     border: 1px solid var(--border-color);
+    position: relative;
+    overflow: hidden;
+}
+
+.soc-histogram::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
 }
 
 /* Empty State */
@@ -1763,38 +1807,67 @@ body {
 }
 
 .charging-stats-row {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-lg);
+    margin-bottom: var(--space-lg);
+}
+
+@media (min-width: 768px) {
+    .charging-stats-row {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 .charging-stats {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
-    padding: 1rem;
-    background-color: var(--bg-card);
-    border-radius: 8px;
-    flex: 1;
-    min-width: 200px;
+    gap: var(--space-base);
+    padding: var(--space-lg);
+    background: linear-gradient(145deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.85) 100%);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    position: relative;
+    overflow: hidden;
+}
+
+.charging-stats::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
 }
 
 /* Cost Comparison Section */
 .cost-comparison {
-    padding: 1rem;
-    background-color: var(--bg-card);
-    border-radius: 8px;
-    flex: 1;
-    min-width: 200px;
+    padding: var(--space-lg);
+    background: linear-gradient(145deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.85) 100%);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    position: relative;
+    overflow: hidden;
+}
+
+.cost-comparison::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
 }
 
 .cost-comparison h4 {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
+    font-size: 0.8rem;
+    color: var(--text-muted);
     text-transform: uppercase;
-    margin-bottom: 0.75rem;
-    letter-spacing: 0.5px;
+    margin-bottom: var(--space-md);
+    letter-spacing: 0.1em;
+    font-weight: 500;
 }
 
 .cost-compare-grid {
