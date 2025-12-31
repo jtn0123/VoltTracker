@@ -805,6 +805,113 @@ def export_all():
 
 
 # ============================================================================
+# Import Endpoints
+# ============================================================================
+
+@app.route('/api/import/csv', methods=['POST'])
+def import_csv():
+    """
+    Import telemetry data from a Torque Pro CSV log file.
+
+    Accepts multipart form data with a CSV file.
+
+    Returns:
+        JSON with import statistics (rows imported, skipped, errors)
+    """
+    from receiver.utils.csv_importer import TorqueCSVImporter
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    if not file.filename.lower().endswith('.csv'):
+        return jsonify({'error': 'File must be a CSV'}), 400
+
+    try:
+        # Read and parse CSV
+        csv_content = file.read().decode('utf-8')
+        records, stats = TorqueCSVImporter.parse_csv(csv_content)
+
+        if not records:
+            return jsonify({
+                'message': 'No valid records found in CSV',
+                'stats': stats
+            }), 400
+
+        # Insert records into database
+        db = get_db()
+        inserted_count = 0
+
+        for record in records:
+            telemetry = TelemetryRaw(
+                session_id=record['session_id'],
+                timestamp=record['timestamp'],
+                latitude=record.get('latitude'),
+                longitude=record.get('longitude'),
+                speed_mph=record.get('speed_mph'),
+                engine_rpm=record.get('engine_rpm'),
+                throttle_position=record.get('throttle_position'),
+                coolant_temp_f=record.get('coolant_temp_f'),
+                intake_air_temp_f=record.get('intake_air_temp_f'),
+                fuel_level_percent=record.get('fuel_level_percent'),
+                fuel_remaining_gallons=record.get('fuel_remaining_gallons'),
+                state_of_charge=record.get('state_of_charge'),
+                battery_voltage=record.get('battery_voltage'),
+                ambient_temp_f=record.get('ambient_temp_f'),
+                odometer_miles=record.get('odometer_miles'),
+                hv_battery_power_kw=record.get('hv_battery_power_kw'),
+                raw_data=record.get('raw_data', {})
+            )
+            db.add(telemetry)
+            inserted_count += 1
+
+        db.commit()
+
+        # Create a trip for the imported data
+        if records:
+            session_id = records[0]['session_id']
+            first_record = records[0]
+            last_record = records[-1]
+
+            trip = Trip(
+                session_id=session_id,
+                start_time=first_record['timestamp'],
+                end_time=last_record['timestamp'],
+                start_odometer=first_record.get('odometer_miles'),
+                end_odometer=last_record.get('odometer_miles'),
+                start_fuel_level=first_record.get('fuel_level_percent'),
+                end_fuel_level=last_record.get('fuel_level_percent'),
+                start_soc=first_record.get('state_of_charge'),
+                end_soc=last_record.get('state_of_charge'),
+            )
+
+            # Calculate distance if odometer available
+            if trip.start_odometer and trip.end_odometer:
+                trip.distance_miles = trip.end_odometer - trip.start_odometer
+
+            db.add(trip)
+            db.commit()
+
+            stats['trip_id'] = trip.id
+
+        logger.info(f"Imported {inserted_count} telemetry records from CSV")
+
+        return jsonify({
+            'message': f'Successfully imported {inserted_count} records',
+            'stats': stats
+        })
+
+    except UnicodeDecodeError:
+        return jsonify({'error': 'File encoding error. Please use UTF-8 encoded CSV'}), 400
+    except Exception as e:
+        logger.error(f"CSV import error: {e}")
+        return jsonify({'error': f'Import failed: {str(e)}'}), 500
+
+
+# ============================================================================
 # Trip Management Endpoints
 # ============================================================================
 
