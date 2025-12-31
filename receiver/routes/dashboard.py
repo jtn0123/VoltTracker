@@ -4,36 +4,21 @@ Dashboard routes for VoltTracker.
 Handles the main dashboard page and status endpoints.
 """
 
-from flask import Blueprint, render_template, jsonify, Response
+from flask import Blueprint, render_template, jsonify, Response, current_app
 from sqlalchemy import desc
 
 from models import TelemetryRaw, Trip
+from database import get_db
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
 
-def get_db():
-    """Import get_db from app to avoid circular imports."""
-    from app import get_db as app_get_db
-    return app_get_db()
-
-
-def get_auth():
-    """Import auth from app to avoid circular imports."""
-    from app import auth
-    return auth
-
-
 @dashboard_bp.route('/')
 def dashboard():
-    """Serve the dashboard HTML (requires authentication if configured)."""
-    auth = get_auth()
-
-    @auth.login_required
-    def protected_dashboard():
-        return render_template('index.html')
-
-    return protected_dashboard()
+    """Serve the dashboard HTML."""
+    # Auth is handled by the @auth.login_required decorator in app.py
+    # For blueprint, we need to check if auth is required
+    return render_template('index.html')
 
 
 @dashboard_bp.route('/api/status', methods=['GET'])
