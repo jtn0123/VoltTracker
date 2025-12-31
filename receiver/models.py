@@ -219,6 +219,13 @@ class Trip(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Weather data (from Open-Meteo API)
+    weather_temp_f = Column(Float)
+    weather_precipitation_in = Column(Float)
+    weather_wind_mph = Column(Float)
+    weather_conditions = Column(String(50))
+    weather_impact_factor = Column(Float)  # Estimated efficiency impact multiplier
+
     # Relationships
     soc_transitions = relationship('SocTransition', back_populates='trip')
 
@@ -243,6 +250,11 @@ class Trip(Base):
             'gas_mpg': self.gas_mpg,
             'ambient_temp_avg_f': self.ambient_temp_avg_f,
             'is_closed': self.is_closed,
+            'weather_temp_f': self.weather_temp_f,
+            'weather_precipitation_in': self.weather_precipitation_in,
+            'weather_wind_mph': self.weather_wind_mph,
+            'weather_conditions': self.weather_conditions,
+            'weather_impact_factor': self.weather_impact_factor,
         }
 
 

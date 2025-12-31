@@ -884,8 +884,16 @@ function renderTripMap(telemetry) {
     );
 
     if (hasPowerData) {
+        // Check if we should use efficiency coloring (default: true)
+        const useEfficiencyView = localStorage.getItem('mapEfficiencyView') !== 'false';
+
+        // Add view toggle control
+        addMapViewToggle(tripMap, gpsPoints, useEfficiencyView);
+
         // Create color-coded polyline segments
-        const segments = createColorCodedSegments(gpsPoints);
+        const segments = useEfficiencyView
+            ? createEfficiencySegments(gpsPoints)
+            : createColorCodedSegments(gpsPoints);
 
         // Add each colored segment
         segments.forEach(segment => {
@@ -899,7 +907,7 @@ function renderTripMap(telemetry) {
         });
 
         // Add legend
-        addMapLegend(tripMap);
+        addMapLegend(tripMap, useEfficiencyView);
 
         // Fit map to all points
         const allPoints = gpsPoints.map(p => [p.latitude, p.longitude]);
@@ -1135,6 +1143,40 @@ function addMapLegend(map, isEfficiencyMode = false) {
     };
 
     legend.addTo(map);
+}
+
+/**
+ * Add a toggle control to switch between mode and efficiency views
+ */
+function addMapViewToggle(map, gpsPoints, isEfficiencyMode) {
+    const toggle = L.control({ position: 'topleft' });
+
+    toggle.onAdd = function() {
+        const div = L.DomUtil.create('div', 'map-view-toggle');
+        div.innerHTML = `
+            <div style="background:rgba(255,255,255,0.95);padding:6px 10px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.2);font-size:12px;">
+                <label style="display:flex;align-items:center;cursor:pointer;color:#333;">
+                    <input type="checkbox" id="map-efficiency-toggle" ${isEfficiencyMode ? 'checked' : ''} style="margin-right:6px;">
+                    Efficiency Heatmap
+                </label>
+            </div>
+        `;
+
+        // Prevent map interactions when clicking the toggle
+        L.DomEvent.disableClickPropagation(div);
+
+        // Handle toggle change
+        const checkbox = div.querySelector('#map-efficiency-toggle');
+        checkbox.addEventListener('change', function() {
+            localStorage.setItem('mapEfficiencyView', this.checked);
+            // Re-render the map with new view
+            renderTripMap(gpsPoints);
+        });
+
+        return div;
+    };
+
+    toggle.addTo(map);
 }
 
 /**
