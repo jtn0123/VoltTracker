@@ -87,10 +87,44 @@ class TelemetryRaw(Base):
     hv_battery_power_kw = Column(Float)  # Positive = discharging, negative = charging
     hv_battery_current_a = Column(Float)
     hv_battery_voltage_v = Column(Float)
+    hv_discharge_amps = Column(Float)
+    battery_temp_f = Column(Float)
+    battery_coolant_temp_f = Column(Float)
 
-    # Charging status
+    # Charging status (expanded)
     charger_ac_power_kw = Column(Float)
     charger_connected = Column(Boolean)
+    charger_status = Column(Float)
+    charger_power_kw = Column(Float)
+    charger_power_w = Column(Float)
+    charger_ac_voltage = Column(Float)
+    charger_ac_current = Column(Float)
+    charger_hv_voltage = Column(Float)
+    charger_hv_current = Column(Float)
+    last_charge_wh = Column(Float)
+
+    # Motor/Generator
+    motor_a_rpm = Column(Float)
+    motor_b_rpm = Column(Float)
+    generator_rpm = Column(Float)
+    motor_temp_max_f = Column(Float)
+
+    # Engine details
+    engine_oil_temp_f = Column(Float)
+    engine_torque_nm = Column(Float)
+    engine_running = Column(Boolean)
+    transmission_temp_f = Column(Float)
+
+    # Battery health
+    battery_capacity_kwh = Column(Float)
+
+    # Lifetime counters
+    lifetime_ev_miles = Column(Float)
+    lifetime_gas_miles = Column(Float)
+    lifetime_fuel_gal = Column(Float)
+    lifetime_kwh = Column(Float)
+    dte_electric_miles = Column(Float)
+    dte_gas_miles = Column(Float)
 
     raw_data = Column(JSONType())
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
@@ -113,11 +147,38 @@ class TelemetryRaw(Base):
             'battery_voltage': self.battery_voltage,
             'ambient_temp_f': self.ambient_temp_f,
             'odometer_miles': self.odometer_miles,
+            # HV Battery
             'hv_battery_power_kw': self.hv_battery_power_kw,
             'hv_battery_current_a': self.hv_battery_current_a,
             'hv_battery_voltage_v': self.hv_battery_voltage_v,
+            'hv_discharge_amps': self.hv_discharge_amps,
+            'battery_temp_f': self.battery_temp_f,
+            'battery_coolant_temp_f': self.battery_coolant_temp_f,
+            # Charging
             'charger_ac_power_kw': self.charger_ac_power_kw,
             'charger_connected': self.charger_connected,
+            'charger_status': self.charger_status,
+            'charger_power_kw': self.charger_power_kw,
+            'charger_ac_voltage': self.charger_ac_voltage,
+            'charger_ac_current': self.charger_ac_current,
+            'last_charge_wh': self.last_charge_wh,
+            # Motor/Generator
+            'motor_a_rpm': self.motor_a_rpm,
+            'motor_b_rpm': self.motor_b_rpm,
+            'generator_rpm': self.generator_rpm,
+            'motor_temp_max_f': self.motor_temp_max_f,
+            # Engine
+            'engine_oil_temp_f': self.engine_oil_temp_f,
+            'engine_torque_nm': self.engine_torque_nm,
+            'engine_running': self.engine_running,
+            'transmission_temp_f': self.transmission_temp_f,
+            # Battery health
+            'battery_capacity_kwh': self.battery_capacity_kwh,
+            # Lifetime counters
+            'lifetime_ev_miles': self.lifetime_ev_miles,
+            'lifetime_gas_miles': self.lifetime_gas_miles,
+            'dte_electric_miles': self.dte_electric_miles,
+            'dte_gas_miles': self.dte_gas_miles,
         }
 
 
@@ -269,7 +330,11 @@ class ChargingSession(Base):
     # Cost tracking (manual entry)
     cost = Column(Float)
     cost_per_kwh = Column(Float)
+    electricity_rate = Column(Float)  # $/kWh rate used for auto-calculation
     notes = Column(Text)
+
+    # Charging curve data (power readings over time)
+    charging_curve = Column(JSONType())  # [{timestamp, power_kw, soc}, ...]
 
     # Status
     is_complete = Column(Boolean, default=False, index=True)
@@ -292,8 +357,10 @@ class ChargingSession(Base):
             'charge_type': self.charge_type,
             'cost': self.cost,
             'cost_per_kwh': self.cost_per_kwh,
+            'electricity_rate': self.electricity_rate,
             'notes': self.notes,
             'is_complete': self.is_complete,
+            'charging_curve': self.charging_curve,
             'duration_minutes': (
                 (self.end_time - self.start_time).total_seconds() / 60
                 if self.end_time and self.start_time else None
@@ -303,6 +370,51 @@ class ChargingSession(Base):
                 if self.end_soc and self.start_soc else None
             ),
         }
+
+
+class BatteryHealthReading(Base):
+    """Tracks battery capacity over time for degradation analysis.
+
+    The battery capacity PID (2241A3) reports the current usable capacity.
+    By tracking this over time, we can detect degradation trends.
+    Original Gen 2 Volt capacity: 18.4 kWh usable.
+    """
+
+    __tablename__ = 'battery_health_readings'
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    # Raw capacity reading from OBD
+    capacity_kwh = Column(Float)
+
+    # Normalized to 100% SOC for accurate comparison
+    normalized_capacity_kwh = Column(Float)
+
+    # Context for the reading
+    soc_at_reading = Column(Float)
+    ambient_temp_f = Column(Float)
+    odometer_miles = Column(Float)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'capacity_kwh': self.capacity_kwh,
+            'normalized_capacity_kwh': self.normalized_capacity_kwh,
+            'soc_at_reading': self.soc_at_reading,
+            'ambient_temp_f': self.ambient_temp_f,
+            'odometer_miles': self.odometer_miles,
+        }
+
+    @property
+    def degradation_percent(self):
+        """Calculate degradation percentage from original 18.4 kWh capacity."""
+        if self.normalized_capacity_kwh:
+            return round((1 - (self.normalized_capacity_kwh / 18.4)) * 100, 2)
+        return None
 
 
 class BatteryCellReading(Base):

@@ -27,6 +27,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-volt}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-volt_tracker}
       FLASK_ENV: ${FLASK_ENV:-production}
       SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+      ELECTRICITY_COST: ${ELECTRICITY_COST:-0.12}
+      GAS_COST: ${GAS_COST:-3.50}
     ports:
       - "8080:8080"
     depends_on:
@@ -35,6 +37,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./logs:/app/logs
+      - ./torque-config:/app/torque-config:ro
 
 volumes:
   postgres_data:

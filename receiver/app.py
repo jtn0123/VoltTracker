@@ -939,7 +939,25 @@ def get_latest_telemetry() -> Response:
             'engine_rpm': float(latest.engine_rpm) if latest.engine_rpm else None,
             'latitude': float(latest.latitude) if latest.latitude else None,
             'longitude': float(latest.longitude) if latest.longitude else None,
-            'odometer': float(latest.odometer_miles) if latest.odometer_miles else None
+            'odometer': float(latest.odometer_miles) if latest.odometer_miles else None,
+            # Power flow data
+            'hv_battery_power_kw': float(latest.hv_battery_power_kw) if latest.hv_battery_power_kw else None,
+            'hv_battery_voltage_v': float(latest.hv_battery_voltage_v) if latest.hv_battery_voltage_v else None,
+            'hv_battery_current_a': float(latest.hv_battery_current_a) if latest.hv_battery_current_a else None,
+            # Motor/Generator
+            'motor_a_rpm': float(latest.motor_a_rpm) if latest.motor_a_rpm else None,
+            'motor_b_rpm': float(latest.motor_b_rpm) if latest.motor_b_rpm else None,
+            'generator_rpm': float(latest.generator_rpm) if latest.generator_rpm else None,
+            'motor_temp_max_f': float(latest.motor_temp_max_f) if latest.motor_temp_max_f else None,
+            # Engine
+            'engine_running': latest.engine_running if latest.engine_running is not None else (latest.engine_rpm and latest.engine_rpm > 500),
+            'engine_oil_temp_f': float(latest.engine_oil_temp_f) if latest.engine_oil_temp_f else None,
+            # Battery health
+            'battery_capacity_kwh': float(latest.battery_capacity_kwh) if latest.battery_capacity_kwh else None,
+            'battery_temp_f': float(latest.battery_temp_f) if latest.battery_temp_f else None,
+            # Charging
+            'charger_power_kw': float(latest.charger_power_kw) if latest.charger_power_kw else None,
+            'charger_connected': latest.charger_connected,
         },
         'trip_stats': trip_stats,
         'point_count': len(recent)
@@ -1084,6 +1102,57 @@ def export_all():
             'total_charging_sessions': len(charging_sessions)
         }
     })
+
+
+@app.route('/api/export/torque-pids', methods=['GET'])
+def export_torque_pids():
+    """
+    Download the Volt PID configuration file for Torque Pro.
+
+    This CSV can be imported into Torque Pro to enable Volt-specific PIDs.
+    """
+    import os
+    # Try mounted volume first (Docker), then relative path (development)
+    pid_file_path = '/app/torque-config/volt_pids_complete.csv'
+
+    if not os.path.exists(pid_file_path):
+        pid_file_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            'torque-config',
+            'volt_pids_complete.csv'
+        )
+
+    if not os.path.exists(pid_file_path):
+        # Return embedded version if file not found
+        csv_content = """Name,ShortName,ModeAndPID,Equation,Min Value,Max Value,Units,Header
+Fuel Level Percent,FuelPct,22002F,(A*100)/255,0,100,%,7E4
+State of Charge,SOC,22005B,A/2.55,0,100,%,7E4
+Battery Capacity kWh,BattCap,2241A3,(A*256+B)/28,0,25,kWh,7E4
+HV Battery Voltage,HVBattV,220009,(A*256+B)/100,0,500,V,7E4
+HV Battery Current,HVBattA,22000A,((A*256+B)-32768)/100,-300,300,A,7E4
+HV Battery Power,HVBattKW,22000B,((A*256+B)-32768)/100,-150,150,kW,7E4
+Charger Status,ChgStat,220057,A,0,10,,7E4
+Charger Power kW,ChgPwrKW,22006E,(A*256+B)/1000,0,10,kW,7E4
+Motor A Speed,MotARPM,220051,(A*256+B)/4,0,10000,RPM,7E4
+Motor B Speed,MotBRPM,220052,(A*256+B)/4,0,10000,RPM,7E4
+Generator Speed,GenRPM,220053,(A*256+B)/4,0,10000,RPM,7E4
+Engine Running,EngRun,221930,A,0,1,,7E0
+Ambient Air Temp,AmbTemp,22004F,(A-40),-40,100,C,7E4
+"""
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=volt_pids.csv'}
+        )
+
+    with open(pid_file_path, 'r') as f:
+        csv_content = f.read()
+
+    return Response(
+        csv_content,
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=volt_pids_complete.csv'}
+    )
 
 
 # ============================================================================

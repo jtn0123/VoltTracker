@@ -21,9 +21,15 @@ class Config:
     # Volt-specific constants
     TANK_CAPACITY_GALLONS = 9.3122  # Gen 2 Volt tank capacity
     BATTERY_CAPACITY_KWH = 18.4  # Gen 2 Volt usable battery capacity
+    BATTERY_ORIGINAL_CAPACITY_KWH = 18.4  # Original capacity for degradation tracking
+    BATTERY_DEGRADATION_WARNING_PERCENT = 80  # Alert if capacity falls below this %
     SOC_GAS_THRESHOLD = 25.0  # SOC below this triggers gas mode detection
     RPM_THRESHOLD = 500  # RPM above this indicates engine running
     TRIP_TIMEOUT_SECONDS = 120  # 2 minutes of no data = trip closed
+
+    # Cost tracking
+    ELECTRICITY_COST_PER_KWH = float(os.environ.get('ELECTRICITY_COST', 0.12))  # $/kWh
+    GAS_COST_PER_GALLON = float(os.environ.get('GAS_COST', 3.50))  # $/gallon
 
     # Fuel sensor smoothing
     FUEL_SMOOTHING_WINDOW = 10  # Number of readings for median filter
