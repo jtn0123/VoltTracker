@@ -635,24 +635,53 @@ body {
 }
 
 .card {
-    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.8) 100%);
+    background: linear-gradient(145deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.85) 50%, rgba(22, 33, 62, 0.9) 100%);
     border-radius: var(--radius-lg);
     padding: var(--space-lg);
     border: 1px solid var(--border-color);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease-out, box-shadow 0.3s ease-out, border-color 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Subtle inner glow effect */
+.card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
 }
 
 .card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg), 0 0 30px rgba(15, 76, 117, 0.15);
+    border-color: var(--accent);
 }
 
 .card.electric-accent {
     border-left: 3px solid var(--electric);
 }
 
+.card.electric-accent:hover {
+    box-shadow: var(--shadow-lg), var(--shadow-glow-electric);
+}
+
 .card.gas-accent {
     border-left: 3px solid var(--gas);
+}
+
+.card.gas-accent:hover {
+    box-shadow: var(--shadow-lg), var(--shadow-glow-gas);
+}
+
+/* Desktop card enhancements */
+@media (min-width: 1024px) {
+    .card {
+        padding: var(--space-xl) var(--space-lg);
+    }
 }
 
 .card-label {
@@ -704,11 +733,29 @@ body {
 
 /* Chart Section */
 .chart-section {
-    background-color: var(--bg-card);
-    border-radius: 12px;
+    background: linear-gradient(145deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.85) 50%, rgba(22, 33, 62, 0.9) 100%);
+    border-radius: var(--radius-lg);
     padding: 1.5rem;
     margin-bottom: 2rem;
     border: 1px solid var(--border-color);
+    position: relative;
+    overflow: hidden;
+}
+
+.chart-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+}
+
+@media (min-width: 1024px) {
+    .chart-section {
+        padding: 2rem;
+    }
 }
 
 .chart-header {
