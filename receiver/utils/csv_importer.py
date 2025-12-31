@@ -4,12 +4,25 @@ import csv
 import io
 import uuid
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
 import logging
 
 from config import Config
 
 logger = logging.getLogger(__name__)
+
+
+# Validation ranges for key fields
+VALIDATION_RANGES = {
+    'state_of_charge': (0, 100),      # SOC is 0-100%
+    'fuel_level_percent': (0, 100),    # Fuel is 0-100%
+    'speed_mph': (0, 200),             # Reasonable speed range
+    'engine_rpm': (0, 8000),           # Reasonable RPM range
+    'latitude': (-90, 90),             # Valid GPS range
+    'longitude': (-180, 180),          # Valid GPS range
+    'ambient_temp_f': (-60, 150),      # Reasonable temp range F
+    'coolant_temp_f': (0, 300),        # Engine temp range F
+}
 
 
 class TorqueCSVImporter:
@@ -84,6 +97,70 @@ class TorqueCSVImporter:
         'voltage (control module)(v)': 'battery_voltage',
         'battery voltage(v)': 'battery_voltage',
     }
+
+    @classmethod
+    def _validate_record(cls, record: Dict[str, Any]) -> Tuple[bool, List[str]]:
+        """
+        Validate a record's field values are within acceptable ranges.
+
+        Args:
+            record: Telemetry record dict
+
+        Returns:
+            Tuple of (is_valid, list of warning messages)
+        """
+        warnings = []
+
+        for field, (min_val, max_val) in VALIDATION_RANGES.items():
+            value = record.get(field)
+            if value is not None:
+                if value < min_val or value > max_val:
+                    warnings.append(
+                        f"{field}={value} outside range [{min_val}, {max_val}]"
+                    )
+
+        # A record is valid if it has a timestamp (we just warn about out-of-range values)
+        is_valid = record.get('timestamp') is not None
+        return is_valid, warnings
+
+    @classmethod
+    def _find_duplicates(
+        cls,
+        records: List[Dict[str, Any]],
+        existing_timestamps: Optional[Set[datetime]] = None
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """
+        Remove duplicate records based on timestamp.
+
+        Args:
+            records: List of telemetry records
+            existing_timestamps: Optional set of existing timestamps to check against
+
+        Returns:
+            Tuple of (deduplicated records, count of duplicates removed)
+        """
+        seen_timestamps: Set[datetime] = existing_timestamps or set()
+        unique_records = []
+        duplicate_count = 0
+
+        for record in records:
+            ts = record.get('timestamp')
+            if ts is None:
+                continue
+
+            # Normalize to naive datetime for comparison
+            if ts.tzinfo is not None:
+                ts_key = ts.replace(tzinfo=None)
+            else:
+                ts_key = ts
+
+            if ts_key in seen_timestamps:
+                duplicate_count += 1
+            else:
+                seen_timestamps.add(ts_key)
+                unique_records.append(record)
+
+        return unique_records, duplicate_count
 
     @classmethod
     def parse_csv(cls, csv_content: str) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
