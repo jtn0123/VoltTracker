@@ -882,10 +882,8 @@ def import_csv():
                 end_time=last_record['timestamp'],
                 start_odometer=first_record.get('odometer_miles'),
                 end_odometer=last_record.get('odometer_miles'),
-                start_fuel_level=first_record.get('fuel_level_percent'),
-                end_fuel_level=last_record.get('fuel_level_percent'),
                 start_soc=first_record.get('state_of_charge'),
-                end_soc=last_record.get('state_of_charge'),
+                fuel_level_at_end=last_record.get('fuel_level_percent'),
             )
 
             # Calculate distance if odometer available

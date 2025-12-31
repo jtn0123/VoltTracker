@@ -1072,3 +1072,93 @@ document.addEventListener('keydown', (event) => {
         closeChargingModal();
     }
 });
+
+/**
+ * Initialize CSV import file input
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    const fileInput = document.getElementById('csv-file');
+    const fileNameDisplay = document.getElementById('file-name');
+    const importBtn = document.getElementById('import-btn');
+
+    if (fileInput) {
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                fileNameDisplay.textContent = fileInput.files[0].name;
+                importBtn.disabled = false;
+            } else {
+                fileNameDisplay.textContent = 'No file selected';
+                importBtn.disabled = true;
+            }
+        });
+    }
+});
+
+/**
+ * Handle CSV import form submission
+ */
+async function handleImport(event) {
+    event.preventDefault();
+
+    const fileInput = document.getElementById('csv-file');
+    const statusDiv = document.getElementById('import-status');
+    const importBtn = document.getElementById('import-btn');
+
+    if (!fileInput.files.length) {
+        showImportStatus('Please select a CSV file', 'error');
+        return;
+    }
+
+    const file = fileInput.files[0];
+
+    // Show loading state
+    importBtn.disabled = true;
+    showImportStatus('Importing...', 'loading');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/api/import/csv', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            const stats = data.stats;
+            showImportStatus(
+                `Successfully imported ${stats.parsed_rows} records. ` +
+                (stats.skipped_rows > 0 ? `Skipped ${stats.skipped_rows} invalid rows.` : ''),
+                'success'
+            );
+
+            // Reload data
+            loadTrips();
+            loadSummary();
+            loadMpgTrend(currentTimeframe);
+            loadSocAnalysis();
+
+            // Reset form
+            fileInput.value = '';
+            document.getElementById('file-name').textContent = 'No file selected';
+        } else {
+            showImportStatus(data.error || data.message || 'Import failed', 'error');
+        }
+    } catch (error) {
+        console.error('Import error:', error);
+        showImportStatus('Import failed. Please try again.', 'error');
+    } finally {
+        importBtn.disabled = false;
+    }
+}
+
+/**
+ * Show import status message
+ */
+function showImportStatus(message, type) {
+    const statusDiv = document.getElementById('import-status');
+    statusDiv.textContent = message;
+    statusDiv.className = `import-status show ${type}`;
+}

@@ -237,6 +237,27 @@
                 </table>
             </div>
         </section>
+
+        <!-- Import Section -->
+        <section class="import-section" aria-labelledby="import-title">
+            <div class="section-header">
+                <h2 class="section-title" id="import-title">Import Data</h2>
+            </div>
+            <div class="import-form" role="region" aria-label="Import Torque CSV logs">
+                <p class="import-description">Import historical data from Torque Pro CSV log files.</p>
+                <form id="import-form" onsubmit="handleImport(event)" aria-label="CSV import form">
+                    <div class="import-controls">
+                        <label for="csv-file" class="btn-secondary btn-file">
+                            Choose CSV File
+                            <input type="file" id="csv-file" accept=".csv" required hidden>
+                        </label>
+                        <span id="file-name" class="file-name" aria-live="polite">No file selected</span>
+                        <button type="submit" class="btn-primary" id="import-btn" disabled>Import</button>
+                    </div>
+                </form>
+                <div id="import-status" class="import-status" role="status" aria-live="polite"></div>
+            </div>
+        </section>
     </main>
 
     <!-- Trip Detail Modal -->

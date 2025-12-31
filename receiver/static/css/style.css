@@ -612,6 +612,78 @@ body {
 }
 
 /* ============================================
+   Import Section
+   ============================================ */
+.import-section {
+    background-color: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    margin-top: 2rem;
+}
+
+.import-form {
+    margin-top: 1rem;
+}
+
+.import-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+}
+
+.import-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.btn-file {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+}
+
+.file-name {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    flex: 1;
+    min-width: 150px;
+}
+
+.import-status {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    display: none;
+}
+
+.import-status.show {
+    display: block;
+}
+
+.import-status.success {
+    background-color: rgba(40, 167, 69, 0.2);
+    color: var(--success);
+    border: 1px solid var(--success);
+}
+
+.import-status.error {
+    background-color: rgba(220, 53, 69, 0.2);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+}
+
+.import-status.loading {
+    background-color: rgba(50, 130, 184, 0.2);
+    color: var(--accent-light);
+    border: 1px solid var(--accent-light);
+}
+
+/* ============================================
    Modal
    ============================================ */
 .modal {
