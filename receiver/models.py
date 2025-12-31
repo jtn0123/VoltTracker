@@ -425,9 +425,10 @@ class BatteryHealthReading(Base):
 
     @property
     def degradation_percent(self):
-        """Calculate degradation percentage from original 18.4 kWh capacity."""
+        """Calculate degradation percentage from original battery capacity."""
         if self.normalized_capacity_kwh:
-            return round((1 - (self.normalized_capacity_kwh / 18.4)) * 100, 2)
+            original = Config.BATTERY_ORIGINAL_CAPACITY_KWH
+            return round((1 - (self.normalized_capacity_kwh / original)) * 100, 2)
         return None
 
 
