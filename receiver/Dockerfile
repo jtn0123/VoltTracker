@@ -21,5 +21,6 @@ RUN mkdir -p /app/logs
 # Expose port
 EXPOSE 8080
 
-# Run with gunicorn for production
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--threads", "4", "--limit-request-line", "0", "app:app"]
+# Run with gunicorn + gevent for WebSocket support
+# Note: Using 1 worker because gevent handles concurrency internally
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--worker-class", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", "--workers", "1", "--limit-request-line", "0", "app:app"]

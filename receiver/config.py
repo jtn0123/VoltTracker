@@ -41,6 +41,12 @@ class Config:
     API_DEFAULT_PER_PAGE = int(os.environ.get('API_DEFAULT_PER_PAGE', 50))
     API_MAX_PER_PAGE = int(os.environ.get('API_MAX_PER_PAGE', 100))
 
+    # Security
+    TORQUE_API_TOKEN = os.environ.get('TORQUE_API_TOKEN')  # Required in production
+    DASHBOARD_USER = os.environ.get('DASHBOARD_USER', 'admin')
+    DASHBOARD_PASSWORD = os.environ.get('DASHBOARD_PASSWORD')  # Required in production
+    RATE_LIMIT_ENABLED = os.environ.get('RATE_LIMIT_ENABLED', 'true').lower() == 'true'
+
     # Validation Thresholds
     MIN_MPG = float(os.environ.get('MIN_MPG', 10))
     MAX_MPG = float(os.environ.get('MAX_MPG', 100))

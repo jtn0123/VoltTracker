@@ -1,5 +1,8 @@
 -- Volt Efficiency Tracker Database Schema
--- PostgreSQL 15
+-- PostgreSQL 15 with TimescaleDB
+
+-- Enable TimescaleDB extension
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 -- Table: telemetry_raw
 -- Stores every data point received from Torque Pro
@@ -158,3 +161,27 @@ CREATE TRIGGER update_charging_sessions_updated_at
     BEFORE UPDATE ON charging_sessions
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- TimescaleDB Hypertable Configuration
+-- ============================================================================
+
+-- Convert telemetry_raw to a hypertable for efficient time-series queries
+-- Partitioned by timestamp with 1-day chunks
+SELECT create_hypertable('telemetry_raw', 'timestamp',
+    chunk_time_interval => INTERVAL '1 day',
+    if_not_exists => TRUE
+);
+
+-- Enable compression on telemetry_raw for storage efficiency
+-- Compress data older than 7 days, segment by session for efficient queries
+ALTER TABLE telemetry_raw SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'session_id'
+);
+
+-- Add compression policy to automatically compress old data
+SELECT add_compression_policy('telemetry_raw', INTERVAL '7 days', if_not_exists => TRUE);
+
+-- Optional: Add retention policy (uncomment to auto-delete data older than 2 years)
+-- SELECT add_retention_policy('telemetry_raw', INTERVAL '2 years', if_not_exists => TRUE);

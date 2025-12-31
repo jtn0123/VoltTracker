@@ -11,6 +11,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Union, Tuple, Any
 from flask import Flask, request, jsonify, render_template, Response
 from flask_caching import Cache
+from flask_httpauth import HTTPBasicAuth
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_socketio import SocketIO, emit
+from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy import func, desc
 from sqlalchemy.orm import scoped_session, sessionmaker
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -63,6 +68,80 @@ def init_cache(app):
 
 
 init_cache(app)
+
+# Initialize SocketIO for real-time updates
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode='gevent',
+    logger=False,
+    engineio_logger=False
+)
+
+
+def emit_telemetry_update(data: dict):
+    """Emit real-time telemetry update to all connected clients."""
+    socketio.emit('telemetry', {
+        'speed': data.get('speed_mph'),
+        'rpm': data.get('engine_rpm'),
+        'soc': data.get('state_of_charge'),
+        'fuel_percent': data.get('fuel_level_percent'),
+        'hv_power': data.get('hv_battery_power_kw'),
+        'latitude': data.get('latitude'),
+        'longitude': data.get('longitude'),
+        'odometer': data.get('odometer_miles'),
+        'timestamp': datetime.utcnow().isoformat()
+    })
+
+
+# ============================================================================
+# Security: Authentication & Rate Limiting
+# ============================================================================
+
+# Initialize HTTP Basic Auth for dashboard
+auth = HTTPBasicAuth()
+
+
+@auth.verify_password
+def verify_password(username, password):
+    """Verify dashboard credentials."""
+    # Skip auth if no password is configured (development mode)
+    if not Config.DASHBOARD_PASSWORD:
+        return username or 'dev'
+
+    if username == Config.DASHBOARD_USER:
+        # Compare with hashed password if it looks hashed, otherwise direct compare
+        stored_password = Config.DASHBOARD_PASSWORD
+        if stored_password.startswith('pbkdf2:') or stored_password.startswith('scrypt:'):
+            return username if check_password_hash(stored_password, password) else None
+        else:
+            return username if password == stored_password else None
+    return None
+
+
+# Initialize rate limiter
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"] if Config.RATE_LIMIT_ENABLED else [],
+    storage_uri="memory://",
+    enabled=Config.RATE_LIMIT_ENABLED
+)
+
+
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    # Add HSTS in production (when not in debug mode)
+    if not app.debug:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
+
 
 # Database setup
 engine = get_engine(Config.DATABASE_URL)
@@ -349,13 +428,25 @@ atexit.register(lambda: scheduler.shutdown())
 # ============================================================================
 
 @app.route('/torque/upload', methods=['GET', 'POST'])
-def torque_upload():
+@app.route('/torque/upload/<token>', methods=['GET', 'POST'])
+@limiter.exempt
+def torque_upload(token=None):
     """
     Receive data from Torque Pro app.
 
     Torque sends data as either GET query params or POST form data.
     Must respond with "OK!" exactly.
+
+    URL formats:
+        - /torque/upload (no auth, works if TORQUE_API_TOKEN not set)
+        - /torque/upload/<token> (token must match TORQUE_API_TOKEN)
     """
+    # Validate API token if configured
+    if Config.TORQUE_API_TOKEN:
+        if token != Config.TORQUE_API_TOKEN:
+            logger.warning(f"Invalid Torque API token attempt from {request.remote_addr}")
+            return "Unauthorized", 401
+
     try:
         # Handle both GET (query params) and POST (form data)
         if request.method == 'GET':
@@ -422,6 +513,9 @@ def torque_upload():
         )
         db.add(telemetry)
         db.commit()
+
+        # Emit real-time update to WebSocket clients
+        emit_telemetry_update(data)
 
         return "OK!"
 
@@ -2045,8 +2139,9 @@ def api_docs():
 # ============================================================================
 
 @app.route('/')
+@auth.login_required
 def dashboard():
-    """Serve the dashboard HTML."""
+    """Serve the dashboard HTML (requires authentication if configured)."""
     return render_template('index.html')
 
 
@@ -2055,4 +2150,4 @@ def dashboard():
 # ============================================================================
 
 if __name__ == '__main__':
-    app.run(host=Config.FLASK_HOST, port=Config.FLASK_PORT, debug=Config.DEBUG)
+    socketio.run(app, host=Config.FLASK_HOST, port=Config.FLASK_PORT, debug=Config.DEBUG)

@@ -12,11 +12,15 @@ let currentTimeframe = 30;
 let dateFilter = { start: null, end: null };
 let flatpickrInstance = null;
 let liveRefreshInterval = null;
+let socket = null;
+let useWebSocket = true;  // Will fallback to polling if WebSocket fails
 
 // Initialize dashboard on load
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     initDatePicker();
+    initWebSocket();
+    initServiceWorker();
     loadStatus();
     loadSummary();
     loadMpgTrend(currentTimeframe);
@@ -30,12 +34,156 @@ document.addEventListener('DOMContentLoaded', () => {
     // Refresh status every 30 seconds
     setInterval(loadStatus, 30000);
 
-    // Check for live trip every 10 seconds
-    setInterval(loadLiveTelemetry, 10000);
+    // Check for live trip every 10 seconds (fallback if WebSocket fails)
+    if (!useWebSocket) {
+        setInterval(loadLiveTelemetry, 10000);
+    }
 
     // Auto-refresh trips every 60 seconds
     setInterval(loadTrips, 60000);
 });
+
+/**
+ * Initialize WebSocket connection for real-time updates
+ */
+function initWebSocket() {
+    // Check if Socket.IO is available
+    if (typeof io === 'undefined') {
+        console.log('Socket.IO not available, falling back to polling');
+        useWebSocket = false;
+        setInterval(loadLiveTelemetry, 10000);
+        return;
+    }
+
+    try {
+        socket = io();
+
+        socket.on('connect', () => {
+            console.log('WebSocket connected');
+            useWebSocket = true;
+            updateConnectionStatus('connected');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('WebSocket disconnected');
+            updateConnectionStatus('disconnected');
+            // Start polling as fallback
+            if (!liveRefreshInterval) {
+                liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);
+            }
+        });
+
+        socket.on('telemetry', (data) => {
+            handleRealtimeTelemetry(data);
+        });
+
+        socket.on('connect_error', (error) => {
+            console.log('WebSocket connection error, falling back to polling');
+            useWebSocket = false;
+            if (!liveRefreshInterval) {
+                liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);
+            }
+        });
+    } catch (error) {
+        console.error('Failed to initialize WebSocket:', error);
+        useWebSocket = false;
+        setInterval(loadLiveTelemetry, 10000);
+    }
+}
+
+/**
+ * Handle real-time telemetry from WebSocket
+ */
+function handleRealtimeTelemetry(data) {
+    // Show live trip section
+    const liveSection = document.getElementById('live-trip-section');
+    const powerFlowSection = document.getElementById('power-flow-section');
+
+    if (liveSection) {
+        liveSection.style.display = 'block';
+    }
+    if (powerFlowSection && data.hv_power !== null) {
+        powerFlowSection.style.display = 'block';
+    }
+
+    // Update live display values
+    updateLiveValue('live-speed', data.speed, 0, ' mph');
+    updateLiveValue('live-rpm', data.rpm, 0, ' RPM');
+    updateLiveValue('live-soc', data.soc, 1, '%');
+    updateLiveValue('live-fuel', data.fuel_percent, 1, '%');
+
+    // Update power flow if available
+    if (data.hv_power !== null && data.hv_power !== undefined) {
+        const powerKw = document.getElementById('power-kw');
+        const powerMode = document.getElementById('power-mode');
+        const powerDirection = document.getElementById('power-direction');
+
+        if (powerKw) {
+            powerKw.textContent = Math.abs(data.hv_power).toFixed(1) + ' kW';
+        }
+        if (powerMode) {
+            if (data.hv_power > 1) {
+                powerMode.textContent = 'Discharging';
+                powerMode.className = 'power-mode discharging';
+            } else if (data.hv_power < -1) {
+                powerMode.textContent = 'Regen';
+                powerMode.className = 'power-mode regen';
+            } else {
+                powerMode.textContent = 'Idle';
+                powerMode.className = 'power-mode';
+            }
+        }
+        if (powerDirection) {
+            powerDirection.querySelector('.arrow-icon').textContent =
+                data.hv_power < 0 ? '←' : '→';
+        }
+    }
+
+    // Update status indicator
+    updateConnectionStatus('live');
+}
+
+/**
+ * Update a live value element
+ */
+function updateLiveValue(elementId, value, decimals, suffix) {
+    const element = document.getElementById(elementId);
+    if (element && value !== null && value !== undefined) {
+        element.textContent = value.toFixed(decimals) + (suffix || '');
+    }
+}
+
+/**
+ * Update connection status indicator
+ */
+function updateConnectionStatus(status) {
+    const statusDot = document.getElementById('status-dot');
+    const lastSync = document.getElementById('last-sync');
+
+    if (statusDot) {
+        statusDot.classList.remove('offline', 'live');
+        if (status === 'live' || status === 'connected') {
+            statusDot.classList.add('live');
+        } else if (status === 'disconnected') {
+            statusDot.classList.add('offline');
+        }
+    }
+
+    if (lastSync && status === 'live') {
+        lastSync.textContent = 'Live';
+    }
+}
+
+/**
+ * Initialize Service Worker for PWA
+ */
+function initServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/static/sw.js')
+            .then(reg => console.log('Service Worker registered'))
+            .catch(err => console.log('Service Worker registration failed:', err));
+    }
+}
 
 /**
  * Initialize theme from localStorage
@@ -837,20 +985,152 @@ function getPointColor(point) {
 }
 
 /**
+ * Get color based on instantaneous efficiency
+ * Uses a gradient from red (poor) to yellow (moderate) to green (excellent)
+ */
+function getEfficiencyColor(efficiency, isGasMode) {
+    if (efficiency === null || efficiency === undefined || !isFinite(efficiency)) {
+        return '#888888'; // Gray for unknown
+    }
+
+    if (isGasMode) {
+        // Gas MPG: <30 red, 30-40 yellow, >40 green
+        if (efficiency < 25) return '#e74c3c';      // Red - poor
+        if (efficiency < 30) return '#e67e22';      // Orange - below average
+        if (efficiency < 35) return '#f1c40f';      // Yellow - moderate
+        if (efficiency < 40) return '#2ecc71';      // Light green - good
+        return '#27ae60';                           // Green - excellent
+    } else {
+        // Electric miles/kWh: <2.5 red, 2.5-3.5 yellow, >3.5 green
+        // (Inverse of kWh/mile: 0.4+ bad, 0.29-0.4 moderate, <0.29 good)
+        if (efficiency < 2.0) return '#e74c3c';     // Red - poor
+        if (efficiency < 2.5) return '#e67e22';     // Orange - below average
+        if (efficiency < 3.0) return '#f1c40f';     // Yellow - moderate
+        if (efficiency < 3.5) return '#2ecc71';     // Light green - good
+        return '#27ae60';                           // Green - excellent
+    }
+}
+
+/**
+ * Calculate haversine distance between two GPS points (in miles)
+ */
+function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 3959; // Earth radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat1 * Math.PI / 180) *
+              Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Create efficiency-colored route segments
+ * Colors segments based on instantaneous efficiency (kWh/mile or MPG)
+ */
+function createEfficiencySegments(points) {
+    const segments = [];
+    let currentSegment = null;
+
+    for (let i = 1; i < points.length; i++) {
+        const prev = points[i - 1];
+        const curr = points[i];
+
+        if (!curr.latitude || !curr.longitude || !prev.latitude || !prev.longitude) {
+            continue;
+        }
+
+        // Calculate distance for this segment
+        const distance = haversineDistance(
+            prev.latitude, prev.longitude,
+            curr.latitude, curr.longitude
+        );
+
+        // Skip very short segments (GPS noise)
+        if (distance < 0.001) continue;
+
+        // Determine efficiency and mode
+        const isGasMode = curr.engine_rpm !== undefined && curr.engine_rpm > 500;
+        let efficiency = null;
+
+        if (isGasMode) {
+            // Gas mode - calculate MPG for segment
+            const prevFuel = prev.fuel_level_percent;
+            const currFuel = curr.fuel_level_percent;
+            if (prevFuel !== undefined && currFuel !== undefined && prevFuel > currFuel) {
+                const fuelUsed = (prevFuel - currFuel) / 100 * 9.31; // gallons
+                if (fuelUsed > 0.001) {
+                    efficiency = distance / fuelUsed; // MPG
+                }
+            }
+        } else {
+            // Electric mode - calculate miles per kWh
+            const prevSoc = prev.state_of_charge;
+            const currSoc = curr.state_of_charge;
+            if (prevSoc !== undefined && currSoc !== undefined && prevSoc > currSoc) {
+                const kwUsed = (prevSoc - currSoc) / 100 * 18.4; // kWh
+                if (kwUsed > 0.001) {
+                    efficiency = distance / kwUsed; // miles per kWh
+                }
+            }
+        }
+
+        // Get color based on efficiency
+        const color = getEfficiencyColor(efficiency, isGasMode);
+        const latlng = [curr.latitude, curr.longitude];
+        const prevLatlng = [prev.latitude, prev.longitude];
+
+        if (!currentSegment || currentSegment.color !== color) {
+            // Start new segment
+            if (currentSegment && currentSegment.points.length > 0) {
+                // Add overlap point for continuity
+                currentSegment.points.push(prevLatlng);
+            }
+            currentSegment = {
+                color: color,
+                efficiency: efficiency,
+                isGasMode: isGasMode,
+                points: [prevLatlng]
+            };
+            segments.push(currentSegment);
+        }
+
+        currentSegment.points.push(latlng);
+    }
+
+    return segments;
+}
+
+/**
  * Add a legend to the map
  */
-function addMapLegend(map) {
+function addMapLegend(map, isEfficiencyMode = false) {
     const legend = L.control({ position: 'bottomright' });
 
     legend.onAdd = function() {
         const div = L.DomUtil.create('div', 'map-legend');
-        div.innerHTML = `
-            <div style="background:rgba(0,0,0,0.7);padding:8px;border-radius:6px;color:white;font-size:11px;">
-                <div style="margin-bottom:4px;"><span style="display:inline-block;width:12px;height:3px;background:#27ae60;margin-right:6px;"></span>Electric</div>
-                <div style="margin-bottom:4px;"><span style="display:inline-block;width:12px;height:3px;background:#e67e22;margin-right:6px;"></span>Gas</div>
-                <div><span style="display:inline-block;width:12px;height:3px;background:#3498db;margin-right:6px;"></span>Regen</div>
-            </div>
-        `;
+        if (isEfficiencyMode) {
+            div.innerHTML = `
+                <div style="background:rgba(0,0,0,0.8);padding:10px;border-radius:6px;color:white;font-size:11px;">
+                    <div style="font-weight:bold;margin-bottom:6px;">Efficiency</div>
+                    <div style="margin-bottom:3px;"><span style="display:inline-block;width:12px;height:3px;background:#27ae60;margin-right:6px;"></span>Excellent</div>
+                    <div style="margin-bottom:3px;"><span style="display:inline-block;width:12px;height:3px;background:#2ecc71;margin-right:6px;"></span>Good</div>
+                    <div style="margin-bottom:3px;"><span style="display:inline-block;width:12px;height:3px;background:#f1c40f;margin-right:6px;"></span>Moderate</div>
+                    <div style="margin-bottom:3px;"><span style="display:inline-block;width:12px;height:3px;background:#e67e22;margin-right:6px;"></span>Below Avg</div>
+                    <div style="margin-bottom:3px;"><span style="display:inline-block;width:12px;height:3px;background:#e74c3c;margin-right:6px;"></span>Poor</div>
+                    <div><span style="display:inline-block;width:12px;height:3px;background:#888888;margin-right:6px;"></span>Unknown</div>
+                </div>
+            `;
+        } else {
+            div.innerHTML = `
+                <div style="background:rgba(0,0,0,0.7);padding:8px;border-radius:6px;color:white;font-size:11px;">
+                    <div style="margin-bottom:4px;"><span style="display:inline-block;width:12px;height:3px;background:#27ae60;margin-right:6px;"></span>Electric</div>
+                    <div style="margin-bottom:4px;"><span style="display:inline-block;width:12px;height:3px;background:#e67e22;margin-right:6px;"></span>Gas</div>
+                    <div><span style="display:inline-block;width:12px;height:3px;background:#3498db;margin-right:6px;"></span>Regen</div>
+                </div>
+            `;
+        }
         return div;
     };
 

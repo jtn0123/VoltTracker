@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   db:
-    image: postgres:15-alpine
+    image: timescale/timescaledb:latest-pg15
     container_name: volt-tracker-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-volt}
@@ -29,6 +29,11 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
       ELECTRICITY_COST: ${ELECTRICITY_COST:-0.12}
       GAS_COST: ${GAS_COST:-3.50}
+      # Security
+      TORQUE_API_TOKEN: ${TORQUE_API_TOKEN:-}
+      DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
     ports:
       - "8080:8080"
     depends_on:
