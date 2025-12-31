@@ -2221,7 +2221,90 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // Initialize bottom navigation
+    initBottomNav();
 });
+
+/**
+ * Initialize bottom navigation with scroll spy
+ */
+function initBottomNav() {
+    const bottomNav = document.querySelector('.bottom-nav');
+    if (!bottomNav) return;
+
+    const navItems = bottomNav.querySelectorAll('.bottom-nav-item');
+    const sections = [
+        { id: 'summary-section', nav: 'summary' },
+        { id: 'trips-section', nav: 'trips' },
+        { id: 'charging-section', nav: 'charging' },
+        { id: 'soc-section', nav: 'analysis' }
+    ];
+
+    // Handle nav item clicks
+    navItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const sectionId = item.getAttribute('href').substring(1);
+            const section = document.getElementById(sectionId);
+            if (section) {
+                // Offset for header
+                const headerOffset = 80;
+                const elementPosition = section.getBoundingClientRect().top;
+                const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+
+                window.scrollTo({
+                    top: offsetPosition,
+                    behavior: 'smooth'
+                });
+
+                // Update active state
+                setActiveNavItem(item.dataset.section);
+            }
+        });
+    });
+
+    // Scroll spy - update active nav item based on scroll position
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+        if (!ticking) {
+            window.requestAnimationFrame(() => {
+                updateActiveNavOnScroll(sections);
+                ticking = false;
+            });
+            ticking = true;
+        }
+    });
+}
+
+/**
+ * Update active nav item based on scroll position
+ */
+function updateActiveNavOnScroll(sections) {
+    const scrollPosition = window.scrollY + 100; // Offset for better UX
+
+    for (let i = sections.length - 1; i >= 0; i--) {
+        const section = document.getElementById(sections[i].id);
+        if (section && section.offsetTop <= scrollPosition) {
+            setActiveNavItem(sections[i].nav);
+            break;
+        }
+    }
+}
+
+/**
+ * Set active navigation item
+ */
+function setActiveNavItem(sectionName) {
+    const navItems = document.querySelectorAll('.bottom-nav-item');
+    navItems.forEach(item => {
+        if (item.dataset.section === sectionName) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
+}
 
 /**
  * Handle CSV import form submission

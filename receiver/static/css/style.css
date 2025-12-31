@@ -2080,3 +2080,76 @@ body {
     text-align: center;
     font-size: 1rem;
 }
+
+/* ============================================
+   Bottom Navigation (Mobile)
+   ============================================ */
+.bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+    border-top: 1px solid var(--border-color);
+    z-index: var(--z-fixed);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: var(--font-xs);
+    gap: var(--space-xs);
+    padding: var(--space-sm) 0;
+    transition: color 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.bottom-nav-item .nav-icon {
+    width: 24px;
+    height: 24px;
+    stroke-width: 1.5;
+    transition: transform 0.2s ease;
+}
+
+.bottom-nav-item.active {
+    color: var(--electric);
+}
+
+.bottom-nav-item.active .nav-icon {
+    transform: scale(1.1);
+}
+
+.bottom-nav-item:active {
+    transform: scale(0.95);
+}
+
+/* Show bottom nav on mobile */
+@media (max-width: 768px) {
+    .bottom-nav {
+        display: flex;
+    }
+
+    /* Add padding to container to account for bottom nav */
+    .container {
+        padding-bottom: calc(64px + env(safe-area-inset-bottom, 0) + var(--space-lg));
+    }
+}
+
+/* Smooth scroll for anchor links */
+html {
+    scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+}
