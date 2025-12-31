@@ -1092,3 +1092,283 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* ============================================
+   Mobile Improvements (WCAG Touch Target 44x44px)
+   ============================================ */
+
+/* Minimum touch targets for mobile */
+@media (max-width: 768px) {
+    .btn-primary,
+    .btn-secondary,
+    .btn-add,
+    .export-btn,
+    .theme-toggle,
+    .timeframe-btn,
+    .modal-close {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .theme-toggle {
+        padding: 0.75rem;
+    }
+
+    .timeframe-btn {
+        padding: 0.75rem 1rem;
+    }
+
+    /* Better spacing for mobile cards */
+    .cards-grid {
+        gap: 0.75rem;
+    }
+
+    .card {
+        padding: 1rem;
+    }
+
+    /* Full-width buttons on mobile */
+    .btn-add {
+        padding: 0.75rem 1rem;
+    }
+
+    /* Bottom sheet style modals on mobile */
+    .modal.show {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .modal-content {
+        border-radius: 16px 16px 0 0;
+        max-height: 90vh;
+        overflow-y: auto;
+        animation: slideUp 0.3s ease-out;
+    }
+
+    @keyframes slideUp {
+        from {
+            transform: translateY(100%);
+        }
+        to {
+            transform: translateY(0);
+        }
+    }
+
+    .modal-header {
+        position: sticky;
+        top: 0;
+        background-color: var(--bg-card);
+        z-index: 10;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    /* Swipe indicator for mobile modals */
+    .modal-header::before {
+        content: '';
+        display: block;
+        width: 40px;
+        height: 4px;
+        background-color: var(--border-color);
+        border-radius: 2px;
+        margin: 0 auto 1rem auto;
+    }
+}
+
+/* ============================================
+   Status Indicators with Icons (Not just colors)
+   ============================================ */
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--success);
+    position: relative;
+}
+
+/* Add icon overlay for status */
+.status-dot::after {
+    content: '✓';
+    position: absolute;
+    font-size: 6px;
+    color: white;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.status-dot.offline {
+    background-color: var(--danger);
+}
+
+.status-dot.offline::after {
+    content: '✕';
+}
+
+.status-dot.warning {
+    background-color: var(--warning);
+}
+
+.status-dot.warning::after {
+    content: '!';
+}
+
+/* Charge type badges with icons */
+.charge-type-badge.l1::before {
+    content: '⚡';
+    margin-right: 0.25rem;
+}
+
+.charge-type-badge.l2::before {
+    content: '⚡⚡';
+    margin-right: 0.25rem;
+}
+
+.charge-type-badge.dcfc::before {
+    content: '🔋';
+    margin-right: 0.25rem;
+}
+
+/* ============================================
+   Color Contrast Improvements (WCAG 2.1 AA)
+   ============================================ */
+
+/* Ensure minimum 4.5:1 contrast ratio for normal text */
+:root {
+    /* Adjusted colors for better contrast */
+    --text-secondary-contrast: #c4c4c4;  /* Lighter for better contrast */
+}
+
+/* Use higher contrast colors for important text */
+.card-value {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.card-label {
+    color: var(--text-secondary-contrast, var(--text-secondary));
+}
+
+.stat-label {
+    color: var(--text-secondary-contrast, var(--text-secondary));
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    :root {
+        --bg-primary: #000000;
+        --bg-secondary: #0a0a0a;
+        --bg-card: #111111;
+        --text-primary: #ffffff;
+        --text-secondary: #e0e0e0;
+        --border-color: #555555;
+        --accent: #4a9fd4;
+        --accent-light: #6bb8e8;
+    }
+
+    .card {
+        border: 2px solid var(--border-color);
+    }
+
+    .trips-table th,
+    .charging-table th {
+        border-bottom: 2px solid var(--border-color);
+    }
+
+    button, a {
+        text-decoration: underline;
+    }
+
+    button:focus,
+    a:focus,
+    input:focus,
+    select:focus {
+        outline: 3px solid var(--accent-light);
+        outline-offset: 2px;
+    }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .modal-content {
+        animation: none;
+    }
+
+    .spinner {
+        animation: none;
+        opacity: 0.5;
+    }
+}
+
+/* ============================================
+   Delete Button Improvements
+   ============================================ */
+
+.delete-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.delete-btn:hover {
+    background-color: rgba(220, 53, 69, 0.2);
+}
+
+.delete-btn:active {
+    transform: scale(0.95);
+}
+
+/* ============================================
+   Responsive Chart Containers
+   ============================================ */
+
+.chart-container {
+    position: relative;
+    width: 100%;
+}
+
+@media (max-width: 480px) {
+    .chart-container {
+        min-height: 200px;
+    }
+
+    .chart-section {
+        padding: 1rem;
+    }
+
+    .chart-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .timeframe-selector {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.25rem;
+    }
+
+    .timeframe-btn {
+        font-size: 0.75rem;
+        padding: 0.5rem;
+    }
+}
