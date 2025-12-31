@@ -1370,14 +1370,95 @@ body {
     margin-top: 2rem;
 }
 
+.charging-stats-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
 .charging-stats {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
-    margin-bottom: 1.5rem;
     padding: 1rem;
     background-color: var(--bg-card);
     border-radius: 8px;
+    flex: 1;
+    min-width: 200px;
+}
+
+/* Cost Comparison Section */
+.cost-comparison {
+    padding: 1rem;
+    background-color: var(--bg-card);
+    border-radius: 8px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.cost-comparison h4 {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
+.cost-compare-grid {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.cost-item {
+    flex: 1;
+    text-align: center;
+    padding: 0.5rem;
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.cost-item.electric {
+    border-left: 3px solid #00d4aa;
+}
+
+.cost-item.gas {
+    border-left: 3px solid #ffc107;
+}
+
+.cost-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+}
+
+.cost-value {
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.cost-savings {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    padding: 0.5rem;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+}
+
+.cost-savings.positive {
+    color: #00d4aa;
+    background-color: rgba(0, 212, 170, 0.1);
+}
+
+.cost-savings.negative {
+    color: #ffc107;
+    background-color: rgba(255, 193, 7, 0.1);
 }
 
 .charging-table-wrapper {

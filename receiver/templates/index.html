@@ -294,17 +294,34 @@
                 <h2 class="section-title" id="charging-title">Charging History</h2>
                 <button class="btn-add" onclick="openAddChargingModal()" aria-label="Add new charging session">+ Add Session</button>
             </div>
-            <div class="charging-stats" role="region" aria-label="Charging session counts">
-                <dl class="stat-list">
-                    <div class="stat-row">
-                        <dt class="stat-label">L1 Sessions</dt>
-                        <dd class="stat-value" id="l1-sessions" aria-live="polite">--</dd>
+            <div class="charging-stats-row">
+                <div class="charging-stats" role="region" aria-label="Charging session counts">
+                    <dl class="stat-list">
+                        <div class="stat-row">
+                            <dt class="stat-label">L1 Sessions</dt>
+                            <dd class="stat-value" id="l1-sessions" aria-live="polite">--</dd>
+                        </div>
+                        <div class="stat-row">
+                            <dt class="stat-label">L2 Sessions</dt>
+                            <dd class="stat-value" id="l2-sessions" aria-live="polite">--</dd>
+                        </div>
+                    </dl>
+                </div>
+                <!-- Cost Comparison (hidden until data exists) -->
+                <div id="cost-comparison-section" class="cost-comparison" style="display:none;" role="region" aria-label="Cost comparison">
+                    <h4>Cost per Mile</h4>
+                    <div class="cost-compare-grid">
+                        <div class="cost-item electric">
+                            <span class="cost-label">Electric</span>
+                            <span class="cost-value" id="cost-per-mile-electric">--</span>
+                        </div>
+                        <div class="cost-item gas">
+                            <span class="cost-label">Gas</span>
+                            <span class="cost-value" id="cost-per-mile-gas">--</span>
+                        </div>
                     </div>
-                    <div class="stat-row">
-                        <dt class="stat-label">L2 Sessions</dt>
-                        <dd class="stat-value" id="l2-sessions" aria-live="polite">--</dd>
-                    </div>
-                </dl>
+                    <div class="cost-savings" id="cost-savings">--</div>
+                </div>
             </div>
             <div class="charging-table-wrapper">
                 <table class="charging-table" aria-label="Charging sessions">

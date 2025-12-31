@@ -704,7 +704,10 @@ function closeTripModal() {
 }
 
 /**
- * Render trip route on map
+ * Render trip route on map with color-coded segments
+ * - Green: Electric driving (no engine)
+ * - Orange: Gas mode (engine running)
+ * - Blue: Regenerating (negative power flow)
  */
 function renderTripMap(telemetry) {
     const mapEl = document.getElementById('trip-detail-map');
@@ -727,27 +730,131 @@ function renderTripMap(telemetry) {
         attribution: '&copy; OpenStreetMap contributors'
     }).addTo(tripMap);
 
-    // Create polyline from GPS points
-    const latlngs = gpsPoints.map(p => [p.latitude, p.longitude]);
-    const polyline = L.polyline(latlngs, { color: '#3282b8', weight: 4 }).addTo(tripMap);
+    // Determine if we have power/RPM data for color coding
+    const hasPowerData = gpsPoints.some(p =>
+        p.engine_rpm !== undefined || p.hv_battery_power_kw !== undefined
+    );
+
+    if (hasPowerData) {
+        // Create color-coded polyline segments
+        const segments = createColorCodedSegments(gpsPoints);
+
+        // Add each colored segment
+        segments.forEach(segment => {
+            if (segment.points.length >= 2) {
+                L.polyline(segment.points, {
+                    color: segment.color,
+                    weight: 4,
+                    opacity: 0.9
+                }).addTo(tripMap);
+            }
+        });
+
+        // Add legend
+        addMapLegend(tripMap);
+
+        // Fit map to all points
+        const allPoints = gpsPoints.map(p => [p.latitude, p.longitude]);
+        const bounds = L.latLngBounds(allPoints);
+        tripMap.fitBounds(bounds, { padding: [20, 20] });
+    } else {
+        // Fallback to simple polyline if no power data
+        const latlngs = gpsPoints.map(p => [p.latitude, p.longitude]);
+        const polyline = L.polyline(latlngs, { color: '#3282b8', weight: 4 }).addTo(tripMap);
+        tripMap.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+    }
 
     // Add start and end markers
-    L.marker(latlngs[0], {
+    const startPoint = [gpsPoints[0].latitude, gpsPoints[0].longitude];
+    const endPoint = [gpsPoints[gpsPoints.length - 1].latitude, gpsPoints[gpsPoints.length - 1].longitude];
+
+    L.marker(startPoint, {
         icon: L.divIcon({
             className: 'map-marker-start',
-            html: '<div style="background:#28a745;width:12px;height:12px;border-radius:50%;border:2px solid white;"></div>'
+            html: '<div style="background:#28a745;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>'
         })
     }).addTo(tripMap).bindPopup('Start');
 
-    L.marker(latlngs[latlngs.length - 1], {
+    L.marker(endPoint, {
         icon: L.divIcon({
             className: 'map-marker-end',
-            html: '<div style="background:#dc3545;width:12px;height:12px;border-radius:50%;border:2px solid white;"></div>'
+            html: '<div style="background:#dc3545;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>'
         })
     }).addTo(tripMap).bindPopup('End');
+}
 
-    // Fit map to polyline bounds
-    tripMap.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+/**
+ * Create color-coded route segments based on driving mode
+ */
+function createColorCodedSegments(points) {
+    const segments = [];
+    let currentSegment = null;
+
+    for (let i = 0; i < points.length; i++) {
+        const point = points[i];
+        const color = getPointColor(point);
+        const latlng = [point.latitude, point.longitude];
+
+        if (!currentSegment || currentSegment.color !== color) {
+            // Start new segment
+            if (currentSegment && currentSegment.points.length > 0) {
+                // Add overlap point for continuity
+                currentSegment.points.push(latlng);
+            }
+            currentSegment = {
+                color: color,
+                points: currentSegment ? [currentSegment.points[currentSegment.points.length - 1]] : []
+            };
+            currentSegment.points.push(latlng);
+            segments.push(currentSegment);
+        } else {
+            currentSegment.points.push(latlng);
+        }
+    }
+
+    return segments;
+}
+
+/**
+ * Get color for a telemetry point based on driving mode
+ */
+function getPointColor(point) {
+    const engineRpm = point.engine_rpm;
+    const powerKw = point.hv_battery_power_kw;
+
+    // Check for regeneration first (negative power = charging battery)
+    if (powerKw !== undefined && powerKw !== null && powerKw < -0.5) {
+        return '#3498db'; // Blue - Regenerating
+    }
+
+    // Check if engine is running (gas mode)
+    if (engineRpm !== undefined && engineRpm !== null && engineRpm > 500) {
+        return '#e67e22'; // Orange - Gas mode
+    }
+
+    // Default to electric
+    return '#27ae60'; // Green - Electric
+}
+
+/**
+ * Add a legend to the map
+ */
+function addMapLegend(map) {
+    const legend = L.control({ position: 'bottomright' });
+
+    legend.onAdd = function() {
+        const div = L.DomUtil.create('div', 'map-legend');
+        div.innerHTML = `
+            <div style="background:rgba(0,0,0,0.7);padding:8px;border-radius:6px;color:white;font-size:11px;">
+                <div style="margin-bottom:4px;"><span style="display:inline-block;width:12px;height:3px;background:#27ae60;margin-right:6px;"></span>Electric</div>
+                <div style="margin-bottom:4px;"><span style="display:inline-block;width:12px;height:3px;background:#e67e22;margin-right:6px;"></span>Gas</div>
+                <div><span style="display:inline-block;width:12px;height:3px;background:#3498db;margin-right:6px;"></span>Regen</div>
+            </div>
+        `;
+        return div;
+    };
+
+    legend.addTo(map);
 }
 
 /**
