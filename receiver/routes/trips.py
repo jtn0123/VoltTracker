@@ -204,8 +204,10 @@ def get_efficiency_summary():
 
     # Calculate average kWh/mile for electric driving
     avg_kwh_per_mile = None
+    mi_per_kwh = None
     if total_electric_miles > 0 and total_kwh_used > 0:
         avg_kwh_per_mile = round(total_kwh_used / total_electric_miles, 3)
+        mi_per_kwh = round(total_electric_miles / total_kwh_used, 2)
 
     # Calculate EV ratio
     ev_ratio = None
@@ -261,6 +263,7 @@ def get_efficiency_summary():
         'total_electric_miles': round(total_electric_miles, 1),
         'total_kwh_used': round(total_kwh_used, 2),
         'avg_kwh_per_mile': avg_kwh_per_mile,
+        'mi_per_kwh': mi_per_kwh,
         'ev_ratio': ev_ratio,
     })
 

@@ -570,6 +570,44 @@ async function loadSummary() {
             totalMiles.textContent = '--';
         }
 
+        // Electric Efficiency (kWh/mile)
+        const kwhPerMile = document.getElementById('kwh-per-mile');
+        const miPerKwh = document.getElementById('mi-per-kwh');
+        if (data.avg_kwh_per_mile) {
+            kwhPerMile.innerHTML = `${data.avg_kwh_per_mile}<span class="card-unit">kWh/mi</span>`;
+            if (data.mi_per_kwh) {
+                miPerKwh.textContent = `${data.mi_per_kwh} mi/kWh`;
+            } else {
+                miPerKwh.textContent = 'Lifetime average';
+            }
+        } else {
+            kwhPerMile.textContent = '--';
+            miPerKwh.textContent = 'No electric data yet';
+        }
+
+        // Electric Miles with kWh used
+        const electricMiles = document.getElementById('total-electric-miles');
+        const totalKwhUsed = document.getElementById('total-kwh-used');
+        if (data.total_electric_miles) {
+            electricMiles.innerHTML = `${data.total_electric_miles.toLocaleString()}<span class="card-unit">mi</span>`;
+            if (data.total_kwh_used) {
+                totalKwhUsed.textContent = `${data.total_kwh_used} kWh used`;
+            } else {
+                totalKwhUsed.textContent = 'Total EV driving';
+            }
+        } else {
+            electricMiles.textContent = '--';
+            totalKwhUsed.textContent = 'No electric data yet';
+        }
+
+        // EV Ratio
+        const evRatio = document.getElementById('ev-ratio');
+        if (data.ev_ratio !== undefined && data.ev_ratio !== null) {
+            evRatio.innerHTML = `${data.ev_ratio}<span class="card-unit">%</span>`;
+        } else {
+            evRatio.textContent = '--';
+        }
+
     } catch (error) {
         console.error('Failed to load summary:', error);
     }
@@ -1527,39 +1565,28 @@ async function loadChargingSummary() {
         }
 
         // Average kWh per session with cost info
-        const avgKwh = document.getElementById('avg-kwh-session');
-        if (data.avg_kwh_per_session) {
-            avgKwh.innerHTML = `${data.avg_kwh_per_session.toFixed(1)}<span class="card-unit">kWh</span>`;
-            // Show monthly cost if available
+        const avgKwhSession = document.getElementById('avg-kwh-session');
+        if (avgKwhSession) {
+            if (data.avg_kwh_per_session) {
+                avgKwhSession.innerHTML = `${data.avg_kwh_per_session.toFixed(1)}<span class="card-unit">kWh</span>`;
+            } else {
+                avgKwhSession.textContent = '--';
+            }
+        }
+
+        // Show monthly/total cost if available
+        const chargingCost = document.getElementById('charging-cost');
+        if (chargingCost) {
             if (data.monthly_cost) {
                 const costLabel = data.has_explicit_costs ? '' : '~';
-                document.getElementById('charging-cost').textContent =
-                    `${costLabel}$${data.monthly_cost.toFixed(2)}/month`;
+                chargingCost.textContent = `${costLabel}$${data.monthly_cost.toFixed(2)}/month`;
             } else if (data.total_cost) {
-                document.getElementById('charging-cost').textContent =
-                    `$${data.total_cost.toFixed(2)} total`;
+                chargingCost.textContent = `$${data.total_cost.toFixed(2)} total`;
+            } else if (data.electricity_rate) {
+                chargingCost.textContent = `$${data.electricity_rate}/kWh rate`;
             } else {
-                document.getElementById('charging-cost').textContent = `$${data.electricity_rate}/kWh rate`;
+                chargingCost.textContent = 'No cost data';
             }
-        } else {
-            avgKwh.textContent = '--';
-            document.getElementById('charging-cost').textContent = 'No data yet';
-        }
-
-        // Electric miles (from trips data)
-        const electricMiles = document.getElementById('total-electric-miles');
-        if (data.total_electric_miles) {
-            electricMiles.innerHTML = `${data.total_electric_miles.toLocaleString()}<span class="card-unit">mi</span>`;
-        } else {
-            electricMiles.textContent = '--';
-        }
-
-        // EV ratio
-        const evRatio = document.getElementById('ev-ratio');
-        if (data.ev_ratio !== undefined) {
-            evRatio.innerHTML = `${data.ev_ratio}<span class="card-unit">%</span>`;
-        } else {
-            evRatio.textContent = '--';
         }
 
         // L1/L2 session counts
