@@ -53,6 +53,67 @@
             </div>
         </section>
 
+        <!-- Power Flow Section (hidden by default, shown when live data has power flow info) -->
+        <section id="power-flow-section" class="card card-power-flow" style="display:none;" role="region" aria-label="Power flow visualization">
+            <h2>Power Flow</h2>
+            <div class="power-flow-container">
+                <!-- Power Flow Diagram -->
+                <div class="power-flow-diagram">
+                    <div class="power-source" id="power-battery">
+                        <div class="power-label">Battery</div>
+                        <div class="power-bar-container">
+                            <div class="power-bar" id="battery-bar"></div>
+                        </div>
+                        <div class="power-stats" id="battery-stats">-- V, -- A</div>
+                    </div>
+                    <div class="power-arrow" id="power-direction">
+                        <span class="arrow-icon">→</span>
+                    </div>
+                    <div class="power-dest" id="power-motor">
+                        <div class="power-label">Motor</div>
+                        <div class="power-value" id="power-kw">-- kW</div>
+                        <div class="power-mode" id="power-mode">--</div>
+                    </div>
+                    <div class="power-arrow">
+                        <span class="arrow-icon">→</span>
+                    </div>
+                    <div class="power-dest">
+                        <div class="power-label">Wheels</div>
+                    </div>
+                </div>
+
+                <!-- Motor/Generator Stats -->
+                <div class="powertrain-stats">
+                    <div class="powertrain-row">
+                        <div class="powertrain-item">
+                            <span class="powertrain-label">Motor A</span>
+                            <span class="powertrain-value" id="motor-a-rpm">-- RPM</span>
+                        </div>
+                        <div class="powertrain-item">
+                            <span class="powertrain-label">Motor B</span>
+                            <span class="powertrain-value" id="motor-b-rpm">-- RPM</span>
+                        </div>
+                    </div>
+                    <div class="powertrain-row">
+                        <div class="powertrain-item">
+                            <span class="powertrain-label">Generator</span>
+                            <span class="powertrain-value" id="generator-rpm">-- RPM</span>
+                        </div>
+                        <div class="powertrain-item">
+                            <span class="powertrain-label">Engine</span>
+                            <span class="powertrain-value" id="engine-status">--</span>
+                        </div>
+                    </div>
+                    <div class="powertrain-row" id="motor-temps-row" style="display:none;">
+                        <div class="powertrain-item powertrain-temps">
+                            <span class="powertrain-label">Motor Temps</span>
+                            <span class="powertrain-value" id="motor-temps">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Summary Cards -->
         <section class="cards-grid" aria-label="Gas efficiency summary">
             <div class="card" role="region" aria-labelledby="lifetime-mpg-label">

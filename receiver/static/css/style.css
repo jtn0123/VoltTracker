@@ -83,6 +83,230 @@
     }
 }
 
+/* ============================================
+   Power Flow Section
+   ============================================ */
+#power-flow-section {
+    background: linear-gradient(135deg, #1a3a5c 0%, #0d2840 100%);
+    color: white;
+    margin-bottom: 1.5rem;
+    border: none;
+}
+
+#power-flow-section h2 {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.1rem;
+}
+
+#power-flow-section h2::before {
+    content: '⚡';
+}
+
+.power-flow-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Power Flow Diagram */
+.power-flow-diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+
+.power-source, .power-dest {
+    text-align: center;
+    min-width: 80px;
+    padding: 0.75rem;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+}
+
+.power-source {
+    min-width: 120px;
+}
+
+.power-label {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.power-bar-container {
+    height: 12px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 0.5rem 0;
+}
+
+.power-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+    border-radius: 6px;
+    width: 50%;
+    transition: width 0.3s ease;
+}
+
+.power-bar.discharging {
+    background: linear-gradient(90deg, #ff6b6b 0%, #ee5a5a 100%);
+}
+
+.power-bar.regenerating {
+    background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+}
+
+.power-bar.charging {
+    background: linear-gradient(90deg, #3498db 0%, #2980b9 100%);
+}
+
+.power-stats {
+    font-size: 0.7rem;
+    opacity: 0.75;
+}
+
+.power-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 0.25rem;
+}
+
+.arrow-icon {
+    font-size: 1.5rem;
+    color: rgba(255, 255, 255, 0.6);
+    transition: color 0.3s ease;
+}
+
+.power-arrow.active .arrow-icon {
+    color: #00d4aa;
+}
+
+.power-arrow.reverse .arrow-icon {
+    transform: scaleX(-1);
+    color: #3498db;
+}
+
+.power-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0.25rem 0;
+}
+
+.power-mode {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    display: inline-block;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.power-mode.discharging {
+    background-color: rgba(255, 107, 107, 0.3);
+    color: #ff6b6b;
+}
+
+.power-mode.regenerating {
+    background-color: rgba(0, 212, 170, 0.3);
+    color: #00d4aa;
+}
+
+.power-mode.charging {
+    background-color: rgba(52, 152, 219, 0.3);
+    color: #3498db;
+}
+
+.power-mode.idle {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* Powertrain Stats */
+.powertrain-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.powertrain-row {
+    display: flex;
+    justify-content: space-around;
+    gap: 1rem;
+}
+
+.powertrain-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    min-width: 100px;
+    padding: 0.5rem;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    flex: 1;
+}
+
+.powertrain-item.powertrain-temps {
+    flex: 2;
+}
+
+.powertrain-label {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.powertrain-value {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 0.25rem;
+}
+
+.powertrain-value.engine-on {
+    color: #ff6b6b;
+}
+
+.powertrain-value.engine-off {
+    color: #00d4aa;
+}
+
+/* Power Flow responsive */
+@media (max-width: 600px) {
+    .power-flow-diagram {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .power-arrow {
+        transform: rotate(90deg);
+    }
+
+    .power-arrow.reverse .arrow-icon {
+        transform: rotate(180deg) scaleX(1);
+    }
+
+    .powertrain-row {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .powertrain-item {
+        min-width: calc(50% - 0.5rem);
+    }
+}
+
 :root {
     --bg-primary: #1a1a2e;
     --bg-secondary: #16213e;
