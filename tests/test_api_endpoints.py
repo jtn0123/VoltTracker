@@ -4,16 +4,14 @@ Tests for extended API endpoint coverage.
 Tests telemetry latest, battery health, and export endpoints.
 """
 
-import pytest
 import sys
 import os
-import json
 import uuid
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 
-from models import TelemetryRaw, Trip, FuelEvent, ChargingSession, BatteryHealthReading
+from models import TelemetryRaw, Trip, FuelEvent, ChargingSession, BatteryHealthReading  # noqa: E402
 
 
 class TestTelemetryLatestEndpoint:

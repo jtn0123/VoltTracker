@@ -42,6 +42,7 @@ from utils import (
 )
 from utils.weather import get_weather_for_location, get_weather_impact_factor
 
+
 # Configure logging with rotation
 def setup_logging():
     """

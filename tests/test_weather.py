@@ -14,10 +14,8 @@ import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 
-from utils.weather import (
+from utils.weather import (  # noqa: E402
     get_weather_for_location,
-    _get_forecast_weather,
-    _get_historical_weather,
     _parse_weather_response,
     _weather_code_to_description,
     get_weather_impact_factor,
