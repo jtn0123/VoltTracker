@@ -305,6 +305,95 @@ class ChargingSession(Base):
         }
 
 
+class BatteryCellReading(Base):
+    """Stores individual cell voltage readings from the HV battery pack.
+
+    The Gen 2 Volt has 96 cells arranged in 3 sections/modules.
+    This table stores snapshots of cell voltages for battery health analysis.
+    """
+
+    __tablename__ = 'battery_cell_readings'
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    # Cell voltages stored as JSON array (96 values)
+    # Format: [cell1_v, cell2_v, ..., cell96_v]
+    cell_voltages = Column(JSONType())
+
+    # Summary statistics (calculated at insert time for quick queries)
+    min_voltage = Column(Float)
+    max_voltage = Column(Float)
+    avg_voltage = Column(Float)
+    voltage_delta = Column(Float)  # max - min (imbalance indicator)
+
+    # Module-level summaries (cells 1-32, 33-64, 65-96)
+    module1_avg = Column(Float)
+    module2_avg = Column(Float)
+    module3_avg = Column(Float)
+
+    # Environmental context
+    ambient_temp_f = Column(Float)
+    state_of_charge = Column(Float)
+    is_charging = Column(Boolean, default=False)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'cell_voltages': self.cell_voltages,
+            'min_voltage': self.min_voltage,
+            'max_voltage': self.max_voltage,
+            'avg_voltage': self.avg_voltage,
+            'voltage_delta': self.voltage_delta,
+            'module1_avg': self.module1_avg,
+            'module2_avg': self.module2_avg,
+            'module3_avg': self.module3_avg,
+            'ambient_temp_f': self.ambient_temp_f,
+            'state_of_charge': self.state_of_charge,
+            'is_charging': self.is_charging,
+        }
+
+    @classmethod
+    def from_cell_voltages(cls, timestamp, cell_voltages, ambient_temp_f=None,
+                           state_of_charge=None, is_charging=False):
+        """Create a reading from a list of cell voltages with calculated stats."""
+        if not cell_voltages or len(cell_voltages) == 0:
+            return None
+
+        import statistics
+
+        valid_voltages = [v for v in cell_voltages if v is not None and v > 0]
+        if not valid_voltages:
+            return None
+
+        min_v = min(valid_voltages)
+        max_v = max(valid_voltages)
+        avg_v = statistics.mean(valid_voltages)
+
+        # Calculate module averages (assuming 96 cells, 32 per module)
+        module1 = [v for v in cell_voltages[:32] if v is not None and v > 0]
+        module2 = [v for v in cell_voltages[32:64] if v is not None and v > 0]
+        module3 = [v for v in cell_voltages[64:] if v is not None and v > 0]
+
+        return cls(
+            timestamp=timestamp,
+            cell_voltages=cell_voltages,
+            min_voltage=round(min_v, 4),
+            max_voltage=round(max_v, 4),
+            avg_voltage=round(avg_v, 4),
+            voltage_delta=round(max_v - min_v, 4),
+            module1_avg=round(statistics.mean(module1), 4) if module1 else None,
+            module2_avg=round(statistics.mean(module2), 4) if module2 else None,
+            module3_avg=round(statistics.mean(module3), 4) if module3 else None,
+            ambient_temp_f=ambient_temp_f,
+            state_of_charge=state_of_charge,
+            is_charging=is_charging,
+        )
+
+
 def get_engine(database_url):
     """Create database engine."""
     return create_engine(database_url, pool_pre_ping=True)

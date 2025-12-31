@@ -5,7 +5,7 @@ from datetime import datetime
 import statistics
 import logging
 
-from receiver.config import Config
+from config import Config
 
 logger = logging.getLogger(__name__)
 

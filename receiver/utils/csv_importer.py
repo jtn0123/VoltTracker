@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 import logging
 
-from receiver.config import Config
+from config import Config
 
 logger = logging.getLogger(__name__)
 

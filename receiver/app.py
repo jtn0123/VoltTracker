@@ -818,7 +818,7 @@ def import_csv():
     Returns:
         JSON with import statistics (rows imported, skipped, errors)
     """
-    from receiver.utils.csv_importer import TorqueCSVImporter
+    from utils.csv_importer import TorqueCSVImporter
 
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
