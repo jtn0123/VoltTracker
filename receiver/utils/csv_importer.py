@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Optional, Tuple, Set
 import logging
 
 from config import Config
+from exceptions import CSVImportError, CSVValidationError, CSVTimestampParseError
 
 logger = logging.getLogger(__name__)
 
@@ -232,10 +233,15 @@ class TorqueCSVImporter:
                     stats['parsed_rows'] += 1
                 else:
                     stats['skipped_rows'] += 1
-            except Exception as e:
+            except CSVImportError as e:
                 stats['skipped_rows'] += 1
                 if len(stats['errors']) < 10:  # Limit error messages
-                    stats['errors'].append(f"Row {row_num}: {str(e)}")
+                    stats['errors'].append(str(e))
+            except Exception as e:
+                stats['skipped_rows'] += 1
+                error = CSVImportError(f"Failed to parse row: {e}", row_number=row_num)
+                if len(stats['errors']) < 10:  # Limit error messages
+                    stats['errors'].append(str(error))
 
         # Remove duplicates
         records, duplicate_count = cls._find_duplicates(records, existing_timestamps)

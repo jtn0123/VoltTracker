@@ -22,6 +22,15 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 
 from config import Config
+from exceptions import (
+    VoltTrackerError,
+    DatabaseError,
+    TelemetryParsingError,
+    CSVImportError,
+    WeatherAPIError,
+    TripProcessingError,
+    ChargingSessionError,
+)
 from models import (
     TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession,
     BatteryCellReading, BatteryHealthReading, get_engine
@@ -239,7 +248,8 @@ def close_stale_trips():
 
         db.commit()
     except Exception as e:
-        logger.error(f"Error closing stale trips: {e}")
+        error = DatabaseError(f"Failed to close stale trips: {e}")
+        logger.error(str(error))
         db.rollback()
     finally:
         Session.remove()
@@ -379,7 +389,12 @@ def _fetch_trip_weather(trip: Trip, points: list) -> None:
                     f"{weather.get('conditions')}, {weather.get('temperature_f')}°F"
                 )
     except Exception as e:
-        logger.warning(f"Failed to fetch weather for trip {trip.id}: {e}")
+        error = WeatherAPIError(
+            f"Failed to fetch weather for trip {trip.id}: {e}",
+            latitude=gps_point.get('latitude') if gps_point else None,
+            longitude=gps_point.get('longitude') if gps_point else None
+        )
+        logger.warning(str(error))
 
 
 def finalize_trip(db, trip: Trip):
@@ -475,7 +490,8 @@ def check_refuel_events():
 
         db.commit()
     except Exception as e:
-        logger.error(f"Error checking refuel events: {e}")
+        error = DatabaseError(f"Failed to check refuel events: {e}")
+        logger.error(str(error))
         db.rollback()
     finally:
         Session.remove()
@@ -568,7 +584,8 @@ def check_charging_sessions():
                 )
 
     except Exception as e:
-        logger.error(f"Error checking charging sessions: {e}")
+        error = ChargingSessionError(f"Failed to check charging sessions: {e}")
+        logger.error(str(error))
         db.rollback()
     finally:
         Session.remove()
@@ -634,7 +651,11 @@ def torque_upload(token=None):
                 logger.info(f"New trip started: {trip.session_id}")
             except Exception as e:
                 # Race condition - trip was created by another request
-                logger.debug(f"Trip race condition handled for session {data['session_id']}: {e}")
+                error = TripProcessingError(
+                    f"Trip race condition handled: {e}",
+                    session_id=str(data['session_id'])
+                )
+                logger.debug(str(error))
                 db.rollback()
                 trip = db.query(Trip).filter(
                     Trip.session_id == data['session_id']
@@ -680,7 +701,8 @@ def torque_upload(token=None):
         return "OK!"
 
     except Exception as e:
-        logger.error(f"Error processing Torque upload: {e}")
+        error = TelemetryParsingError(f"Error processing Torque upload: {e}")
+        logger.error(str(error))
         return "OK!"  # Still return OK to avoid Torque retries
 
 
@@ -1505,8 +1527,12 @@ def import_csv():
 
     except UnicodeDecodeError:
         return jsonify({'error': 'File encoding error. Please use UTF-8 encoded CSV'}), 400
+    except CSVImportError as e:
+        logger.error(str(e))
+        return jsonify({'error': f'Import failed: {e.message}'}), 400
     except Exception as e:
-        logger.error(f"CSV import error: {e}")
+        error = CSVImportError(f"CSV import error: {e}")
+        logger.error(str(error))
         return jsonify({'error': f'Import failed: {str(e)}'}), 500
 
 

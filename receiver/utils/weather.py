@@ -11,6 +11,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 import logging
 
+from exceptions import WeatherAPIError
+
 logger = logging.getLogger(__name__)
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
@@ -59,8 +61,10 @@ def _request_with_retry(
             last_error = e
             logger.warning(f"Weather API HTTP error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
         except Exception as e:
-            last_error = e
-            logger.warning(f"Weather API error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+            last_error = WeatherAPIError(
+                f"Weather API error (attempt {attempt + 1}/{MAX_RETRIES}): {e}"
+            )
+            logger.warning(str(last_error))
 
         # Wait before retrying (exponential backoff)
         if attempt < MAX_RETRIES - 1:
@@ -105,8 +109,15 @@ def get_weather_for_location(
         else:
             # Use forecast API for recent/current data
             return _get_forecast_weather(latitude, longitude, timestamp, timeout)
+    except WeatherAPIError:
+        raise
     except Exception as e:
-        logger.warning(f"Weather API error: {e}")
+        error = WeatherAPIError(
+            f"Weather API error: {e}",
+            latitude=latitude,
+            longitude=longitude
+        )
+        logger.warning(str(error))
         return None
 
 
