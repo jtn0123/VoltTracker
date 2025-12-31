@@ -7,6 +7,7 @@ let mpgChart = null;
 let socChart = null;
 let tripSpeedChart = null;
 let tripSocChart = null;
+let chargingCurveChart = null;
 let tripMap = null;
 let currentTimeframe = 30;
 let dateFilter = { start: null, end: null };
@@ -1755,7 +1756,7 @@ async function loadChargingHistory() {
         }
 
         tableBody.innerHTML = sessions.map(session => `
-            <tr>
+            <tr class="clickable" onclick="openChargingDetailModal(${session.id})">
                 <td>${formatDateTime(new Date(session.start_time))}</td>
                 <td>
                     ${session.charge_type ?
@@ -1773,7 +1774,7 @@ async function loadChargingHistory() {
                 <td>${session.end_time ? formatChargingDuration(session.start_time, session.end_time) : '--'}</td>
                 <td>${session.location_name || '--'}</td>
                 <td>
-                    <button class="btn-delete" onclick="deleteChargingSession(${session.id})" title="Delete session">×</button>
+                    <button class="btn-delete" onclick="event.stopPropagation(); deleteChargingSession(${session.id})" title="Delete session">×</button>
                 </td>
             </tr>
         `).join('');
@@ -1908,10 +1909,296 @@ async function deleteChargingSession(sessionId) {
     }
 }
 
-// Close charging modal on escape key
+/**
+ * Open charging session detail modal
+ */
+async function openChargingDetailModal(sessionId) {
+    const modal = document.getElementById('charging-detail-modal');
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+
+    // Focus the close button for keyboard users
+    const closeBtn = modal.querySelector('.modal-close');
+    if (closeBtn) {
+        setTimeout(() => closeBtn.focus(), 100);
+    }
+
+    try {
+        // Fetch session details and curve data in parallel
+        const [sessionResponse, curveResponse] = await Promise.all([
+            fetch(`/api/charging/${sessionId}`),
+            fetch(`/api/charging/${sessionId}/curve`)
+        ]);
+
+        const session = await sessionResponse.json();
+        const curveData = await curveResponse.json();
+
+        // Render summary stats
+        renderChargingDetailSummary(session);
+
+        // Render charging curve chart
+        renderChargingCurveChart(curveData);
+
+        // Render cost breakdown
+        renderChargingCostBreakdown(session);
+
+    } catch (error) {
+        console.error('Failed to load charging session details:', error);
+    }
+}
+
+/**
+ * Close charging detail modal
+ */
+function closeChargingDetailModal() {
+    const modal = document.getElementById('charging-detail-modal');
+    if (!modal.classList.contains('show')) return;
+
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+
+    // Clean up chart
+    if (chargingCurveChart) {
+        chargingCurveChart.destroy();
+        chargingCurveChart = null;
+    }
+}
+
+/**
+ * Render charging session summary in the detail modal
+ */
+function renderChargingDetailSummary(session) {
+    const summaryEl = document.getElementById('charging-detail-summary');
+    if (!summaryEl) return;
+
+    const duration = session.end_time ?
+        formatChargingDuration(session.start_time, session.end_time) : 'In progress';
+
+    summaryEl.innerHTML = `
+        <div class="charging-detail-grid">
+            <div class="charging-stat">
+                <div class="charging-stat-label">Date</div>
+                <div class="charging-stat-value">${formatDate(new Date(session.start_time))}</div>
+            </div>
+            <div class="charging-stat">
+                <div class="charging-stat-label">Duration</div>
+                <div class="charging-stat-value">${duration}</div>
+            </div>
+            <div class="charging-stat">
+                <div class="charging-stat-label">Type</div>
+                <div class="charging-stat-value">
+                    ${session.charge_type ?
+                        `<span class="badge badge-${session.charge_type.toLowerCase()}">${session.charge_type}</span>` :
+                        '--'
+                    }
+                </div>
+            </div>
+            <div class="charging-stat">
+                <div class="charging-stat-label">Energy Added</div>
+                <div class="charging-stat-value">${session.kwh_added ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</div>
+            </div>
+            <div class="charging-stat">
+                <div class="charging-stat-label">SOC Change</div>
+                <div class="charging-stat-value">
+                    ${session.start_soc !== null && session.end_soc !== null ?
+                        `${session.start_soc}% → ${session.end_soc}%` :
+                        '--'
+                    }
+                </div>
+            </div>
+            <div class="charging-stat">
+                <div class="charging-stat-label">Peak Power</div>
+                <div class="charging-stat-value">${session.peak_power_kw ? session.peak_power_kw.toFixed(1) + ' kW' : '--'}</div>
+            </div>
+            <div class="charging-stat">
+                <div class="charging-stat-label">Avg Power</div>
+                <div class="charging-stat-value">${session.avg_power_kw ? session.avg_power_kw.toFixed(1) + ' kW' : '--'}</div>
+            </div>
+            <div class="charging-stat">
+                <div class="charging-stat-label">Location</div>
+                <div class="charging-stat-value">${session.location_name || '--'}</div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render charging curve chart
+ */
+function renderChargingCurveChart(curveData) {
+    const ctx = document.getElementById('charging-curve-chart');
+    if (!ctx) return;
+
+    // Clean up existing chart
+    if (chargingCurveChart) {
+        chargingCurveChart.destroy();
+        chargingCurveChart = null;
+    }
+
+    // Check if we have curve data
+    if (!curveData.curve || curveData.curve.length === 0) {
+        ctx.parentElement.innerHTML = `
+            <div class="empty-state" style="padding: 2rem; text-align: center;">
+                <p>No charging curve data available for this session.</p>
+                <p style="font-size: 0.875rem; color: var(--text-secondary);">
+                    Curve data is recorded during active charging sessions.
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    const curve = curveData.curve;
+    const labels = curve.map(d => formatTime(new Date(d.timestamp)));
+    const powerData = curve.map(d => d.power_kw);
+    const socData = curve.map(d => d.soc);
+
+    chargingCurveChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Power (kW)',
+                    data: powerData,
+                    borderColor: '#27ae60',
+                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'SOC (%)',
+                    data: socData,
+                    borderColor: '#3282b8',
+                    backgroundColor: 'rgba(50, 130, 184, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: { color: '#b8b8b8' }
+                },
+                tooltip: {
+                    backgroundColor: '#0f3460',
+                    titleColor: '#ffffff',
+                    bodyColor: '#b8b8b8',
+                    borderColor: '#3282b8',
+                    borderWidth: 1,
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                    ticks: { color: '#b8b8b8', maxTicksLimit: 8 }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Power (kW)',
+                        color: '#27ae60'
+                    },
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                    ticks: { color: '#27ae60' },
+                    min: 0
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'SOC (%)',
+                        color: '#3282b8'
+                    },
+                    grid: { drawOnChartArea: false },
+                    ticks: { color: '#3282b8' },
+                    min: 0,
+                    max: 100
+                }
+            }
+        }
+    });
+}
+
+/**
+ * Render charging cost breakdown
+ */
+function renderChargingCostBreakdown(session) {
+    const breakdownEl = document.getElementById('charging-cost-breakdown');
+    if (!breakdownEl) return;
+
+    // Get cost info
+    const kwh = session.kwh_added || 0;
+    const explicitCost = session.cost;
+    const rate = session.cost_per_kwh || session.electricity_rate || 0.12; // Default rate
+    const estimatedCost = kwh * rate;
+    const actualCost = explicitCost !== null ? explicitCost : estimatedCost;
+
+    // Calculate equivalent gas cost (using avg 35 MPG and $3.50/gal)
+    const milesPerKwh = 3.5; // Typical Volt efficiency
+    const equivalentMiles = kwh * milesPerKwh;
+    const gasGallons = equivalentMiles / 35;
+    const gasCost = gasGallons * 3.50;
+    const savings = gasCost - actualCost;
+
+    breakdownEl.innerHTML = `
+        <h3>Cost Analysis</h3>
+        <div class="cost-breakdown-grid">
+            <div class="cost-item">
+                <span class="cost-label">Session Cost</span>
+                <span class="cost-value ${explicitCost !== null ? '' : 'estimated'}">
+                    ${explicitCost !== null ? '' : '~'}$${actualCost.toFixed(2)}
+                </span>
+            </div>
+            <div class="cost-item">
+                <span class="cost-label">Rate</span>
+                <span class="cost-value">$${rate.toFixed(2)}/kWh</span>
+            </div>
+            <div class="cost-item">
+                <span class="cost-label">Equiv. Miles</span>
+                <span class="cost-value">${equivalentMiles.toFixed(0)} mi</span>
+            </div>
+            <div class="cost-item">
+                <span class="cost-label">Gas Equiv. Cost</span>
+                <span class="cost-value">$${gasCost.toFixed(2)}</span>
+            </div>
+        </div>
+        ${savings > 0 ? `
+            <div class="savings-callout">
+                <strong>Savings vs Gas:</strong> $${savings.toFixed(2)}
+            </div>
+        ` : ''}
+    `;
+}
+
+// Close charging modals on escape key
 document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
         closeChargingModal();
+        closeChargingDetailModal();
     }
 });
 

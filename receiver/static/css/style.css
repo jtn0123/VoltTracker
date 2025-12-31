@@ -1993,3 +1993,90 @@ body {
         padding: 0.5rem;
     }
 }
+
+/* ============================================
+   Charging Detail Modal
+   ============================================ */
+.charging-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.charging-stat {
+    background-color: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.charging-stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.charging-stat-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.charging-curve-container {
+    margin-bottom: 1.5rem;
+}
+
+.charging-curve-container h3 {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+.charging-cost-breakdown h3 {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+.cost-breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.cost-breakdown-grid .cost-item {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg-secondary);
+    padding: 0.75rem;
+    border-radius: 8px;
+}
+
+.cost-breakdown-grid .cost-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.cost-breakdown-grid .cost-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.cost-breakdown-grid .cost-value.estimated {
+    color: var(--text-secondary);
+}
+
+.savings-callout {
+    background-color: rgba(39, 174, 96, 0.15);
+    color: #27ae60;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 1rem;
+}

@@ -123,7 +123,7 @@
         </section>
 
         <!-- Summary Cards -->
-        <section class="cards-grid" aria-label="Gas efficiency summary">
+        <section id="summary-section" class="cards-grid" aria-label="Gas efficiency summary">
             <div class="card" role="region" aria-labelledby="lifetime-mpg-label">
                 <div class="card-label" id="lifetime-mpg-label">Lifetime Gas MPG</div>
                 <div class="card-value" id="lifetime-mpg" aria-live="polite">--</div>
@@ -210,7 +210,7 @@
         </section>
 
         <!-- Recent Trips -->
-        <section class="trips-section" aria-labelledby="trips-title">
+        <section id="trips-section" class="trips-section" aria-labelledby="trips-title">
             <div class="section-header">
                 <h2 class="section-title" id="trips-title">Recent Trips</h2>
                 <div class="date-filter">
@@ -255,7 +255,7 @@
         </section>
 
         <!-- SOC Analysis -->
-        <section class="soc-section" aria-labelledby="soc-analysis-title">
+        <section id="soc-section" class="soc-section" aria-labelledby="soc-analysis-title">
             <div class="soc-stats" role="region" aria-labelledby="soc-analysis-title">
                 <h2 class="section-title" id="soc-analysis-title">SOC Floor Analysis</h2>
                 <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
@@ -297,7 +297,7 @@
         </section>
 
         <!-- Charging History -->
-        <section class="charging-section" aria-labelledby="charging-title">
+        <section id="charging-section" class="charging-section" aria-labelledby="charging-title">
             <div class="section-header">
                 <h2 class="section-title" id="charging-title">Charging History</h2>
                 <button class="btn-add" onclick="openAddChargingModal()" aria-label="Add new charging session">+ Add Session</button>
@@ -406,6 +406,31 @@
         </div>
     </div>
 
+    <!-- Charging Session Detail Modal -->
+    <div class="modal" id="charging-detail-modal" role="dialog" aria-modal="true" aria-labelledby="charging-detail-title" aria-hidden="true">
+        <div class="modal-backdrop" onclick="closeChargingDetailModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="charging-detail-title">Charging Session Details</h2>
+                <button class="modal-close" onclick="closeChargingDetailModal()" aria-label="Close session details">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="charging-detail-summary" id="charging-detail-summary" role="region" aria-label="Charging statistics">
+                    <!-- Summary stats injected here -->
+                </div>
+                <div class="charging-curve-container" role="region" aria-label="Charging curve chart">
+                    <h3>Power & SOC Over Time</h3>
+                    <div class="chart-container" style="height: 250px;">
+                        <canvas id="charging-curve-chart" role="img" aria-label="Charging power and SOC over time"></canvas>
+                    </div>
+                </div>
+                <div class="charging-cost-breakdown" id="charging-cost-breakdown" role="region" aria-label="Cost breakdown">
+                    <!-- Cost breakdown injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Charging Session Modal -->
     <div class="modal" id="charging-modal" role="dialog" aria-modal="true" aria-labelledby="charging-modal-title" aria-hidden="true">
         <div class="modal-backdrop" onclick="closeChargingModal()"></div>
@@ -473,6 +498,40 @@
             </div>
         </div>
     </div>
+
+    <!-- Bottom Navigation (Mobile) -->
+    <nav class="bottom-nav" aria-label="Main navigation">
+        <a href="#summary-section" class="bottom-nav-item active" data-section="summary">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+            <span>Summary</span>
+        </a>
+        <a href="#trips-section" class="bottom-nav-item" data-section="trips">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+            </svg>
+            <span>Trips</span>
+        </a>
+        <a href="#charging-section" class="bottom-nav-item" data-section="charging">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+            <span>Charging</span>
+        </a>
+        <a href="#soc-section" class="bottom-nav-item" data-section="analysis">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 3v18h18"/>
+                <path d="M18 9l-5 5-4-4-3 3"/>
+            </svg>
+            <span>Analysis</span>
+        </a>
+    </nav>
 
     <script src="/static/js/dashboard.js"></script>
 </body>

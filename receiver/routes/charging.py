@@ -100,6 +100,69 @@ def get_charging_session(session_id):
     return jsonify(session.to_dict())
 
 
+@charging_bp.route('/charging/<int:session_id>/curve', methods=['GET'])
+def get_charging_curve(session_id):
+    """
+    Get charging curve data for visualization.
+
+    Returns time-series power and SOC data for the charging session.
+    If charging_curve is not stored, attempts to reconstruct from telemetry.
+    """
+    from models import TelemetryRaw
+    db = get_db()
+
+    session = db.query(ChargingSession).filter(ChargingSession.id == session_id).first()
+    if not session:
+        return jsonify({'error': 'Charging session not found'}), 404
+
+    # Check if we have stored curve data
+    if session.charging_curve and len(session.charging_curve) > 0:
+        return jsonify({
+            'session_id': session_id,
+            'curve': session.charging_curve,
+            'source': 'stored'
+        })
+
+    # Try to reconstruct from telemetry data
+    if session.start_time and session.end_time:
+        telemetry = db.query(TelemetryRaw).filter(
+            TelemetryRaw.timestamp >= session.start_time,
+            TelemetryRaw.timestamp <= session.end_time,
+            TelemetryRaw.charger_connected.is_(True)
+        ).order_by(TelemetryRaw.timestamp).all()
+
+        if telemetry:
+            curve_data = []
+            for t in telemetry:
+                # Use charger AC power or HV battery power (negative during charging)
+                power = t.charger_ac_power_kw
+                if power is None and t.hv_battery_power_kw is not None:
+                    # HV power is negative during charging
+                    power = abs(t.hv_battery_power_kw) if t.hv_battery_power_kw < 0 else None
+
+                if power is not None:
+                    curve_data.append({
+                        'timestamp': t.timestamp.isoformat() if t.timestamp else None,
+                        'power_kw': round(power, 2),
+                        'soc': t.state_of_charge,
+                    })
+
+            if curve_data:
+                return jsonify({
+                    'session_id': session_id,
+                    'curve': curve_data,
+                    'source': 'telemetry'
+                })
+
+    # No curve data available
+    return jsonify({
+        'session_id': session_id,
+        'curve': [],
+        'source': 'none',
+        'message': 'No charging curve data available for this session'
+    })
+
+
 @charging_bp.route('/charging/<int:session_id>', methods=['DELETE'])
 def delete_charging_session(session_id):
     """Delete a charging session."""
