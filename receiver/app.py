@@ -39,6 +39,7 @@ from utils import (
     calculate_kwh_per_mile,
     detect_charging_session,
 )
+from utils.weather import get_weather_for_location, get_weather_impact_factor
 
 # Configure logging
 logging.basicConfig(
@@ -280,6 +281,29 @@ def finalize_trip(db, trip: Trip):
             trip.kwh_per_mile = calculate_kwh_per_mile(
                 trip.electric_kwh_used, trip.electric_miles
             )
+
+    # Fetch weather data for the trip
+    try:
+        # Get first point with GPS data
+        gps_point = next(
+            (p for p in points if p.get('latitude') and p.get('longitude')),
+            None
+        )
+        if gps_point and trip.start_time:
+            weather = get_weather_for_location(
+                gps_point['latitude'],
+                gps_point['longitude'],
+                trip.start_time
+            )
+            if weather:
+                trip.weather_temp_f = weather.get('temperature_f')
+                trip.weather_precipitation_in = weather.get('precipitation_in')
+                trip.weather_wind_mph = weather.get('wind_speed_mph')
+                trip.weather_conditions = weather.get('conditions')
+                trip.weather_impact_factor = get_weather_impact_factor(weather)
+                logger.debug(f"Weather for trip {trip.id}: {weather.get('conditions')}, {weather.get('temperature_f')}°F")
+    except Exception as e:
+        logger.warning(f"Failed to fetch weather for trip {trip.id}: {e}")
 
     trip.is_closed = True
     logger.info(

@@ -10,6 +10,17 @@ pytest-html>=4.1.0
 # HTTP requests for simulator
 requests>=2.31.0
 
-# Code quality (optional)
+# Code quality
 flake8>=6.1.0
 black>=23.12.1
+isort>=5.13.2
+mypy>=1.8.0
+types-requests>=2.31.0
+sqlalchemy-stubs>=0.4
+
+# Pre-commit hooks
+pre-commit>=3.6.0
+
+# Security scanning
+bandit>=1.7.6
+pip-audit>=2.6.0
