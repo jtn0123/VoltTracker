@@ -519,41 +519,73 @@ def get_efficiency_summary():
     """
     Get efficiency statistics.
 
+    Calculates from available trip data, falling back to computing from
+    raw values when pre-calculated fields are missing.
+
     Returns:
         - Lifetime gas MPG average
         - Last 30 days gas MPG average
         - Current tank MPG (since last fill)
         - Total miles tracked
+        - Electric stats (miles, kWh, efficiency)
     """
     db = get_db()
 
-    # Lifetime gas MPG
-    lifetime_stats = db.query(
-        func.sum(Trip.gas_miles).label('total_gas_miles'),
-        func.sum(Trip.fuel_used_gallons).label('total_fuel')
-    ).filter(
-        Trip.gas_mode_entered == True,
-        Trip.gas_mpg.isnot(None)
-    ).first()
+    # Get all closed trips for comprehensive stats
+    closed_trips = db.query(Trip).filter(Trip.is_closed == True).all()
 
+    # Calculate totals from whatever data exists
+    total_miles = 0.0
+    total_electric_miles = 0.0
+    total_gas_miles = 0.0
+    total_fuel_used = 0.0
+    total_kwh_used = 0.0
+
+    for trip in closed_trips:
+        if trip.distance_miles:
+            total_miles += float(trip.distance_miles)
+        if trip.electric_miles:
+            total_electric_miles += float(trip.electric_miles)
+        if trip.gas_miles:
+            total_gas_miles += float(trip.gas_miles)
+        if trip.fuel_used_gallons:
+            total_fuel_used += float(trip.fuel_used_gallons)
+        if trip.electric_kwh_used:
+            total_kwh_used += float(trip.electric_kwh_used)
+
+    # Calculate lifetime gas MPG
     lifetime_mpg = None
-    if lifetime_stats.total_gas_miles and lifetime_stats.total_fuel:
-        lifetime_mpg = round(lifetime_stats.total_gas_miles / lifetime_stats.total_fuel, 1)
+    if total_gas_miles > 0 and total_fuel_used > 0:
+        lifetime_mpg = round(total_gas_miles / total_fuel_used, 1)
 
-    # Last 30 days
-    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
-    recent_stats = db.query(
-        func.sum(Trip.gas_miles).label('total_gas_miles'),
-        func.sum(Trip.fuel_used_gallons).label('total_fuel')
-    ).filter(
-        Trip.start_time >= thirty_days_ago,
-        Trip.gas_mode_entered == True,
-        Trip.gas_mpg.isnot(None)
-    ).first()
+    # Calculate average kWh/mile for electric driving
+    avg_kwh_per_mile = None
+    if total_electric_miles > 0 and total_kwh_used > 0:
+        avg_kwh_per_mile = round(total_kwh_used / total_electric_miles, 3)
+
+    # Calculate EV ratio
+    ev_ratio = None
+    if total_miles > 0:
+        ev_ratio = round(total_electric_miles / total_miles * 100, 1)
+
+    # Last 30 days stats
+    # Use naive datetime since trip.start_time may be naive or aware
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    recent_trips = []
+    for t in closed_trips:
+        if not t.start_time:
+            continue
+        # Handle both naive and aware datetimes
+        trip_time = t.start_time.replace(tzinfo=None) if t.start_time.tzinfo else t.start_time
+        if trip_time >= thirty_days_ago:
+            recent_trips.append(t)
+
+    recent_gas_miles = sum(float(t.gas_miles) for t in recent_trips if t.gas_miles) or 0
+    recent_fuel = sum(float(t.fuel_used_gallons) for t in recent_trips if t.fuel_used_gallons) or 0
 
     recent_mpg = None
-    if recent_stats.total_gas_miles and recent_stats.total_fuel:
-        recent_mpg = round(recent_stats.total_gas_miles / recent_stats.total_fuel, 1)
+    if recent_gas_miles > 0 and recent_fuel > 0:
+        recent_mpg = round(recent_gas_miles / recent_fuel, 1)
 
     # Current tank (since last refuel)
     last_refuel = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp)).first()
@@ -561,31 +593,34 @@ def get_efficiency_summary():
     current_tank_mpg = None
     current_tank_miles = None
     if last_refuel:
-        tank_trips = db.query(
-            func.sum(Trip.gas_miles).label('miles'),
-            func.sum(Trip.fuel_used_gallons).label('fuel')
-        ).filter(
-            Trip.start_time >= last_refuel.timestamp,
-            Trip.gas_mode_entered == True,
-            Trip.gas_mpg.isnot(None)
-        ).first()
+        # Handle timezone comparison
+        refuel_time = last_refuel.timestamp.replace(tzinfo=None) if last_refuel.timestamp.tzinfo else last_refuel.timestamp
+        tank_trips = []
+        for t in closed_trips:
+            if not t.start_time:
+                continue
+            trip_time = t.start_time.replace(tzinfo=None) if t.start_time.tzinfo else t.start_time
+            if trip_time >= refuel_time:
+                tank_trips.append(t)
 
-        if tank_trips.miles and tank_trips.fuel:
-            current_tank_mpg = round(tank_trips.miles / tank_trips.fuel, 1)
-            current_tank_miles = round(tank_trips.miles, 1)
+        tank_gas_miles = sum(float(t.gas_miles) for t in tank_trips if t.gas_miles) or 0
+        tank_fuel = sum(float(t.fuel_used_gallons) for t in tank_trips if t.fuel_used_gallons) or 0
 
-    # Total miles tracked
-    total_miles = db.query(func.sum(Trip.distance_miles)).filter(
-        Trip.is_closed == True
-    ).scalar() or 0
+        if tank_gas_miles > 0 and tank_fuel > 0:
+            current_tank_mpg = round(tank_gas_miles / tank_fuel, 1)
+            current_tank_miles = round(tank_gas_miles, 1)
 
     return jsonify({
         'lifetime_gas_mpg': lifetime_mpg,
-        'lifetime_gas_miles': round(lifetime_stats.total_gas_miles or 0, 1),
+        'lifetime_gas_miles': round(total_gas_miles, 1),
         'recent_30d_mpg': recent_mpg,
         'current_tank_mpg': current_tank_mpg,
         'current_tank_miles': current_tank_miles,
         'total_miles_tracked': round(total_miles, 1),
+        'total_electric_miles': round(total_electric_miles, 1),
+        'total_kwh_used': round(total_kwh_used, 2),
+        'avg_kwh_per_mile': avg_kwh_per_mile,
+        'ev_ratio': ev_ratio,
     })
 
 
@@ -766,6 +801,93 @@ def get_status() -> Response:
     })
 
 
+def _calculate_trip_stats(
+    first: TelemetryRaw | None,
+    latest: TelemetryRaw | None,
+    trip: Trip | None
+) -> dict:
+    """
+    Calculate real-time trip efficiency statistics.
+
+    Returns stats for display in the live trip card:
+    - miles_driven: Distance traveled this trip
+    - kwh_used: Electric energy consumed
+    - kwh_per_mile: Electric efficiency
+    - in_gas_mode: Whether engine is running on gas
+    - gas_miles: Miles driven in gas mode
+    - gas_mpg: Fuel efficiency if in gas mode
+    """
+    stats = {
+        'miles_driven': None,
+        'kwh_used': None,
+        'kwh_per_mile': None,
+        'in_gas_mode': False,
+        'electric_miles': None,
+        'gas_miles': None,
+        'gas_mpg': None,
+        'fuel_used_gallons': None
+    }
+
+    if not first or not latest:
+        return stats
+
+    # Calculate miles driven from odometer
+    if first.odometer_miles and latest.odometer_miles:
+        stats['miles_driven'] = float(latest.odometer_miles - first.odometer_miles)
+
+    # Get start SOC (prefer trip's stored value, fall back to first telemetry)
+    start_soc = None
+    if trip and trip.start_soc:
+        start_soc = float(trip.start_soc)
+    elif first.state_of_charge:
+        start_soc = float(first.state_of_charge)
+
+    current_soc = float(latest.state_of_charge) if latest.state_of_charge else None
+
+    # Calculate kWh used from SOC change
+    if start_soc is not None and current_soc is not None:
+        soc_change = start_soc - current_soc
+        if soc_change >= 0:  # Only count discharge, not regen gains
+            stats['kwh_used'] = soc_change / 100.0 * Config.BATTERY_CAPACITY_KWH
+
+    # Detect gas mode: engine running AND low SOC
+    current_rpm = float(latest.engine_rpm) if latest.engine_rpm else 0
+    in_gas_mode = (
+        current_rpm > Config.RPM_THRESHOLD and
+        current_soc is not None and
+        current_soc < Config.SOC_GAS_THRESHOLD
+    )
+    stats['in_gas_mode'] = in_gas_mode
+
+    # Calculate kWh/mile for electric portion
+    if stats['kwh_used'] and stats['miles_driven'] and stats['miles_driven'] > 0:
+        # For simplicity, use total miles for now
+        # A more accurate version would track when gas mode started
+        stats['kwh_per_mile'] = stats['kwh_used'] / stats['miles_driven']
+
+    # Calculate gas usage if fuel data available
+    start_fuel = None
+    if trip and trip.start_fuel_level:
+        start_fuel = float(trip.start_fuel_level)
+    elif first.fuel_level_percent:
+        start_fuel = float(first.fuel_level_percent)
+
+    current_fuel = float(latest.fuel_level_percent) if latest.fuel_level_percent else None
+
+    if start_fuel is not None and current_fuel is not None:
+        fuel_percent_used = start_fuel - current_fuel
+        if fuel_percent_used > 0.5:  # Only count if meaningful fuel was used
+            fuel_gallons_used = fuel_percent_used / 100.0 * Config.TANK_CAPACITY_GALLONS
+            stats['fuel_used_gallons'] = fuel_gallons_used
+
+            # Estimate gas miles (rough: if fuel used, assume some portion was gas driving)
+            if stats['miles_driven'] and stats['miles_driven'] > 0:
+                # Calculate gas MPG from fuel consumption
+                stats['gas_mpg'] = stats['miles_driven'] / fuel_gallons_used
+
+    return stats
+
+
 @app.route('/api/telemetry/latest', methods=['GET'])
 def get_latest_telemetry() -> Response:
     """Get latest telemetry for real-time dashboard display."""
@@ -795,6 +917,15 @@ def get_latest_telemetry() -> Response:
     ).order_by(desc(TelemetryRaw.timestamp)).limit(10).all()
 
     latest = recent[0] if recent else latest_telemetry
+
+    # Get the first telemetry point for this session to calculate trip stats
+    first_telemetry = db.query(TelemetryRaw).filter(
+        TelemetryRaw.session_id == latest_telemetry.session_id
+    ).order_by(TelemetryRaw.timestamp).first()
+
+    # Calculate trip efficiency stats
+    trip_stats = _calculate_trip_stats(first_telemetry, latest, active_trip)
+
     return jsonify({
         'active': True,
         'session_id': str(latest_telemetry.session_id),
@@ -810,6 +941,7 @@ def get_latest_telemetry() -> Response:
             'longitude': float(latest.longitude) if latest.longitude else None,
             'odometer': float(latest.odometer_miles) if latest.odometer_miles else None
         },
+        'trip_stats': trip_stats,
         'point_count': len(recent)
     })
 

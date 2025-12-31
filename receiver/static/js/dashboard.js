@@ -160,34 +160,43 @@ async function loadLiveTelemetry() {
             const elapsed = getElapsedTime(data.start_time);
             const lastUpdate = new Date(data.data.timestamp);
             const secondsAgo = Math.floor((Date.now() - lastUpdate) / 1000);
+            const stats = data.trip_stats || {};
 
-            // Determine engine status
-            const engineStatus = data.data.engine_rpm && data.data.engine_rpm > 100 ? 'ON' : 'OFF';
-            const engineClass = engineStatus === 'ON' ? 'engine-on' : 'engine-off';
+            // Determine mode display
+            let modeLabel, modeValue, modeClass;
+            if (stats.in_gas_mode) {
+                modeLabel = 'Gas MPG';
+                modeValue = stats.gas_mpg ? stats.gas_mpg.toFixed(1) : '--';
+                modeClass = 'engine-on';
+            } else {
+                modeLabel = 'Mode';
+                modeValue = 'EV';
+                modeClass = 'engine-off';
+            }
 
             liveContent.innerHTML = `
                 <div class="live-stats">
                     <div class="stat">
-                        <span class="label">SOC</span>
-                        <span class="value">${data.data.soc?.toFixed(1) || '--'}%</span>
+                        <span class="label">Miles</span>
+                        <span class="value">${stats.miles_driven?.toFixed(1) || '--'}</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Fuel</span>
-                        <span class="value">${data.data.fuel_percent?.toFixed(1) || '--'}%</span>
+                        <span class="label">kWh</span>
+                        <span class="value">${stats.kwh_used?.toFixed(2) || '--'}</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Speed</span>
-                        <span class="value">${data.data.speed_mph?.toFixed(0) || '0'} mph</span>
+                        <span class="label">kWh/mi</span>
+                        <span class="value">${stats.kwh_per_mile?.toFixed(2) || '--'}</span>
                     </div>
                     <div class="stat">
-                        <span class="label">Engine</span>
-                        <span class="value ${engineClass}">${engineStatus}</span>
+                        <span class="label">${modeLabel}</span>
+                        <span class="value ${modeClass}">${modeValue}</span>
                     </div>
                 </div>
                 <div class="live-meta">
-                    Trip started: ${elapsed} ago |
-                    Last update: ${secondsAgo}s ago |
-                    Points: ${data.point_count}
+                    SOC: ${data.data.soc?.toFixed(0) || '--'}% |
+                    Fuel: ${data.data.fuel_percent?.toFixed(0) || '--'}% |
+                    ${elapsed} elapsed
                 </div>
             `;
 

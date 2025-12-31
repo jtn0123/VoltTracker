@@ -65,12 +65,17 @@
     }
 
     .live-stats .stat {
-        min-width: 70px;
+        min-width: 65px;
         padding: 0.4rem;
+        flex: 1 1 calc(50% - 0.5rem);  /* 2-column grid on mobile */
+    }
+
+    .live-stats .label {
+        font-size: 0.7rem;
     }
 
     .live-stats .value {
-        font-size: 1.25rem;
+        font-size: 1.1rem;  /* Smaller for longer efficiency values */
     }
 
     .live-meta {
