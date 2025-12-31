@@ -152,7 +152,7 @@ def calculate_gas_mpg(
     mpg = gas_miles / gallons_used
 
     # Sanity check - Volt should get 30-50 MPG in gas mode
-    if mpg < 10 or mpg > 100:
+    if mpg < Config.MIN_MPG or mpg > Config.MAX_MPG:
         logger.warning(f"Unusual MPG calculated: {mpg:.1f} (miles: {gas_miles:.1f}, gallons: {gallons_used:.2f})")
 
     return round(mpg, 1)
@@ -371,7 +371,7 @@ def calculate_kwh_per_mile(
     kwh_per_mile = kwh_used / electric_miles
 
     # Sanity check - Volt typically gets 0.25-0.40 kWh/mile
-    if kwh_per_mile < 0.1 or kwh_per_mile > 1.0:
+    if kwh_per_mile < Config.MIN_KWH_PER_MILE or kwh_per_mile > Config.MAX_KWH_PER_MILE:
         logger.warning(f"Unusual kWh/mile: {kwh_per_mile:.3f} (kWh: {kwh_used:.2f}, miles: {electric_miles:.1f})")
 
     return round(kwh_per_mile, 3)

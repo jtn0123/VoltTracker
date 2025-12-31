@@ -27,3 +27,18 @@ class Config:
 
     # Fuel sensor smoothing
     FUEL_SMOOTHING_WINDOW = 10  # Number of readings for median filter
+
+    # API Configuration
+    FLASK_HOST = os.environ.get('FLASK_HOST', '0.0.0.0')
+    FLASK_PORT = int(os.environ.get('FLASK_PORT', 8080))
+    CACHE_TIMEOUT_SECONDS = int(os.environ.get('CACHE_TIMEOUT', 60))
+    API_DEFAULT_PER_PAGE = int(os.environ.get('API_DEFAULT_PER_PAGE', 50))
+    API_MAX_PER_PAGE = int(os.environ.get('API_MAX_PER_PAGE', 100))
+
+    # Validation Thresholds
+    MIN_MPG = float(os.environ.get('MIN_MPG', 10))
+    MAX_MPG = float(os.environ.get('MAX_MPG', 100))
+    MIN_KWH_PER_MILE = float(os.environ.get('MIN_KWH_PER_MILE', 0.1))
+    MAX_KWH_PER_MILE = float(os.environ.get('MAX_KWH_PER_MILE', 1.0))
+    FUEL_TANK_MIN = float(os.environ.get('FUEL_TANK_MIN', 0))
+    FUEL_TANK_MAX = float(os.environ.get('FUEL_TANK_MAX', 20))

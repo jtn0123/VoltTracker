@@ -58,7 +58,7 @@ def init_cache(app):
     else:
         cache.init_app(app, config={
             'CACHE_TYPE': 'SimpleCache',
-            'CACHE_DEFAULT_TIMEOUT': 60
+            'CACHE_DEFAULT_TIMEOUT': Config.CACHE_TIMEOUT_SECONDS
         })
 
 
@@ -194,11 +194,19 @@ def finalize_trip(db, trip: Trip):
         if trip.start_odometer and trip.end_odometer:
             trip.electric_miles = trip.distance_miles
 
+    # Calculate electric efficiency (kWh)
+    if trip.electric_miles and trip.electric_miles > 0.5:
+        trip.electric_kwh_used = calculate_electric_kwh(points)
+        if trip.electric_kwh_used:
+            trip.kwh_per_mile = calculate_kwh_per_mile(
+                trip.electric_kwh_used, trip.electric_miles
+            )
+
     trip.is_closed = True
     logger.info(
-        f"Trip {trip.id} finalized: {trip.distance_miles:.1f} mi "
+        f"Trip {trip.id} finalized: {trip.distance_miles:.1f if trip.distance_miles else 0} mi "
         f"(electric: {trip.electric_miles or 0:.1f}, gas: {trip.gas_miles or 0:.1f}, "
-        f"MPG: {trip.gas_mpg or 'N/A'})"
+        f"MPG: {trip.gas_mpg or 'N/A'}, kWh/mi: {trip.kwh_per_mile or 'N/A'})"
     )
 
 
@@ -254,10 +262,84 @@ def check_refuel_events():
         Session.remove()
 
 
+def check_charging_sessions():
+    """Detect and track charging sessions from telemetry data."""
+    db = get_db()
+    try:
+        # Get recent telemetry with charger data
+        recent = db.query(TelemetryRaw).filter(
+            TelemetryRaw.charger_connected == True
+        ).order_by(desc(TelemetryRaw.timestamp)).limit(50).all()
+
+        if not recent:
+            return
+
+        # Convert to dicts for the detection function
+        points = [t.to_dict() for t in recent]
+        session_info = detect_charging_session(points)
+
+        if session_info and session_info.get('is_charging'):
+            # Check for existing active charging session
+            active_session = db.query(ChargingSession).filter(
+                ChargingSession.is_complete == False
+            ).order_by(desc(ChargingSession.start_time)).first()
+
+            if not active_session:
+                # Create new charging session
+                first_point = recent[-1]  # Oldest in the set
+                active_session = ChargingSession(
+                    start_time=first_point.timestamp,
+                    start_soc=session_info.get('start_soc'),
+                    latitude=first_point.latitude,
+                    longitude=first_point.longitude,
+                    charge_type=session_info.get('charge_type', 'L1')
+                )
+                db.add(active_session)
+                logger.info(f"Charging session started: {session_info.get('charge_type')}")
+
+            # Update with latest data
+            latest_point = recent[0]
+            active_session.end_soc = session_info.get('current_soc')
+            active_session.peak_power_kw = session_info.get('peak_power_kw')
+            active_session.avg_power_kw = session_info.get('avg_power_kw')
+
+            db.commit()
+
+        else:
+            # Check if we need to close an active session
+            active_session = db.query(ChargingSession).filter(
+                ChargingSession.is_complete == False
+            ).first()
+
+            if active_session:
+                # Charger disconnected - finalize session
+                active_session.end_time = db.query(func.max(TelemetryRaw.timestamp)).scalar()
+                active_session.is_complete = True
+
+                # Calculate kWh added from SOC change
+                if active_session.start_soc and active_session.end_soc:
+                    soc_gained = active_session.end_soc - active_session.start_soc
+                    if soc_gained > 0:
+                        active_session.kwh_added = (soc_gained / 100) * Config.BATTERY_CAPACITY_KWH
+
+                db.commit()
+                logger.info(
+                    f"Charging session completed: {active_session.kwh_added or 0:.2f} kWh added, "
+                    f"SOC {active_session.start_soc:.0f}% -> {active_session.end_soc:.0f}%"
+                )
+
+    except Exception as e:
+        logger.error(f"Error checking charging sessions: {e}")
+        db.rollback()
+    finally:
+        Session.remove()
+
+
 # Initialize scheduler
 scheduler = BackgroundScheduler()
 scheduler.add_job(close_stale_trips, 'interval', minutes=1)
 scheduler.add_job(check_refuel_events, 'interval', minutes=5)
+scheduler.add_job(check_charging_sessions, 'interval', minutes=2)
 scheduler.start()
 atexit.register(lambda: scheduler.shutdown())
 
@@ -299,8 +381,9 @@ def torque_upload():
                 db.add(trip)
                 db.flush()
                 logger.info(f"New trip started: {trip.session_id}")
-            except Exception:
+            except Exception as e:
                 # Race condition - trip was created by another request
+                logger.debug(f"Trip race condition handled for session {data['session_id']}: {e}")
                 db.rollback()
                 trip = db.query(Trip).filter(
                     Trip.session_id == data['session_id']
@@ -380,9 +463,9 @@ def get_trips():
         page = 1
 
     try:
-        per_page = min(100, max(1, int(request.args.get('per_page', 50))))
+        per_page = min(Config.API_MAX_PER_PAGE, max(1, int(request.args.get('per_page', Config.API_DEFAULT_PER_PAGE))))
     except (ValueError, TypeError):
-        per_page = 50
+        per_page = Config.API_DEFAULT_PER_PAGE
 
     # Get total count for pagination info
     total_count = query.count()
@@ -391,7 +474,7 @@ def get_trips():
     offset = (page - 1) * per_page
     trips = query.order_by(desc(Trip.start_time)).offset(offset).limit(per_page).all()
 
-    # Return paginated response with metadata
+    # Return consistent paginated response with metadata
     return jsonify({
         'trips': [t.to_dict() for t in trips],
         'pagination': {
@@ -400,7 +483,7 @@ def get_trips():
             'total': total_count,
             'pages': (total_count + per_page - 1) // per_page if per_page > 0 else 0
         }
-    }) if request.args.get('page') or request.args.get('per_page') else jsonify([t.to_dict() for t in trips])
+    })
 
 
 @app.route('/api/trips/<int:trip_id>', methods=['GET'])
@@ -1578,4 +1661,4 @@ def dashboard():
 # ============================================================================
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080, debug=Config.DEBUG)
+    app.run(host=Config.FLASK_HOST, port=Config.FLASK_PORT, debug=Config.DEBUG)
