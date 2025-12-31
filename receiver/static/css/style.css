@@ -494,6 +494,62 @@ body {
     z-index: var(--z-sticky);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+    transition: box-shadow 0.3s ease;
+}
+
+/* Header shadow on scroll */
+.header.scrolled {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Back to Top Button */
+.back-to-top {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 48px;
+    height: 48px;
+    background: var(--electric);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(20px);
+    transition: all 0.3s ease-out;
+    z-index: var(--z-fixed);
+}
+
+.back-to-top.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.back-to-top:hover {
+    background: var(--electric-dark);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg), var(--shadow-glow-electric);
+}
+
+.back-to-top:active {
+    transform: translateY(0) scale(0.95);
+}
+
+/* Hide on mobile (bottom nav is there) */
+@media (max-width: 768px) {
+    .back-to-top {
+        bottom: calc(64px + env(safe-area-inset-bottom, 0) + 1rem);
+        right: 1rem;
+        width: 44px;
+        height: 44px;
+    }
 }
 
 .header h1 {

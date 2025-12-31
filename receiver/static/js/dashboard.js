@@ -2618,3 +2618,68 @@ function showImportStatus(message, type) {
     statusDiv.textContent = message;
     statusDiv.className = `import-status show ${type}`;
 }
+
+/**
+ * Initialize desktop navigation enhancements
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    initHeaderScroll();
+    initBackToTop();
+});
+
+/**
+ * Add scroll shadow to header
+ */
+function initHeaderScroll() {
+    const header = document.querySelector('.header');
+    if (!header) return;
+
+    let ticking = false;
+
+    window.addEventListener('scroll', () => {
+        if (!ticking) {
+            window.requestAnimationFrame(() => {
+                if (window.scrollY > 10) {
+                    header.classList.add('scrolled');
+                } else {
+                    header.classList.remove('scrolled');
+                }
+                ticking = false;
+            });
+            ticking = true;
+        }
+    });
+}
+
+/**
+ * Initialize back to top button
+ */
+function initBackToTop() {
+    const backToTop = document.getElementById('back-to-top');
+    if (!backToTop) return;
+
+    let ticking = false;
+
+    // Show/hide based on scroll position
+    window.addEventListener('scroll', () => {
+        if (!ticking) {
+            window.requestAnimationFrame(() => {
+                if (window.scrollY > 400) {
+                    backToTop.classList.add('visible');
+                } else {
+                    backToTop.classList.remove('visible');
+                }
+                ticking = false;
+            });
+            ticking = true;
+        }
+    });
+
+    // Scroll to top on click
+    backToTop.addEventListener('click', () => {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    });
+}
