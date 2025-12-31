@@ -283,21 +283,28 @@ def torque_upload():
         data = TorqueParser.parse(form_data)
         db = get_db()
 
-        # Create or get trip
+        # Create or get trip (handle race condition)
         trip = db.query(Trip).filter(
             Trip.session_id == data['session_id']
         ).first()
 
         if not trip:
-            trip = Trip(
-                session_id=data['session_id'],
-                start_time=data['timestamp'],
-                start_odometer=data['odometer_miles'],
-                start_soc=data['state_of_charge']
-            )
-            db.add(trip)
-            db.flush()
-            logger.info(f"New trip started: {trip.session_id}")
+            try:
+                trip = Trip(
+                    session_id=data['session_id'],
+                    start_time=data['timestamp'],
+                    start_odometer=data['odometer_miles'],
+                    start_soc=data['state_of_charge']
+                )
+                db.add(trip)
+                db.flush()
+                logger.info(f"New trip started: {trip.session_id}")
+            except Exception:
+                # Race condition - trip was created by another request
+                db.rollback()
+                trip = db.query(Trip).filter(
+                    Trip.session_id == data['session_id']
+                ).first()
 
         # Store telemetry
         telemetry = TelemetryRaw(
