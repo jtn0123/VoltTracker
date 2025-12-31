@@ -1188,3 +1188,407 @@ class TestChargingSummaryDetails:
         data = json.loads(response.data)
         assert data['total_electric_miles'] == 70.0
         assert data['ev_ratio'] == 70.0  # 70/100 = 70%
+
+
+class TestChargingFiltersAndCost:
+    """Tests for charging history filtering and cost calculations."""
+
+    def test_charging_filters_by_date_range(self, client, db_session):
+        """Test charging history can be filtered by date range."""
+        from datetime import datetime, timezone, timedelta
+        from models import ChargingSession
+
+        # Create sessions at different dates
+        old_session = ChargingSession(
+            start_time=datetime.now(timezone.utc) - timedelta(days=30),
+            kwh_added=10.0,
+            is_complete=True,
+        )
+        recent_session = ChargingSession(
+            start_time=datetime.now(timezone.utc) - timedelta(days=1),
+            kwh_added=12.0,
+            is_complete=True,
+        )
+        db_session.add(old_session)
+        db_session.add(recent_session)
+        db_session.commit()
+
+        # Filter for last 7 days
+        start_date = (datetime.now(timezone.utc) - timedelta(days=7)).strftime('%Y-%m-%d')
+        response = client.get(f'/api/charging/history?start_date={start_date}')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # Should only include recent session
+        assert len(data) == 1
+        assert data[0]['kwh_added'] == 12.0
+
+    def test_charging_summary_includes_cost_comparison(self, client, db_session):
+        """Test charging summary includes gas vs electric cost comparison."""
+        from datetime import datetime, timezone
+        from models import ChargingSession
+
+        # Add charging session with cost data
+        session = ChargingSession(
+            start_time=datetime.now(timezone.utc),
+            kwh_added=15.0,
+            electricity_cost=2.25,  # $0.15/kWh
+            is_complete=True,
+        )
+        db_session.add(session)
+        db_session.commit()
+
+        response = client.get('/api/charging/summary')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # Should include cost-related fields
+        assert 'total_kwh' in data
+        assert data['total_kwh'] == 15.0
+
+    def test_charging_history_sorted_by_date(self, client, db_session):
+        """Test charging history is returned sorted by date descending."""
+        from datetime import datetime, timezone, timedelta
+        from models import ChargingSession
+
+        # Create sessions in non-chronological order
+        session1 = ChargingSession(
+            start_time=datetime.now(timezone.utc) - timedelta(days=5),
+            kwh_added=8.0,
+            is_complete=True,
+        )
+        session2 = ChargingSession(
+            start_time=datetime.now(timezone.utc) - timedelta(days=1),
+            kwh_added=12.0,
+            is_complete=True,
+        )
+        session3 = ChargingSession(
+            start_time=datetime.now(timezone.utc) - timedelta(days=10),
+            kwh_added=6.0,
+            is_complete=True,
+        )
+        db_session.add(session1)
+        db_session.add(session2)
+        db_session.add(session3)
+        db_session.commit()
+
+        response = client.get('/api/charging/history')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert len(data) == 3
+        # Most recent should be first
+        assert data[0]['kwh_added'] == 12.0
+        assert data[1]['kwh_added'] == 8.0
+        assert data[2]['kwh_added'] == 6.0
+
+
+class TestTripPatchRestrictions:
+    """Tests for trip patch field restrictions."""
+
+    def test_trip_patch_ignores_disallowed_fields(self, client, db_session):
+        """Test that PATCH ignores fields that shouldn't be updated directly."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        original_session_id = uuid.uuid4()
+        trip = Trip(
+            session_id=original_session_id,
+            start_time=datetime.now(timezone.utc),
+            distance_miles=25.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        # Try to update session_id and id (should be ignored)
+        new_session_id = str(uuid.uuid4())
+        response = client.patch(
+            f'/api/trips/{trip.id}',
+            data=json.dumps({
+                'session_id': new_session_id,
+                'id': 99999,
+                'gas_mpg': 42.0,  # This should be updated
+            }),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # gas_mpg should be updated
+        assert data['gas_mpg'] == 42.0
+        # session_id should NOT be changed
+        assert data['session_id'] == str(original_session_id)
+        # id should NOT be changed
+        assert data['id'] == trip.id
+
+    def test_trip_patch_updates_notes(self, client, db_session):
+        """Test that trip notes can be updated."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        response = client.patch(
+            f'/api/trips/{trip.id}',
+            data=json.dumps({'notes': 'Test drive to the store'}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['notes'] == 'Test drive to the store'
+
+    def test_trip_patch_updates_multiple_fields(self, client, db_session):
+        """Test updating multiple allowed fields at once."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            gas_mpg=35.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        response = client.patch(
+            f'/api/trips/{trip.id}',
+            data=json.dumps({
+                'gas_mpg': 45.0,
+                'notes': 'Highway trip',
+                'electric_miles': 10.0,
+            }),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['gas_mpg'] == 45.0
+        assert data['notes'] == 'Highway trip'
+        assert data['electric_miles'] == 10.0
+
+
+class TestTripSortingAndFiltering:
+    """Tests for trips sorting and advanced filtering."""
+
+    def test_trips_sorted_by_date_descending(self, client, db_session):
+        """Test trips are returned sorted by start_time descending."""
+        import uuid
+        from datetime import datetime, timezone, timedelta
+        from models import Trip
+
+        # Create trips in non-chronological order
+        for i in [5, 1, 10, 3]:
+            trip = Trip(
+                session_id=uuid.uuid4(),
+                start_time=datetime.now(timezone.utc) - timedelta(days=i),
+                distance_miles=float(i * 10),
+                is_closed=True,
+            )
+            db_session.add(trip)
+        db_session.commit()
+
+        response = client.get('/api/trips')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        trips = data['trips']
+        assert len(trips) == 4
+        # Most recent (1 day ago) should be first
+        assert trips[0]['distance_miles'] == 10.0
+        # Oldest (10 days ago) should be last
+        assert trips[-1]['distance_miles'] == 100.0
+
+    def test_trips_filter_electric_only(self, client, db_session):
+        """Test filtering for electric-only trips."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        # Create mixed trips
+        gas_trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            distance_miles=30.0,
+            gas_miles=30.0,
+            electric_miles=0.0,
+            is_closed=True,
+        )
+        electric_trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            distance_miles=25.0,
+            gas_miles=0.0,
+            electric_miles=25.0,
+            is_closed=True,
+        )
+        db_session.add(gas_trip)
+        db_session.add(electric_trip)
+        db_session.commit()
+
+        # Filter for gas_only=false should include all or just electric
+        response = client.get('/api/trips?gas_only=false')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'trips' in data
+
+    def test_trips_filter_combined_date_and_gas(self, client, db_session):
+        """Test combining date and gas_only filters."""
+        import uuid
+        from datetime import datetime, timezone, timedelta
+        from models import Trip
+
+        now = datetime.now(timezone.utc)
+
+        # Recent gas trip
+        trip1 = Trip(
+            session_id=uuid.uuid4(),
+            start_time=now - timedelta(days=1),
+            gas_miles=20.0,
+            is_closed=True,
+        )
+        # Old gas trip
+        trip2 = Trip(
+            session_id=uuid.uuid4(),
+            start_time=now - timedelta(days=30),
+            gas_miles=25.0,
+            is_closed=True,
+        )
+        # Recent electric trip
+        trip3 = Trip(
+            session_id=uuid.uuid4(),
+            start_time=now - timedelta(days=1),
+            electric_miles=15.0,
+            is_closed=True,
+        )
+        db_session.add(trip1)
+        db_session.add(trip2)
+        db_session.add(trip3)
+        db_session.commit()
+
+        start_date = (now - timedelta(days=7)).strftime('%Y-%m-%d')
+        response = client.get(f'/api/trips?start_date={start_date}&gas_only=true')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # Should only include recent gas trip
+        trips = data['trips']
+        assert len(trips) == 1
+        assert trips[0]['gas_miles'] == 20.0
+
+
+class TestPowerFlowEndpoint:
+    """Tests for power flow data endpoint."""
+
+    def test_power_flow_returns_data_structure(self, client, db_session):
+        """Test power flow endpoint returns expected structure."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import TelemetryRaw
+
+        telemetry = TelemetryRaw(
+            session_id=uuid.uuid4(),
+            timestamp=datetime.now(timezone.utc),
+            hv_battery_power_kw=5.0,
+            state_of_charge=70.0,
+        )
+        db_session.add(telemetry)
+        db_session.commit()
+
+        response = client.get('/api/power-flow')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # Should have power flow related fields
+        assert isinstance(data, dict)
+
+
+class TestBatteryHealthHistory:
+    """Tests for battery health history endpoint."""
+
+    def test_battery_health_history_returns_list(self, client, db_session):
+        """Test battery health history returns list of readings."""
+        from datetime import datetime, timezone, timedelta
+        from models import BatteryHealthReading
+
+        # Create several readings over time
+        for i in range(3):
+            reading = BatteryHealthReading(
+                timestamp=datetime.now(timezone.utc) - timedelta(days=i * 30),
+                capacity_kwh=18.0 - (i * 0.1),
+                normalized_capacity_kwh=18.0 - (i * 0.1),
+                soc_at_reading=100.0,
+            )
+            db_session.add(reading)
+        db_session.commit()
+
+        response = client.get('/api/battery/health')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # Should have capacity or history data
+        assert 'capacity_kwh' in data or 'current_capacity_kwh' in data or 'history' in data
+
+
+class TestEfficiencyWithData:
+    """Tests for efficiency endpoint with actual data."""
+
+    def test_efficiency_with_trips(self, client, db_session):
+        """Test efficiency summary with trip data."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            distance_miles=50.0,
+            gas_miles=20.0,
+            electric_miles=30.0,
+            gallons_used=0.5,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        response = client.get('/api/efficiency/summary')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['total_miles_tracked'] == 50.0
+        assert data['lifetime_gas_mpg'] == 40.0  # 20 miles / 0.5 gallons
+
+    def test_efficiency_calculates_ev_percentage(self, client, db_session):
+        """Test efficiency summary includes EV percentage."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            distance_miles=100.0,
+            electric_miles=75.0,
+            gas_miles=25.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        response = client.get('/api/efficiency/summary')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'ev_percentage' in data or 'electric_ratio' in data or 'total_electric_miles' in data

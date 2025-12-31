@@ -292,3 +292,187 @@ def imbalanced_cell_voltages():
     voltages = [3.75] * 96
     voltages[42] = 3.60  # One weak cell
     return voltages
+
+
+# ============================================================================
+# Weather Test Fixtures
+# ============================================================================
+
+@pytest.fixture
+def mock_weather_response():
+    """Standard weather API response from Open-Meteo."""
+    now = datetime.now(timezone.utc)
+    hours = [(now - timedelta(hours=i)).strftime('%Y-%m-%dT%H:00') for i in range(24)]
+    hours.reverse()
+
+    return {
+        'hourly': {
+            'time': hours,
+            'temperature_2m': [65.0 + i * 0.5 for i in range(24)],
+            'precipitation': [0.0] * 20 + [0.1, 0.2, 0.0, 0.0],
+            'wind_speed_10m': [10.0 + i for i in range(24)],
+            'weather_code': [0] * 20 + [61, 61, 0, 0],
+        }
+    }
+
+
+@pytest.fixture
+def mock_weather_extreme():
+    """Weather response with extreme conditions."""
+    now = datetime.now(timezone.utc)
+    current_hour = now.strftime('%Y-%m-%dT%H:00')
+
+    return {
+        'hourly': {
+            'time': [current_hour],
+            'temperature_2m': [15.0],  # Very cold
+            'precipitation': [0.8],     # Heavy rain
+            'wind_speed_10m': [35.0],   # Strong wind
+            'weather_code': [95],       # Thunderstorm
+        }
+    }
+
+
+# ============================================================================
+# Power Telemetry Fixtures
+# ============================================================================
+
+@pytest.fixture
+def power_telemetry_points(db_session):
+    """Telemetry with HV battery power data for kWh calculations."""
+    session_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    points = []
+    for i in range(10):
+        point = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(minutes=(10 - i) * 6),  # Every 6 minutes
+            hv_battery_power_kw=8.0 + (i % 3),  # 8-10 kW draw
+            state_of_charge=100.0 - (i * 3),     # Draining
+            speed_mph=45.0 + i,
+            odometer_miles=50000.0 + i,
+        )
+        points.append(point)
+        db_session.add(point)
+
+    db_session.commit()
+    return points
+
+
+@pytest.fixture
+def charging_telemetry_with_power(db_session):
+    """Charging session with detailed power readings."""
+    from models import ChargingSession
+
+    session_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    # Create charging session
+    charging = ChargingSession(
+        start_time=now - timedelta(hours=4),
+        end_time=now,
+        start_soc=20.0,
+        end_soc=95.0,
+        kwh_added=13.8,
+        charge_type='L2',
+        peak_power_kw=6.8,
+        avg_power_kw=6.6,
+        is_complete=True,
+    )
+    db_session.add(charging)
+
+    # Create telemetry during charging
+    points = []
+    for i in range(24):  # 24 points over 4 hours
+        point = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(minutes=(24 - i) * 10),
+            charger_connected=True,
+            charger_power_kw=6.6 + (i % 3) * 0.1,  # Varying 6.6-6.8 kW
+            charger_ac_power_kw=6.6 + (i % 3) * 0.1,
+            state_of_charge=20.0 + (i * 3.125),  # 20% to 95%
+            speed_mph=0.0,
+        )
+        points.append(point)
+        db_session.add(point)
+
+    db_session.commit()
+
+    return {'session': charging, 'telemetry': points}
+
+
+# ============================================================================
+# Battery Health Fixtures
+# ============================================================================
+
+@pytest.fixture
+def battery_health_readings(db_session):
+    """12 months of battery health degradation data."""
+    from models import BatteryHealthReading
+
+    readings = []
+    now = datetime.now(timezone.utc)
+
+    # Simulate gradual degradation over 12 months
+    for month in range(12):
+        reading = BatteryHealthReading(
+            timestamp=now - timedelta(days=month * 30),
+            capacity_kwh=18.4 - (month * 0.05),  # Lose ~0.05 kWh per month
+            normalized_capacity_kwh=18.4 - (month * 0.05),
+            soc_at_reading=100.0,
+            ambient_temp_f=70.0,
+        )
+        readings.append(reading)
+        db_session.add(reading)
+
+    db_session.commit()
+    return readings
+
+
+# ============================================================================
+# Trip with Telemetry Fixtures
+# ============================================================================
+
+@pytest.fixture
+def trips_with_telemetry(db_session):
+    """Multiple trips with associated telemetry data."""
+    trips = []
+    now = datetime.now(timezone.utc)
+
+    for trip_num in range(3):
+        session_id = uuid.uuid4()
+        trip_start = now - timedelta(days=trip_num, hours=2)
+
+        # Create trip
+        trip = Trip(
+            session_id=session_id,
+            start_time=trip_start,
+            end_time=trip_start + timedelta(hours=1),
+            start_odometer=50000.0 + (trip_num * 30),
+            end_odometer=50000.0 + (trip_num * 30) + 25.0,
+            distance_miles=25.0,
+            start_soc=90.0 - (trip_num * 5),
+            end_soc=70.0 - (trip_num * 5),
+            electric_miles=20.0,
+            gas_miles=5.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+
+        # Create telemetry for trip
+        for point_num in range(10):
+            telemetry = TelemetryRaw(
+                session_id=session_id,
+                timestamp=trip_start + timedelta(minutes=point_num * 6),
+                speed_mph=35.0 + point_num,
+                state_of_charge=90.0 - (trip_num * 5) - point_num * 2,
+                odometer_miles=50000.0 + (trip_num * 30) + (point_num * 2.5),
+                engine_rpm=0 if point_num < 7 else 1200,
+            )
+            db_session.add(telemetry)
+
+        trips.append(trip)
+
+    db_session.commit()
+    return trips

@@ -130,16 +130,22 @@ class TorqueCSVImporter:
         existing_timestamps: Optional[Set[datetime]] = None
     ) -> Tuple[List[Dict[str, Any]], int]:
         """
-        Remove duplicate records based on timestamp.
+        Remove records that already exist in the database (by timestamp).
+
+        Only removes duplicates if existing_timestamps is provided. Does not
+        deduplicate within the import itself, as the same timestamp from
+        different rows might be valid data points.
 
         Args:
             records: List of telemetry records
-            existing_timestamps: Optional set of existing timestamps to check against
+            existing_timestamps: Set of existing timestamps from database
 
         Returns:
-            Tuple of (deduplicated records, count of duplicates removed)
+            Tuple of (filtered records, count of duplicates removed)
         """
-        seen_timestamps: Set[datetime] = existing_timestamps or set()
+        if not existing_timestamps:
+            return records, 0
+
         unique_records = []
         duplicate_count = 0
 
@@ -154,32 +160,39 @@ class TorqueCSVImporter:
             else:
                 ts_key = ts
 
-            if ts_key in seen_timestamps:
+            if ts_key in existing_timestamps:
                 duplicate_count += 1
             else:
-                seen_timestamps.add(ts_key)
                 unique_records.append(record)
 
         return unique_records, duplicate_count
 
     @classmethod
-    def parse_csv(cls, csv_content: str) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    def parse_csv(
+        cls,
+        csv_content: str,
+        existing_timestamps: Optional[Set[datetime]] = None
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
-        Parse Torque CSV content into telemetry records.
+        Parse Torque CSV content into telemetry records with validation.
 
         Args:
             csv_content: Raw CSV file content as string
+            existing_timestamps: Optional set of existing timestamps to detect duplicates
 
         Returns:
-            Tuple of (list of telemetry dicts, stats dict)
+            Tuple of (list of telemetry dicts, stats dict with validation info)
         """
         records = []
         stats = {
             'total_rows': 0,
             'parsed_rows': 0,
             'skipped_rows': 0,
+            'duplicates_removed': 0,
+            'validation_warnings': 0,
             'columns_found': [],
-            'errors': []
+            'errors': [],
+            'warnings': []
         }
 
         try:
@@ -208,6 +221,13 @@ class TorqueCSVImporter:
             try:
                 record = cls._parse_row(row, column_mapping, session_id)
                 if record and record.get('timestamp'):
+                    # Validate the record
+                    is_valid, warnings = cls._validate_record(record)
+                    if warnings:
+                        stats['validation_warnings'] += len(warnings)
+                        if len(stats['warnings']) < 10:  # Limit warning messages
+                            stats['warnings'].append(f"Row {row_num}: {', '.join(warnings)}")
+
                     records.append(record)
                     stats['parsed_rows'] += 1
                 else:
@@ -216,6 +236,10 @@ class TorqueCSVImporter:
                 stats['skipped_rows'] += 1
                 if len(stats['errors']) < 10:  # Limit error messages
                     stats['errors'].append(f"Row {row_num}: {str(e)}")
+
+        # Remove duplicates
+        records, duplicate_count = cls._find_duplicates(records, existing_timestamps)
+        stats['duplicates_removed'] = duplicate_count
 
         return records, stats
 
