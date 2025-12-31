@@ -8,8 +8,8 @@ HV Battery Current,HVBattA,22000A,((A*256+B)-32768)/100,-300,300,A,7E4
 HV Battery Power,HVBattKW,22000B,((A*256+B)-32768)/100,-150,150,kW,7E4
 HV Discharge Amps,HVDisA,222414,(S_A*256+B)/20,-100,100,A,7E4
 Battery Pack Voltage,PackV,222429,A*256+B,0,450,V,7E4
-Battery Coolant Temp,BattCool,220038,(A-40),-40,120,C,7E4
-Battery Temp Sensor,BattTmp,22434F,(A-40),-40,100,C,7E4
+Battery Coolant Temp,BattCool,220038,((A-40)*1.8)+32,-40,248,°F,7E4
+Battery Temp Sensor,BattTmp,22434F,((A-40)*1.8)+32,-40,212,°F,7E4
 Charger Status,ChgStat,220057,A,0,10,,7E4
 Charger Power kW,ChgPwrKW,22006E,(A*256+B)/1000,0,10,kW,7E4
 Charger Power W,ChgPwrW,224373,(A*256+B),0,4000,W,7E4
@@ -21,16 +21,16 @@ Last Charge Wh,LastChgWh,22437D,((A*256+B))*10,0,20000,Wh,7E4
 Motor A Speed,MotARPM,220051,(A*256+B)/4,0,10000,RPM,7E4
 Motor B Speed,MotBRPM,220052,(A*256+B)/4,0,10000,RPM,7E4
 Generator Speed,GenRPM,220053,(A*256+B)/4,0,10000,RPM,7E4
-Motor Temp 1,MotTmp1,221570,A-40,-40,200,C,7E4
-Motor Temp 2,MotTmp2,221571,A-40,-40,200,C,7E4
-Motor Temp 3,MotTmp3,221572,A-40,-40,200,C,7E4
-Motor Temp 4,MotTmp4,221573,A-40,-40,200,C,7E4
+Motor Temp 1,MotTmp1,221570,(A-40)*1.8+32,-40,392,°F,7E4
+Motor Temp 2,MotTmp2,221571,(A-40)*1.8+32,-40,392,°F,7E4
+Motor Temp 3,MotTmp3,221572,(A-40)*1.8+32,-40,392,°F,7E4
+Motor Temp 4,MotTmp4,221573,(A-40)*1.8+32,-40,392,°F,7E4
 Engine Running,EngRun,221930,A,0,1,,7E0
-Engine Coolant Temp,EngCool,220049,(A-40),-40,215,C,7E4
-Engine Oil Temp,OilTmp,221154,(A-40),-40,200,C,7E4
-Engine Torque,EngTrq,22203F,((A*256)+B)/4,-500,500,Nm,7E4
-Transmission Fluid Temp,TransTmp,220047,(A-40),-40,215,C,7E4
-Ambient Air Temp,AmbTemp,22004F,(A-40),-40,100,C,7E4
+Engine Coolant Temp,EngCool,220049,((A-40)*1.8)+32,-40,419,°F,7E4
+Engine Oil Temp,OilTmp,221154,((A-40)*1.8)+32,-40,392,°F,7E4
+Engine Torque,EngTrq,22203F,(((A*256)+B)/4)*0.7376,-369,369,ft-lb,7E4
+Transmission Fluid Temp,TransTmp,220047,((A-40)*1.8)+32,-40,419,°F,7E4
+Ambient Air Temp,AmbTemp,22004F,((A-40)*1.8)+32,-40,212,°F,7E4
 Distance to Empty Electric,DTE_EV,22430A,(A*256+B)/10,0,100,mi,7E4
 Distance to Empty Gas,DTE_Gas,22430C,(A*256+B)/10,0,400,mi,7E4
 Lifetime Miles Electric,LfMiEV,224322,(A*16777216+B*65536+C*256+D)/10,0,999999,mi,7E4
