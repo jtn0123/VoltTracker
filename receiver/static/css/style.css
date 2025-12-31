@@ -533,16 +533,30 @@ body {
 /* Summary Cards */
 .cards-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-lg);
+    margin-bottom: var(--space-xl);
 }
 
 .card {
-    background-color: var(--bg-card);
-    border-radius: 12px;
-    padding: 1.5rem;
+    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.8) 100%);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
     border: 1px solid var(--border-color);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.card.electric-accent {
+    border-left: 3px solid var(--electric);
+}
+
+.card.gas-accent {
+    border-left: 3px solid var(--gas);
 }
 
 .card-label {
@@ -867,7 +881,20 @@ body {
 
 @media (max-width: 480px) {
     .cards-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-sm);
+    }
+
+    .card {
+        padding: var(--space-md);
+    }
+
+    .card-value {
+        font-size: var(--font-xl);
+    }
+
+    .card-label {
+        font-size: var(--font-xs);
     }
 
     .status-bar {
