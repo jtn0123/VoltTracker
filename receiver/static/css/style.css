@@ -870,25 +870,58 @@ body {
 
 .trips-table th,
 .trips-table td {
-    padding: 1rem;
+    padding: 1rem 1.25rem;
     text-align: left;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .trips-table th {
     font-weight: 600;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.1em;
+    background-color: rgba(0, 0, 0, 0.2);
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
 
-.trips-table tr:hover {
-    background-color: rgba(255, 255, 255, 0.05);
+/* Zebra striping */
+.trips-table tbody tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.trips-table tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.trips-table tbody tr:hover {
+    background-color: rgba(50, 130, 184, 0.1);
+}
+
+.trips-table tbody tr.clickable {
+    cursor: pointer;
 }
 
 .trips-table td {
     font-size: 0.9375rem;
+}
+
+/* Desktop table enhancements */
+@media (min-width: 1024px) {
+    .trips-table th,
+    .trips-table td {
+        padding: 1.125rem 1.5rem;
+    }
+
+    .trips-table th {
+        font-size: 0.8rem;
+    }
+
+    .trips-table td {
+        font-size: 1rem;
+    }
 }
 
 .badge {
@@ -1938,21 +1971,54 @@ body {
 
 .charging-table th,
 .charging-table td {
-    padding: 0.75rem 1rem;
+    padding: 1rem 1.25rem;
     text-align: left;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .charging-table th {
-    color: var(--text-secondary);
-    font-weight: 500;
+    color: var(--text-muted);
+    font-weight: 600;
     text-transform: uppercase;
     font-size: 0.75rem;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.1em;
+    background-color: rgba(0, 0, 0, 0.2);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+/* Zebra striping */
+.charging-table tbody tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.charging-table tbody tr {
+    transition: background-color 0.15s ease;
 }
 
 .charging-table tbody tr:hover {
     background-color: rgba(50, 130, 184, 0.1);
+}
+
+.charging-table tbody tr.clickable {
+    cursor: pointer;
+}
+
+/* Desktop charging table enhancements */
+@media (min-width: 1024px) {
+    .charging-table th,
+    .charging-table td {
+        padding: 1.125rem 1.5rem;
+    }
+
+    .charging-table {
+        font-size: 1rem;
+    }
+
+    .charging-table th {
+        font-size: 0.8rem;
+    }
 }
 
 .btn-add {
