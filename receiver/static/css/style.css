@@ -864,6 +864,91 @@ body {
     justify-content: space-between;
 }
 
+/* Mobile Charging Cards Layout */
+.charging-cards {
+    display: none;
+}
+
+.charging-card {
+    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.8) 100%);
+    border-radius: var(--radius-lg);
+    padding: var(--space-base);
+    margin-bottom: var(--space-base);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.charging-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.charging-card:active {
+    transform: scale(0.98);
+}
+
+.charging-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-md);
+}
+
+.charging-card-date {
+    font-weight: 600;
+    font-size: var(--font-base);
+    color: var(--text-primary);
+}
+
+.charging-card-badge {
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-full);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.charging-card-badge.l1 {
+    background-color: rgba(108, 117, 125, 0.2);
+    color: #adb5bd;
+}
+
+.charging-card-badge.l2 {
+    background-color: var(--electric-glow);
+    color: var(--electric);
+}
+
+.charging-card-badge.dcfc {
+    background-color: rgba(255, 193, 7, 0.2);
+    color: var(--gas);
+}
+
+.charging-card-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-sm);
+}
+
+.charging-card-stat {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.charging-card-stat-label {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.charging-card-stat-value {
+    font-size: var(--font-base);
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .header {
@@ -905,6 +990,15 @@ body {
     }
 
     .trip-cards {
+        display: block;
+    }
+
+    /* Hide charging table, show cards on mobile */
+    .charging-table-wrapper {
+        display: none;
+    }
+
+    .charging-cards {
         display: block;
     }
 
@@ -2123,6 +2217,172 @@ body {
     border-radius: 8px;
     text-align: center;
     font-size: 1rem;
+}
+
+/* ============================================
+   Battery Cell Voltage Section
+   ============================================ */
+.battery-cells-section {
+    margin-bottom: 1.5rem;
+}
+
+.battery-cells-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.battery-cells-header h3 {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.voltage-delta {
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    background-color: var(--bg-secondary);
+}
+
+.voltage-delta.good {
+    color: #27ae60;
+    background-color: rgba(39, 174, 96, 0.15);
+}
+
+.voltage-delta.warning {
+    color: #f39c12;
+    background-color: rgba(243, 156, 18, 0.15);
+}
+
+.voltage-delta.danger {
+    color: #e74c3c;
+    background-color: rgba(231, 76, 60, 0.15);
+}
+
+/* Module Balance Bars */
+.module-balance {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.module-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.module-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    width: 24px;
+}
+
+.module-value-container {
+    flex: 1;
+    height: 8px;
+    background-color: var(--bg-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.module-value {
+    height: 100%;
+    background: linear-gradient(90deg, #3282b8 0%, #27ae60 100%);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.module-voltage {
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    width: 50px;
+    text-align: right;
+    font-family: monospace;
+}
+
+/* Cell Voltage Heatmap */
+.cell-heatmap-container {
+    margin-bottom: 1rem;
+}
+
+.cell-heatmap {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 2px;
+    margin-bottom: 0.75rem;
+}
+
+.cell {
+    aspect-ratio: 1;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+    min-width: 12px;
+    min-height: 12px;
+}
+
+.cell:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 6px rgba(50, 130, 184, 0.5);
+    z-index: 1;
+}
+
+.cell.weak {
+    box-shadow: 0 0 4px rgba(231, 76, 60, 0.7);
+    animation: pulse-weak 1.5s infinite;
+}
+
+@keyframes pulse-weak {
+    0%, 100% { box-shadow: 0 0 4px rgba(231, 76, 60, 0.7); }
+    50% { box-shadow: 0 0 8px rgba(231, 76, 60, 0.9); }
+}
+
+.heatmap-legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.legend-gradient {
+    width: 100px;
+    height: 8px;
+    background: linear-gradient(90deg, #e74c3c 0%, #f39c12 25%, #27ae60 50%, #3282b8 75%, #9b59b6 100%);
+    border-radius: 4px;
+}
+
+/* Weak Cells Warning */
+.weak-cells-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background-color: rgba(243, 156, 18, 0.15);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.weak-cells-warning .warning-icon {
+    font-size: 1rem;
+}
+
+.weak-cells-warning .warning-text {
+    font-size: 0.875rem;
+    color: #f39c12;
+}
+
+.battery-cells-footer {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: right;
 }
 
 /* ============================================

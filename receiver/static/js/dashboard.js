@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadChargingHistory();
     loadLiveTelemetry();
     loadBatteryHealth();
+    loadBatteryCells();
 
     // Refresh status every 30 seconds
     setInterval(loadStatus, 30000);
@@ -1730,6 +1731,206 @@ async function loadBatteryHealth() {
 
     } catch (error) {
         console.error('Failed to load battery health:', error);
+    }
+}
+
+/**
+ * Load battery cell voltage data
+ */
+async function loadBatteryCells() {
+    try {
+        const response = await fetch('/api/battery/cells/latest');
+        const data = await response.json();
+
+        const section = document.getElementById('battery-cells-section');
+        if (!section) return;
+
+        // Only show if we have data
+        if (!data.reading) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+        const reading = data.reading;
+
+        // Update voltage delta
+        const deltaEl = document.getElementById('voltage-delta');
+        if (deltaEl && reading.voltage_delta !== null) {
+            const delta = reading.voltage_delta;
+            deltaEl.textContent = `Δ ${(delta * 1000).toFixed(0)}mV`;
+
+            // Set status class based on delta
+            deltaEl.classList.remove('good', 'warning', 'danger');
+            if (delta < 0.03) {
+                deltaEl.classList.add('good');
+            } else if (delta < 0.05) {
+                deltaEl.classList.add('warning');
+            } else {
+                deltaEl.classList.add('danger');
+            }
+        }
+
+        // Update module bars
+        updateModuleBars(reading);
+
+        // Render cell heatmap
+        renderCellHeatmap(reading);
+
+        // Check for weak cells
+        checkWeakCells(reading);
+
+        // Update timestamp
+        const timestampEl = document.getElementById('cells-timestamp');
+        if (timestampEl && reading.timestamp) {
+            timestampEl.textContent = `Last updated: ${formatDateTime(new Date(reading.timestamp))}`;
+        }
+
+    } catch (error) {
+        console.error('Failed to load battery cells:', error);
+    }
+}
+
+/**
+ * Update module balance bars
+ */
+function updateModuleBars(reading) {
+    const modules = [
+        { bar: 'module1-bar', voltage: 'module1-voltage', avg: reading.module1_avg },
+        { bar: 'module2-bar', voltage: 'module2-voltage', avg: reading.module2_avg },
+        { bar: 'module3-bar', voltage: 'module3-voltage', avg: reading.module3_avg }
+    ];
+
+    // Calculate min/max for scaling
+    const avgValues = modules.map(m => m.avg).filter(v => v !== null);
+    if (avgValues.length === 0) return;
+
+    const minAvg = Math.min(...avgValues);
+    const maxAvg = Math.max(...avgValues);
+    const range = maxAvg - minAvg || 0.01; // Avoid division by zero
+
+    modules.forEach(module => {
+        const barEl = document.getElementById(module.bar);
+        const voltageEl = document.getElementById(module.voltage);
+
+        if (barEl && module.avg !== null) {
+            // Scale bar width (min will be around 80%, max will be 100%)
+            const normalizedValue = (module.avg - minAvg) / range;
+            const width = 80 + (normalizedValue * 20);
+            barEl.style.width = `${width}%`;
+        }
+
+        if (voltageEl && module.avg !== null) {
+            voltageEl.textContent = `${module.avg.toFixed(3)}V`;
+        }
+    });
+}
+
+/**
+ * Render cell voltage heatmap
+ */
+function renderCellHeatmap(reading) {
+    const heatmap = document.getElementById('cell-heatmap');
+    if (!heatmap || !reading.cell_voltages) return;
+
+    const voltages = reading.cell_voltages;
+    const minV = reading.min_voltage || Math.min(...voltages.filter(v => v));
+    const maxV = reading.max_voltage || Math.max(...voltages.filter(v => v));
+    const range = maxV - minV || 0.01;
+
+    heatmap.innerHTML = voltages.map((voltage, index) => {
+        if (voltage === null || voltage === undefined) {
+            return `<div class="cell" style="background-color: var(--bg-secondary);" title="Cell ${index + 1}: N/A"></div>`;
+        }
+
+        // Normalize voltage to 0-1 range
+        const normalized = (voltage - minV) / range;
+
+        // Generate color from red (low) through green (middle) to blue (high)
+        const color = getHeatmapColor(normalized);
+
+        return `<div class="cell" style="background-color: ${color};" title="Cell ${index + 1}: ${voltage.toFixed(3)}V"></div>`;
+    }).join('');
+}
+
+/**
+ * Generate heatmap color based on normalized value (0-1)
+ */
+function getHeatmapColor(value) {
+    // Red (low) -> Orange -> Green (middle) -> Blue -> Purple (high)
+    const colors = [
+        { pos: 0, r: 231, g: 76, b: 60 },    // Red
+        { pos: 0.25, r: 243, g: 156, b: 18 }, // Orange
+        { pos: 0.5, r: 39, g: 174, b: 96 },   // Green
+        { pos: 0.75, r: 50, g: 130, b: 184 }, // Blue
+        { pos: 1, r: 155, g: 89, b: 182 }     // Purple
+    ];
+
+    // Find the two colors to interpolate between
+    let lower = colors[0];
+    let upper = colors[colors.length - 1];
+
+    for (let i = 0; i < colors.length - 1; i++) {
+        if (value >= colors[i].pos && value <= colors[i + 1].pos) {
+            lower = colors[i];
+            upper = colors[i + 1];
+            break;
+        }
+    }
+
+    // Interpolate
+    const range = upper.pos - lower.pos;
+    const factor = range === 0 ? 0 : (value - lower.pos) / range;
+
+    const r = Math.round(lower.r + (upper.r - lower.r) * factor);
+    const g = Math.round(lower.g + (upper.g - lower.g) * factor);
+    const b = Math.round(lower.b + (upper.b - lower.b) * factor);
+
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
+/**
+ * Check for weak cells and show warning
+ */
+function checkWeakCells(reading) {
+    const warningEl = document.getElementById('weak-cells-warning');
+    const textEl = document.getElementById('weak-cells-text');
+    if (!warningEl || !textEl) return;
+
+    if (!reading.cell_voltages || !reading.avg_voltage) {
+        warningEl.style.display = 'none';
+        return;
+    }
+
+    // Find cells that are more than 2% below average
+    const threshold = reading.avg_voltage * 0.02;
+    const weakCells = [];
+
+    reading.cell_voltages.forEach((voltage, index) => {
+        if (voltage !== null && voltage < reading.avg_voltage - threshold) {
+            weakCells.push({
+                index: index + 1,
+                voltage: voltage,
+                deviation: (voltage - reading.avg_voltage) * 1000 // Convert to mV
+            });
+        }
+    });
+
+    if (weakCells.length > 0) {
+        warningEl.style.display = 'flex';
+        const cellNumbers = weakCells.slice(0, 3).map(c => c.index).join(', ');
+        const moreText = weakCells.length > 3 ? ` and ${weakCells.length - 3} more` : '';
+        textEl.textContent = `Weak cells detected: #${cellNumbers}${moreText}`;
+
+        // Mark weak cells in heatmap
+        weakCells.forEach(cell => {
+            const cellEl = document.querySelectorAll('#cell-heatmap .cell')[cell.index - 1];
+            if (cellEl) {
+                cellEl.classList.add('weak');
+            }
+        });
+    } else {
+        warningEl.style.display = 'none';
     }
 }
 

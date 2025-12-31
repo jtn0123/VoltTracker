@@ -193,6 +193,65 @@
             </div>
         </section>
 
+        <!-- Battery Cell Voltage Section (hidden until data exists) -->
+        <section id="battery-cells-section" class="battery-cells-section" style="display:none;" aria-labelledby="battery-cells-title">
+            <div class="card" role="region" aria-labelledby="battery-cells-title">
+                <div class="battery-cells-header">
+                    <h3 id="battery-cells-title">Cell Voltages</h3>
+                    <div class="battery-cells-summary" id="battery-cells-summary">
+                        <span class="voltage-delta" id="voltage-delta">Δ --</span>
+                    </div>
+                </div>
+
+                <!-- Module Balance -->
+                <div class="module-balance" id="module-balance" role="region" aria-label="Module balance">
+                    <div class="module-bar">
+                        <span class="module-label">M1</span>
+                        <div class="module-value-container">
+                            <div class="module-value" id="module1-bar"></div>
+                        </div>
+                        <span class="module-voltage" id="module1-voltage">--</span>
+                    </div>
+                    <div class="module-bar">
+                        <span class="module-label">M2</span>
+                        <div class="module-value-container">
+                            <div class="module-value" id="module2-bar"></div>
+                        </div>
+                        <span class="module-voltage" id="module2-voltage">--</span>
+                    </div>
+                    <div class="module-bar">
+                        <span class="module-label">M3</span>
+                        <div class="module-value-container">
+                            <div class="module-value" id="module3-bar"></div>
+                        </div>
+                        <span class="module-voltage" id="module3-voltage">--</span>
+                    </div>
+                </div>
+
+                <!-- Cell Voltage Heatmap -->
+                <div class="cell-heatmap-container" role="region" aria-label="Cell voltage heatmap">
+                    <div class="cell-heatmap" id="cell-heatmap">
+                        <!-- 96 cells rendered by JavaScript -->
+                    </div>
+                    <div class="heatmap-legend">
+                        <span class="legend-low">Low</span>
+                        <div class="legend-gradient"></div>
+                        <span class="legend-high">High</span>
+                    </div>
+                </div>
+
+                <!-- Weak Cells Warning -->
+                <div class="weak-cells-warning" id="weak-cells-warning" style="display:none;">
+                    <span class="warning-icon">⚠️</span>
+                    <span class="warning-text" id="weak-cells-text">No weak cells detected</span>
+                </div>
+
+                <div class="battery-cells-footer">
+                    <span class="cells-timestamp" id="cells-timestamp">Last updated: --</span>
+                </div>
+            </div>
+        </section>
+
         <!-- MPG Trend Chart -->
         <section class="chart-section" aria-labelledby="mpg-chart-title">
             <div class="chart-header">
@@ -354,6 +413,13 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Mobile Charging Cards -->
+            <div class="charging-cards" id="charging-cards" role="list" aria-label="Charging sessions" aria-live="polite">
+                <div class="loading" role="status" aria-label="Loading charging sessions">
+                    <div class="spinner" aria-hidden="true"></div>
+                </div>
             </div>
         </section>
 
