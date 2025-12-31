@@ -20,6 +20,13 @@ CREATE TABLE telemetry_raw (
     battery_voltage DECIMAL(5,2),
     ambient_temp_f DECIMAL(5,1),
     odometer_miles DECIMAL(10,1),
+    -- HV Battery tracking for kWh calculations
+    hv_battery_power_kw DECIMAL(6,2),
+    hv_battery_current_a DECIMAL(6,2),
+    hv_battery_voltage_v DECIMAL(6,2),
+    -- Charging status
+    charger_ac_power_kw DECIMAL(6,2),
+    charger_connected BOOLEAN,
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -44,6 +51,8 @@ CREATE TABLE trips (
     start_soc DECIMAL(5,2),
     soc_at_gas_transition DECIMAL(5,2),
     electric_miles DECIMAL(6,1),
+    electric_kwh_used DECIMAL(6,2),
+    kwh_per_mile DECIMAL(6,3),
 
     -- Gas portion
     gas_mode_entered BOOLEAN DEFAULT FALSE,
@@ -98,6 +107,37 @@ CREATE TABLE soc_transitions (
 
 CREATE INDEX idx_soc_transitions_timestamp ON soc_transitions(timestamp);
 
+-- Table: charging_sessions
+-- Tracks charging sessions for energy analysis
+CREATE TABLE charging_sessions (
+    id SERIAL PRIMARY KEY,
+    start_time TIMESTAMPTZ NOT NULL,
+    end_time TIMESTAMPTZ,
+    start_soc DECIMAL(5,2),
+    end_soc DECIMAL(5,2),
+    -- Energy tracking
+    kwh_added DECIMAL(6,2),
+    peak_power_kw DECIMAL(6,2),
+    avg_power_kw DECIMAL(6,2),
+    -- Location
+    latitude DECIMAL(9,6),
+    longitude DECIMAL(9,6),
+    location_name VARCHAR(255),
+    -- Charging type
+    charge_type VARCHAR(50),
+    -- Cost tracking
+    cost DECIMAL(6,2),
+    cost_per_kwh DECIMAL(6,4),
+    notes TEXT,
+    -- Status
+    is_complete BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_charging_sessions_start_time ON charging_sessions(start_time);
+CREATE INDEX idx_charging_sessions_is_complete ON charging_sessions(is_complete);
+
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -110,5 +150,11 @@ $$ language 'plpgsql';
 -- Trigger for trips table
 CREATE TRIGGER update_trips_updated_at
     BEFORE UPDATE ON trips
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger for charging_sessions table
+CREATE TRIGGER update_charging_sessions_updated_at
+    BEFORE UPDATE ON charging_sessions
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
