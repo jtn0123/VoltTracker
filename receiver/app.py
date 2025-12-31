@@ -1225,6 +1225,177 @@ def get_charging_summary():
 
 
 # ============================================================================
+# Battery Cell Voltage Endpoints
+# ============================================================================
+
+@app.route('/api/battery/cells', methods=['GET'])
+def get_battery_cell_readings():
+    """
+    Get battery cell voltage readings.
+
+    Query params:
+        - limit: Max readings to return (default 10)
+        - days: Filter to last N days
+    """
+    db = get_db()
+
+    limit = request.args.get('limit', 10, type=int)
+    days = request.args.get('days', type=int)
+
+    query = db.query(BatteryCellReading).order_by(desc(BatteryCellReading.timestamp))
+
+    if days:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        query = query.filter(BatteryCellReading.timestamp >= cutoff)
+
+    readings = query.limit(min(limit, 100)).all()
+
+    return jsonify({
+        'readings': [r.to_dict() for r in readings],
+        'count': len(readings)
+    })
+
+
+@app.route('/api/battery/cells/latest', methods=['GET'])
+def get_latest_cell_reading():
+    """Get the most recent cell voltage reading."""
+    db = get_db()
+
+    reading = db.query(BatteryCellReading).order_by(
+        desc(BatteryCellReading.timestamp)
+    ).first()
+
+    if not reading:
+        return jsonify({'reading': None, 'message': 'No cell readings available'})
+
+    return jsonify({'reading': reading.to_dict()})
+
+
+@app.route('/api/battery/cells/analysis', methods=['GET'])
+def get_cell_analysis():
+    """
+    Get battery cell health analysis.
+
+    Analyzes voltage delta trends, weak cells, and module balance.
+    """
+    db = get_db()
+
+    days = request.args.get('days', 30, type=int)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    readings = db.query(BatteryCellReading).filter(
+        BatteryCellReading.timestamp >= cutoff
+    ).order_by(BatteryCellReading.timestamp).all()
+
+    if not readings:
+        return jsonify({
+            'message': 'No cell readings in the specified period',
+            'analysis': None
+        })
+
+    # Calculate statistics
+    import statistics
+
+    deltas = [r.voltage_delta for r in readings if r.voltage_delta]
+    avg_voltages = [r.avg_voltage for r in readings if r.avg_voltage]
+
+    # Find cells that are consistently low or high
+    weak_cells = []
+    if readings and readings[-1].cell_voltages:
+        latest = readings[-1]
+        voltages = latest.cell_voltages
+        if voltages and latest.avg_voltage:
+            threshold = latest.avg_voltage * 0.02  # 2% below average
+            for i, v in enumerate(voltages):
+                if v and v < (latest.avg_voltage - threshold):
+                    weak_cells.append({
+                        'cell_index': i + 1,
+                        'voltage': v,
+                        'deviation': round(v - latest.avg_voltage, 4)
+                    })
+
+    analysis = {
+        'period_days': days,
+        'reading_count': len(readings),
+        'avg_voltage_delta': round(statistics.mean(deltas), 4) if deltas else None,
+        'max_voltage_delta': round(max(deltas), 4) if deltas else None,
+        'min_voltage_delta': round(min(deltas), 4) if deltas else None,
+        'avg_cell_voltage': round(statistics.mean(avg_voltages), 4) if avg_voltages else None,
+        'weak_cells': weak_cells[:5],  # Top 5 weakest cells
+        'health_status': 'good' if deltas and max(deltas) < 0.05 else 'monitor',
+    }
+
+    # Module balance analysis
+    if readings:
+        latest = readings[-1]
+        if all([latest.module1_avg, latest.module2_avg, latest.module3_avg]):
+            module_avgs = [latest.module1_avg, latest.module2_avg, latest.module3_avg]
+            module_delta = max(module_avgs) - min(module_avgs)
+            analysis['module_balance'] = {
+                'module1_avg': latest.module1_avg,
+                'module2_avg': latest.module2_avg,
+                'module3_avg': latest.module3_avg,
+                'module_delta': round(module_delta, 4),
+                'balanced': module_delta < 0.02
+            }
+
+    return jsonify({'analysis': analysis})
+
+
+@app.route('/api/battery/cells/add', methods=['POST'])
+def add_cell_reading():
+    """
+    Add a battery cell voltage reading.
+
+    JSON body:
+        - cell_voltages: Array of 96 cell voltages
+        - timestamp: ISO timestamp (optional, defaults to now)
+        - ambient_temp_f: Ambient temperature (optional)
+        - state_of_charge: Current SOC (optional)
+        - is_charging: Whether charging (optional)
+    """
+    db = get_db()
+    data = request.get_json()
+
+    if not data or 'cell_voltages' not in data:
+        return jsonify({'error': 'cell_voltages array is required'}), 400
+
+    cell_voltages = data['cell_voltages']
+    if not isinstance(cell_voltages, list) or len(cell_voltages) == 0:
+        return jsonify({'error': 'cell_voltages must be a non-empty array'}), 400
+
+    timestamp_str = data.get('timestamp')
+    if timestamp_str:
+        try:
+            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+        except ValueError:
+            return jsonify({'error': 'Invalid timestamp format'}), 400
+    else:
+        timestamp = datetime.now(timezone.utc)
+
+    reading = BatteryCellReading.from_cell_voltages(
+        timestamp=timestamp,
+        cell_voltages=cell_voltages,
+        ambient_temp_f=data.get('ambient_temp_f'),
+        state_of_charge=data.get('state_of_charge'),
+        is_charging=data.get('is_charging', False)
+    )
+
+    if not reading:
+        return jsonify({'error': 'Could not create reading from provided data'}), 400
+
+    db.add(reading)
+    db.commit()
+
+    logger.info(f"Added cell reading: delta={reading.voltage_delta}V")
+
+    return jsonify({
+        'message': 'Cell reading added',
+        'reading': reading.to_dict()
+    }), 201
+
+
+# ============================================================================
 # Dashboard
 # ============================================================================
 
