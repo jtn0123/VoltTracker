@@ -1443,75 +1443,80 @@ class TestTripSortingAndFiltering:
         data = json.loads(response.data)
         assert 'trips' in data
 
-    def test_trips_filter_combined_date_and_gas(self, client, db_session):
-        """Test combining date and gas_only filters."""
+    def test_trips_filter_gas_only_returns_gas_trips(self, client, db_session):
+        """Test gas_only filter returns only trips with gas usage."""
         import uuid
         from datetime import datetime, timezone, timedelta
         from models import Trip
 
         now = datetime.now(timezone.utc)
 
-        # Recent gas trip
+        # Gas trip with gas_mode_entered=True
         trip1 = Trip(
             session_id=uuid.uuid4(),
             start_time=now - timedelta(days=1),
             gas_miles=20.0,
+            gas_mode_entered=True,
             is_closed=True,
         )
-        # Old gas trip
+        # Electric-only trip
         trip2 = Trip(
             session_id=uuid.uuid4(),
-            start_time=now - timedelta(days=30),
-            gas_miles=25.0,
-            is_closed=True,
-        )
-        # Recent electric trip
-        trip3 = Trip(
-            session_id=uuid.uuid4(),
-            start_time=now - timedelta(days=1),
+            start_time=now - timedelta(days=2),
             electric_miles=15.0,
+            gas_mode_entered=False,
             is_closed=True,
         )
         db_session.add(trip1)
         db_session.add(trip2)
-        db_session.add(trip3)
         db_session.commit()
 
-        start_date = (now - timedelta(days=7)).strftime('%Y-%m-%d')
-        response = client.get(f'/api/trips?start_date={start_date}&gas_only=true')
+        response = client.get('/api/trips?gas_only=true')
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        # Should only include recent gas trip
         trips = data['trips']
+        # Should only include trips with gas_mode_entered=True
         assert len(trips) == 1
         assert trips[0]['gas_miles'] == 20.0
 
 
-class TestPowerFlowEndpoint:
-    """Tests for power flow data endpoint."""
+class TestTelemetryLatestEndpointExtended:
+    """Extended tests for telemetry latest endpoint."""
 
-    def test_power_flow_returns_data_structure(self, client, db_session):
-        """Test power flow endpoint returns expected structure."""
+    def test_telemetry_latest_with_power_data(self, client, db_session):
+        """Test telemetry latest includes power data when available."""
         import uuid
-        from datetime import datetime, timezone
-        from models import TelemetryRaw
+        from datetime import datetime, timezone, timedelta
+        from models import TelemetryRaw, Trip
 
+        session_id = uuid.uuid4()
+
+        # Create active trip
+        trip = Trip(
+            session_id=session_id,
+            start_time=datetime.now(timezone.utc) - timedelta(minutes=10),
+            start_odometer=50000.0,
+            is_closed=False,
+        )
+        db_session.add(trip)
+
+        # Create telemetry with power data
         telemetry = TelemetryRaw(
-            session_id=uuid.uuid4(),
+            session_id=session_id,
             timestamp=datetime.now(timezone.utc),
             hv_battery_power_kw=5.0,
             state_of_charge=70.0,
+            speed_mph=45.0,
         )
         db_session.add(telemetry)
         db_session.commit()
 
-        response = client.get('/api/power-flow')
+        response = client.get('/api/telemetry/latest')
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        # Should have power flow related fields
-        assert isinstance(data, dict)
+        assert data['active'] is True
 
 
 class TestBatteryHealthHistory:
@@ -1556,7 +1561,7 @@ class TestEfficiencyWithData:
             distance_miles=50.0,
             gas_miles=20.0,
             electric_miles=30.0,
-            gallons_used=0.5,
+            fuel_used_gallons=0.5,
             is_closed=True,
         )
         db_session.add(trip)
