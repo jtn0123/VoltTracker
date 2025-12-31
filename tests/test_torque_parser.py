@@ -11,6 +11,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 
 from utils.torque_parser import TorqueParser  # noqa: E402
+from utils.timezone import utc_now  # noqa: E402
 
 
 class TestTorqueParser:
@@ -154,7 +155,7 @@ class TestTorqueParser:
 
         assert result['timestamp'] is not None
         # Should be close to now
-        diff = datetime.now(timezone.utc) - result['timestamp']
+        diff = utc_now() - result['timestamp']
         assert diff.total_seconds() < 5
 
     def test_celsius_to_fahrenheit(self):

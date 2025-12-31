@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any
 import logging
 
 from exceptions import WeatherAPIError
+from utils.timezone import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -96,10 +97,10 @@ def get_weather_for_location(
         Dictionary with weather data or None if request failed
     """
     if timestamp is None:
-        timestamp = datetime.utcnow()
+        timestamp = utc_now()
 
     # Determine if we need historical or forecast API
-    now = datetime.utcnow()
+    now = utc_now()
     days_ago = (now - timestamp).days
 
     try:

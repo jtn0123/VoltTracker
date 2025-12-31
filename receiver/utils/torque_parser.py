@@ -6,6 +6,7 @@ import uuid
 import logging
 
 from config import Config
+from utils.timezone import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -206,9 +207,9 @@ class TorqueParser:
                     timestamp_ms / 1000, tz=timezone.utc
                 )
             except (ValueError, TypeError):
-                result['timestamp'] = datetime.now(timezone.utc)
+                result['timestamp'] = utc_now()
         else:
-            result['timestamp'] = datetime.now(timezone.utc)
+            result['timestamp'] = utc_now()
 
         # Parse PID values
         temp_values = {}

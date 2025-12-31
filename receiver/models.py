@@ -10,6 +10,7 @@ from sqlalchemy import TypeDecorator
 import uuid as uuid_module
 
 from config import Config
+from utils.timezone import utc_now
 
 
 Base = declarative_base()
@@ -129,7 +130,7 @@ class TelemetryRaw(Base):
     dte_gas_miles = Column(Float)
 
     raw_data = Column(JSONType())
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
 
     def to_dict(self):
         return {
@@ -218,8 +219,8 @@ class Trip(Base):
     # Metadata
     ambient_temp_avg_f = Column(Float)
     is_closed = Column(Boolean, default=False, index=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     # Weather data (from Open-Meteo API)
     weather_temp_f = Column(Float)
@@ -274,7 +275,7 @@ class FuelEvent(Base):
     price_per_gallon = Column(Float)
     total_cost = Column(Float)
     notes = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
 
     def to_dict(self):
         return {
@@ -301,7 +302,7 @@ class SocTransition(Base):
     soc_at_transition = Column(Float)
     ambient_temp_f = Column(Float)
     odometer_miles = Column(Float)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
 
     # Relationships
     trip = relationship('Trip', back_populates='soc_transitions')
@@ -352,8 +353,8 @@ class ChargingSession(Base):
 
     # Status
     is_complete = Column(Boolean, default=False, index=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     def to_dict(self):
         return {
@@ -410,7 +411,7 @@ class BatteryHealthReading(Base):
     ambient_temp_f = Column(Float)
     odometer_miles = Column(Float)
 
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
 
     def to_dict(self):
         return {
@@ -464,7 +465,7 @@ class BatteryCellReading(Base):
     state_of_charge = Column(Float)
     is_charging = Column(Boolean, default=False)
 
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
 
     def to_dict(self):
         return {

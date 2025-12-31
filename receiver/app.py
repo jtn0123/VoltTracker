@@ -145,7 +145,7 @@ def emit_telemetry_update(data: dict):
         'latitude': data.get('latitude'),
         'longitude': data.get('longitude'),
         'odometer': data.get('odometer_miles'),
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': utc_now().isoformat()
     })
 
 
@@ -514,7 +514,7 @@ def check_charging_sessions():
 
             if active_session:
                 # Charger disconnected - finalize session
-                active_session.end_time = datetime.utcnow()
+                active_session.end_time = utc_now()
                 active_session.is_complete = True
 
                 # Calculate kWh added from SOC change
@@ -1005,7 +1005,7 @@ def add_fuel_event():
     try:
         timestamp = datetime.fromisoformat(data.get('timestamp', ''))
     except (ValueError, TypeError):
-        timestamp = datetime.now(timezone.utc)
+        timestamp = utc_now()
 
     fuel_event = FuelEvent(
         timestamp=timestamp,
@@ -1037,7 +1037,7 @@ def get_mpg_trend():
         days = int(request.args.get('days', 30))
     except (ValueError, TypeError):
         days = 30
-    start_date = datetime.now(timezone.utc) - timedelta(days=days)
+    start_date = utc_now() - timedelta(days=days)
 
     trips = db.query(Trip).filter(
         Trip.start_time >= start_date,
@@ -1362,7 +1362,7 @@ def export_all():
     charging_sessions = db.query(ChargingSession).order_by(desc(ChargingSession.start_time)).all()
 
     return jsonify({
-        'exported_at': datetime.now(timezone.utc).isoformat(),
+        'exported_at': utc_now().isoformat(),
         'trips': [t.to_dict() for t in trips],
         'fuel_events': [e.to_dict() for e in fuel_events],
         'soc_transitions': [s.to_dict() for s in soc_transitions],
@@ -1866,7 +1866,7 @@ def get_charging_summary():
 
     # Calculate monthly stats (last 30 days)
     # Use naive datetime for comparison since database stores naive datetimes
-    month_ago = datetime.utcnow() - timedelta(days=30)
+    month_ago = utc_now() - timedelta(days=30)
     monthly_sessions = [s for s in sessions if s.start_time and s.start_time.replace(tzinfo=None) >= month_ago]
     monthly_kwh = sum(s.kwh_added or 0 for s in monthly_sessions)
     monthly_cost = monthly_kwh * electricity_rate
@@ -1949,7 +1949,7 @@ def get_battery_health():
     yearly_trend = None
     if readings and len(readings) >= 10:
         # Get readings from ~1 year ago and compare
-        one_year_ago = datetime.now(timezone.utc) - timedelta(days=365)
+        one_year_ago = utc_now() - timedelta(days=365)
         old_readings = [r for r in readings if r.timestamp and r.timestamp < one_year_ago]
         recent_readings = readings[:10]  # Most recent 10
 
@@ -2010,7 +2010,7 @@ def get_battery_cell_readings():
     query = db.query(BatteryCellReading).order_by(desc(BatteryCellReading.timestamp))
 
     if days:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = utc_now() - timedelta(days=days)
         query = query.filter(BatteryCellReading.timestamp >= cutoff)
 
     readings = query.limit(min(limit, 100)).all()
@@ -2046,7 +2046,7 @@ def get_cell_analysis():
     db = get_db()
 
     days = request.args.get('days', 30, type=int)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = utc_now() - timedelta(days=days)
 
     readings = db.query(BatteryCellReading).filter(
         BatteryCellReading.timestamp >= cutoff
@@ -2136,7 +2136,7 @@ def add_cell_reading():
         except ValueError:
             return jsonify({'error': 'Invalid timestamp format'}), 400
     else:
-        timestamp = datetime.now(timezone.utc)
+        timestamp = utc_now()
 
     reading = BatteryCellReading.from_cell_voltages(
         timestamp=timestamp,
