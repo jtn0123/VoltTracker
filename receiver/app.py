@@ -1589,8 +1589,9 @@ def get_charging_summary():
             l2_count += 1
 
     # Calculate monthly stats (last 30 days)
-    month_ago = datetime.now(timezone.utc) - timedelta(days=30)
-    monthly_sessions = [s for s in sessions if s.start_time and s.start_time >= month_ago]
+    # Use naive datetime for comparison since database stores naive datetimes
+    month_ago = datetime.utcnow() - timedelta(days=30)
+    monthly_sessions = [s for s in sessions if s.start_time and s.start_time.replace(tzinfo=None) >= month_ago]
     monthly_kwh = sum(s.kwh_added or 0 for s in monthly_sessions)
     monthly_cost = monthly_kwh * electricity_rate
 

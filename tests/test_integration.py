@@ -286,9 +286,9 @@ class TestTripListFiltering:
         response = client.get('/api/trips?gas_only=true')
         gas_data = json.loads(response.data)
 
-        assert len(all_data) == 2
-        assert len(gas_data) == 1
-        assert gas_data[0]['gas_mode_entered'] is True
+        assert len(all_data['trips']) == 2
+        assert len(gas_data['trips']) == 1
+        assert gas_data['trips'][0]['gas_mode_entered'] is True
 
     def test_trips_date_filter(self, client, db_session):
         """Test date filtering on trips endpoint."""
@@ -316,7 +316,7 @@ class TestTripListFiltering:
         data = json.loads(response.data)
 
         # Should only include recent trip
-        assert len(data) == 1
+        assert len(data['trips']) == 1
 
 
 class TestMpgTrendFlow:

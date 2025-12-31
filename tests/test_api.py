@@ -62,12 +62,14 @@ class TestTripsEndpoint:
     """Tests for /api/trips endpoint."""
 
     def test_trips_returns_list(self, client):
-        """Test that trips endpoint returns a list."""
+        """Test that trips endpoint returns paginated response with trips list."""
         response = client.get('/api/trips')
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
+        assert 'trips' in data
+        assert 'pagination' in data
+        assert isinstance(data['trips'], list)
 
     def test_trips_with_gas_only_filter(self, client):
         """Test gas_only query parameter."""
@@ -75,7 +77,8 @@ class TestTripsEndpoint:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
+        assert 'trips' in data
+        assert isinstance(data['trips'], list)
 
     def test_trips_with_date_filter(self, client):
         """Test date filter parameters."""
@@ -83,7 +86,8 @@ class TestTripsEndpoint:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
+        assert 'trips' in data
+        assert isinstance(data['trips'], list)
 
 
 class TestEfficiencyEndpoint:
@@ -599,8 +603,8 @@ class TestApiPagination:
         assert data['pagination']['total'] == 5
         assert data['pagination']['pages'] == 3
 
-    def test_trips_without_pagination_returns_list(self, client, db_session):
-        """Test trips endpoint without pagination returns flat list."""
+    def test_trips_without_pagination_returns_paginated(self, client, db_session):
+        """Test trips endpoint returns paginated response with default pagination."""
         import uuid
         from datetime import datetime, timezone
         from models import Trip
@@ -618,8 +622,11 @@ class TestApiPagination:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        # Should return flat list for backwards compatibility
-        assert isinstance(data, list)
+        # Should return paginated response
+        assert 'trips' in data
+        assert 'pagination' in data
+        assert isinstance(data['trips'], list)
+        assert len(data['trips']) == 1
 
     def test_pagination_page_2(self, client, db_session):
         """Test fetching second page of results."""
