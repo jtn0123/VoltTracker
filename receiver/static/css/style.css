@@ -2022,19 +2022,69 @@ body {
 }
 
 .btn-add {
-    padding: 0.5rem 1rem;
-    background-color: #00d4aa;
+    padding: 0.625rem 1.25rem;
+    background-color: var(--electric);
     color: var(--bg-primary);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     font-size: 0.875rem;
-    font-weight: 500;
-    transition: all 0.2s;
+    font-weight: 600;
+    transition: all 0.2s ease-out;
+    box-shadow: 0 2px 8px rgba(0, 212, 170, 0.25);
 }
 
 .btn-add:hover {
-    background-color: #00b894;
+    background-color: var(--electric-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 212, 170, 0.35);
+}
+
+.btn-add:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 0 1px 4px rgba(0, 212, 170, 0.2);
+}
+
+/* Enhanced Interactive States */
+.btn-primary,
+.btn-secondary {
+    transition: all 0.2s ease-out;
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-primary:active,
+.btn-secondary:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* Timeframe button enhancements */
+.timeframe-btn {
+    transition: all 0.2s ease-out;
+}
+
+.timeframe-btn:hover {
+    transform: translateY(-1px);
+}
+
+.timeframe-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* Export button polish */
+.export-btn {
+    transition: all 0.2s ease-out;
+}
+
+.export-btn:hover {
+    transform: translateY(-1px);
+}
+
+.export-btn:active {
+    transform: translateY(0) scale(0.98);
 }
 
 /* ============================================
