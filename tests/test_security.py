@@ -4,7 +4,6 @@ Tests for authentication and security features.
 Tests HTTP Basic Auth, rate limiting, security headers, and API token validation.
 """
 
-import pytest
 import sys
 import os
 import base64
@@ -157,9 +156,10 @@ class TestSecurityHeaders:
     def test_no_hsts_in_debug_mode(self, app, client):
         """HSTS header absent when DEBUG=True."""
         app.debug = True
-        response = client.get('/api/status')
+        _response = client.get('/api/status')
         # In debug mode, HSTS should not be set
         # The after_request handler checks app.debug
+        _ = _response  # Variable used to trigger request
 
 
 class TestTorqueAPIToken:

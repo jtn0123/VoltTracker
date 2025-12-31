@@ -12,13 +12,11 @@ import sys
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, MagicMock
-from freezegun import freeze_time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 
-from models import TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession
-from config import Config
+from models import TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession  # noqa: E402
+from config import Config  # noqa: E402
 
 
 class TestCloseStaleTrips:
@@ -89,7 +87,6 @@ class TestCloseStaleTrips:
         # Trip still exists
         assert updated_trip is not None
 
-    @pytest.mark.xfail(reason="SQLite/PostgreSQL timezone handling difference")
     def test_close_stale_trip_after_timeout(self, app, db_session):
         """Trip with no telemetry for > TRIP_TIMEOUT_SECONDS gets closed."""
         from app import close_stale_trips, Session
@@ -121,7 +118,6 @@ class TestCloseStaleTrips:
         updated_trip = Session().query(Trip).filter(Trip.id == trip_id).first()
         assert updated_trip.is_closed is True
 
-    @pytest.mark.xfail(reason="SQLite/PostgreSQL timezone handling difference")
     def test_finalize_trip_calculates_distance(self, app, db_session):
         """Closed trip has distance_miles calculated from odometer."""
         from app import close_stale_trips, Session
@@ -160,7 +156,6 @@ class TestCloseStaleTrips:
         assert updated_trip.distance_miles == 25.0
         assert updated_trip.end_odometer == 50025.0
 
-    @pytest.mark.xfail(reason="SQLite/PostgreSQL timezone handling difference")
     def test_finalize_trip_detects_gas_mode_entry(self, app, db_session):
         """Trip that entered gas mode has gas_mode_entered=True."""
         from app import close_stale_trips, Session
@@ -205,7 +200,6 @@ class TestCloseStaleTrips:
         assert updated_trip.gas_mode_entered is True
         assert updated_trip.soc_at_gas_transition is not None
 
-    @pytest.mark.xfail(reason="SQLite/PostgreSQL timezone handling difference")
     def test_finalize_trip_records_soc_transition(self, app, db_session):
         """SocTransition record created when gas mode detected."""
         from app import close_stale_trips, Session
@@ -252,7 +246,6 @@ class TestCloseStaleTrips:
         assert len(transitions) >= 1
         assert transitions[0].soc_at_transition is not None
 
-    @pytest.mark.xfail(reason="SQLite/PostgreSQL timezone handling difference")
     def test_finalize_trip_electric_only(self, app, db_session):
         """Electric-only trip has electric_miles equal to distance_miles."""
         from app import close_stale_trips, Session
@@ -511,11 +504,11 @@ class TestCheckChargingSessions:
 
         check_charging_sessions()
 
-        sessions = Session().query(ChargingSession).all()
+        _sessions = Session().query(ChargingSession).all()
         # May or may not create session depending on detect_charging_session logic
         # The key is it doesn't error
+        _ = _sessions
 
-    @pytest.mark.xfail(reason="check_charging_sessions logic depends on production data patterns")
     def test_closes_session_when_charger_disconnects(self, app, db_session):
         """Session marked complete when charger_connected=False."""
         from app import check_charging_sessions, Session

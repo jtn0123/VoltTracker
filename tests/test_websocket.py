@@ -4,11 +4,9 @@ Tests for WebSocket/SocketIO functionality.
 Tests real-time telemetry emission and client connections.
 """
 
-import pytest
 import sys
 import os
-from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 

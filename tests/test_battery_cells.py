@@ -1,6 +1,5 @@
 """Tests for battery cell voltage tracking functionality."""
 
-import pytest
 from datetime import datetime, timezone
 from models import BatteryCellReading
 

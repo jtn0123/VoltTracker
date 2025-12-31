@@ -2,7 +2,6 @@
 Integration tests for end-to-end data flow.
 """
 
-import pytest
 import json
 import uuid
 import sys

@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 
-from utils.calculations import (
+from utils.calculations import (  # noqa: E402
     smooth_fuel_level,
     detect_gas_mode_entry,
     detect_refuel_event,

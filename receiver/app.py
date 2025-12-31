@@ -8,14 +8,14 @@ import logging
 import io
 import csv
 from datetime import datetime, timedelta, timezone
-from typing import Union, Tuple, Any
+from typing import Union, Tuple
 from flask import Flask, request, jsonify, render_template, Response
 from flask_caching import Cache
 from flask_httpauth import HTTPBasicAuth
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_socketio import SocketIO, emit
-from werkzeug.security import check_password_hash, generate_password_hash
+from flask_socketio import SocketIO
+from werkzeug.security import check_password_hash
 from sqlalchemy import func, desc
 from sqlalchemy.orm import scoped_session, sessionmaker
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -23,13 +23,12 @@ import atexit
 
 from config import Config
 from models import (
-    Base, TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession,
+    TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession,
     BatteryCellReading, BatteryHealthReading, get_engine
 )
 from utils import (
     TorqueParser,
     calculate_gas_mpg,
-    smooth_fuel_level,
     detect_gas_mode_entry,
     detect_refuel_event,
     calculate_electric_miles,
@@ -171,11 +170,12 @@ def close_stale_trips():
     """
     db = get_db()
     try:
-        cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS)
+        # Use naive UTC time for comparison (works with both SQLite and PostgreSQL)
+        cutoff_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS)
 
         # Find open trips with no recent telemetry
         open_trips = db.query(Trip).filter(
-            Trip.is_closed == False
+            Trip.is_closed.is_(False)
         ).all()
 
         for trip in open_trips:
@@ -184,9 +184,15 @@ def close_stale_trips():
                 TelemetryRaw.session_id == trip.session_id
             ).order_by(desc(TelemetryRaw.timestamp)).first()
 
-            if latest and latest.timestamp < cutoff_time:
-                logger.info(f"Closing stale trip {trip.id} (session: {trip.session_id})")
-                finalize_trip(db, trip)
+            if latest:
+                # Normalize timestamp for comparison (handle both naive and aware)
+                latest_ts = latest.timestamp
+                if latest_ts.tzinfo is not None:
+                    latest_ts = latest_ts.replace(tzinfo=None)
+
+                if latest_ts < cutoff_time:
+                    logger.info(f"Closing stale trip {trip.id} (session: {trip.session_id})")
+                    finalize_trip(db, trip)
 
         db.commit()
     except Exception as e:
@@ -307,8 +313,8 @@ def finalize_trip(db, trip: Trip):
 
     trip.is_closed = True
     logger.info(
-        f"Trip {trip.id} finalized: {trip.distance_miles:.1f if trip.distance_miles else 0} mi "
-        f"(electric: {trip.electric_miles or 0:.1f}, gas: {trip.gas_miles or 0:.1f}, "
+        f"Trip {trip.id} finalized: {(trip.distance_miles or 0):.1f} mi "
+        f"(electric: {(trip.electric_miles or 0):.1f}, gas: {(trip.gas_miles or 0):.1f}, "
         f"MPG: {trip.gas_mpg or 'N/A'}, kWh/mi: {trip.kwh_per_mile or 'N/A'})"
     )
 
@@ -371,10 +377,31 @@ def check_charging_sessions():
     try:
         # Get recent telemetry with charger data
         recent = db.query(TelemetryRaw).filter(
-            TelemetryRaw.charger_connected == True
+            TelemetryRaw.charger_connected.is_(True)
         ).order_by(desc(TelemetryRaw.timestamp)).limit(50).all()
 
         if not recent:
+            # No active charging - check if we need to close any active sessions
+            active_session = db.query(ChargingSession).filter(
+                ChargingSession.is_complete.is_(False)
+            ).first()
+
+            if active_session:
+                # Charger disconnected - finalize session
+                active_session.end_time = datetime.utcnow()
+                active_session.is_complete = True
+
+                # Calculate kWh added from SOC change
+                if active_session.start_soc and active_session.end_soc:
+                    soc_gained = active_session.end_soc - active_session.start_soc
+                    if soc_gained > 0:
+                        active_session.kwh_added = (soc_gained / 100) * Config.BATTERY_CAPACITY_KWH
+
+                db.commit()
+                logger.info(
+                    f"Charging session completed (no charger data): "
+                    f"{active_session.kwh_added or 0:.2f} kWh added"
+                )
             return
 
         # Convert to dicts for the detection function
@@ -384,7 +411,7 @@ def check_charging_sessions():
         if session_info and session_info.get('is_charging'):
             # Check for existing active charging session
             active_session = db.query(ChargingSession).filter(
-                ChargingSession.is_complete == False
+                ChargingSession.is_complete.is_(False)
             ).order_by(desc(ChargingSession.start_time)).first()
 
             if not active_session:
@@ -401,7 +428,6 @@ def check_charging_sessions():
                 logger.info(f"Charging session started: {session_info.get('charge_type')}")
 
             # Update with latest data
-            latest_point = recent[0]
             active_session.end_soc = session_info.get('current_soc')
             active_session.peak_power_kw = session_info.get('peak_power_kw')
             active_session.avg_power_kw = session_info.get('avg_power_kw')
@@ -411,7 +437,7 @@ def check_charging_sessions():
         else:
             # Check if we need to close an active session
             active_session = db.query(ChargingSession).filter(
-                ChargingSession.is_complete == False
+                ChargingSession.is_complete.is_(False)
             ).first()
 
             if active_session:
@@ -566,7 +592,7 @@ def get_trips():
     """
     db = get_db()
 
-    query = db.query(Trip).filter(Trip.is_closed == True)
+    query = db.query(Trip).filter(Trip.is_closed.is_(True))
 
     # Apply filters
     start_date = request.args.get('start_date')
@@ -579,7 +605,7 @@ def get_trips():
 
     gas_only = request.args.get('gas_only', '').lower() == 'true'
     if gas_only:
-        query = query.filter(Trip.gas_mode_entered == True)
+        query = query.filter(Trip.gas_mode_entered.is_(True))
 
     # Pagination
     try:
@@ -650,7 +676,7 @@ def get_efficiency_summary():
     db = get_db()
 
     # Get all closed trips for comprehensive stats
-    closed_trips = db.query(Trip).filter(Trip.is_closed == True).all()
+    closed_trips = db.query(Trip).filter(Trip.is_closed.is_(True)).all()
 
     # Calculate totals from whatever data exists
     total_miles = 0.0
@@ -886,7 +912,7 @@ def get_mpg_trend():
 
     trips = db.query(Trip).filter(
         Trip.start_time >= start_date,
-        Trip.gas_mode_entered == True,
+        Trip.gas_mode_entered.is_(True),
         Trip.gas_mpg.isnot(None)
     ).order_by(Trip.start_time).all()
 
@@ -908,7 +934,7 @@ def get_status() -> Response:
     ).first()
 
     active_trip = db.query(Trip).filter(
-        Trip.is_closed == False
+        Trip.is_closed.is_(False)
     ).first()
 
     return jsonify({
@@ -971,9 +997,9 @@ def _calculate_trip_stats(
     # Detect gas mode: engine running AND low SOC
     current_rpm = float(latest.engine_rpm) if latest.engine_rpm else 0
     in_gas_mode = (
-        current_rpm > Config.RPM_THRESHOLD and
-        current_soc is not None and
-        current_soc < Config.SOC_GAS_THRESHOLD
+        current_rpm > Config.RPM_THRESHOLD
+        and current_soc is not None
+        and current_soc < Config.SOC_GAS_THRESHOLD
     )
     stats['in_gas_mode'] = in_gas_mode
 
@@ -1100,7 +1126,7 @@ def export_trips() -> Response:
     db = get_db()
     export_format = request.args.get('format', 'csv').lower()
 
-    query = db.query(Trip).filter(Trip.is_closed == True)
+    query = db.query(Trip).filter(Trip.is_closed.is_(True))
 
     # Apply filters
     start_date = request.args.get('start_date')
@@ -1113,7 +1139,7 @@ def export_trips() -> Response:
 
     gas_only = request.args.get('gas_only', '').lower() == 'true'
     if gas_only:
-        query = query.filter(Trip.gas_mode_entered == True)
+        query = query.filter(Trip.gas_mode_entered.is_(True))
 
     trips = query.order_by(desc(Trip.start_time)).all()
 
@@ -1635,11 +1661,11 @@ def get_charging_summary():
     db = get_db()
 
     sessions = db.query(ChargingSession).filter(
-        ChargingSession.is_complete == True
+        ChargingSession.is_complete.is_(True)
     ).all()
 
     # Get trip data for electric miles and EV ratio
-    trips = db.query(Trip).filter(Trip.is_closed == True).all()
+    trips = db.query(Trip).filter(Trip.is_closed.is_(True)).all()
     total_miles = sum(t.distance_miles or 0 for t in trips)
     total_electric_miles = sum(t.electric_miles or 0 for t in trips)
     total_gas_miles = sum(t.gas_miles or 0 for t in trips)

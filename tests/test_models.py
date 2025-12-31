@@ -6,11 +6,11 @@ import pytest
 import sys
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 
-from models import (
+from models import (  # noqa: E402
     TelemetryRaw, Trip, FuelEvent, SocTransition,
     ChargingSession, BatteryHealthReading, BatteryCellReading
 )
@@ -775,5 +775,3 @@ class TestModelRelationships:
         assert str(fetched.trip.session_id) == str(session_id)
 
 
-# Import timedelta for ChargingSession tests
-from datetime import timedelta

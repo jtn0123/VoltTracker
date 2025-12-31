@@ -10,7 +10,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 
-from utils.torque_parser import TorqueParser
+from utils.torque_parser import TorqueParser  # noqa: E402
 
 
 class TestTorqueParser:

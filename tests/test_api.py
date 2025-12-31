@@ -2,7 +2,6 @@
 Tests for Flask API endpoints.
 """
 
-import pytest
 import json
 import sys
 import os
@@ -322,14 +321,9 @@ class TestApiEdgeCases:
 
     def test_trips_with_limit(self, client, db_session):
         """Test trips endpoint respects the 100 limit."""
-        import uuid
-        from datetime import datetime, timezone
-        import sys
-        import os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
-        from models import Trip
-
         # This tests the limit behavior with empty database
+        # db_session is needed to ensure DB is initialized
+        _ = db_session
         response = client.get('/api/trips')
 
         assert response.status_code == 200
@@ -581,7 +575,7 @@ class TestApiPagination:
         from models import Trip
 
         # Create 5 trips
-        for i in range(5):
+        for _ in range(5):
             trip = Trip(
                 session_id=uuid.uuid4(),
                 start_time=datetime.now(timezone.utc),

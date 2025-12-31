@@ -1,6 +1,5 @@
 """Tests for CSV import functionality."""
 
-import pytest
 import io
 from receiver.utils.csv_importer import TorqueCSVImporter
 

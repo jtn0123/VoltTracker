@@ -70,7 +70,7 @@ class TorqueParser:
         'k222429': 'hv_battery_voltage_v',  # Alternative pack voltage
         'k222414': 'hv_discharge_amps',     # HV discharge amps
         'k22434f': 'battery_temp_c',        # Battery temperature sensor
-        'k220038': 'battery_coolant_temp_c', # Battery coolant temp
+        'k220038': 'battery_coolant_temp_c',  # Battery coolant temp
 
         # Charging (Volt-specific PIDs) - CORRECTED
         'k220057': 'charger_status',        # Charger status 0-10
