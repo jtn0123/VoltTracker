@@ -19,7 +19,8 @@ class Config:
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 
     # Volt-specific constants
-    TANK_CAPACITY_GALLONS = 9.3122
+    TANK_CAPACITY_GALLONS = 9.3122  # Gen 2 Volt tank capacity
+    BATTERY_CAPACITY_KWH = 18.4  # Gen 2 Volt usable battery capacity
     SOC_GAS_THRESHOLD = 25.0  # SOC below this triggers gas mode detection
     RPM_THRESHOLD = 500  # RPM above this indicates engine running
     TRIP_TIMEOUT_SECONDS = 300  # 5 minutes of no data = trip closed

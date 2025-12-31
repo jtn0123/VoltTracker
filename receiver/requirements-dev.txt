@@ -2,13 +2,14 @@
 -r requirements.txt
 
 # Testing
-pytest==7.4.3
-pytest-cov==4.1.0
-pytest-mock==3.12.0
+pytest>=9.0.0
+pytest-cov>=7.0.0
+pytest-mock>=3.12.0
+pytest-html>=4.1.0
 
 # HTTP requests for simulator
-requests==2.31.0
+requests>=2.31.0
 
 # Code quality (optional)
-flake8==6.1.0
-black==23.12.1
+flake8>=6.1.0
+black>=23.12.1

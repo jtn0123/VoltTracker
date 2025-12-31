@@ -82,6 +82,16 @@ class TelemetryRaw(Base):
     battery_voltage = Column(Float)
     ambient_temp_f = Column(Float)
     odometer_miles = Column(Float)
+
+    # HV Battery tracking for kWh calculations
+    hv_battery_power_kw = Column(Float)  # Positive = discharging, negative = charging
+    hv_battery_current_a = Column(Float)
+    hv_battery_voltage_v = Column(Float)
+
+    # Charging status
+    charger_ac_power_kw = Column(Float)
+    charger_connected = Column(Boolean)
+
     raw_data = Column(JSONType())
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
@@ -103,6 +113,11 @@ class TelemetryRaw(Base):
             'battery_voltage': self.battery_voltage,
             'ambient_temp_f': self.ambient_temp_f,
             'odometer_miles': self.odometer_miles,
+            'hv_battery_power_kw': self.hv_battery_power_kw,
+            'hv_battery_current_a': self.hv_battery_current_a,
+            'hv_battery_voltage_v': self.hv_battery_voltage_v,
+            'charger_ac_power_kw': self.charger_ac_power_kw,
+            'charger_connected': self.charger_connected,
         }
 
 
@@ -123,6 +138,8 @@ class Trip(Base):
     start_soc = Column(Float)
     soc_at_gas_transition = Column(Float)
     electric_miles = Column(Float)
+    electric_kwh_used = Column(Float)  # Total kWh consumed during electric driving
+    kwh_per_mile = Column(Float)  # Electric efficiency: kWh/mile
 
     # Gas portion
     gas_mode_entered = Column(Boolean, default=False, index=True)
@@ -156,6 +173,8 @@ class Trip(Base):
             'start_soc': self.start_soc,
             'soc_at_gas_transition': self.soc_at_gas_transition,
             'electric_miles': self.electric_miles,
+            'electric_kwh_used': self.electric_kwh_used,
+            'kwh_per_mile': self.kwh_per_mile,
             'gas_mode_entered': self.gas_mode_entered,
             'gas_mode_entry_time': self.gas_mode_entry_time.isoformat() if self.gas_mode_entry_time else None,
             'gas_miles': self.gas_miles,
@@ -220,6 +239,69 @@ class SocTransition(Base):
             'soc_at_transition': self.soc_at_transition,
             'ambient_temp_f': self.ambient_temp_f,
             'odometer_miles': self.odometer_miles,
+        }
+
+
+class ChargingSession(Base):
+    """Tracks charging sessions for energy analysis."""
+
+    __tablename__ = 'charging_sessions'
+
+    id = Column(Integer, primary_key=True)
+    start_time = Column(DateTime(timezone=True), nullable=False, index=True)
+    end_time = Column(DateTime(timezone=True))
+    start_soc = Column(Float)
+    end_soc = Column(Float)
+
+    # Energy tracking
+    kwh_added = Column(Float)  # Total kWh added during session
+    peak_power_kw = Column(Float)  # Maximum charging power observed
+    avg_power_kw = Column(Float)  # Average charging power
+
+    # Location (if available)
+    latitude = Column(Float)
+    longitude = Column(Float)
+    location_name = Column(String(255))
+
+    # Charging type
+    charge_type = Column(String(50))  # 'L1', 'L2', 'DCFC'
+
+    # Cost tracking (manual entry)
+    cost = Column(Float)
+    cost_per_kwh = Column(Float)
+    notes = Column(Text)
+
+    # Status
+    is_complete = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'start_time': self.start_time.isoformat() if self.start_time else None,
+            'end_time': self.end_time.isoformat() if self.end_time else None,
+            'start_soc': self.start_soc,
+            'end_soc': self.end_soc,
+            'kwh_added': self.kwh_added,
+            'peak_power_kw': self.peak_power_kw,
+            'avg_power_kw': self.avg_power_kw,
+            'latitude': self.latitude,
+            'longitude': self.longitude,
+            'location_name': self.location_name,
+            'charge_type': self.charge_type,
+            'cost': self.cost,
+            'cost_per_kwh': self.cost_per_kwh,
+            'notes': self.notes,
+            'is_complete': self.is_complete,
+            'duration_minutes': (
+                (self.end_time - self.start_time).total_seconds() / 60
+                if self.end_time and self.start_time else None
+            ),
+            'soc_gained': (
+                self.end_soc - self.start_soc
+                if self.end_soc and self.start_soc else None
+            ),
         }
 
 

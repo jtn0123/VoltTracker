@@ -9,6 +9,9 @@ from .calculations import (
     calculate_electric_miles,
     calculate_average_temp,
     analyze_soc_floor,
+    calculate_electric_kwh,
+    calculate_kwh_per_mile,
+    detect_charging_session,
 )
 
 __all__ = [
@@ -20,4 +23,7 @@ __all__ = [
     'calculate_electric_miles',
     'calculate_average_temp',
     'analyze_soc_floor',
+    'calculate_electric_kwh',
+    'calculate_kwh_per_mile',
+    'detect_charging_session',
 ]

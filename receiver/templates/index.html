@@ -1,30 +1,41 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Volt Efficiency Tracker</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Leaflet.js for maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Flatpickr date picker -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 </head>
 <body>
     <!-- Header -->
-    <header class="header">
+    <header class="header" role="banner">
         <h1>Volt Efficiency Tracker</h1>
         <div class="header-actions">
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle dark/light theme" aria-pressed="true">
+                <span class="theme-icon" id="theme-icon" aria-hidden="true">🌙</span>
+            </button>
             <div class="export-dropdown">
-                <button class="export-btn" onclick="toggleExportMenu()">
+                <button class="export-btn" onclick="toggleExportMenu()" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu" id="export-btn">
                     Export ▾
                 </button>
-                <div class="export-menu" id="export-menu">
-                    <a href="/api/export/trips" download="trips.csv">Trips (CSV)</a>
-                    <a href="/api/export/trips?format=json" download="trips.json">Trips (JSON)</a>
-                    <a href="/api/export/fuel" download="fuel_events.csv">Fuel Events (CSV)</a>
-                    <a href="/api/export/all" download="volttracker_backup.json">Full Backup (JSON)</a>
+                <div class="export-menu" id="export-menu" role="menu" aria-labelledby="export-btn">
+                    <a href="/api/export/trips" download="trips.csv" role="menuitem">Trips (CSV)</a>
+                    <a href="/api/export/trips?format=json" download="trips.json" role="menuitem">Trips (JSON)</a>
+                    <a href="/api/export/fuel" download="fuel_events.csv" role="menuitem">Fuel Events (CSV)</a>
+                    <a href="/api/export/all" download="volttracker_backup.json" role="menuitem">Full Backup (JSON)</a>
                 </div>
             </div>
-            <div class="status-indicator">
-                <span class="status-dot" id="status-dot"></span>
+            <div class="status-indicator" role="status" aria-live="polite">
+                <span class="status-dot" id="status-dot" aria-hidden="true"></span>
                 <span id="last-sync">Loading...</span>
             </div>
         </div>
@@ -33,68 +44,99 @@
     <!-- Main Content -->
     <main class="container">
         <!-- Summary Cards -->
-        <section class="cards-grid">
-            <div class="card">
-                <div class="card-label">Lifetime Gas MPG</div>
-                <div class="card-value" id="lifetime-mpg">--</div>
+        <section class="cards-grid" aria-label="Gas efficiency summary">
+            <div class="card" role="region" aria-labelledby="lifetime-mpg-label">
+                <div class="card-label" id="lifetime-mpg-label">Lifetime Gas MPG</div>
+                <div class="card-value" id="lifetime-mpg" aria-live="polite">--</div>
                 <div class="card-subtitle" id="lifetime-miles">Loading...</div>
             </div>
-            <div class="card">
-                <div class="card-label">Current Tank MPG</div>
-                <div class="card-value" id="tank-mpg">--</div>
+            <div class="card" role="region" aria-labelledby="tank-mpg-label">
+                <div class="card-label" id="tank-mpg-label">Current Tank MPG</div>
+                <div class="card-value" id="tank-mpg" aria-live="polite">--</div>
                 <div class="card-subtitle" id="tank-miles">Loading...</div>
             </div>
-            <div class="card">
-                <div class="card-label">Avg SOC Floor</div>
-                <div class="card-value" id="soc-floor">--</div>
+            <div class="card" role="region" aria-labelledby="soc-floor-label">
+                <div class="card-label" id="soc-floor-label">Avg SOC Floor</div>
+                <div class="card-value" id="soc-floor" aria-live="polite">--</div>
                 <div class="card-subtitle" id="soc-count">Loading...</div>
             </div>
-            <div class="card">
-                <div class="card-label">Total Miles Tracked</div>
-                <div class="card-value" id="total-miles">--</div>
+            <div class="card" role="region" aria-labelledby="total-miles-label">
+                <div class="card-label" id="total-miles-label">Total Miles Tracked</div>
+                <div class="card-value" id="total-miles" aria-live="polite">--</div>
                 <div class="card-subtitle">All trips</div>
             </div>
         </section>
 
+        <!-- Electric Efficiency Cards -->
+        <section class="cards-grid electric-cards" aria-label="Electric efficiency summary">
+            <div class="card card-electric" role="region" aria-labelledby="total-kwh-label">
+                <div class="card-label" id="total-kwh-label">Total kWh Charged</div>
+                <div class="card-value" id="total-kwh" aria-live="polite">--</div>
+                <div class="card-subtitle" id="charging-sessions">Loading...</div>
+            </div>
+            <div class="card card-electric" role="region" aria-labelledby="avg-kwh-label">
+                <div class="card-label" id="avg-kwh-label">Avg kWh/Session</div>
+                <div class="card-value" id="avg-kwh-session" aria-live="polite">--</div>
+                <div class="card-subtitle" id="charging-cost">Loading...</div>
+            </div>
+            <div class="card card-electric" role="region" aria-labelledby="electric-miles-label">
+                <div class="card-label" id="electric-miles-label">Electric Miles</div>
+                <div class="card-value" id="total-electric-miles" aria-live="polite">--</div>
+                <div class="card-subtitle">Total EV driving</div>
+            </div>
+            <div class="card card-electric" role="region" aria-labelledby="ev-ratio-label">
+                <div class="card-label" id="ev-ratio-label">EV Ratio</div>
+                <div class="card-value" id="ev-ratio" aria-live="polite">--</div>
+                <div class="card-subtitle">Electric vs Gas miles</div>
+            </div>
+        </section>
+
         <!-- MPG Trend Chart -->
-        <section class="chart-section">
+        <section class="chart-section" aria-labelledby="mpg-chart-title">
             <div class="chart-header">
-                <h2 class="chart-title">Gas MPG Trend</h2>
-                <div class="timeframe-selector">
-                    <button class="timeframe-btn" data-days="7" onclick="setTimeframe(7)">7 Days</button>
-                    <button class="timeframe-btn active" data-days="30" onclick="setTimeframe(30)">30 Days</button>
-                    <button class="timeframe-btn" data-days="90" onclick="setTimeframe(90)">90 Days</button>
-                    <button class="timeframe-btn" data-days="365" onclick="setTimeframe(365)">All Time</button>
+                <h2 class="chart-title" id="mpg-chart-title">Gas MPG Trend</h2>
+                <div class="timeframe-selector" role="group" aria-label="Chart timeframe">
+                    <button class="timeframe-btn" data-days="7" onclick="setTimeframe(7)" aria-pressed="false">7 Days</button>
+                    <button class="timeframe-btn active" data-days="30" onclick="setTimeframe(30)" aria-pressed="true">30 Days</button>
+                    <button class="timeframe-btn" data-days="90" onclick="setTimeframe(90)" aria-pressed="false">90 Days</button>
+                    <button class="timeframe-btn" data-days="365" onclick="setTimeframe(365)" aria-pressed="false">All Time</button>
                 </div>
             </div>
             <div class="chart-container">
-                <canvas id="mpg-chart"></canvas>
+                <canvas id="mpg-chart" role="img" aria-label="MPG trend chart showing fuel efficiency over time"></canvas>
             </div>
         </section>
 
         <!-- Recent Trips -->
-        <section class="trips-section">
-            <h2 class="section-title">Recent Trips</h2>
+        <section class="trips-section" aria-labelledby="trips-title">
+            <div class="section-header">
+                <h2 class="section-title" id="trips-title">Recent Trips</h2>
+                <div class="date-filter">
+                    <label for="date-range" class="visually-hidden">Filter trips by date range</label>
+                    <input type="text" id="date-range" placeholder="Filter by date range" readonly aria-label="Filter by date range">
+                    <button class="btn-clear-filter" id="clear-date-filter" onclick="clearDateFilter()" style="display: none;" aria-label="Clear date filter">Clear</button>
+                </div>
+            </div>
 
             <!-- Desktop Table -->
             <div class="trips-table-wrapper">
-                <table class="trips-table">
+                <table class="trips-table" aria-label="Recent trips">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Total</th>
-                            <th>Electric</th>
-                            <th>Gas</th>
-                            <th>MPG</th>
-                            <th>SOC at Switch</th>
-                            <th></th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Total</th>
+                            <th scope="col">Electric</th>
+                            <th scope="col">Gas</th>
+                            <th scope="col">MPG</th>
+                            <th scope="col">SOC at Switch</th>
+                            <th scope="col"><span class="visually-hidden">Actions</span></th>
                         </tr>
                     </thead>
-                    <tbody id="trips-table-body">
+                    <tbody id="trips-table-body" aria-live="polite">
                         <tr>
                             <td colspan="7">
-                                <div class="loading">
-                                    <div class="spinner"></div>
+                                <div class="loading" role="status" aria-label="Loading trips">
+                                    <div class="spinner" aria-hidden="true"></div>
                                 </div>
                             </td>
                         </tr>
@@ -103,53 +145,194 @@
             </div>
 
             <!-- Mobile Cards -->
-            <div class="trip-cards" id="trip-cards">
-                <div class="loading">
-                    <div class="spinner"></div>
+            <div class="trip-cards" id="trip-cards" role="list" aria-label="Recent trips" aria-live="polite">
+                <div class="loading" role="status" aria-label="Loading trips">
+                    <div class="spinner" aria-hidden="true"></div>
                 </div>
             </div>
         </section>
 
         <!-- SOC Analysis -->
-        <section class="soc-section">
-            <div class="soc-stats">
-                <h2 class="section-title">SOC Floor Analysis</h2>
+        <section class="soc-section" aria-labelledby="soc-analysis-title">
+            <div class="soc-stats" role="region" aria-labelledby="soc-analysis-title">
+                <h2 class="section-title" id="soc-analysis-title">SOC Floor Analysis</h2>
                 <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
                     Battery state of charge when the engine starts. Higher values over time may indicate battery degradation.
                 </p>
-                <div class="stat-row">
-                    <span class="stat-label">Average SOC</span>
-                    <span class="stat-value" id="soc-avg">--</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Minimum SOC</span>
-                    <span class="stat-value" id="soc-min">--</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Maximum SOC</span>
-                    <span class="stat-value" id="soc-max">--</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Cold Weather (&lt;50°F)</span>
-                    <span class="stat-value" id="soc-cold">--</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Warm Weather (≥50°F)</span>
-                    <span class="stat-value" id="soc-warm">--</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Trend</span>
-                    <span class="stat-value" id="soc-trend">--</span>
-                </div>
+                <dl class="stat-list">
+                    <div class="stat-row">
+                        <dt class="stat-label">Average SOC</dt>
+                        <dd class="stat-value" id="soc-avg" aria-live="polite">--</dd>
+                    </div>
+                    <div class="stat-row">
+                        <dt class="stat-label">Minimum SOC</dt>
+                        <dd class="stat-value" id="soc-min" aria-live="polite">--</dd>
+                    </div>
+                    <div class="stat-row">
+                        <dt class="stat-label">Maximum SOC</dt>
+                        <dd class="stat-value" id="soc-max" aria-live="polite">--</dd>
+                    </div>
+                    <div class="stat-row">
+                        <dt class="stat-label">Cold Weather (&lt;50°F)</dt>
+                        <dd class="stat-value" id="soc-cold" aria-live="polite">--</dd>
+                    </div>
+                    <div class="stat-row">
+                        <dt class="stat-label">Warm Weather (≥50°F)</dt>
+                        <dd class="stat-value" id="soc-warm" aria-live="polite">--</dd>
+                    </div>
+                    <div class="stat-row">
+                        <dt class="stat-label">Trend</dt>
+                        <dd class="stat-value" id="soc-trend" aria-live="polite">--</dd>
+                    </div>
+                </dl>
             </div>
-            <div class="soc-histogram">
-                <h2 class="section-title">SOC Distribution</h2>
+            <div class="soc-histogram" role="region" aria-labelledby="soc-histogram-title">
+                <h2 class="section-title" id="soc-histogram-title">SOC Distribution</h2>
                 <div class="chart-container" style="height: 200px;">
-                    <canvas id="soc-histogram-chart"></canvas>
+                    <canvas id="soc-histogram-chart" role="img" aria-label="Histogram showing SOC distribution when engine starts"></canvas>
                 </div>
             </div>
         </section>
+
+        <!-- Charging History -->
+        <section class="charging-section" aria-labelledby="charging-title">
+            <div class="section-header">
+                <h2 class="section-title" id="charging-title">Charging History</h2>
+                <button class="btn-add" onclick="openAddChargingModal()" aria-label="Add new charging session">+ Add Session</button>
+            </div>
+            <div class="charging-stats" role="region" aria-label="Charging session counts">
+                <dl class="stat-list">
+                    <div class="stat-row">
+                        <dt class="stat-label">L1 Sessions</dt>
+                        <dd class="stat-value" id="l1-sessions" aria-live="polite">--</dd>
+                    </div>
+                    <div class="stat-row">
+                        <dt class="stat-label">L2 Sessions</dt>
+                        <dd class="stat-value" id="l2-sessions" aria-live="polite">--</dd>
+                    </div>
+                </dl>
+            </div>
+            <div class="charging-table-wrapper">
+                <table class="charging-table" aria-label="Charging sessions">
+                    <thead>
+                        <tr>
+                            <th scope="col">Date</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">kWh</th>
+                            <th scope="col">SOC</th>
+                            <th scope="col">Duration</th>
+                            <th scope="col">Location</th>
+                            <th scope="col"><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="charging-table-body" aria-live="polite">
+                        <tr>
+                            <td colspan="7">
+                                <div class="loading" role="status" aria-label="Loading charging sessions">
+                                    <div class="spinner" aria-hidden="true"></div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
     </main>
+
+    <!-- Trip Detail Modal -->
+    <div class="modal" id="trip-modal" role="dialog" aria-modal="true" aria-labelledby="trip-modal-title" aria-hidden="true">
+        <div class="modal-backdrop" onclick="closeTripModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="trip-modal-title">Trip Details</h2>
+                <button class="modal-close" onclick="closeTripModal()" aria-label="Close trip details">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="trip-detail-summary" id="trip-detail-summary" role="region" aria-label="Trip statistics">
+                    <!-- Summary stats injected here -->
+                </div>
+                <div class="trip-detail-map" id="trip-detail-map" role="img" aria-label="Trip route map">
+                    <!-- Leaflet map goes here -->
+                </div>
+                <div class="trip-detail-charts" role="region" aria-label="Trip charts">
+                    <div class="chart-container" style="height: 200px;">
+                        <canvas id="trip-speed-chart" role="img" aria-label="Speed over time chart"></canvas>
+                    </div>
+                    <div class="chart-container" style="height: 200px;">
+                        <canvas id="trip-soc-chart" role="img" aria-label="Battery state of charge over time chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Charging Session Modal -->
+    <div class="modal" id="charging-modal" role="dialog" aria-modal="true" aria-labelledby="charging-modal-title" aria-hidden="true">
+        <div class="modal-backdrop" onclick="closeChargingModal()"></div>
+        <div class="modal-content modal-form">
+            <div class="modal-header">
+                <h2 id="charging-modal-title">Add Charging Session</h2>
+                <button class="modal-close" onclick="closeChargingModal()" aria-label="Close charging form">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="charging-form" onsubmit="submitChargingSession(event)" aria-label="Add charging session form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="charge-start">Start Time</label>
+                            <input type="datetime-local" id="charge-start" required aria-required="true">
+                        </div>
+                        <div class="form-group">
+                            <label for="charge-end">End Time</label>
+                            <input type="datetime-local" id="charge-end">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="charge-start-soc">Start SOC (%)</label>
+                            <input type="number" id="charge-start-soc" min="0" max="100" step="1" aria-describedby="soc-hint">
+                        </div>
+                        <div class="form-group">
+                            <label for="charge-end-soc">End SOC (%)</label>
+                            <input type="number" id="charge-end-soc" min="0" max="100" step="1">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="charge-kwh">kWh Added</label>
+                            <input type="number" id="charge-kwh" min="0" max="20" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="charge-type">Charge Type</label>
+                            <select id="charge-type">
+                                <option value="">Select...</option>
+                                <option value="L1">L1 (120V)</option>
+                                <option value="L2">L2 (240V)</option>
+                                <option value="DCFC">DC Fast Charge</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="charge-cost">Cost ($)</label>
+                            <input type="number" id="charge-cost" min="0" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label for="charge-location">Location</label>
+                            <input type="text" id="charge-location" placeholder="Home, Work, etc.">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="charge-notes">Notes</label>
+                        <textarea id="charge-notes" rows="2" placeholder="Optional notes..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-secondary" onclick="closeChargingModal()">Cancel</button>
+                        <button type="submit" class="btn-primary">Save Session</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <script src="/static/js/dashboard.js"></script>
 </body>

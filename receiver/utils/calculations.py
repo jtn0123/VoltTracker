@@ -5,13 +5,16 @@ from datetime import datetime
 import statistics
 import logging
 
+from receiver.config import Config
+
 logger = logging.getLogger(__name__)
 
-# Volt-specific constants
-TANK_CAPACITY_GALLONS = 9.3122
-SOC_GAS_THRESHOLD = 25.0  # SOC below this indicates depleted battery
-RPM_THRESHOLD = 500  # RPM above this indicates engine is running
+# Use centralized config values
+TANK_CAPACITY_GALLONS = Config.TANK_CAPACITY_GALLONS
+SOC_GAS_THRESHOLD = Config.SOC_GAS_THRESHOLD
+RPM_THRESHOLD = Config.RPM_THRESHOLD
 MIN_GAS_MILES_FOR_MPG = 1.0  # Minimum gas miles for reliable MPG calculation
+BATTERY_CAPACITY_KWH = Config.BATTERY_CAPACITY_KWH
 
 
 def smooth_fuel_level(readings: List[float], window_size: int = 10) -> float:
@@ -272,3 +275,165 @@ def analyze_soc_floor(transitions: List[dict]) -> dict:
         'histogram': histogram,
         'temperature_correlation': temp_correlation,
     }
+
+
+def calculate_electric_kwh(
+    telemetry_points: List[dict],
+    battery_capacity_kwh: float = BATTERY_CAPACITY_KWH
+) -> Optional[float]:
+    """
+    Calculate kWh consumed during electric driving.
+
+    Uses two methods depending on available data:
+    1. If HV battery power data available: integrate power over time
+    2. Otherwise: estimate from SOC change and battery capacity
+
+    Args:
+        telemetry_points: List of telemetry data points, sorted by timestamp
+        battery_capacity_kwh: Total battery capacity in kWh
+
+    Returns:
+        kWh consumed, or None if insufficient data
+    """
+    if len(telemetry_points) < 2:
+        return None
+
+    # Method 1: Integrate power over time if HV battery power data available
+    power_readings = [
+        (p.get('timestamp'), p.get('hv_battery_power_kw'))
+        for p in telemetry_points
+        if p.get('hv_battery_power_kw') is not None and p.get('timestamp') is not None
+    ]
+
+    if len(power_readings) >= 2:
+        total_kwh = 0.0
+        for i in range(1, len(power_readings)):
+            prev_time, prev_power = power_readings[i - 1]
+            curr_time, curr_power = power_readings[i]
+
+            # Convert timestamp to datetime if string
+            if isinstance(prev_time, str):
+                prev_time = datetime.fromisoformat(prev_time.replace('Z', '+00:00'))
+            if isinstance(curr_time, str):
+                curr_time = datetime.fromisoformat(curr_time.replace('Z', '+00:00'))
+
+            # Calculate time delta in hours
+            delta_hours = (curr_time - prev_time).total_seconds() / 3600
+
+            # Average power during interval (only count positive = discharging)
+            avg_power = (prev_power + curr_power) / 2
+            if avg_power > 0:  # Positive = discharging (consuming energy)
+                total_kwh += avg_power * delta_hours
+
+        if total_kwh > 0:
+            return round(total_kwh, 2)
+
+    # Method 2: Estimate from SOC change
+    soc_readings = [
+        p.get('state_of_charge')
+        for p in telemetry_points
+        if p.get('state_of_charge') is not None
+    ]
+
+    if len(soc_readings) >= 2:
+        start_soc = soc_readings[0]
+        end_soc = soc_readings[-1]
+
+        # Only calculate if SOC decreased (not charging)
+        if start_soc > end_soc:
+            soc_change = start_soc - end_soc
+            kwh_used = (soc_change / 100) * battery_capacity_kwh
+            return round(kwh_used, 2)
+
+    return None
+
+
+def calculate_kwh_per_mile(
+    kwh_used: float,
+    electric_miles: float
+) -> Optional[float]:
+    """
+    Calculate electric efficiency in kWh/mile.
+
+    Args:
+        kwh_used: Total kWh consumed
+        electric_miles: Miles driven on electric
+
+    Returns:
+        kWh/mile efficiency, or None if insufficient data
+    """
+    if kwh_used is None or electric_miles is None:
+        return None
+
+    if electric_miles < 0.5:  # Need at least half a mile for meaningful data
+        return None
+
+    kwh_per_mile = kwh_used / electric_miles
+
+    # Sanity check - Volt typically gets 0.25-0.40 kWh/mile
+    if kwh_per_mile < 0.1 or kwh_per_mile > 1.0:
+        logger.warning(f"Unusual kWh/mile: {kwh_per_mile:.3f} (kWh: {kwh_used:.2f}, miles: {electric_miles:.1f})")
+
+    return round(kwh_per_mile, 3)
+
+
+def detect_charging_session(
+    telemetry_points: List[dict],
+    min_power_kw: float = 0.5
+) -> Optional[dict]:
+    """
+    Detect if a charging session is occurring based on telemetry data.
+
+    Args:
+        telemetry_points: List of telemetry data points
+        min_power_kw: Minimum power level to consider as active charging
+
+    Returns:
+        Charging session info dict, or None if not charging
+    """
+    if not telemetry_points:
+        return None
+
+    # Check for charger connected
+    charger_readings = [
+        p for p in telemetry_points
+        if p.get('charger_connected') is True
+    ]
+
+    if not charger_readings:
+        return None
+
+    # Get power readings during charging
+    power_readings = [
+        p.get('charger_ac_power_kw', 0) or 0
+        for p in charger_readings
+        if p.get('charger_ac_power_kw') is not None
+    ]
+
+    if not power_readings or max(power_readings) < min_power_kw:
+        return None
+
+    # Calculate charging stats
+    soc_readings = [
+        p.get('state_of_charge')
+        for p in charger_readings
+        if p.get('state_of_charge') is not None
+    ]
+
+    result = {
+        'is_charging': True,
+        'peak_power_kw': round(max(power_readings), 2),
+        'avg_power_kw': round(statistics.mean(power_readings), 2) if power_readings else None,
+        'start_soc': soc_readings[0] if soc_readings else None,
+        'current_soc': soc_readings[-1] if soc_readings else None,
+    }
+
+    # Estimate charge type based on power level
+    if max(power_readings) > 6.0:
+        result['charge_type'] = 'L2'
+    elif max(power_readings) > 1.2:
+        result['charge_type'] = 'L1-high'
+    else:
+        result['charge_type'] = 'L1'
+
+    return result

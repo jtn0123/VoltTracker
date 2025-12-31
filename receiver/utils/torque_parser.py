@@ -5,6 +5,8 @@ from typing import Optional
 import uuid
 import logging
 
+from receiver.config import Config
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,6 +62,15 @@ class TorqueParser:
         'k5b': 'state_of_charge',
         'k42': 'battery_voltage',
 
+        # HV Battery (Volt-specific PIDs)
+        'k220101': 'hv_battery_power_kw',  # HV Battery Power (kW)
+        'k220104': 'hv_battery_current_a',  # HV Battery Current (A)
+        'k220105': 'hv_battery_voltage_v',  # HV Battery Voltage (V)
+
+        # Charging (Volt-specific PIDs)
+        'k220130': 'charger_ac_power_kw',  # Charger AC Line Power (kW)
+        'k220131': 'charger_connected',  # Charger Plug Present (0/1)
+
         # Odometer
         'kff1271': 'odometer_miles',
         'k21': 'odometer_km',  # Convert to miles if present
@@ -92,6 +103,13 @@ class TorqueParser:
             'battery_voltage': None,
             'ambient_temp_f': None,
             'odometer_miles': None,
+            # HV Battery tracking
+            'hv_battery_power_kw': None,
+            'hv_battery_current_a': None,
+            'hv_battery_voltage_v': None,
+            # Charging status
+            'charger_ac_power_kw': None,
+            'charger_connected': None,
             'raw_data': dict(form_data),
         }
 
@@ -148,9 +166,9 @@ class TorqueParser:
             result['throttle_position'] = temp_values['throttle_position']
         if 'fuel_level_percent' in temp_values:
             result['fuel_level_percent'] = temp_values['fuel_level_percent']
-            # Calculate gallons remaining (Volt tank = 9.3122 gallons)
+            # Calculate gallons remaining using configured tank capacity
             result['fuel_remaining_gallons'] = (
-                temp_values['fuel_level_percent'] / 100 * 9.3122
+                temp_values['fuel_level_percent'] / 100 * Config.TANK_CAPACITY_GALLONS
             )
         if 'state_of_charge' in temp_values:
             result['state_of_charge'] = temp_values['state_of_charge']
@@ -176,6 +194,21 @@ class TorqueParser:
             result['odometer_miles'] = temp_values['odometer_miles']
         elif 'odometer_km' in temp_values:
             result['odometer_miles'] = temp_values['odometer_km'] * 0.621371
+
+        # HV Battery tracking
+        if 'hv_battery_power_kw' in temp_values:
+            result['hv_battery_power_kw'] = temp_values['hv_battery_power_kw']
+        if 'hv_battery_current_a' in temp_values:
+            result['hv_battery_current_a'] = temp_values['hv_battery_current_a']
+        if 'hv_battery_voltage_v' in temp_values:
+            result['hv_battery_voltage_v'] = temp_values['hv_battery_voltage_v']
+
+        # Charging status
+        if 'charger_ac_power_kw' in temp_values:
+            result['charger_ac_power_kw'] = temp_values['charger_ac_power_kw']
+        if 'charger_connected' in temp_values:
+            # Convert to boolean (0/1 from OBD)
+            result['charger_connected'] = temp_values['charger_connected'] > 0
 
         return result
 

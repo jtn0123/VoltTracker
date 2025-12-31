@@ -8,7 +8,9 @@ import logging
 import io
 import csv
 from datetime import datetime, timedelta, timezone
+from typing import Union, Tuple, Any
 from flask import Flask, request, jsonify, render_template, Response
+from flask_caching import Cache
 from sqlalchemy import func, desc
 from sqlalchemy.orm import scoped_session, sessionmaker
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -16,7 +18,7 @@ import atexit
 
 from config import Config
 from models import (
-    Base, TelemetryRaw, Trip, FuelEvent, SocTransition,
+    Base, TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession,
     get_engine
 )
 from utils import (
@@ -28,6 +30,9 @@ from utils import (
     calculate_electric_miles,
     calculate_average_temp,
     analyze_soc_floor,
+    calculate_electric_kwh,
+    calculate_kwh_per_mile,
+    detect_charging_session,
 )
 
 # Configure logging
@@ -40,6 +45,24 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# Initialize cache (disabled in testing mode)
+cache = Cache()
+
+
+def init_cache(app):
+    """Initialize cache based on environment."""
+    import os
+    if app.config.get('TESTING') or os.environ.get('FLASK_TESTING'):
+        cache.init_app(app, config={'CACHE_TYPE': 'NullCache'})
+    else:
+        cache.init_app(app, config={
+            'CACHE_TYPE': 'SimpleCache',
+            'CACHE_DEFAULT_TIMEOUT': 60
+        })
+
+
+init_cache(app)
 
 # Database setup
 engine = get_engine(Config.DATABASE_URL)
@@ -288,6 +311,11 @@ def torque_upload():
             battery_voltage=data['battery_voltage'],
             ambient_temp_f=data['ambient_temp_f'],
             odometer_miles=data['odometer_miles'],
+            hv_battery_power_kw=data['hv_battery_power_kw'],
+            hv_battery_current_a=data['hv_battery_current_a'],
+            hv_battery_voltage_v=data['hv_battery_voltage_v'],
+            charger_ac_power_kw=data['charger_ac_power_kw'],
+            charger_connected=data['charger_connected'],
             raw_data=data['raw_data']
         )
         db.add(telemetry)
@@ -313,6 +341,8 @@ def get_trips():
         start_date: Filter trips after this date (ISO format)
         end_date: Filter trips before this date (ISO format)
         gas_only: If true, only return trips with gas usage
+        page: Page number (default 1)
+        per_page: Items per page (default 50, max 100)
     """
     db = get_db()
 
@@ -331,9 +361,34 @@ def get_trips():
     if gas_only:
         query = query.filter(Trip.gas_mode_entered == True)
 
-    trips = query.order_by(desc(Trip.start_time)).limit(100).all()
+    # Pagination
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except (ValueError, TypeError):
+        page = 1
 
-    return jsonify([t.to_dict() for t in trips])
+    try:
+        per_page = min(100, max(1, int(request.args.get('per_page', 50))))
+    except (ValueError, TypeError):
+        per_page = 50
+
+    # Get total count for pagination info
+    total_count = query.count()
+
+    # Apply pagination
+    offset = (page - 1) * per_page
+    trips = query.order_by(desc(Trip.start_time)).offset(offset).limit(per_page).all()
+
+    # Return paginated response with metadata
+    return jsonify({
+        'trips': [t.to_dict() for t in trips],
+        'pagination': {
+            'page': page,
+            'per_page': per_page,
+            'total': total_count,
+            'pages': (total_count + per_page - 1) // per_page if per_page > 0 else 0
+        }
+    }) if request.args.get('page') or request.args.get('per_page') else jsonify([t.to_dict() for t in trips])
 
 
 @app.route('/api/trips/<int:trip_id>', methods=['GET'])
@@ -357,6 +412,7 @@ def get_trip_detail(trip_id):
 
 
 @app.route('/api/efficiency/summary', methods=['GET'])
+@cache.cached(timeout=30)
 def get_efficiency_summary():
     """
     Get efficiency statistics.
@@ -432,6 +488,7 @@ def get_efficiency_summary():
 
 
 @app.route('/api/soc/analysis', methods=['GET'])
+@cache.cached(timeout=60)
 def get_soc_analysis():
     """
     Get SOC floor analysis.
@@ -480,6 +537,37 @@ def get_fuel_history():
     return jsonify([e.to_dict() for e in events])
 
 
+def validate_fuel_event_data(data):
+    """
+    Validate fuel event data.
+
+    Returns (is_valid, errors) tuple.
+    """
+    errors = []
+
+    # Check numeric fields are valid if provided
+    numeric_fields = {
+        'odometer_miles': (0, 1000000),
+        'gallons_added': (0, 20),  # Tank is ~9.3 gal
+        'fuel_level_before': (0, 100),
+        'fuel_level_after': (0, 100),
+        'price_per_gallon': (0, 20),
+        'total_cost': (0, 500)
+    }
+
+    for field, (min_val, max_val) in numeric_fields.items():
+        value = data.get(field)
+        if value is not None:
+            try:
+                num_val = float(value)
+                if num_val < min_val or num_val > max_val:
+                    errors.append(f'{field} must be between {min_val} and {max_val}')
+            except (ValueError, TypeError):
+                errors.append(f'{field} must be a valid number')
+
+    return len(errors) == 0, errors
+
+
 @app.route('/api/fuel/add', methods=['POST'])
 def add_fuel_event():
     """
@@ -498,6 +586,11 @@ def add_fuel_event():
     data = request.get_json()
     if not data:
         return jsonify({'error': 'No data provided'}), 400
+
+    # Validate input data
+    is_valid, errors = validate_fuel_event_data(data)
+    if not is_valid:
+        return jsonify({'error': 'Validation failed', 'details': errors}), 400
 
     try:
         timestamp = datetime.fromisoformat(data.get('timestamp', ''))
@@ -551,7 +644,7 @@ def get_mpg_trend():
 
 
 @app.route('/api/status', methods=['GET'])
-def get_status():
+def get_status() -> Response:
     """Get system status and last sync time."""
     db = get_db()
 
@@ -576,7 +669,7 @@ def get_status():
 # ============================================================================
 
 @app.route('/api/export/trips', methods=['GET'])
-def export_trips():
+def export_trips() -> Response:
     """
     Export trips as CSV or JSON.
 
@@ -687,23 +780,26 @@ def export_all():
     """
     Export all data as JSON for backup.
 
-    Returns trips, fuel events, SOC transitions, and summary stats.
+    Returns trips, fuel events, SOC transitions, charging sessions, and summary stats.
     """
     db = get_db()
 
     trips = db.query(Trip).order_by(desc(Trip.start_time)).all()
     fuel_events = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp)).all()
     soc_transitions = db.query(SocTransition).order_by(SocTransition.timestamp).all()
+    charging_sessions = db.query(ChargingSession).order_by(desc(ChargingSession.start_time)).all()
 
     return jsonify({
         'exported_at': datetime.now(timezone.utc).isoformat(),
         'trips': [t.to_dict() for t in trips],
         'fuel_events': [e.to_dict() for e in fuel_events],
         'soc_transitions': [s.to_dict() for s in soc_transitions],
+        'charging_sessions': [c.to_dict() for c in charging_sessions],
         'summary': {
             'total_trips': len(trips),
             'total_fuel_events': len(fuel_events),
-            'total_soc_transitions': len(soc_transitions)
+            'total_soc_transitions': len(soc_transitions),
+            'total_charging_sessions': len(charging_sessions)
         }
     })
 
@@ -713,7 +809,7 @@ def export_all():
 # ============================================================================
 
 @app.route('/api/trips/<int:trip_id>', methods=['DELETE'])
-def delete_trip(trip_id):
+def delete_trip(trip_id: int) -> Union[Response, Tuple[Response, int]]:
     """Delete a trip and its associated data."""
     db = get_db()
 
@@ -822,6 +918,205 @@ def update_fuel_event(fuel_id):
 
     logger.info(f"Updated fuel event {fuel_id}: {data}")
     return jsonify(event.to_dict())
+
+
+# ============================================================================
+# Charging Session Endpoints
+# ============================================================================
+
+@app.route('/api/charging/history', methods=['GET'])
+def get_charging_history():
+    """Get charging session history."""
+    db = get_db()
+
+    sessions = db.query(ChargingSession).order_by(
+        desc(ChargingSession.start_time)
+    ).limit(50).all()
+
+    return jsonify([s.to_dict() for s in sessions])
+
+
+@app.route('/api/charging/add', methods=['POST'])
+def add_charging_session():
+    """
+    Manually add a charging session.
+
+    Request body:
+        start_time: ISO datetime (required)
+        end_time: ISO datetime
+        start_soc: Starting SOC percentage
+        end_soc: Ending SOC percentage
+        kwh_added: kWh added during session
+        charge_type: 'L1', 'L2', or 'DCFC'
+        location_name: Location description
+        cost: Total cost
+        notes: Optional notes
+    """
+    db = get_db()
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    try:
+        start_time = datetime.fromisoformat(data.get('start_time', ''))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid or missing start_time'}), 400
+
+    end_time = None
+    if data.get('end_time'):
+        try:
+            end_time = datetime.fromisoformat(data['end_time'])
+        except (ValueError, TypeError):
+            pass
+
+    session = ChargingSession(
+        start_time=start_time,
+        end_time=end_time,
+        start_soc=data.get('start_soc'),
+        end_soc=data.get('end_soc'),
+        kwh_added=data.get('kwh_added'),
+        peak_power_kw=data.get('peak_power_kw'),
+        avg_power_kw=data.get('avg_power_kw'),
+        latitude=data.get('latitude'),
+        longitude=data.get('longitude'),
+        location_name=data.get('location_name'),
+        charge_type=data.get('charge_type'),
+        cost=data.get('cost'),
+        cost_per_kwh=data.get('cost_per_kwh'),
+        notes=data.get('notes'),
+        is_complete=end_time is not None,
+    )
+    db.add(session)
+    db.commit()
+
+    return jsonify(session.to_dict()), 201
+
+
+@app.route('/api/charging/<int:session_id>', methods=['GET'])
+def get_charging_session(session_id):
+    """Get details of a specific charging session."""
+    db = get_db()
+
+    session = db.query(ChargingSession).filter(ChargingSession.id == session_id).first()
+    if not session:
+        return jsonify({'error': 'Charging session not found'}), 404
+
+    return jsonify(session.to_dict())
+
+
+@app.route('/api/charging/<int:session_id>', methods=['DELETE'])
+def delete_charging_session(session_id):
+    """Delete a charging session."""
+    db = get_db()
+
+    session = db.query(ChargingSession).filter(ChargingSession.id == session_id).first()
+    if not session:
+        return jsonify({'error': 'Charging session not found'}), 404
+
+    db.delete(session)
+    db.commit()
+
+    logger.info(f"Deleted charging session {session_id}")
+    return jsonify({'message': f'Charging session {session_id} deleted successfully'})
+
+
+@app.route('/api/charging/<int:session_id>', methods=['PATCH'])
+def update_charging_session(session_id):
+    """Update a charging session."""
+    db = get_db()
+
+    session = db.query(ChargingSession).filter(ChargingSession.id == session_id).first()
+    if not session:
+        return jsonify({'error': 'Charging session not found'}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    allowed_fields = [
+        'end_time', 'end_soc', 'kwh_added', 'peak_power_kw', 'avg_power_kw',
+        'location_name', 'charge_type', 'cost', 'cost_per_kwh', 'notes', 'is_complete'
+    ]
+
+    for field in allowed_fields:
+        if field in data:
+            if field == 'end_time' and data[field]:
+                try:
+                    setattr(session, field, datetime.fromisoformat(data[field]))
+                except (ValueError, TypeError):
+                    pass
+            else:
+                setattr(session, field, data[field])
+
+    db.commit()
+
+    logger.info(f"Updated charging session {session_id}: {data}")
+    return jsonify(session.to_dict())
+
+
+@app.route('/api/charging/summary', methods=['GET'])
+def get_charging_summary():
+    """Get charging statistics summary."""
+    db = get_db()
+
+    sessions = db.query(ChargingSession).filter(
+        ChargingSession.is_complete == True
+    ).all()
+
+    # Get trip data for electric miles and EV ratio
+    trips = db.query(Trip).filter(Trip.is_closed == True).all()
+    total_miles = sum(t.distance_miles or 0 for t in trips)
+    total_electric_miles = sum(t.electric_miles or 0 for t in trips)
+
+    # Calculate EV ratio
+    ev_ratio = None
+    if total_miles > 0:
+        ev_ratio = round((total_electric_miles / total_miles) * 100, 1)
+
+    if not sessions:
+        return jsonify({
+            'total_sessions': 0,
+            'total_kwh': 0,
+            'total_cost': None,
+            'avg_kwh_per_session': None,
+            'by_charge_type': {},
+            'total_electric_miles': round(total_electric_miles, 1) if total_electric_miles else None,
+            'ev_ratio': ev_ratio,
+            'l1_sessions': 0,
+            'l2_sessions': 0,
+        })
+
+    total_kwh = sum(s.kwh_added or 0 for s in sessions)
+    total_cost = sum(s.cost or 0 for s in sessions if s.cost)
+
+    # Group by charge type and count L1/L2
+    by_type = {}
+    l1_count = 0
+    l2_count = 0
+    for s in sessions:
+        ctype = s.charge_type or 'Unknown'
+        if ctype not in by_type:
+            by_type[ctype] = {'count': 0, 'kwh': 0}
+        by_type[ctype]['count'] += 1
+        by_type[ctype]['kwh'] += s.kwh_added or 0
+
+        if ctype == 'L1':
+            l1_count += 1
+        elif ctype == 'L2':
+            l2_count += 1
+
+    return jsonify({
+        'total_sessions': len(sessions),
+        'total_kwh': round(total_kwh, 2),
+        'total_cost': round(total_cost, 2) if total_cost else None,
+        'avg_kwh_per_session': round(total_kwh / len(sessions), 2) if sessions else None,
+        'by_charge_type': by_type,
+        'total_electric_miles': round(total_electric_miles, 1) if total_electric_miles else None,
+        'ev_ratio': ev_ratio,
+        'l1_sessions': l1_count,
+        'l2_sessions': l2_count,
+    })
 
 
 # ============================================================================

@@ -13,9 +13,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
 
 # Set DATABASE_URL BEFORE importing app to use SQLite for tests
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
+os.environ['FLASK_TESTING'] = 'true'
 
-from app import app as flask_app, Session, engine
-from models import Base, TelemetryRaw, Trip, FuelEvent, SocTransition
+from app import app as flask_app, Session, engine, cache, init_cache
+from models import Base, TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -24,6 +25,9 @@ from sqlalchemy.orm import sessionmaker
 def app():
     """Create application for testing."""
     flask_app.config['TESTING'] = True
+
+    # Reinitialize cache to ensure it uses NullCache
+    init_cache(flask_app)
 
     # Create all tables in the test database
     Base.metadata.create_all(engine)

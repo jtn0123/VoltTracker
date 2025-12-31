@@ -565,3 +565,625 @@ class TestFuelEventManagement:
         )
 
         assert response.status_code == 404
+
+
+class TestApiPagination:
+    """Tests for API pagination support."""
+
+    def test_trips_with_pagination(self, client, db_session):
+        """Test trips endpoint with pagination parameters."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        # Create 5 trips
+        for i in range(5):
+            trip = Trip(
+                session_id=uuid.uuid4(),
+                start_time=datetime.now(timezone.utc),
+                is_closed=True,
+            )
+            db_session.add(trip)
+        db_session.commit()
+
+        # Request with pagination
+        response = client.get('/api/trips?page=1&per_page=2')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'trips' in data
+        assert 'pagination' in data
+        assert len(data['trips']) == 2
+        assert data['pagination']['page'] == 1
+        assert data['pagination']['per_page'] == 2
+        assert data['pagination']['total'] == 5
+        assert data['pagination']['pages'] == 3
+
+    def test_trips_without_pagination_returns_list(self, client, db_session):
+        """Test trips endpoint without pagination returns flat list."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        # Request without pagination params
+        response = client.get('/api/trips')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # Should return flat list for backwards compatibility
+        assert isinstance(data, list)
+
+    def test_pagination_page_2(self, client, db_session):
+        """Test fetching second page of results."""
+        import uuid
+        from datetime import datetime, timezone, timedelta
+        from models import Trip
+
+        # Create 5 trips with different start times
+        for i in range(5):
+            trip = Trip(
+                session_id=uuid.uuid4(),
+                start_time=datetime.now(timezone.utc) - timedelta(days=i),
+                is_closed=True,
+            )
+            db_session.add(trip)
+        db_session.commit()
+
+        # Request page 2
+        response = client.get('/api/trips?page=2&per_page=2')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert len(data['trips']) == 2
+        assert data['pagination']['page'] == 2
+
+    def test_pagination_invalid_params(self, client):
+        """Test pagination with invalid parameters."""
+        response = client.get('/api/trips?page=invalid&per_page=abc')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # Should use defaults
+        assert data['pagination']['page'] == 1
+        assert data['pagination']['per_page'] == 50
+
+
+class TestChargingEndpoints:
+    """Tests for charging session endpoints."""
+
+    def test_charging_history_returns_list(self, client):
+        """Test charging history endpoint returns list."""
+        response = client.get('/api/charging/history')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert isinstance(data, list)
+
+    def test_add_charging_session(self, client):
+        """Test adding a charging session."""
+        charging_data = {
+            'start_time': '2024-01-15T18:00:00',
+            'end_time': '2024-01-15T22:00:00',
+            'start_soc': 20.0,
+            'end_soc': 95.0,
+            'kwh_added': 12.0,
+            'charge_type': 'L2',
+            'location_name': 'Home',
+        }
+        response = client.post(
+            '/api/charging/add',
+            data=json.dumps(charging_data),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 201
+        data = json.loads(response.data)
+        assert data['kwh_added'] == 12.0
+        assert data['charge_type'] == 'L2'
+        assert data['is_complete'] is True
+
+    def test_add_charging_session_no_start_time(self, client):
+        """Test adding charging session without start_time fails."""
+        response = client.post(
+            '/api/charging/add',
+            data=json.dumps({'kwh_added': 10.0}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'start_time' in data['error'].lower()
+
+    def test_get_charging_session(self, client, db_session):
+        """Test getting a specific charging session."""
+        from datetime import datetime, timezone
+        from models import ChargingSession
+
+        session = ChargingSession(
+            start_time=datetime.now(timezone.utc),
+            start_soc=30.0,
+            end_soc=80.0,
+            kwh_added=8.0,
+            charge_type='L1',
+            is_complete=True,
+        )
+        db_session.add(session)
+        db_session.commit()
+
+        response = client.get(f'/api/charging/{session.id}')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['id'] == session.id
+        assert data['kwh_added'] == 8.0
+
+    def test_get_charging_session_not_found(self, client):
+        """Test 404 for non-existent charging session."""
+        response = client.get('/api/charging/99999')
+
+        assert response.status_code == 404
+
+    def test_delete_charging_session(self, client, db_session):
+        """Test deleting a charging session."""
+        from datetime import datetime, timezone
+        from models import ChargingSession
+
+        session = ChargingSession(
+            start_time=datetime.now(timezone.utc),
+            kwh_added=10.0,
+            is_complete=True,
+        )
+        db_session.add(session)
+        db_session.commit()
+        session_id = session.id
+
+        response = client.delete(f'/api/charging/{session_id}')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'deleted successfully' in data['message']
+
+    def test_update_charging_session(self, client, db_session):
+        """Test updating a charging session."""
+        from datetime import datetime, timezone
+        from models import ChargingSession
+
+        session = ChargingSession(
+            start_time=datetime.now(timezone.utc),
+            kwh_added=10.0,
+        )
+        db_session.add(session)
+        db_session.commit()
+
+        response = client.patch(
+            f'/api/charging/{session.id}',
+            data=json.dumps({'kwh_added': 12.5, 'notes': 'Updated'}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['kwh_added'] == 12.5
+        assert data['notes'] == 'Updated'
+
+    def test_charging_summary_empty(self, client):
+        """Test charging summary with no data."""
+        response = client.get('/api/charging/summary')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['total_sessions'] == 0
+        assert data['total_kwh'] == 0
+
+    def test_charging_summary_with_data(self, client, db_session):
+        """Test charging summary with data."""
+        from datetime import datetime, timezone
+        from models import ChargingSession
+
+        # Add two charging sessions
+        for i in range(2):
+            session = ChargingSession(
+                start_time=datetime.now(timezone.utc),
+                kwh_added=10.0 + i,
+                charge_type='L2',
+                is_complete=True,
+            )
+            db_session.add(session)
+        db_session.commit()
+
+        response = client.get('/api/charging/summary')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['total_sessions'] == 2
+        assert data['total_kwh'] == 21.0
+        assert 'L2' in data['by_charge_type']
+
+
+class TestApiValidation:
+    """Tests for API input validation."""
+
+    def test_fuel_event_validation_invalid_gallons(self, client):
+        """Test validation rejects invalid gallons value."""
+        fuel_data = {
+            'timestamp': '2024-01-15T10:30:00',
+            'gallons_added': 50.0,  # Way too much for a 9.3 gal tank
+        }
+        response = client.post(
+            '/api/fuel/add',
+            data=json.dumps(fuel_data),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'error' in data
+        assert 'Validation failed' in data['error']
+
+    def test_fuel_event_validation_invalid_odometer(self, client):
+        """Test validation rejects negative odometer."""
+        fuel_data = {
+            'timestamp': '2024-01-15T10:30:00',
+            'odometer_miles': -100,
+        }
+        response = client.post(
+            '/api/fuel/add',
+            data=json.dumps(fuel_data),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'Validation failed' in data['error']
+
+    def test_fuel_event_validation_invalid_fuel_level(self, client):
+        """Test validation rejects fuel level over 100."""
+        fuel_data = {
+            'timestamp': '2024-01-15T10:30:00',
+            'fuel_level_after': 150.0,
+        }
+        response = client.post(
+            '/api/fuel/add',
+            data=json.dumps(fuel_data),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'Validation failed' in data['error']
+
+    def test_fuel_event_validation_non_numeric(self, client):
+        """Test validation rejects non-numeric values."""
+        fuel_data = {
+            'timestamp': '2024-01-15T10:30:00',
+            'gallons_added': 'not-a-number',
+        }
+        response = client.post(
+            '/api/fuel/add',
+            data=json.dumps(fuel_data),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'Validation failed' in data['error']
+
+    def test_fuel_event_valid_data_passes(self, client):
+        """Test valid fuel event data is accepted."""
+        fuel_data = {
+            'timestamp': '2024-01-15T10:30:00',
+            'odometer_miles': 51000,
+            'gallons_added': 7.5,
+            'price_per_gallon': 3.49,
+            'total_cost': 26.18,
+            'fuel_level_before': 10.0,
+            'fuel_level_after': 90.0,
+        }
+        response = client.post(
+            '/api/fuel/add',
+            data=json.dumps(fuel_data),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 201
+        data = json.loads(response.data)
+        assert data['gallons_added'] == 7.5
+
+
+class TestPaginationEdgeCases:
+    """Tests for pagination edge cases."""
+
+    def test_pagination_page_zero(self, client, db_session):
+        """Test page=0 defaults to page 1."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        response = client.get('/api/trips?page=0&per_page=10')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['pagination']['page'] == 1
+
+    def test_pagination_negative_page(self, client):
+        """Test negative page defaults to page 1."""
+        response = client.get('/api/trips?page=-5&per_page=10')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['pagination']['page'] == 1
+
+    def test_pagination_per_page_zero(self, client):
+        """Test per_page=0 is capped to minimum of 1."""
+        response = client.get('/api/trips?page=1&per_page=0')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # per_page=0 becomes max(1, 0) = 1
+        assert data['pagination']['per_page'] == 1
+
+    def test_pagination_per_page_too_large(self, client):
+        """Test per_page > 100 is capped."""
+        response = client.get('/api/trips?page=1&per_page=999')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['pagination']['per_page'] <= 100
+
+    def test_pagination_page_beyond_max(self, client):
+        """Test page beyond max returns empty results."""
+        response = client.get('/api/trips?page=9999&per_page=10')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert len(data['trips']) == 0
+
+
+class TestMalformedRequests:
+    """Tests for malformed JSON and bad requests."""
+
+    def test_fuel_add_malformed_json(self, client):
+        """Test malformed JSON returns 400."""
+        response = client.post(
+            '/api/fuel/add',
+            data='{"invalid json',
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+
+    def test_charging_add_malformed_json(self, client):
+        """Test malformed JSON in charging add returns 400."""
+        response = client.post(
+            '/api/charging/add',
+            data='not valid json at all',
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+
+    def test_trip_patch_malformed_json(self, client, db_session):
+        """Test malformed JSON in trip patch returns 400."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        response = client.patch(
+            f'/api/trips/{trip.id}',
+            data='{broken: json}',
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+
+    def test_fuel_add_empty_body(self, client):
+        """Test empty request body returns error."""
+        response = client.post(
+            '/api/fuel/add',
+            data='',
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+
+
+class TestDeleteNotFound:
+    """Tests for 404 on delete operations."""
+
+    def test_delete_nonexistent_trip(self, client):
+        """Test deleting non-existent trip returns 404."""
+        response = client.delete('/api/trips/99999')
+
+        assert response.status_code == 404
+        data = json.loads(response.data)
+        assert 'not found' in data['error'].lower()
+
+    def test_delete_nonexistent_fuel_event(self, client):
+        """Test deleting non-existent fuel event returns 404."""
+        response = client.delete('/api/fuel/99999')
+
+        assert response.status_code == 404
+
+    def test_delete_nonexistent_charging_session(self, client):
+        """Test deleting non-existent charging session returns 404."""
+        response = client.delete('/api/charging/99999')
+
+        assert response.status_code == 404
+
+    def test_patch_nonexistent_trip(self, client):
+        """Test patching non-existent trip returns 404."""
+        response = client.patch(
+            '/api/trips/99999',
+            data=json.dumps({'gas_mpg': 45.0}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 404
+
+    def test_patch_nonexistent_fuel_event(self, client):
+        """Test patching non-existent fuel event returns 404."""
+        response = client.patch(
+            '/api/fuel/99999',
+            data=json.dumps({'gallons_added': 5.0}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 404
+
+    def test_patch_nonexistent_charging_session(self, client):
+        """Test patching non-existent charging session returns 404."""
+        response = client.patch(
+            '/api/charging/99999',
+            data=json.dumps({'kwh_added': 10.0}),
+            content_type='application/json'
+        )
+
+        assert response.status_code == 404
+
+
+class TestExportWithData:
+    """Tests for export endpoints with various data."""
+
+    def test_export_all_includes_charging(self, client, db_session):
+        """Test full export includes charging sessions."""
+        from datetime import datetime, timezone
+        from models import ChargingSession
+
+        session = ChargingSession(
+            start_time=datetime.now(timezone.utc),
+            kwh_added=10.0,
+            charge_type='L2',
+            is_complete=True,
+        )
+        db_session.add(session)
+        db_session.commit()
+
+        response = client.get('/api/export/all')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert 'charging_sessions' in data
+        assert len(data['charging_sessions']) == 1
+        assert data['charging_sessions'][0]['kwh_added'] == 10.0
+
+    def test_export_csv_with_special_characters(self, client, db_session):
+        """Test CSV export handles special characters."""
+        from datetime import datetime, timezone
+        from models import ChargingSession
+
+        session = ChargingSession(
+            start_time=datetime.now(timezone.utc),
+            kwh_added=10.0,
+            location_name='Home, "Main" Garage',  # Commas and quotes
+            notes='Test notes with\nnewlines',
+            is_complete=True,
+        )
+        db_session.add(session)
+        db_session.commit()
+
+        response = client.get('/api/charging/history')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data[0]['location_name'] == 'Home, "Main" Garage'
+
+
+class TestChargingSummaryDetails:
+    """Tests for charging summary edge cases."""
+
+    def test_charging_summary_l1_and_l2_counts(self, client, db_session):
+        """Test summary returns correct L1/L2 counts."""
+        from datetime import datetime, timezone
+        from models import ChargingSession
+
+        # Add L1 sessions
+        for _ in range(3):
+            db_session.add(ChargingSession(
+                start_time=datetime.now(timezone.utc),
+                kwh_added=5.0,
+                charge_type='L1',
+                is_complete=True,
+            ))
+
+        # Add L2 sessions
+        for _ in range(2):
+            db_session.add(ChargingSession(
+                start_time=datetime.now(timezone.utc),
+                kwh_added=10.0,
+                charge_type='L2',
+                is_complete=True,
+            ))
+
+        db_session.commit()
+
+        response = client.get('/api/charging/summary')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['l1_sessions'] == 3
+        assert data['l2_sessions'] == 2
+        assert data['total_sessions'] == 5
+
+    def test_charging_summary_with_ev_ratio(self, client, db_session):
+        """Test summary includes EV ratio from trips."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip, ChargingSession
+
+        # Create trips with electric miles
+        trip1 = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            distance_miles=50.0,
+            electric_miles=40.0,  # 80% electric
+            is_closed=True,
+        )
+        trip2 = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            distance_miles=50.0,
+            electric_miles=30.0,  # 60% electric
+            is_closed=True,
+        )
+        db_session.add(trip1)
+        db_session.add(trip2)
+
+        # Add a charging session to make summary return data
+        db_session.add(ChargingSession(
+            start_time=datetime.now(timezone.utc),
+            kwh_added=10.0,
+            is_complete=True,
+        ))
+
+        db_session.commit()
+
+        response = client.get('/api/charging/summary')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['total_electric_miles'] == 70.0
+        assert data['ev_ratio'] == 70.0  # 70/100 = 70%

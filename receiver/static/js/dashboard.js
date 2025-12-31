@@ -5,19 +5,92 @@
 // State
 let mpgChart = null;
 let socChart = null;
+let tripSpeedChart = null;
+let tripSocChart = null;
+let tripMap = null;
 let currentTimeframe = 30;
+let dateFilter = { start: null, end: null };
+let flatpickrInstance = null;
 
 // Initialize dashboard on load
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    initDatePicker();
     loadStatus();
     loadSummary();
     loadMpgTrend(currentTimeframe);
     loadTrips();
     loadSocAnalysis();
+    loadChargingSummary();
+    loadChargingHistory();
 
     // Refresh status every 30 seconds
     setInterval(loadStatus, 30000);
 });
+
+/**
+ * Initialize theme from localStorage
+ */
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+}
+
+/**
+ * Toggle between light and dark theme
+ */
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateThemeIcon(newTheme);
+}
+
+/**
+ * Update theme icon
+ */
+function updateThemeIcon(theme) {
+    const icon = document.getElementById('theme-icon');
+    if (icon) {
+        icon.textContent = theme === 'dark' ? '🌙' : '☀️';
+    }
+}
+
+/**
+ * Initialize date range picker
+ */
+function initDatePicker() {
+    const input = document.getElementById('date-range');
+    if (!input) return;
+
+    flatpickrInstance = flatpickr(input, {
+        mode: 'range',
+        dateFormat: 'M j, Y',
+        theme: 'dark',
+        onChange: function(selectedDates) {
+            if (selectedDates.length === 2) {
+                dateFilter.start = selectedDates[0].toISOString().split('T')[0];
+                dateFilter.end = selectedDates[1].toISOString().split('T')[0];
+                document.getElementById('clear-date-filter').style.display = 'block';
+                loadTrips();
+            }
+        }
+    });
+}
+
+/**
+ * Clear date filter
+ */
+function clearDateFilter() {
+    dateFilter = { start: null, end: null };
+    if (flatpickrInstance) {
+        flatpickrInstance.clear();
+    }
+    document.getElementById('clear-date-filter').style.display = 'none';
+    loadTrips();
+}
 
 /**
  * Load system status
@@ -196,7 +269,11 @@ async function loadMpgTrend(days) {
  */
 async function loadTrips() {
     try {
-        const response = await fetch('/api/trips?limit=20');
+        let url = '/api/trips?limit=20';
+        if (dateFilter.start) url += `&start_date=${dateFilter.start}`;
+        if (dateFilter.end) url += `&end_date=${dateFilter.end}`;
+
+        const response = await fetch(url);
         const trips = await response.json();
 
         const tableBody = document.getElementById('trips-table-body');
@@ -205,7 +282,7 @@ async function loadTrips() {
         if (trips.length === 0) {
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="empty-state">
+                    <td colspan="7" class="empty-state">
                         <h3>No Trips Recorded</h3>
                         <p>Trips will appear once you start driving with Torque Pro connected.</p>
                     </td>
@@ -220,9 +297,9 @@ async function loadTrips() {
             return;
         }
 
-        // Desktop table
+        // Desktop table with clickable rows
         tableBody.innerHTML = trips.map(trip => `
-            <tr>
+            <tr class="clickable" onclick="openTripModal(${trip.id})">
                 <td>${formatDateTime(new Date(trip.start_time))}</td>
                 <td>${trip.distance_miles ? trip.distance_miles.toFixed(1) : '--'} mi</td>
                 <td>${trip.electric_miles ? trip.electric_miles.toFixed(1) : '--'} mi</td>
@@ -235,14 +312,14 @@ async function loadTrips() {
                 <td>${trip.gas_mpg ? trip.gas_mpg + ' MPG' : '--'}</td>
                 <td>${trip.soc_at_gas_transition ? trip.soc_at_gas_transition.toFixed(1) + '%' : '--'}</td>
                 <td>
-                    <button class="btn-delete" onclick="deleteTrip(${trip.id})" title="Delete trip">×</button>
+                    <button class="btn-delete" onclick="event.stopPropagation(); deleteTrip(${trip.id})" title="Delete trip">×</button>
                 </td>
             </tr>
         `).join('');
 
-        // Mobile cards
+        // Mobile cards with click handler
         tripCards.innerHTML = trips.map(trip => `
-            <div class="trip-card">
+            <div class="trip-card clickable" onclick="openTripModal(${trip.id})">
                 <div class="trip-card-header">
                     <span class="trip-card-date">${formatDate(new Date(trip.start_time))}</span>
                     ${trip.gas_mode_entered ?
@@ -274,6 +351,204 @@ async function loadTrips() {
     } catch (error) {
         console.error('Failed to load trips:', error);
     }
+}
+
+/**
+ * Open trip detail modal
+ */
+async function openTripModal(tripId) {
+    const modal = document.getElementById('trip-modal');
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+
+    try {
+        const response = await fetch(`/api/trips/${tripId}`);
+        const data = await response.json();
+        const trip = data.trip;
+        const telemetry = data.telemetry;
+
+        // Render summary stats
+        const summaryEl = document.getElementById('trip-detail-summary');
+        summaryEl.innerHTML = `
+            <div class="trip-stat">
+                <div class="trip-stat-label">Date</div>
+                <div class="trip-stat-value">${formatDate(new Date(trip.start_time))}</div>
+            </div>
+            <div class="trip-stat">
+                <div class="trip-stat-label">Duration</div>
+                <div class="trip-stat-value">${trip.end_time ? formatDuration(new Date(trip.start_time), new Date(trip.end_time)) : '--'}</div>
+            </div>
+            <div class="trip-stat">
+                <div class="trip-stat-label">Distance</div>
+                <div class="trip-stat-value">${trip.distance_miles ? trip.distance_miles.toFixed(1) + ' mi' : '--'}</div>
+            </div>
+            <div class="trip-stat">
+                <div class="trip-stat-label">Electric</div>
+                <div class="trip-stat-value">${trip.electric_miles ? trip.electric_miles.toFixed(1) + ' mi' : '--'}</div>
+            </div>
+            <div class="trip-stat">
+                <div class="trip-stat-label">Gas</div>
+                <div class="trip-stat-value">${trip.gas_miles ? trip.gas_miles.toFixed(1) + ' mi' : '--'}</div>
+            </div>
+            <div class="trip-stat">
+                <div class="trip-stat-label">MPG</div>
+                <div class="trip-stat-value">${trip.gas_mpg || '--'}</div>
+            </div>
+        `;
+
+        // Render map
+        renderTripMap(telemetry);
+
+        // Render charts
+        renderTripCharts(telemetry);
+
+    } catch (error) {
+        console.error('Failed to load trip details:', error);
+    }
+}
+
+/**
+ * Close trip modal
+ */
+function closeTripModal() {
+    const modal = document.getElementById('trip-modal');
+    modal.classList.remove('show');
+    document.body.style.overflow = '';
+
+    // Clean up charts
+    if (tripSpeedChart) {
+        tripSpeedChart.destroy();
+        tripSpeedChart = null;
+    }
+    if (tripSocChart) {
+        tripSocChart.destroy();
+        tripSocChart = null;
+    }
+    if (tripMap) {
+        tripMap.remove();
+        tripMap = null;
+    }
+}
+
+/**
+ * Render trip route on map
+ */
+function renderTripMap(telemetry) {
+    const mapEl = document.getElementById('trip-detail-map');
+
+    // Filter telemetry with valid GPS coordinates
+    const gpsPoints = telemetry.filter(t => t.latitude && t.longitude);
+
+    if (gpsPoints.length < 2) {
+        mapEl.innerHTML = '<div class="no-gps">No GPS data available for this trip</div>';
+        return;
+    }
+
+    // Clear previous content
+    mapEl.innerHTML = '';
+
+    // Initialize map
+    tripMap = L.map(mapEl).setView([gpsPoints[0].latitude, gpsPoints[0].longitude], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(tripMap);
+
+    // Create polyline from GPS points
+    const latlngs = gpsPoints.map(p => [p.latitude, p.longitude]);
+    const polyline = L.polyline(latlngs, { color: '#3282b8', weight: 4 }).addTo(tripMap);
+
+    // Add start and end markers
+    L.marker(latlngs[0], {
+        icon: L.divIcon({
+            className: 'map-marker-start',
+            html: '<div style="background:#28a745;width:12px;height:12px;border-radius:50%;border:2px solid white;"></div>'
+        })
+    }).addTo(tripMap).bindPopup('Start');
+
+    L.marker(latlngs[latlngs.length - 1], {
+        icon: L.divIcon({
+            className: 'map-marker-end',
+            html: '<div style="background:#dc3545;width:12px;height:12px;border-radius:50%;border:2px solid white;"></div>'
+        })
+    }).addTo(tripMap).bindPopup('End');
+
+    // Fit map to polyline bounds
+    tripMap.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+}
+
+/**
+ * Render trip detail charts
+ */
+function renderTripCharts(telemetry) {
+    const speedCtx = document.getElementById('trip-speed-chart');
+    const socCtx = document.getElementById('trip-soc-chart');
+
+    if (!speedCtx || !socCtx || telemetry.length === 0) return;
+
+    const labels = telemetry.map(t => formatTime(new Date(t.timestamp)));
+    const speeds = telemetry.map(t => t.speed_mph);
+    const socs = telemetry.map(t => t.state_of_charge);
+
+    // Speed chart
+    if (tripSpeedChart) tripSpeedChart.destroy();
+    tripSpeedChart = new Chart(speedCtx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Speed (MPH)',
+                data: speeds,
+                borderColor: '#3282b8',
+                backgroundColor: 'rgba(50, 130, 184, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top', labels: { color: '#b8b8b8' } }
+            },
+            scales: {
+                x: { display: false },
+                y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#b8b8b8' } }
+            }
+        }
+    });
+
+    // SOC chart
+    if (tripSocChart) tripSocChart.destroy();
+    tripSocChart = new Chart(socCtx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Battery SOC (%)',
+                data: socs,
+                borderColor: '#28a745',
+                backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top', labels: { color: '#b8b8b8' } }
+            },
+            scales: {
+                x: { display: false },
+                y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#b8b8b8' }, min: 0, max: 100 }
+            }
+        }
+    });
 }
 
 /**
@@ -419,9 +694,39 @@ function formatDateTime(date) {
 }
 
 /**
+ * Format time only
+ */
+function formatTime(date) {
+    return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+}
+
+/**
+ * Format duration between two dates
+ */
+function formatDuration(start, end) {
+    const minutes = Math.round((end - start) / 60000);
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
+/**
  * Handle timeframe button clicks
  */
 function setTimeframe(days) {
+    // Update aria-pressed on timeframe buttons
+    const buttons = document.querySelectorAll('.timeframe-btn');
+    buttons.forEach(btn => {
+        const btnDays = parseInt(btn.getAttribute('data-days'));
+        const isActive = btnDays === days;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+
     loadMpgTrend(days);
 }
 
@@ -430,15 +735,44 @@ function setTimeframe(days) {
  */
 function toggleExportMenu() {
     const menu = document.getElementById('export-menu');
-    menu.classList.toggle('show');
+    const btn = document.getElementById('export-btn');
+    const isOpen = menu.classList.toggle('show');
+
+    // Update ARIA state
+    if (btn) {
+        btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
 }
 
 // Close export menu when clicking outside
 document.addEventListener('click', (event) => {
     const menu = document.getElementById('export-menu');
     const dropdown = document.querySelector('.export-dropdown');
+    const btn = document.getElementById('export-btn');
     if (menu && dropdown && !dropdown.contains(event.target)) {
         menu.classList.remove('show');
+        if (btn) {
+            btn.setAttribute('aria-expanded', 'false');
+        }
+    }
+});
+
+// Close modals on escape key and handle keyboard navigation
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        closeTripModal();
+        closeChargingModal();
+
+        // Close export menu
+        const menu = document.getElementById('export-menu');
+        const btn = document.getElementById('export-btn');
+        if (menu && menu.classList.contains('show')) {
+            menu.classList.remove('show');
+            if (btn) {
+                btn.setAttribute('aria-expanded', 'false');
+                btn.focus();
+            }
+        }
     }
 });
 
@@ -470,3 +804,239 @@ async function deleteTrip(tripId) {
         alert('Failed to delete trip. Please try again.');
     }
 }
+
+/**
+ * Load charging summary for electric efficiency cards
+ */
+async function loadChargingSummary() {
+    try {
+        const response = await fetch('/api/charging/summary');
+        const data = await response.json();
+
+        // Total kWh
+        const totalKwh = document.getElementById('total-kwh');
+        if (data.total_kwh) {
+            totalKwh.innerHTML = `${data.total_kwh.toFixed(1)}<span class="card-unit">kWh</span>`;
+            document.getElementById('charging-sessions').textContent =
+                `${data.total_sessions} charging sessions`;
+        } else {
+            totalKwh.textContent = '--';
+            document.getElementById('charging-sessions').textContent = 'No charging data';
+        }
+
+        // Average kWh per session
+        const avgKwh = document.getElementById('avg-kwh-session');
+        if (data.avg_kwh_per_session) {
+            avgKwh.innerHTML = `${data.avg_kwh_per_session.toFixed(1)}<span class="card-unit">kWh</span>`;
+            if (data.total_cost) {
+                document.getElementById('charging-cost').textContent =
+                    `$${data.total_cost.toFixed(2)} total cost`;
+            } else {
+                document.getElementById('charging-cost').textContent = 'Cost not tracked';
+            }
+        } else {
+            avgKwh.textContent = '--';
+            document.getElementById('charging-cost').textContent = 'No data yet';
+        }
+
+        // Electric miles (from trips data)
+        const electricMiles = document.getElementById('total-electric-miles');
+        if (data.total_electric_miles) {
+            electricMiles.innerHTML = `${data.total_electric_miles.toLocaleString()}<span class="card-unit">mi</span>`;
+        } else {
+            electricMiles.textContent = '--';
+        }
+
+        // EV ratio
+        const evRatio = document.getElementById('ev-ratio');
+        if (data.ev_ratio !== undefined) {
+            evRatio.innerHTML = `${data.ev_ratio}<span class="card-unit">%</span>`;
+        } else {
+            evRatio.textContent = '--';
+        }
+
+        // L1/L2 session counts
+        if (data.l1_sessions !== undefined) {
+            document.getElementById('l1-sessions').textContent = data.l1_sessions;
+        }
+        if (data.l2_sessions !== undefined) {
+            document.getElementById('l2-sessions').textContent = data.l2_sessions;
+        }
+
+    } catch (error) {
+        console.error('Failed to load charging summary:', error);
+    }
+}
+
+/**
+ * Load charging history
+ */
+async function loadChargingHistory() {
+    try {
+        const response = await fetch('/api/charging/history?limit=20');
+        const sessions = await response.json();
+
+        const tableBody = document.getElementById('charging-table-body');
+
+        if (sessions.length === 0) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="empty-state">
+                        <h3>No Charging Sessions</h3>
+                        <p>Add charging sessions manually or they'll be detected automatically.</p>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tableBody.innerHTML = sessions.map(session => `
+            <tr>
+                <td>${formatDateTime(new Date(session.start_time))}</td>
+                <td>
+                    ${session.charge_type ?
+                        `<span class="badge badge-${session.charge_type.toLowerCase()}">${session.charge_type}</span>` :
+                        '--'
+                    }
+                </td>
+                <td>${session.kwh_added ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</td>
+                <td>
+                    ${session.start_soc !== null && session.end_soc !== null ?
+                        `${session.start_soc}% → ${session.end_soc}%` :
+                        '--'
+                    }
+                </td>
+                <td>${session.end_time ? formatChargingDuration(session.start_time, session.end_time) : '--'}</td>
+                <td>${session.location_name || '--'}</td>
+                <td>
+                    <button class="btn-delete" onclick="deleteChargingSession(${session.id})" title="Delete session">×</button>
+                </td>
+            </tr>
+        `).join('');
+
+    } catch (error) {
+        console.error('Failed to load charging history:', error);
+    }
+}
+
+/**
+ * Format charging duration
+ */
+function formatChargingDuration(startTime, endTime) {
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const minutes = Math.round((end - start) / 60000);
+
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
+/**
+ * Open add charging session modal
+ */
+function openAddChargingModal() {
+    const modal = document.getElementById('charging-modal');
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+
+    // Set default start time to now
+    const now = new Date();
+    const localDateTime = now.toISOString().slice(0, 16);
+    document.getElementById('charge-start').value = localDateTime;
+}
+
+/**
+ * Close charging modal
+ */
+function closeChargingModal() {
+    const modal = document.getElementById('charging-modal');
+    modal.classList.remove('show');
+    document.body.style.overflow = '';
+
+    // Reset form
+    document.getElementById('charging-form').reset();
+}
+
+/**
+ * Submit charging session form
+ */
+async function submitChargingSession(event) {
+    event.preventDefault();
+
+    const form = document.getElementById('charging-form');
+    const formData = {
+        start_time: document.getElementById('charge-start').value,
+        end_time: document.getElementById('charge-end').value || null,
+        start_soc: parseFloat(document.getElementById('charge-start-soc').value) || null,
+        end_soc: parseFloat(document.getElementById('charge-end-soc').value) || null,
+        kwh_added: parseFloat(document.getElementById('charge-kwh').value) || null,
+        charge_type: document.getElementById('charge-type').value || null,
+        cost: parseFloat(document.getElementById('charge-cost').value) || null,
+        location_name: document.getElementById('charge-location').value || null,
+        notes: document.getElementById('charge-notes').value || null
+    };
+
+    // Remove null values
+    Object.keys(formData).forEach(key => {
+        if (formData[key] === null || formData[key] === '') {
+            delete formData[key];
+        }
+    });
+
+    try {
+        const response = await fetch('/api/charging/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+
+        if (response.ok) {
+            closeChargingModal();
+            loadChargingSummary();
+            loadChargingHistory();
+        } else {
+            const data = await response.json();
+            alert(`Failed to add charging session: ${data.error || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('Failed to submit charging session:', error);
+        alert('Failed to add charging session. Please try again.');
+    }
+}
+
+/**
+ * Delete a charging session
+ */
+async function deleteChargingSession(sessionId) {
+    if (!confirm('Are you sure you want to delete this charging session?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/charging/${sessionId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            loadChargingSummary();
+            loadChargingHistory();
+        } else {
+            const data = await response.json();
+            alert(`Failed to delete charging session: ${data.error || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('Failed to delete charging session:', error);
+        alert('Failed to delete charging session. Please try again.');
+    }
+}
+
+// Close charging modal on escape key
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        closeChargingModal();
+    }
+});
