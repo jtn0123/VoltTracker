@@ -19,7 +19,7 @@ import atexit
 from config import Config
 from models import (
     Base, TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession,
-    get_engine
+    BatteryCellReading, get_engine
 )
 from utils import (
     TorqueParser,
