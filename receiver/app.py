@@ -42,11 +42,54 @@ from utils import (
 )
 from utils.weather import get_weather_for_location, get_weather_impact_factor
 
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, Config.LOG_LEVEL),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configure logging with rotation
+def setup_logging():
+    """
+    Configure logging with rotating file handler and console output.
+
+    Creates logs in ./logs directory with rotation:
+    - Max 10MB per file
+    - Keep 5 backup files
+    - Console output for Docker compatibility
+    """
+    import os
+    from logging.handlers import RotatingFileHandler
+
+    log_level = getattr(logging, Config.LOG_LEVEL)
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    formatter = logging.Formatter(log_format)
+
+    # Get root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    # Clear existing handlers (avoid duplicates)
+    root_logger.handlers.clear()
+
+    # Console handler (always add for Docker/terminal visibility)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+    # File handler with rotation (optional, skip in testing)
+    if not os.environ.get('FLASK_TESTING'):
+        log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, 'volttracker.log')
+
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,  # 10 MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        file_handler.setLevel(log_level)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+
+
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # Initialize Flask app

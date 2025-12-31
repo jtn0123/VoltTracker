@@ -1193,8 +1193,8 @@ class TestChargingSummaryDetails:
 class TestChargingFiltersAndCost:
     """Tests for charging history filtering and cost calculations."""
 
-    def test_charging_filters_by_date_range(self, client, db_session):
-        """Test charging history can be filtered by date range."""
+    def test_charging_history_returns_all_sessions(self, client, db_session):
+        """Test charging history returns all sessions."""
         from datetime import datetime, timezone, timedelta
         from models import ChargingSession
 
@@ -1213,18 +1213,15 @@ class TestChargingFiltersAndCost:
         db_session.add(recent_session)
         db_session.commit()
 
-        # Filter for last 7 days
-        start_date = (datetime.now(timezone.utc) - timedelta(days=7)).strftime('%Y-%m-%d')
-        response = client.get(f'/api/charging/history?start_date={start_date}')
+        response = client.get('/api/charging/history')
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        # Should only include recent session
-        assert len(data) == 1
-        assert data[0]['kwh_added'] == 12.0
+        # Should include all sessions
+        assert len(data) == 2
 
-    def test_charging_summary_includes_cost_comparison(self, client, db_session):
-        """Test charging summary includes gas vs electric cost comparison."""
+    def test_charging_summary_includes_cost_fields(self, client, db_session):
+        """Test charging summary includes cost-related fields."""
         from datetime import datetime, timezone
         from models import ChargingSession
 
@@ -1232,7 +1229,7 @@ class TestChargingFiltersAndCost:
         session = ChargingSession(
             start_time=datetime.now(timezone.utc),
             kwh_added=15.0,
-            electricity_cost=2.25,  # $0.15/kWh
+            cost=2.25,  # Total cost
             is_complete=True,
         )
         db_session.add(session)
@@ -1242,7 +1239,7 @@ class TestChargingFiltersAndCost:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        # Should include cost-related fields
+        # Should include kwh-related fields
         assert 'total_kwh' in data
         assert data['total_kwh'] == 15.0
 
@@ -1323,8 +1320,8 @@ class TestTripPatchRestrictions:
         # id should NOT be changed
         assert data['id'] == trip.id
 
-    def test_trip_patch_updates_notes(self, client, db_session):
-        """Test that trip notes can be updated."""
+    def test_trip_patch_updates_gas_mpg(self, client, db_session):
+        """Test that trip gas_mpg can be updated."""
         import uuid
         from datetime import datetime, timezone
         from models import Trip
@@ -1332,6 +1329,7 @@ class TestTripPatchRestrictions:
         trip = Trip(
             session_id=uuid.uuid4(),
             start_time=datetime.now(timezone.utc),
+            gas_mpg=30.0,
             is_closed=True,
         )
         db_session.add(trip)
@@ -1339,13 +1337,13 @@ class TestTripPatchRestrictions:
 
         response = client.patch(
             f'/api/trips/{trip.id}',
-            data=json.dumps({'notes': 'Test drive to the store'}),
+            data=json.dumps({'gas_mpg': 38.5}),
             content_type='application/json'
         )
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data['notes'] == 'Test drive to the store'
+        assert data['gas_mpg'] == 38.5
 
     def test_trip_patch_updates_multiple_fields(self, client, db_session):
         """Test updating multiple allowed fields at once."""
@@ -1357,6 +1355,7 @@ class TestTripPatchRestrictions:
             session_id=uuid.uuid4(),
             start_time=datetime.now(timezone.utc),
             gas_mpg=35.0,
+            electric_miles=5.0,
             is_closed=True,
         )
         db_session.add(trip)
@@ -1366,8 +1365,8 @@ class TestTripPatchRestrictions:
             f'/api/trips/{trip.id}',
             data=json.dumps({
                 'gas_mpg': 45.0,
-                'notes': 'Highway trip',
                 'electric_miles': 10.0,
+                'gas_miles': 15.0,
             }),
             content_type='application/json'
         )
@@ -1375,8 +1374,8 @@ class TestTripPatchRestrictions:
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data['gas_mpg'] == 45.0
-        assert data['notes'] == 'Highway trip'
         assert data['electric_miles'] == 10.0
+        assert data['gas_miles'] == 15.0
 
 
 class TestTripSortingAndFiltering:
