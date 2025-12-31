@@ -266,16 +266,21 @@ atexit.register(lambda: scheduler.shutdown())
 # Torque Pro Endpoint
 # ============================================================================
 
-@app.route('/torque/upload', methods=['POST'])
+@app.route('/torque/upload', methods=['GET', 'POST'])
 def torque_upload():
     """
     Receive data from Torque Pro app.
 
-    Torque sends form-encoded POST with dynamic field names.
+    Torque sends data as either GET query params or POST form data.
     Must respond with "OK!" exactly.
     """
     try:
-        data = TorqueParser.parse(request.form)
+        # Handle both GET (query params) and POST (form data)
+        if request.method == 'GET':
+            form_data = request.args
+        else:
+            form_data = request.form
+        data = TorqueParser.parse(form_data)
         db = get_db()
 
         # Create or get trip
@@ -1393,6 +1398,162 @@ def add_cell_reading():
         'message': 'Cell reading added',
         'reading': reading.to_dict()
     }), 201
+
+
+# ============================================================================
+# API Documentation
+# ============================================================================
+
+@app.route('/api/docs', methods=['GET'])
+def api_docs():
+    """
+    Return API documentation as JSON.
+
+    Provides a comprehensive list of all endpoints with their methods,
+    parameters, and descriptions.
+    """
+    docs = {
+        'title': 'VoltTracker API',
+        'version': '1.0.0',
+        'description': 'API for tracking Chevy Volt efficiency, trips, and battery health',
+        'base_url': '/api',
+        'endpoints': [
+            {
+                'path': '/status',
+                'methods': ['GET'],
+                'description': 'Get system status and last sync time',
+                'response': {'status': 'string', 'last_sync': 'datetime', 'uptime_seconds': 'number'}
+            },
+            {
+                'path': '/telemetry',
+                'methods': ['POST'],
+                'description': 'Receive telemetry from Torque Pro',
+                'parameters': 'Form-encoded Torque data',
+                'response': {'status': 'string', 'session_id': 'uuid'}
+            },
+            {
+                'path': '/trips',
+                'methods': ['GET'],
+                'description': 'List trips with pagination',
+                'query_params': {
+                    'page': 'Page number (default: 1)',
+                    'per_page': 'Items per page (default: 50, max: 100)',
+                    'start_date': 'Filter start date (YYYY-MM-DD)',
+                    'end_date': 'Filter end date (YYYY-MM-DD)'
+                }
+            },
+            {
+                'path': '/trips/<trip_id>',
+                'methods': ['GET', 'DELETE', 'PATCH'],
+                'description': 'Get, delete, or update a specific trip',
+                'patch_fields': ['gas_mpg', 'gas_miles', 'electric_miles', 'fuel_used_gallons', 'notes']
+            },
+            {
+                'path': '/trips/summary',
+                'methods': ['GET'],
+                'description': 'Get lifetime MPG and trip statistics'
+            },
+            {
+                'path': '/fuel/events',
+                'methods': ['GET'],
+                'description': 'List fuel events with pagination'
+            },
+            {
+                'path': '/fuel/add',
+                'methods': ['POST'],
+                'description': 'Add a manual fuel event',
+                'body': {
+                    'gallons_added': 'number (required)',
+                    'price_per_gallon': 'number',
+                    'odometer_miles': 'number',
+                    'timestamp': 'ISO datetime'
+                }
+            },
+            {
+                'path': '/soc/analysis',
+                'methods': ['GET'],
+                'description': 'Get SOC floor analysis with temperature correlation'
+            },
+            {
+                'path': '/charging/history',
+                'methods': ['GET'],
+                'description': 'List charging sessions'
+            },
+            {
+                'path': '/charging/add',
+                'methods': ['POST'],
+                'description': 'Add a charging session',
+                'body': {
+                    'start_time': 'ISO datetime (required)',
+                    'end_time': 'ISO datetime',
+                    'kwh_added': 'number',
+                    'charge_type': 'L1|L2|DCFC',
+                    'cost': 'number',
+                    'location_name': 'string'
+                }
+            },
+            {
+                'path': '/charging/summary',
+                'methods': ['GET'],
+                'description': 'Get charging statistics and EV ratio'
+            },
+            {
+                'path': '/battery/cells',
+                'methods': ['GET'],
+                'description': 'Get battery cell voltage readings',
+                'query_params': {
+                    'limit': 'Max readings (default: 10, max: 100)',
+                    'days': 'Filter to last N days'
+                }
+            },
+            {
+                'path': '/battery/cells/latest',
+                'methods': ['GET'],
+                'description': 'Get the most recent cell voltage reading'
+            },
+            {
+                'path': '/battery/cells/analysis',
+                'methods': ['GET'],
+                'description': 'Get battery health analysis with weak cell detection',
+                'query_params': {'days': 'Analysis period (default: 30)'}
+            },
+            {
+                'path': '/battery/cells/add',
+                'methods': ['POST'],
+                'description': 'Add a cell voltage reading',
+                'body': {
+                    'cell_voltages': 'array of 96 floats (required)',
+                    'timestamp': 'ISO datetime',
+                    'state_of_charge': 'number',
+                    'ambient_temp_f': 'number'
+                }
+            },
+            {
+                'path': '/export/trips',
+                'methods': ['GET'],
+                'description': 'Export trips as CSV or JSON',
+                'query_params': {'format': 'csv|json (default: csv)'}
+            },
+            {
+                'path': '/export/fuel',
+                'methods': ['GET'],
+                'description': 'Export fuel events as CSV'
+            },
+            {
+                'path': '/export/all',
+                'methods': ['GET'],
+                'description': 'Export all data as JSON backup'
+            },
+            {
+                'path': '/import/csv',
+                'methods': ['POST'],
+                'description': 'Import Torque CSV log file',
+                'content_type': 'multipart/form-data',
+                'body': {'file': 'CSV file'}
+            }
+        ]
+    }
+    return jsonify(docs)
 
 
 # ============================================================================
