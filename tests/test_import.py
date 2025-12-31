@@ -52,6 +52,66 @@ class TestTorqueCSVImporter:
         assert len(records) == 3
         assert all(r['timestamp'] is not None for r in records)
 
+    def test_parse_european_date_formats(self):
+        """Test European date formats (DD/MM/YYYY and DD.MM.YYYY)."""
+        csv_content = """GPS Time,Latitude
+15/01/2024 10:30:45,37.7749
+15.01.2024 10:30:45,37.7750
+15-01-2024 10:30:45,37.7751
+"""
+        records, stats = TorqueCSVImporter.parse_csv(csv_content)
+
+        assert len(records) == 3
+        assert all(r['timestamp'] is not None for r in records)
+        # All should parse to January 15, 2024
+        for record in records:
+            assert record['timestamp'].month == 1
+            assert record['timestamp'].day == 15
+
+    def test_parse_iso8601_with_timezone(self):
+        """Test ISO 8601 with timezone offsets."""
+        csv_content = """GPS Time,Latitude
+2024-01-15T10:30:45Z,37.7749
+2024-01-15T10:30:45+00:00,37.7750
+2024-01-15T15:30:45+05:00,37.7751
+2024-01-15T05:30:45-05:00,37.7752
+"""
+        records, stats = TorqueCSVImporter.parse_csv(csv_content)
+
+        assert len(records) == 4
+        assert all(r['timestamp'] is not None for r in records)
+        # All should be converted to UTC
+        for record in records:
+            # Should all be the same time in UTC (10:30:45)
+            assert record['timestamp'].hour == 10
+            assert record['timestamp'].minute == 30
+
+    def test_parse_text_month_formats(self):
+        """Test text month formats like 'Jan 15, 2024'."""
+        csv_content = """GPS Time,Latitude
+Jan 15, 2024 10:30:45,37.7749
+January 15, 2024 10:30:45,37.7750
+"""
+        records, stats = TorqueCSVImporter.parse_csv(csv_content)
+
+        assert len(records) == 2
+        assert all(r['timestamp'] is not None for r in records)
+
+    def test_parse_date_only_formats(self):
+        """Test date-only formats assume midnight UTC."""
+        csv_content = """GPS Time,Latitude
+2024-01-15,37.7749
+01/15/2024,37.7750
+"""
+        records, stats = TorqueCSVImporter.parse_csv(csv_content)
+
+        assert len(records) == 2
+        assert all(r['timestamp'] is not None for r in records)
+        # Should default to midnight
+        for record in records:
+            assert record['timestamp'].hour == 0
+            assert record['timestamp'].minute == 0
+
     def test_parse_epoch_timestamp(self):
         """Test parsing epoch timestamp in milliseconds."""
         csv_content = """GPS Time,Latitude

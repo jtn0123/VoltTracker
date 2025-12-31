@@ -338,40 +338,105 @@ class TorqueCSVImporter:
 
     @classmethod
     def _parse_timestamp(cls, value: str) -> Optional[datetime]:
-        """Parse timestamp from various Torque formats."""
+        """
+        Parse timestamp from various Torque and international formats.
 
-        # Common formats Torque uses
+        Supports:
+        - Unix epoch timestamps (seconds and milliseconds)
+        - ISO 8601 formats with and without timezone
+        - US date formats (MM/DD/YYYY)
+        - European date formats (DD/MM/YYYY, DD.MM.YYYY)
+        - Torque-specific formats (DD-Mon-YYYY)
+
+        Args:
+            value: Raw timestamp string
+
+        Returns:
+            Parsed datetime in UTC, or None if parsing failed
+        """
+        if not value or not value.strip():
+            return None
+
+        value = value.strip()
+
+        # Common formats Torque uses, plus international formats
         formats = [
+            # Torque formats
             '%d-%b-%Y %H:%M:%S.%f',    # 01-Jan-2024 12:30:45.123
             '%d-%b-%Y %H:%M:%S',        # 01-Jan-2024 12:30:45
+            # ISO 8601 formats
             '%Y-%m-%d %H:%M:%S.%f',     # 2024-01-01 12:30:45.123
             '%Y-%m-%d %H:%M:%S',        # 2024-01-01 12:30:45
             '%Y-%m-%dT%H:%M:%S.%f',     # 2024-01-01T12:30:45.123
             '%Y-%m-%dT%H:%M:%S',        # 2024-01-01T12:30:45
+            # US formats
             '%m/%d/%Y %H:%M:%S',        # 01/01/2024 12:30:45
             '%m/%d/%Y %I:%M:%S %p',     # 01/01/2024 12:30:45 PM
+            '%m-%d-%Y %H:%M:%S',        # 01-01-2024 12:30:45
+            # European formats
+            '%d/%m/%Y %H:%M:%S',        # 01/01/2024 12:30:45 (European)
+            '%d.%m.%Y %H:%M:%S',        # 01.01.2024 12:30:45 (European)
+            '%d-%m-%Y %H:%M:%S',        # 01-01-2024 12:30:45 (European)
+            # Text month formats
+            '%b %d, %Y %H:%M:%S',       # Jan 01, 2024 12:30:45
+            '%B %d, %Y %H:%M:%S',       # January 01, 2024 12:30:45
+            # Date only (assume midnight)
+            '%Y-%m-%d',                  # 2024-01-01
+            '%m/%d/%Y',                  # 01/01/2024
+            '%d/%m/%Y',                  # 01/01/2024 (European)
         ]
 
-        # Try epoch timestamp (milliseconds)
+        # Try epoch timestamp (seconds or milliseconds)
         try:
             ts = float(value)
             if ts > 1e12:  # Milliseconds
                 ts = ts / 1000
-            if 1e9 < ts < 2e9:  # Valid Unix timestamp range
+            if 1e9 < ts < 2e9:  # Valid Unix timestamp range (2001-2033)
                 return datetime.fromtimestamp(ts, tz=timezone.utc)
-        except ValueError:
+        except (ValueError, TypeError):
             pass
 
-        # Try string formats
+        # Try ISO 8601 with timezone offset (e.g., 2024-01-01T12:30:45+05:00)
+        try:
+            # Handle 'Z' suffix for UTC
+            if value.endswith('Z'):
+                value_tz = value[:-1] + '+00:00'
+            else:
+                value_tz = value
+
+            # Python 3.7+ can parse ISO 8601 with timezone
+            dt = datetime.fromisoformat(value_tz)
+            # Convert to UTC if it has timezone info
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(timezone.utc)
+            else:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except (ValueError, TypeError):
+            pass
+
+        # Try standard strptime formats
         for fmt in formats:
             try:
-                dt = datetime.strptime(value.strip(), fmt)
+                dt = datetime.strptime(value, fmt)
                 # Assume UTC if no timezone
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
                 return dt
             except ValueError:
                 continue
+
+        # Fallback: try dateutil parser for flexible parsing
+        try:
+            from dateutil import parser as dateutil_parser
+            dt = dateutil_parser.parse(value, fuzzy=False)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return dt
+        except (ImportError, ValueError, TypeError):
+            pass
 
         logger.debug(f"Could not parse timestamp: {value}")
         return None
