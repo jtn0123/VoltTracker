@@ -1943,6 +1943,7 @@ async function loadChargingHistory() {
         const sessions = await response.json();
 
         const tableBody = document.getElementById('charging-table-body');
+        const cardsContainer = document.getElementById('charging-cards');
 
         if (sessions.length === 0) {
             tableBody.innerHTML = `
@@ -1953,9 +1954,18 @@ async function loadChargingHistory() {
                     </td>
                 </tr>
             `;
+            if (cardsContainer) {
+                cardsContainer.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No Charging Sessions</h3>
+                        <p>Add charging sessions manually or they'll be detected automatically.</p>
+                    </div>
+                `;
+            }
             return;
         }
 
+        // Render table rows
         tableBody.innerHTML = sessions.map(session => `
             <tr class="clickable" onclick="openChargingDetailModal(${session.id})">
                 <td>${formatDateTime(new Date(session.start_time))}</td>
@@ -1979,6 +1989,39 @@ async function loadChargingHistory() {
                 </td>
             </tr>
         `).join('');
+
+        // Render mobile cards
+        if (cardsContainer) {
+            cardsContainer.innerHTML = sessions.map(session => `
+                <div class="charging-card" role="listitem" onclick="openChargingDetailModal(${session.id})">
+                    <div class="charging-card-header">
+                        <span class="charging-card-date">${formatDateTime(new Date(session.start_time))}</span>
+                        ${session.charge_type ?
+                            `<span class="charging-card-badge ${session.charge_type.toLowerCase()}">${session.charge_type}</span>` :
+                            ''
+                        }
+                    </div>
+                    <div class="charging-card-stats">
+                        <div class="charging-card-stat">
+                            <span class="charging-card-stat-label">Energy</span>
+                            <span class="charging-card-stat-value">${session.kwh_added ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</span>
+                        </div>
+                        <div class="charging-card-stat">
+                            <span class="charging-card-stat-label">SOC</span>
+                            <span class="charging-card-stat-value">${session.start_soc !== null && session.end_soc !== null ? `${session.start_soc}% → ${session.end_soc}%` : '--'}</span>
+                        </div>
+                        <div class="charging-card-stat">
+                            <span class="charging-card-stat-label">Duration</span>
+                            <span class="charging-card-stat-value">${session.end_time ? formatChargingDuration(session.start_time, session.end_time) : '--'}</span>
+                        </div>
+                        <div class="charging-card-stat">
+                            <span class="charging-card-stat-label">Location</span>
+                            <span class="charging-card-stat-value">${session.location_name || '--'}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
 
     } catch (error) {
         console.error('Failed to load charging history:', error);
