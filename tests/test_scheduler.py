@@ -7,7 +7,6 @@ Tests the background jobs that run periodically:
 - check_charging_sessions: Tracks charging sessions
 """
 
-import pytest
 import sys
 import os
 import uuid
@@ -123,7 +122,8 @@ class TestCloseStaleTrips:
         from app import close_stale_trips, Session
 
         session_id = uuid.uuid4()
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        # Make all telemetry timestamps in the past (beyond timeout)
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
 
         trip = Trip(
             session_id=session_id,
@@ -141,7 +141,7 @@ class TestCloseStaleTrips:
         )
         telemetry_end = TelemetryRaw(
             session_id=session_id,
-            timestamp=old_time + timedelta(minutes=30),
+            timestamp=old_time + timedelta(seconds=30),  # 30 seconds, not minutes
             odometer_miles=50025.0,
             state_of_charge=50.0,
         )
@@ -161,7 +161,8 @@ class TestCloseStaleTrips:
         from app import close_stale_trips, Session
 
         session_id = uuid.uuid4()
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        # All timestamps in the past (beyond timeout)
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
 
         trip = Trip(
             session_id=session_id,
@@ -172,7 +173,8 @@ class TestCloseStaleTrips:
         )
         db_session.add(trip)
 
-        telemetry_electric = TelemetryRaw(
+        # Need 3+ points for detect_gas_mode_entry to work
+        telemetry1 = TelemetryRaw(
             session_id=session_id,
             timestamp=old_time,
             odometer_miles=50000.0,
@@ -180,17 +182,27 @@ class TestCloseStaleTrips:
             engine_rpm=0,
             fuel_level_percent=75.0,
         )
-        telemetry_gas = TelemetryRaw(
+        telemetry2 = TelemetryRaw(
             session_id=session_id,
-            timestamp=old_time + timedelta(minutes=30),
-            odometer_miles=50020.0,
+            timestamp=old_time + timedelta(seconds=10),
+            odometer_miles=50010.0,
             state_of_charge=18.0,
-            engine_rpm=1200,
+            engine_rpm=1200,  # Gas mode starts here
+            fuel_level_percent=74.5,
+            ambient_temp_f=72.0,
+        )
+        telemetry3 = TelemetryRaw(
+            session_id=session_id,
+            timestamp=old_time + timedelta(seconds=20),
+            odometer_miles=50020.0,
+            state_of_charge=17.0,
+            engine_rpm=1500,  # Sustained gas mode
             fuel_level_percent=74.0,
             ambient_temp_f=72.0,
         )
-        db_session.add(telemetry_electric)
-        db_session.add(telemetry_gas)
+        db_session.add(telemetry1)
+        db_session.add(telemetry2)
+        db_session.add(telemetry3)
         db_session.commit()
         trip_id = trip.id
 
@@ -205,7 +217,8 @@ class TestCloseStaleTrips:
         from app import close_stale_trips, Session
 
         session_id = uuid.uuid4()
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        # All timestamps in the past (beyond timeout)
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
 
         trip = Trip(
             session_id=session_id,
@@ -216,6 +229,7 @@ class TestCloseStaleTrips:
         )
         db_session.add(trip)
 
+        # Need 3+ points for detect_gas_mode_entry to work
         telemetry1 = TelemetryRaw(
             session_id=session_id,
             timestamp=old_time,
@@ -226,15 +240,25 @@ class TestCloseStaleTrips:
         )
         telemetry2 = TelemetryRaw(
             session_id=session_id,
-            timestamp=old_time + timedelta(minutes=30),
-            odometer_miles=50020.0,
+            timestamp=old_time + timedelta(seconds=10),
+            odometer_miles=50010.0,
             state_of_charge=17.0,
-            engine_rpm=1500,
+            engine_rpm=1500,  # Gas mode entry
+            fuel_level_percent=74.5,
+            ambient_temp_f=70.0,
+        )
+        telemetry3 = TelemetryRaw(
+            session_id=session_id,
+            timestamp=old_time + timedelta(seconds=20),
+            odometer_miles=50020.0,
+            state_of_charge=16.0,
+            engine_rpm=1600,  # Sustained gas mode
             fuel_level_percent=74.0,
             ambient_temp_f=70.0,
         )
         db_session.add(telemetry1)
         db_session.add(telemetry2)
+        db_session.add(telemetry3)
         db_session.commit()
         trip_id = trip.id
 
@@ -251,7 +275,8 @@ class TestCloseStaleTrips:
         from app import close_stale_trips, Session
 
         session_id = uuid.uuid4()
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        # All timestamps in the past (beyond timeout)
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
 
         trip = Trip(
             session_id=session_id,
@@ -271,7 +296,7 @@ class TestCloseStaleTrips:
         )
         telemetry2 = TelemetryRaw(
             session_id=session_id,
-            timestamp=old_time + timedelta(minutes=20),
+            timestamp=old_time + timedelta(seconds=30),  # Keep in past
             odometer_miles=50015.0,
             state_of_charge=50.0,
             engine_rpm=0,

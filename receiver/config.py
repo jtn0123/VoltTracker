@@ -35,7 +35,7 @@ class Config:
     FUEL_SMOOTHING_WINDOW = 10  # Number of readings for median filter
 
     # API Configuration
-    FLASK_HOST = os.environ.get('FLASK_HOST', '0.0.0.0')
+    FLASK_HOST = os.environ.get('FLASK_HOST', '0.0.0.0')  # nosec B104 - intentional for server
     FLASK_PORT = int(os.environ.get('FLASK_PORT', 8080))
     CACHE_TIMEOUT_SECONDS = int(os.environ.get('CACHE_TIMEOUT', 60))
     API_DEFAULT_PER_PAGE = int(os.environ.get('API_DEFAULT_PER_PAGE', 50))

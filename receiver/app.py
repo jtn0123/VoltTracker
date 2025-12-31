@@ -237,7 +237,14 @@ def finalize_trip(db, trip: Trip):
 
     if gas_entry:
         trip.gas_mode_entered = True
-        trip.gas_mode_entry_time = gas_entry.get('timestamp')
+        # Parse timestamp if it's a string (from to_dict())
+        entry_time = gas_entry.get('timestamp')
+        if isinstance(entry_time, str):
+            entry_time = datetime.fromisoformat(entry_time.replace('Z', '+00:00'))
+            # Convert to naive datetime for SQLite compatibility
+            if entry_time.tzinfo is not None:
+                entry_time = entry_time.replace(tzinfo=None)
+        trip.gas_mode_entry_time = entry_time
         trip.soc_at_gas_transition = gas_entry.get('state_of_charge')
         trip.fuel_level_at_gas_entry = gas_entry.get('fuel_level_percent')
         trip.fuel_level_at_end = telemetry[-1].fuel_level_percent

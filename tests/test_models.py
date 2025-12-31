@@ -773,5 +773,3 @@ class TestModelRelationships:
         assert fetched.trip is not None
         assert fetched.trip.id == trip.id
         assert str(fetched.trip.session_id) == str(session_id)
-
-
