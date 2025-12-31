@@ -43,6 +43,14 @@
 
     <!-- Main Content -->
     <main class="container">
+        <!-- Live Trip Section (hidden by default, shown when trip is active) -->
+        <section id="live-trip-section" class="card card-live" style="display:none;" role="region" aria-label="Live trip data">
+            <h2>Live Trip</h2>
+            <div id="live-trip-content">
+                <!-- Populated by JavaScript -->
+            </div>
+        </section>
+
         <!-- Summary Cards -->
         <section class="cards-grid" aria-label="Gas efficiency summary">
             <div class="card" role="region" aria-labelledby="lifetime-mpg-label">

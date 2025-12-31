@@ -759,6 +759,44 @@ def get_status() -> Response:
     })
 
 
+@app.route('/api/telemetry/latest', methods=['GET'])
+def get_latest_telemetry() -> Response:
+    """Get latest telemetry for real-time dashboard display."""
+    db = get_db()
+
+    # Get active trip
+    active_trip = db.query(Trip).filter(Trip.is_closed == False).first()
+    if not active_trip:
+        return jsonify({'active': False})
+
+    # Get last 10 telemetry points
+    recent = db.query(TelemetryRaw).filter(
+        TelemetryRaw.session_id == active_trip.session_id
+    ).order_by(desc(TelemetryRaw.timestamp)).limit(10).all()
+
+    if not recent:
+        return jsonify({'active': True, 'data': None})
+
+    latest = recent[0]
+    return jsonify({
+        'active': True,
+        'session_id': str(active_trip.session_id),
+        'start_time': active_trip.start_time.isoformat(),
+        'start_soc': float(active_trip.start_soc) if active_trip.start_soc else None,
+        'data': {
+            'timestamp': latest.timestamp.isoformat(),
+            'soc': float(latest.state_of_charge) if latest.state_of_charge else None,
+            'fuel_percent': float(latest.fuel_level_percent) if latest.fuel_level_percent else None,
+            'speed_mph': float(latest.speed_mph) if latest.speed_mph else None,
+            'engine_rpm': float(latest.engine_rpm) if latest.engine_rpm else None,
+            'latitude': float(latest.latitude) if latest.latitude else None,
+            'longitude': float(latest.longitude) if latest.longitude else None,
+            'odometer': float(latest.odometer_miles) if latest.odometer_miles else None
+        },
+        'point_count': len(recent)
+    })
+
+
 # ============================================================================
 # Export Endpoints
 # ============================================================================

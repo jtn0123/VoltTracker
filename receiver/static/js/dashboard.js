@@ -11,6 +11,7 @@ let tripMap = null;
 let currentTimeframe = 30;
 let dateFilter = { start: null, end: null };
 let flatpickrInstance = null;
+let liveRefreshInterval = null;
 
 // Initialize dashboard on load
 document.addEventListener('DOMContentLoaded', () => {
@@ -23,9 +24,16 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSocAnalysis();
     loadChargingSummary();
     loadChargingHistory();
+    loadLiveTelemetry();
 
     // Refresh status every 30 seconds
     setInterval(loadStatus, 30000);
+
+    // Check for live trip every 10 seconds
+    setInterval(loadLiveTelemetry, 10000);
+
+    // Auto-refresh trips every 60 seconds
+    setInterval(loadTrips, 60000);
 });
 
 /**
@@ -131,6 +139,89 @@ async function loadStatus() {
         console.error('Failed to load status:', error);
         document.getElementById('status-dot').classList.add('offline');
     }
+}
+
+/**
+ * Load live telemetry for active trip display
+ */
+async function loadLiveTelemetry() {
+    try {
+        const response = await fetch('/api/telemetry/latest');
+        const data = await response.json();
+
+        const liveSection = document.getElementById('live-trip-section');
+        const liveContent = document.getElementById('live-trip-content');
+
+        if (!liveSection || !liveContent) return;
+
+        if (data.active && data.data) {
+            liveSection.style.display = 'block';
+
+            const elapsed = getElapsedTime(data.start_time);
+            const lastUpdate = new Date(data.data.timestamp);
+            const secondsAgo = Math.floor((Date.now() - lastUpdate) / 1000);
+
+            // Determine engine status
+            const engineStatus = data.data.engine_rpm && data.data.engine_rpm > 100 ? 'ON' : 'OFF';
+            const engineClass = engineStatus === 'ON' ? 'engine-on' : 'engine-off';
+
+            liveContent.innerHTML = `
+                <div class="live-stats">
+                    <div class="stat">
+                        <span class="label">SOC</span>
+                        <span class="value">${data.data.soc?.toFixed(1) || '--'}%</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Fuel</span>
+                        <span class="value">${data.data.fuel_percent?.toFixed(1) || '--'}%</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Speed</span>
+                        <span class="value">${data.data.speed_mph?.toFixed(0) || '0'} mph</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">Engine</span>
+                        <span class="value ${engineClass}">${engineStatus}</span>
+                    </div>
+                </div>
+                <div class="live-meta">
+                    Trip started: ${elapsed} ago |
+                    Last update: ${secondsAgo}s ago |
+                    Points: ${data.point_count}
+                </div>
+            `;
+
+            // Start faster refresh when active (every 5 seconds)
+            if (!liveRefreshInterval) {
+                liveRefreshInterval = setInterval(loadLiveTelemetry, 5000);
+            }
+        } else {
+            liveSection.style.display = 'none';
+            // Clear faster refresh when no active trip
+            if (liveRefreshInterval) {
+                clearInterval(liveRefreshInterval);
+                liveRefreshInterval = null;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading live telemetry:', error);
+    }
+}
+
+/**
+ * Calculate elapsed time from a start timestamp
+ */
+function getElapsedTime(startTime) {
+    const start = new Date(startTime);
+    const now = new Date();
+    const diffMs = now - start;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+
+    if (diffHours > 0) {
+        return `${diffHours}h ${diffMins % 60}m`;
+    }
+    return `${diffMins}m`;
 }
 
 /**

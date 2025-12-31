@@ -1,5 +1,83 @@
 /* Volt Efficiency Tracker - Dark Theme */
 
+/* ============================================
+   Live Trip Section
+   ============================================ */
+#live-trip-section {
+    background: linear-gradient(135deg, #1a5f2a 0%, #2d8a3e 100%);
+    color: white;
+    margin-bottom: 1.5rem;
+    border: none;
+}
+
+#live-trip-section h2 {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#live-trip-section h2::before {
+    content: '🚗';
+}
+
+.live-stats {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.live-stats .stat {
+    text-align: center;
+    min-width: 80px;
+    padding: 0.5rem;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+}
+
+.live-stats .label {
+    display: block;
+    font-size: 0.8rem;
+    opacity: 0.85;
+    margin-bottom: 0.25rem;
+}
+
+.live-stats .value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.live-meta {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    text-align: center;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Live trip section responsive */
+@media (max-width: 480px) {
+    .live-stats {
+        gap: 0.5rem;
+    }
+
+    .live-stats .stat {
+        min-width: 70px;
+        padding: 0.4rem;
+    }
+
+    .live-stats .value {
+        font-size: 1.25rem;
+    }
+
+    .live-meta {
+        font-size: 0.75rem;
+    }
+}
+
 :root {
     --bg-primary: #1a1a2e;
     --bg-secondary: #16213e;
