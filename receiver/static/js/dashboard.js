@@ -16,6 +16,91 @@ let liveRefreshInterval = null;
 let socket = null;
 let useWebSocket = true;  // Will fallback to polling if WebSocket fails
 
+// Chart gradient helper
+function createGradient(ctx, colorStart, colorEnd) {
+    const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+    gradient.addColorStop(0, colorStart);
+    gradient.addColorStop(1, colorEnd);
+    return gradient;
+}
+
+// Desktop-responsive chart defaults
+function getChartDefaults() {
+    const isDesktop = window.innerWidth >= 1024;
+    return {
+        font: {
+            size: isDesktop ? 13 : 11,
+            family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+        },
+        tickFont: {
+            size: isDesktop ? 12 : 10
+        },
+        titleFont: {
+            size: isDesktop ? 14 : 12,
+            weight: '600'
+        }
+    };
+}
+
+// Enhanced tooltip configuration
+function getEnhancedTooltip(additionalCallbacks = {}) {
+    const defaults = getChartDefaults();
+    return {
+        backgroundColor: 'rgba(15, 52, 96, 0.95)',
+        titleColor: '#ffffff',
+        bodyColor: '#e0e0e0',
+        borderColor: 'rgba(50, 130, 184, 0.5)',
+        borderWidth: 1,
+        cornerRadius: 8,
+        padding: 12,
+        titleFont: { size: defaults.font.size, weight: '600' },
+        bodyFont: { size: defaults.font.size - 1 },
+        displayColors: true,
+        boxPadding: 4,
+        ...additionalCallbacks
+    };
+}
+
+// Enhanced legend configuration
+function getEnhancedLegend(display = true) {
+    const defaults = getChartDefaults();
+    return {
+        display: display,
+        position: 'top',
+        labels: {
+            color: '#b8b8b8',
+            font: { size: defaults.font.size },
+            padding: 16,
+            usePointStyle: true,
+            pointStyle: 'circle'
+        }
+    };
+}
+
+// Enhanced axis configuration
+function getEnhancedAxis(options = {}) {
+    const defaults = getChartDefaults();
+    return {
+        grid: {
+            color: 'rgba(255, 255, 255, 0.08)',
+            ...options.grid
+        },
+        ticks: {
+            color: '#b8b8b8',
+            font: { size: defaults.tickFont.size },
+            padding: 8,
+            ...options.ticks
+        },
+        title: options.title ? {
+            display: true,
+            font: defaults.titleFont,
+            padding: { top: 8, bottom: 8 },
+            ...options.title
+        } : undefined,
+        ...options
+    };
+}
+
 // Initialize dashboard on load
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
@@ -647,6 +732,9 @@ async function loadMpgTrend(days) {
             mpgChart.destroy();
         }
 
+        // Create gradient fill
+        const gradient = createGradient(ctx.getContext('2d'), 'rgba(50, 130, 184, 0.4)', 'rgba(50, 130, 184, 0.02)');
+
         mpgChart = new Chart(ctx, {
             type: 'line',
             data: {
@@ -655,58 +743,46 @@ async function loadMpgTrend(days) {
                     label: 'MPG',
                     data: data.map(d => d.mpg),
                     borderColor: '#3282b8',
-                    backgroundColor: 'rgba(50, 130, 184, 0.1)',
-                    borderWidth: 2,
+                    backgroundColor: gradient,
+                    borderWidth: 2.5,
                     fill: true,
-                    tension: 0.3,
-                    pointRadius: 4,
-                    pointBackgroundColor: '#3282b8'
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: '#3282b8',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
                 plugins: {
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        backgroundColor: '#0f3460',
-                        titleColor: '#ffffff',
-                        bodyColor: '#b8b8b8',
-                        borderColor: '#3282b8',
-                        borderWidth: 1,
+                    legend: getEnhancedLegend(false),
+                    tooltip: getEnhancedTooltip({
                         callbacks: {
                             label: (context) => {
                                 const point = data[context.dataIndex];
                                 return [
                                     `MPG: ${point.mpg}`,
-                                    `Miles: ${point.gas_miles}`,
+                                    `Miles: ${point.gas_miles.toFixed(1)} mi`,
                                     point.ambient_temp ? `Temp: ${point.ambient_temp}°F` : ''
                                 ].filter(Boolean);
                             }
                         }
-                    }
+                    })
                 },
                 scales: {
-                    x: {
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        },
-                        ticks: {
-                            color: '#b8b8b8'
-                        }
-                    },
-                    y: {
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        },
-                        ticks: {
-                            color: '#b8b8b8'
-                        },
+                    x: getEnhancedAxis(),
+                    y: getEnhancedAxis({
                         suggestedMin: 20,
-                        suggestedMax: 50
-                    }
+                        suggestedMax: 50,
+                        title: { text: 'MPG', color: '#3282b8' }
+                    })
                 }
             }
         });
@@ -1232,6 +1308,10 @@ function renderTripCharts(telemetry) {
     const speeds = telemetry.map(t => t.speed_mph);
     const socs = telemetry.map(t => t.state_of_charge);
 
+    // Create gradients
+    const speedGradient = createGradient(speedCtx.getContext('2d'), 'rgba(50, 130, 184, 0.4)', 'rgba(50, 130, 184, 0.02)');
+    const socGradient = createGradient(socCtx.getContext('2d'), 'rgba(40, 167, 69, 0.4)', 'rgba(40, 167, 69, 0.02)');
+
     // Speed chart
     if (tripSpeedChart) tripSpeedChart.destroy();
     tripSpeedChart = new Chart(speedCtx, {
@@ -1242,22 +1322,25 @@ function renderTripCharts(telemetry) {
                 label: 'Speed (MPH)',
                 data: speeds,
                 borderColor: '#3282b8',
-                backgroundColor: 'rgba(50, 130, 184, 0.1)',
+                backgroundColor: speedGradient,
                 borderWidth: 2,
                 fill: true,
-                tension: 0.3,
-                pointRadius: 0
+                tension: 0.4,
+                pointRadius: 0,
+                pointHoverRadius: 4
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { display: true, position: 'top', labels: { color: '#b8b8b8' } }
+                legend: getEnhancedLegend(true),
+                tooltip: getEnhancedTooltip()
             },
             scales: {
                 x: { display: false },
-                y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#b8b8b8' } }
+                y: getEnhancedAxis({ title: { text: 'MPH', color: '#3282b8' } })
             }
         }
     });
@@ -1272,22 +1355,25 @@ function renderTripCharts(telemetry) {
                 label: 'Battery SOC (%)',
                 data: socs,
                 borderColor: '#28a745',
-                backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                backgroundColor: socGradient,
                 borderWidth: 2,
                 fill: true,
-                tension: 0.3,
-                pointRadius: 0
+                tension: 0.4,
+                pointRadius: 0,
+                pointHoverRadius: 4
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { display: true, position: 'top', labels: { color: '#b8b8b8' } }
+                legend: getEnhancedLegend(true),
+                tooltip: getEnhancedTooltip()
             },
             scales: {
                 x: { display: false },
-                y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#b8b8b8' }, min: 0, max: 100 }
+                y: getEnhancedAxis({ min: 0, max: 100, title: { text: 'SOC %', color: '#28a745' } })
             }
         }
     });
@@ -1365,6 +1451,9 @@ function renderSocHistogram(histogram) {
         socChart.destroy();
     }
 
+    // Create gradient for bars
+    const barGradient = createGradient(ctx.getContext('2d'), 'rgba(50, 130, 184, 0.9)', 'rgba(50, 130, 184, 0.5)');
+
     socChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -1372,42 +1461,32 @@ function renderSocHistogram(histogram) {
             datasets: [{
                 label: 'Transitions',
                 data: values,
-                backgroundColor: '#3282b8',
-                borderRadius: 4
+                backgroundColor: barGradient,
+                borderColor: 'rgba(50, 130, 184, 0.8)',
+                borderWidth: 1,
+                borderRadius: 6,
+                hoverBackgroundColor: '#3282b8'
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    backgroundColor: '#0f3460',
-                    titleColor: '#ffffff',
-                    bodyColor: '#b8b8b8'
-                }
+                legend: getEnhancedLegend(false),
+                tooltip: getEnhancedTooltip({
+                    callbacks: {
+                        title: (items) => `SOC: ${items[0].label}`,
+                        label: (context) => `${context.parsed.y} transition${context.parsed.y !== 1 ? 's' : ''}`
+                    }
+                })
             },
             scales: {
-                x: {
-                    grid: {
-                        display: false
-                    },
-                    ticks: {
-                        color: '#b8b8b8'
-                    }
-                },
-                y: {
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    },
-                    ticks: {
-                        color: '#b8b8b8',
-                        stepSize: 1
-                    },
-                    beginAtZero: true
-                }
+                x: getEnhancedAxis({ grid: { display: false } }),
+                y: getEnhancedAxis({
+                    beginAtZero: true,
+                    ticks: { stepSize: 1 },
+                    title: { text: 'Frequency', color: '#b8b8b8' }
+                })
             }
         }
     });
@@ -2299,6 +2378,11 @@ function renderChargingCurveChart(curveData) {
     const powerData = curve.map(d => d.power_kw);
     const socData = curve.map(d => d.soc);
 
+    // Create gradients
+    const powerGradient = createGradient(ctx.getContext('2d'), 'rgba(39, 174, 96, 0.4)', 'rgba(39, 174, 96, 0.02)');
+    const socGradient = createGradient(ctx.getContext('2d'), 'rgba(50, 130, 184, 0.3)', 'rgba(50, 130, 184, 0.02)');
+    const defaults = getChartDefaults();
+
     chargingCurveChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -2308,22 +2392,24 @@ function renderChargingCurveChart(curveData) {
                     label: 'Power (kW)',
                     data: powerData,
                     borderColor: '#27ae60',
-                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
-                    borderWidth: 2,
+                    backgroundColor: powerGradient,
+                    borderWidth: 2.5,
                     fill: true,
-                    tension: 0.3,
+                    tension: 0.4,
                     pointRadius: 0,
+                    pointHoverRadius: 4,
                     yAxisID: 'y'
                 },
                 {
                     label: 'SOC (%)',
                     data: socData,
                     borderColor: '#3282b8',
-                    backgroundColor: 'rgba(50, 130, 184, 0.1)',
-                    borderWidth: 2,
-                    fill: false,
-                    tension: 0.3,
+                    backgroundColor: socGradient,
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.4,
                     pointRadius: 0,
+                    pointHoverRadius: 4,
                     yAxisID: 'y1'
                 }
             ]
@@ -2336,25 +2422,25 @@ function renderChargingCurveChart(curveData) {
                 intersect: false,
             },
             plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                    labels: { color: '#b8b8b8' }
-                },
-                tooltip: {
-                    backgroundColor: '#0f3460',
-                    titleColor: '#ffffff',
-                    bodyColor: '#b8b8b8',
-                    borderColor: '#3282b8',
-                    borderWidth: 1,
-                }
+                legend: getEnhancedLegend(true),
+                tooltip: getEnhancedTooltip({
+                    callbacks: {
+                        label: (context) => {
+                            const label = context.dataset.label || '';
+                            const value = context.parsed.y;
+                            if (label.includes('Power')) {
+                                return `${label}: ${value.toFixed(1)} kW`;
+                            }
+                            return `${label}: ${value.toFixed(0)}%`;
+                        }
+                    }
+                })
             },
             scales: {
-                x: {
+                x: getEnhancedAxis({
                     display: true,
-                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                    ticks: { color: '#b8b8b8', maxTicksLimit: 8 }
-                },
+                    ticks: { maxTicksLimit: 8 }
+                }),
                 y: {
                     type: 'linear',
                     display: true,
@@ -2362,10 +2448,11 @@ function renderChargingCurveChart(curveData) {
                     title: {
                         display: true,
                         text: 'Power (kW)',
-                        color: '#27ae60'
+                        color: '#27ae60',
+                        font: defaults.titleFont
                     },
-                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                    ticks: { color: '#27ae60' },
+                    grid: { color: 'rgba(255, 255, 255, 0.08)' },
+                    ticks: { color: '#27ae60', font: { size: defaults.tickFont.size }, padding: 8 },
                     min: 0
                 },
                 y1: {
@@ -2375,10 +2462,11 @@ function renderChargingCurveChart(curveData) {
                     title: {
                         display: true,
                         text: 'SOC (%)',
-                        color: '#3282b8'
+                        color: '#3282b8',
+                        font: defaults.titleFont
                     },
                     grid: { drawOnChartArea: false },
-                    ticks: { color: '#3282b8' },
+                    ticks: { color: '#3282b8', font: { size: defaults.tickFont.size }, padding: 8 },
                     min: 0,
                     max: 100
                 }
