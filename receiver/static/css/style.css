@@ -286,24 +286,77 @@
 @media (max-width: 600px) {
     .power-flow-diagram {
         flex-direction: column;
-        gap: 0.5rem;
+        gap: var(--space-sm);
+        padding: var(--space-md);
+    }
+
+    .power-source, .power-dest {
+        min-width: unset;
+        width: 100%;
+        padding: var(--space-md);
     }
 
     .power-arrow {
         transform: rotate(90deg);
+        padding: var(--space-xs) 0;
     }
 
     .power-arrow.reverse .arrow-icon {
         transform: rotate(180deg) scaleX(1);
     }
 
+    .arrow-icon {
+        font-size: var(--font-xl);
+    }
+
+    .power-label {
+        font-size: var(--font-xs);
+    }
+
+    .power-stats {
+        font-size: var(--font-xs);
+    }
+
+    .powertrain-stats {
+        gap: var(--space-sm);
+    }
+
     .powertrain-row {
-        flex-wrap: wrap;
-        gap: 0.5rem;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-sm);
     }
 
     .powertrain-item {
-        min-width: calc(50% - 0.5rem);
+        min-width: unset;
+        padding: var(--space-sm);
+    }
+
+    .powertrain-item.powertrain-temps {
+        grid-column: span 2;
+    }
+
+    .powertrain-label {
+        font-size: var(--font-xs);
+    }
+
+    .powertrain-value {
+        font-size: var(--font-base);
+    }
+}
+
+/* Extra small screens */
+@media (max-width: 380px) {
+    .power-flow-container {
+        gap: var(--space-sm);
+    }
+
+    .power-bar-container {
+        height: 8px;
+    }
+
+    .powertrain-value {
+        font-size: var(--font-sm);
     }
 }
 
