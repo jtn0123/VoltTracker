@@ -389,6 +389,13 @@ def torque_upload():
                     Trip.session_id == data['session_id']
                 ).first()
 
+        # Update trip start values if they were null initially
+        if trip:
+            if trip.start_soc is None and data['state_of_charge'] is not None:
+                trip.start_soc = data['state_of_charge']
+            if trip.start_odometer is None and data['odometer_miles'] is not None:
+                trip.start_odometer = data['odometer_miles']
+
         # Store telemetry
         telemetry = TelemetryRaw(
             session_id=data['session_id'],
@@ -764,25 +771,35 @@ def get_latest_telemetry() -> Response:
     """Get latest telemetry for real-time dashboard display."""
     db = get_db()
 
-    # Get active trip
-    active_trip = db.query(Trip).filter(Trip.is_closed == False).first()
-    if not active_trip:
+    # Find the most recent telemetry point to identify the active trip
+    latest_telemetry = db.query(TelemetryRaw).order_by(
+        desc(TelemetryRaw.timestamp)
+    ).first()
+
+    if not latest_telemetry:
         return jsonify({'active': False})
 
-    # Get last 10 telemetry points
+    # Check if the latest data is recent (within timeout period)
+    cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS)
+    if latest_telemetry.timestamp < cutoff_time:
+        return jsonify({'active': False})
+
+    # Get the trip for this session
+    active_trip = db.query(Trip).filter(
+        Trip.session_id == latest_telemetry.session_id
+    ).first()
+
+    # Get last 10 telemetry points for this session
     recent = db.query(TelemetryRaw).filter(
-        TelemetryRaw.session_id == active_trip.session_id
+        TelemetryRaw.session_id == latest_telemetry.session_id
     ).order_by(desc(TelemetryRaw.timestamp)).limit(10).all()
 
-    if not recent:
-        return jsonify({'active': True, 'data': None})
-
-    latest = recent[0]
+    latest = recent[0] if recent else latest_telemetry
     return jsonify({
         'active': True,
-        'session_id': str(active_trip.session_id),
-        'start_time': active_trip.start_time.isoformat(),
-        'start_soc': float(active_trip.start_soc) if active_trip.start_soc else None,
+        'session_id': str(latest_telemetry.session_id),
+        'start_time': active_trip.start_time.isoformat() if active_trip else None,
+        'start_soc': float(active_trip.start_soc) if active_trip and active_trip.start_soc else None,
         'data': {
             'timestamp': latest.timestamp.isoformat(),
             'soc': float(latest.state_of_charge) if latest.state_of_charge else None,
