@@ -16,9 +16,10 @@ os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 os.environ['FLASK_TESTING'] = 'true'
 
 from app import app as flask_app, Session, engine, cache, init_cache
-from models import Base, TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession
+from models import Base, TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession, BatteryCellReading
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from datetime import timedelta
 
 
 @pytest.fixture
@@ -138,3 +139,158 @@ def sample_soc_transitions():
         {'soc_at_transition': 18.0, 'ambient_temp_f': 55.0, 'timestamp': datetime.now(timezone.utc)},
         {'soc_at_transition': 17.2, 'ambient_temp_f': 80.0, 'timestamp': datetime.now(timezone.utc)},
     ]
+
+
+# ============================================================================
+# Scheduler Test Fixtures
+# ============================================================================
+
+@pytest.fixture
+def stale_trip(db_session):
+    """Create a trip with telemetry older than TRIP_TIMEOUT_SECONDS."""
+    from config import Config
+
+    session_id = uuid.uuid4()
+    old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
+
+    trip = Trip(
+        session_id=session_id,
+        start_time=old_time,
+        start_odometer=50000.0,
+        start_soc=80.0,
+        is_closed=False,
+    )
+    db_session.add(trip)
+
+    # Add old telemetry
+    telemetry = TelemetryRaw(
+        session_id=session_id,
+        timestamp=old_time,
+        odometer_miles=50000.0,
+        state_of_charge=80.0,
+        speed_mph=45.0,
+    )
+    db_session.add(telemetry)
+    db_session.commit()
+
+    return trip
+
+
+@pytest.fixture
+def active_trip(db_session):
+    """Create a trip with recent telemetry (still active)."""
+    session_id = uuid.uuid4()
+    recent_time = datetime.now(timezone.utc) - timedelta(seconds=30)
+
+    trip = Trip(
+        session_id=session_id,
+        start_time=recent_time,
+        start_odometer=50000.0,
+        start_soc=85.0,
+        is_closed=False,
+    )
+    db_session.add(trip)
+
+    telemetry = TelemetryRaw(
+        session_id=session_id,
+        timestamp=recent_time,
+        odometer_miles=50010.0,
+        state_of_charge=75.0,
+        speed_mph=55.0,
+    )
+    db_session.add(telemetry)
+    db_session.commit()
+
+    return trip
+
+
+@pytest.fixture
+def refuel_telemetry(db_session):
+    """Create telemetry data showing a fuel level jump (refuel event)."""
+    session_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    # Before refuel
+    before = TelemetryRaw(
+        session_id=session_id,
+        timestamp=now - timedelta(hours=2),
+        fuel_level_percent=25.0,
+        odometer_miles=50000.0,
+    )
+
+    # After refuel (60% jump)
+    after = TelemetryRaw(
+        session_id=session_id,
+        timestamp=now - timedelta(hours=1),
+        fuel_level_percent=85.0,
+        odometer_miles=50000.0,
+    )
+
+    db_session.add(before)
+    db_session.add(after)
+    db_session.commit()
+
+    return {'before': before, 'after': after}
+
+
+@pytest.fixture
+def charging_telemetry(db_session):
+    """Create telemetry data showing active charging."""
+    session_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    telemetry_points = []
+    for i in range(10):
+        point = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(minutes=i * 10),
+            charger_connected=True,
+            charger_power_kw=6.6,
+            state_of_charge=30.0 + (i * 5),
+            latitude=37.7749,
+            longitude=-122.4194,
+        )
+        telemetry_points.append(point)
+        db_session.add(point)
+
+    db_session.commit()
+
+    return telemetry_points
+
+
+# ============================================================================
+# Security Test Fixtures
+# ============================================================================
+
+@pytest.fixture
+def app_with_auth(app, monkeypatch):
+    """App configured with authentication enabled."""
+    monkeypatch.setattr('config.Config.DASHBOARD_PASSWORD', 'test_password')
+    monkeypatch.setattr('config.Config.DASHBOARD_USER', 'test_user')
+    return app
+
+
+@pytest.fixture
+def app_with_token(app, monkeypatch):
+    """App configured with Torque API token."""
+    monkeypatch.setattr('config.Config.TORQUE_API_TOKEN', 'test_token_12345')
+    return app
+
+
+# ============================================================================
+# Battery Test Fixtures
+# ============================================================================
+
+@pytest.fixture
+def sample_cell_voltages():
+    """Generate sample cell voltages for 96-cell pack."""
+    # Normal voltages around 3.7V with slight variation
+    return [3.7 + (i % 10) * 0.005 for i in range(96)]
+
+
+@pytest.fixture
+def imbalanced_cell_voltages():
+    """Cell voltages with one weak cell."""
+    voltages = [3.75] * 96
+    voltages[42] = 3.60  # One weak cell
+    return voltages
