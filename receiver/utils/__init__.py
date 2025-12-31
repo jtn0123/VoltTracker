@@ -13,6 +13,13 @@ from .calculations import (
     calculate_kwh_per_mile,
     detect_charging_session,
 )
+from .timezone import (
+    utc_now,
+    normalize_datetime,
+    ensure_utc,
+    is_before,
+    is_after,
+)
 
 __all__ = [
     'TorqueParser',
@@ -26,4 +33,9 @@ __all__ = [
     'calculate_electric_kwh',
     'calculate_kwh_per_mile',
     'detect_charging_session',
+    'utc_now',
+    'normalize_datetime',
+    'ensure_utc',
+    'is_before',
+    'is_after',
 ]

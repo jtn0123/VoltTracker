@@ -15,7 +15,11 @@ from utils.calculations import (  # noqa: E402
     calculate_electric_miles,
     calculate_average_temp,
     analyze_soc_floor,
+    calculate_electric_kwh,
+    calculate_kwh_per_mile,
+    detect_charging_session,
 )
+from datetime import datetime, timedelta
 
 
 class TestSmoothFuelLevel:
@@ -544,3 +548,231 @@ class TestTemperatureEdgeCases:
         result = calculate_average_temp(points)
         # Should only average the one valid reading
         assert result == 70.0
+
+
+class TestCalculateElectricKwh:
+    """Tests for calculate_electric_kwh function."""
+
+    def test_kwh_from_power_readings(self):
+        """Calculate kWh from HV battery power data."""
+        now = datetime.utcnow()
+        points = [
+            {'timestamp': now, 'hv_battery_power_kw': 10.0},
+            {'timestamp': now + timedelta(hours=1), 'hv_battery_power_kw': 10.0},
+        ]
+        result = calculate_electric_kwh(points)
+        # 1 hour at 10kW = 10 kWh
+        assert result == 10.0
+
+    def test_kwh_ignores_negative_power_readings(self):
+        """Negative power (regen) is not counted as consumption."""
+        now = datetime.utcnow()
+        points = [
+            {'timestamp': now, 'hv_battery_power_kw': -5.0},  # Regen
+            {'timestamp': now + timedelta(hours=1), 'hv_battery_power_kw': -5.0},
+        ]
+        result = calculate_electric_kwh(points)
+        # Negative power means charging/regen, should return None or 0
+        assert result is None
+
+    def test_kwh_handles_string_timestamps(self):
+        """ISO format string timestamps are parsed correctly."""
+        now = datetime.utcnow()
+        points = [
+            {'timestamp': now.isoformat(), 'hv_battery_power_kw': 15.0},
+            {'timestamp': (now + timedelta(hours=0.5)).isoformat(), 'hv_battery_power_kw': 15.0},
+        ]
+        result = calculate_electric_kwh(points)
+        # 0.5 hours at 15kW = 7.5 kWh
+        assert result == 7.5
+
+    def test_kwh_calculates_time_delta_correctly(self):
+        """Time intervals are correctly calculated."""
+        now = datetime.utcnow()
+        points = [
+            {'timestamp': now, 'hv_battery_power_kw': 20.0},
+            {'timestamp': now + timedelta(minutes=15), 'hv_battery_power_kw': 20.0},
+        ]
+        result = calculate_electric_kwh(points)
+        # 0.25 hours at 20kW = 5 kWh
+        assert result == 5.0
+
+    def test_kwh_from_soc_when_no_power_data(self):
+        """Calculate kWh from SOC change when power data unavailable."""
+        points = [
+            {'state_of_charge': 80.0},  # No power data
+            {'state_of_charge': 60.0},
+        ]
+        result = calculate_electric_kwh(points)
+        # 20% of 18.4 kWh battery = 3.68 kWh
+        assert result == pytest.approx(3.68, rel=0.1)
+
+    def test_kwh_returns_none_when_soc_increases(self):
+        """Return None when SOC increases (charging, not driving)."""
+        points = [
+            {'state_of_charge': 60.0},
+            {'state_of_charge': 80.0},  # Charging
+        ]
+        result = calculate_electric_kwh(points)
+        assert result is None
+
+    def test_kwh_uses_battery_capacity_constant(self):
+        """Uses correct battery capacity for Volt."""
+        points = [
+            {'state_of_charge': 100.0},
+            {'state_of_charge': 50.0},
+        ]
+        result = calculate_electric_kwh(points)
+        # 50% of 18.4 kWh = 9.2 kWh
+        assert result == pytest.approx(9.2, rel=0.1)
+
+    def test_kwh_returns_none_for_single_point(self):
+        """Need at least 2 points for calculation."""
+        points = [{'state_of_charge': 80.0}]
+        result = calculate_electric_kwh(points)
+        assert result is None
+
+    def test_kwh_returns_none_for_empty_list(self):
+        """Empty point list returns None."""
+        result = calculate_electric_kwh([])
+        assert result is None
+
+    def test_kwh_prefers_power_method_over_soc(self):
+        """When power data available, use it instead of SOC."""
+        now = datetime.utcnow()
+        points = [
+            {'timestamp': now, 'hv_battery_power_kw': 10.0, 'state_of_charge': 80.0},
+            {'timestamp': now + timedelta(hours=1), 'hv_battery_power_kw': 10.0, 'state_of_charge': 70.0},
+        ]
+        result = calculate_electric_kwh(points)
+        # Should use power method: 1 hour at 10kW = 10 kWh
+        # SOC method would give: 10% of 18.4 = 1.84 kWh
+        assert result == 10.0
+
+
+class TestCalculateKwhPerMile:
+    """Tests for calculate_kwh_per_mile function."""
+
+    def test_kwh_per_mile_normal_calculation(self):
+        """Normal efficiency calculation."""
+        result = calculate_kwh_per_mile(kwh_used=5.0, electric_miles=15.0)
+        # 5.0 / 15.0 = 0.333
+        assert result == pytest.approx(0.333, rel=0.01)
+
+    def test_kwh_per_mile_returns_none_under_half_mile(self):
+        """Minimum distance threshold is 0.5 miles."""
+        result = calculate_kwh_per_mile(kwh_used=0.1, electric_miles=0.4)
+        assert result is None
+
+    def test_kwh_per_mile_exactly_half_mile(self):
+        """Exactly 0.5 miles should return a value."""
+        result = calculate_kwh_per_mile(kwh_used=0.2, electric_miles=0.5)
+        assert result is not None
+        assert result == 0.4
+
+    def test_kwh_per_mile_returns_none_for_none_kwh(self):
+        """None kWh returns None."""
+        result = calculate_kwh_per_mile(kwh_used=None, electric_miles=10.0)
+        assert result is None
+
+    def test_kwh_per_mile_returns_none_for_none_miles(self):
+        """None miles returns None."""
+        result = calculate_kwh_per_mile(kwh_used=5.0, electric_miles=None)
+        assert result is None
+
+    def test_kwh_per_mile_rounds_to_three_decimals(self):
+        """Result is rounded to 3 decimal places."""
+        result = calculate_kwh_per_mile(kwh_used=1.0, electric_miles=3.0)
+        # 1.0 / 3.0 = 0.333333...
+        assert result == 0.333
+
+
+class TestDetectChargingSession:
+    """Tests for detect_charging_session function."""
+
+    def test_detects_active_charging(self):
+        """Detect when charger is connected and power flowing."""
+        points = [
+            {'charger_connected': True, 'charger_ac_power_kw': 6.6, 'state_of_charge': 50.0},
+            {'charger_connected': True, 'charger_ac_power_kw': 6.6, 'state_of_charge': 55.0},
+        ]
+        result = detect_charging_session(points)
+        assert result is not None
+        assert result['is_charging'] is True
+
+    def test_returns_none_when_not_charging(self):
+        """Return None when charger not connected."""
+        points = [
+            {'charger_connected': False, 'state_of_charge': 50.0},
+            {'charger_connected': False, 'state_of_charge': 50.0},
+        ]
+        result = detect_charging_session(points)
+        assert result is None
+
+    def test_returns_none_when_power_below_threshold(self):
+        """Return None when power below minimum threshold."""
+        points = [
+            {'charger_connected': True, 'charger_ac_power_kw': 0.3, 'state_of_charge': 50.0},
+        ]
+        result = detect_charging_session(points)
+        assert result is None
+
+    def test_classifies_l1_charging(self):
+        """Power under 1.2 kW is L1."""
+        points = [
+            {'charger_connected': True, 'charger_ac_power_kw': 1.0, 'state_of_charge': 50.0},
+        ]
+        result = detect_charging_session(points)
+        assert result['charge_type'] == 'L1'
+
+    def test_classifies_l1_high_charging(self):
+        """Power 1.2-6.0 kW is L1-high."""
+        points = [
+            {'charger_connected': True, 'charger_ac_power_kw': 3.3, 'state_of_charge': 50.0},
+        ]
+        result = detect_charging_session(points)
+        assert result['charge_type'] == 'L1-high'
+
+    def test_classifies_l2_charging(self):
+        """Power over 6.0 kW is L2."""
+        points = [
+            {'charger_connected': True, 'charger_ac_power_kw': 7.2, 'state_of_charge': 50.0},
+        ]
+        result = detect_charging_session(points)
+        assert result['charge_type'] == 'L2'
+
+    def test_calculates_peak_and_avg_power(self):
+        """Peak and average power are calculated."""
+        points = [
+            {'charger_connected': True, 'charger_ac_power_kw': 6.0, 'state_of_charge': 50.0},
+            {'charger_connected': True, 'charger_ac_power_kw': 7.0, 'state_of_charge': 55.0},
+            {'charger_connected': True, 'charger_ac_power_kw': 6.5, 'state_of_charge': 60.0},
+        ]
+        result = detect_charging_session(points)
+        assert result['peak_power_kw'] == 7.0
+        assert result['avg_power_kw'] == pytest.approx(6.5, rel=0.01)
+
+    def test_tracks_soc_range(self):
+        """Start and current SOC are tracked."""
+        points = [
+            {'charger_connected': True, 'charger_ac_power_kw': 6.6, 'state_of_charge': 30.0},
+            {'charger_connected': True, 'charger_ac_power_kw': 6.6, 'state_of_charge': 50.0},
+            {'charger_connected': True, 'charger_ac_power_kw': 6.6, 'state_of_charge': 70.0},
+        ]
+        result = detect_charging_session(points)
+        assert result['start_soc'] == 30.0
+        assert result['current_soc'] == 70.0
+
+    def test_handles_empty_telemetry(self):
+        """Empty telemetry list returns None."""
+        result = detect_charging_session([])
+        assert result is None
+
+    def test_handles_missing_power_data(self):
+        """Charger connected but no power data."""
+        points = [
+            {'charger_connected': True, 'state_of_charge': 50.0},
+        ]
+        result = detect_charging_session(points)
+        # No power readings means not actively charging
+        assert result is None

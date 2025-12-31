@@ -37,6 +37,8 @@ from utils import (
     calculate_electric_kwh,
     calculate_kwh_per_mile,
     detect_charging_session,
+    utc_now,
+    normalize_datetime,
 )
 from utils.weather import get_weather_for_location, get_weather_impact_factor
 
@@ -72,7 +74,7 @@ init_cache(app)
 # Initialize SocketIO for real-time updates
 socketio = SocketIO(
     app,
-    cors_allowed_origins="*",
+    cors_allowed_origins=Config.CORS_ALLOWED_ORIGINS,
     async_mode='gevent',
     logger=False,
     engineio_logger=False
@@ -170,8 +172,7 @@ def close_stale_trips():
     """
     db = get_db()
     try:
-        # Use naive UTC time for comparison (works with both SQLite and PostgreSQL)
-        cutoff_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS)
+        cutoff_time = utc_now() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS)
 
         # Find open trips with no recent telemetry
         open_trips = db.query(Trip).filter(
@@ -185,10 +186,8 @@ def close_stale_trips():
             ).order_by(desc(TelemetryRaw.timestamp)).first()
 
             if latest:
-                # Normalize timestamp for comparison (handle both naive and aware)
-                latest_ts = latest.timestamp
-                if latest_ts.tzinfo is not None:
-                    latest_ts = latest_ts.replace(tzinfo=None)
+                # normalize_datetime handles both naive and timezone-aware datetimes
+                latest_ts = normalize_datetime(latest.timestamp)
 
                 if latest_ts < cutoff_time:
                     logger.info(f"Closing stale trip {trip.id} (session: {trip.session_id})")
@@ -241,10 +240,7 @@ def finalize_trip(db, trip: Trip):
         entry_time = gas_entry.get('timestamp')
         if isinstance(entry_time, str):
             entry_time = datetime.fromisoformat(entry_time.replace('Z', '+00:00'))
-            # Convert to naive datetime for SQLite compatibility
-            if entry_time.tzinfo is not None:
-                entry_time = entry_time.replace(tzinfo=None)
-        trip.gas_mode_entry_time = entry_time
+        trip.gas_mode_entry_time = normalize_datetime(entry_time)
         trip.soc_at_gas_transition = gas_entry.get('state_of_charge')
         trip.fuel_level_at_gas_entry = gas_entry.get('fuel_level_percent')
         trip.fuel_level_at_end = telemetry[-1].fuel_level_percent
@@ -720,14 +716,12 @@ def get_efficiency_summary():
         ev_ratio = round(total_electric_miles / total_miles * 100, 1)
 
     # Last 30 days stats
-    # Use naive datetime since trip.start_time may be naive or aware
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = utc_now() - timedelta(days=30)
     recent_trips = []
     for t in closed_trips:
         if not t.start_time:
             continue
-        # Handle both naive and aware datetimes
-        trip_time = t.start_time.replace(tzinfo=None) if t.start_time.tzinfo else t.start_time
+        trip_time = normalize_datetime(t.start_time)
         if trip_time >= thirty_days_ago:
             recent_trips.append(t)
 
@@ -744,13 +738,12 @@ def get_efficiency_summary():
     current_tank_mpg = None
     current_tank_miles = None
     if last_refuel:
-        # Handle timezone comparison
-        refuel_time = last_refuel.timestamp.replace(tzinfo=None) if last_refuel.timestamp.tzinfo else last_refuel.timestamp
+        refuel_time = normalize_datetime(last_refuel.timestamp)
         tank_trips = []
         for t in closed_trips:
             if not t.start_time:
                 continue
-            trip_time = t.start_time.replace(tzinfo=None) if t.start_time.tzinfo else t.start_time
+            trip_time = normalize_datetime(t.start_time)
             if trip_time >= refuel_time:
                 tank_trips.append(t)
 

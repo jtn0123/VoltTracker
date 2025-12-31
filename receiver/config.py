@@ -47,6 +47,12 @@ class Config:
     DASHBOARD_PASSWORD = os.environ.get('DASHBOARD_PASSWORD')  # Required in production
     RATE_LIMIT_ENABLED = os.environ.get('RATE_LIMIT_ENABLED', 'true').lower() == 'true'
 
+    # CORS - WebSocket allowed origins
+    # Default allows local development and common private network ranges
+    # Set CORS_ALLOWED_ORIGINS env var to comma-separated list for custom origins
+    _default_cors = "http://localhost:*,http://127.0.0.1:*,http://192.168.*:*,http://10.*:*"
+    CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', _default_cors).split(',')
+
     # Validation Thresholds
     MIN_MPG = float(os.environ.get('MIN_MPG', 10))
     MAX_MPG = float(os.environ.get('MAX_MPG', 100))

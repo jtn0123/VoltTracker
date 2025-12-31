@@ -9,6 +9,8 @@ from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import TypeDecorator
 import uuid as uuid_module
 
+from config import Config
+
 
 Base = declarative_base()
 
