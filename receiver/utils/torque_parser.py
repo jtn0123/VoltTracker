@@ -5,7 +5,7 @@ from typing import Optional
 import uuid
 import logging
 
-from receiver.config import Config
+from config import Config
 
 logger = logging.getLogger(__name__)
 
