@@ -19,7 +19,7 @@ import atexit
 from config import Config
 from models import (
     Base, TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession,
-    BatteryCellReading, get_engine
+    BatteryCellReading, BatteryHealthReading, get_engine
 )
 from utils import (
     TorqueParser,
@@ -1513,7 +1513,7 @@ def update_charging_session(session_id):
 
 @app.route('/api/charging/summary', methods=['GET'])
 def get_charging_summary():
-    """Get charging statistics summary."""
+    """Get charging statistics summary with cost analysis."""
     db = get_db()
 
     sessions = db.query(ChargingSession).filter(
@@ -1524,27 +1524,53 @@ def get_charging_summary():
     trips = db.query(Trip).filter(Trip.is_closed == True).all()
     total_miles = sum(t.distance_miles or 0 for t in trips)
     total_electric_miles = sum(t.electric_miles or 0 for t in trips)
+    total_gas_miles = sum(t.gas_miles or 0 for t in trips)
+    total_fuel_used = sum(t.fuel_used_gallons or 0 for t in trips if t.fuel_used_gallons)
 
     # Calculate EV ratio
     ev_ratio = None
     if total_miles > 0:
         ev_ratio = round((total_electric_miles / total_miles) * 100, 1)
 
+    # Get configured rates
+    electricity_rate = Config.ELECTRICITY_COST_PER_KWH
+    gas_rate = Config.GAS_COST_PER_GALLON
+
     if not sessions:
         return jsonify({
             'total_sessions': 0,
             'total_kwh': 0,
             'total_cost': None,
+            'estimated_cost': None,
             'avg_kwh_per_session': None,
             'by_charge_type': {},
             'total_electric_miles': round(total_electric_miles, 1) if total_electric_miles else None,
             'ev_ratio': ev_ratio,
             'l1_sessions': 0,
             'l2_sessions': 0,
+            'cost_per_mile_electric': None,
+            'cost_per_mile_gas': None,
+            'electricity_rate': electricity_rate,
+            'gas_rate': gas_rate,
         })
 
     total_kwh = sum(s.kwh_added or 0 for s in sessions)
-    total_cost = sum(s.cost or 0 for s in sessions if s.cost)
+    # Sum explicit costs
+    explicit_cost = sum(s.cost or 0 for s in sessions if s.cost)
+    # Estimate cost for sessions without explicit cost
+    estimated_cost = total_kwh * electricity_rate
+    # Use explicit if available, otherwise estimated
+    total_cost = explicit_cost if explicit_cost > 0 else estimated_cost
+
+    # Calculate cost per mile (electric)
+    cost_per_mile_electric = None
+    if total_electric_miles > 0 and total_kwh > 0:
+        cost_per_mile_electric = round((total_kwh * electricity_rate) / total_electric_miles, 3)
+
+    # Calculate cost per mile (gas)
+    cost_per_mile_gas = None
+    if total_gas_miles > 0 and total_fuel_used > 0:
+        cost_per_mile_gas = round((total_fuel_used * gas_rate) / total_gas_miles, 3)
 
     # Group by charge type and count L1/L2
     by_type = {}
@@ -1562,16 +1588,127 @@ def get_charging_summary():
         elif ctype == 'L2':
             l2_count += 1
 
+    # Calculate monthly stats (last 30 days)
+    month_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    monthly_sessions = [s for s in sessions if s.start_time and s.start_time >= month_ago]
+    monthly_kwh = sum(s.kwh_added or 0 for s in monthly_sessions)
+    monthly_cost = monthly_kwh * electricity_rate
+
     return jsonify({
         'total_sessions': len(sessions),
         'total_kwh': round(total_kwh, 2),
         'total_cost': round(total_cost, 2) if total_cost else None,
+        'estimated_cost': round(estimated_cost, 2),
+        'has_explicit_costs': explicit_cost > 0,
         'avg_kwh_per_session': round(total_kwh / len(sessions), 2) if sessions else None,
         'by_charge_type': by_type,
         'total_electric_miles': round(total_electric_miles, 1) if total_electric_miles else None,
+        'total_gas_miles': round(total_gas_miles, 1) if total_gas_miles else None,
         'ev_ratio': ev_ratio,
         'l1_sessions': l1_count,
         'l2_sessions': l2_count,
+        'cost_per_mile_electric': cost_per_mile_electric,
+        'cost_per_mile_gas': cost_per_mile_gas,
+        'electricity_rate': electricity_rate,
+        'gas_rate': gas_rate,
+        'monthly_kwh': round(monthly_kwh, 2),
+        'monthly_cost': round(monthly_cost, 2),
+        'monthly_sessions': len(monthly_sessions),
+    })
+
+
+# ============================================================================
+# Battery Health Endpoints
+# ============================================================================
+
+@app.route('/api/battery/health', methods=['GET'])
+def get_battery_health():
+    """
+    Get battery health and degradation analysis.
+
+    Returns current capacity, original capacity, percentage remaining,
+    and yearly degradation trend based on available data.
+    """
+    db = get_db()
+
+    # Original Gen 2 Volt battery capacity
+    original_capacity = Config.BATTERY_ORIGINAL_CAPACITY_KWH
+
+    # Get battery health readings if any exist
+    readings = db.query(BatteryHealthReading).order_by(
+        desc(BatteryHealthReading.timestamp)
+    ).limit(100).all()
+
+    # Also check telemetry for battery_capacity_kwh data
+    telemetry_capacity = db.query(
+        func.avg(TelemetryRaw.battery_capacity_kwh).label('avg_capacity'),
+        func.max(TelemetryRaw.battery_capacity_kwh).label('max_capacity'),
+        func.min(TelemetryRaw.battery_capacity_kwh).label('min_capacity'),
+        func.count(TelemetryRaw.battery_capacity_kwh).label('count')
+    ).filter(
+        TelemetryRaw.battery_capacity_kwh.isnot(None),
+        TelemetryRaw.battery_capacity_kwh > 0
+    ).first()
+
+    current_capacity = None
+    capacity_readings_count = 0
+    health_percent = None
+
+    # Prefer dedicated health readings, fall back to telemetry
+    if readings:
+        # Use most recent normalized reading
+        latest_reading = readings[0]
+        current_capacity = latest_reading.normalized_capacity_kwh or latest_reading.capacity_kwh
+        capacity_readings_count = len(readings)
+    elif telemetry_capacity and telemetry_capacity.count and telemetry_capacity.count > 0:
+        # Use average from telemetry
+        current_capacity = float(telemetry_capacity.avg_capacity)
+        capacity_readings_count = telemetry_capacity.count
+
+    if current_capacity:
+        health_percent = round((current_capacity / original_capacity) * 100, 1)
+
+    # Calculate trend if we have enough historical data
+    yearly_trend = None
+    if readings and len(readings) >= 10:
+        # Get readings from ~1 year ago and compare
+        one_year_ago = datetime.now(timezone.utc) - timedelta(days=365)
+        old_readings = [r for r in readings if r.timestamp and r.timestamp < one_year_ago]
+        recent_readings = readings[:10]  # Most recent 10
+
+        if old_readings and recent_readings:
+            old_avg = sum(
+                r.normalized_capacity_kwh or r.capacity_kwh or 0 for r in old_readings
+            ) / len(old_readings)
+            recent_avg = sum(
+                r.normalized_capacity_kwh or r.capacity_kwh or 0 for r in recent_readings
+            ) / len(recent_readings)
+
+            if old_avg > 0:
+                yearly_change = ((recent_avg - old_avg) / old_avg) * 100
+                yearly_trend = round(yearly_change, 2)
+
+    # Determine health status
+    health_status = 'unknown'
+    if health_percent:
+        if health_percent >= 90:
+            health_status = 'excellent'
+        elif health_percent >= 80:
+            health_status = 'good'
+        elif health_percent >= 70:
+            health_status = 'fair'
+        else:
+            health_status = 'degraded'
+
+    return jsonify({
+        'current_capacity_kwh': round(current_capacity, 2) if current_capacity else None,
+        'original_capacity_kwh': original_capacity,
+        'health_percent': health_percent,
+        'health_status': health_status,
+        'yearly_trend_percent': yearly_trend,
+        'readings_count': capacity_readings_count,
+        'has_data': capacity_readings_count > 0,
+        'degradation_warning_threshold': Config.BATTERY_DEGRADATION_WARNING_PERCENT
     })
 
 

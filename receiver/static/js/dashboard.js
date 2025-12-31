@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadChargingSummary();
     loadChargingHistory();
     loadLiveTelemetry();
+    loadBatteryHealth();
 
     // Refresh status every 30 seconds
     setInterval(loadStatus, 30000);
@@ -151,6 +152,7 @@ async function loadLiveTelemetry() {
 
         const liveSection = document.getElementById('live-trip-section');
         const liveContent = document.getElementById('live-trip-content');
+        const powerFlowSection = document.getElementById('power-flow-section');
 
         if (!liveSection || !liveContent) return;
 
@@ -200,12 +202,18 @@ async function loadLiveTelemetry() {
                 </div>
             `;
 
+            // Update Power Flow section if data available
+            updatePowerFlow(data.data, powerFlowSection);
+
             // Start faster refresh when active (every 5 seconds)
             if (!liveRefreshInterval) {
                 liveRefreshInterval = setInterval(loadLiveTelemetry, 5000);
             }
         } else {
             liveSection.style.display = 'none';
+            if (powerFlowSection) {
+                powerFlowSection.style.display = 'none';
+            }
             // Clear faster refresh when no active trip
             if (liveRefreshInterval) {
                 clearInterval(liveRefreshInterval);
@@ -214,6 +222,149 @@ async function loadLiveTelemetry() {
         }
     } catch (error) {
         console.error('Error loading live telemetry:', error);
+    }
+}
+
+/**
+ * Update Power Flow visualization
+ */
+function updatePowerFlow(telemetry, section) {
+    if (!section) return;
+
+    // Check if we have any power flow related data
+    const hasPowerData = telemetry.hv_battery_power_kw !== null ||
+                         telemetry.hv_battery_voltage_v !== null ||
+                         telemetry.motor_a_rpm !== null ||
+                         telemetry.engine_rpm > 500;
+
+    if (!hasPowerData) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+
+    // Get power values
+    const powerKw = telemetry.hv_battery_power_kw;
+    const voltage = telemetry.hv_battery_voltage_v;
+    const current = telemetry.hv_battery_current_a;
+    const soc = telemetry.soc || 0;
+
+    // Determine power mode
+    let mode = 'idle';
+    let modeLabel = 'Idle';
+    let powerDisplay = '0.0 kW';
+
+    if (powerKw !== null) {
+        if (powerKw > 0.5) {
+            mode = 'discharging';
+            modeLabel = 'Driving';
+            powerDisplay = `${powerKw.toFixed(1)} kW`;
+        } else if (powerKw < -0.5) {
+            mode = 'regenerating';
+            modeLabel = 'Regen';
+            powerDisplay = `${Math.abs(powerKw).toFixed(1)} kW`;
+        } else {
+            mode = 'idle';
+            modeLabel = 'Idle';
+            powerDisplay = '0.0 kW';
+        }
+    }
+
+    // Check if charging (based on charger status or low speed with negative power)
+    if (telemetry.charger_status > 0 || (powerKw < -1 && telemetry.speed_mph < 1)) {
+        mode = 'charging';
+        modeLabel = 'Charging';
+    }
+
+    // Update battery bar (based on SOC)
+    const batteryBar = document.getElementById('battery-bar');
+    if (batteryBar) {
+        batteryBar.style.width = `${soc}%`;
+        batteryBar.className = `power-bar ${mode}`;
+    }
+
+    // Update battery stats
+    const batteryStats = document.getElementById('battery-stats');
+    if (batteryStats) {
+        let statsText = [];
+        if (voltage !== null) statsText.push(`${voltage.toFixed(0)}V`);
+        if (current !== null) statsText.push(`${current.toFixed(1)}A`);
+        batteryStats.textContent = statsText.join(', ') || '-- V, -- A';
+    }
+
+    // Update power display
+    const powerKwEl = document.getElementById('power-kw');
+    if (powerKwEl) {
+        powerKwEl.textContent = powerDisplay;
+    }
+
+    // Update mode display
+    const powerModeEl = document.getElementById('power-mode');
+    if (powerModeEl) {
+        powerModeEl.textContent = modeLabel;
+        powerModeEl.className = `power-mode ${mode}`;
+    }
+
+    // Update arrow direction
+    const powerDirection = document.getElementById('power-direction');
+    if (powerDirection) {
+        if (mode === 'regenerating' || mode === 'charging') {
+            powerDirection.classList.add('reverse');
+            powerDirection.classList.remove('active');
+        } else if (mode === 'discharging') {
+            powerDirection.classList.add('active');
+            powerDirection.classList.remove('reverse');
+        } else {
+            powerDirection.classList.remove('active', 'reverse');
+        }
+    }
+
+    // Update motor RPMs
+    const motorARpm = document.getElementById('motor-a-rpm');
+    if (motorARpm) {
+        motorARpm.textContent = telemetry.motor_a_rpm !== null ?
+            `${Math.round(telemetry.motor_a_rpm).toLocaleString()} RPM` : '-- RPM';
+    }
+
+    const motorBRpm = document.getElementById('motor-b-rpm');
+    if (motorBRpm) {
+        motorBRpm.textContent = telemetry.motor_b_rpm !== null ?
+            `${Math.round(telemetry.motor_b_rpm).toLocaleString()} RPM` : '-- RPM';
+    }
+
+    // Update generator RPM
+    const generatorRpm = document.getElementById('generator-rpm');
+    if (generatorRpm) {
+        generatorRpm.textContent = telemetry.generator_rpm !== null ?
+            `${Math.round(telemetry.generator_rpm).toLocaleString()} RPM` : '-- RPM';
+    }
+
+    // Update engine status
+    const engineStatus = document.getElementById('engine-status');
+    if (engineStatus) {
+        const engineOn = telemetry.engine_rpm > 500;
+        engineStatus.textContent = engineOn ? `ON (${Math.round(telemetry.engine_rpm)} RPM)` : 'OFF';
+        engineStatus.className = `powertrain-value ${engineOn ? 'engine-on' : 'engine-off'}`;
+    }
+
+    // Update motor temps if available
+    const motorTempsRow = document.getElementById('motor-temps-row');
+    const motorTemps = document.getElementById('motor-temps');
+    if (motorTempsRow && motorTemps) {
+        const temps = [
+            telemetry.motor_temp_1_f,
+            telemetry.motor_temp_2_f,
+            telemetry.motor_temp_3_f,
+            telemetry.motor_temp_4_f
+        ].filter(t => t !== null && t !== undefined);
+
+        if (temps.length > 0) {
+            motorTempsRow.style.display = 'flex';
+            motorTemps.textContent = temps.map(t => `${Math.round(t)}°F`).join(' / ');
+        } else {
+            motorTempsRow.style.display = 'none';
+        }
     }
 }
 
@@ -946,15 +1097,20 @@ async function loadChargingSummary() {
             document.getElementById('charging-sessions').textContent = 'No charging data';
         }
 
-        // Average kWh per session
+        // Average kWh per session with cost info
         const avgKwh = document.getElementById('avg-kwh-session');
         if (data.avg_kwh_per_session) {
             avgKwh.innerHTML = `${data.avg_kwh_per_session.toFixed(1)}<span class="card-unit">kWh</span>`;
-            if (data.total_cost) {
+            // Show monthly cost if available
+            if (data.monthly_cost) {
+                const costLabel = data.has_explicit_costs ? '' : '~';
                 document.getElementById('charging-cost').textContent =
-                    `$${data.total_cost.toFixed(2)} total cost`;
+                    `${costLabel}$${data.monthly_cost.toFixed(2)}/month`;
+            } else if (data.total_cost) {
+                document.getElementById('charging-cost').textContent =
+                    `$${data.total_cost.toFixed(2)} total`;
             } else {
-                document.getElementById('charging-cost').textContent = 'Cost not tracked';
+                document.getElementById('charging-cost').textContent = `$${data.electricity_rate}/kWh rate`;
             }
         } else {
             avgKwh.textContent = '--';
@@ -985,8 +1141,138 @@ async function loadChargingSummary() {
             document.getElementById('l2-sessions').textContent = data.l2_sessions;
         }
 
+        // Update cost comparison section if it exists
+        updateCostComparison(data);
+
     } catch (error) {
         console.error('Failed to load charging summary:', error);
+    }
+}
+
+/**
+ * Update cost comparison display
+ */
+function updateCostComparison(data) {
+    const section = document.getElementById('cost-comparison-section');
+    if (!section) return;
+
+    // Only show if we have cost data
+    const hasCostData = data.cost_per_mile_electric || data.cost_per_mile_gas;
+    if (!hasCostData) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+
+    // Update electric cost per mile
+    const electricCost = document.getElementById('cost-per-mile-electric');
+    if (electricCost && data.cost_per_mile_electric) {
+        electricCost.textContent = `$${data.cost_per_mile_electric.toFixed(3)}`;
+    } else if (electricCost) {
+        electricCost.textContent = '--';
+    }
+
+    // Update gas cost per mile
+    const gasCost = document.getElementById('cost-per-mile-gas');
+    if (gasCost && data.cost_per_mile_gas) {
+        gasCost.textContent = `$${data.cost_per_mile_gas.toFixed(3)}`;
+    } else if (gasCost) {
+        gasCost.textContent = '--';
+    }
+
+    // Update savings
+    const savingsEl = document.getElementById('cost-savings');
+    if (savingsEl && data.cost_per_mile_electric && data.cost_per_mile_gas) {
+        const savings = data.cost_per_mile_gas - data.cost_per_mile_electric;
+        const savingsPercent = ((savings / data.cost_per_mile_gas) * 100).toFixed(0);
+        if (savings > 0) {
+            savingsEl.textContent = `Save $${savings.toFixed(3)}/mi (${savingsPercent}%)`;
+            savingsEl.className = 'cost-savings positive';
+        } else {
+            savingsEl.textContent = `Gas cheaper by $${Math.abs(savings).toFixed(3)}/mi`;
+            savingsEl.className = 'cost-savings negative';
+        }
+    } else if (savingsEl) {
+        savingsEl.textContent = 'Compare when data available';
+        savingsEl.className = 'cost-savings';
+    }
+}
+
+/**
+ * Load battery health data
+ */
+async function loadBatteryHealth() {
+    try {
+        const response = await fetch('/api/battery/health');
+        const data = await response.json();
+
+        const section = document.getElementById('battery-health-section');
+        if (!section) return;
+
+        // Only show if we have data
+        if (!data.has_data) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+
+        // Update capacity display
+        const capacityEl = document.getElementById('battery-health-capacity');
+        if (capacityEl && data.current_capacity_kwh) {
+            capacityEl.textContent = data.current_capacity_kwh.toFixed(1);
+        }
+
+        // Update original capacity
+        const originalEl = document.getElementById('battery-health-original');
+        if (originalEl && data.original_capacity_kwh) {
+            originalEl.textContent = data.original_capacity_kwh.toFixed(1);
+        }
+
+        // Update health percent
+        const percentEl = document.getElementById('battery-health-percent');
+        if (percentEl && data.health_percent) {
+            percentEl.textContent = `${data.health_percent}% capacity`;
+        }
+
+        // Update status badge
+        const statusEl = document.getElementById('battery-health-status');
+        if (statusEl && data.health_status) {
+            statusEl.textContent = data.health_status.charAt(0).toUpperCase() + data.health_status.slice(1);
+            statusEl.className = `battery-health-status ${data.health_status}`;
+        }
+
+        // Update health bar
+        const barEl = document.getElementById('battery-health-bar');
+        if (barEl && data.health_percent) {
+            barEl.style.width = `${data.health_percent}%`;
+            // Set bar color based on health
+            if (data.health_percent >= 80) {
+                barEl.className = 'battery-health-bar good';
+            } else if (data.health_percent >= 70) {
+                barEl.className = 'battery-health-bar fair';
+            } else {
+                barEl.className = 'battery-health-bar degraded';
+            }
+        }
+
+        // Update trend
+        const trendEl = document.getElementById('battery-health-trend');
+        if (trendEl) {
+            if (data.yearly_trend_percent !== null && data.yearly_trend_percent !== undefined) {
+                const sign = data.yearly_trend_percent >= 0 ? '+' : '';
+                const direction = data.yearly_trend_percent >= 0 ? 'positive' : 'negative';
+                trendEl.textContent = `${sign}${data.yearly_trend_percent}% this year`;
+                trendEl.className = `battery-health-trend ${direction}`;
+            } else {
+                trendEl.textContent = 'Trend data not yet available';
+                trendEl.className = 'battery-health-trend';
+            }
+        }
+
+    } catch (error) {
+        console.error('Failed to load battery health:', error);
     }
 }
 

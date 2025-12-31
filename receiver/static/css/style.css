@@ -991,6 +991,158 @@ body {
 }
 
 /* ============================================
+   Battery Health Card
+   ============================================ */
+.battery-health-section {
+    margin-bottom: 2rem;
+}
+
+.card-battery-health {
+    background: linear-gradient(135deg, #1a3a5c 0%, #0d2840 100%);
+    border: 1px solid rgba(0, 212, 170, 0.3);
+    color: white;
+}
+
+.battery-health-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.battery-health-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #00d4aa;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.battery-health-header h3::before {
+    content: '🔋';
+}
+
+.battery-health-status {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.battery-health-status.excellent {
+    background-color: rgba(0, 212, 170, 0.2);
+    color: #00d4aa;
+}
+
+.battery-health-status.good {
+    background-color: rgba(40, 167, 69, 0.2);
+    color: #28a745;
+}
+
+.battery-health-status.fair {
+    background-color: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+.battery-health-status.degraded {
+    background-color: rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+}
+
+.battery-health-status.unknown {
+    background-color: rgba(108, 117, 125, 0.2);
+    color: #6c757d;
+}
+
+.battery-health-visual {
+    margin-bottom: 1rem;
+}
+
+.battery-health-bar-container {
+    height: 16px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+}
+
+.battery-health-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+    border-radius: 8px;
+    width: 0%;
+    transition: width 0.5s ease, background 0.5s ease;
+}
+
+.battery-health-bar.good {
+    background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+}
+
+.battery-health-bar.fair {
+    background: linear-gradient(90deg, #ffc107 0%, #e6a700 100%);
+}
+
+.battery-health-bar.degraded {
+    background: linear-gradient(90deg, #dc3545 0%, #c82333 100%);
+}
+
+.battery-health-stats {
+    text-align: center;
+}
+
+.battery-health-main {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.battery-health-value {
+    color: #00d4aa;
+}
+
+.battery-health-original {
+    font-size: 1rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.battery-health-percent {
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 0.25rem;
+}
+
+.battery-health-trend {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.battery-health-trend.positive {
+    color: #00d4aa;
+}
+
+.battery-health-trend.negative {
+    color: #dc3545;
+}
+
+/* Battery health responsive */
+@media (max-width: 600px) {
+    .battery-health-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .battery-health-main {
+        font-size: 1.25rem;
+    }
+}
+
+/* ============================================
    Modal
    ============================================ */
 .modal {

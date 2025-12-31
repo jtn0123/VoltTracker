@@ -162,6 +162,29 @@
             </div>
         </section>
 
+        <!-- Battery Health Card (hidden until data exists) -->
+        <section id="battery-health-section" class="battery-health-section" style="display:none;" aria-labelledby="battery-health-title">
+            <div class="card card-battery-health" role="region" aria-labelledby="battery-health-title">
+                <div class="battery-health-header">
+                    <h3 id="battery-health-title">Battery Health</h3>
+                    <span class="battery-health-status" id="battery-health-status">--</span>
+                </div>
+                <div class="battery-health-visual">
+                    <div class="battery-health-bar-container">
+                        <div class="battery-health-bar" id="battery-health-bar"></div>
+                    </div>
+                </div>
+                <div class="battery-health-stats">
+                    <div class="battery-health-main">
+                        <span class="battery-health-value" id="battery-health-capacity">--</span>
+                        <span class="battery-health-original">/ <span id="battery-health-original">18.4</span> kWh</span>
+                    </div>
+                    <div class="battery-health-percent" id="battery-health-percent">--% capacity</div>
+                    <div class="battery-health-trend" id="battery-health-trend"></div>
+                </div>
+            </div>
+        </section>
+
         <!-- MPG Trend Chart -->
         <section class="chart-section" aria-labelledby="mpg-chart-title">
             <div class="chart-header">
