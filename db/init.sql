@@ -6,8 +6,9 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 -- Table: telemetry_raw
 -- Stores every data point received from Torque Pro
+-- Note: Primary key includes timestamp for TimescaleDB hypertable compatibility
 CREATE TABLE telemetry_raw (
-    id BIGSERIAL PRIMARY KEY,
+    id BIGSERIAL NOT NULL,
     session_id UUID NOT NULL,
     timestamp TIMESTAMPTZ NOT NULL,
     latitude DECIMAL(9,6),
@@ -30,8 +31,48 @@ CREATE TABLE telemetry_raw (
     -- Charging status
     charger_ac_power_kw DECIMAL(6,2),
     charger_connected BOOLEAN,
+
+    -- Expanded HV Battery fields
+    hv_discharge_amps FLOAT,
+    battery_temp_f FLOAT,
+    battery_coolant_temp_f FLOAT,
+
+    -- Expanded charging fields
+    charger_status FLOAT,
+    charger_power_kw FLOAT,
+    charger_power_w FLOAT,
+    charger_ac_voltage FLOAT,
+    charger_ac_current FLOAT,
+    charger_hv_voltage FLOAT,
+    charger_hv_current FLOAT,
+    last_charge_wh FLOAT,
+
+    -- Motor/Generator fields
+    motor_a_rpm FLOAT,
+    motor_b_rpm FLOAT,
+    generator_rpm FLOAT,
+    motor_temp_max_f FLOAT,
+
+    -- Engine detail fields
+    engine_oil_temp_f FLOAT,
+    engine_torque_nm FLOAT,
+    engine_running BOOLEAN,
+    transmission_temp_f FLOAT,
+
+    -- Battery health
+    battery_capacity_kwh FLOAT,
+
+    -- Lifetime counters
+    lifetime_ev_miles FLOAT,
+    lifetime_gas_miles FLOAT,
+    lifetime_fuel_gal FLOAT,
+    lifetime_kwh FLOAT,
+    dte_electric_miles FLOAT,
+    dte_gas_miles FLOAT,
+
     raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (id, timestamp)
 );
 
 CREATE INDEX idx_telemetry_timestamp ON telemetry_raw(timestamp);
@@ -72,12 +113,21 @@ CREATE TABLE trips (
     ambient_temp_avg_f DECIMAL(5,1),
     is_closed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Weather data (from Open-Meteo API)
+    weather_temp_f DECIMAL(5,1),
+    weather_precipitation_in DECIMAL(5,3),
+    weather_wind_mph DECIMAL(5,1),
+    weather_conditions VARCHAR(50),
+    weather_impact_factor DECIMAL(4,3)
 );
 
 CREATE INDEX idx_trips_start_time ON trips(start_time);
 CREATE INDEX idx_trips_gas_mode ON trips(gas_mode_entered);
 CREATE INDEX idx_trips_is_closed ON trips(is_closed);
+CREATE INDEX idx_trips_weather_conditions ON trips(weather_conditions);
+CREATE INDEX idx_trips_weather_temp ON trips(weather_temp_f);
 
 -- Table: fuel_events
 -- Tracks refueling events for tank-based efficiency calculations
@@ -131,15 +181,33 @@ CREATE TABLE charging_sessions (
     -- Cost tracking
     cost DECIMAL(6,2),
     cost_per_kwh DECIMAL(6,4),
+    electricity_rate FLOAT,
     notes TEXT,
     -- Status
     is_complete BOOLEAN DEFAULT FALSE,
+    -- Charging curve data
+    charging_curve JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_charging_sessions_start_time ON charging_sessions(start_time);
 CREATE INDEX idx_charging_sessions_is_complete ON charging_sessions(is_complete);
+
+-- Table: battery_health_readings
+-- Tracks battery degradation over time
+CREATE TABLE battery_health_readings (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMPTZ NOT NULL,
+    capacity_kwh FLOAT,
+    normalized_capacity_kwh FLOAT,
+    soc_at_reading FLOAT,
+    ambient_temp_f FLOAT,
+    odometer_miles FLOAT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_battery_health_timestamp ON battery_health_readings(timestamp);
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

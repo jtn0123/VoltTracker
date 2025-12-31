@@ -26,10 +26,11 @@ class TestCloseStaleTrips:
 
     def test_close_stale_trip_after_timeout(self, app, db_session):
         """Trip with no telemetry for > TRIP_TIMEOUT_SECONDS gets closed."""
-        from app import close_stale_trips
+        from app import close_stale_trips, Session
 
         session_id = uuid.uuid4()
-        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        # Use naive datetime to match SQLite behavior in tests
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
 
         # Create an open trip
         trip = Trip(
@@ -40,6 +41,7 @@ class TestCloseStaleTrips:
             is_closed=False,
         )
         db_session.add(trip)
+        trip_id = None
 
         # Add old telemetry
         telemetry = TelemetryRaw(
@@ -50,21 +52,21 @@ class TestCloseStaleTrips:
         )
         db_session.add(telemetry)
         db_session.commit()
+        trip_id = trip.id
 
         # Run the job
         close_stale_trips()
 
-        # Refresh and check
-        db_session.expire_all()
-        updated_trip = db_session.query(Trip).filter(Trip.id == trip.id).first()
+        # Query with fresh session since scheduler uses its own
+        updated_trip = Session().query(Trip).filter(Trip.id == trip_id).first()
         assert updated_trip.is_closed is True
 
     def test_open_trip_with_recent_telemetry_stays_open(self, app, db_session):
         """Trip with recent telemetry (<TRIP_TIMEOUT_SECONDS) remains open."""
-        from app import close_stale_trips
+        from app import close_stale_trips, Session
 
         session_id = uuid.uuid4()
-        recent_time = datetime.now(timezone.utc) - timedelta(seconds=30)
+        recent_time = datetime.utcnow() - timedelta(seconds=30)
 
         trip = Trip(
             session_id=session_id,
@@ -81,19 +83,19 @@ class TestCloseStaleTrips:
         )
         db_session.add(telemetry)
         db_session.commit()
+        trip_id = trip.id
 
         close_stale_trips()
 
-        db_session.expire_all()
-        updated_trip = db_session.query(Trip).filter(Trip.id == trip.id).first()
+        updated_trip = Session().query(Trip).filter(Trip.id == trip_id).first()
         assert updated_trip.is_closed is False
 
     def test_finalize_trip_calculates_distance(self, app, db_session):
         """Closed trip has distance_miles calculated from odometer."""
-        from app import close_stale_trips
+        from app import close_stale_trips, Session
 
         session_id = uuid.uuid4()
-        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
 
         trip = Trip(
             session_id=session_id,
@@ -119,20 +121,20 @@ class TestCloseStaleTrips:
         db_session.add(telemetry_start)
         db_session.add(telemetry_end)
         db_session.commit()
+        trip_id = trip.id
 
         close_stale_trips()
 
-        db_session.expire_all()
-        updated_trip = db_session.query(Trip).filter(Trip.id == trip.id).first()
+        updated_trip = Session().query(Trip).filter(Trip.id == trip_id).first()
         assert updated_trip.distance_miles == 25.0
         assert updated_trip.end_odometer == 50025.0
 
     def test_finalize_trip_detects_gas_mode_entry(self, app, db_session):
         """Trip that entered gas mode has gas_mode_entered=True."""
-        from app import close_stale_trips
+        from app import close_stale_trips, Session
 
         session_id = uuid.uuid4()
-        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
 
         trip = Trip(
             session_id=session_id,
@@ -164,20 +166,20 @@ class TestCloseStaleTrips:
         db_session.add(telemetry_electric)
         db_session.add(telemetry_gas)
         db_session.commit()
+        trip_id = trip.id
 
         close_stale_trips()
 
-        db_session.expire_all()
-        updated_trip = db_session.query(Trip).filter(Trip.id == trip.id).first()
+        updated_trip = Session().query(Trip).filter(Trip.id == trip_id).first()
         assert updated_trip.gas_mode_entered is True
         assert updated_trip.soc_at_gas_transition is not None
 
     def test_finalize_trip_records_soc_transition(self, app, db_session):
         """SocTransition record created when gas mode detected."""
-        from app import close_stale_trips
+        from app import close_stale_trips, Session
 
         session_id = uuid.uuid4()
-        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
 
         trip = Trip(
             session_id=session_id,
@@ -209,22 +211,22 @@ class TestCloseStaleTrips:
         db_session.add(telemetry1)
         db_session.add(telemetry2)
         db_session.commit()
+        trip_id = trip.id
 
         close_stale_trips()
 
-        db_session.expire_all()
-        transitions = db_session.query(SocTransition).filter(
-            SocTransition.trip_id == trip.id
+        transitions = Session().query(SocTransition).filter(
+            SocTransition.trip_id == trip_id
         ).all()
         assert len(transitions) >= 1
         assert transitions[0].soc_at_transition is not None
 
     def test_finalize_trip_handles_empty_telemetry(self, app, db_session):
         """Trip with no telemetry points is marked closed but no stats."""
-        from app import close_stale_trips
+        from app import close_stale_trips, Session
 
         session_id = uuid.uuid4()
-        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
 
         trip = Trip(
             session_id=session_id,
@@ -234,12 +236,12 @@ class TestCloseStaleTrips:
         )
         db_session.add(trip)
         db_session.commit()
+        trip_id = trip.id
 
         # No telemetry added - trip will stay open (no telemetry means no timeout check)
         close_stale_trips()
 
-        db_session.expire_all()
-        updated_trip = db_session.query(Trip).filter(Trip.id == trip.id).first()
+        updated_trip = Session().query(Trip).filter(Trip.id == trip_id).first()
         # Without telemetry, there's nothing to timeout against
         assert updated_trip is not None
 
@@ -252,10 +254,10 @@ class TestCloseStaleTrips:
 
     def test_finalize_trip_electric_only(self, app, db_session):
         """Electric-only trip has electric_miles equal to distance_miles."""
-        from app import close_stale_trips
+        from app import close_stale_trips, Session
 
         session_id = uuid.uuid4()
-        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
 
         trip = Trip(
             session_id=session_id,
@@ -284,11 +286,11 @@ class TestCloseStaleTrips:
         db_session.add(telemetry1)
         db_session.add(telemetry2)
         db_session.commit()
+        trip_id = trip.id
 
         close_stale_trips()
 
-        db_session.expire_all()
-        updated_trip = db_session.query(Trip).filter(Trip.id == trip.id).first()
+        updated_trip = Session().query(Trip).filter(Trip.id == trip_id).first()
         assert updated_trip.is_closed is True
         assert updated_trip.gas_mode_entered is False
         assert updated_trip.electric_miles == updated_trip.distance_miles
@@ -489,10 +491,10 @@ class TestCheckChargingSessions:
 
     def test_detect_charging_creates_session(self, app, db_session):
         """Charger connected with power creates ChargingSession."""
-        from app import check_charging_sessions
+        from app import check_charging_sessions, Session
 
         session_id = uuid.uuid4()
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
 
         # Add charging telemetry
         telemetry = TelemetryRaw(
@@ -509,29 +511,29 @@ class TestCheckChargingSessions:
 
         check_charging_sessions()
 
-        sessions = db_session.query(ChargingSession).all()
+        sessions = Session().query(ChargingSession).all()
         # May or may not create session depending on detect_charging_session logic
         # The key is it doesn't error
 
     def test_closes_session_when_charger_disconnects(self, app, db_session):
         """Session marked complete when charger_connected=False."""
-        from app import check_charging_sessions
+        from app import check_charging_sessions, Session
 
         # Create an active session
         session = ChargingSession(
-            start_time=datetime.now(timezone.utc) - timedelta(hours=2),
+            start_time=datetime.utcnow() - timedelta(hours=2),
             start_soc=30.0,
             is_complete=False,
         )
         db_session.add(session)
         db_session.commit()
+        session_id = session.id
 
         # No charger connected telemetry (empty or disconnected)
         check_charging_sessions()
 
-        db_session.expire_all()
-        updated = db_session.query(ChargingSession).filter(
-            ChargingSession.id == session.id
+        updated = Session().query(ChargingSession).filter(
+            ChargingSession.id == session_id
         ).first()
         assert updated.is_complete is True
 
@@ -542,7 +544,7 @@ class TestCheckChargingSessions:
         session_id = uuid.uuid4()
         telemetry = TelemetryRaw(
             session_id=session_id,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.utcnow(),
             charger_connected=False,
         )
         db_session.add(telemetry)
@@ -553,36 +555,36 @@ class TestCheckChargingSessions:
 
     def test_calculates_kwh_added(self, app, db_session):
         """kwh_added calculated from SOC change on session close."""
-        from app import check_charging_sessions
+        from app import check_charging_sessions, Session
 
         # Create an active session with SOC data
         session = ChargingSession(
-            start_time=datetime.now(timezone.utc) - timedelta(hours=2),
+            start_time=datetime.utcnow() - timedelta(hours=2),
             start_soc=30.0,
             end_soc=80.0,  # Gained 50%
             is_complete=False,
         )
         db_session.add(session)
         db_session.commit()
+        session_id = session.id
 
         # Trigger close by running check with no active charger
         check_charging_sessions()
 
-        db_session.expire_all()
-        updated = db_session.query(ChargingSession).filter(
-            ChargingSession.id == session.id
+        updated = Session().query(ChargingSession).filter(
+            ChargingSession.id == session_id
         ).first()
 
         if updated.is_complete:
-            expected_kwh = (80.0 - 30.0) / 100 * Config.BATTERY_CAPACITY_KWH
+            # Either kwh_added calculated or end_soc is set
             assert updated.kwh_added is not None or updated.end_soc is not None
 
     def test_updates_existing_active_session(self, app, db_session):
         """Ongoing charging updates existing ChargingSession."""
-        from app import check_charging_sessions
+        from app import check_charging_sessions, Session
 
-        session_id = uuid.uuid4()
-        now = datetime.now(timezone.utc)
+        telem_session_id = uuid.uuid4()
+        now = datetime.utcnow()
 
         # Create active session
         session = ChargingSession(
@@ -594,7 +596,7 @@ class TestCheckChargingSessions:
 
         # Add charging telemetry
         telemetry = TelemetryRaw(
-            session_id=session_id,
+            session_id=telem_session_id,
             timestamp=now,
             charger_connected=True,
             charger_power_kw=6.6,
@@ -606,5 +608,5 @@ class TestCheckChargingSessions:
         check_charging_sessions()
 
         # Session should still exist
-        sessions = db_session.query(ChargingSession).all()
+        sessions = Session().query(ChargingSession).all()
         assert len(sessions) >= 1
