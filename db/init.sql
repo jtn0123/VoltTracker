@@ -112,6 +112,8 @@ CREATE TABLE trips (
     -- Metadata
     ambient_temp_avg_f DECIMAL(5,1),
     is_closed BOOLEAN DEFAULT FALSE,
+    is_imported BOOLEAN DEFAULT FALSE,
+    deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
@@ -126,6 +128,8 @@ CREATE TABLE trips (
 CREATE INDEX idx_trips_start_time ON trips(start_time);
 CREATE INDEX idx_trips_gas_mode ON trips(gas_mode_entered);
 CREATE INDEX idx_trips_is_closed ON trips(is_closed);
+CREATE INDEX idx_trips_is_imported ON trips(is_imported);
+CREATE INDEX idx_trips_deleted_at ON trips(deleted_at);
 CREATE INDEX idx_trips_weather_conditions ON trips(weather_conditions);
 CREATE INDEX idx_trips_weather_temp ON trips(weather_temp_f);
 

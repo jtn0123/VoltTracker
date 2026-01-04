@@ -8,6 +8,8 @@ import io
 import csv
 import os
 import logging
+from datetime import datetime
+from pathlib import Path
 from flask import Blueprint, request, jsonify, Response
 from sqlalchemy import desc
 
@@ -15,6 +17,9 @@ from database import get_db
 from exceptions import CSVImportError
 from models import Trip, FuelEvent, SocTransition, ChargingSession, TelemetryRaw
 from utils import utc_now
+
+# Backup directory for imported CSV files
+CSV_BACKUP_DIR = Path(os.environ.get('CSV_BACKUP_DIR', '/app/backups/csv-imports'))
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +237,18 @@ def import_csv():
     try:
         # Read and parse CSV
         csv_content = file.read().decode('utf-8')
+
+        # Backup original CSV file
+        try:
+            CSV_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            safe_filename = "".join(c for c in file.filename if c.isalnum() or c in '._-')
+            backup_path = CSV_BACKUP_DIR / f"{timestamp}_{safe_filename}"
+            backup_path.write_text(csv_content, encoding='utf-8')
+            logger.info(f"Backed up CSV to {backup_path}")
+        except Exception as e:
+            logger.warning(f"Failed to backup CSV: {e}")  # Don't fail import if backup fails
+
         records, stats = TorqueCSVImporter.parse_csv(csv_content)
 
         if not records:
@@ -283,6 +300,7 @@ def import_csv():
                 end_odometer=last_record.get('odometer_miles'),
                 start_soc=first_record.get('state_of_charge'),
                 fuel_level_at_end=last_record.get('fuel_level_percent'),
+                is_imported=True,  # Mark as imported for soft-delete protection
             )
 
             # Calculate distance if odometer available

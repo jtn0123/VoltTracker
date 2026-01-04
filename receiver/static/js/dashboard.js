@@ -16,6 +16,22 @@ let liveRefreshInterval = null;
 let socket = null;
 let useWebSocket = true;  // Will fallback to polling if WebSocket fails
 
+/**
+ * Fetch helper that validates response status before parsing JSON.
+ * @param {string} url - The URL to fetch
+ * @param {object} options - Optional fetch options
+ * @returns {Promise<any>} - Parsed JSON data
+ * @throws {Error} - If response is not ok
+ */
+async function fetchJson(url, options = {}) {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return response.json();
+}
+
 // Chart gradient helper
 function createGradient(ctx, colorStart, colorEnd) {
     const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
@@ -353,8 +369,7 @@ function clearDateFilter() {
  */
 async function loadStatus() {
     try {
-        const response = await fetch('/api/status');
-        const data = await response.json();
+        const data = await fetchJson('/api/status');
 
         const statusDot = document.getElementById('status-dot');
         const lastSync = document.getElementById('last-sync');
@@ -382,8 +397,7 @@ async function loadStatus() {
  */
 async function loadLiveTelemetry() {
     try {
-        const response = await fetch('/api/telemetry/latest');
-        const data = await response.json();
+        const data = await fetchJson('/api/telemetry/latest');
 
         const liveSection = document.getElementById('live-trip-section');
         const liveContent = document.getElementById('live-trip-content');
@@ -624,8 +638,7 @@ function getElapsedTime(startTime) {
  */
 async function loadSummary() {
     try {
-        const response = await fetch('/api/efficiency/summary');
-        const data = await response.json();
+        const data = await fetchJson('/api/efficiency/summary');
 
         // Lifetime MPG
         const lifetimeMpg = document.getElementById('lifetime-mpg');
@@ -712,8 +725,7 @@ async function loadMpgTrend(days) {
             btn.classList.toggle('active', parseInt(btn.dataset.days) === days);
         });
 
-        const response = await fetch(`/api/mpg/trend?days=${days}`);
-        const data = await response.json();
+        const data = await fetchJson(`/api/mpg/trend?days=${days}`);
 
         const ctx = document.getElementById('mpg-chart');
 
@@ -800,13 +812,13 @@ async function loadTrips() {
         if (dateFilter.start) url += `&start_date=${dateFilter.start}`;
         if (dateFilter.end) url += `&end_date=${dateFilter.end}`;
 
-        const response = await fetch(url);
-        const trips = await response.json();
+        const response = await fetchJson(url);
+        const trips = response.trips || response;  // Handle both paginated and legacy response
 
         const tableBody = document.getElementById('trips-table-body');
         const tripCards = document.getElementById('trip-cards');
 
-        if (trips.length === 0) {
+        if (!trips || trips.length === 0) {
             tableBody.innerHTML = `
                 <tr>
                     <td colspan="7" class="empty-state">
@@ -896,8 +908,7 @@ async function openTripModal(tripId) {
     }
 
     try {
-        const response = await fetch(`/api/trips/${tripId}`);
-        const data = await response.json();
+        const data = await fetchJson(`/api/trips/${tripId}`);
         const trip = data.trip;
         const telemetry = data.telemetry;
 
@@ -1384,8 +1395,7 @@ function renderTripCharts(telemetry) {
  */
 async function loadSocAnalysis() {
     try {
-        const response = await fetch('/api/soc/analysis');
-        const data = await response.json();
+        const data = await fetchJson('/api/soc/analysis');
 
         // Update SOC floor card
         const socFloor = document.getElementById('soc-floor');
@@ -1631,8 +1641,7 @@ async function deleteTrip(tripId) {
  */
 async function loadChargingSummary() {
     try {
-        const response = await fetch('/api/charging/summary');
-        const data = await response.json();
+        const data = await fetchJson('/api/charging/summary');
 
         // Total kWh
         const totalKwh = document.getElementById('total-kwh');
@@ -1741,8 +1750,7 @@ function updateCostComparison(data) {
  */
 async function loadBatteryHealth() {
     try {
-        const response = await fetch('/api/battery/health');
-        const data = await response.json();
+        const data = await fetchJson('/api/battery/health');
 
         const section = document.getElementById('battery-health-section');
         if (!section) return;
@@ -1818,8 +1826,7 @@ async function loadBatteryHealth() {
  */
 async function loadBatteryCells() {
     try {
-        const response = await fetch('/api/battery/cells/latest');
-        const data = await response.json();
+        const data = await fetchJson('/api/battery/cells/latest');
 
         const section = document.getElementById('battery-cells-section');
         if (!section) return;
@@ -2018,13 +2025,12 @@ function checkWeakCells(reading) {
  */
 async function loadChargingHistory() {
     try {
-        const response = await fetch('/api/charging/history?limit=20');
-        const sessions = await response.json();
+        const sessions = await fetchJson('/api/charging/history?limit=20');
 
         const tableBody = document.getElementById('charging-table-body');
         const cardsContainer = document.getElementById('charging-cards');
 
-        if (sessions.length === 0) {
+        if (!sessions || sessions.length === 0) {
             tableBody.innerHTML = `
                 <tr>
                     <td colspan="7" class="empty-state">
@@ -2249,13 +2255,10 @@ async function openChargingDetailModal(sessionId) {
 
     try {
         // Fetch session details and curve data in parallel
-        const [sessionResponse, curveResponse] = await Promise.all([
-            fetch(`/api/charging/${sessionId}`),
-            fetch(`/api/charging/${sessionId}/curve`)
+        const [session, curveData] = await Promise.all([
+            fetchJson(`/api/charging/${sessionId}`),
+            fetchJson(`/api/charging/${sessionId}/curve`)
         ]);
-
-        const session = await sessionResponse.json();
-        const curveData = await curveResponse.json();
 
         // Render summary stats
         renderChargingDetailSummary(session);
