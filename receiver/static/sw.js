@@ -3,7 +3,9 @@
  * Provides offline support and caching for the PWA
  */
 
-const CACHE_NAME = 'volttracker-v1';
+// Cache version - update on each deploy to ensure fresh assets
+const CACHE_VERSION = '2025-01-04';
+const CACHE_NAME = `volttracker-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
     '/',
     '/static/css/style.css',
