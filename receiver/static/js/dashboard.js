@@ -2544,7 +2544,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (fileInput) {
         fileInput.addEventListener('change', () => {
-            if (fileInput.files.length > 0) {
+            const count = fileInput.files.length;
+            if (count > 1) {
+                fileNameDisplay.textContent = `${count} files selected`;
+                importBtn.disabled = false;
+            } else if (count === 1) {
                 fileNameDisplay.textContent = fileInput.files[0].name;
                 importBtn.disabled = false;
             } else {
@@ -2639,63 +2643,78 @@ function setActiveNavItem(sectionName) {
 }
 
 /**
- * Handle CSV import form submission
+ * Handle CSV import form submission (supports multiple files)
  */
 async function handleImport(event) {
     event.preventDefault();
 
     const fileInput = document.getElementById('csv-file');
-    const statusDiv = document.getElementById('import-status');
     const importBtn = document.getElementById('import-btn');
 
     if (!fileInput.files.length) {
-        showImportStatus('Please select a CSV file', 'error');
+        showImportStatus('Please select CSV files', 'error');
         return;
     }
 
-    const file = fileInput.files[0];
+    const files = Array.from(fileInput.files);
+    const totalFiles = files.length;
 
     // Show loading state
     importBtn.disabled = true;
-    showImportStatus('Importing...', 'loading');
 
-    const formData = new FormData();
-    formData.append('file', file);
+    let totalImported = 0;
+    let totalSkipped = 0;
+    let failedFiles = [];
 
-    try {
-        const response = await fetch('/api/import/csv', {
-            method: 'POST',
-            body: formData
-        });
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        showImportStatus(`Importing ${i + 1} of ${totalFiles}: ${file.name}...`, 'loading');
 
-        const data = await response.json();
+        const formData = new FormData();
+        formData.append('file', file);
 
-        if (response.ok) {
-            const stats = data.stats;
-            showImportStatus(
-                `Successfully imported ${stats.parsed_rows} records. ` +
-                (stats.skipped_rows > 0 ? `Skipped ${stats.skipped_rows} invalid rows.` : ''),
-                'success'
-            );
+        try {
+            const response = await fetch('/api/import/csv', {
+                method: 'POST',
+                body: formData
+            });
 
-            // Reload data
-            loadTrips();
-            loadSummary();
-            loadMpgTrend(currentTimeframe);
-            loadSocAnalysis();
+            const data = await response.json();
 
-            // Reset form
-            fileInput.value = '';
-            document.getElementById('file-name').textContent = 'No file selected';
-        } else {
-            showImportStatus(data.error || data.message || 'Import failed', 'error');
+            if (response.ok) {
+                totalImported += data.stats.parsed_rows;
+                totalSkipped += data.stats.skipped_rows;
+            } else {
+                failedFiles.push(file.name);
+            }
+        } catch (error) {
+            console.error('Import error:', error);
+            failedFiles.push(file.name);
         }
-    } catch (error) {
-        console.error('Import error:', error);
-        showImportStatus('Import failed. Please try again.', 'error');
-    } finally {
-        importBtn.disabled = false;
     }
+
+    // Show final summary
+    let message = `Imported ${totalImported} records from ${totalFiles - failedFiles.length} files.`;
+    if (totalSkipped > 0) {
+        message += ` Skipped ${totalSkipped} invalid rows.`;
+    }
+    if (failedFiles.length > 0) {
+        message += ` Failed: ${failedFiles.join(', ')}`;
+        showImportStatus(message, 'error');
+    } else {
+        showImportStatus(message, 'success');
+    }
+
+    // Reload data once at the end
+    loadTrips();
+    loadSummary();
+    loadMpgTrend(currentTimeframe);
+    loadSocAnalysis();
+
+    // Reset form
+    fileInput.value = '';
+    document.getElementById('file-name').textContent = 'No file selected';
+    importBtn.disabled = false;
 }
 
 /**

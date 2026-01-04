@@ -433,8 +433,8 @@
                 <form id="import-form" onsubmit="handleImport(event)" aria-label="CSV import form">
                     <div class="import-controls">
                         <label for="csv-file" class="btn-secondary btn-file">
-                            Choose CSV File
-                            <input type="file" id="csv-file" accept=".csv" required hidden>
+                            Choose CSV Files
+                            <input type="file" id="csv-file" accept=".csv" required hidden multiple>
                         </label>
                         <span id="file-name" class="file-name" aria-live="polite">No file selected</span>
                         <button type="submit" class="btn-primary" id="import-btn" disabled>Import</button>
