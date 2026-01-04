@@ -7,6 +7,8 @@ Handles charging session detection and finalization.
 import logging
 from datetime import datetime
 
+from sqlalchemy.exc import IntegrityError, OperationalError
+
 from config import Config
 from models import ChargingSession, TelemetryRaw
 from exceptions import ChargingSessionError
@@ -42,7 +44,7 @@ def detect_and_finalize_charging_session(
         active_session.is_complete = True
 
         # Calculate kWh added from SOC change
-        if active_session.start_soc and active_session.end_soc:
+        if active_session.start_soc is not None and active_session.end_soc is not None:
             soc_gained = active_session.end_soc - active_session.start_soc
             if soc_gained > 0:
                 active_session.kwh_added = (
@@ -63,12 +65,16 @@ def detect_and_finalize_charging_session(
             f"{active_session.kwh_added or 0:.2f} kWh added, "
             f"SOC {active_session.start_soc:.0f}% -> {active_session.end_soc:.0f}%"
         )
-    except Exception as e:
+    except (IntegrityError, OperationalError) as e:
         error = ChargingSessionError(
             f"Failed to finalize charging session: {e}",
             session_id=active_session.id
         )
-        logger.error(str(error))
+        logger.error(str(error), exc_info=True)
+        db.rollback()
+        raise
+    except Exception as e:
+        logger.exception(f"Unexpected error finalizing charging session: {e}")
         db.rollback()
         raise
 
@@ -129,7 +135,7 @@ def update_charging_session(
         telemetry: Latest TelemetryRaw record
     """
     # Update end SOC
-    if telemetry.state_of_charge:
+    if telemetry.state_of_charge is not None:
         session.end_soc = telemetry.state_of_charge
 
     # Update peak power if higher

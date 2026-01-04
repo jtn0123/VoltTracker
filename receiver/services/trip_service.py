@@ -32,6 +32,10 @@ def calculate_trip_basics(trip: Trip, telemetry: list) -> None:
         trip: Trip to update
         telemetry: List of TelemetryRaw records (ordered by timestamp)
     """
+    if not telemetry:
+        logger.warning(f"No telemetry data for trip {trip.id}")
+        return
+
     trip.end_time = telemetry[-1].timestamp
     trip.end_odometer = telemetry[-1].odometer_miles
 
@@ -53,6 +57,9 @@ def process_gas_mode(db, trip: Trip, telemetry: list, points: list) -> None:
         telemetry: List of TelemetryRaw records
         points: List of telemetry dicts (from to_dict())
     """
+    if not telemetry or not points:
+        return
+
     gas_entry = detect_gas_mode_entry(points)
 
     if gas_entry:
@@ -154,13 +161,15 @@ def fetch_trip_weather(trip: Trip, points: list) -> None:
                     f"Weather for trip {trip.id}: "
                     f"{weather.get('conditions')}, {weather.get('temperature_f')}°F"
                 )
-    except Exception as e:
+    except (ConnectionError, TimeoutError, ValueError) as e:
         error = WeatherAPIError(
             f"Failed to fetch weather for trip {trip.id}: {e}",
             latitude=gps_point.get('latitude') if gps_point else None,
             longitude=gps_point.get('longitude') if gps_point else None
         )
         logger.warning(str(error))
+    except Exception as e:
+        logger.exception(f"Unexpected error fetching weather for trip {trip.id}: {e}")
 
 
 def finalize_trip(db, trip: Trip):

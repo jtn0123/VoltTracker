@@ -191,6 +191,7 @@ class TorqueCSVImporter:
             'skipped_rows': 0,
             'duplicates_removed': 0,
             'validation_warnings': 0,
+            'total_errors': 0,
             'columns_found': [],
             'errors': [],
             'warnings': []
@@ -235,13 +236,19 @@ class TorqueCSVImporter:
                     stats['skipped_rows'] += 1
             except CSVImportError as e:
                 stats['skipped_rows'] += 1
-                if len(stats['errors']) < 10:  # Limit error messages
+                stats['total_errors'] += 1
+                if len(stats['errors']) < 10:
                     stats['errors'].append(str(e))
             except Exception as e:
                 stats['skipped_rows'] += 1
+                stats['total_errors'] += 1
                 error = CSVImportError(f"Failed to parse row: {e}", row_number=row_num)
-                if len(stats['errors']) < 10:  # Limit error messages
+                if len(stats['errors']) < 10:
                     stats['errors'].append(str(error))
+
+        # Add truncation note if there were more errors than shown
+        if stats['total_errors'] > 10:
+            stats['errors'].append(f"... and {stats['total_errors'] - 10} more errors (showing first 10 only)")
 
         # Remove duplicates
         records, duplicate_count = cls._find_duplicates(records, existing_timestamps)

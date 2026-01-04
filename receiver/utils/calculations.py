@@ -320,6 +320,10 @@ def calculate_electric_kwh(
             # Calculate time delta in hours
             delta_hours = (curr_time - prev_time).total_seconds() / 3600
 
+            # Skip if timestamps are identical or reversed
+            if delta_hours <= 0:
+                continue
+
             # Average power during interval (only count positive = discharging)
             avg_power = (prev_power + curr_power) / 2
             if avg_power > 0:  # Positive = discharging (consuming energy)
@@ -363,6 +367,9 @@ def calculate_kwh_per_mile(
         kWh/mile efficiency, or None if insufficient data
     """
     if kwh_used is None or electric_miles is None:
+        return None
+
+    if electric_miles <= 0:  # Guard against division by zero
         return None
 
     if electric_miles < 0.5:  # Need at least half a mile for meaningful data

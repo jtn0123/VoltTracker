@@ -61,11 +61,14 @@ def _request_with_retry(
                 return None
             last_error = e
             logger.warning(f"Weather API HTTP error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+        except requests.exceptions.JSONDecodeError as e:
+            # Invalid JSON response - don't retry
+            logger.warning(f"Weather API invalid JSON response: {e}")
+            return None
         except Exception as e:
-            last_error = WeatherAPIError(
-                f"Weather API error (attempt {attempt + 1}/{MAX_RETRIES}): {e}"
-            )
-            logger.warning(str(last_error))
+            # Log full traceback for unexpected errors
+            logger.exception(f"Weather API unexpected error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+            last_error = e
 
         # Wait before retrying (exponential backoff)
         if attempt < MAX_RETRIES - 1:
@@ -112,13 +115,16 @@ def get_weather_for_location(
             return _get_forecast_weather(latitude, longitude, timestamp, timeout)
     except WeatherAPIError:
         raise
-    except Exception as e:
+    except (ValueError, KeyError, TypeError) as e:
         error = WeatherAPIError(
-            f"Weather API error: {e}",
+            f"Weather API parsing error: {e}",
             latitude=latitude,
             longitude=longitude
         )
         logger.warning(str(error))
+        return None
+    except Exception as e:
+        logger.exception(f"Unexpected error fetching weather for ({latitude}, {longitude}): {e}")
         return None
 
 

@@ -9,6 +9,7 @@ import logging
 from datetime import timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import func, desc
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from config import Config
 from database import SessionLocal
@@ -57,9 +58,12 @@ def close_stale_trips():
                     finalize_trip(db, trip)
 
         db.commit()
-    except Exception as e:
+    except (IntegrityError, OperationalError) as e:
         error = DatabaseError(f"Failed to close stale trips: {e}")
-        logger.error(str(error))
+        logger.error(str(error), exc_info=True)
+        db.rollback()
+    except Exception as e:
+        logger.exception(f"Unexpected error closing stale trips: {e}")
         db.rollback()
     finally:
         SessionLocal.remove()
@@ -110,9 +114,12 @@ def check_refuel_events():
                     )
 
         db.commit()
-    except Exception as e:
+    except (IntegrityError, OperationalError) as e:
         error = DatabaseError(f"Failed to check refuel events: {e}")
-        logger.error(str(error))
+        logger.error(str(error), exc_info=True)
+        db.rollback()
+    except Exception as e:
+        logger.exception(f"Unexpected error checking refuel events: {e}")
         db.rollback()
     finally:
         SessionLocal.remove()
@@ -139,7 +146,7 @@ def check_charging_sessions():
                 active_session.is_complete = True
 
                 # Calculate kWh added from SOC change
-                if active_session.start_soc and active_session.end_soc:
+                if active_session.start_soc is not None and active_session.end_soc is not None:
                     soc_gained = active_session.end_soc - active_session.start_soc
                     if soc_gained > 0:
                         active_session.kwh_added = (soc_gained / 100) * Config.BATTERY_CAPACITY_KWH
@@ -193,7 +200,7 @@ def check_charging_sessions():
                 active_session.is_complete = True
 
                 # Calculate kWh added from SOC change
-                if active_session.start_soc and active_session.end_soc:
+                if active_session.start_soc is not None and active_session.end_soc is not None:
                     soc_gained = active_session.end_soc - active_session.start_soc
                     if soc_gained > 0:
                         active_session.kwh_added = (soc_gained / 100) * Config.BATTERY_CAPACITY_KWH
@@ -204,9 +211,12 @@ def check_charging_sessions():
                     f"SOC {active_session.start_soc:.0f}% -> {active_session.end_soc:.0f}%"
                 )
 
-    except Exception as e:
+    except (IntegrityError, OperationalError) as e:
         error = ChargingSessionError(f"Failed to check charging sessions: {e}")
-        logger.error(str(error))
+        logger.error(str(error), exc_info=True)
+        db.rollback()
+    except Exception as e:
+        logger.exception(f"Unexpected error checking charging sessions: {e}")
         db.rollback()
     finally:
         SessionLocal.remove()
