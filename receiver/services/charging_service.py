@@ -60,10 +60,13 @@ def detect_and_finalize_charging_session(
 
         db.commit()
 
+        # Safely format SOC values (may be None)
+        start_soc_str = f"{active_session.start_soc:.0f}" if active_session.start_soc is not None else "?"
+        end_soc_str = f"{active_session.end_soc:.0f}" if active_session.end_soc is not None else "?"
         logger.info(
             f"Charging session completed: "
             f"{active_session.kwh_added or 0:.2f} kWh added, "
-            f"SOC {active_session.start_soc:.0f}% -> {active_session.end_soc:.0f}%"
+            f"SOC {start_soc_str}% -> {end_soc_str}%"
         )
     except (IntegrityError, OperationalError) as e:
         error = ChargingSessionError(
@@ -115,9 +118,11 @@ def start_charging_session(
     db.add(session)
     db.flush()
 
+    # Safely format SOC (may be None)
+    soc_str = f"{session.start_soc:.0f}" if session.start_soc is not None else "?"
     logger.info(
         f"Started new charging session: {session.charge_type} at "
-        f"{power:.1f} kW, SOC {session.start_soc:.0f}%"
+        f"{power:.1f} kW, SOC {soc_str}%"
     )
 
     return session
@@ -143,7 +148,11 @@ def update_charging_session(
     if current_power > (session.peak_power_kw or 0):
         session.peak_power_kw = current_power
 
-    # Add to charging curve if we have data
+    # Add to charging curve if we have data (limit to 1000 points max)
+    # A typical L2 charge session is ~4 hours with 1-minute intervals = ~240 points
+    # 1000 points allows for longer sessions while preventing unbounded growth
+    MAX_CURVE_POINTS = 1000
+
     if session.charging_curve is None:
         session.charging_curve = []
 
@@ -152,4 +161,10 @@ def update_charging_session(
         'power_kw': current_power,
         'soc': telemetry.state_of_charge
     }
-    session.charging_curve.append(curve_point)
+
+    if len(session.charging_curve) < MAX_CURVE_POINTS:
+        session.charging_curve.append(curve_point)
+    elif len(session.charging_curve) == MAX_CURVE_POINTS:
+        # Log once when we hit the limit
+        logger.debug(f"Charging curve reached max size ({MAX_CURVE_POINTS} points)")
+        session.charging_curve.append(curve_point)  # Allow one more to indicate truncation

@@ -163,23 +163,35 @@ def check_charging_sessions():
         session_info = detect_charging_session(points)
 
         if session_info and session_info.get('is_charging'):
-            # Check for existing active charging session
+            # Check for existing active charging session with row lock
+            # Use with_for_update() to prevent race conditions where multiple
+            # scheduler instances could create duplicate sessions
             active_session = db.query(ChargingSession).filter(
                 ChargingSession.is_complete.is_(False)
-            ).order_by(desc(ChargingSession.start_time)).first()
+            ).with_for_update(skip_locked=True).order_by(
+                desc(ChargingSession.start_time)
+            ).first()
 
             if not active_session:
-                # Create new charging session
-                first_point = recent[-1]  # Oldest in the set
-                active_session = ChargingSession(
-                    start_time=first_point.timestamp,
-                    start_soc=session_info.get('start_soc'),
-                    latitude=first_point.latitude,
-                    longitude=first_point.longitude,
-                    charge_type=session_info.get('charge_type', 'L1')
-                )
-                db.add(active_session)
-                logger.info(f"Charging session started: {session_info.get('charge_type')}")
+                # Double-check for existing session without lock (in case another
+                # process just created one)
+                existing = db.query(ChargingSession).filter(
+                    ChargingSession.is_complete.is_(False)
+                ).first()
+                if existing:
+                    active_session = existing
+                else:
+                    # Create new charging session
+                    first_point = recent[-1]  # Oldest in the set
+                    active_session = ChargingSession(
+                        start_time=first_point.timestamp,
+                        start_soc=session_info.get('start_soc'),
+                        latitude=first_point.latitude,
+                        longitude=first_point.longitude,
+                        charge_type=session_info.get('charge_type', 'L1')
+                    )
+                    db.add(active_session)
+                    logger.info(f"Charging session started: {session_info.get('charge_type')}")
 
             # Update with latest data
             active_session.end_soc = session_info.get('current_soc')
@@ -206,9 +218,12 @@ def check_charging_sessions():
                         active_session.kwh_added = (soc_gained / 100) * Config.BATTERY_CAPACITY_KWH
 
                 db.commit()
+                # Safely format SOC values (may be None)
+                start_soc_str = f"{active_session.start_soc:.0f}" if active_session.start_soc is not None else "?"
+                end_soc_str = f"{active_session.end_soc:.0f}" if active_session.end_soc is not None else "?"
                 logger.info(
                     f"Charging session completed: {active_session.kwh_added or 0:.2f} kWh added, "
-                    f"SOC {active_session.start_soc:.0f}% -> {active_session.end_soc:.0f}%"
+                    f"SOC {start_soc_str}% -> {end_soc_str}%"
                 )
 
     except (IntegrityError, OperationalError) as e:

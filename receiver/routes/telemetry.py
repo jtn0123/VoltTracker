@@ -89,9 +89,12 @@ def torque_upload(token=None):
                 trip = db.query(Trip).filter(
                     Trip.session_id == data['session_id']
                 ).first()
+                # If trip is still None after retry (rare - possibly deleted), skip trip updates
+                if trip is None:
+                    logger.warning(f"Trip not found after race condition retry: {data['session_id']}")
 
         # Update trip start values if they were null initially
-        if trip:
+        if trip is not None:
             if trip.start_soc is None and data['state_of_charge'] is not None:
                 trip.start_soc = data['state_of_charge']
             if trip.start_odometer is None and data['odometer_miles'] is not None:
@@ -132,9 +135,17 @@ def torque_upload(token=None):
         return "OK!"
 
     except Exception as e:
+        # Log full exception details for debugging (data is often malformed from Torque)
         error = TelemetryParsingError(f"Error processing Torque upload: {e}")
-        logger.error(str(error))
-        return "OK!"  # Still return OK to avoid Torque retries
+        logger.error(str(error), exc_info=True)
+        # Log raw request data to help debug parsing issues
+        if request.method == 'GET':
+            logger.debug(f"Failed request args: {dict(request.args)}")
+        else:
+            logger.debug(f"Failed request form: {dict(request.form)}")
+        # Return OK to avoid Torque retries (Torque doesn't handle errors gracefully)
+        # Data loss is logged above for later investigation
+        return "OK!"
 
 
 def _calculate_trip_stats(

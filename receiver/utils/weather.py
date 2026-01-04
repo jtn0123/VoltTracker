@@ -19,9 +19,10 @@ logger = logging.getLogger(__name__)
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_HISTORICAL_URL = "https://archive-api.open-meteo.com/v1/archive"
 
-# Retry configuration
-MAX_RETRIES = 3
-RETRY_DELAY_SECONDS = 1  # Base delay, doubles each retry (exponential backoff)
+# Retry configuration - keep short to avoid blocking scheduler
+MAX_RETRIES = 2  # Reduce retries to minimize blocking time
+RETRY_DELAY_SECONDS = 0.5  # Short delay between retries
+WEATHER_API_TIMEOUT = 3  # Default timeout per request (seconds)
 
 
 def _request_with_retry(
@@ -83,18 +84,19 @@ def get_weather_for_location(
     latitude: float,
     longitude: float,
     timestamp: Optional[datetime] = None,
-    timeout: int = 5
+    timeout: int = WEATHER_API_TIMEOUT
 ) -> Optional[Dict[str, Any]]:
     """
     Fetch weather data for a location at a given time.
 
     Uses Open-Meteo API (free, no API key needed).
+    Total max blocking time: ~7s (2 retries × 3s timeout + 0.5s delay)
 
     Args:
         latitude: GPS latitude
         longitude: GPS longitude
         timestamp: Time to get weather for (defaults to now)
-        timeout: Request timeout in seconds
+        timeout: Request timeout in seconds (default: 3s to avoid blocking scheduler)
 
     Returns:
         Dictionary with weather data or None if request failed
