@@ -219,6 +219,8 @@ class Trip(Base):
     # Metadata
     ambient_temp_avg_f = Column(Float)
     is_closed = Column(Boolean, default=False, index=True)
+    is_imported = Column(Boolean, default=False, index=True)  # True if imported from CSV
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)  # Soft delete for imported trips
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
@@ -253,6 +255,7 @@ class Trip(Base):
             'gas_mpg': self.gas_mpg,
             'ambient_temp_avg_f': self.ambient_temp_avg_f,
             'is_closed': self.is_closed,
+            'is_imported': self.is_imported,
             'weather_temp_f': self.weather_temp_f,
             'weather_precipitation_in': self.weather_precipitation_in,
             'weather_wind_mph': self.weather_wind_mph,

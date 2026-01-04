@@ -9,7 +9,7 @@ import statistics
 from datetime import timedelta
 from typing import Union, Tuple
 from flask import Blueprint, request, jsonify, Response
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 
 from config import Config
 from database import get_db
@@ -35,7 +35,11 @@ def get_trips():
     """
     db = get_db()
 
-    query = db.query(Trip).filter(Trip.is_closed.is_(True))
+    # Filter for closed trips that aren't soft-deleted
+    query = db.query(Trip).filter(
+        Trip.is_closed.is_(True),
+        Trip.deleted_at.is_(None)
+    )
 
     # Apply filters
     start_date = request.args.get('start_date')
@@ -102,25 +106,51 @@ def get_trip_detail(trip_id):
 
 @trips_bp.route('/trips/<int:trip_id>', methods=['DELETE'])
 def delete_trip(trip_id: int) -> Union[Response, Tuple[Response, int]]:
-    """Delete a trip and its associated data."""
+    """Delete a trip and its associated data.
+
+    Imported trips (from CSV) are soft-deleted and can be restored.
+    Real-time trips are permanently deleted.
+    """
     db = get_db()
 
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
         return jsonify({'error': 'Trip not found'}), 404
 
-    # Delete associated SOC transitions
+    # Soft delete for imported trips (protect CSV imports)
+    if trip.is_imported:
+        trip.deleted_at = utc_now()
+        db.commit()
+        logger.info(f"Soft-deleted imported trip {trip_id}")
+        return jsonify({'message': f'Trip {trip_id} archived (can be restored)'})
+
+    # Hard delete for real-time trips
     db.query(SocTransition).filter(SocTransition.trip_id == trip_id).delete()
-
-    # Delete associated telemetry
     db.query(TelemetryRaw).filter(TelemetryRaw.session_id == trip.session_id).delete()
-
-    # Delete the trip
     db.delete(trip)
     db.commit()
 
     logger.info(f"Deleted trip {trip_id}")
     return jsonify({'message': f'Trip {trip_id} deleted successfully'})
+
+
+@trips_bp.route('/trips/<int:trip_id>/restore', methods=['POST'])
+def restore_trip(trip_id: int) -> Union[Response, Tuple[Response, int]]:
+    """Restore a soft-deleted trip."""
+    db = get_db()
+
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        return jsonify({'error': 'Trip not found'}), 404
+
+    if not trip.deleted_at:
+        return jsonify({'error': 'Trip is not deleted'}), 400
+
+    trip.deleted_at = None
+    db.commit()
+
+    logger.info(f"Restored trip {trip_id}")
+    return jsonify({'message': f'Trip {trip_id} restored successfully'})
 
 
 @trips_bp.route('/trips/<int:trip_id>', methods=['PATCH'])
@@ -163,8 +193,7 @@ def get_efficiency_summary():
     """
     Get efficiency statistics.
 
-    Calculates from available trip data, falling back to computing from
-    raw values when pre-calculated fields are missing.
+    Calculates from available trip data using SQL aggregation for efficiency.
 
     Returns:
         - Lifetime gas MPG average
@@ -175,27 +204,20 @@ def get_efficiency_summary():
     """
     db = get_db()
 
-    # Get all closed trips for comprehensive stats
-    closed_trips = db.query(Trip).filter(Trip.is_closed.is_(True)).all()
+    # Get lifetime totals using SQL aggregation (single query instead of loading all trips)
+    lifetime_stats = db.query(
+        func.coalesce(func.sum(Trip.distance_miles), 0).label('total_miles'),
+        func.coalesce(func.sum(Trip.electric_miles), 0).label('electric_miles'),
+        func.coalesce(func.sum(Trip.gas_miles), 0).label('gas_miles'),
+        func.coalesce(func.sum(Trip.fuel_used_gallons), 0).label('fuel_used'),
+        func.coalesce(func.sum(Trip.electric_kwh_used), 0).label('kwh_used')
+    ).filter(Trip.is_closed.is_(True)).first()
 
-    # Calculate totals from whatever data exists
-    total_miles = 0.0
-    total_electric_miles = 0.0
-    total_gas_miles = 0.0
-    total_fuel_used = 0.0
-    total_kwh_used = 0.0
-
-    for trip in closed_trips:
-        if trip.distance_miles:
-            total_miles += float(trip.distance_miles)
-        if trip.electric_miles:
-            total_electric_miles += float(trip.electric_miles)
-        if trip.gas_miles:
-            total_gas_miles += float(trip.gas_miles)
-        if trip.fuel_used_gallons:
-            total_fuel_used += float(trip.fuel_used_gallons)
-        if trip.electric_kwh_used:
-            total_kwh_used += float(trip.electric_kwh_used)
+    total_miles = float(lifetime_stats.total_miles or 0)
+    total_electric_miles = float(lifetime_stats.electric_miles or 0)
+    total_gas_miles = float(lifetime_stats.gas_miles or 0)
+    total_fuel_used = float(lifetime_stats.fuel_used or 0)
+    total_kwh_used = float(lifetime_stats.kwh_used or 0)
 
     # Calculate lifetime gas MPG
     lifetime_mpg = None
@@ -214,40 +236,39 @@ def get_efficiency_summary():
     if total_miles > 0:
         ev_ratio = round(total_electric_miles / total_miles * 100, 1)
 
-    # Last 30 days stats
+    # Last 30 days stats using SQL aggregation
     thirty_days_ago = utc_now() - timedelta(days=30)
-    recent_trips = []
-    for t in closed_trips:
-        if not t.start_time:
-            continue
-        trip_time = normalize_datetime(t.start_time)
-        if trip_time >= thirty_days_ago:
-            recent_trips.append(t)
+    recent_stats = db.query(
+        func.coalesce(func.sum(Trip.gas_miles), 0).label('gas_miles'),
+        func.coalesce(func.sum(Trip.fuel_used_gallons), 0).label('fuel_used')
+    ).filter(
+        Trip.is_closed.is_(True),
+        Trip.start_time >= thirty_days_ago
+    ).first()
 
-    recent_gas_miles = sum(float(t.gas_miles) for t in recent_trips if t.gas_miles) or 0
-    recent_fuel = sum(float(t.fuel_used_gallons) for t in recent_trips if t.fuel_used_gallons) or 0
+    recent_gas_miles = float(recent_stats.gas_miles or 0)
+    recent_fuel = float(recent_stats.fuel_used or 0)
 
     recent_mpg = None
     if recent_gas_miles > 0 and recent_fuel > 0:
         recent_mpg = round(recent_gas_miles / recent_fuel, 1)
 
-    # Current tank (since last refuel)
+    # Current tank (since last refuel) using SQL aggregation
     last_refuel = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp)).first()
 
     current_tank_mpg = None
     current_tank_miles = None
     if last_refuel:
-        refuel_time = normalize_datetime(last_refuel.timestamp)
-        tank_trips = []
-        for t in closed_trips:
-            if not t.start_time:
-                continue
-            trip_time = normalize_datetime(t.start_time)
-            if trip_time >= refuel_time:
-                tank_trips.append(t)
+        tank_stats = db.query(
+            func.coalesce(func.sum(Trip.gas_miles), 0).label('gas_miles'),
+            func.coalesce(func.sum(Trip.fuel_used_gallons), 0).label('fuel_used')
+        ).filter(
+            Trip.is_closed.is_(True),
+            Trip.start_time >= last_refuel.timestamp
+        ).first()
 
-        tank_gas_miles = sum(float(t.gas_miles) for t in tank_trips if t.gas_miles) or 0
-        tank_fuel = sum(float(t.fuel_used_gallons) for t in tank_trips if t.fuel_used_gallons) or 0
+        tank_gas_miles = float(tank_stats.gas_miles or 0)
+        tank_fuel = float(tank_stats.fuel_used or 0)
 
         if tank_gas_miles > 0 and tank_fuel > 0:
             current_tank_mpg = round(tank_gas_miles / tank_fuel, 1)

@@ -43,6 +43,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./torque-config:/app/torque-config:ro
+      - ./backups/csv-imports:/app/backups/csv-imports
 
 volumes:
   postgres_data:

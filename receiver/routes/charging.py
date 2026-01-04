@@ -7,7 +7,7 @@ Handles charging session CRUD operations and charging statistics.
 import logging
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 
 from config import Config
 from database import get_db
@@ -222,12 +222,18 @@ def get_charging_summary():
         ChargingSession.is_complete.is_(True)
     ).all()
 
-    # Get trip data for electric miles and EV ratio
-    trips = db.query(Trip).filter(Trip.is_closed.is_(True)).all()
-    total_miles = sum(t.distance_miles or 0 for t in trips)
-    total_electric_miles = sum(t.electric_miles or 0 for t in trips)
-    total_gas_miles = sum(t.gas_miles or 0 for t in trips)
-    total_fuel_used = sum(t.fuel_used_gallons or 0 for t in trips if t.fuel_used_gallons)
+    # Get trip data using SQL aggregation (much faster than loading all trips)
+    trip_stats = db.query(
+        func.coalesce(func.sum(Trip.distance_miles), 0).label('total_miles'),
+        func.coalesce(func.sum(Trip.electric_miles), 0).label('electric_miles'),
+        func.coalesce(func.sum(Trip.gas_miles), 0).label('gas_miles'),
+        func.coalesce(func.sum(Trip.fuel_used_gallons), 0).label('fuel_used')
+    ).filter(Trip.is_closed.is_(True)).first()
+
+    total_miles = float(trip_stats.total_miles or 0)
+    total_electric_miles = float(trip_stats.electric_miles or 0)
+    total_gas_miles = float(trip_stats.gas_miles or 0)
+    total_fuel_used = float(trip_stats.fuel_used or 0)
 
     # Calculate EV ratio
     ev_ratio = None
