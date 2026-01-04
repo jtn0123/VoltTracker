@@ -38,7 +38,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          python -m pytest tests/ -v --cov=receiver --cov-report=xml --cov-report=term-missing
+          python -m pytest tests/ -v --cov=receiver --cov-report=xml --cov-report=term-missing --cov-fail-under=80
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -66,7 +66,7 @@ jobs:
 
       - name: Run flake8
         run: |
-          flake8 receiver/ tests/ --max-line-length=120 --ignore=E501,W503
+          flake8 receiver/ tests/ --max-line-length=120 --ignore=W503
 
   security:
     runs-on: ubuntu-latest
@@ -77,7 +77,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install security tools
         run: |
@@ -90,7 +90,7 @@ jobs:
 
       - name: Check dependencies for vulnerabilities
         run: |
-          pip-audit -r receiver/requirements.txt --ignore-vuln GHSA-xxxx-xxxx-xxxx || true
+          pip-audit -r receiver/requirements.txt
 
   type-check:
     runs-on: ubuntu-latest
@@ -111,4 +111,4 @@ jobs:
 
       - name: Run mypy
         run: |
-          mypy receiver/ --ignore-missing-imports --no-strict-optional || true
+          mypy receiver/ --ignore-missing-imports

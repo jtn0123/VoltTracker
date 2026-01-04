@@ -167,7 +167,9 @@ class TestBatteryHealthEndpoint:
         response = client.get('/api/battery/health')
         assert response.status_code == 200
         data = response.get_json()
-        assert 'status' in data or 'current_capacity_kwh' in data
+        # When no data exists, should have has_data=False
+        assert 'has_data' in data
+        assert data['has_data'] is False
 
     def test_health_with_dedicated_readings(self, client, db_session):
         """Uses BatteryHealthReading when available."""
@@ -183,7 +185,8 @@ class TestBatteryHealthEndpoint:
         response = client.get('/api/battery/health')
         assert response.status_code == 200
         data = response.get_json()
-        assert 'current_capacity_kwh' in data or 'capacity_kwh' in data or 'status' in data
+        # With readings present, should have current_capacity_kwh
+        assert 'current_capacity_kwh' in data
 
     def test_health_calculates_percentage(self, client, db_session):
         """Battery health percentage is calculated from capacity."""

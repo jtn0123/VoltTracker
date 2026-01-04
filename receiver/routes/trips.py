@@ -259,13 +259,17 @@ def get_efficiency_summary():
     db = get_db()
 
     # Get lifetime totals using SQL aggregation (single query instead of loading all trips)
+    # Exclude soft-deleted trips to match /trips endpoint behavior
     lifetime_stats = db.query(
         func.coalesce(func.sum(Trip.distance_miles), 0).label('total_miles'),
         func.coalesce(func.sum(Trip.electric_miles), 0).label('electric_miles'),
         func.coalesce(func.sum(Trip.gas_miles), 0).label('gas_miles'),
         func.coalesce(func.sum(Trip.fuel_used_gallons), 0).label('fuel_used'),
         func.coalesce(func.sum(Trip.electric_kwh_used), 0).label('kwh_used')
-    ).filter(Trip.is_closed.is_(True)).first()
+    ).filter(
+        Trip.is_closed.is_(True),
+        Trip.deleted_at.is_(None)
+    ).first()
 
     total_miles = float(lifetime_stats.total_miles or 0)
     total_electric_miles = float(lifetime_stats.electric_miles or 0)
@@ -297,6 +301,7 @@ def get_efficiency_summary():
         func.coalesce(func.sum(Trip.fuel_used_gallons), 0).label('fuel_used')
     ).filter(
         Trip.is_closed.is_(True),
+        Trip.deleted_at.is_(None),
         Trip.start_time >= thirty_days_ago
     ).first()
 
@@ -318,6 +323,7 @@ def get_efficiency_summary():
             func.coalesce(func.sum(Trip.fuel_used_gallons), 0).label('fuel_used')
         ).filter(
             Trip.is_closed.is_(True),
+            Trip.deleted_at.is_(None),
             Trip.start_time >= last_refuel.timestamp
         ).first()
 

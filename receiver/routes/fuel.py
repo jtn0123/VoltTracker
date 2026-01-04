@@ -144,6 +144,11 @@ def update_fuel_event(fuel_id):
     if not data:
         return jsonify({'error': 'No data provided'}), 400
 
+    # Validate numeric fields before updating
+    is_valid, errors = validate_fuel_event_data(data)
+    if not is_valid:
+        return jsonify({'error': 'Validation failed', 'details': errors}), 400
+
     allowed_fields = ['odometer_miles', 'gallons_added', 'price_per_gallon', 'total_cost', 'notes']
 
     for field in allowed_fields:
