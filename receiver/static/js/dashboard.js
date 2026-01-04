@@ -31,19 +31,37 @@ window.addEventListener('beforeunload', () => {
 });
 
 /**
- * Fetch helper that validates response status before parsing JSON.
+ * Fetch helper with timeout and JSON validation.
  * @param {string} url - The URL to fetch
  * @param {object} options - Optional fetch options
+ * @param {number} timeoutMs - Timeout in milliseconds (default: 10000)
  * @returns {Promise<any>} - Parsed JSON data
- * @throws {Error} - If response is not ok
+ * @throws {Error} - If response is not ok or timeout
  */
-async function fetchJson(url, options = {}) {
-    const response = await fetch(url, options);
-    if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+async function fetchJson(url, options = {}, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            throw new Error(`Request timeout after ${timeoutMs}ms`);
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeout);
     }
-    return response.json();
 }
 
 // Chart gradient helper
@@ -132,21 +150,41 @@ function getEnhancedAxis(options = {}) {
 }
 
 // Initialize dashboard on load
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
     initDatePicker();
     initWebSocket();
     initServiceWorker();
-    loadStatus();
-    loadSummary();
-    loadMpgTrend(currentTimeframe);
-    loadTrips();
-    loadSocAnalysis();
-    loadChargingSummary();
-    loadChargingHistory();
-    loadLiveTelemetry();
-    loadBatteryHealth();
-    loadBatteryCells();
+
+    // Load critical data in parallel for faster initial render
+    await Promise.all([
+        loadStatus(),
+        loadSummary(),
+        loadTrips(),
+        loadLiveTelemetry()
+    ]);
+
+    // Defer non-critical data loading to avoid blocking
+    if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(() => {
+            loadMpgTrend(currentTimeframe);
+            loadSocAnalysis();
+            loadChargingSummary();
+            loadChargingHistory();
+            loadBatteryHealth();
+            loadBatteryCells();
+        });
+    } else {
+        // Fallback for browsers without requestIdleCallback
+        setTimeout(() => {
+            loadMpgTrend(currentTimeframe);
+            loadSocAnalysis();
+            loadChargingSummary();
+            loadChargingHistory();
+            loadBatteryHealth();
+            loadBatteryCells();
+        }, 100);
+    }
 
     // Refresh status every 30 seconds
     statusRefreshInterval = setInterval(loadStatus, 30000);
@@ -386,11 +424,14 @@ function clearDateFilter() {
  * Load system status
  */
 async function loadStatus() {
+    const statusDot = document.getElementById('status-dot');
+    const lastSync = document.getElementById('last-sync');
+
+    // Guard against missing elements
+    if (!statusDot || !lastSync) return;
+
     try {
         const data = await fetchJson('/api/status');
-
-        const statusDot = document.getElementById('status-dot');
-        const lastSync = document.getElementById('last-sync');
 
         if (data.status === 'online') {
             statusDot.classList.remove('offline');
@@ -405,8 +446,9 @@ async function loadStatus() {
             lastSync.textContent = 'No data yet';
         }
     } catch (error) {
-        console.error('Failed to load status:', error);
-        document.getElementById('status-dot').classList.add('offline');
+        if (DEBUG) console.error('Failed to load status:', error);
+        statusDot.classList.add('offline');
+        lastSync.textContent = 'Connection error';
     }
 }
 
@@ -2712,16 +2754,29 @@ async function handleImport(event) {
                 body: formData
             });
 
-            const data = await response.json();
+            // Parse JSON safely - server may return non-JSON on errors
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                const errorText = await response.text().catch(() => 'Unknown error');
+                showImportStatus(`Import failed for ${file.name}: Invalid server response`, 'error');
+                failedFiles.push(file.name);
+                continue;
+            }
 
             if (response.ok) {
-                totalImported += data.stats.parsed_rows;
-                totalSkipped += data.stats.skipped_rows;
+                totalImported += data.stats?.parsed_rows || 0;
+                totalSkipped += data.stats?.skipped_rows || 0;
             } else {
+                // Show specific error from server
+                const errorMsg = data.error || data.message || 'Unknown error';
+                showImportStatus(`Import failed for ${file.name}: ${errorMsg}`, 'error');
                 failedFiles.push(file.name);
             }
         } catch (error) {
-            console.error('Import error:', error);
+            if (DEBUG) console.error('Import error:', error);
+            showImportStatus(`Import failed for ${file.name}: ${error.message}`, 'error');
             failedFiles.push(file.name);
         }
     }

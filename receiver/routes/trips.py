@@ -86,21 +86,48 @@ def get_trips():
 
 @trips_bp.route('/trips/<int:trip_id>', methods=['GET'])
 def get_trip_detail(trip_id):
-    """Get detailed trip data including telemetry points."""
+    """Get detailed trip data including telemetry points.
+
+    Query params:
+        limit: Max telemetry points to return (default 500, max 2000)
+        offset: Skip first N telemetry points (default 0)
+    """
     db = get_db()
 
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
         return jsonify({'error': 'Trip not found'}), 404
 
-    # Get telemetry for this trip
+    # Pagination for telemetry to avoid huge responses
+    try:
+        limit = min(2000, max(1, int(request.args.get('limit', 500))))
+    except (ValueError, TypeError):
+        limit = 500
+
+    try:
+        offset = max(0, int(request.args.get('offset', 0)))
+    except (ValueError, TypeError):
+        offset = 0
+
+    # Get total count for pagination info
+    total_count = db.query(TelemetryRaw).filter(
+        TelemetryRaw.session_id == trip.session_id
+    ).count()
+
+    # Get paginated telemetry for this trip
     telemetry = db.query(TelemetryRaw).filter(
         TelemetryRaw.session_id == trip.session_id
-    ).order_by(TelemetryRaw.timestamp).all()
+    ).order_by(TelemetryRaw.timestamp).offset(offset).limit(limit).all()
 
     return jsonify({
         'trip': trip.to_dict(),
-        'telemetry': [t.to_dict() for t in telemetry]
+        'telemetry': [t.to_dict() for t in telemetry],
+        'telemetry_pagination': {
+            'offset': offset,
+            'limit': limit,
+            'total': total_count,
+            'has_more': offset + len(telemetry) < total_count
+        }
     })
 
 

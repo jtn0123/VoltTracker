@@ -8,6 +8,7 @@ import logging
 import atexit
 from flask import Flask
 from flask_caching import Cache
+from flask_compress import Compress
 from flask_httpauth import HTTPBasicAuth
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -73,6 +74,10 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# Initialize gzip compression (60-80% smaller API responses)
+compress = Compress()
+compress.init_app(app)
 
 # Initialize cache (disabled in testing mode)
 cache = Cache()
@@ -157,6 +162,8 @@ init_db(app)
 from routes.telemetry import telemetry_bp
 from routes.dashboard import dashboard_bp
 from routes.trips import trips_bp
+from routes.battery import battery_bp
+from routes.charging import charging_bp
 
 
 @dashboard_bp.before_request
@@ -178,6 +185,26 @@ def cache_efficiency(response):
         response.cache_control.max_age = 30
     elif request.endpoint == 'trips.get_soc_analysis':
         response.cache_control.max_age = 60
+    return response
+
+
+@battery_bp.after_request
+def cache_battery(response):
+    """Apply caching to battery endpoints (data changes slowly)."""
+    from flask import request
+    if request.endpoint == 'battery.get_battery_health':
+        response.cache_control.max_age = 300  # 5 minutes
+    elif request.endpoint == 'battery.get_cell_voltages':
+        response.cache_control.max_age = 60  # 1 minute
+    return response
+
+
+@charging_bp.after_request
+def cache_charging(response):
+    """Apply caching to charging summary endpoint."""
+    from flask import request
+    if request.endpoint == 'charging.get_charging_summary':
+        response.cache_control.max_age = 300  # 5 minutes
     return response
 
 
