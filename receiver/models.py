@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean,
-    DateTime, ForeignKey, Text, create_engine, JSON
+    DateTime, ForeignKey, Text, create_engine, JSON, Index
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.declarative import declarative_base
@@ -68,6 +68,10 @@ class TelemetryRaw(Base):
     """Raw telemetry data from Torque Pro."""
 
     __tablename__ = 'telemetry_raw'
+    __table_args__ = (
+        # Composite index for common query pattern: telemetry for a session ordered by time
+        Index('ix_telemetry_session_timestamp', 'session_id', 'timestamp'),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(GUID(), nullable=False, index=True)
@@ -189,6 +193,12 @@ class Trip(Base):
     """Aggregated trip summaries."""
 
     __tablename__ = 'trips'
+    __table_args__ = (
+        # Composite index for common query pattern: closed trips ordered by start_time
+        Index('ix_trips_is_closed_start_time', 'is_closed', 'start_time'),
+        # Composite index for gas mode queries by date
+        Index('ix_trips_gas_mode_start_time', 'gas_mode_entered', 'start_time'),
+    )
 
     id = Column(Integer, primary_key=True)
     session_id = Column(GUID(), unique=True, nullable=False)

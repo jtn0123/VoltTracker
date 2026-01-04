@@ -178,9 +178,36 @@ def update_trip(trip_id):
     # Only allow specific fields to be updated
     allowed_fields = ['gas_mpg', 'gas_miles', 'electric_miles', 'fuel_used_gallons']
 
+    # Validation rules for numeric fields (must be non-negative if provided)
+    validation_rules = {
+        'gas_mpg': {'min': 0, 'max': 100, 'type': (int, float)},
+        'gas_miles': {'min': 0, 'max': 10000, 'type': (int, float)},
+        'electric_miles': {'min': 0, 'max': 10000, 'type': (int, float)},
+        'fuel_used_gallons': {'min': 0, 'max': 50, 'type': (int, float)},
+    }
+
     for field in allowed_fields:
         if field in data:
-            setattr(trip, field, data[field])
+            value = data[field]
+            # Allow null values to clear the field
+            if value is None:
+                setattr(trip, field, None)
+                continue
+
+            rules = validation_rules.get(field)
+            if rules:
+                # Type check
+                if not isinstance(value, rules['type']):
+                    return jsonify({
+                        'error': f'{field} must be a number'
+                    }), 400
+                # Range check
+                if value < rules['min'] or value > rules['max']:
+                    return jsonify({
+                        'error': f'{field} must be between {rules["min"]} and {rules["max"]}'
+                    }), 400
+
+            setattr(trip, field, value)
 
     db.commit()
 

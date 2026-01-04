@@ -11,9 +11,17 @@ class Config:
     )
 
     # Flask
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
     FLASK_ENV = os.environ.get('FLASK_ENV', 'production')
     DEBUG = FLASK_ENV == 'development'
+
+    # Secret key - required in production, uses dev default only in development
+    _secret_key = os.environ.get('SECRET_KEY')
+    if not _secret_key and FLASK_ENV != 'development':
+        raise ValueError(
+            "SECRET_KEY environment variable must be set in production. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    SECRET_KEY = _secret_key or 'dev-secret-key-change-in-production'
 
     # Logging
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')

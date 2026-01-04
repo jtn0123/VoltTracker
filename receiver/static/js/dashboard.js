@@ -2,6 +2,9 @@
  * Volt Efficiency Tracker - Dashboard JavaScript
  */
 
+// Debug mode - set to true to enable console logging
+const DEBUG = false;
+
 // State
 let mpgChart = null;
 let socChart = null;
@@ -13,8 +16,19 @@ let currentTimeframe = 30;
 let dateFilter = { start: null, end: null };
 let flatpickrInstance = null;
 let liveRefreshInterval = null;
+let statusRefreshInterval = null;
+let tripsRefreshInterval = null;
 let socket = null;
 let useWebSocket = true;  // Will fallback to polling if WebSocket fails
+let modalTriggerElement = null;  // Track element that opened modal for focus restoration
+
+// Cleanup intervals and connections on page unload
+window.addEventListener('beforeunload', () => {
+    if (liveRefreshInterval) clearInterval(liveRefreshInterval);
+    if (statusRefreshInterval) clearInterval(statusRefreshInterval);
+    if (tripsRefreshInterval) clearInterval(tripsRefreshInterval);
+    if (socket) socket.disconnect();
+});
 
 /**
  * Fetch helper that validates response status before parsing JSON.
@@ -135,15 +149,15 @@ document.addEventListener('DOMContentLoaded', () => {
     loadBatteryCells();
 
     // Refresh status every 30 seconds
-    setInterval(loadStatus, 30000);
+    statusRefreshInterval = setInterval(loadStatus, 30000);
 
     // Check for live trip every 10 seconds (fallback if WebSocket fails)
     if (!useWebSocket) {
-        setInterval(loadLiveTelemetry, 10000);
+        liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);
     }
 
     // Auto-refresh trips every 60 seconds
-    setInterval(loadTrips, 60000);
+    tripsRefreshInterval = setInterval(loadTrips, 60000);
 });
 
 /**
@@ -152,9 +166,11 @@ document.addEventListener('DOMContentLoaded', () => {
 function initWebSocket() {
     // Check if Socket.IO is available
     if (typeof io === 'undefined') {
-        console.log('Socket.IO not available, falling back to polling');
+        if (DEBUG) console.log('Socket.IO not available, falling back to polling');
         useWebSocket = false;
-        setInterval(loadLiveTelemetry, 10000);
+        if (!liveRefreshInterval) {
+            liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);
+        }
         return;
     }
 
@@ -162,13 +178,13 @@ function initWebSocket() {
         socket = io();
 
         socket.on('connect', () => {
-            console.log('WebSocket connected');
+            if (DEBUG) console.log('WebSocket connected');
             useWebSocket = true;
             updateConnectionStatus('connected');
         });
 
         socket.on('disconnect', () => {
-            console.log('WebSocket disconnected');
+            if (DEBUG) console.log('WebSocket disconnected');
             updateConnectionStatus('disconnected');
             // Start polling as fallback
             if (!liveRefreshInterval) {
@@ -181,7 +197,7 @@ function initWebSocket() {
         });
 
         socket.on('connect_error', (error) => {
-            console.log('WebSocket connection error, falling back to polling');
+            if (DEBUG) console.log('WebSocket connection error, falling back to polling');
             useWebSocket = false;
             if (!liveRefreshInterval) {
                 liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);
@@ -190,7 +206,9 @@ function initWebSocket() {
     } catch (error) {
         console.error('Failed to initialize WebSocket:', error);
         useWebSocket = false;
-        setInterval(loadLiveTelemetry, 10000);
+        if (!liveRefreshInterval) {
+            liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);
+        }
     }
 }
 
@@ -283,8 +301,8 @@ function updateConnectionStatus(status) {
 function initServiceWorker() {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/static/sw.js')
-            .then(reg => console.log('Service Worker registered'))
-            .catch(err => console.log('Service Worker registration failed:', err));
+            .then(reg => { if (DEBUG) console.log('Service Worker registered'); })
+            .catch(err => { if (DEBUG) console.log('Service Worker registration failed:', err); });
     }
 }
 
@@ -484,7 +502,7 @@ function updatePowerFlow(telemetry, section) {
     const hasPowerData = telemetry.hv_battery_power_kw !== null ||
                          telemetry.hv_battery_voltage_v !== null ||
                          telemetry.motor_a_rpm !== null ||
-                         telemetry.engine_rpm > 500;
+                         (telemetry.engine_rpm != null && telemetry.engine_rpm > 500);
 
     if (!hasPowerData) {
         section.style.display = 'none';
@@ -521,7 +539,9 @@ function updatePowerFlow(telemetry, section) {
     }
 
     // Check if charging (based on charger status or low speed with negative power)
-    if (telemetry.charger_status > 0 || (powerKw < -1 && telemetry.speed_mph < 1)) {
+    const isCharging = (telemetry.charger_status != null && telemetry.charger_status > 0) ||
+                       (powerKw < -1 && (telemetry.speed_mph == null || telemetry.speed_mph < 1));
+    if (isCharging) {
         mode = 'charging';
         modeLabel = 'Charging';
     }
@@ -592,8 +612,9 @@ function updatePowerFlow(telemetry, section) {
     // Update engine status
     const engineStatus = document.getElementById('engine-status');
     if (engineStatus) {
-        const engineOn = telemetry.engine_rpm > 500;
-        engineStatus.textContent = engineOn ? `ON (${Math.round(telemetry.engine_rpm)} RPM)` : 'OFF';
+        const engineRpm = telemetry.engine_rpm ?? 0;
+        const engineOn = engineRpm > 500;
+        engineStatus.textContent = engineOn ? `ON (${Math.round(engineRpm)} RPM)` : 'OFF';
         engineStatus.className = `powertrain-value ${engineOn ? 'engine-on' : 'engine-off'}`;
     }
 
@@ -896,6 +917,9 @@ async function loadTrips() {
  * Open trip detail modal
  */
 async function openTripModal(tripId) {
+    // Store trigger element for focus restoration on close
+    modalTriggerElement = document.activeElement;
+
     const modal = document.getElementById('trip-modal');
     modal.classList.add('show');
     modal.setAttribute('aria-hidden', 'false');
@@ -975,6 +999,12 @@ function closeTripModal() {
     if (tripMap) {
         tripMap.remove();
         tripMap = null;
+    }
+
+    // Restore focus to trigger element for accessibility
+    if (modalTriggerElement && typeof modalTriggerElement.focus === 'function') {
+        modalTriggerElement.focus();
+        modalTriggerElement = null;
     }
 }
 

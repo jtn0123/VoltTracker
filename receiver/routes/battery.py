@@ -245,6 +245,26 @@ def add_cell_reading():
     if not isinstance(cell_voltages, list) or len(cell_voltages) == 0:
         return jsonify({'error': 'cell_voltages must be a non-empty array'}), 400
 
+    # Validate cell count (Chevy Volt Gen 2 has 96 cells)
+    expected_cell_count = 96
+    if len(cell_voltages) != expected_cell_count:
+        return jsonify({
+            'error': f'Expected {expected_cell_count} cell voltages, got {len(cell_voltages)}'
+        }), 400
+
+    # Validate voltage range (Li-ion cells typically 3.0V-4.2V)
+    min_valid_voltage = 2.5  # Allow some margin for safety
+    max_valid_voltage = 4.5
+    for i, voltage in enumerate(cell_voltages):
+        if voltage is None:
+            continue
+        if not isinstance(voltage, (int, float)):
+            return jsonify({'error': f'Cell {i+1} voltage must be a number'}), 400
+        if voltage < min_valid_voltage or voltage > max_valid_voltage:
+            return jsonify({
+                'error': f'Cell {i+1} voltage {voltage}V is outside valid range ({min_valid_voltage}-{max_valid_voltage}V)'
+            }), 400
+
     timestamp_str = data.get('timestamp')
     if timestamp_str:
         try:
