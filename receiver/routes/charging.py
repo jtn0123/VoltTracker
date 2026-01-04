@@ -203,7 +203,7 @@ def update_charging_session(session_id):
                 try:
                     setattr(session, field, datetime.fromisoformat(data[field]))
                 except (ValueError, TypeError):
-                    pass
+                    return jsonify({'error': f'Invalid datetime format for {field}'}), 400
             else:
                 setattr(session, field, data[field])
 

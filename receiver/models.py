@@ -395,7 +395,7 @@ class ChargingSession(Base):
             ),
             'soc_gained': (
                 self.end_soc - self.start_soc
-                if self.end_soc and self.start_soc else None
+                if self.end_soc is not None and self.start_soc is not None else None
             ),
         }
 

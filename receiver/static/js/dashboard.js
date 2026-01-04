@@ -157,12 +157,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     initServiceWorker();
 
     // Load critical data in parallel for faster initial render
-    await Promise.all([
+    // Use Promise.allSettled to prevent one failure from blocking others
+    const results = await Promise.allSettled([
         loadStatus(),
         loadSummary(),
         loadTrips(),
         loadLiveTelemetry()
     ]);
+
+    // Log any failures but don't block the UI
+    results.forEach((result, index) => {
+        if (result.status === 'rejected' && DEBUG) {
+            const names = ['loadStatus', 'loadSummary', 'loadTrips', 'loadLiveTelemetry'];
+            console.error(`${names[index]} failed:`, result.reason);
+        }
+    });
 
     // Defer non-critical data loading to avoid blocking
     if (typeof requestIdleCallback !== 'undefined') {
@@ -1699,11 +1708,17 @@ async function deleteTrip(tripId) {
             loadMpgTrend(currentTimeframe);
             loadSocAnalysis();
         } else {
-            const data = await response.json();
-            alert(`Failed to delete trip: ${data.error || 'Unknown error'}`);
+            let errorMsg = 'Unknown error';
+            try {
+                const data = await response.json();
+                errorMsg = data.error || errorMsg;
+            } catch {
+                errorMsg = `HTTP ${response.status}`;
+            }
+            alert(`Failed to delete trip: ${errorMsg}`);
         }
     } catch (error) {
-        console.error('Failed to delete trip:', error);
+        if (DEBUG) console.error('Failed to delete trip:', error);
         alert('Failed to delete trip. Please try again.');
     }
 }
