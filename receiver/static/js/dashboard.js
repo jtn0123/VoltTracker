@@ -2631,6 +2631,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileInput = document.getElementById('csv-file');
     const fileNameDisplay = document.getElementById('file-name');
     const importBtn = document.getElementById('import-btn');
+    const importForm = document.getElementById('import-form');
 
     if (fileInput) {
         fileInput.addEventListener('change', () => {
@@ -2644,6 +2645,21 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 fileNameDisplay.textContent = 'No file selected';
                 importBtn.disabled = true;
+            }
+        });
+    }
+
+    // Add form submit handler (more reliable than inline onsubmit on mobile)
+    if (importForm) {
+        importForm.addEventListener('submit', handleImport);
+    }
+
+    // Add click feedback for disabled import button
+    if (importBtn) {
+        importBtn.addEventListener('click', (e) => {
+            if (importBtn.disabled) {
+                e.preventDefault();
+                showImportStatus('Please select CSV files first', 'error');
             }
         });
     }
