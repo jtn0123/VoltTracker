@@ -61,9 +61,9 @@ class Config:
     _default_cors = "http://localhost:*,http://127.0.0.1:*,http://192.168.*:*,http://10.*:*"
     CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', _default_cors).split(',')
 
-    # Validation Thresholds
-    MIN_MPG = float(os.environ.get('MIN_MPG', 10))
-    MAX_MPG = float(os.environ.get('MAX_MPG', 100))
+    # Validation Thresholds (Volt typical: 25-50 MPG, allow 15-60 for margin)
+    MIN_MPG = float(os.environ.get('MIN_MPG', 15))
+    MAX_MPG = float(os.environ.get('MAX_MPG', 60))
     MIN_KWH_PER_MILE = float(os.environ.get('MIN_KWH_PER_MILE', 0.1))
     MAX_KWH_PER_MILE = float(os.environ.get('MAX_KWH_PER_MILE', 1.0))
     FUEL_TANK_MIN = float(os.environ.get('FUEL_TANK_MIN', 0))
