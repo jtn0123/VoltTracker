@@ -8,7 +8,7 @@ for correlation with trip efficiency.
 import requests
 import time
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast
 import logging
 
 from exceptions import WeatherAPIError
@@ -41,14 +41,14 @@ def _request_with_retry(
     Returns:
         JSON response as dict, or None if all retries failed
     """
-    last_error = None
+    last_error: Optional[Exception] = None
     delay = RETRY_DELAY_SECONDS
 
     for attempt in range(MAX_RETRIES):
         try:
             response = requests.get(url, params=params, timeout=timeout)
             response.raise_for_status()
-            return response.json()
+            return cast(Dict[str, Any], response.json())
         except requests.exceptions.Timeout as e:
             last_error = e
             logger.warning(f"Weather API timeout (attempt {attempt + 1}/{MAX_RETRIES})")

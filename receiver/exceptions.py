@@ -5,6 +5,8 @@ This module provides a hierarchy of exceptions for better error handling
 and more informative error messages throughout the application.
 """
 
+from typing import Any, Dict
+
 
 class VoltTrackerError(Exception):
     """Base exception for all VoltTracker errors."""
@@ -30,7 +32,7 @@ class TelemetryParsingError(VoltTrackerError):
     """Failed to parse telemetry data from Torque Pro."""
 
     def __init__(self, message: str, field: str = None, value: str = None):
-        details = {}
+        details: Dict[str, Any] = {}
         if field:
             details['field'] = field
         if value:
@@ -44,7 +46,7 @@ class CSVImportError(VoltTrackerError):
     """CSV import operation failed."""
 
     def __init__(self, message: str, row_number: int = None, filename: str = None):
-        details = {}
+        details: Dict[str, Any] = {}
         if row_number:
             details['row_number'] = row_number
         if filename:
@@ -97,7 +99,7 @@ class WeatherAPIError(VoltTrackerError):
         longitude: float = None,
         status_code: int = None
     ):
-        details = {}
+        details: Dict[str, Any] = {}
         if latitude is not None:
             details['latitude'] = latitude
         if longitude is not None:
@@ -114,7 +116,7 @@ class TripProcessingError(VoltTrackerError):
     """Trip finalization or processing failed."""
 
     def __init__(self, message: str, trip_id: int = None, session_id: str = None):
-        details = {}
+        details: Dict[str, Any] = {}
         if trip_id:
             details['trip_id'] = trip_id
         if session_id:
@@ -128,7 +130,7 @@ class ChargingSessionError(VoltTrackerError):
     """Charging session operation failed."""
 
     def __init__(self, message: str, session_id: int = None):
-        details = {}
+        details: Dict[str, Any] = {}
         if session_id:
             details['session_id'] = session_id
         super().__init__(message, details)
@@ -139,7 +141,7 @@ class ConfigurationError(VoltTrackerError):
     """Invalid or missing configuration."""
 
     def __init__(self, message: str, config_key: str = None):
-        details = {}
+        details: Dict[str, Any] = {}
         if config_key:
             details['config_key'] = config_key
         super().__init__(message, details)

@@ -4,7 +4,7 @@ Dashboard routes for VoltTracker.
 Handles the main dashboard page and status endpoints.
 """
 
-from flask import Blueprint, render_template, jsonify, Response, current_app
+from flask import Blueprint, render_template, jsonify
 from sqlalchemy import desc
 
 from models import TelemetryRaw, Trip
@@ -22,7 +22,7 @@ def dashboard():
 
 
 @dashboard_bp.route('/api/status', methods=['GET'])
-def get_status() -> Response:
+def get_status():
     """Get system status and last sync time."""
     db = get_db()
 

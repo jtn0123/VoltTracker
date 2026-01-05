@@ -7,14 +7,13 @@ Handles trip CRUD operations, efficiency statistics, and analysis.
 import logging
 import statistics
 from datetime import timedelta
-from typing import Union, Tuple
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify
 from sqlalchemy import desc, func
 
 from config import Config
 from database import get_db
 from models import Trip, TelemetryRaw, FuelEvent, SocTransition
-from utils import analyze_soc_floor, utc_now, normalize_datetime
+from utils import analyze_soc_floor, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +52,15 @@ def get_trips():
     gas_only = request.args.get('gas_only', '').lower() == 'true'
     if gas_only:
         query = query.filter(Trip.gas_mode_entered.is_(True))
+
+    # Filter out trips with 0 or very small distance (likely GPS errors or no movement)
+    # Unless explicitly requested with include_zero=true
+    include_zero = request.args.get('include_zero', '').lower() == 'true'
+    if not include_zero:
+        query = query.filter(
+            (Trip.distance_miles.isnot(None)) &
+            (Trip.distance_miles > 0.1)  # At least 0.1 miles
+        )
 
     # Pagination
     try:
@@ -132,7 +140,7 @@ def get_trip_detail(trip_id):
 
 
 @trips_bp.route('/trips/<int:trip_id>', methods=['DELETE'])
-def delete_trip(trip_id: int) -> Union[Response, Tuple[Response, int]]:
+def delete_trip(trip_id: int):
     """Delete a trip and its associated data.
 
     Imported trips (from CSV) are soft-deleted and can be restored.
@@ -162,7 +170,7 @@ def delete_trip(trip_id: int) -> Union[Response, Tuple[Response, int]]:
 
 
 @trips_bp.route('/trips/<int:trip_id>/restore', methods=['POST'])
-def restore_trip(trip_id: int) -> Union[Response, Tuple[Response, int]]:
+def restore_trip(trip_id: int):
     """Restore a soft-deleted trip."""
     db = get_db()
 
@@ -190,7 +198,6 @@ def update_trip(trip_id):
         - gas_miles: Override gas miles
         - electric_miles: Override electric miles
         - fuel_used_gallons: Override fuel used
-        - notes: Add notes to trip
     """
     db = get_db()
 

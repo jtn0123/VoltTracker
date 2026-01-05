@@ -999,6 +999,11 @@ body {
     color: var(--warning);
 }
 
+.badge-unknown {
+    background-color: rgba(108, 117, 125, 0.2);
+    color: var(--text-secondary);
+}
+
 /* Delete Button */
 .btn-delete {
     width: 28px;

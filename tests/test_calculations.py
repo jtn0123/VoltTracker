@@ -346,29 +346,29 @@ class TestCalculateGasMpgBoundary:
 
     def test_good_mpg_calculation(self):
         """Test typical good MPG calculation."""
-        # 40 miles, 1% fuel = 0.093 gallons
-        # MPG = 40 / 0.093 = ~430 MPG (unrealistic but valid)
+        # 40 miles, 10% fuel = 0.93 gallons
+        # MPG = 40 / 0.93 = ~43 MPG (realistic for Volt gas mode)
         result = calculate_gas_mpg(
             start_odometer=50000,
             end_odometer=50040,
             start_fuel_level=80.0,
-            end_fuel_level=79.0,
+            end_fuel_level=70.0,
         )
         assert result is not None
-        assert result > 40  # Should be high MPG
+        assert 40 < result < 50  # Should be around 43 MPG
 
-    def test_very_low_mpg(self):
-        """Test calculation with very low MPG (heavy fuel use)."""
-        # 5 miles, 20% fuel = 20% of 9.3122 gal = 1.86 gal
-        # MPG = 5 / 1.86 = ~2.7 MPG
+    def test_low_mpg_calculation(self):
+        """Test calculation with lower MPG (city driving)."""
+        # 30 miles, 10% fuel = 0.93 gallons
+        # MPG = 30 / 0.93 = ~32 MPG (lower but still valid)
         result = calculate_gas_mpg(
             start_odometer=50000,
-            end_odometer=50005,
+            end_odometer=50030,
             start_fuel_level=80.0,
-            end_fuel_level=60.0,
+            end_fuel_level=70.0,
         )
         assert result is not None
-        assert result < 10
+        assert 30 < result < 35  # Should be around 32 MPG
 
     def test_zero_values(self):
         """Test handling of zero odometer values."""

@@ -209,8 +209,8 @@ class TorqueCSVImporter:
         Returns:
             Tuple of (list of telemetry dicts, stats dict with validation info)
         """
-        records = []
-        stats = {
+        records: List[Dict[str, Any]] = []
+        stats: Dict[str, Any] = {
             'total_rows': 0,
             'parsed_rows': 0,
             'skipped_rows': 0,
@@ -290,7 +290,7 @@ class TorqueCSVImporter:
     ) -> Optional[Dict[str, Any]]:
         """Parse a single CSV row into a telemetry record."""
 
-        record = {
+        record: Dict[str, Any] = {
             'session_id': session_id,
             'timestamp': None,
             'latitude': None,
