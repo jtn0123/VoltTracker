@@ -1,0 +1,28 @@
+{
+  "name": "volttracker",
+  "version": "1.0.0",
+  "description": "A self-hosted data logging and analysis system for the 2017 Chevy Volt (Gen 2). Receives OBD-II telemetry from the Torque Pro Android app, stores it in PostgreSQL, and provides a web dashboard for analyzing fuel efficiency during gasoline operation.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "build": "vite build",
+    "build:watch": "vite build --watch",
+    "preview": "vite preview",
+    "dev": "vite",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:64515/git/jtn0123/VoltTracker"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "terser": "^5.44.1",
+    "vite": "^7.3.0"
+  }
+}
