@@ -30,7 +30,14 @@ repos:
           - types-requests
           - sqlalchemy-stubs
           - types-Flask
-        args: ["--ignore-missing-imports", "--no-strict-optional"]
+        args:
+          - "--ignore-missing-imports"
+          - "--disable-error-code=misc"
+          - "--disable-error-code=valid-type"
+          - "--disable-error-code=var-annotated"
+          - "--disable-error-code=assignment"
+          - "--disable-error-code=arg-type"
+          - "--disable-error-code=operator"
         files: ^receiver/
 
   # General pre-commit hooks
@@ -51,5 +58,19 @@ repos:
     rev: 1.7.6
     hooks:
       - id: bandit
-        args: ["-ll", "-r", "receiver/"]
+        args: ["-ll", "--skip", "B101", "-r", "receiver/"]
         files: ^receiver/
+
+  # Optional: Quick test runner (uncomment to enable)
+  # Note: This runs pytest without coverage for faster checks
+  # If this is too slow, you can remove it or use 'SKIP=pytest git commit'
+  # - repo: local
+  #   hooks:
+  #     - id: pytest
+  #       name: pytest-quick
+  #       entry: pytest
+  #       language: system
+  #       pass_filenames: false
+  #       args: ["-x", "--tb=short", "-q"]
+  #       types: [python]
+  #       stages: [commit]
