@@ -34,6 +34,7 @@ class TestPredictRangeSimple:
                 end_time=now - timedelta(days=i) + timedelta(hours=1),
                 electric_miles=25.0,
                 electric_kwh_used=5.0,  # 5 mi/kWh efficiency
+                kwh_per_mile=5.0 / 25.0,  # 0.2 kWh/mile
                 is_closed=True,
             )
             db_session.add(trip)
@@ -57,6 +58,7 @@ class TestPredictRangeSimple:
                 start_time=datetime.now(timezone.utc) - timedelta(days=i),
                 electric_miles=30.0,
                 electric_kwh_used=6.0,  # 5 mi/kWh
+                kwh_per_mile=6.0 / 30.0,  # 0.2 kWh/mile
                 is_closed=True,
             )
             db_session.add(trip)
@@ -72,7 +74,7 @@ class TestPredictRangeSimple:
         assert result is not None
         assert result["factors"]["temperature_factor"] == pytest.approx(0.65, abs=0.01)
         # Range should be significantly reduced
-        assert result["predicted_range_miles"] < 50  # Much less than ideal ~82 miles
+        assert result["predicted_range_miles"] < 55  # Much less than ideal ~82 miles (65% factor)
 
     def test_cold_temperature_penalty(self, app, db_session):
         """Cold temperature (32-50°F) applies 20% penalty."""
@@ -329,6 +331,7 @@ class TestPredictRangeSimple:
                 start_time=datetime.now(timezone.utc) - timedelta(days=i),
                 electric_miles=30.0,
                 electric_kwh_used=6.0,
+                kwh_per_mile=6.0 / 30.0,  # 0.2 kWh/mile
                 is_closed=True,
             )
             db_session.add(trip)
@@ -348,6 +351,7 @@ class TestPredictRangeSimple:
                 start_time=datetime.now(timezone.utc) - timedelta(days=i),
                 electric_miles=30.0,
                 electric_kwh_used=6.0,  # 5 mi/kWh
+                kwh_per_mile=6.0 / 30.0,  # 0.2 kWh/mile
                 is_closed=True,
             )
             db_session.add(trip)
@@ -387,6 +391,7 @@ class TestGetHistoricalEfficiency:
                 start_time=datetime.now(timezone.utc) - timedelta(days=i),
                 electric_miles=25.0,
                 electric_kwh_used=5.0,  # 5 mi/kWh
+                kwh_per_mile=5.0 / 25.0,  # 0.2 kWh/mile
                 ambient_temp_avg_f=70.0,
                 is_closed=True,
             )
@@ -396,10 +401,13 @@ class TestGetHistoricalEfficiency:
         result = get_historical_efficiency(db_session, days=30)
 
         assert len(result) == 5
-        # Each tuple: (temp, speed, soc_change, efficiency)
-        for temp, speed, soc, eff in result:
+        # Each tuple: (temp, capacity_pct, speed, efficiency)
+        for temp, capacity_pct, speed, eff in result:
             assert isinstance(eff, float)
             assert eff > 0
+            assert isinstance(temp, float)
+            assert isinstance(capacity_pct, float)
+            assert isinstance(speed, float)
 
     def test_filters_by_days(self, app, db_session):
         """Only returns trips within specified days."""
@@ -411,6 +419,7 @@ class TestGetHistoricalEfficiency:
             start_time=now - timedelta(days=40),
             electric_miles=25.0,
             electric_kwh_used=5.0,
+            kwh_per_mile=5.0 / 25.0,  # 0.2 kWh/mile
             is_closed=True,
         )
         db_session.add(old_trip)
@@ -421,6 +430,7 @@ class TestGetHistoricalEfficiency:
             start_time=now - timedelta(days=10),
             electric_miles=25.0,
             electric_kwh_used=5.0,
+            kwh_per_mile=5.0 / 25.0,  # 0.2 kWh/mile
             is_closed=True,
         )
         db_session.add(recent_trip)
@@ -449,6 +459,7 @@ class TestGetHistoricalEfficiency:
             start_time=datetime.now(timezone.utc) - timedelta(days=2),
             electric_miles=25.0,
             electric_kwh_used=5.0,
+            kwh_per_mile=5.0 / 25.0,  # 0.2 kWh/mile
             is_closed=True,
         )
         db_session.add(trip_with_kwh)
@@ -476,6 +487,7 @@ class TestRangePredictionValidation:
                 start_time=datetime.now(timezone.utc) - timedelta(days=i),
                 electric_miles=30.0,
                 electric_kwh_used=6.0,
+                kwh_per_mile=6.0 / 30.0,  # 0.2 kWh/mile
                 is_closed=True,
             )
             db_session.add(trip)
@@ -498,6 +510,7 @@ class TestRangePredictionValidation:
                 start_time=datetime.now(timezone.utc) - timedelta(days=i),
                 electric_miles=30.0,
                 electric_kwh_used=6.0,
+                kwh_per_mile=6.0 / 30.0,  # 0.2 kWh/mile
                 is_closed=True,
             )
             db_session.add(trip)
@@ -520,6 +533,7 @@ class TestRangePredictionValidation:
                 start_time=datetime.now(timezone.utc) - timedelta(days=i),
                 electric_miles=30.0,
                 electric_kwh_used=6.0,
+                kwh_per_mile=6.0 / 30.0,  # 0.2 kWh/mile
                 is_closed=True,
             )
             db_session.add(trip)
