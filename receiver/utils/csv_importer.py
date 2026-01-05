@@ -67,20 +67,45 @@ class TorqueCSVImporter:
         'fuel level (fuel tank)(%)': 'fuel_level_percent',
         'fuel level(%)': 'fuel_level_percent',
         'fuel level (%)': 'fuel_level_percent',
+        '!fuel level(%)': 'fuel_level_percent',
+        '!fuel level (%)': 'fuel_level_percent',
+        'fuel level (from engine ecu)(%)': 'fuel_level_percent',
 
-        # Volt-specific
+        # Volt-specific SOC (standard naming)
         'state of charge(%)': 'state_of_charge',
         'state of charge (%)': 'state_of_charge',
         'soc(%)': 'state_of_charge',
+        # Volt-specific SOC (Torque custom PID naming with !! and ! prefixes)
+        '!! soc (usable)(%)': 'state_of_charge',
+        '!! soc(usable)(%)': 'state_of_charge',
+        '!! soc(raw)(%)': 'state_of_charge',
+        '!! soc (raw)(%)': 'state_of_charge',
+        '!hybrid pack remaining (soc)(%)': 'state_of_charge',
+        '!hybrid pack remaining(soc)(%)': 'state_of_charge',
+        'hybrid battery charge (%)': 'state_of_charge',
+        'hybrid battery charge(%)': 'state_of_charge',
+        'hybrid/ev battery remaining charge(%)': 'state_of_charge',
+        # HV Battery
         'hv battery power(kw)': 'hv_battery_power_kw',
         'hv battery power (kw)': 'hv_battery_power_kw',
+        '!! inst. kpower(kw)': 'hv_battery_power_kw',
+        '!! hv discharge amps(a)': 'hv_discharge_amps',
+        '!! hv volts(v)': 'hv_battery_voltage_v',
+        '!hv battery temp(°f)': 'battery_temp_f',
 
         # Temperature
         'ambient air temp(°f)': 'ambient_temp_f',
         'ambient air temp (°f)': 'ambient_temp_f',
         'ambient air temperature(°f)': 'ambient_temp_f',
+        '*outside temp filtered(°f)': 'ambient_temp_f',
         'intake air temp(°f)': 'intake_air_temp_f',
+        'intake air temperature(°f)': 'intake_air_temp_f',
+        '*m intake air temp iat(°f)': 'intake_air_temp_f',
         'engine coolant temp(°f)': 'coolant_temp_f',
+        '!engine coolant temp(°f)': 'coolant_temp_f',
+        'engine coolant temperature(°f)': 'coolant_temp_f',
+        '!engine oil temp(°f)': 'coolant_temp_f',
+        '!tran temp(°f)': 'coolant_temp_f',
 
         # Odometer
         'trip distance(km)': 'trip_distance_km',
@@ -282,6 +307,9 @@ class TorqueCSVImporter:
             'intake_air_temp_f': None,
             'odometer_miles': None,
             'hv_battery_power_kw': None,
+            'hv_discharge_amps': None,
+            'hv_battery_voltage_v': None,
+            'battery_temp_f': None,
             'raw_data': {},
         }
 
@@ -337,6 +365,12 @@ class TorqueCSVImporter:
                     record['odometer_miles'] = float(value) * 0.621371
                 elif field_name == 'hv_battery_power_kw':
                     record['hv_battery_power_kw'] = float(value)
+                elif field_name == 'hv_discharge_amps':
+                    record['hv_discharge_amps'] = float(value)
+                elif field_name == 'hv_battery_voltage_v':
+                    record['hv_battery_voltage_v'] = float(value)
+                elif field_name == 'battery_temp_f':
+                    record['battery_temp_f'] = float(value)
             except (ValueError, TypeError) as e:
                 logger.debug(f"Failed to parse {field_name}: {value} - {e}")
                 continue

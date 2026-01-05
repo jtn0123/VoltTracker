@@ -151,9 +151,10 @@ def calculate_gas_mpg(
 
     mpg = gas_miles / gallons_used
 
-    # Sanity check - Volt should get 30-50 MPG in gas mode
+    # Sanity check - Volt should get 15-60 MPG in gas mode
     if mpg < Config.MIN_MPG or mpg > Config.MAX_MPG:
-        logger.warning(f"Unusual MPG calculated: {mpg:.1f} (miles: {gas_miles:.1f}, gallons: {gallons_used:.2f})")
+        logger.warning(f"Rejecting outlier MPG: {mpg:.1f} (miles: {gas_miles:.1f}, gallons: {gallons_used:.2f})")
+        return None  # Reject outliers instead of returning bad data
 
     return round(mpg, 1)
 

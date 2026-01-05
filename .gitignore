@@ -78,3 +78,6 @@ docker-compose.override.yml
 coverage.xml
 *.cover
 .hypothesis/
+
+# Backups (user data, not code)
+backups/

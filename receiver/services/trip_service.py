@@ -75,13 +75,18 @@ def process_gas_mode(db, trip: Trip, telemetry: list, points: list) -> None:
         trip.fuel_level_at_gas_entry = gas_entry.get('fuel_level_percent')
         trip.fuel_level_at_end = telemetry[-1].fuel_level_percent
 
-        # Calculate electric and gas miles
-        if gas_entry.get('odometer_miles') and trip.start_odometer:
+        # Calculate electric and gas miles (need all three odometer values)
+        if gas_entry.get('odometer_miles') and trip.start_odometer and trip.end_odometer:
             trip.electric_miles, trip.gas_miles = calculate_electric_miles(
                 gas_entry.get('odometer_miles'),
                 trip.start_odometer,
-                trip.end_odometer or gas_entry.get('odometer_miles')
+                trip.end_odometer
             )
+        else:
+            # Fallback: gas mode entered but odometer missing → use distance_miles
+            trip.electric_miles = 0.0
+            if trip.distance_miles:
+                trip.gas_miles = trip.distance_miles
 
         # Calculate gas MPG (only if we drove at least 1 mile on gas)
         if trip.gas_miles and trip.gas_miles >= 1.0:
@@ -92,22 +97,26 @@ def process_gas_mode(db, trip: Trip, telemetry: list, points: list) -> None:
                 trip.fuel_level_at_end
             )
 
-            if trip.gas_mpg and trip.fuel_level_at_gas_entry and trip.fuel_level_at_end:
-                trip.fuel_used_gallons = (
-                    (trip.fuel_level_at_gas_entry - trip.fuel_level_at_end) / 100
-                    * Config.TANK_CAPACITY_GALLONS
-                )
+        # Calculate fuel used (independent of MPG validity for accurate totals)
+        if trip.fuel_level_at_gas_entry and trip.fuel_level_at_end:
+            fuel_change = trip.fuel_level_at_gas_entry - trip.fuel_level_at_end
+            if fuel_change > 0:  # Only count fuel consumption, not refuels
+                trip.fuel_used_gallons = (fuel_change / 100) * Config.TANK_CAPACITY_GALLONS
 
-        # Record SOC transition for battery health tracking
+        # Record SOC transition for battery health tracking (avoid duplicates)
         if trip.soc_at_gas_transition:
-            soc_transition = SocTransition(
-                trip_id=trip.id,
-                timestamp=trip.gas_mode_entry_time,
-                soc_at_transition=trip.soc_at_gas_transition,
-                ambient_temp_f=gas_entry.get('ambient_temp_f'),
-                odometer_miles=gas_entry.get('odometer_miles')
-            )
-            db.add(soc_transition)
+            existing = db.query(SocTransition).filter(
+                SocTransition.trip_id == trip.id
+            ).first()
+            if not existing:
+                soc_transition = SocTransition(
+                    trip_id=trip.id,
+                    timestamp=trip.gas_mode_entry_time,
+                    soc_at_transition=trip.soc_at_gas_transition,
+                    ambient_temp_f=gas_entry.get('ambient_temp_f'),
+                    odometer_miles=gas_entry.get('odometer_miles')
+                )
+                db.add(soc_transition)
     else:
         # Entire trip was electric - all distance is electric miles
         if trip.start_odometer and trip.end_odometer:

@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any
 import logging
 
 from exceptions import WeatherAPIError
-from utils.timezone import utc_now
+from utils.timezone import utc_now, normalize_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +105,10 @@ def get_weather_for_location(
         timestamp = utc_now()
 
     # Determine if we need historical or forecast API
-    now = utc_now()
-    days_ago = (now - timestamp).days
+    # Normalize both datetimes to handle mixed timezone states
+    now = normalize_datetime(utc_now())
+    normalized_timestamp = normalize_datetime(timestamp)
+    days_ago = (now - normalized_timestamp).days if normalized_timestamp else 0
 
     try:
         if days_ago > 5:

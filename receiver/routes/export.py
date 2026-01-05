@@ -11,9 +11,10 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, request, jsonify, Response
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 
 from database import get_db
+from services.trip_service import finalize_trip
 from exceptions import CSVImportError
 from models import Trip, FuelEvent, SocTransition, ChargingSession, TelemetryRaw
 from utils import utc_now
@@ -292,23 +293,60 @@ def import_csv():
             first_record = records[0]
             last_record = records[-1]
 
+            # Query MIN/MAX odometer from all telemetry (more reliable than first/last record)
+            odometer_range = db.query(
+                func.min(TelemetryRaw.odometer_miles),
+                func.max(TelemetryRaw.odometer_miles)
+            ).filter(
+                TelemetryRaw.session_id == session_id,
+                TelemetryRaw.odometer_miles.isnot(None)
+            ).first()
+
+            # Query MIN/MAX SOC from all telemetry
+            soc_range = db.query(
+                func.min(TelemetryRaw.state_of_charge),
+                func.max(TelemetryRaw.state_of_charge)
+            ).filter(
+                TelemetryRaw.session_id == session_id,
+                TelemetryRaw.state_of_charge.isnot(None)
+            ).first()
+
+            # Query time range from telemetry
+            time_range = db.query(
+                func.min(TelemetryRaw.timestamp),
+                func.max(TelemetryRaw.timestamp)
+            ).filter(
+                TelemetryRaw.session_id == session_id
+            ).first()
+
             trip = Trip(
                 session_id=session_id,
-                start_time=first_record['timestamp'],
-                end_time=last_record['timestamp'],
-                start_odometer=first_record.get('odometer_miles'),
-                end_odometer=last_record.get('odometer_miles'),
-                start_soc=first_record.get('state_of_charge'),
+                start_time=time_range[0] if time_range else first_record['timestamp'],
+                end_time=time_range[1] if time_range else last_record['timestamp'],
+                start_odometer=odometer_range[0] if odometer_range else None,  # MIN (trip start)
+                end_odometer=odometer_range[1] if odometer_range else None,    # MAX (trip end)
+                start_soc=soc_range[1] if soc_range else None,  # MAX SOC (start of trip)
                 fuel_level_at_end=last_record.get('fuel_level_percent'),
                 is_imported=True,  # Mark as imported for soft-delete protection
+                is_closed=False,   # Will be closed by finalize_trip
             )
 
-            # Calculate distance if odometer available
-            if trip.start_odometer and trip.end_odometer:
-                trip.distance_miles = trip.end_odometer - trip.start_odometer
+            # Calculate distance if odometer available (use abs to handle any ordering issues)
+            if trip.start_odometer is not None and trip.end_odometer is not None:
+                trip.distance_miles = abs(trip.end_odometer - trip.start_odometer)
 
             db.add(trip)
             db.commit()
+
+            # Finalize trip to calculate electric_miles, gas_mpg, etc.
+            try:
+                finalize_trip(db, trip)
+                logger.info(f"Finalized imported trip {trip.id}")
+            except Exception as e:
+                logger.warning(f"Failed to finalize imported trip {trip.id}: {e}")
+                # Still mark as closed even if finalization has issues
+                trip.is_closed = True
+                db.commit()
 
             stats['trip_id'] = trip.id
 
