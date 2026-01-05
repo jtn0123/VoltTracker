@@ -10,7 +10,6 @@ Tests the charging session detection and finalization including:
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch  # noqa: F401
 
 import pytest
 from config import Config

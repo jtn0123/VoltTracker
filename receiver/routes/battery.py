@@ -249,12 +249,13 @@ def add_cell_reading():
         if voltage is None:
             continue
         if not isinstance(voltage, (int, float)):
-            return jsonify({"error": f"Cell {i+1} voltage must be a number"}), 400
+            return jsonify({"error": f"Cell {i + 1} voltage must be a number"}), 400
         if voltage < min_valid_voltage or voltage > max_valid_voltage:
             return (
                 jsonify(
                     {
-                        "error": f"Cell {i+1} voltage {voltage}V is outside valid range ({min_valid_voltage}-{max_valid_voltage}V)"
+                        "error": f"Cell {i + 1} voltage {voltage}V outside range "
+                        f"({min_valid_voltage}-{max_valid_voltage}V)"
                     }
                 ),
                 400,
