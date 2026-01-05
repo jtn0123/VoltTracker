@@ -642,9 +642,96 @@ class WebVital(Base):
         return f"<WebVital(name={self.name}, value={self.value}, rating={self.rating})>"
 
 
+class MaintenanceRecord(Base):
+    """Track maintenance items and predict when service is due."""
+
+    __tablename__ = "maintenance_records"
+    __table_args__ = (Index("ix_maintenance_type_date", "maintenance_type", "service_date"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    maintenance_type = Column(String(100), nullable=False)
+    service_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    odometer_miles = Column(Float)
+    engine_hours = Column(Float)  # For oil changes
+    cost = Column(Float)
+    location = Column(String(200))
+    notes = Column(Text)
+    next_due_date = Column(DateTime(timezone=True))
+    next_due_miles = Column(Float)
+    next_due_engine_hours = Column(Float)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    def to_dict(self):
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "maintenance_type": self.maintenance_type,
+            "service_date": self.service_date.isoformat() if self.service_date else None,
+            "odometer_miles": self.odometer_miles,
+            "engine_hours": self.engine_hours,
+            "cost": self.cost,
+            "location": self.location,
+            "notes": self.notes,
+            "next_due_date": self.next_due_date.isoformat() if self.next_due_date else None,
+            "next_due_miles": self.next_due_miles,
+            "next_due_engine_hours": self.next_due_engine_hours,
+        }
+
+
+class Route(Base):
+    """Common routes detected from GPS patterns."""
+
+    __tablename__ = "routes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200))  # User-given or auto-generated
+    start_lat = Column(Float, nullable=False)
+    start_lon = Column(Float, nullable=False)
+    end_lat = Column(Float, nullable=False)
+    end_lon = Column(Float, nullable=False)
+    trip_count = Column(Integer, default=1)
+    avg_distance_miles = Column(Float)
+    avg_efficiency_kwh_per_mile = Column(Float)
+    avg_duration_minutes = Column(Float)
+    best_efficiency = Column(Float)
+    worst_efficiency = Column(Float)
+    last_traveled = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+    def to_dict(self):
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "start": {"lat": self.start_lat, "lon": self.start_lon},
+            "end": {"lat": self.end_lat, "lon": self.end_lon},
+            "trip_count": self.trip_count,
+            "avg_distance_miles": self.avg_distance_miles,
+            "avg_efficiency": self.avg_efficiency_kwh_per_mile,
+            "avg_duration_minutes": self.avg_duration_minutes,
+            "best_efficiency": self.best_efficiency,
+            "worst_efficiency": self.worst_efficiency,
+            "last_traveled": self.last_traveled.isoformat() if self.last_traveled else None,
+        }
+
+
 def get_engine(database_url):
-    """Create database engine."""
-    return create_engine(database_url, pool_pre_ping=True)
+    """
+    Create database engine with proper connection pooling.
+
+    P0 Technical Improvement: Add connection pooling configuration
+    to prevent connection exhaustion and improve performance.
+    """
+    return create_engine(
+        database_url,
+        pool_pre_ping=True,  # Verify connections before use
+        pool_size=10,  # Max connections in pool
+        max_overflow=20,  # Allow 20 additional connections
+        pool_recycle=3600,  # Recycle connections after 1 hour
+        pool_timeout=30,  # Wait up to 30s for a connection
+        echo_pool=False,  # Set to True for debugging
+    )
 
 
 def get_session(engine):

@@ -1,0 +1,156 @@
+"""
+Battery Degradation Forecasting Service
+
+Predict future battery capacity based on historical degradation trends.
+"""
+
+import logging
+from typing import Dict, List, Tuple
+
+from models import BatteryHealthReading, Trip
+from sqlalchemy import and_
+from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
+
+
+def get_degradation_history(db: Session) -> List[Tuple[float, float]]:
+    """
+    Get historical battery capacity data.
+
+    Returns: List of (odometer_miles, capacity_percent)
+    """
+    readings = (
+        db.query(BatteryHealthReading)
+        .filter(BatteryHealthReading.capacity_percent.isnot(None))
+        .order_by(BatteryHealthReading.timestamp)
+        .all()
+    )
+
+    # Get odometer at time of each reading (approximate from nearby trip)
+    data = []
+    for reading in readings:
+        # Find nearest trip
+        nearby_trip = (
+            db.query(Trip.odometer_miles)
+            .filter(
+                and_(
+                    Trip.odometer_miles.isnot(None),
+                    Trip.start_time >= reading.timestamp,
+                )
+            )
+            .order_by(Trip.start_time)
+            .first()
+        )
+
+        if nearby_trip and nearby_trip[0]:
+            data.append((nearby_trip[0], reading.capacity_percent))
+
+    return data
+
+
+def simple_linear_regression(data: List[Tuple[float, float]]) -> Tuple[float, float]:
+    """
+    Simple linear regression: y = mx + b
+
+    Args:
+        data: List of (x, y) tuples
+
+    Returns:
+        (slope, intercept)
+    """
+    n = len(data)
+    if n < 2:
+        return (0, 100)  # No degradation if insufficient data
+
+    sum_x = sum(x for x, y in data)
+    sum_y = sum(y for x, y in data)
+    sum_xy = sum(x * y for x, y in data)
+    sum_xx = sum(x * x for x, y in data)
+
+    # Calculate slope and intercept
+    slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x)
+    intercept = (sum_y - slope * sum_x) / n
+
+    return (slope, intercept)
+
+
+def forecast_degradation(db: Session) -> Dict:
+    """
+    Forecast battery degradation at key mileage milestones.
+    """
+    # Get historical data
+    history = get_degradation_history(db)
+
+    if len(history) < 2:
+        return {
+            "error": "Not enough battery health data",
+            "min_readings_needed": 2,
+            "current_readings": len(history),
+        }
+
+    # Perform regression
+    slope, intercept = simple_linear_regression(history)
+
+    # Get current status
+    latest_reading = db.query(BatteryHealthReading).order_by(BatteryHealthReading.timestamp.desc()).first()
+
+    current_miles = 0
+    current_capacity_pct = 100
+
+    if latest_reading:
+        current_capacity_pct = latest_reading.capacity_percent
+
+        # Get current mileage
+        latest_trip = db.query(Trip).filter(Trip.odometer_miles.isnot(None)).order_by(Trip.start_time.desc()).first()
+        if latest_trip:
+            current_miles = latest_trip.odometer_miles
+
+    # Forecast at milestones
+    milestones = [50000, 75000, 100000, 125000, 150000, 200000]
+    forecasts = []
+
+    for miles in milestones:
+        if miles <= current_miles:
+            continue
+
+        predicted_capacity = slope * miles + intercept
+        predicted_capacity = max(70, min(100, predicted_capacity))  # Clamp 70-100%
+
+        forecasts.append(
+            {
+                "odometer_miles": miles,
+                "predicted_capacity_pct": round(predicted_capacity, 1),
+                "predicted_capacity_kwh": round(16.5 * predicted_capacity / 100, 2),
+            }
+        )
+
+    # Calculate degradation rate (percent per 10k miles)
+    degradation_per_10k = abs(slope * 10000)
+
+    # Typical Volt Gen 2 degradation: 2-3% per 50k miles = 0.4-0.6% per 10k
+    is_normal = 0.2 <= degradation_per_10k <= 0.8
+
+    return {
+        "current_status": {
+            "odometer_miles": current_miles,
+            "capacity_pct": current_capacity_pct,
+            "capacity_kwh": latest_reading.capacity_kwh if latest_reading else 16.5,
+        },
+        "degradation_rate": {
+            "percent_per_10k_miles": round(degradation_per_10k, 2),
+            "percent_per_50k_miles": round(degradation_per_10k * 5, 1),
+            "is_normal": is_normal,
+            "comparison": "Normal (2-3% per 50k)"
+            if is_normal
+            else "Faster than typical"
+            if degradation_per_10k > 0.8
+            else "Slower than typical",
+        },
+        "forecasts": forecasts,
+        "data_points": len(history),
+        "model": {"slope": slope, "intercept": intercept},
+        "recommendation": "Battery health is normal"
+        if is_normal
+        else "Consider having battery inspected if degradation continues",
+    }
