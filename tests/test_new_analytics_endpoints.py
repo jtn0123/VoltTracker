@@ -181,11 +181,13 @@ class TestMaintenanceEndpoints:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
-        assert len(data) == 8  # 8 maintenance items
+        assert "maintenance_items" in data
+        assert len(data["maintenance_items"]) == 8  # 8 maintenance items
         # Check structure
-        assert "type" in data[0]
-        assert "description" in data[0]
+        assert "type" in data["maintenance_items"][0]
+        assert "description" in data["maintenance_items"][0]
+        assert "current_odometer" in data
+        assert "total_engine_hours" in data
 
     def test_maintenance_engine_hours_endpoint(self, client, db_session):
         """GET /api/analytics/maintenance/engine-hours returns hours."""
@@ -302,7 +304,7 @@ class TestBatteryDegradationEndpoints:
     """Tests for battery degradation API endpoints."""
 
     def test_degradation_endpoint_insufficient_data(self, client, db_session):
-        """Returns 404 with insufficient data."""
+        """Returns error message with insufficient data."""
         # Only one reading
         reading = BatteryHealthReading(
             timestamp=datetime.now(timezone.utc),
@@ -314,7 +316,10 @@ class TestBatteryDegradationEndpoints:
 
         response = client.get("/api/analytics/battery/degradation")
 
-        assert response.status_code == 404
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert "error" in data
+        assert data["current_readings"] == 1
 
     def test_degradation_endpoint_with_data(self, client, db_session):
         """Returns forecast with sufficient data."""
@@ -341,8 +346,10 @@ class TestBatteryDegradationEndpoints:
         assert response.status_code == 200
         data = json.loads(response.data)
         assert "forecasts" in data
-        assert "current_capacity_kwh" in data
-        assert "degradation_rate_per_mile" in data
+        assert "current_status" in data
+        assert "capacity_kwh" in data["current_status"]
+        assert "degradation_rate" in data
+        assert "percent_per_10k_miles" in data["degradation_rate"]
 
     def test_degradation_forecasts_structure(self, client, db_session):
         """Forecast data has expected structure."""
@@ -367,9 +374,9 @@ class TestBatteryDegradationEndpoints:
         assert len(forecasts) > 0
 
         for forecast in forecasts:
-            assert "miles" in forecast
-            assert "capacity_kwh" in forecast
-            assert "vs_typical_volt" in forecast
+            assert "odometer_miles" in forecast
+            assert "predicted_capacity_kwh" in forecast
+            assert "predicted_capacity_pct" in forecast
 
 
 class TestEndpointErrorHandling:
