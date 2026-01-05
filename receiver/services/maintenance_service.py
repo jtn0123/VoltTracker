@@ -138,13 +138,15 @@ def calculate_next_due(
         overdue = True
 
     result["overdue"] = overdue
-    result["status"] = (
-        "overdue"
-        if overdue
-        else "upcoming"
-        if (result.get("days_remaining", 999) < 30 or result.get("miles_remaining", 999) < 500)
-        else "ok"
+
+    # Check if upcoming (within 30 days or 500 miles)
+    days_remaining = result.get("days_remaining")
+    miles_remaining = result.get("miles_remaining")
+    is_upcoming = (days_remaining is not None and days_remaining < 30) or (
+        miles_remaining is not None and miles_remaining < 500
     )
+
+    result["status"] = "overdue" if overdue else "upcoming" if is_upcoming else "ok"
 
     return result
 
