@@ -6,7 +6,9 @@ Endpoints for receiving and logging client-side performance data.
 
 import logging
 
+from database import get_db
 from flask import Blueprint, jsonify, request
+from models import WebVital
 
 logger = logging.getLogger(__name__)
 
@@ -45,16 +47,18 @@ def record_vitals():
             f"[{data.get('url', 'unknown')}]"
         )
 
-        # TODO: Store in database for historical analysis
-        # Example:
-        # WebVital.create(
-        #     name=metric_name,
-        #     value=metric_value,
-        #     rating=rating,
-        #     url=data.get('url'),
-        #     user_agent=data.get('userAgent'),
-        #     timestamp=data.get('timestamp')
-        # )
+        # Store in database for historical analysis
+        try:
+            db = get_db()
+            web_vital = WebVital.create_from_frontend(data)
+            db.add(web_vital)
+            db.commit()
+
+            logger.debug(f"Stored Web Vital {metric_name} to database (id={web_vital.id})")
+        except Exception as db_error:
+            logger.error(f"Failed to store Web Vital in database: {db_error}", exc_info=True)
+            # Continue execution - logging is more important than DB storage
+            # The metric was already logged, so we don't fail the request
 
         return jsonify({"status": "ok", "recorded": metric_name}), 200
 

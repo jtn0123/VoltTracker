@@ -1,16 +1,24 @@
-from sqlalchemy import (
-    Column, Integer, String, Float, Boolean,
-    DateTime, ForeignKey, Text, create_engine, JSON, Index
-)
-from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
-from sqlalchemy import TypeDecorator
 import uuid as uuid_module
 
 from config import Config
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    TypeDecorator,
+    create_engine,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship, sessionmaker
 from utils.timezone import utc_now
-
 
 Base = declarative_base()
 
@@ -21,11 +29,12 @@ class GUID(TypeDecorator):
 
     Uses PostgreSQL's UUID type when available, otherwise stores as String(36).
     """
+
     impl = String(36)
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
-        if dialect.name == 'postgresql':
+        if dialect.name == "postgresql":
             return dialect.type_descriptor(UUID(as_uuid=True))
         else:
             return dialect.type_descriptor(String(36))
@@ -33,7 +42,7 @@ class GUID(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is None:
             return value
-        elif dialect.name == 'postgresql':
+        elif dialect.name == "postgresql":
             return value
         else:
             return str(value)
@@ -53,11 +62,12 @@ class JSONType(TypeDecorator):
 
     Uses PostgreSQL's JSONB type when available, otherwise uses JSON.
     """
+
     impl = JSON
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
-        if dialect.name == 'postgresql':
+        if dialect.name == "postgresql":
             return dialect.type_descriptor(JSONB)
         else:
             return dialect.type_descriptor(JSON)
@@ -66,10 +76,10 @@ class JSONType(TypeDecorator):
 class TelemetryRaw(Base):
     """Raw telemetry data from Torque Pro."""
 
-    __tablename__ = 'telemetry_raw'
+    __tablename__ = "telemetry_raw"
     __table_args__ = (
         # Composite index for common query pattern: telemetry for a session ordered by time
-        Index('ix_telemetry_session_timestamp', 'session_id', 'timestamp'),
+        Index("ix_telemetry_session_timestamp", "session_id", "timestamp"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -137,68 +147,68 @@ class TelemetryRaw(Base):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'session_id': str(self.session_id),
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
-            'latitude': self.latitude,
-            'longitude': self.longitude,
-            'speed_mph': self.speed_mph,
-            'engine_rpm': self.engine_rpm,
-            'throttle_position': self.throttle_position,
-            'coolant_temp_f': self.coolant_temp_f,
-            'intake_air_temp_f': self.intake_air_temp_f,
-            'fuel_level_percent': self.fuel_level_percent,
-            'fuel_remaining_gallons': self.fuel_remaining_gallons,
-            'state_of_charge': self.state_of_charge,
-            'battery_voltage': self.battery_voltage,
-            'ambient_temp_f': self.ambient_temp_f,
-            'odometer_miles': self.odometer_miles,
+            "id": self.id,
+            "session_id": str(self.session_id),
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "speed_mph": self.speed_mph,
+            "engine_rpm": self.engine_rpm,
+            "throttle_position": self.throttle_position,
+            "coolant_temp_f": self.coolant_temp_f,
+            "intake_air_temp_f": self.intake_air_temp_f,
+            "fuel_level_percent": self.fuel_level_percent,
+            "fuel_remaining_gallons": self.fuel_remaining_gallons,
+            "state_of_charge": self.state_of_charge,
+            "battery_voltage": self.battery_voltage,
+            "ambient_temp_f": self.ambient_temp_f,
+            "odometer_miles": self.odometer_miles,
             # HV Battery
-            'hv_battery_power_kw': self.hv_battery_power_kw,
-            'hv_battery_current_a': self.hv_battery_current_a,
-            'hv_battery_voltage_v': self.hv_battery_voltage_v,
-            'hv_discharge_amps': self.hv_discharge_amps,
-            'battery_temp_f': self.battery_temp_f,
-            'battery_coolant_temp_f': self.battery_coolant_temp_f,
+            "hv_battery_power_kw": self.hv_battery_power_kw,
+            "hv_battery_current_a": self.hv_battery_current_a,
+            "hv_battery_voltage_v": self.hv_battery_voltage_v,
+            "hv_discharge_amps": self.hv_discharge_amps,
+            "battery_temp_f": self.battery_temp_f,
+            "battery_coolant_temp_f": self.battery_coolant_temp_f,
             # Charging
-            'charger_ac_power_kw': self.charger_ac_power_kw,
-            'charger_connected': self.charger_connected,
-            'charger_status': self.charger_status,
-            'charger_power_kw': self.charger_power_kw,
-            'charger_ac_voltage': self.charger_ac_voltage,
-            'charger_ac_current': self.charger_ac_current,
-            'last_charge_wh': self.last_charge_wh,
+            "charger_ac_power_kw": self.charger_ac_power_kw,
+            "charger_connected": self.charger_connected,
+            "charger_status": self.charger_status,
+            "charger_power_kw": self.charger_power_kw,
+            "charger_ac_voltage": self.charger_ac_voltage,
+            "charger_ac_current": self.charger_ac_current,
+            "last_charge_wh": self.last_charge_wh,
             # Motor/Generator
-            'motor_a_rpm': self.motor_a_rpm,
-            'motor_b_rpm': self.motor_b_rpm,
-            'generator_rpm': self.generator_rpm,
-            'motor_temp_max_f': self.motor_temp_max_f,
+            "motor_a_rpm": self.motor_a_rpm,
+            "motor_b_rpm": self.motor_b_rpm,
+            "generator_rpm": self.generator_rpm,
+            "motor_temp_max_f": self.motor_temp_max_f,
             # Engine
-            'engine_oil_temp_f': self.engine_oil_temp_f,
-            'engine_torque_nm': self.engine_torque_nm,
-            'engine_running': self.engine_running,
-            'transmission_temp_f': self.transmission_temp_f,
+            "engine_oil_temp_f": self.engine_oil_temp_f,
+            "engine_torque_nm": self.engine_torque_nm,
+            "engine_running": self.engine_running,
+            "transmission_temp_f": self.transmission_temp_f,
             # Battery health
-            'battery_capacity_kwh': self.battery_capacity_kwh,
+            "battery_capacity_kwh": self.battery_capacity_kwh,
             # Lifetime counters
-            'lifetime_ev_miles': self.lifetime_ev_miles,
-            'lifetime_gas_miles': self.lifetime_gas_miles,
-            'dte_electric_miles': self.dte_electric_miles,
-            'dte_gas_miles': self.dte_gas_miles,
+            "lifetime_ev_miles": self.lifetime_ev_miles,
+            "lifetime_gas_miles": self.lifetime_gas_miles,
+            "dte_electric_miles": self.dte_electric_miles,
+            "dte_gas_miles": self.dte_gas_miles,
         }
 
 
 class Trip(Base):
     """Aggregated trip summaries."""
 
-    __tablename__ = 'trips'
+    __tablename__ = "trips"
     __table_args__ = (
         # Composite index for common query pattern: closed trips ordered by start_time
-        Index('ix_trips_is_closed_start_time', 'is_closed', 'start_time'),
+        Index("ix_trips_is_closed_start_time", "is_closed", "start_time"),
         # Composite index for gas mode queries by date
-        Index('ix_trips_gas_mode_start_time', 'gas_mode_entered', 'start_time'),
+        Index("ix_trips_gas_mode_start_time", "gas_mode_entered", "start_time"),
         # Composite index for filtered trip listing (most common query)
-        Index('ix_trips_closed_deleted_time', 'is_closed', 'deleted_at', 'start_time'),
+        Index("ix_trips_closed_deleted_time", "is_closed", "deleted_at", "start_time"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -243,42 +253,42 @@ class Trip(Base):
     weather_impact_factor = Column(Float)  # Estimated efficiency impact multiplier
 
     # Relationships
-    soc_transitions = relationship('SocTransition', back_populates='trip')
+    soc_transitions = relationship("SocTransition", back_populates="trip")
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'session_id': str(self.session_id),
-            'start_time': self.start_time.isoformat() if self.start_time else None,
-            'end_time': self.end_time.isoformat() if self.end_time else None,
-            'start_odometer': self.start_odometer,
-            'end_odometer': self.end_odometer,
-            'distance_miles': self.distance_miles,
-            'start_soc': self.start_soc,
-            'soc_at_gas_transition': self.soc_at_gas_transition,
-            'electric_miles': self.electric_miles,
-            'electric_kwh_used': self.electric_kwh_used,
-            'kwh_per_mile': self.kwh_per_mile,
-            'gas_mode_entered': self.gas_mode_entered,
-            'gas_mode_entry_time': self.gas_mode_entry_time.isoformat() if self.gas_mode_entry_time else None,
-            'gas_miles': self.gas_miles,
-            'fuel_used_gallons': self.fuel_used_gallons,
-            'gas_mpg': self.gas_mpg,
-            'ambient_temp_avg_f': self.ambient_temp_avg_f,
-            'is_closed': self.is_closed,
-            'is_imported': self.is_imported,
-            'weather_temp_f': self.weather_temp_f,
-            'weather_precipitation_in': self.weather_precipitation_in,
-            'weather_wind_mph': self.weather_wind_mph,
-            'weather_conditions': self.weather_conditions,
-            'weather_impact_factor': self.weather_impact_factor,
+            "id": self.id,
+            "session_id": str(self.session_id),
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "start_odometer": self.start_odometer,
+            "end_odometer": self.end_odometer,
+            "distance_miles": self.distance_miles,
+            "start_soc": self.start_soc,
+            "soc_at_gas_transition": self.soc_at_gas_transition,
+            "electric_miles": self.electric_miles,
+            "electric_kwh_used": self.electric_kwh_used,
+            "kwh_per_mile": self.kwh_per_mile,
+            "gas_mode_entered": self.gas_mode_entered,
+            "gas_mode_entry_time": self.gas_mode_entry_time.isoformat() if self.gas_mode_entry_time else None,
+            "gas_miles": self.gas_miles,
+            "fuel_used_gallons": self.fuel_used_gallons,
+            "gas_mpg": self.gas_mpg,
+            "ambient_temp_avg_f": self.ambient_temp_avg_f,
+            "is_closed": self.is_closed,
+            "is_imported": self.is_imported,
+            "weather_temp_f": self.weather_temp_f,
+            "weather_precipitation_in": self.weather_precipitation_in,
+            "weather_wind_mph": self.weather_wind_mph,
+            "weather_conditions": self.weather_conditions,
+            "weather_impact_factor": self.weather_impact_factor,
         }
 
 
 class FuelEvent(Base):
     """Refueling events for tank-based efficiency calculations."""
 
-    __tablename__ = 'fuel_events'
+    __tablename__ = "fuel_events"
 
     id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
@@ -293,25 +303,25 @@ class FuelEvent(Base):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
-            'odometer_miles': self.odometer_miles,
-            'gallons_added': self.gallons_added,
-            'fuel_level_before': self.fuel_level_before,
-            'fuel_level_after': self.fuel_level_after,
-            'price_per_gallon': self.price_per_gallon,
-            'total_cost': self.total_cost,
-            'notes': self.notes,
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "odometer_miles": self.odometer_miles,
+            "gallons_added": self.gallons_added,
+            "fuel_level_before": self.fuel_level_before,
+            "fuel_level_after": self.fuel_level_after,
+            "price_per_gallon": self.price_per_gallon,
+            "total_cost": self.total_cost,
+            "notes": self.notes,
         }
 
 
 class SocTransition(Base):
     """Records electric-to-gas transitions for SOC floor analysis."""
 
-    __tablename__ = 'soc_transitions'
+    __tablename__ = "soc_transitions"
 
     id = Column(Integer, primary_key=True)
-    trip_id = Column(Integer, ForeignKey('trips.id'))
+    trip_id = Column(Integer, ForeignKey("trips.id"))
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     soc_at_transition = Column(Float)
     ambient_temp_f = Column(Float)
@@ -319,23 +329,23 @@ class SocTransition(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
     # Relationships
-    trip = relationship('Trip', back_populates='soc_transitions')
+    trip = relationship("Trip", back_populates="soc_transitions")
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'trip_id': self.trip_id,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
-            'soc_at_transition': self.soc_at_transition,
-            'ambient_temp_f': self.ambient_temp_f,
-            'odometer_miles': self.odometer_miles,
+            "id": self.id,
+            "trip_id": self.trip_id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "soc_at_transition": self.soc_at_transition,
+            "ambient_temp_f": self.ambient_temp_f,
+            "odometer_miles": self.odometer_miles,
         }
 
 
 class ChargingSession(Base):
     """Tracks charging sessions for energy analysis."""
 
-    __tablename__ = 'charging_sessions'
+    __tablename__ = "charging_sessions"
 
     id = Column(Integer, primary_key=True)
     start_time = Column(DateTime(timezone=True), nullable=False, index=True)
@@ -372,31 +382,29 @@ class ChargingSession(Base):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'start_time': self.start_time.isoformat() if self.start_time else None,
-            'end_time': self.end_time.isoformat() if self.end_time else None,
-            'start_soc': self.start_soc,
-            'end_soc': self.end_soc,
-            'kwh_added': self.kwh_added,
-            'peak_power_kw': self.peak_power_kw,
-            'avg_power_kw': self.avg_power_kw,
-            'latitude': self.latitude,
-            'longitude': self.longitude,
-            'location_name': self.location_name,
-            'charge_type': self.charge_type,
-            'cost': self.cost,
-            'cost_per_kwh': self.cost_per_kwh,
-            'electricity_rate': self.electricity_rate,
-            'notes': self.notes,
-            'is_complete': self.is_complete,
-            'charging_curve': self.charging_curve,
-            'duration_minutes': (
-                (self.end_time - self.start_time).total_seconds() / 60
-                if self.end_time and self.start_time else None
+            "id": self.id,
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "start_soc": self.start_soc,
+            "end_soc": self.end_soc,
+            "kwh_added": self.kwh_added,
+            "peak_power_kw": self.peak_power_kw,
+            "avg_power_kw": self.avg_power_kw,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "location_name": self.location_name,
+            "charge_type": self.charge_type,
+            "cost": self.cost,
+            "cost_per_kwh": self.cost_per_kwh,
+            "electricity_rate": self.electricity_rate,
+            "notes": self.notes,
+            "is_complete": self.is_complete,
+            "charging_curve": self.charging_curve,
+            "duration_minutes": (
+                (self.end_time - self.start_time).total_seconds() / 60 if self.end_time and self.start_time else None
             ),
-            'soc_gained': (
-                self.end_soc - self.start_soc
-                if self.end_soc is not None and self.start_soc is not None else None
+            "soc_gained": (
+                self.end_soc - self.start_soc if self.end_soc is not None and self.start_soc is not None else None
             ),
         }
 
@@ -409,7 +417,7 @@ class BatteryHealthReading(Base):
     Original Gen 2 Volt capacity: 18.4 kWh usable.
     """
 
-    __tablename__ = 'battery_health_readings'
+    __tablename__ = "battery_health_readings"
 
     id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
@@ -429,13 +437,13 @@ class BatteryHealthReading(Base):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
-            'capacity_kwh': self.capacity_kwh,
-            'normalized_capacity_kwh': self.normalized_capacity_kwh,
-            'soc_at_reading': self.soc_at_reading,
-            'ambient_temp_f': self.ambient_temp_f,
-            'odometer_miles': self.odometer_miles,
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "capacity_kwh": self.capacity_kwh,
+            "normalized_capacity_kwh": self.normalized_capacity_kwh,
+            "soc_at_reading": self.soc_at_reading,
+            "ambient_temp_f": self.ambient_temp_f,
+            "odometer_miles": self.odometer_miles,
         }
 
     @property
@@ -454,7 +462,7 @@ class BatteryCellReading(Base):
     This table stores snapshots of cell voltages for battery health analysis.
     """
 
-    __tablename__ = 'battery_cell_readings'
+    __tablename__ = "battery_cell_readings"
 
     id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
@@ -483,24 +491,23 @@ class BatteryCellReading(Base):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
-            'cell_voltages': self.cell_voltages,
-            'min_voltage': self.min_voltage,
-            'max_voltage': self.max_voltage,
-            'avg_voltage': self.avg_voltage,
-            'voltage_delta': self.voltage_delta,
-            'module1_avg': self.module1_avg,
-            'module2_avg': self.module2_avg,
-            'module3_avg': self.module3_avg,
-            'ambient_temp_f': self.ambient_temp_f,
-            'state_of_charge': self.state_of_charge,
-            'is_charging': self.is_charging,
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "cell_voltages": self.cell_voltages,
+            "min_voltage": self.min_voltage,
+            "max_voltage": self.max_voltage,
+            "avg_voltage": self.avg_voltage,
+            "voltage_delta": self.voltage_delta,
+            "module1_avg": self.module1_avg,
+            "module2_avg": self.module2_avg,
+            "module3_avg": self.module3_avg,
+            "ambient_temp_f": self.ambient_temp_f,
+            "state_of_charge": self.state_of_charge,
+            "is_charging": self.is_charging,
         }
 
     @classmethod
-    def from_cell_voltages(cls, timestamp, cell_voltages, ambient_temp_f=None,
-                           state_of_charge=None, is_charging=False):
+    def from_cell_voltages(cls, timestamp, cell_voltages, ambient_temp_f=None, state_of_charge=None, is_charging=False):
         """Create a reading from a list of cell voltages with calculated stats."""
         if not cell_voltages or len(cell_voltages) == 0:
             return None
@@ -534,6 +541,105 @@ class BatteryCellReading(Base):
             state_of_charge=state_of_charge,
             is_charging=is_charging,
         )
+
+
+class WebVital(Base):
+    """Stores Web Vitals performance metrics from the frontend.
+
+    Tracks Core Web Vitals and other performance metrics to monitor
+    application performance in real-world usage.
+
+    Metrics tracked:
+    - LCP (Largest Contentful Paint): Load performance
+    - FID (First Input Delay): Interactivity (deprecated, use INP)
+    - INP (Interaction to Next Paint): Interactivity
+    - CLS (Cumulative Layout Shift): Visual stability
+    - FCP (First Contentful Paint): Initial render
+    - TTFB (Time to First Byte): Server response time
+    """
+
+    __tablename__ = "web_vitals"
+    __table_args__ = (
+        # Index for querying metrics by name and date
+        Index("ix_web_vitals_name_timestamp", "name", "timestamp"),
+        # Index for analyzing by rating
+        Index("ix_web_vitals_rating", "rating"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime(timezone=True), nullable=False, default=utc_now, index=True)
+
+    # Metric details
+    name = Column(String(50), nullable=False)  # LCP, FID, CLS, etc.
+    value = Column(Float, nullable=False)  # Metric value in milliseconds or score
+    rating = Column(String(20))  # 'good', 'needs-improvement', 'poor'
+
+    # Context
+    metric_id = Column(String(100))  # Unique ID from web-vitals library
+    navigation_type = Column(String(50))  # 'navigate', 'reload', 'back_forward', etc.
+    url = Column(String(500))  # Page URL where metric was recorded
+    user_agent = Column(Text)  # Browser user agent string
+
+    # Metadata
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+    def to_dict(self):
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "name": self.name,
+            "value": self.value,
+            "rating": self.rating,
+            "metric_id": self.metric_id,
+            "navigation_type": self.navigation_type,
+            "url": self.url,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    @classmethod
+    def create_from_frontend(cls, data):
+        """
+        Create a WebVital record from frontend data.
+
+        Args:
+            data (dict): Frontend data containing:
+                - name: Metric name (LCP, FID, etc.)
+                - value: Metric value
+                - rating: Performance rating
+                - id: Metric ID
+                - navigationType: Navigation type
+                - url: Page URL
+                - userAgent: Browser user agent
+                - timestamp: ISO timestamp string
+
+        Returns:
+            WebVital: New WebVital instance (not yet committed)
+        """
+        from datetime import datetime
+
+        timestamp = data.get("timestamp")
+        if timestamp and isinstance(timestamp, str):
+            try:
+                timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                timestamp = utc_now()
+        else:
+            timestamp = utc_now()
+
+        return cls(
+            timestamp=timestamp,
+            name=data.get("name"),
+            value=data.get("value"),
+            rating=data.get("rating"),
+            metric_id=data.get("id"),
+            navigation_type=data.get("navigationType"),
+            url=data.get("url"),
+            user_agent=data.get("userAgent"),
+        )
+
+    def __repr__(self):
+        return f"<WebVital(name={self.name}, value={self.value}, rating={self.rating})>"
 
 
 def get_engine(database_url):
