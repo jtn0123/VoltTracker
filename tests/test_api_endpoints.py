@@ -4,14 +4,14 @@ Tests for extended API endpoint coverage.
 Tests telemetry latest, battery health, and export endpoints.
 """
 
-import sys
 import os
+import sys
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "receiver"))
 
-from models import TelemetryRaw, Trip, FuelEvent, ChargingSession, BatteryHealthReading  # noqa: E402
+from models import BatteryHealthReading, ChargingSession, FuelEvent, TelemetryRaw, Trip  # noqa: E402
 
 
 class TestTelemetryLatestEndpoint:
@@ -19,10 +19,10 @@ class TestTelemetryLatestEndpoint:
 
     def test_latest_returns_inactive_when_no_data(self, client):
         """No telemetry data returns inactive status."""
-        response = client.get('/api/telemetry/latest')
+        response = client.get("/api/telemetry/latest")
         assert response.status_code == 200
         data = response.get_json()
-        assert data['active'] is False
+        assert data["active"] is False
 
     def test_latest_returns_inactive_when_data_stale(self, client, db_session):
         """Stale telemetry (>2 min old) returns inactive status."""
@@ -39,10 +39,10 @@ class TestTelemetryLatestEndpoint:
         db_session.add(telemetry)
         db_session.commit()
 
-        response = client.get('/api/telemetry/latest')
+        response = client.get("/api/telemetry/latest")
         assert response.status_code == 200
         data = response.get_json()
-        assert data['active'] is False
+        assert data["active"] is False
 
     def test_latest_returns_active_with_recent_data(self, client, db_session):
         """Recent telemetry returns active status with data."""
@@ -69,11 +69,11 @@ class TestTelemetryLatestEndpoint:
         db_session.add(telemetry)
         db_session.commit()
 
-        response = client.get('/api/telemetry/latest')
+        response = client.get("/api/telemetry/latest")
         assert response.status_code == 200
         data = response.get_json()
-        assert data['active'] is True
-        assert 'data' in data
+        assert data["active"] is True
+        assert "data" in data
 
     def test_latest_includes_trip_stats(self, client, db_session):
         """Response includes trip statistics when driving."""
@@ -99,10 +99,10 @@ class TestTelemetryLatestEndpoint:
         db_session.add(telemetry)
         db_session.commit()
 
-        response = client.get('/api/telemetry/latest')
+        response = client.get("/api/telemetry/latest")
         data = response.get_json()
-        assert data['active'] is True
-        assert 'trip_stats' in data
+        assert data["active"] is True
+        assert "trip_stats" in data
 
     def test_latest_detects_electric_mode(self, client, db_session):
         """Detects electric mode when RPM is 0."""
@@ -126,10 +126,10 @@ class TestTelemetryLatestEndpoint:
         db_session.add(telemetry)
         db_session.commit()
 
-        response = client.get('/api/telemetry/latest')
+        response = client.get("/api/telemetry/latest")
         assert response.status_code == 200
         data = response.get_json()
-        assert data['active'] is True
+        assert data["active"] is True
 
     def test_latest_detects_gas_mode(self, client, db_session):
         """Detects gas mode when RPM > 0 and SOC low."""
@@ -153,10 +153,10 @@ class TestTelemetryLatestEndpoint:
         db_session.add(telemetry)
         db_session.commit()
 
-        response = client.get('/api/telemetry/latest')
+        response = client.get("/api/telemetry/latest")
         assert response.status_code == 200
         data = response.get_json()
-        assert data['active'] is True
+        assert data["active"] is True
 
 
 class TestBatteryHealthEndpoint:
@@ -164,12 +164,12 @@ class TestBatteryHealthEndpoint:
 
     def test_health_returns_no_data_state(self, client):
         """No battery data returns appropriate status."""
-        response = client.get('/api/battery/health')
+        response = client.get("/api/battery/health")
         assert response.status_code == 200
         data = response.get_json()
         # When no data exists, should have has_data=False
-        assert 'has_data' in data
-        assert data['has_data'] is False
+        assert "has_data" in data
+        assert data["has_data"] is False
 
     def test_health_with_dedicated_readings(self, client, db_session):
         """Uses BatteryHealthReading when available."""
@@ -182,11 +182,11 @@ class TestBatteryHealthEndpoint:
         db_session.add(reading)
         db_session.commit()
 
-        response = client.get('/api/battery/health')
+        response = client.get("/api/battery/health")
         assert response.status_code == 200
         data = response.get_json()
         # With readings present, should have current_capacity_kwh
-        assert 'current_capacity_kwh' in data
+        assert "current_capacity_kwh" in data
 
     def test_health_calculates_percentage(self, client, db_session):
         """Battery health percentage is calculated from capacity."""
@@ -199,7 +199,7 @@ class TestBatteryHealthEndpoint:
         db_session.add(reading)
         db_session.commit()
 
-        response = client.get('/api/battery/health')
+        response = client.get("/api/battery/health")
         assert response.status_code == 200
 
 
@@ -221,9 +221,9 @@ class TestExportEndpoints:
         db_session.add(trip)
         db_session.commit()
 
-        response = client.get('/api/export/trips')
+        response = client.get("/api/export/trips")
         assert response.status_code == 200
-        assert 'text/csv' in response.content_type
+        assert "text/csv" in response.content_type
 
     def test_export_trips_has_correct_headers(self, client, db_session):
         """CSV export has expected column headers."""
@@ -238,10 +238,10 @@ class TestExportEndpoints:
         db_session.add(trip)
         db_session.commit()
 
-        response = client.get('/api/export/trips')
-        csv_data = response.data.decode('utf-8')
+        response = client.get("/api/export/trips")
+        csv_data = response.data.decode("utf-8")
         # Should have headers
-        assert 'id' in csv_data.lower() or 'distance' in csv_data.lower()
+        assert "id" in csv_data.lower() or "distance" in csv_data.lower()
 
     def test_export_trips_json_format(self, client, db_session):
         """Trips export as JSON when format=json specified."""
@@ -254,9 +254,9 @@ class TestExportEndpoints:
         db_session.add(trip)
         db_session.commit()
 
-        response = client.get('/api/export/trips?format=json')
+        response = client.get("/api/export/trips?format=json")
         assert response.status_code == 200
-        assert 'application/json' in response.content_type
+        assert "application/json" in response.content_type
 
     def test_export_fuel_returns_csv(self, client, db_session):
         """Fuel export returns CSV by default."""
@@ -270,9 +270,9 @@ class TestExportEndpoints:
         db_session.add(fuel_event)
         db_session.commit()
 
-        response = client.get('/api/export/fuel')
+        response = client.get("/api/export/fuel")
         assert response.status_code == 200
-        assert 'text/csv' in response.content_type
+        assert "text/csv" in response.content_type
 
     def test_export_all_returns_json(self, client, db_session):
         """All data export returns JSON."""
@@ -284,11 +284,11 @@ class TestExportEndpoints:
         db_session.add(trip)
         db_session.commit()
 
-        response = client.get('/api/export/all')
+        response = client.get("/api/export/all")
         assert response.status_code == 200
-        assert 'application/json' in response.content_type
+        assert "application/json" in response.content_type
         data = response.get_json()
-        assert 'trips' in data
+        assert "trips" in data
 
     def test_export_all_includes_summary(self, client, db_session):
         """Export all includes summary statistics."""
@@ -302,17 +302,17 @@ class TestExportEndpoints:
         db_session.add(trip)
         db_session.commit()
 
-        response = client.get('/api/export/all')
+        response = client.get("/api/export/all")
         data = response.get_json()
-        assert 'summary' in data or 'trips' in data
+        assert "summary" in data or "trips" in data
 
     def test_export_torque_pids_returns_csv(self, client):
         """Torque PIDs export returns CSV."""
-        response = client.get('/api/export/torque-pids')
+        response = client.get("/api/export/torque-pids")
         assert response.status_code == 200
         # Either returns CSV or 404 if file not found
         if response.status_code == 200:
-            assert 'text/csv' in response.content_type or 'attachment' in str(response.headers)
+            assert "text/csv" in response.content_type or "attachment" in str(response.headers)
 
     def test_export_with_date_filter(self, client, db_session):
         """Export respects date range filter."""
@@ -336,8 +336,8 @@ class TestExportEndpoints:
         db_session.add(trip2)
         db_session.commit()
 
-        start_date = (now - timedelta(days=7)).strftime('%Y-%m-%d')
-        response = client.get(f'/api/export/trips?format=json&start_date={start_date}')
+        start_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+        response = client.get(f"/api/export/trips?format=json&start_date={start_date}")
         assert response.status_code == 200
 
 
@@ -352,16 +352,16 @@ class TestChargingHistoryEndpoint:
             start_soc=30.0,
             end_soc=90.0,
             kwh_added=11.0,
-            charge_type='L2',
+            charge_type="L2",
             is_complete=True,
         )
         db_session.add(session)
         db_session.commit()
 
-        response = client.get('/api/charging/history')
+        response = client.get("/api/charging/history")
         assert response.status_code == 200
         data = response.get_json()
-        assert isinstance(data, list) or 'sessions' in data
+        assert isinstance(data, list) or "sessions" in data
 
     def test_charging_summary_returns_stats(self, client, db_session):
         """Charging summary returns aggregate statistics."""
@@ -371,7 +371,7 @@ class TestChargingHistoryEndpoint:
             start_soc=20.0,
             end_soc=100.0,
             kwh_added=14.72,
-            charge_type='L2',
+            charge_type="L2",
             is_complete=True,
         )
         session2 = ChargingSession(
@@ -380,15 +380,15 @@ class TestChargingHistoryEndpoint:
             start_soc=50.0,
             end_soc=80.0,
             kwh_added=5.52,
-            charge_type='L1',
+            charge_type="L1",
             is_complete=True,
         )
         db_session.add(session1)
         db_session.add(session2)
         db_session.commit()
 
-        response = client.get('/api/charging/summary')
+        response = client.get("/api/charging/summary")
         assert response.status_code == 200
         data = response.get_json()
         # Should have summary stats
-        assert 'total_kwh' in data or 'sessions' in data or 'total_sessions' in data
+        assert "total_kwh" in data or "sessions" in data or "total_sessions" in data

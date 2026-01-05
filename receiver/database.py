@@ -5,11 +5,10 @@ Provides the database engine and session factory that can be imported
 by blueprints without circular dependencies.
 """
 
-from sqlalchemy.orm import scoped_session, sessionmaker
-from flask import g
-
 from config import Config
+from flask import g
 from models import get_engine
+from sqlalchemy.orm import scoped_session, sessionmaker
 
 # Create engine and session factory
 engine = get_engine(Config.DATABASE_URL)
@@ -23,7 +22,7 @@ def get_db():
     Uses Flask's application context to store the session,
     ensuring proper cleanup at the end of each request.
     """
-    if 'db' not in g:
+    if "db" not in g:
         g.db = SessionLocal()
     return g.db
 
@@ -34,7 +33,7 @@ def close_db(exception=None):
 
     Call this in teardown_appcontext.
     """
-    db = g.pop('db', None)
+    db = g.pop("db", None)
     if db is not None:
         SessionLocal.remove()
 
