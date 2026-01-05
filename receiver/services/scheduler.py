@@ -258,7 +258,6 @@ def init_scheduler():
 
 def shutdown_scheduler():
     """Shutdown the background scheduler gracefully."""
-    global scheduler
     if scheduler:
         scheduler.shutdown()
         logger.info("Background scheduler shut down")

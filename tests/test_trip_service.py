@@ -11,10 +11,9 @@ Tests the trip finalization logic including:
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch  # noqa: F401
+from unittest.mock import patch
 
-import pytest  # noqa: F401
-from models import SocTransition, TelemetryRaw, Trip  # noqa: F401
+from models import TelemetryRaw, Trip
 from services.trip_service import (
     calculate_electric_efficiency,
     calculate_trip_basics,

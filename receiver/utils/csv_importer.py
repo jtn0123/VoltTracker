@@ -5,7 +5,7 @@ import io
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 from config import Config
 from exceptions import CSVImportError
@@ -457,7 +457,7 @@ class TorqueCSVImporter:
                 dt = dt.replace(tzinfo=timezone.utc)
             else:
                 dt = dt.astimezone(timezone.utc)
-            return dt
+            return cast(datetime, dt)
         except (ImportError, ValueError, TypeError):
             pass
 

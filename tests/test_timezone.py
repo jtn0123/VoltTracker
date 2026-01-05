@@ -8,10 +8,8 @@ Tests the timezone handling functions including:
 - is_before() and is_after() for safe datetime comparisons
 """
 
-from datetime import datetime, timedelta, timezone  # noqa: F401
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-
-import pytest  # noqa: F401
 from utils.timezone import ensure_utc, is_after, is_before, normalize_datetime, utc_now
 
 

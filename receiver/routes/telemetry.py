@@ -404,9 +404,11 @@ def get_latest_telemetry():
                 "generator_rpm": float(latest.generator_rpm) if latest.generator_rpm else None,
                 "motor_temp_max_f": float(latest.motor_temp_max_f) if latest.motor_temp_max_f else None,
                 # Engine
-                "engine_running": latest.engine_running
-                if latest.engine_running is not None
-                else (latest.engine_rpm and latest.engine_rpm > 500),
+                "engine_running": (
+                    latest.engine_running
+                    if latest.engine_running is not None
+                    else (latest.engine_rpm and latest.engine_rpm > 500)
+                ),
                 "engine_oil_temp_f": float(latest.engine_oil_temp_f) if latest.engine_oil_temp_f else None,
                 # Battery health
                 "battery_capacity_kwh": float(latest.battery_capacity_kwh) if latest.battery_capacity_kwh else None,
