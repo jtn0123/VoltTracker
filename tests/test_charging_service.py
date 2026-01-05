@@ -8,18 +8,18 @@ Tests the charging session detection and finalization including:
 - Power tracking
 """
 
-import pytest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
 import uuid
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch  # noqa: F401
 
+import pytest
+from config import Config
 from models import ChargingSession, TelemetryRaw
 from services.charging_service import (
     detect_and_finalize_charging_session,
     start_charging_session,
     update_charging_session,
 )
-from config import Config
 
 
 class TestDetectAndFinalizeChargingSession:
@@ -96,7 +96,7 @@ class TestDetectAndFinalizeChargingSession:
 
     def test_calculates_cost_with_electricity_rate(self, app, db_session, monkeypatch):
         """Cost should be calculated when electricity rate is configured."""
-        monkeypatch.setattr('config.Config.ELECTRICITY_COST_PER_KWH', 0.15)
+        monkeypatch.setattr("config.Config.ELECTRICITY_COST_PER_KWH", 0.15)
 
         now = datetime.now(timezone.utc)
 
@@ -196,7 +196,7 @@ class TestStartChargingSession:
 
         session = start_charging_session(db_session, telemetry)
 
-        assert session.charge_type == 'L1'
+        assert session.charge_type == "L1"
 
     def test_detects_l2_charging(self, app, db_session):
         """Medium power charging should be detected as L2."""
@@ -211,7 +211,7 @@ class TestStartChargingSession:
 
         session = start_charging_session(db_session, telemetry)
 
-        assert session.charge_type == 'L2'
+        assert session.charge_type == "L2"
 
     def test_detects_dcfc_charging(self, app, db_session):
         """High power charging should be detected as DCFC."""
@@ -226,7 +226,7 @@ class TestStartChargingSession:
 
         session = start_charging_session(db_session, telemetry)
 
-        assert session.charge_type == 'DCFC'
+        assert session.charge_type == "DCFC"
 
     def test_handles_none_power_values(self, app, db_session):
         """Should handle missing power values gracefully."""
@@ -243,7 +243,7 @@ class TestStartChargingSession:
         session = start_charging_session(db_session, telemetry)
 
         # Should default to L1 when power is None/0
-        assert session.charge_type == 'L1'
+        assert session.charge_type == "L1"
 
 
 class TestUpdateChargingSession:
@@ -368,8 +368,8 @@ class TestUpdateChargingSession:
         update_charging_session(session, telemetry)
 
         assert len(session.charging_curve) == 1
-        assert session.charging_curve[0]['power_kw'] == 6.6
-        assert session.charging_curve[0]['soc'] == 60.0
+        assert session.charging_curve[0]["power_kw"] == 6.6
+        assert session.charging_curve[0]["soc"] == 60.0
 
     def test_initializes_charging_curve_if_none(self, app, db_session):
         """Charging curve should be initialized if None."""

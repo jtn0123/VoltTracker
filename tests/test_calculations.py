@@ -2,24 +2,25 @@
 Tests for calculation utilities.
 """
 
-import pytest
-import sys
 import os
+import sys
 from datetime import datetime, timedelta
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "receiver"))
 
 from utils.calculations import (  # noqa: E402
-    smooth_fuel_level,
-    detect_gas_mode_entry,
-    detect_refuel_event,
-    calculate_gas_mpg,
-    calculate_electric_miles,
-    calculate_average_temp,
     analyze_soc_floor,
+    calculate_average_temp,
     calculate_electric_kwh,
+    calculate_electric_miles,
+    calculate_gas_mpg,
     calculate_kwh_per_mile,
     detect_charging_session,
+    detect_gas_mode_entry,
+    detect_refuel_event,
+    smooth_fuel_level,
 )
 
 
@@ -65,15 +66,15 @@ class TestDetectGasModeEntry:
         result = detect_gas_mode_entry(sample_telemetry_points)
 
         assert result is not None
-        assert result['engine_rpm'] > 500
-        assert result['state_of_charge'] < 25
+        assert result["engine_rpm"] > 500
+        assert result["state_of_charge"] < 25
 
     def test_no_gas_mode_in_electric_only(self):
         """Test no detection when trip is electric only."""
         points = [
-            {'engine_rpm': 0, 'state_of_charge': 80},
-            {'engine_rpm': 0, 'state_of_charge': 70},
-            {'engine_rpm': 0, 'state_of_charge': 60},
+            {"engine_rpm": 0, "state_of_charge": 80},
+            {"engine_rpm": 0, "state_of_charge": 70},
+            {"engine_rpm": 0, "state_of_charge": 60},
         ]
         result = detect_gas_mode_entry(points)
         assert result is None
@@ -81,9 +82,9 @@ class TestDetectGasModeEntry:
     def test_no_gas_mode_with_high_soc(self):
         """Test no detection when SOC is high (regenerative braking)."""
         points = [
-            {'engine_rpm': 0, 'state_of_charge': 80},
-            {'engine_rpm': 1500, 'state_of_charge': 75},  # High SOC, probably regen
-            {'engine_rpm': 0, 'state_of_charge': 76},
+            {"engine_rpm": 0, "state_of_charge": 80},
+            {"engine_rpm": 1500, "state_of_charge": 75},  # High SOC, probably regen
+            {"engine_rpm": 0, "state_of_charge": 76},
         ]
         result = detect_gas_mode_entry(points)
         assert result is None
@@ -91,10 +92,10 @@ class TestDetectGasModeEntry:
     def test_sustained_rpm_required(self):
         """Test that brief RPM spikes are filtered out."""
         points = [
-            {'engine_rpm': 0, 'state_of_charge': 20},
-            {'engine_rpm': 800, 'state_of_charge': 18},   # Brief spike
-            {'engine_rpm': 0, 'state_of_charge': 18},     # Back to 0
-            {'engine_rpm': 0, 'state_of_charge': 17},
+            {"engine_rpm": 0, "state_of_charge": 20},
+            {"engine_rpm": 800, "state_of_charge": 18},  # Brief spike
+            {"engine_rpm": 0, "state_of_charge": 18},  # Back to 0
+            {"engine_rpm": 0, "state_of_charge": 17},
         ]
         result = detect_gas_mode_entry(points)
         assert result is None
@@ -107,7 +108,7 @@ class TestDetectGasModeEntry:
     def test_short_list(self):
         """Test with list too short for verification."""
         points = [
-            {'engine_rpm': 1000, 'state_of_charge': 15},
+            {"engine_rpm": 1000, "state_of_charge": 15},
         ]
         result = detect_gas_mode_entry(points)
         assert result is None
@@ -234,9 +235,9 @@ class TestCalculateAverageTemp:
     def test_average_temp_with_nulls(self):
         """Test average temp ignores None values."""
         points = [
-            {'ambient_temp_f': 70.0},
-            {'ambient_temp_f': None},
-            {'ambient_temp_f': 80.0},
+            {"ambient_temp_f": 70.0},
+            {"ambient_temp_f": None},
+            {"ambient_temp_f": 80.0},
         ]
         result = calculate_average_temp(points)
         assert result == 75.0
@@ -244,8 +245,8 @@ class TestCalculateAverageTemp:
     def test_average_temp_all_nulls(self):
         """Test returns None when all temps are None."""
         points = [
-            {'ambient_temp_f': None},
-            {'ambient_temp_f': None},
+            {"ambient_temp_f": None},
+            {"ambient_temp_f": None},
         ]
         result = calculate_average_temp(points)
         assert result is None
@@ -263,48 +264,48 @@ class TestAnalyzeSocFloor:
         """Test basic statistics calculation."""
         result = analyze_soc_floor(sample_soc_transitions)
 
-        assert result['count'] == 10
-        assert result['average_soc'] is not None
-        assert result['min_soc'] is not None
-        assert result['max_soc'] is not None
-        assert result['min_soc'] <= result['average_soc'] <= result['max_soc']
+        assert result["count"] == 10
+        assert result["average_soc"] is not None
+        assert result["min_soc"] is not None
+        assert result["max_soc"] is not None
+        assert result["min_soc"] <= result["average_soc"] <= result["max_soc"]
 
     def test_analyze_histogram(self, sample_soc_transitions):
         """Test histogram generation."""
         result = analyze_soc_floor(sample_soc_transitions)
 
-        assert result['histogram'] is not None
-        assert len(result['histogram']) > 0
+        assert result["histogram"] is not None
+        assert len(result["histogram"]) > 0
         # Sum of histogram should equal count
-        assert sum(result['histogram'].values()) == result['count']
+        assert sum(result["histogram"].values()) == result["count"]
 
     def test_analyze_temperature_correlation(self, sample_soc_transitions):
         """Test temperature correlation analysis."""
         result = analyze_soc_floor(sample_soc_transitions)
 
-        assert result['temperature_correlation'] is not None
-        assert 'cold_avg_soc' in result['temperature_correlation']
-        assert 'warm_avg_soc' in result['temperature_correlation']
+        assert result["temperature_correlation"] is not None
+        assert "cold_avg_soc" in result["temperature_correlation"]
+        assert "warm_avg_soc" in result["temperature_correlation"]
         # Cold weather should have higher SOC floor
-        assert result['temperature_correlation']['cold_avg_soc'] > result['temperature_correlation']['warm_avg_soc']
+        assert result["temperature_correlation"]["cold_avg_soc"] > result["temperature_correlation"]["warm_avg_soc"]
 
     def test_analyze_empty_list(self):
         """Test with empty list."""
         result = analyze_soc_floor([])
 
-        assert result['count'] == 0
-        assert result['average_soc'] is None
-        assert result['histogram'] == {}
+        assert result["count"] == 0
+        assert result["average_soc"] is None
+        assert result["histogram"] == {}
 
     def test_analyze_insufficient_data_for_correlation(self):
         """Test temperature correlation not calculated with insufficient data."""
         transitions = [
-            {'soc_at_transition': 17.0, 'ambient_temp_f': 70.0},
-            {'soc_at_transition': 18.0, 'ambient_temp_f': 72.0},
+            {"soc_at_transition": 17.0, "ambient_temp_f": 70.0},
+            {"soc_at_transition": 18.0, "ambient_temp_f": 72.0},
         ]
         result = analyze_soc_floor(transitions)
 
-        assert result['temperature_correlation'] is None
+        assert result["temperature_correlation"] is None
 
 
 class TestCalculateGasMpgBoundary:
@@ -388,9 +389,9 @@ class TestDetectGasModeEdgeCases:
     def test_very_brief_rpm_spike(self):
         """Test that a single-reading RPM spike is ignored."""
         points = [
-            {'engine_rpm': 0, 'state_of_charge': 20},
-            {'engine_rpm': 2000, 'state_of_charge': 18},  # Single spike
-            {'engine_rpm': 0, 'state_of_charge': 18},
+            {"engine_rpm": 0, "state_of_charge": 20},
+            {"engine_rpm": 2000, "state_of_charge": 18},  # Single spike
+            {"engine_rpm": 0, "state_of_charge": 18},
         ]
         result = detect_gas_mode_entry(points)
         assert result is None
@@ -398,11 +399,11 @@ class TestDetectGasModeEdgeCases:
     def test_intermittent_rpm(self):
         """Test intermittent RPM doesn't trigger gas mode."""
         points = [
-            {'engine_rpm': 0, 'state_of_charge': 20},
-            {'engine_rpm': 1000, 'state_of_charge': 19},
-            {'engine_rpm': 0, 'state_of_charge': 18},
-            {'engine_rpm': 1000, 'state_of_charge': 17},
-            {'engine_rpm': 0, 'state_of_charge': 16},
+            {"engine_rpm": 0, "state_of_charge": 20},
+            {"engine_rpm": 1000, "state_of_charge": 19},
+            {"engine_rpm": 0, "state_of_charge": 18},
+            {"engine_rpm": 1000, "state_of_charge": 17},
+            {"engine_rpm": 0, "state_of_charge": 16},
         ]
         result = detect_gas_mode_entry(points)
         # Intermittent RPM shouldn't be detected as gas mode
@@ -411,9 +412,9 @@ class TestDetectGasModeEdgeCases:
     def test_high_soc_with_rpm_is_regenerative(self):
         """Test that RPM with high SOC (regenerative braking) isn't gas mode."""
         points = [
-            {'engine_rpm': 0, 'state_of_charge': 85},
-            {'engine_rpm': 500, 'state_of_charge': 86},  # SOC increasing = regen
-            {'engine_rpm': 0, 'state_of_charge': 87},
+            {"engine_rpm": 0, "state_of_charge": 85},
+            {"engine_rpm": 500, "state_of_charge": 86},  # SOC increasing = regen
+            {"engine_rpm": 0, "state_of_charge": 87},
         ]
         result = detect_gas_mode_entry(points)
         assert result is None
@@ -421,10 +422,10 @@ class TestDetectGasModeEdgeCases:
     def test_very_low_rpm_threshold(self):
         """Test detection with low but sustained RPM."""
         points = [
-            {'engine_rpm': 0, 'state_of_charge': 20},
-            {'engine_rpm': 500, 'state_of_charge': 18},  # Low RPM
-            {'engine_rpm': 600, 'state_of_charge': 17},  # Sustained low RPM
-            {'engine_rpm': 700, 'state_of_charge': 16},
+            {"engine_rpm": 0, "state_of_charge": 20},
+            {"engine_rpm": 500, "state_of_charge": 18},  # Low RPM
+            {"engine_rpm": 600, "state_of_charge": 17},  # Sustained low RPM
+            {"engine_rpm": 700, "state_of_charge": 16},
         ]
         result = detect_gas_mode_entry(points)
         # Low but sustained RPM should be detected
@@ -528,23 +529,23 @@ class TestTemperatureEdgeCases:
     def test_extreme_temperatures(self):
         """Test with extreme temperature values."""
         points = [
-            {'ambient_temp_f': -40.0},  # Very cold
-            {'ambient_temp_f': 120.0},  # Very hot
+            {"ambient_temp_f": -40.0},  # Very cold
+            {"ambient_temp_f": 120.0},  # Very hot
         ]
         result = calculate_average_temp(points)
         assert result == 40.0  # Average of -40 and 120
 
     def test_single_reading(self):
         """Test with single temperature reading."""
-        points = [{'ambient_temp_f': 72.0}]
+        points = [{"ambient_temp_f": 72.0}]
         result = calculate_average_temp(points)
         assert result == 72.0
 
     def test_missing_temp_key(self):
         """Test with points missing temperature key."""
         points = [
-            {'speed_mph': 45.0},  # No temp key
-            {'ambient_temp_f': 70.0},
+            {"speed_mph": 45.0},  # No temp key
+            {"ambient_temp_f": 70.0},
         ]
         result = calculate_average_temp(points)
         # Should only average the one valid reading
@@ -558,8 +559,8 @@ class TestCalculateElectricKwh:
         """Calculate kWh from HV battery power data."""
         now = datetime.utcnow()
         points = [
-            {'timestamp': now, 'hv_battery_power_kw': 10.0},
-            {'timestamp': now + timedelta(hours=1), 'hv_battery_power_kw': 10.0},
+            {"timestamp": now, "hv_battery_power_kw": 10.0},
+            {"timestamp": now + timedelta(hours=1), "hv_battery_power_kw": 10.0},
         ]
         result = calculate_electric_kwh(points)
         # 1 hour at 10kW = 10 kWh
@@ -569,8 +570,8 @@ class TestCalculateElectricKwh:
         """Negative power (regen) is not counted as consumption."""
         now = datetime.utcnow()
         points = [
-            {'timestamp': now, 'hv_battery_power_kw': -5.0},  # Regen
-            {'timestamp': now + timedelta(hours=1), 'hv_battery_power_kw': -5.0},
+            {"timestamp": now, "hv_battery_power_kw": -5.0},  # Regen
+            {"timestamp": now + timedelta(hours=1), "hv_battery_power_kw": -5.0},
         ]
         result = calculate_electric_kwh(points)
         # Negative power means charging/regen, should return None or 0
@@ -580,8 +581,8 @@ class TestCalculateElectricKwh:
         """ISO format string timestamps are parsed correctly."""
         now = datetime.utcnow()
         points = [
-            {'timestamp': now.isoformat(), 'hv_battery_power_kw': 15.0},
-            {'timestamp': (now + timedelta(hours=0.5)).isoformat(), 'hv_battery_power_kw': 15.0},
+            {"timestamp": now.isoformat(), "hv_battery_power_kw": 15.0},
+            {"timestamp": (now + timedelta(hours=0.5)).isoformat(), "hv_battery_power_kw": 15.0},
         ]
         result = calculate_electric_kwh(points)
         # 0.5 hours at 15kW = 7.5 kWh
@@ -591,8 +592,8 @@ class TestCalculateElectricKwh:
         """Time intervals are correctly calculated."""
         now = datetime.utcnow()
         points = [
-            {'timestamp': now, 'hv_battery_power_kw': 20.0},
-            {'timestamp': now + timedelta(minutes=15), 'hv_battery_power_kw': 20.0},
+            {"timestamp": now, "hv_battery_power_kw": 20.0},
+            {"timestamp": now + timedelta(minutes=15), "hv_battery_power_kw": 20.0},
         ]
         result = calculate_electric_kwh(points)
         # 0.25 hours at 20kW = 5 kWh
@@ -601,8 +602,8 @@ class TestCalculateElectricKwh:
     def test_kwh_from_soc_when_no_power_data(self):
         """Calculate kWh from SOC change when power data unavailable."""
         points = [
-            {'state_of_charge': 80.0},  # No power data
-            {'state_of_charge': 60.0},
+            {"state_of_charge": 80.0},  # No power data
+            {"state_of_charge": 60.0},
         ]
         result = calculate_electric_kwh(points)
         # 20% of 18.4 kWh battery = 3.68 kWh
@@ -611,8 +612,8 @@ class TestCalculateElectricKwh:
     def test_kwh_returns_none_when_soc_increases(self):
         """Return None when SOC increases (charging, not driving)."""
         points = [
-            {'state_of_charge': 60.0},
-            {'state_of_charge': 80.0},  # Charging
+            {"state_of_charge": 60.0},
+            {"state_of_charge": 80.0},  # Charging
         ]
         result = calculate_electric_kwh(points)
         assert result is None
@@ -620,8 +621,8 @@ class TestCalculateElectricKwh:
     def test_kwh_uses_battery_capacity_constant(self):
         """Uses correct battery capacity for Volt."""
         points = [
-            {'state_of_charge': 100.0},
-            {'state_of_charge': 50.0},
+            {"state_of_charge": 100.0},
+            {"state_of_charge": 50.0},
         ]
         result = calculate_electric_kwh(points)
         # 50% of 18.4 kWh = 9.2 kWh
@@ -629,7 +630,7 @@ class TestCalculateElectricKwh:
 
     def test_kwh_returns_none_for_single_point(self):
         """Need at least 2 points for calculation."""
-        points = [{'state_of_charge': 80.0}]
+        points = [{"state_of_charge": 80.0}]
         result = calculate_electric_kwh(points)
         assert result is None
 
@@ -642,8 +643,8 @@ class TestCalculateElectricKwh:
         """When power data available, use it instead of SOC."""
         now = datetime.utcnow()
         points = [
-            {'timestamp': now, 'hv_battery_power_kw': 10.0, 'state_of_charge': 80.0},
-            {'timestamp': now + timedelta(hours=1), 'hv_battery_power_kw': 10.0, 'state_of_charge': 70.0},
+            {"timestamp": now, "hv_battery_power_kw": 10.0, "state_of_charge": 80.0},
+            {"timestamp": now + timedelta(hours=1), "hv_battery_power_kw": 10.0, "state_of_charge": 70.0},
         ]
         result = calculate_electric_kwh(points)
         # Should use power method: 1 hour at 10kW = 10 kWh
@@ -694,18 +695,18 @@ class TestDetectChargingSession:
     def test_detects_active_charging(self):
         """Detect when charger is connected and power flowing."""
         points = [
-            {'charger_connected': True, 'charger_ac_power_kw': 6.6, 'state_of_charge': 50.0},
-            {'charger_connected': True, 'charger_ac_power_kw': 6.6, 'state_of_charge': 55.0},
+            {"charger_connected": True, "charger_ac_power_kw": 6.6, "state_of_charge": 50.0},
+            {"charger_connected": True, "charger_ac_power_kw": 6.6, "state_of_charge": 55.0},
         ]
         result = detect_charging_session(points)
         assert result is not None
-        assert result['is_charging'] is True
+        assert result["is_charging"] is True
 
     def test_returns_none_when_not_charging(self):
         """Return None when charger not connected."""
         points = [
-            {'charger_connected': False, 'state_of_charge': 50.0},
-            {'charger_connected': False, 'state_of_charge': 50.0},
+            {"charger_connected": False, "state_of_charge": 50.0},
+            {"charger_connected": False, "state_of_charge": 50.0},
         ]
         result = detect_charging_session(points)
         assert result is None
@@ -713,7 +714,7 @@ class TestDetectChargingSession:
     def test_returns_none_when_power_below_threshold(self):
         """Return None when power below minimum threshold."""
         points = [
-            {'charger_connected': True, 'charger_ac_power_kw': 0.3, 'state_of_charge': 50.0},
+            {"charger_connected": True, "charger_ac_power_kw": 0.3, "state_of_charge": 50.0},
         ]
         result = detect_charging_session(points)
         assert result is None
@@ -721,48 +722,48 @@ class TestDetectChargingSession:
     def test_classifies_l1_charging(self):
         """Power under 1.2 kW is L1."""
         points = [
-            {'charger_connected': True, 'charger_ac_power_kw': 1.0, 'state_of_charge': 50.0},
+            {"charger_connected": True, "charger_ac_power_kw": 1.0, "state_of_charge": 50.0},
         ]
         result = detect_charging_session(points)
-        assert result['charge_type'] == 'L1'
+        assert result["charge_type"] == "L1"
 
     def test_classifies_l1_high_charging(self):
         """Power 1.2-6.0 kW is L1-high."""
         points = [
-            {'charger_connected': True, 'charger_ac_power_kw': 3.3, 'state_of_charge': 50.0},
+            {"charger_connected": True, "charger_ac_power_kw": 3.3, "state_of_charge": 50.0},
         ]
         result = detect_charging_session(points)
-        assert result['charge_type'] == 'L1-high'
+        assert result["charge_type"] == "L1-high"
 
     def test_classifies_l2_charging(self):
         """Power over 6.0 kW is L2."""
         points = [
-            {'charger_connected': True, 'charger_ac_power_kw': 7.2, 'state_of_charge': 50.0},
+            {"charger_connected": True, "charger_ac_power_kw": 7.2, "state_of_charge": 50.0},
         ]
         result = detect_charging_session(points)
-        assert result['charge_type'] == 'L2'
+        assert result["charge_type"] == "L2"
 
     def test_calculates_peak_and_avg_power(self):
         """Peak and average power are calculated."""
         points = [
-            {'charger_connected': True, 'charger_ac_power_kw': 6.0, 'state_of_charge': 50.0},
-            {'charger_connected': True, 'charger_ac_power_kw': 7.0, 'state_of_charge': 55.0},
-            {'charger_connected': True, 'charger_ac_power_kw': 6.5, 'state_of_charge': 60.0},
+            {"charger_connected": True, "charger_ac_power_kw": 6.0, "state_of_charge": 50.0},
+            {"charger_connected": True, "charger_ac_power_kw": 7.0, "state_of_charge": 55.0},
+            {"charger_connected": True, "charger_ac_power_kw": 6.5, "state_of_charge": 60.0},
         ]
         result = detect_charging_session(points)
-        assert result['peak_power_kw'] == 7.0
-        assert result['avg_power_kw'] == pytest.approx(6.5, rel=0.01)
+        assert result["peak_power_kw"] == 7.0
+        assert result["avg_power_kw"] == pytest.approx(6.5, rel=0.01)
 
     def test_tracks_soc_range(self):
         """Start and current SOC are tracked."""
         points = [
-            {'charger_connected': True, 'charger_ac_power_kw': 6.6, 'state_of_charge': 30.0},
-            {'charger_connected': True, 'charger_ac_power_kw': 6.6, 'state_of_charge': 50.0},
-            {'charger_connected': True, 'charger_ac_power_kw': 6.6, 'state_of_charge': 70.0},
+            {"charger_connected": True, "charger_ac_power_kw": 6.6, "state_of_charge": 30.0},
+            {"charger_connected": True, "charger_ac_power_kw": 6.6, "state_of_charge": 50.0},
+            {"charger_connected": True, "charger_ac_power_kw": 6.6, "state_of_charge": 70.0},
         ]
         result = detect_charging_session(points)
-        assert result['start_soc'] == 30.0
-        assert result['current_soc'] == 70.0
+        assert result["start_soc"] == 30.0
+        assert result["current_soc"] == 70.0
 
     def test_handles_empty_telemetry(self):
         """Empty telemetry list returns None."""
@@ -772,7 +773,7 @@ class TestDetectChargingSession:
     def test_handles_missing_power_data(self):
         """Charger connected but no power data."""
         points = [
-            {'charger_connected': True, 'state_of_charge': 50.0},
+            {"charger_connected": True, "state_of_charge": 50.0},
         ]
         result = detect_charging_session(points)
         # No power readings means not actively charging

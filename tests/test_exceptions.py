@@ -3,16 +3,16 @@
 import pytest
 
 from receiver.exceptions import (
-    VoltTrackerError,
-    DatabaseError,
-    TelemetryParsingError,
-    CSVImportError,
-    CSVValidationError,
-    CSVTimestampParseError,
-    WeatherAPIError,
-    TripProcessingError,
     ChargingSessionError,
     ConfigurationError,
+    CSVImportError,
+    CSVTimestampParseError,
+    CSVValidationError,
+    DatabaseError,
+    TelemetryParsingError,
+    TripProcessingError,
+    VoltTrackerError,
+    WeatherAPIError,
 )
 
 
@@ -68,11 +68,7 @@ class TestTelemetryParsingError:
 
     def test_with_field_and_value(self):
         """Test error with field and value context."""
-        error = TelemetryParsingError(
-            "Could not parse field",
-            field="state_of_charge",
-            value="not_a_number"
-        )
+        error = TelemetryParsingError("Could not parse field", field="state_of_charge", value="not_a_number")
         assert error.field == "state_of_charge"
         assert error.value == "not_a_number"
         assert error.details["field"] == "state_of_charge"
@@ -103,11 +99,7 @@ class TestCSVImportError:
 
     def test_with_all_context(self):
         """Test error with full context."""
-        error = CSVImportError(
-            "Parse error",
-            row_number=100,
-            filename="torque_log.csv"
-        )
+        error = CSVImportError("Parse error", row_number=100, filename="torque_log.csv")
         assert error.row_number == 100
         assert error.filename == "torque_log.csv"
 
@@ -124,11 +116,7 @@ class TestCSVValidationError:
     def test_with_validation_context(self):
         """Test error with validation context."""
         error = CSVValidationError(
-            "Value out of range",
-            row_number=50,
-            field="state_of_charge",
-            value="150",
-            expected_range=(0, 100)
+            "Value out of range", row_number=50, field="state_of_charge", value="150", expected_range=(0, 100)
         )
         assert error.row_number == 50
         assert error.field == "state_of_charge"
@@ -147,11 +135,7 @@ class TestCSVTimestampParseError:
 
     def test_with_raw_value(self):
         """Test error with raw timestamp value."""
-        error = CSVTimestampParseError(
-            "Invalid timestamp format",
-            row_number=10,
-            raw_value="not-a-date"
-        )
+        error = CSVTimestampParseError("Invalid timestamp format", row_number=10, raw_value="not-a-date")
         assert error.row_number == 10
         assert error.raw_value == "not-a-date"
         assert error.details["raw_value"] == "not-a-date"
@@ -170,11 +154,7 @@ class TestWeatherAPIError:
 
     def test_with_location(self):
         """Test error with location context."""
-        error = WeatherAPIError(
-            "Request timeout",
-            latitude=37.7749,
-            longitude=-122.4194
-        )
+        error = WeatherAPIError("Request timeout", latitude=37.7749, longitude=-122.4194)
         assert error.latitude == 37.7749
         assert error.longitude == -122.4194
         assert error.details["latitude"] == 37.7749
@@ -182,10 +162,7 @@ class TestWeatherAPIError:
 
     def test_with_status_code(self):
         """Test error with HTTP status code."""
-        error = WeatherAPIError(
-            "Server error",
-            status_code=500
-        )
+        error = WeatherAPIError("Server error", status_code=500)
         assert error.status_code == 500
         assert error.details["status_code"] == 500
 
@@ -208,10 +185,7 @@ class TestTripProcessingError:
 
     def test_with_session_id(self):
         """Test error with session ID context."""
-        error = TripProcessingError(
-            "Trip creation failed",
-            session_id="abc-123-def"
-        )
+        error = TripProcessingError("Trip creation failed", session_id="abc-123-def")
         assert error.session_id == "abc-123-def"
         assert error.details["session_id"] == "abc-123-def"
 
@@ -243,10 +217,7 @@ class TestConfigurationError:
 
     def test_with_config_key(self):
         """Test error with config key context."""
-        error = ConfigurationError(
-            "Invalid value for config",
-            config_key="DATABASE_URL"
-        )
+        error = ConfigurationError("Invalid value for config", config_key="DATABASE_URL")
         assert error.config_key == "DATABASE_URL"
         assert error.details["config_key"] == "DATABASE_URL"
 
@@ -275,6 +246,7 @@ class TestExceptionRaising:
 
     def test_exception_in_try_except(self):
         """Test using exceptions in try-except blocks."""
+
         def function_that_raises():
             raise TripProcessingError("Trip failed", trip_id=1)
 
