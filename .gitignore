@@ -1,83 +1,39 @@
+# Node modules
+node_modules/
+package-lock.json
+
+# Build outputs
+receiver/static/dist/
+
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
+*.pyc
+*.pyo
+*.pyd
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
+*.so
 *.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
 
-# Virtual environments
+# Environment
+.env
+.venv
 venv/
 ENV/
-env/
-.venv/
-
-# pytest
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
 
 # IDE
-.idea/
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
-.project
-.pydevproject
-.settings/
 
-# macOS
+# OS
 .DS_Store
-.AppleDouble
-.LSOverride
-._*
-.Spotlight-V100
-.Trashes
-
-# Environment files
-.env
-.env.local
-.env.*.local
-
-# Logs
-logs/
-*.log
-
-# Docker
-docker-compose.override.yml
-
-# Database
-*.db
-*.sqlite3
-
-# Local development
-*.local
-.claude/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Coverage reports
-coverage.xml
-*.cover
-.hypothesis/
-
-# Backups (user data, not code)
-backups/
+Thumbs.db
