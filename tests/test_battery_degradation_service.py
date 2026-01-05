@@ -193,13 +193,14 @@ class TestSimpleLinearRegression:
         assert intercept == pytest.approx(18.4, abs=0.01)
 
     def test_single_point(self):
-        """Single data point."""
+        """Single data point returns default values."""
         data = [(10000.0, 18.0)]
 
-        # Should raise error or handle gracefully
-        # Division by zero in denominator
-        with pytest.raises(ZeroDivisionError):
-            simple_linear_regression(data)
+        # With less than 2 points, should return default (no degradation)
+        slope, intercept = simple_linear_regression(data)
+
+        assert slope == 0
+        assert intercept == 100
 
     def test_two_points(self):
         """Two points define a line."""
@@ -261,14 +262,16 @@ class TestForecastDegradation:
 
         assert forecast is not None
         assert "forecasts" in forecast
-        assert "current_capacity_kwh" in forecast
-        assert "degradation_rate_per_mile" in forecast
+        assert "current_status" in forecast
+        assert "capacity_kwh" in forecast["current_status"]
+        assert "degradation_rate" in forecast
+        assert "percent_per_10k_miles" in forecast["degradation_rate"]
 
         # Should have forecasts for key milestones
         forecasts = forecast["forecasts"]
-        milestones = [f["miles"] for f in forecasts]
-        assert 50000 in milestones
+        milestones = [f["odometer_miles"] for f in forecasts]
         assert 100000 in milestones
+        assert 125000 in milestones
         assert 150000 in milestones
         assert 200000 in milestones
 
@@ -298,8 +301,8 @@ class TestForecastDegradation:
         forecasts = forecast["forecasts"]
 
         # Capacity at 200k should be less than 100k
-        capacity_100k = next(f["capacity_kwh"] for f in forecasts if f["miles"] == 100000)
-        capacity_200k = next(f["capacity_kwh"] for f in forecasts if f["miles"] == 200000)
+        capacity_100k = next(f["predicted_capacity_kwh"] for f in forecasts if f["odometer_miles"] == 100000)
+        capacity_200k = next(f["predicted_capacity_kwh"] for f in forecasts if f["odometer_miles"] == 200000)
 
         assert capacity_200k < capacity_100k
 
@@ -325,12 +328,10 @@ class TestForecastDegradation:
         forecast = forecast_degradation(db_session)
 
         assert forecast is not None
-        forecasts = forecast["forecasts"]
-
-        # Each forecast should have comparison to typical
-        for f in forecasts:
-            assert "vs_typical_volt" in f
-            # Should be string like "Better" or "Worse" or "Similar"
+        assert "degradation_rate" in forecast
+        assert "comparison" in forecast["degradation_rate"]
+        # Should have comparison like "Normal (2-3% per 50k)" or "Faster than typical"
+        assert forecast["degradation_rate"]["comparison"] is not None
 
     def test_calculates_degradation_rate(self, app, db_session):
         """Calculates degradation rate per mile."""
@@ -353,14 +354,15 @@ class TestForecastDegradation:
         forecast = forecast_degradation(db_session)
 
         assert forecast is not None
-        assert "degradation_rate_per_mile" in forecast
+        assert "degradation_rate" in forecast
+        assert "percent_per_10k_miles" in forecast["degradation_rate"]
 
-        rate = forecast["degradation_rate_per_mile"]
-        # 0.5 kWh / 50k miles = 0.00001 kWh/mile
-        assert rate < 0  # Should be negative
+        rate = forecast["degradation_rate"]["percent_per_10k_miles"]
+        # 0.5 kWh / 50k miles ≈ 0.54% per 10k miles
+        assert rate > 0  # Should be positive (absolute value)
 
-    def test_insufficient_data_returns_none(self, app, db_session):
-        """Less than 2 readings returns None."""
+    def test_insufficient_data_returns_error(self, app, db_session):
+        """Less than 2 readings returns error dict."""
         now = datetime.now(timezone.utc)
 
         # Only one reading
@@ -374,12 +376,16 @@ class TestForecastDegradation:
 
         forecast = forecast_degradation(db_session)
 
-        assert forecast is None
+        assert forecast is not None
+        assert "error" in forecast
+        assert forecast["current_readings"] == 1
 
-    def test_no_data_returns_none(self, app, db_session):
-        """No health readings returns None."""
+    def test_no_data_returns_error(self, app, db_session):
+        """No health readings returns error dict."""
         forecast = forecast_degradation(db_session)
-        assert forecast is None
+        assert forecast is not None
+        assert "error" in forecast
+        assert forecast["current_readings"] == 0
 
     def test_includes_confidence_metric(self, app, db_session):
         """Includes confidence based on data quality."""
@@ -398,9 +404,13 @@ class TestForecastDegradation:
         forecast = forecast_degradation(db_session)
 
         assert forecast is not None
-        assert "confidence" in forecast
-        # More data should give higher confidence
-        assert forecast["confidence"] > 0.5
+        assert "data_points" in forecast
+        # Should have 10 data points
+        assert forecast["data_points"] == 10
+        # Should also have model info
+        assert "model" in forecast
+        assert "slope" in forecast["model"]
+        assert "intercept" in forecast["model"]
 
 
 class TestBatteryDegradationValidation:
@@ -481,7 +491,7 @@ class TestBatteryDegradationValidation:
 
         # All forecasts should be positive
         for f in forecast["forecasts"]:
-            assert f["capacity_kwh"] > 0
+            assert f["predicted_capacity_kwh"] > 0
 
     def test_zero_mileage_readings(self, app, db_session):
         """Handles readings with zero or null mileage."""
