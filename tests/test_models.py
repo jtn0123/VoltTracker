@@ -793,7 +793,7 @@ class TestMaintenanceRecordModel:
         record = MaintenanceRecord(
             maintenance_type="oil_change",
             service_date=now,
-            mileage=55000.0,
+            odometer_miles=55000.0,
             engine_hours=25.5,
             cost=65.00,
             location="Chevy Dealer",
@@ -806,7 +806,7 @@ class TestMaintenanceRecordModel:
         result = record.to_dict()
 
         assert result["maintenance_type"] == "oil_change"
-        assert result["mileage"] == 55000.0
+        assert result["odometer_miles"] == 55000.0
         assert result["engine_hours"] == 25.5
         assert result["cost"] == 65.00
         assert result["location"] == "Chevy Dealer"
@@ -831,7 +831,7 @@ class TestMaintenanceRecordModel:
 
         assert result["maintenance_type"] == "tire_rotation"
         assert result["service_date"] is not None
-        assert result["mileage"] is None
+        assert result["odometer_miles"] is None
         assert result["cost"] is None
         assert result["notes"] is None
 
@@ -892,7 +892,7 @@ class TestMaintenanceRecordModel:
         record = MaintenanceRecord(
             maintenance_type="brake_fluid",
             service_date=now,
-            mileage=None,
+            odometer_miles=None,
             engine_hours=None,
             cost=None,
             location=None,
@@ -904,12 +904,12 @@ class TestMaintenanceRecordModel:
 
         result = record.to_dict()
 
-        assert result["mileage"] is None
+        assert result["odometer_miles"] is None
         assert result["engine_hours"] is None
         assert result["cost"] is None
 
-    def test_negative_mileage_stored(self, db_session):
-        """Negative mileage can be stored (validation at app layer)."""
+    def test_negative_odometer_miles_stored(self, db_session):
+        """Negative odometer_miles can be stored (validation at app layer)."""
         from models import MaintenanceRecord
 
         now = datetime.now(timezone.utc)
@@ -917,13 +917,13 @@ class TestMaintenanceRecordModel:
         record = MaintenanceRecord(
             maintenance_type="tire_rotation",
             service_date=now,
-            mileage=-100.0,  # Invalid but model allows
+            odometer_miles=-100.0,  # Invalid but model allows
         )
         db_session.add(record)
         db_session.commit()
 
         fetched = db_session.query(MaintenanceRecord).filter_by(id=record.id).first()
-        assert fetched.mileage == -100.0
+        assert fetched.odometer_miles == -100.0
 
     def test_negative_cost_stored(self, db_session):
         """Negative cost can be stored."""
@@ -959,9 +959,9 @@ class TestRouteModel:
             end_lat=37.8044,
             end_lon=-122.2712,
             trip_count=25,
-            total_distance_miles=250.0,
+            avg_distance_miles=250.0,
             avg_efficiency_kwh_per_mile=0.2,
-            last_trip_date=now,
+            last_traveled=now,
         )
         db_session.add(route)
         db_session.commit()
@@ -969,14 +969,14 @@ class TestRouteModel:
         result = route.to_dict()
 
         assert result["name"] == "Work Commute"
-        assert result["start_lat"] == 37.7749
-        assert result["start_lon"] == -122.4194
-        assert result["end_lat"] == 37.8044
-        assert result["end_lon"] == -122.2712
+        assert result["start"]["lat"] == 37.7749
+        assert result["start"]["lon"] == -122.4194
+        assert result["end"]["lat"] == 37.8044
+        assert result["end"]["lon"] == -122.2712
         assert result["trip_count"] == 25
-        assert result["total_distance_miles"] == 250.0
-        assert result["avg_efficiency_kwh_per_mile"] == 0.2
-        assert result["last_trip_date"] is not None
+        assert result["avg_distance_miles"] == 250.0
+        assert result["avg_efficiency"] == 0.2
+        assert result["last_traveled"] is not None
 
     def test_to_dict_required_fields_only(self, db_session):
         """Works with only required fields."""
@@ -993,9 +993,9 @@ class TestRouteModel:
 
         result = route.to_dict()
 
-        assert result["start_lat"] == 37.7749
+        assert result["start"]["lat"] == 37.7749
         assert result["name"] is None
-        assert result["trip_count"] is None
+        assert result["trip_count"] == 1  # Default value is 1, not None
 
     def test_requires_start_coordinates(self, db_session):
         """start_lat and start_lon are required."""
@@ -1066,8 +1066,8 @@ class TestRouteModel:
         assert fetched.start_lat == -33.8688
         assert fetched.end_lat == -37.8136
 
-    def test_trip_count_defaults_to_zero(self, db_session):
-        """trip_count defaults to 0."""
+    def test_trip_count_defaults_to_one(self, db_session):
+        """trip_count defaults to 1."""
         from models import Route
 
         route = Route(
@@ -1079,7 +1079,7 @@ class TestRouteModel:
         db_session.add(route)
         db_session.commit()
 
-        assert route.trip_count is None or route.trip_count == 0
+        assert route.trip_count == 1
 
     def test_optional_name_field(self, db_session):
         """name field is optional."""
@@ -1132,8 +1132,8 @@ class TestRouteModel:
         fetched = db_session.query(Route).filter_by(id=route.id).first()
         assert fetched.avg_efficiency_kwh_per_mile == -0.1
 
-    def test_last_trip_date_formatting(self, db_session):
-        """last_trip_date formatted as ISO string."""
+    def test_last_traveled_formatting(self, db_session):
+        """last_traveled formatted as ISO string."""
         from models import Route
 
         last_trip = datetime(2024, 6, 20, 14, 30, 0, tzinfo=timezone.utc)
@@ -1143,12 +1143,12 @@ class TestRouteModel:
             start_lon=-122.4194,
             end_lat=37.8044,
             end_lon=-122.2712,
-            last_trip_date=last_trip,
+            last_traveled=last_trip,
         )
         db_session.add(route)
         db_session.commit()
 
         result = route.to_dict()
 
-        assert "2024-06-20" in result["last_trip_date"]
-        assert "14:30:00" in result["last_trip_date"]
+        assert "2024-06-20" in result["last_traveled"]
+        assert "14:30:00" in result["last_traveled"]

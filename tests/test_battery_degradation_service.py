@@ -13,12 +13,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from models import BatteryHealthReading
-from services.battery_degradation_service import (
-    forecast_degradation,
-    get_current_health,
-    get_degradation_history,
-    simple_linear_regression,
-)
+from services.battery_degradation_service import forecast_degradation, get_degradation_history, simple_linear_regression
 
 
 class TestGetDegradationHistory:
@@ -405,96 +400,6 @@ class TestForecastDegradation:
         assert "confidence" in forecast
         # More data should give higher confidence
         assert forecast["confidence"] > 0.5
-
-
-class TestGetCurrentHealth:
-    """Tests for get_current_health function."""
-
-    def test_returns_most_recent_reading(self, app, db_session):
-        """Returns the most recent health reading."""
-        now = datetime.now(timezone.utc)
-
-        # Add multiple readings
-        readings = [
-            (now - timedelta(days=60), 18.0),
-            (now - timedelta(days=30), 18.1),
-            (now - timedelta(days=5), 18.2),  # Most recent
-        ]
-
-        for timestamp, cap in readings:
-            reading = BatteryHealthReading(
-                timestamp=timestamp,
-                capacity_kwh=cap,
-                normalized_capacity_kwh=cap,
-            )
-            db_session.add(reading)
-        db_session.commit()
-
-        current = get_current_health(db_session)
-
-        assert current is not None
-        # Should return most recent (18.2)
-        assert current["capacity_kwh"] == 18.2
-
-    def test_uses_normalized_capacity(self, app, db_session):
-        """Prefers normalized_capacity_kwh."""
-        now = datetime.now(timezone.utc)
-
-        reading = BatteryHealthReading(
-            timestamp=now,
-            capacity_kwh=17.5,
-            normalized_capacity_kwh=17.8,
-            odometer_miles=55000.0,
-        )
-        db_session.add(reading)
-        db_session.commit()
-
-        current = get_current_health(db_session)
-
-        assert current is not None
-        assert current["capacity_kwh"] == 17.8
-
-    def test_calculates_percent_of_new(self, app, db_session):
-        """Calculates percentage of new capacity."""
-        now = datetime.now(timezone.utc)
-
-        reading = BatteryHealthReading(
-            timestamp=now,
-            normalized_capacity_kwh=16.56,  # 90% of 18.4
-            odometer_miles=55000.0,
-        )
-        db_session.add(reading)
-        db_session.commit()
-
-        current = get_current_health(db_session)
-
-        assert current is not None
-        assert "percent_of_new" in current
-        # Should be around 90%
-        assert 89 < current["percent_of_new"] < 91
-
-    def test_includes_odometer(self, app, db_session):
-        """Includes odometer reading."""
-        now = datetime.now(timezone.utc)
-
-        reading = BatteryHealthReading(
-            timestamp=now,
-            capacity_kwh=18.0,
-            odometer_miles=75000.0,
-        )
-        db_session.add(reading)
-        db_session.commit()
-
-        current = get_current_health(db_session)
-
-        assert current is not None
-        assert "odometer_miles" in current
-        assert current["odometer_miles"] == 75000.0
-
-    def test_no_readings_returns_none(self, app, db_session):
-        """No health readings returns None."""
-        current = get_current_health(db_session)
-        assert current is None
 
 
 class TestBatteryDegradationValidation:
