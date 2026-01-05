@@ -18,11 +18,18 @@ def get_degradation_history(db: Session) -> List[Tuple[float, float]]:
     """
     Get historical battery capacity data.
 
-    Returns: List of (odometer_miles, capacity_percent)
+    Returns: List of (odometer_miles, capacity_kwh)
     """
+    from sqlalchemy import or_
+
     readings = (
         db.query(BatteryHealthReading)
-        .filter(BatteryHealthReading.capacity_percent.isnot(None))
+        .filter(
+            or_(
+                BatteryHealthReading.normalized_capacity_kwh.isnot(None),
+                BatteryHealthReading.capacity_kwh.isnot(None),
+            )
+        )
         .order_by(BatteryHealthReading.timestamp)
         .all()
     )
@@ -30,21 +37,30 @@ def get_degradation_history(db: Session) -> List[Tuple[float, float]]:
     # Get odometer at time of each reading (approximate from nearby trip)
     data = []
     for reading in readings:
-        # Find nearest trip
-        nearby_trip = (
-            db.query(Trip.odometer_miles)
-            .filter(
-                and_(
-                    Trip.odometer_miles.isnot(None),
-                    Trip.start_time >= reading.timestamp,
-                )
-            )
-            .order_by(Trip.start_time)
-            .first()
-        )
+        # Use normalized capacity, fallback to raw capacity
+        capacity_kwh = reading.normalized_capacity_kwh
+        if capacity_kwh is None and reading.capacity_kwh:
+            capacity_kwh = reading.capacity_kwh
 
-        if nearby_trip and nearby_trip[0]:
-            data.append((nearby_trip[0], reading.capacity_percent))
+        # Use odometer from reading if available, otherwise find nearest trip
+        odometer = reading.odometer_miles
+        if not odometer:
+            nearby_trip = (
+                db.query(Trip.end_odometer)
+                .filter(
+                    and_(
+                        Trip.end_odometer.isnot(None),
+                        Trip.start_time >= reading.timestamp,
+                    )
+                )
+                .order_by(Trip.start_time)
+                .first()
+            )
+            if nearby_trip and nearby_trip[0]:
+                odometer = nearby_trip[0]
+
+        if odometer and capacity_kwh:
+            data.append((float(odometer), float(capacity_kwh)))
 
     return data
 
@@ -99,12 +115,20 @@ def forecast_degradation(db: Session) -> Dict:
     current_capacity_pct = 100
 
     if latest_reading:
-        current_capacity_pct = latest_reading.capacity_percent
+        # Calculate capacity percent from normalized kWh
+        if latest_reading.normalized_capacity_kwh:
+            current_capacity_pct = (latest_reading.normalized_capacity_kwh / 18.4) * 100
+        elif latest_reading.capacity_kwh:
+            # Fallback to raw capacity if normalized not available
+            current_capacity_pct = (latest_reading.capacity_kwh / 18.4) * 100
 
-        # Get current mileage
-        latest_trip = db.query(Trip).filter(Trip.odometer_miles.isnot(None)).order_by(Trip.start_time.desc()).first()
-        if latest_trip:
-            current_miles = latest_trip.odometer_miles
+        # Get current mileage from reading or latest trip
+        if latest_reading.odometer_miles:
+            current_miles = latest_reading.odometer_miles
+        else:
+            latest_trip = db.query(Trip).filter(Trip.end_odometer.isnot(None)).order_by(Trip.start_time.desc()).first()
+            if latest_trip:
+                current_miles = latest_trip.end_odometer
 
     # Forecast at milestones
     milestones = [50000, 75000, 100000, 125000, 150000, 200000]
@@ -114,19 +138,24 @@ def forecast_degradation(db: Session) -> Dict:
         if miles <= current_miles:
             continue
 
-        predicted_capacity = slope * miles + intercept
-        predicted_capacity = max(70, min(100, predicted_capacity))  # Clamp 70-100%
+        # Predict capacity in kWh using regression model
+        predicted_capacity_kwh = slope * miles + intercept
+        predicted_capacity_kwh = max(12.88, min(18.4, predicted_capacity_kwh))  # Clamp to 70-100% of 18.4kWh
+
+        # Convert to percent
+        predicted_capacity_pct = (predicted_capacity_kwh / 18.4) * 100
 
         forecasts.append(
             {
                 "odometer_miles": miles,
-                "predicted_capacity_pct": round(predicted_capacity, 1),
-                "predicted_capacity_kwh": round(16.5 * predicted_capacity / 100, 2),
+                "predicted_capacity_pct": round(predicted_capacity_pct, 1),
+                "predicted_capacity_kwh": round(predicted_capacity_kwh, 2),
             }
         )
 
-    # Calculate degradation rate (percent per 10k miles)
-    degradation_per_10k = abs(slope * 10000)
+    # Calculate degradation rate in kWh per 10k miles, then convert to percent
+    degradation_kwh_per_10k = abs(slope * 10000)
+    degradation_per_10k = (degradation_kwh_per_10k / 18.4) * 100  # Convert to percent
 
     # Typical Volt Gen 2 degradation: 2-3% per 50k miles = 0.4-0.6% per 10k
     is_normal = 0.2 <= degradation_per_10k <= 0.8
