@@ -1,6 +1,6 @@
 """Calculations for MPG, SOC analysis, and trip processing."""
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import statistics
 import logging
@@ -197,8 +197,8 @@ def calculate_average_temp(telemetry_points: List[dict]) -> Optional[float]:
     Returns:
         Average ambient temperature in Fahrenheit, or None
     """
-    temps = [
-        p.get('ambient_temp_f')
+    temps: List[float] = [
+        float(p.get('ambient_temp_f'))
         for p in telemetry_points
         if p.get('ambient_temp_f') is not None
     ]
@@ -206,7 +206,7 @@ def calculate_average_temp(telemetry_points: List[dict]) -> Optional[float]:
     if not temps:
         return None
 
-    return round(statistics.mean(temps), 1)
+    return float(round(statistics.mean(temps), 1))
 
 
 def analyze_soc_floor(transitions: List[dict]) -> dict:
@@ -242,7 +242,7 @@ def analyze_soc_floor(transitions: List[dict]) -> dict:
         }
 
     # Build histogram (1% buckets)
-    histogram = {}
+    histogram: Dict[int, int] = {}
     for soc in soc_values:
         bucket = int(soc)
         histogram[bucket] = histogram.get(bucket, 0) + 1
@@ -331,11 +331,11 @@ def calculate_electric_kwh(
                 total_kwh += avg_power * delta_hours
 
         if total_kwh > 0:
-            return round(total_kwh, 2)
+            return float(round(total_kwh, 2))
 
     # Method 2: Estimate from SOC change
-    soc_readings = [
-        p.get('state_of_charge')
+    soc_readings: List[float] = [
+        float(p.get('state_of_charge'))
         for p in telemetry_points
         if p.get('state_of_charge') is not None
     ]
@@ -348,7 +348,7 @@ def calculate_electric_kwh(
         if start_soc > end_soc:
             soc_change = start_soc - end_soc
             kwh_used = (soc_change / 100) * battery_capacity_kwh
-            return round(kwh_used, 2)
+            return float(round(kwh_used, 2))
 
     return None
 

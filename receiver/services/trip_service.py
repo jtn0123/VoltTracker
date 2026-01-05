@@ -102,6 +102,17 @@ def process_gas_mode(db, trip: Trip, telemetry: list, points: list) -> None:
             fuel_change = trip.fuel_level_at_gas_entry - trip.fuel_level_at_end
             if fuel_change > 0:  # Only count fuel consumption, not refuels
                 trip.fuel_used_gallons = (fuel_change / 100) * Config.TANK_CAPACITY_GALLONS
+            elif fuel_change < -5:  # Significant increase = refuel during trip
+                logger.info(
+                    f"Refuel detected during trip {trip.id}: "
+                    f"{trip.fuel_level_at_gas_entry:.1f}% → {trip.fuel_level_at_end:.1f}%"
+                )
+
+        # Ensure gas_miles is set for gas_mode_entered trips (defensive fallback)
+        if trip.gas_mode_entered and trip.gas_miles is None and trip.distance_miles:
+            logger.debug(f"Trip {trip.id}: Applying fallback gas_miles = distance_miles")
+            trip.gas_miles = trip.distance_miles
+            trip.electric_miles = 0.0
 
         # Record SOC transition for battery health tracking (avoid duplicates)
         if trip.soc_at_gas_transition:

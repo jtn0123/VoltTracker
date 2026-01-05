@@ -28,7 +28,7 @@ export_bp = Blueprint('export', __name__)
 
 
 @export_bp.route('/export/trips', methods=['GET'])
-def export_trips() -> Response:
+def export_trips():
     """
     Export trips as CSV or JSON.
 
@@ -293,6 +293,17 @@ def import_csv():
             first_record = records[0]
             last_record = records[-1]
 
+            # Check for duplicate trip (same session_id already exists)
+            existing_trip = db.query(Trip).filter(Trip.session_id == session_id).first()
+            if existing_trip:
+                logger.info(f"Skipping duplicate trip for session {session_id} (existing trip ID: {existing_trip.id})")
+                stats['skipped_duplicate'] = True
+                stats['existing_trip_id'] = existing_trip.id
+                return jsonify({
+                    'message': f'Imported {inserted_count} records (trip already exists)',
+                    'stats': stats
+                })
+
             # Query MIN/MAX odometer from all telemetry (more reliable than first/last record)
             odometer_range = db.query(
                 func.min(TelemetryRaw.odometer_miles),
@@ -410,7 +421,7 @@ def api_docs():
                 'path': '/trips/<trip_id>',
                 'methods': ['GET', 'DELETE', 'PATCH'],
                 'description': 'Get, delete, or update a specific trip',
-                'patch_fields': ['gas_mpg', 'gas_miles', 'electric_miles', 'fuel_used_gallons', 'notes']
+                'patch_fields': ['gas_mpg', 'gas_miles', 'electric_miles', 'fuel_used_gallons']
             },
             {
                 'path': '/trips/summary',

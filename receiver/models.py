@@ -1,4 +1,3 @@
-from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean,
     DateTime, ForeignKey, Text, create_engine, JSON, Index
@@ -198,6 +197,8 @@ class Trip(Base):
         Index('ix_trips_is_closed_start_time', 'is_closed', 'start_time'),
         # Composite index for gas mode queries by date
         Index('ix_trips_gas_mode_start_time', 'gas_mode_entered', 'start_time'),
+        # Composite index for filtered trip listing (most common query)
+        Index('ix_trips_closed_deleted_time', 'is_closed', 'deleted_at', 'start_time'),
     )
 
     id = Column(Integer, primary_key=True)

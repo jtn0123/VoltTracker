@@ -263,6 +263,7 @@ class TestTripListFiltering:
             start_time=datetime.now(timezone.utc),
             gas_mode_entered=False,
             is_closed=True,
+            distance_miles=10.0,  # Set distance to pass filter
         )
         db_session.add(electric_trip)
 
@@ -273,6 +274,7 @@ class TestTripListFiltering:
             gas_mode_entered=True,
             gas_mpg=40.0,
             is_closed=True,
+            distance_miles=15.0,  # Set distance to pass filter
         )
         db_session.add(gas_trip)
         db_session.commit()
@@ -298,6 +300,7 @@ class TestTripListFiltering:
             session_id=uuid.uuid4(),
             start_time=datetime(2023, 1, 15, tzinfo=timezone.utc),
             is_closed=True,
+            distance_miles=10.0,  # Set distance to pass filter
         )
         db_session.add(old_trip)
 
@@ -306,6 +309,7 @@ class TestTripListFiltering:
             session_id=uuid.uuid4(),
             start_time=datetime.now(timezone.utc),
             is_closed=True,
+            distance_miles=15.0,  # Set distance to pass filter
         )
         db_session.add(recent_trip)
         db_session.commit()

@@ -6,7 +6,8 @@ Handles Torque Pro data ingestion and real-time telemetry endpoints.
 
 import logging
 from datetime import timedelta
-from flask import Blueprint, request, jsonify, Response, current_app
+from typing import Any, Dict
+from flask import Blueprint, request, jsonify, current_app
 
 from config import Config
 from database import get_db
@@ -164,7 +165,7 @@ def _calculate_trip_stats(
     - gas_miles: Miles driven in gas mode
     - gas_mpg: Fuel efficiency if in gas mode
     """
-    stats = {
+    stats: Dict[str, Any] = {
         'miles_driven': None,
         'kwh_used': None,
         'kwh_per_mile': None,
@@ -234,7 +235,7 @@ def _calculate_trip_stats(
 
 
 @telemetry_bp.route('/api/telemetry/latest', methods=['GET'])
-def get_latest_telemetry() -> Response:
+def get_latest_telemetry():
     """Get latest telemetry for real-time dashboard display."""
     from sqlalchemy import desc
 

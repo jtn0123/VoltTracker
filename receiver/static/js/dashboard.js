@@ -21,6 +21,8 @@ let tripsRefreshInterval = null;
 let socket = null;
 let useWebSocket = true;  // Will fallback to polling if WebSocket fails
 let modalTriggerElement = null;  // Track element that opened modal for focus restoration
+let statusErrorCount = 0;  // Track consecutive status fetch errors for retry logic
+const STATUS_ERROR_THRESHOLD = 3;  // Show error only after this many consecutive failures
 
 // Cleanup intervals and connections on page unload
 window.addEventListener('beforeunload', () => {
@@ -442,6 +444,9 @@ async function loadStatus() {
     try {
         const data = await fetchJson('/api/status');
 
+        // Reset error counter on success
+        statusErrorCount = 0;
+
         if (data.status === 'online') {
             statusDot.classList.remove('offline');
         } else {
@@ -455,9 +460,15 @@ async function loadStatus() {
             lastSync.textContent = 'No data yet';
         }
     } catch (error) {
-        if (DEBUG) console.error('Failed to load status:', error);
-        statusDot.classList.add('offline');
-        lastSync.textContent = 'Connection error';
+        statusErrorCount++;
+        if (DEBUG) console.error(`Failed to load status (attempt ${statusErrorCount}):`, error);
+
+        // Only show error UI after multiple consecutive failures
+        if (statusErrorCount >= STATUS_ERROR_THRESHOLD) {
+            statusDot.classList.add('offline');
+            lastSync.textContent = 'Connection error';
+        }
+        // Otherwise keep showing the last known good state
     }
 }
 
@@ -913,11 +924,13 @@ async function loadTrips() {
             <tr class="clickable" onclick="openTripModal(${trip.id})">
                 <td>${formatDateTime(new Date(trip.start_time))}</td>
                 <td>${trip.distance_miles ? trip.distance_miles.toFixed(1) : '--'} mi</td>
-                <td>${trip.electric_miles ? trip.electric_miles.toFixed(1) : '--'} mi</td>
+                <td>${trip.electric_miles !== null && trip.electric_miles !== undefined ? trip.electric_miles.toFixed(1) : '--'} mi</td>
                 <td>
-                    ${trip.gas_mode_entered ?
-                        `<span class="badge badge-gas">${trip.gas_miles ? trip.gas_miles.toFixed(1) : '0'} mi</span>` :
-                        '<span class="badge badge-electric">Electric</span>'
+                    ${!trip.distance_miles ?
+                        '<span class="badge badge-unknown">No Data</span>' :
+                        (trip.gas_mode_entered ?
+                            `<span class="badge badge-gas">${trip.gas_miles ? trip.gas_miles.toFixed(1) : '0'} mi</span>` :
+                            '<span class="badge badge-electric">Electric</span>')
                     }
                 </td>
                 <td>${trip.gas_mpg ? trip.gas_mpg + ' MPG' : '--'}</td>
@@ -933,9 +946,11 @@ async function loadTrips() {
             <div class="trip-card clickable" onclick="openTripModal(${trip.id})">
                 <div class="trip-card-header">
                     <span class="trip-card-date">${formatDate(new Date(trip.start_time))}</span>
-                    ${trip.gas_mode_entered ?
-                        '<span class="badge badge-gas">Gas</span>' :
-                        '<span class="badge badge-electric">Electric</span>'
+                    ${!trip.distance_miles ?
+                        '<span class="badge badge-unknown">No Data</span>' :
+                        (trip.gas_mode_entered ?
+                            '<span class="badge badge-gas">Gas</span>' :
+                            '<span class="badge badge-electric">Electric</span>')
                     }
                 </div>
                 <div class="trip-card-stats">
@@ -945,7 +960,7 @@ async function loadTrips() {
                     </div>
                     <div class="trip-card-stat">
                         <span>Electric</span>
-                        <span>${trip.electric_miles ? trip.electric_miles.toFixed(1) : '--'} mi</span>
+                        <span>${trip.electric_miles !== null && trip.electric_miles !== undefined ? trip.electric_miles.toFixed(1) : '--'} mi</span>
                     </div>
                     <div class="trip-card-stat">
                         <span>Gas</span>

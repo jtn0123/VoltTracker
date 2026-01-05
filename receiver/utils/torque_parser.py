@@ -1,7 +1,7 @@
 """Parse Torque Pro POST data into structured telemetry."""
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 import uuid
 import logging
 
@@ -116,7 +116,7 @@ class TorqueParser:
     }
 
     @classmethod
-    def parse(cls, form_data: dict) -> dict:
+    def parse(cls, form_data: dict) -> Dict[str, Any]:
         """
         Parse Torque Pro form data into structured telemetry.
 
@@ -126,7 +126,7 @@ class TorqueParser:
         Returns:
             Dictionary with structured telemetry data
         """
-        result = {
+        result: Dict[str, Any] = {
             'session_id': None,
             'timestamp': None,
             'latitude': None,

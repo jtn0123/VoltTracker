@@ -575,11 +575,12 @@ class TestApiPagination:
         from models import Trip
 
         # Create 5 trips
-        for _ in range(5):
+        for i in range(5):
             trip = Trip(
                 session_id=uuid.uuid4(),
                 start_time=datetime.now(timezone.utc),
                 is_closed=True,
+                distance_miles=10.0 + i,  # Set distance to pass filter
             )
             db_session.add(trip)
         db_session.commit()
@@ -607,6 +608,7 @@ class TestApiPagination:
             session_id=uuid.uuid4(),
             start_time=datetime.now(timezone.utc),
             is_closed=True,
+            distance_miles=10.0,  # Set distance to pass filter
         )
         db_session.add(trip)
         db_session.commit()
@@ -634,6 +636,7 @@ class TestApiPagination:
                 session_id=uuid.uuid4(),
                 start_time=datetime.now(timezone.utc) - timedelta(days=i),
                 is_closed=True,
+                distance_miles=10.0 + i,  # Set distance to pass filter
             )
             db_session.add(trip)
         db_session.commit()
@@ -1458,6 +1461,7 @@ class TestTripSortingAndFiltering:
             gas_miles=20.0,
             gas_mode_entered=True,
             is_closed=True,
+            distance_miles=20.0,  # Set distance to pass filter
         )
         # Electric-only trip
         trip2 = Trip(
@@ -1466,6 +1470,7 @@ class TestTripSortingAndFiltering:
             electric_miles=15.0,
             gas_mode_entered=False,
             is_closed=True,
+            distance_miles=15.0,  # Set distance to pass filter
         )
         db_session.add(trip1)
         db_session.add(trip2)
