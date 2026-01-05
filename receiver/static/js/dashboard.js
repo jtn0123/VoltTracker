@@ -39,6 +39,61 @@ window.addEventListener('beforeunload', () => {
 });
 
 /**
+ * HTML Escaping Helper - Defense-in-depth against XSS
+ *
+ * Escapes HTML special characters to prevent XSS attacks.
+ * Use this when inserting user-controlled or external data into HTML.
+ *
+ * @param {string} str - The string to escape
+ * @returns {string} - The escaped string safe for HTML insertion
+ *
+ * @example
+ * // Instead of:
+ * element.innerHTML = `<div>${userName}</div>`;
+ *
+ * // Use:
+ * element.innerHTML = `<div>${escapeHtml(userName)}</div>`;
+ */
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+}
+
+/**
+ * Sanitize a number for safe HTML insertion
+ * Ensures the value is actually a number and formats it appropriately
+ *
+ * @param {any} value - The value to sanitize
+ * @param {number} decimals - Number of decimal places (default: 1)
+ * @returns {string} - Sanitized number or '--' if invalid
+ */
+function sanitizeNumber(value, decimals = 1) {
+    if (value === null || value === undefined || isNaN(value)) {
+        return '--';
+    }
+    return Number(value).toFixed(decimals);
+}
+
+/**
+ * Sanitize and format a date for safe HTML insertion
+ *
+ * @param {any} dateValue - The date value to sanitize
+ * @returns {string} - Formatted date or '--' if invalid
+ */
+function sanitizeDate(dateValue) {
+    if (!dateValue) return '--';
+    try {
+        const date = new Date(dateValue);
+        if (isNaN(date.getTime())) return '--';
+        return escapeHtml(formatDateTime(date));
+    } catch (e) {
+        return '--';
+    }
+}
+
+/**
  * IndexedDB API Cache for client-side caching
  */
 class APICache {
