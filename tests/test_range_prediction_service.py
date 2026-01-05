@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from models import Trip
-from services.range_prediction_service import calculate_confidence, get_historical_efficiency, predict_range_simple
+from services.range_prediction_service import get_historical_efficiency, predict_range_simple
 
 
 class TestPredictRangeSimple:
@@ -463,69 +463,6 @@ class TestGetHistoricalEfficiency:
         """No trips returns empty list."""
         result = get_historical_efficiency(db_session, days=90)
         assert result == []
-
-
-class TestCalculateConfidence:
-    """Tests for calculate_confidence function."""
-
-    def test_high_confidence_with_many_trips(self):
-        """Many trips with low variance gives high confidence."""
-        historical = [
-            (70.0, 40.0, 20.0, 5.0),  # temp, speed, soc_change, efficiency
-            (70.0, 40.0, 20.0, 5.1),
-            (70.0, 40.0, 20.0, 4.9),
-            (70.0, 40.0, 20.0, 5.0),
-            (70.0, 40.0, 20.0, 5.1),
-            (70.0, 40.0, 20.0, 4.9),
-            (70.0, 40.0, 20.0, 5.0),
-            (70.0, 40.0, 20.0, 5.0),
-            (70.0, 40.0, 20.0, 5.1),
-            (70.0, 40.0, 20.0, 4.9),
-        ]
-
-        confidence = calculate_confidence(historical)
-
-        assert confidence > 0.8  # High confidence
-
-    def test_low_confidence_with_few_trips(self):
-        """Few trips gives lower confidence."""
-        historical = [
-            (70.0, 40.0, 20.0, 5.0),
-            (70.0, 40.0, 20.0, 5.1),
-        ]
-
-        confidence = calculate_confidence(historical)
-
-        assert confidence < 0.7  # Lower confidence
-
-    def test_low_confidence_with_high_variance(self):
-        """High variance gives lower confidence."""
-        historical = [
-            (70.0, 40.0, 20.0, 3.0),
-            (70.0, 40.0, 20.0, 7.0),
-            (70.0, 40.0, 20.0, 4.0),
-            (70.0, 40.0, 20.0, 6.0),
-            (70.0, 40.0, 20.0, 3.5),
-            (70.0, 40.0, 20.0, 6.5),
-        ]
-
-        confidence = calculate_confidence(historical)
-
-        assert confidence < 0.7  # Lower due to variance
-
-    def test_confidence_bounded_0_to_1(self):
-        """Confidence is always between 0 and 1."""
-        # Test with various scenarios
-        scenarios = [
-            [],  # Empty
-            [(70.0, 40.0, 20.0, 5.0)],  # Single trip
-            [(70.0, 40.0, 20.0, 5.0)] * 20,  # Many consistent trips
-            [(70.0, 40.0, 20.0, float(i)) for i in range(10)],  # High variance
-        ]
-
-        for historical in scenarios:
-            confidence = calculate_confidence(historical)
-            assert 0.0 <= confidence <= 1.0
 
 
 class TestRangePredictionValidation:
