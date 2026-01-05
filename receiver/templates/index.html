@@ -631,14 +631,12 @@
                 timestamp: new Date().toISOString()
             };
 
-            // Log to console in debug mode
-            if (DEBUG || true) {  // Always log vitals for now
-                console.log(`[Web Vital] ${name}:`, {
-                    value: `${Math.round(value)}ms`,
-                    rating,
-                    navigationType
-                });
-            }
+            // Log to console (optional - can be disabled in production)
+            console.log(`[Web Vital] ${name}:`, {
+                value: `${Math.round(value)}ms`,
+                rating,
+                navigationType
+            });
 
             // Send to backend (non-blocking)
             navigator.sendBeacon('/api/analytics/vitals', JSON.stringify(data));
