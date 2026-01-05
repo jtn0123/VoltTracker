@@ -88,9 +88,9 @@ def calculate_engine_hours(db: Session, since_date: Optional[datetime] = None) -
 
 def get_current_odometer(db: Session) -> float:
     """Get current odometer reading from latest trip."""
-    latest_trip = db.query(Trip).filter(Trip.odometer_miles.isnot(None)).order_by(Trip.start_time.desc()).first()
+    latest_trip = db.query(Trip).filter(Trip.end_odometer.isnot(None)).order_by(Trip.start_time.desc()).first()
 
-    return latest_trip.odometer_miles if latest_trip else 0.0
+    return float(latest_trip.end_odometer) if latest_trip else 0.0
 
 
 def calculate_next_due(
@@ -210,6 +210,6 @@ def get_maintenance_summary(db: Session) -> Dict:
         "current_odometer": current_miles,
         "total_engine_hours": round(total_engine_hours, 1),
         "maintenance_items": summary,
-        "overdue_count": sum(1 for item in summary if item["next_due"].get("overdue", False)),
-        "upcoming_count": sum(1 for item in summary if item["next_due"].get("status") == "upcoming"),
+        "overdue_count": sum(1 for item in summary if item["next_due"].get("overdue", False)),  # type: ignore[attr-defined]
+        "upcoming_count": sum(1 for item in summary if item["next_due"].get("status") == "upcoming"),  # type: ignore[attr-defined]
     }
