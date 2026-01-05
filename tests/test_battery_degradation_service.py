@@ -23,13 +23,14 @@ class TestGetDegradationHistory:
         """Returns list of health readings."""
         now = datetime.now(timezone.utc)
 
-        # Add health readings
+        # Add health readings with odometer
         for i in range(5):
             reading = BatteryHealthReading(
                 timestamp=now - timedelta(days=i * 30),
                 capacity_kwh=18.4 - (i * 0.1),  # Gradual degradation
                 normalized_capacity_kwh=18.4 - (i * 0.1),
                 soc_at_reading=100.0,
+                odometer_miles=50000.0 + (i * 1000),  # Increasing mileage
             )
             db_session.add(reading)
         db_session.commit()
@@ -37,7 +38,7 @@ class TestGetDegradationHistory:
         history = get_degradation_history(db_session)
 
         assert len(history) >= 5
-        # Each entry is (odometer, capacity) tuple
+        # Each entry is (odometer, capacity_kwh) tuple
         for odo, cap in history:
             assert isinstance(odo, (int, float))
             assert isinstance(cap, float)
