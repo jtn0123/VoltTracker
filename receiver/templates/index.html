@@ -606,5 +606,44 @@
     </button>
 
     <script src="/static/js/dashboard.js"></script>
+
+    <!-- Web Vitals Performance Monitoring -->
+    <script type="module">
+        import {onCLS, onFID, onLCP, onINP, onFCP, onTTFB} from 'https://unpkg.com/web-vitals@3/dist/web-vitals.js?module';
+
+        function sendToAnalytics({name, value, rating, id, navigationType}) {
+            // Send vital to backend for logging/monitoring
+            const data = {
+                name,
+                value: Math.round(value),
+                rating,
+                id,
+                navigationType,
+                url: window.location.pathname,
+                userAgent: navigator.userAgent,
+                timestamp: new Date().toISOString()
+            };
+
+            // Log to console in debug mode
+            if (DEBUG || true) {  // Always log vitals for now
+                console.log(`[Web Vital] ${name}:`, {
+                    value: `${Math.round(value)}ms`,
+                    rating,
+                    navigationType
+                });
+            }
+
+            // Send to backend (non-blocking)
+            navigator.sendBeacon('/api/analytics/vitals', JSON.stringify(data));
+        }
+
+        // Monitor Core Web Vitals
+        onCLS(sendToAnalytics);  // Cumulative Layout Shift
+        onFID(sendToAnalytics);  // First Input Delay (deprecated, use INP)
+        onLCP(sendToAnalytics);  // Largest Contentful Paint
+        onINP(sendToAnalytics);  // Interaction to Next Paint
+        onFCP(sendToAnalytics);  // First Contentful Paint
+        onTTFB(sendToAnalytics); // Time to First Byte
+    </script>
 </body>
 </html>
