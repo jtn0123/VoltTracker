@@ -4,27 +4,32 @@ Pytest fixtures for VoltTracker tests.
 
 import os
 import sys
-import pytest
-from datetime import datetime, timezone
 import uuid
+from datetime import datetime, timezone
+
+import pytest
 
 # Add receiver to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "receiver"))
 
-# Set DATABASE_URL BEFORE importing app to use SQLite for tests
-os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
-os.environ['FLASK_TESTING'] = 'true'
+# Set environment variables BEFORE importing app to use SQLite for tests
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["FLASK_TESTING"] = "true"
+os.environ["FLASK_ENV"] = "development"  # Avoid SECRET_KEY requirement
 
-from app import app as flask_app, init_cache  # noqa: E402
-from database import SessionLocal as Session, engine  # noqa: E402
-from models import Base, TelemetryRaw, Trip  # noqa: E402
 from datetime import timedelta  # noqa: E402
+
+from app import app as flask_app  # noqa: E402
+from app import init_cache  # noqa: E402
+from database import SessionLocal as Session  # noqa: E402
+from database import engine  # noqa: E402
+from models import Base, TelemetryRaw, Trip  # noqa: E402
 
 
 @pytest.fixture
 def app():
     """Create application for testing."""
-    flask_app.config['TESTING'] = True
+    flask_app.config["TESTING"] = True
 
     # Reinitialize cache to ensure it uses NullCache
     init_cache(flask_app)
@@ -58,23 +63,23 @@ def sample_torque_data():
     """Sample Torque Pro POST data."""
     timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     return {
-        'eml': 'test@example.com',
-        'v': '1.0',
-        'session': str(uuid.uuid4()),
-        'id': 'test-device',
-        'time': str(timestamp_ms),
-        'kff1006': '37.7749',      # Latitude
-        'kff1005': '-122.4194',    # Longitude
-        'kff1001': '45.5',         # Speed (mph)
-        'kc': '0',                 # RPM (electric mode)
-        'k11': '15.0',             # Throttle
-        'k5': '21.0',              # Coolant temp (C)
-        'kf': '18.0',              # Intake temp (C)
-        'k22002f': '75.5',         # Fuel level %
-        'k22005b': '85.0',         # SOC %
-        'k42': '12.6',             # Battery voltage
-        'kff1010': '22.0',         # Ambient temp (C)
-        'kff1271': '50123.4',      # Odometer
+        "eml": "test@example.com",
+        "v": "1.0",
+        "session": str(uuid.uuid4()),
+        "id": "test-device",
+        "time": str(timestamp_ms),
+        "kff1006": "37.7749",  # Latitude
+        "kff1005": "-122.4194",  # Longitude
+        "kff1001": "45.5",  # Speed (mph)
+        "kc": "0",  # RPM (electric mode)
+        "k11": "15.0",  # Throttle
+        "k5": "21.0",  # Coolant temp (C)
+        "kf": "18.0",  # Intake temp (C)
+        "k22002f": "75.5",  # Fuel level %
+        "k22005b": "85.0",  # SOC %
+        "k42": "12.6",  # Battery voltage
+        "kff1010": "22.0",  # Ambient temp (C)
+        "kff1271": "50123.4",  # Odometer
     }
 
 
@@ -82,8 +87,8 @@ def sample_torque_data():
 def sample_torque_data_gas_mode(sample_torque_data):
     """Sample Torque Pro data with engine running (gas mode)."""
     data = sample_torque_data.copy()
-    data['kc'] = '1500'            # Engine running
-    data['k22005b'] = '15.0'       # Low SOC
+    data["kc"] = "1500"  # Engine running
+    data["k22005b"] = "15.0"  # Low SOC
     return data
 
 
@@ -96,29 +101,33 @@ def sample_telemetry_points():
 
     # Electric portion (SOC draining)
     for i in range(30):
-        points.append({
-            'session_id': session_id,
-            'timestamp': base_time,
-            'speed_mph': 45.0 + (i % 10) - 5,
-            'engine_rpm': 0,
-            'state_of_charge': 100 - (i * 2.5),  # Drain from 100 to 25
-            'fuel_level_percent': 80.0,
-            'odometer_miles': 50000 + (i * 0.5),
-            'ambient_temp_f': 70.0,
-        })
+        points.append(
+            {
+                "session_id": session_id,
+                "timestamp": base_time,
+                "speed_mph": 45.0 + (i % 10) - 5,
+                "engine_rpm": 0,
+                "state_of_charge": 100 - (i * 2.5),  # Drain from 100 to 25
+                "fuel_level_percent": 80.0,
+                "odometer_miles": 50000 + (i * 0.5),
+                "ambient_temp_f": 70.0,
+            }
+        )
 
     # Gas portion (engine running)
     for i in range(20):
-        points.append({
-            'session_id': session_id,
-            'timestamp': base_time,
-            'speed_mph': 55.0 + (i % 10) - 5,
-            'engine_rpm': 1200 + (i * 50),
-            'state_of_charge': 18.0,  # Stays around 18% in gas mode
-            'fuel_level_percent': 80.0 - (i * 0.3),
-            'odometer_miles': 50015 + (i * 0.6),
-            'ambient_temp_f': 70.0,
-        })
+        points.append(
+            {
+                "session_id": session_id,
+                "timestamp": base_time,
+                "speed_mph": 55.0 + (i % 10) - 5,
+                "engine_rpm": 1200 + (i * 50),
+                "state_of_charge": 18.0,  # Stays around 18% in gas mode
+                "fuel_level_percent": 80.0 - (i * 0.3),
+                "odometer_miles": 50015 + (i * 0.6),
+                "ambient_temp_f": 70.0,
+            }
+        )
 
     return points
 
@@ -127,22 +136,23 @@ def sample_telemetry_points():
 def sample_soc_transitions():
     """Sample SOC transition data for analysis."""
     return [
-        {'soc_at_transition': 17.5, 'ambient_temp_f': 72.0, 'timestamp': datetime.now(timezone.utc)},
-        {'soc_at_transition': 16.8, 'ambient_temp_f': 75.0, 'timestamp': datetime.now(timezone.utc)},
-        {'soc_at_transition': 18.2, 'ambient_temp_f': 68.0, 'timestamp': datetime.now(timezone.utc)},
-        {'soc_at_transition': 19.5, 'ambient_temp_f': 32.0, 'timestamp': datetime.now(timezone.utc)},  # Cold
-        {'soc_at_transition': 20.1, 'ambient_temp_f': 28.0, 'timestamp': datetime.now(timezone.utc)},  # Cold
-        {'soc_at_transition': 17.0, 'ambient_temp_f': 70.0, 'timestamp': datetime.now(timezone.utc)},
-        {'soc_at_transition': 16.5, 'ambient_temp_f': 78.0, 'timestamp': datetime.now(timezone.utc)},
-        {'soc_at_transition': 17.8, 'ambient_temp_f': 65.0, 'timestamp': datetime.now(timezone.utc)},
-        {'soc_at_transition': 18.0, 'ambient_temp_f': 55.0, 'timestamp': datetime.now(timezone.utc)},
-        {'soc_at_transition': 17.2, 'ambient_temp_f': 80.0, 'timestamp': datetime.now(timezone.utc)},
+        {"soc_at_transition": 17.5, "ambient_temp_f": 72.0, "timestamp": datetime.now(timezone.utc)},
+        {"soc_at_transition": 16.8, "ambient_temp_f": 75.0, "timestamp": datetime.now(timezone.utc)},
+        {"soc_at_transition": 18.2, "ambient_temp_f": 68.0, "timestamp": datetime.now(timezone.utc)},
+        {"soc_at_transition": 19.5, "ambient_temp_f": 32.0, "timestamp": datetime.now(timezone.utc)},  # Cold
+        {"soc_at_transition": 20.1, "ambient_temp_f": 28.0, "timestamp": datetime.now(timezone.utc)},  # Cold
+        {"soc_at_transition": 17.0, "ambient_temp_f": 70.0, "timestamp": datetime.now(timezone.utc)},
+        {"soc_at_transition": 16.5, "ambient_temp_f": 78.0, "timestamp": datetime.now(timezone.utc)},
+        {"soc_at_transition": 17.8, "ambient_temp_f": 65.0, "timestamp": datetime.now(timezone.utc)},
+        {"soc_at_transition": 18.0, "ambient_temp_f": 55.0, "timestamp": datetime.now(timezone.utc)},
+        {"soc_at_transition": 17.2, "ambient_temp_f": 80.0, "timestamp": datetime.now(timezone.utc)},
     ]
 
 
 # ============================================================================
 # Scheduler Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def stale_trip(db_session):
@@ -229,7 +239,7 @@ def refuel_telemetry(db_session):
     db_session.add(after)
     db_session.commit()
 
-    return {'before': before, 'after': after}
+    return {"before": before, "after": after}
 
 
 @pytest.fixture
@@ -261,24 +271,26 @@ def charging_telemetry(db_session):
 # Security Test Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def app_with_auth(app, monkeypatch):
     """App configured with authentication enabled."""
-    monkeypatch.setattr('config.Config.DASHBOARD_PASSWORD', 'test_password')
-    monkeypatch.setattr('config.Config.DASHBOARD_USER', 'test_user')
+    monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "test_password")
+    monkeypatch.setattr("config.Config.DASHBOARD_USER", "test_user")
     return app
 
 
 @pytest.fixture
 def app_with_token(app, monkeypatch):
     """App configured with Torque API token."""
-    monkeypatch.setattr('config.Config.TORQUE_API_TOKEN', 'test_token_12345')
+    monkeypatch.setattr("config.Config.TORQUE_API_TOKEN", "test_token_12345")
     return app
 
 
 # ============================================================================
 # Battery Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def sample_cell_voltages():
@@ -299,20 +311,21 @@ def imbalanced_cell_voltages():
 # Weather Test Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_weather_response():
     """Standard weather API response from Open-Meteo."""
     now = datetime.now(timezone.utc)
-    hours = [(now - timedelta(hours=i)).strftime('%Y-%m-%dT%H:00') for i in range(24)]
+    hours = [(now - timedelta(hours=i)).strftime("%Y-%m-%dT%H:00") for i in range(24)]
     hours.reverse()
 
     return {
-        'hourly': {
-            'time': hours,
-            'temperature_2m': [65.0 + i * 0.5 for i in range(24)],
-            'precipitation': [0.0] * 20 + [0.1, 0.2, 0.0, 0.0],
-            'wind_speed_10m': [10.0 + i for i in range(24)],
-            'weather_code': [0] * 20 + [61, 61, 0, 0],
+        "hourly": {
+            "time": hours,
+            "temperature_2m": [65.0 + i * 0.5 for i in range(24)],
+            "precipitation": [0.0] * 20 + [0.1, 0.2, 0.0, 0.0],
+            "wind_speed_10m": [10.0 + i for i in range(24)],
+            "weather_code": [0] * 20 + [61, 61, 0, 0],
         }
     }
 
@@ -321,15 +334,15 @@ def mock_weather_response():
 def mock_weather_extreme():
     """Weather response with extreme conditions."""
     now = datetime.now(timezone.utc)
-    current_hour = now.strftime('%Y-%m-%dT%H:00')
+    current_hour = now.strftime("%Y-%m-%dT%H:00")
 
     return {
-        'hourly': {
-            'time': [current_hour],
-            'temperature_2m': [15.0],  # Very cold
-            'precipitation': [0.8],     # Heavy rain
-            'wind_speed_10m': [35.0],   # Strong wind
-            'weather_code': [95],       # Thunderstorm
+        "hourly": {
+            "time": [current_hour],
+            "temperature_2m": [15.0],  # Very cold
+            "precipitation": [0.8],  # Heavy rain
+            "wind_speed_10m": [35.0],  # Strong wind
+            "weather_code": [95],  # Thunderstorm
         }
     }
 
@@ -337,6 +350,7 @@ def mock_weather_extreme():
 # ============================================================================
 # Power Telemetry Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def power_telemetry_points(db_session):
@@ -350,7 +364,7 @@ def power_telemetry_points(db_session):
             session_id=session_id,
             timestamp=now - timedelta(minutes=(10 - i) * 6),  # Every 6 minutes
             hv_battery_power_kw=8.0 + (i % 3),  # 8-10 kW draw
-            state_of_charge=100.0 - (i * 3),     # Draining
+            state_of_charge=100.0 - (i * 3),  # Draining
             speed_mph=45.0 + i,
             odometer_miles=50000.0 + i,
         )
@@ -376,7 +390,7 @@ def charging_telemetry_with_power(db_session):
         start_soc=20.0,
         end_soc=95.0,
         kwh_added=13.8,
-        charge_type='L2',
+        charge_type="L2",
         peak_power_kw=6.8,
         avg_power_kw=6.6,
         is_complete=True,
@@ -400,12 +414,13 @@ def charging_telemetry_with_power(db_session):
 
     db_session.commit()
 
-    return {'session': charging, 'telemetry': points}
+    return {"session": charging, "telemetry": points}
 
 
 # ============================================================================
 # Battery Health Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def battery_health_readings(db_session):
@@ -434,6 +449,7 @@ def battery_health_readings(db_session):
 # ============================================================================
 # Trip with Telemetry Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def trips_with_telemetry(db_session):
