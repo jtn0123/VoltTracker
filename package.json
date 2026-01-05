@@ -12,6 +12,8 @@
     "preview": "vite preview",
     "dev": "vite",
     "optimize-images": "node scripts/optimize-images.js",
+    "check-size": "node scripts/check-bundle-size.js",
+    "build:check": "npm run build && npm run check-size",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "type": "module",
