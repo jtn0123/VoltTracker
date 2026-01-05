@@ -195,15 +195,16 @@ class TestGetMaintenanceSummary:
         """Returns summary for all 8 maintenance items."""
         summary = get_maintenance_summary(db_session)
 
-        assert len(summary) == 8
-        assert any(item["type"] == "oil_change" for item in summary)
-        assert any(item["type"] == "tire_rotation" for item in summary)
-        assert any(item["type"] == "cabin_air_filter" for item in summary)
-        assert any(item["type"] == "engine_air_filter" for item in summary)
-        assert any(item["type"] == "coolant_flush" for item in summary)
-        assert any(item["type"] == "brake_fluid" for item in summary)
-        assert any(item["type"] == "transmission_fluid" for item in summary)
-        assert any(item["type"] == "spark_plugs" for item in summary)
+        assert len(summary["maintenance_items"]) == 8
+        items = summary["maintenance_items"]
+        assert any(item["type"] == "oil_change" for item in items)
+        assert any(item["type"] == "tire_rotation" for item in items)
+        assert any(item["type"] == "cabin_filter" for item in items)
+        assert any(item["type"] == "brake_fluid" for item in items)
+        assert any(item["type"] == "coolant_engine" for item in items)
+        assert any(item["type"] == "coolant_battery" for item in items)
+        assert any(item["type"] == "transmission_fluid" for item in items)
+        assert any(item["type"] == "spark_plugs" for item in items)
 
     def test_calculates_engine_hours(self, app, db_session):
         """Summary includes calculated engine hours."""
@@ -222,12 +223,9 @@ class TestGetMaintenanceSummary:
 
         summary = get_maintenance_summary(db_session)
 
-        # Find oil change item
-        oil_item = next(item for item in summary if item["type"] == "oil_change")
-
-        # Should include engine hours
-        assert "current_engine_hours" in oil_item
-        assert oil_item["current_engine_hours"] > 0
+        # Summary should include total engine hours
+        assert "total_engine_hours" in summary
+        assert summary["total_engine_hours"] > 0
 
     def test_includes_last_service_date(self, app, db_session):
         """Summary includes last service date for items."""
@@ -244,11 +242,13 @@ class TestGetMaintenanceSummary:
 
         summary = get_maintenance_summary(db_session)
 
-        oil_item = next(item for item in summary if item["type"] == "oil_change")
+        oil_item = next(item for item in summary["maintenance_items"] if item["type"] == "oil_change")
 
         assert oil_item["last_service_date"] is not None
-        assert "days_since_service" in oil_item
-        assert oil_item["days_since_service"] > 190
+        assert oil_item["has_history"] is True
+        # Next due should be calculated
+        assert "next_due" in oil_item
+        assert "days_remaining" in oil_item["next_due"]
 
     def test_calculates_next_due_date(self, app, db_session):
         """Summary calculates next due date."""
@@ -264,19 +264,19 @@ class TestGetMaintenanceSummary:
 
         summary = get_maintenance_summary(db_session)
 
-        tire_item = next(item for item in summary if item["type"] == "tire_rotation")
+        tire_item = next(item for item in summary["maintenance_items"] if item["type"] == "tire_rotation")
 
-        assert "next_due_date" in tire_item
-        # Tire rotation every 12 months
-        # Should be due in ~165 days (365 - 200)
+        # Tire rotation is mileage-based, so should have miles_remaining
+        assert "next_due" in tire_item
+        assert "next_due_miles" in tire_item["next_due"]
 
     def test_no_maintenance_records(self, app, db_session):
         """Works with no maintenance records."""
         summary = get_maintenance_summary(db_session)
 
-        assert len(summary) == 8
+        assert len(summary["maintenance_items"]) == 8
         # All items should have no last service date
-        for item in summary:
+        for item in summary["maintenance_items"]:
             assert item["last_service_date"] is None
 
 
@@ -288,10 +288,10 @@ class TestMaintenanceIntervals:
         expected_types = [
             "oil_change",
             "tire_rotation",
-            "cabin_air_filter",
-            "engine_air_filter",
-            "coolant_flush",
+            "cabin_filter",
             "brake_fluid",
+            "coolant_engine",
+            "coolant_battery",
             "transmission_fluid",
             "spark_plugs",
         ]
@@ -310,9 +310,14 @@ class TestMaintenanceIntervals:
     def test_all_have_required_fields(self):
         """All intervals have required fields."""
         for mtype, interval in MAINTENANCE_INTERVALS.items():
-            assert "interval_months" in interval
+            # Each interval must have at least one interval type and a description
             assert "description" in interval
-            assert isinstance(interval["interval_months"], int)
+            assert "name" in interval
+            # Must have at least one interval type
+            has_interval = (
+                "interval_months" in interval or "interval_miles" in interval or "interval_engine_hours" in interval
+            )
+            assert has_interval, f"{mtype} has no interval defined"
 
 
 class TestMaintenanceValidation:
