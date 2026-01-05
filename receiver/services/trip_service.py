@@ -8,15 +8,15 @@ import logging
 from datetime import datetime
 
 from config import Config
-from models import Trip, TelemetryRaw, SocTransition
-from exceptions import WeatherAPIError, TripProcessingError
+from exceptions import WeatherAPIError
+from models import SocTransition, TelemetryRaw, Trip
 from utils import (
-    calculate_gas_mpg,
-    detect_gas_mode_entry,
-    calculate_electric_miles,
     calculate_average_temp,
     calculate_electric_kwh,
+    calculate_electric_miles,
+    calculate_gas_mpg,
     calculate_kwh_per_mile,
+    detect_gas_mode_entry,
     normalize_datetime,
 )
 from utils.weather import get_weather_for_location, get_weather_impact_factor
@@ -66,21 +66,19 @@ def process_gas_mode(db, trip: Trip, telemetry: list, points: list) -> None:
         trip.gas_mode_entered = True
 
         # Parse and normalize entry timestamp
-        entry_time = gas_entry.get('timestamp')
+        entry_time = gas_entry.get("timestamp")
         if isinstance(entry_time, str):
-            entry_time = datetime.fromisoformat(entry_time.replace('Z', '+00:00'))
+            entry_time = datetime.fromisoformat(entry_time.replace("Z", "+00:00"))
         trip.gas_mode_entry_time = normalize_datetime(entry_time)
 
-        trip.soc_at_gas_transition = gas_entry.get('state_of_charge')
-        trip.fuel_level_at_gas_entry = gas_entry.get('fuel_level_percent')
+        trip.soc_at_gas_transition = gas_entry.get("state_of_charge")
+        trip.fuel_level_at_gas_entry = gas_entry.get("fuel_level_percent")
         trip.fuel_level_at_end = telemetry[-1].fuel_level_percent
 
         # Calculate electric and gas miles (need all three odometer values)
-        if gas_entry.get('odometer_miles') and trip.start_odometer and trip.end_odometer:
+        if gas_entry.get("odometer_miles") and trip.start_odometer and trip.end_odometer:
             trip.electric_miles, trip.gas_miles = calculate_electric_miles(
-                gas_entry.get('odometer_miles'),
-                trip.start_odometer,
-                trip.end_odometer
+                gas_entry.get("odometer_miles"), trip.start_odometer, trip.end_odometer
             )
         else:
             # Fallback: gas mode entered but odometer missing → use distance_miles
@@ -91,10 +89,7 @@ def process_gas_mode(db, trip: Trip, telemetry: list, points: list) -> None:
         # Calculate gas MPG (only if we drove at least 1 mile on gas)
         if trip.gas_miles and trip.gas_miles >= 1.0:
             trip.gas_mpg = calculate_gas_mpg(
-                gas_entry.get('odometer_miles'),
-                trip.end_odometer,
-                trip.fuel_level_at_gas_entry,
-                trip.fuel_level_at_end
+                gas_entry.get("odometer_miles"), trip.end_odometer, trip.fuel_level_at_gas_entry, trip.fuel_level_at_end
             )
 
         # Calculate fuel used (independent of MPG validity for accurate totals)
@@ -116,16 +111,14 @@ def process_gas_mode(db, trip: Trip, telemetry: list, points: list) -> None:
 
         # Record SOC transition for battery health tracking (avoid duplicates)
         if trip.soc_at_gas_transition:
-            existing = db.query(SocTransition).filter(
-                SocTransition.trip_id == trip.id
-            ).first()
+            existing = db.query(SocTransition).filter(SocTransition.trip_id == trip.id).first()
             if not existing:
                 soc_transition = SocTransition(
                     trip_id=trip.id,
                     timestamp=trip.gas_mode_entry_time,
                     soc_at_transition=trip.soc_at_gas_transition,
-                    ambient_temp_f=gas_entry.get('ambient_temp_f'),
-                    odometer_miles=gas_entry.get('odometer_miles')
+                    ambient_temp_f=gas_entry.get("ambient_temp_f"),
+                    odometer_miles=gas_entry.get("odometer_miles"),
                 )
                 db.add(soc_transition)
     else:
@@ -145,9 +138,7 @@ def calculate_electric_efficiency(trip: Trip, points: list) -> None:
     if trip.electric_miles and trip.electric_miles > 0.5:
         trip.electric_kwh_used = calculate_electric_kwh(points)
         if trip.electric_kwh_used:
-            trip.kwh_per_mile = calculate_kwh_per_mile(
-                trip.electric_kwh_used, trip.electric_miles
-            )
+            trip.kwh_per_mile = calculate_kwh_per_mile(trip.electric_kwh_used, trip.electric_miles)
 
 
 def fetch_trip_weather(trip: Trip, points: list) -> None:
@@ -161,31 +152,23 @@ def fetch_trip_weather(trip: Trip, points: list) -> None:
     gps_point = None
     try:
         # Find first point with GPS coordinates
-        gps_point = next(
-            (p for p in points if p.get('latitude') and p.get('longitude')),
-            None
-        )
+        gps_point = next((p for p in points if p.get("latitude") and p.get("longitude")), None)
         if gps_point and trip.start_time:
-            weather = get_weather_for_location(
-                gps_point['latitude'],
-                gps_point['longitude'],
-                trip.start_time
-            )
+            weather = get_weather_for_location(gps_point["latitude"], gps_point["longitude"], trip.start_time)
             if weather:
-                trip.weather_temp_f = weather.get('temperature_f')
-                trip.weather_precipitation_in = weather.get('precipitation_in')
-                trip.weather_wind_mph = weather.get('wind_speed_mph')
-                trip.weather_conditions = weather.get('conditions')
+                trip.weather_temp_f = weather.get("temperature_f")
+                trip.weather_precipitation_in = weather.get("precipitation_in")
+                trip.weather_wind_mph = weather.get("wind_speed_mph")
+                trip.weather_conditions = weather.get("conditions")
                 trip.weather_impact_factor = get_weather_impact_factor(weather)
                 logger.debug(
-                    f"Weather for trip {trip.id}: "
-                    f"{weather.get('conditions')}, {weather.get('temperature_f')}°F"
+                    f"Weather for trip {trip.id}: " f"{weather.get('conditions')}, {weather.get('temperature_f')}°F"
                 )
     except (ConnectionError, TimeoutError, ValueError) as e:
         error = WeatherAPIError(
             f"Failed to fetch weather for trip {trip.id}: {e}",
-            latitude=gps_point.get('latitude') if gps_point else None,
-            longitude=gps_point.get('longitude') if gps_point else None
+            latitude=gps_point.get("latitude") if gps_point else None,
+            longitude=gps_point.get("longitude") if gps_point else None,
         )
         logger.warning(str(error))
     except Exception as e:
@@ -207,9 +190,9 @@ def finalize_trip(db, trip: Trip):
         trip: Trip to finalize
     """
     # Get all telemetry for this trip
-    telemetry = db.query(TelemetryRaw).filter(
-        TelemetryRaw.session_id == trip.session_id
-    ).order_by(TelemetryRaw.timestamp).all()
+    telemetry = (
+        db.query(TelemetryRaw).filter(TelemetryRaw.session_id == trip.session_id).order_by(TelemetryRaw.timestamp).all()
+    )
 
     if not telemetry:
         trip.is_closed = True

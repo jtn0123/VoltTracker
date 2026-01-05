@@ -4,8 +4,11 @@ Volt Efficiency Tracker - Flask Application
 Receives telemetry from Torque Pro and provides API for dashboard.
 """
 
-import logging
 import atexit
+import logging
+
+from config import Config
+from database import init_app as init_db
 from flask import Flask
 from flask_caching import Cache
 from flask_compress import Compress
@@ -13,12 +16,9 @@ from flask_httpauth import HTTPBasicAuth
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_socketio import SocketIO
-from werkzeug.security import check_password_hash
-
-from config import Config
-from database import init_app as init_db
 from routes import register_blueprints
 from services.scheduler import init_scheduler, shutdown_scheduler
+from werkzeug.security import check_password_hash
 
 
 # Configure logging with rotation
@@ -35,7 +35,7 @@ def setup_logging():
     from logging.handlers import RotatingFileHandler
 
     log_level = getattr(logging, Config.LOG_LEVEL)
-    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     formatter = logging.Formatter(log_format)
 
     # Get root logger
@@ -52,16 +52,13 @@ def setup_logging():
     root_logger.addHandler(console_handler)
 
     # File handler with rotation (optional, skip in testing)
-    if not os.environ.get('FLASK_TESTING'):
-        log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+    if not os.environ.get("FLASK_TESTING"):
+        log_dir = os.path.join(os.path.dirname(__file__), "logs")
         os.makedirs(log_dir, exist_ok=True)
-        log_file = os.path.join(log_dir, 'volttracker.log')
+        log_file = os.path.join(log_dir, "volttracker.log")
 
         file_handler = RotatingFileHandler(
-            log_file,
-            maxBytes=10 * 1024 * 1024,  # 10 MB
-            backupCount=5,
-            encoding='utf-8'
+            log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"  # 10 MB
         )
         file_handler.setLevel(log_level)
         file_handler.setFormatter(formatter)
@@ -86,24 +83,18 @@ cache = Cache()
 def init_cache(app):
     """Initialize cache based on environment."""
     import os
-    if app.config.get('TESTING') or os.environ.get('FLASK_TESTING'):
-        cache.init_app(app, config={'CACHE_TYPE': 'NullCache'})
+
+    if app.config.get("TESTING") or os.environ.get("FLASK_TESTING"):
+        cache.init_app(app, config={"CACHE_TYPE": "NullCache"})
     else:
-        cache.init_app(app, config={
-            'CACHE_TYPE': 'SimpleCache',
-            'CACHE_DEFAULT_TIMEOUT': Config.CACHE_TIMEOUT_SECONDS
-        })
+        cache.init_app(app, config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": Config.CACHE_TIMEOUT_SECONDS})
 
 
 init_cache(app)
 
 # Initialize SocketIO for real-time updates
 socketio = SocketIO(
-    app,
-    cors_allowed_origins=Config.CORS_ALLOWED_ORIGINS,
-    async_mode='gevent',
-    logger=False,
-    engineio_logger=False
+    app, cors_allowed_origins=Config.CORS_ALLOWED_ORIGINS, async_mode="gevent", logger=False, engineio_logger=False
 )
 
 # ============================================================================
@@ -119,12 +110,12 @@ def verify_password(username, password):
     """Verify dashboard credentials."""
     # Skip auth if no password is configured (development mode)
     if not Config.DASHBOARD_PASSWORD:
-        return username or 'dev'
+        return username or "dev"
 
     if username == Config.DASHBOARD_USER:
         # Compare with hashed password if it looks hashed, otherwise direct compare
         stored_password = Config.DASHBOARD_PASSWORD
-        if stored_password.startswith('pbkdf2:') or stored_password.startswith('scrypt:'):
+        if stored_password.startswith("pbkdf2:") or stored_password.startswith("scrypt:"):
             return username if check_password_hash(stored_password, password) else None
         else:
             return username if password == stored_password else None
@@ -137,41 +128,43 @@ limiter = Limiter(
     app=app,
     default_limits=["200 per day", "50 per hour"] if Config.RATE_LIMIT_ENABLED else [],
     storage_uri="memory://",
-    enabled=Config.RATE_LIMIT_ENABLED
+    enabled=Config.RATE_LIMIT_ENABLED,
 )
 
 
 @app.after_request
 def add_security_headers(response):
     """Add security headers to all responses."""
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-    response.headers['X-XSS-Protection'] = '1; mode=block'
-    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     # Add HSTS in production (when not in debug mode)
     if not app.debug:
-        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 
 # Initialize database
 init_db(app)
 
+from routes.battery import battery_bp  # noqa: E402
+from routes.charging import charging_bp  # noqa: E402
+from routes.dashboard import dashboard_bp  # noqa: E402
+
 # Configure blueprint hooks before registration
-from routes.telemetry import telemetry_bp
-from routes.dashboard import dashboard_bp
-from routes.trips import trips_bp
-from routes.battery import battery_bp
-from routes.charging import charging_bp
+from routes.telemetry import telemetry_bp  # noqa: E402
+from routes.trips import trips_bp  # noqa: E402
 
 
 @dashboard_bp.before_request
 def require_auth():
     """Require authentication for dashboard if configured."""
     from flask import request
+
     # Only apply to the main dashboard route, not API endpoints
-    if request.endpoint == 'dashboard.dashboard':
+    if request.endpoint == "dashboard.dashboard":
         auth_result = auth.login_required(lambda: None)()
         if auth_result is not None:
             return auth_result
@@ -181,9 +174,10 @@ def require_auth():
 def cache_efficiency(response):
     """Apply caching to efficiency summary endpoint."""
     from flask import request
-    if request.endpoint == 'trips.get_efficiency_summary':
+
+    if request.endpoint == "trips.get_efficiency_summary":
         response.cache_control.max_age = 30
-    elif request.endpoint == 'trips.get_soc_analysis':
+    elif request.endpoint == "trips.get_soc_analysis":
         response.cache_control.max_age = 60
     return response
 
@@ -192,9 +186,10 @@ def cache_efficiency(response):
 def cache_battery(response):
     """Apply caching to battery endpoints (data changes slowly)."""
     from flask import request
-    if request.endpoint == 'battery.get_battery_health':
+
+    if request.endpoint == "battery.get_battery_health":
         response.cache_control.max_age = 300  # 5 minutes
-    elif request.endpoint == 'battery.get_cell_voltages':
+    elif request.endpoint == "battery.get_cell_voltages":
         response.cache_control.max_age = 60  # 1 minute
     return response
 
@@ -203,7 +198,8 @@ def cache_battery(response):
 def cache_charging(response):
     """Apply caching to charging summary endpoint."""
     from flask import request
-    if request.endpoint == 'charging.get_charging_summary':
+
+    if request.endpoint == "charging.get_charging_summary":
         response.cache_control.max_age = 300  # 5 minutes
     return response
 
@@ -217,8 +213,9 @@ limiter.exempt(telemetry_bp)
 
 
 # Initialize background scheduler
-import os
-if not os.environ.get('FLASK_TESTING'):
+import os  # noqa: E402
+
+if not os.environ.get("FLASK_TESTING"):
     scheduler = init_scheduler()
     atexit.register(shutdown_scheduler)
 
@@ -227,5 +224,5 @@ if not os.environ.get('FLASK_TESTING'):
 # Main
 # ============================================================================
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     socketio.run(app, host=Config.FLASK_HOST, port=Config.FLASK_PORT, debug=Config.DEBUG)

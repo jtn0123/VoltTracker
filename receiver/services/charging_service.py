@@ -5,22 +5,18 @@ Handles charging session detection and finalization.
 """
 
 import logging
-from datetime import datetime
-
-from sqlalchemy.exc import IntegrityError, OperationalError
 
 from config import Config
-from models import ChargingSession, TelemetryRaw
 from exceptions import ChargingSessionError
+from models import ChargingSession, TelemetryRaw
+from sqlalchemy.exc import IntegrityError, OperationalError
 from utils.timezone import utc_now
 
 logger = logging.getLogger(__name__)
 
 
 def detect_and_finalize_charging_session(
-    db,
-    active_session: ChargingSession,
-    latest_telemetry: TelemetryRaw = None
+    db, active_session: ChargingSession, latest_telemetry: TelemetryRaw = None
 ) -> None:
     """
     Finalize an active charging session when charging stops.
@@ -47,15 +43,11 @@ def detect_and_finalize_charging_session(
         if active_session.start_soc is not None and active_session.end_soc is not None:
             soc_gained = active_session.end_soc - active_session.start_soc
             if soc_gained > 0:
-                active_session.kwh_added = (
-                    soc_gained / 100
-                ) * Config.BATTERY_CAPACITY_KWH
+                active_session.kwh_added = (soc_gained / 100) * Config.BATTERY_CAPACITY_KWH
 
         # Calculate cost if electricity rate is set
         if active_session.kwh_added and Config.ELECTRICITY_COST_PER_KWH:
-            active_session.cost = (
-                active_session.kwh_added * Config.ELECTRICITY_COST_PER_KWH
-            )
+            active_session.cost = active_session.kwh_added * Config.ELECTRICITY_COST_PER_KWH
             active_session.cost_per_kwh = Config.ELECTRICITY_COST_PER_KWH
 
         db.commit()
@@ -69,10 +61,7 @@ def detect_and_finalize_charging_session(
             f"SOC {start_soc_str}% -> {end_soc_str}%"
         )
     except (IntegrityError, OperationalError) as e:
-        error = ChargingSessionError(
-            f"Failed to finalize charging session: {e}",
-            session_id=active_session.id
-        )
+        error = ChargingSessionError(f"Failed to finalize charging session: {e}", session_id=active_session.id)
         logger.error(str(error), exc_info=True)
         db.rollback()
         raise
@@ -82,10 +71,7 @@ def detect_and_finalize_charging_session(
         raise
 
 
-def start_charging_session(
-    db,
-    telemetry: TelemetryRaw
-) -> ChargingSession:
+def start_charging_session(db, telemetry: TelemetryRaw) -> ChargingSession:
     """
     Start a new charging session from telemetry data.
 
@@ -103,35 +89,29 @@ def start_charging_session(
         longitude=telemetry.longitude,
         peak_power_kw=telemetry.charger_power_kw or telemetry.charger_ac_power_kw,
         avg_power_kw=telemetry.charger_power_kw or telemetry.charger_ac_power_kw,
-        is_complete=False
+        is_complete=False,
     )
 
     # Detect charging type based on power level
     power = telemetry.charger_power_kw or telemetry.charger_ac_power_kw or 0
     if power > 20:
-        session.charge_type = 'DCFC'
+        session.charge_type = "DCFC"
     elif power > 3:
-        session.charge_type = 'L2'
+        session.charge_type = "L2"
     else:
-        session.charge_type = 'L1'
+        session.charge_type = "L1"
 
     db.add(session)
     db.flush()
 
     # Safely format SOC (may be None)
     soc_str = f"{session.start_soc:.0f}" if session.start_soc is not None else "?"
-    logger.info(
-        f"Started new charging session: {session.charge_type} at "
-        f"{power:.1f} kW, SOC {soc_str}%"
-    )
+    logger.info(f"Started new charging session: {session.charge_type} at " f"{power:.1f} kW, SOC {soc_str}%")
 
     return session
 
 
-def update_charging_session(
-    session: ChargingSession,
-    telemetry: TelemetryRaw
-) -> None:
+def update_charging_session(session: ChargingSession, telemetry: TelemetryRaw) -> None:
     """
     Update an active charging session with new telemetry data.
 
@@ -157,9 +137,9 @@ def update_charging_session(
         session.charging_curve = []
 
     curve_point = {
-        'timestamp': telemetry.timestamp.isoformat() if telemetry.timestamp else None,
-        'power_kw': current_power,
-        'soc': telemetry.state_of_charge
+        "timestamp": telemetry.timestamp.isoformat() if telemetry.timestamp else None,
+        "power_kw": current_power,
+        "soc": telemetry.state_of_charge,
     }
 
     if len(session.charging_curve) < MAX_CURVE_POINTS:

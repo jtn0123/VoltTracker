@@ -8,17 +8,11 @@ Tests the timezone handling functions including:
 - is_before() and is_after() for safe datetime comparisons
 """
 
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone  # noqa: F401
 from zoneinfo import ZoneInfo
 
-from utils.timezone import (
-    utc_now,
-    normalize_datetime,
-    ensure_utc,
-    is_before,
-    is_after,
-)
+import pytest  # noqa: F401
+from utils.timezone import ensure_utc, is_after, is_before, normalize_datetime, utc_now
 
 
 class TestUtcNow:
@@ -70,7 +64,7 @@ class TestNormalizeDatetime:
     def test_non_utc_aware_converts_to_utc_then_strips(self):
         """Non-UTC timezone should be converted to UTC then stripped."""
         # US Eastern time (UTC-5)
-        eastern = ZoneInfo('America/New_York')
+        eastern = ZoneInfo("America/New_York")
         dt = datetime(2024, 6, 15, 8, 30, 0, tzinfo=eastern)
 
         result = normalize_datetime(dt)
@@ -120,7 +114,7 @@ class TestEnsureUtc:
 
     def test_non_utc_aware_converts_to_utc(self):
         """Non-UTC timezone should be converted to UTC."""
-        eastern = ZoneInfo('America/New_York')
+        eastern = ZoneInfo("America/New_York")
         dt = datetime(2024, 6, 15, 8, 30, 0, tzinfo=eastern)
 
         result = ensure_utc(dt)
@@ -176,7 +170,7 @@ class TestIsBefore:
 
     def test_different_timezones_compare_correctly(self):
         """Different timezones should compare correctly."""
-        eastern = ZoneInfo('America/New_York')
+        eastern = ZoneInfo("America/New_York")
         utc = timezone.utc
 
         # 8:00 AM Eastern = 12:00 PM UTC in summer
@@ -236,7 +230,7 @@ class TestTimezoneEdgeCases:
 
     def test_dst_transition(self):
         """Test datetime during DST transition."""
-        eastern = ZoneInfo('America/New_York')
+        eastern = ZoneInfo("America/New_York")
 
         # March 10, 2024 - DST begins in US (clocks spring forward)
         # 2:00 AM EST becomes 3:00 AM EDT

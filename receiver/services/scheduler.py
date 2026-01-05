@@ -7,16 +7,16 @@ and charging session management.
 
 import logging
 from datetime import timedelta
-from apscheduler.schedulers.background import BackgroundScheduler
-from sqlalchemy import func, desc
-from sqlalchemy.exc import IntegrityError, OperationalError
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from config import Config
 from database import SessionLocal
-from exceptions import DatabaseError, ChargingSessionError
-from models import Trip, TelemetryRaw, FuelEvent, ChargingSession
-from utils import detect_refuel_event, detect_charging_session, utc_now, normalize_datetime
+from exceptions import ChargingSessionError, DatabaseError
+from models import ChargingSession, FuelEvent, TelemetryRaw, Trip
 from services.trip_service import finalize_trip
+from sqlalchemy import desc, func
+from sqlalchemy.exc import IntegrityError, OperationalError
+from utils import detect_charging_session, detect_refuel_event, normalize_datetime, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -39,15 +39,16 @@ def close_stale_trips():
         cutoff_time = utc_now() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS)
 
         # Find open trips with no recent telemetry
-        open_trips = db.query(Trip).filter(
-            Trip.is_closed.is_(False)
-        ).all()
+        open_trips = db.query(Trip).filter(Trip.is_closed.is_(False)).all()
 
         for trip in open_trips:
             # Get latest telemetry for this trip
-            latest = db.query(TelemetryRaw).filter(
-                TelemetryRaw.session_id == trip.session_id
-            ).order_by(desc(TelemetryRaw.timestamp)).first()
+            latest = (
+                db.query(TelemetryRaw)
+                .filter(TelemetryRaw.session_id == trip.session_id)
+                .order_by(desc(TelemetryRaw.timestamp))
+                .first()
+            )
 
             if latest:
                 # normalize_datetime handles both naive and timezone-aware datetimes
@@ -74,9 +75,13 @@ def check_refuel_events():
     db = get_scheduler_db()
     try:
         # Get recent telemetry ordered by timestamp
-        recent = db.query(TelemetryRaw).filter(
-            TelemetryRaw.fuel_level_percent.isnot(None)
-        ).order_by(desc(TelemetryRaw.timestamp)).limit(100).all()
+        recent = (
+            db.query(TelemetryRaw)
+            .filter(TelemetryRaw.fuel_level_percent.isnot(None))
+            .order_by(desc(TelemetryRaw.timestamp))
+            .limit(100)
+            .all()
+        )
 
         if len(recent) < 2:
             return
@@ -86,15 +91,13 @@ def check_refuel_events():
             current = recent[i]
             previous = recent[i + 1]
 
-            if detect_refuel_event(
-                current.fuel_level_percent,
-                previous.fuel_level_percent
-            ):
+            if detect_refuel_event(current.fuel_level_percent, previous.fuel_level_percent):
                 # Check if we already logged this refuel
-                existing = db.query(FuelEvent).filter(
-                    FuelEvent.timestamp >= previous.timestamp,
-                    FuelEvent.timestamp <= current.timestamp
-                ).first()
+                existing = (
+                    db.query(FuelEvent)
+                    .filter(FuelEvent.timestamp >= previous.timestamp, FuelEvent.timestamp <= current.timestamp)
+                    .first()
+                )
 
                 if not existing:
                     fuel_event = FuelEvent(
@@ -104,13 +107,13 @@ def check_refuel_events():
                         fuel_level_after=current.fuel_level_percent,
                         gallons_added=(
                             (current.fuel_level_percent - previous.fuel_level_percent)
-                            / 100 * Config.TANK_CAPACITY_GALLONS
-                        )
+                            / 100
+                            * Config.TANK_CAPACITY_GALLONS
+                        ),
                     )
                     db.add(fuel_event)
                     logger.info(
-                        f"Refuel detected: {fuel_event.gallons_added:.2f} gal "
-                        f"at {fuel_event.odometer_miles:.1f} mi"
+                        f"Refuel detected: {fuel_event.gallons_added:.2f} gal " f"at {fuel_event.odometer_miles:.1f} mi"
                     )
 
         db.commit()
@@ -130,15 +133,17 @@ def check_charging_sessions():
     db = get_scheduler_db()
     try:
         # Get recent telemetry with charger data
-        recent = db.query(TelemetryRaw).filter(
-            TelemetryRaw.charger_connected.is_(True)
-        ).order_by(desc(TelemetryRaw.timestamp)).limit(50).all()
+        recent = (
+            db.query(TelemetryRaw)
+            .filter(TelemetryRaw.charger_connected.is_(True))
+            .order_by(desc(TelemetryRaw.timestamp))
+            .limit(50)
+            .all()
+        )
 
         if not recent:
             # No active charging - check if we need to close any active sessions
-            active_session = db.query(ChargingSession).filter(
-                ChargingSession.is_complete.is_(False)
-            ).first()
+            active_session = db.query(ChargingSession).filter(ChargingSession.is_complete.is_(False)).first()
 
             if active_session:
                 # Charger disconnected - finalize session
@@ -153,8 +158,7 @@ def check_charging_sessions():
 
                 db.commit()
                 logger.info(
-                    f"Charging session completed (no charger data): "
-                    f"{active_session.kwh_added or 0:.2f} kWh added"
+                    f"Charging session completed (no charger data): " f"{active_session.kwh_added or 0:.2f} kWh added"
                 )
             return
 
@@ -162,22 +166,22 @@ def check_charging_sessions():
         points = [t.to_dict() for t in recent]
         session_info = detect_charging_session(points)
 
-        if session_info and session_info.get('is_charging'):
+        if session_info and session_info.get("is_charging"):
             # Check for existing active charging session with row lock
             # Use with_for_update() to prevent race conditions where multiple
             # scheduler instances could create duplicate sessions
-            active_session = db.query(ChargingSession).filter(
-                ChargingSession.is_complete.is_(False)
-            ).with_for_update(skip_locked=True).order_by(
-                desc(ChargingSession.start_time)
-            ).first()
+            active_session = (
+                db.query(ChargingSession)
+                .filter(ChargingSession.is_complete.is_(False))
+                .with_for_update(skip_locked=True)
+                .order_by(desc(ChargingSession.start_time))
+                .first()
+            )
 
             if not active_session:
                 # Double-check for existing session without lock (in case another
                 # process just created one)
-                existing = db.query(ChargingSession).filter(
-                    ChargingSession.is_complete.is_(False)
-                ).first()
+                existing = db.query(ChargingSession).filter(ChargingSession.is_complete.is_(False)).first()
                 if existing:
                     active_session = existing
                 else:
@@ -185,26 +189,24 @@ def check_charging_sessions():
                     first_point = recent[-1]  # Oldest in the set
                     active_session = ChargingSession(
                         start_time=first_point.timestamp,
-                        start_soc=session_info.get('start_soc'),
+                        start_soc=session_info.get("start_soc"),
                         latitude=first_point.latitude,
                         longitude=first_point.longitude,
-                        charge_type=session_info.get('charge_type', 'L1')
+                        charge_type=session_info.get("charge_type", "L1"),
                     )
                     db.add(active_session)
                     logger.info(f"Charging session started: {session_info.get('charge_type')}")
 
             # Update with latest data
-            active_session.end_soc = session_info.get('current_soc')
-            active_session.peak_power_kw = session_info.get('peak_power_kw')
-            active_session.avg_power_kw = session_info.get('avg_power_kw')
+            active_session.end_soc = session_info.get("current_soc")
+            active_session.peak_power_kw = session_info.get("peak_power_kw")
+            active_session.avg_power_kw = session_info.get("avg_power_kw")
 
             db.commit()
 
         else:
             # Check if we need to close an active session
-            active_session = db.query(ChargingSession).filter(
-                ChargingSession.is_complete.is_(False)
-            ).first()
+            active_session = db.query(ChargingSession).filter(ChargingSession.is_complete.is_(False)).first()
 
             if active_session:
                 # Charger disconnected - finalize session
@@ -246,9 +248,9 @@ def init_scheduler():
     """
     global scheduler
     scheduler = BackgroundScheduler()
-    scheduler.add_job(close_stale_trips, 'interval', minutes=1)
-    scheduler.add_job(check_refuel_events, 'interval', minutes=5)
-    scheduler.add_job(check_charging_sessions, 'interval', minutes=2)
+    scheduler.add_job(close_stale_trips, "interval", minutes=1)
+    scheduler.add_job(check_refuel_events, "interval", minutes=5)
+    scheduler.add_job(check_charging_sessions, "interval", minutes=2)
     scheduler.start()
     logger.info("Background scheduler initialized")
     return scheduler

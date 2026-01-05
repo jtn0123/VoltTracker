@@ -13,8 +13,8 @@ Or run directly if you have the environment set up:
 """
 
 import argparse
-import sys
 import os
+import sys
 
 # Add parent directory to path for imports when running from scripts/
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def reprocess_trips(db_url: str, dry_run: bool = False):
     """Reprocess all imported trips to fix missing/incorrect data."""
-    from sqlalchemy import create_engine, text, func
+    from sqlalchemy import create_engine, func
     from sqlalchemy.orm import sessionmaker
 
     engine = create_engine(db_url)
@@ -31,13 +31,11 @@ def reprocess_trips(db_url: str, dry_run: bool = False):
 
     try:
         # Import models after setting up path
-        from models import Trip, TelemetryRaw
+        from models import TelemetryRaw, Trip
         from services.trip_service import finalize_trip
 
         # Find all imported trips
-        imported_trips = db.query(Trip).filter(
-            Trip.is_imported.is_(True)
-        ).order_by(Trip.id).all()
+        imported_trips = db.query(Trip).filter(Trip.is_imported.is_(True)).order_by(Trip.id).all()
 
         print(f"Found {len(imported_trips)} imported trips to reprocess")
 
@@ -50,40 +48,37 @@ def reprocess_trips(db_url: str, dry_run: bool = False):
 
             try:
                 # Query MIN/MAX odometer from telemetry
-                odometer_range = db.query(
-                    func.min(TelemetryRaw.odometer_miles),
-                    func.max(TelemetryRaw.odometer_miles)
-                ).filter(
-                    TelemetryRaw.session_id == trip.session_id,
-                    TelemetryRaw.odometer_miles.isnot(None)
-                ).first()
+                odometer_range = (
+                    db.query(func.min(TelemetryRaw.odometer_miles), func.max(TelemetryRaw.odometer_miles))
+                    .filter(TelemetryRaw.session_id == trip.session_id, TelemetryRaw.odometer_miles.isnot(None))
+                    .first()
+                )
 
                 # Query MIN/MAX SOC from telemetry
-                soc_range = db.query(
-                    func.min(TelemetryRaw.state_of_charge),
-                    func.max(TelemetryRaw.state_of_charge)
-                ).filter(
-                    TelemetryRaw.session_id == trip.session_id,
-                    TelemetryRaw.state_of_charge.isnot(None)
-                ).first()
+                soc_range = (
+                    db.query(func.min(TelemetryRaw.state_of_charge), func.max(TelemetryRaw.state_of_charge))
+                    .filter(TelemetryRaw.session_id == trip.session_id, TelemetryRaw.state_of_charge.isnot(None))
+                    .first()
+                )
 
                 # Query time range from telemetry
-                time_range = db.query(
-                    func.min(TelemetryRaw.timestamp),
-                    func.max(TelemetryRaw.timestamp)
-                ).filter(
-                    TelemetryRaw.session_id == trip.session_id
-                ).first()
+                time_range = (
+                    db.query(func.min(TelemetryRaw.timestamp), func.max(TelemetryRaw.timestamp))
+                    .filter(TelemetryRaw.session_id == trip.session_id)
+                    .first()
+                )
 
                 new_start_odo = odometer_range[0] if odometer_range and odometer_range[0] is not None else None
                 new_end_odo = odometer_range[1] if odometer_range and odometer_range[1] is not None else None
                 new_start_soc = soc_range[1] if soc_range and soc_range[1] is not None else None  # MAX = start
-                new_distance = abs(new_end_odo - new_start_odo) if new_start_odo is not None and new_end_odo is not None else None
+                new_distance = (
+                    abs(new_end_odo - new_start_odo) if new_start_odo is not None and new_end_odo is not None else None
+                )
 
                 print(f"  Telemetry: odo={new_start_odo}->{new_end_odo} ({new_distance} mi), SOC start={new_start_soc}")
 
                 if dry_run:
-                    print(f"  [DRY RUN] Would update trip")
+                    print("  [DRY RUN] Would update trip")
                     continue
 
                 # Update trip fields
@@ -111,7 +106,9 @@ def reprocess_trips(db_url: str, dry_run: bool = False):
                 # Call finalize_trip to calculate all derived fields
                 try:
                     finalize_trip(db, trip)
-                    print(f"  Updated: distance={trip.distance_miles}, electric={trip.electric_miles}, gas={trip.gas_miles}")
+                    print(
+                        f"  Updated: distance={trip.distance_miles}, electric={trip.electric_miles}, gas={trip.gas_miles}"
+                    )
                     fixed_count += 1
                 except Exception as e:
                     print(f"  Warning: finalize_trip failed: {e}")
@@ -125,7 +122,7 @@ def reprocess_trips(db_url: str, dry_run: bool = False):
                 db.rollback()
                 continue
 
-        print(f"\n=== Summary ===")
+        print("\n=== Summary ===")
         print(f"Fixed: {fixed_count}")
         print(f"Errors: {error_count}")
         print(f"Total: {len(imported_trips)}")
@@ -135,12 +132,14 @@ def reprocess_trips(db_url: str, dry_run: bool = False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Reprocess imported trips to fix missing data')
-    parser.add_argument('--db', type=str,
-                       default=os.environ.get('DATABASE_URL', 'postgresql://volt:volt@db:5432/volt_tracker'),
-                       help='Database URL')
-    parser.add_argument('--dry-run', action='store_true',
-                       help='Show what would be done without making changes')
+    parser = argparse.ArgumentParser(description="Reprocess imported trips to fix missing data")
+    parser.add_argument(
+        "--db",
+        type=str,
+        default=os.environ.get("DATABASE_URL", "postgresql://volt:volt@db:5432/volt_tracker"),
+        help="Database URL",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be done without making changes")
 
     args = parser.parse_args()
 
@@ -151,5 +150,5 @@ def main():
     reprocess_trips(args.db, dry_run=args.dry_run)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

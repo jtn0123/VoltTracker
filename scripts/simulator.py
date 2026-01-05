@@ -20,79 +20,78 @@ Usage:
 import argparse
 import math
 import random
-import requests
-import select
 import sys
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
+import requests
 
 # ============================================================================
 # Trip Profiles
 # ============================================================================
 
 TRIP_PROFILES: Dict[str, Dict[str, Any]] = {
-    'commute': {
-        'name': 'Morning Commute',
-        'description': 'Typical 15-mile suburban commute with traffic',
-        'duration_minutes': 35,
-        'start_soc': 95,
-        'start_fuel': 75,
-        'ambient_temp': 65,
-        'speed_pattern': 'city',
-        'electric_only': True,
+    "commute": {
+        "name": "Morning Commute",
+        "description": "Typical 15-mile suburban commute with traffic",
+        "duration_minutes": 35,
+        "start_soc": 95,
+        "start_fuel": 75,
+        "ambient_temp": 65,
+        "speed_pattern": "city",
+        "electric_only": True,
     },
-    'highway': {
-        'name': 'Highway Trip',
-        'description': '60-mile highway trip at higher speeds',
-        'duration_minutes': 60,
-        'start_soc': 100,
-        'start_fuel': 80,
-        'ambient_temp': 70,
-        'speed_pattern': 'highway',
-        'electric_only': False,
+    "highway": {
+        "name": "Highway Trip",
+        "description": "60-mile highway trip at higher speeds",
+        "duration_minutes": 60,
+        "start_soc": 100,
+        "start_fuel": 80,
+        "ambient_temp": 70,
+        "speed_pattern": "highway",
+        "electric_only": False,
     },
-    'cold': {
-        'name': 'Cold Weather Trip',
-        'description': 'Winter driving with reduced EV range',
-        'duration_minutes': 40,
-        'start_soc': 100,
-        'start_fuel': 85,
-        'ambient_temp': 25,
-        'speed_pattern': 'mixed',
-        'electric_only': False,
+    "cold": {
+        "name": "Cold Weather Trip",
+        "description": "Winter driving with reduced EV range",
+        "duration_minutes": 40,
+        "start_soc": 100,
+        "start_fuel": 85,
+        "ambient_temp": 25,
+        "speed_pattern": "mixed",
+        "electric_only": False,
     },
-    'mountain': {
-        'name': 'Mountain Drive',
-        'description': 'Hilly terrain with regenerative braking',
-        'duration_minutes': 45,
-        'start_soc': 100,
-        'start_fuel': 90,
-        'ambient_temp': 55,
-        'speed_pattern': 'mountain',
-        'electric_only': False,
+    "mountain": {
+        "name": "Mountain Drive",
+        "description": "Hilly terrain with regenerative braking",
+        "duration_minutes": 45,
+        "start_soc": 100,
+        "start_fuel": 90,
+        "ambient_temp": 55,
+        "speed_pattern": "mountain",
+        "electric_only": False,
     },
-    'errands': {
-        'name': 'Running Errands',
-        'description': 'Short stops with multiple starts',
-        'duration_minutes': 50,
-        'start_soc': 80,
-        'start_fuel': 70,
-        'ambient_temp': 72,
-        'speed_pattern': 'stop_and_go',
-        'electric_only': True,
+    "errands": {
+        "name": "Running Errands",
+        "description": "Short stops with multiple starts",
+        "duration_minutes": 50,
+        "start_soc": 80,
+        "start_fuel": 70,
+        "ambient_temp": 72,
+        "speed_pattern": "stop_and_go",
+        "electric_only": True,
     },
-    'road_trip': {
-        'name': 'Road Trip',
-        'description': 'Long distance highway driving',
-        'duration_minutes': 120,
-        'start_soc': 100,
-        'start_fuel': 100,
-        'ambient_temp': 75,
-        'speed_pattern': 'highway',
-        'electric_only': False,
+    "road_trip": {
+        "name": "Road Trip",
+        "description": "Long distance highway driving",
+        "duration_minutes": 120,
+        "start_soc": 100,
+        "start_fuel": 100,
+        "ambient_temp": 75,
+        "speed_pattern": "highway",
+        "electric_only": False,
     },
 }
 
@@ -116,9 +115,9 @@ class VoltSimulator:
         gas_at_mile: Optional[float] = None,
         electric_only: bool = False,
         ambient_temp: float = 70.0,
-        speed_pattern: str = 'mixed',
+        speed_pattern: str = "mixed",
     ):
-        self.server_url = server_url.rstrip('/')
+        self.server_url = server_url.rstrip("/")
         self.duration_minutes = duration_minutes
         self.start_soc = start_soc
         self.start_fuel = start_fuel
@@ -175,7 +174,7 @@ class VoltSimulator:
             efficiency_factor *= self.cold_weather_factor
 
             # Mountain mode: going uphill uses more, downhill regenerates
-            if self.speed_pattern == 'mountain':
+            if self.speed_pattern == "mountain":
                 if self.elevation_trend > 0:  # Uphill
                     efficiency_factor *= 1.4
                 elif self.elevation_trend < 0:  # Downhill - regen
@@ -207,47 +206,41 @@ class VoltSimulator:
         timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
         return {
-            'eml': 'simulator@volttracker.local',
-            'v': '1.0',
-            'session': self.session_id,
-            'id': 'simulator',
-            'time': str(timestamp_ms),
-
+            "eml": "simulator@volttracker.local",
+            "v": "1.0",
+            "session": self.session_id,
+            "id": "simulator",
+            "time": str(timestamp_ms),
             # GPS
-            'kff1006': f'{self.latitude:.6f}',
-            'kff1005': f'{self.longitude:.6f}',
-            'kff1001': f'{self.current_speed:.1f}',
-
+            "kff1006": f"{self.latitude:.6f}",
+            "kff1005": f"{self.longitude:.6f}",
+            "kff1001": f"{self.current_speed:.1f}",
             # Engine
-            'kc': f'{self.current_rpm:.0f}',
-            'k11': f'{random.uniform(0, 30):.1f}',  # Throttle position
-
+            "kc": f"{self.current_rpm:.0f}",
+            "k11": f"{random.uniform(0, 30):.1f}",  # Throttle position
             # Temperatures (send in Celsius, server converts)
-            'k5': f'{(self.ambient_temp - 32) * 5/9 + random.uniform(-2, 2):.1f}',  # Coolant
-            'kf': f'{(self.ambient_temp - 32) * 5/9 + random.uniform(-5, 5):.1f}',  # Intake
-            'kff1010': f'{(self.ambient_temp - 32) * 5/9:.1f}',  # Ambient
-
+            "k5": f"{(self.ambient_temp - 32) * 5/9 + random.uniform(-2, 2):.1f}",  # Coolant
+            "kf": f"{(self.ambient_temp - 32) * 5/9 + random.uniform(-5, 5):.1f}",  # Intake
+            "kff1010": f"{(self.ambient_temp - 32) * 5/9:.1f}",  # Ambient
             # Fuel
-            'k22002f': f'{self.current_fuel:.1f}',
-
+            "k22002f": f"{self.current_fuel:.1f}",
             # Battery
-            'k22005b': f'{self.current_soc:.1f}',
-            'k42': f'{12.5 + random.uniform(-0.5, 0.5):.1f}',  # 12V battery
-
+            "k22005b": f"{self.current_soc:.1f}",
+            "k42": f"{12.5 + random.uniform(-0.5, 0.5):.1f}",  # 12V battery
             # Odometer
-            'kff1271': f'{self.odometer:.1f}',
+            "kff1271": f"{self.odometer:.1f}",
         }
 
     def _calculate_speed(self, progress: float) -> float:
         """Calculate target speed based on trip progress and speed pattern."""
 
-        if self.speed_pattern == 'highway':
+        if self.speed_pattern == "highway":
             return self._highway_speed(progress)
-        elif self.speed_pattern == 'city':
+        elif self.speed_pattern == "city":
             return self._city_speed(progress)
-        elif self.speed_pattern == 'mountain':
+        elif self.speed_pattern == "mountain":
             return self._mountain_speed(progress)
-        elif self.speed_pattern == 'stop_and_go':
+        elif self.speed_pattern == "stop_and_go":
             return self._stop_and_go_speed(progress)
         else:  # 'mixed' or default
             return self._mixed_speed(progress)
@@ -364,11 +357,7 @@ class VoltSimulator:
     def send_telemetry(self, data: dict) -> bool:
         """Send telemetry to server."""
         try:
-            response = requests.post(
-                f"{self.server_url}/torque/upload",
-                data=data,
-                timeout=5
-            )
+            response = requests.post(f"{self.server_url}/torque/upload", data=data, timeout=5)
             return response.text.strip() == "OK!"
         except requests.RequestException as e:
             print(f"\n❌ Failed to send: {e}")
@@ -438,7 +427,7 @@ class VoltSimulator:
             f"Updates: {updates}"
         )
 
-        print(status, end='', flush=True)
+        print(status, end="", flush=True)
 
     def _print_summary(self, updates: int):
         """Print simulation summary."""
@@ -460,6 +449,7 @@ class VoltSimulator:
 # Charging Simulator
 # ============================================================================
 
+
 class ChargingSimulator:
     """Simulates a Chevy Volt charging session."""
 
@@ -473,13 +463,13 @@ class ChargingSimulator:
     def __init__(
         self,
         server_url: str = "http://localhost:8080",
-        charge_type: str = 'L2',
+        charge_type: str = "L2",
         start_soc: float = 20.0,
         target_soc: float = 100.0,
         speed_multiplier: float = 1.0,
-        location: str = 'Home',
+        location: str = "Home",
     ):
-        self.server_url = server_url.rstrip('/')
+        self.server_url = server_url.rstrip("/")
         self.charge_type = charge_type
         self.start_soc = start_soc
         self.target_soc = target_soc
@@ -487,9 +477,9 @@ class ChargingSimulator:
         self.location = location
 
         # Determine charge rate
-        if charge_type == 'L1':
+        if charge_type == "L1":
             self.charge_rate_kw = self.L1_RATE_KW
-        elif charge_type == 'L2':
+        elif charge_type == "L2":
             self.charge_rate_kw = self.L2_RATE_KW
         else:
             self.charge_rate_kw = self.L2_HIGH_RATE_KW
@@ -555,7 +545,7 @@ class ChargingSimulator:
             f"Added: {self.kwh_added:5.2f} kWh | "
             f"Rate: {self.charge_rate_kw} kW"
         )
-        print(status, end='', flush=True)
+        print(status, end="", flush=True)
 
     def _complete_session(self):
         """Submit the charging session to the server."""
@@ -563,22 +553,18 @@ class ChargingSimulator:
 
         # Post charging session to server
         session_data = {
-            'start_time': self.start_time.isoformat(),
-            'end_time': end_time.isoformat(),
-            'start_soc': self.start_soc,
-            'end_soc': self.current_soc,
-            'kwh_added': round(self.kwh_added, 2),
-            'charge_type': self.charge_type,
-            'location_name': self.location,
-            'is_complete': True,
+            "start_time": self.start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "start_soc": self.start_soc,
+            "end_soc": self.current_soc,
+            "kwh_added": round(self.kwh_added, 2),
+            "charge_type": self.charge_type,
+            "location_name": self.location,
+            "is_complete": True,
         }
 
         try:
-            response = requests.post(
-                f"{self.server_url}/api/charging/add",
-                json=session_data,
-                timeout=5
-            )
+            response = requests.post(f"{self.server_url}/api/charging/add", json=session_data, timeout=5)
             if response.status_code == 201:
                 print("\n")
                 print("━" * 60)
@@ -586,7 +572,7 @@ class ChargingSimulator:
                 print("━" * 60)
                 print(f"  Final SOC:    {self.current_soc:.1f}%")
                 print(f"  kWh Added:    {self.kwh_added:.2f}")
-                print(f"  Session saved to database")
+                print("  Session saved to database")
                 print("━" * 60)
             else:
                 print(f"\n\nWarning: Failed to save session: {response.text}")
@@ -603,16 +589,18 @@ def list_profiles():
         print(f"\n  {name}:")
         print(f"    {profile['name']}")
         print(f"    {profile['description']}")
-        print(f"    Duration: {profile['duration_minutes']} min, "
-              f"SOC: {profile['start_soc']}%, "
-              f"Temp: {profile['ambient_temp']}°F")
+        print(
+            f"    Duration: {profile['duration_minutes']} min, "
+            f"SOC: {profile['start_soc']}%, "
+            f"Temp: {profile['ambient_temp']}°F"
+        )
     print("\n" + "━" * 60)
     print("\nUsage: python simulator.py --profile <name>\n")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='VoltTracker Data Simulator',
+        description="VoltTracker Data Simulator",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -626,92 +614,34 @@ Examples:
   python simulator.py --speed fast         # 10x speed
   python simulator.py --gas-at-mile 15     # Force gas mode at mile 15
   python simulator.py --electric-only      # Pure EV trip
-        """
+        """,
     )
 
-    parser.add_argument(
-        '--url',
-        default='http://localhost:8080',
-        help='Server URL (default: http://localhost:8080)'
-    )
+    parser.add_argument("--url", default="http://localhost:8080", help="Server URL (default: http://localhost:8080)")
 
     # Trip profiles
-    parser.add_argument(
-        '--profile',
-        choices=list(TRIP_PROFILES.keys()),
-        help='Use a predefined trip profile'
-    )
-    parser.add_argument(
-        '--list-profiles',
-        action='store_true',
-        help='List available trip profiles'
-    )
+    parser.add_argument("--profile", choices=list(TRIP_PROFILES.keys()), help="Use a predefined trip profile")
+    parser.add_argument("--list-profiles", action="store_true", help="List available trip profiles")
 
     # Charging mode
-    parser.add_argument(
-        '--charge',
-        action='store_true',
-        help='Simulate a charging session instead of a trip'
-    )
-    parser.add_argument(
-        '--type',
-        choices=['L1', 'L2'],
-        default='L2',
-        help='Charging type: L1 (120V) or L2 (240V)'
-    )
-    parser.add_argument(
-        '--target-soc',
-        type=float,
-        default=100.0,
-        help='Target SOC for charging (default: 100)'
-    )
-    parser.add_argument(
-        '--location',
-        default='Home',
-        help='Charging location name (default: Home)'
-    )
+    parser.add_argument("--charge", action="store_true", help="Simulate a charging session instead of a trip")
+    parser.add_argument("--type", choices=["L1", "L2"], default="L2", help="Charging type: L1 (120V) or L2 (240V)")
+    parser.add_argument("--target-soc", type=float, default=100.0, help="Target SOC for charging (default: 100)")
+    parser.add_argument("--location", default="Home", help="Charging location name (default: Home)")
 
     # Trip settings
+    parser.add_argument("--duration", type=int, default=30, help="Trip duration in minutes (default: 30)")
+    parser.add_argument("--soc", type=float, default=100.0, help="Starting SOC percentage (default: 100)")
+    parser.add_argument("--fuel", type=float, default=80.0, help="Starting fuel percentage (default: 80)")
     parser.add_argument(
-        '--duration',
-        type=int,
-        default=30,
-        help='Trip duration in minutes (default: 30)'
+        "--speed",
+        choices=["normal", "fast", "faster"],
+        default="normal",
+        help="Simulation speed: normal (1x), fast (10x), faster (60x)",
     )
-    parser.add_argument(
-        '--soc',
-        type=float,
-        default=100.0,
-        help='Starting SOC percentage (default: 100)'
-    )
-    parser.add_argument(
-        '--fuel',
-        type=float,
-        default=80.0,
-        help='Starting fuel percentage (default: 80)'
-    )
-    parser.add_argument(
-        '--speed',
-        choices=['normal', 'fast', 'faster'],
-        default='normal',
-        help='Simulation speed: normal (1x), fast (10x), faster (60x)'
-    )
-    parser.add_argument(
-        '--gas-at-mile',
-        type=float,
-        help='Force gas mode at this mileage'
-    )
-    parser.add_argument(
-        '--electric-only',
-        action='store_true',
-        help='Never switch to gas mode'
-    )
-    parser.add_argument(
-        '--temp',
-        type=float,
-        default=70.0,
-        help='Ambient temperature in Fahrenheit (default: 70)'
-    )
+    parser.add_argument("--gas-at-mile", type=float, help="Force gas mode at this mileage")
+    parser.add_argument("--electric-only", action="store_true", help="Never switch to gas mode")
+    parser.add_argument("--temp", type=float, default=70.0, help="Ambient temperature in Fahrenheit (default: 70)")
 
     args = parser.parse_args()
 
@@ -722,9 +652,9 @@ Examples:
 
     # Map speed names to multipliers
     speed_map = {
-        'normal': 1.0,
-        'fast': 10.0,
-        'faster': 60.0,
+        "normal": 1.0,
+        "fast": 10.0,
+        "faster": 60.0,
     }
 
     # Check server connectivity
@@ -756,19 +686,19 @@ Examples:
     start_fuel = args.fuel
     ambient_temp = args.temp
     electric_only = args.electric_only
-    speed_pattern = 'mixed'
+    speed_pattern = "mixed"
 
     if args.profile:
         profile = TRIP_PROFILES[args.profile]
         print(f"\n📋 Using profile: {profile['name']}")
         print(f"   {profile['description']}\n")
 
-        duration = profile['duration_minutes']
-        start_soc = profile['start_soc']
-        start_fuel = profile['start_fuel']
-        ambient_temp = profile['ambient_temp']
-        electric_only = profile.get('electric_only', False)
-        speed_pattern = profile.get('speed_pattern', 'mixed')
+        duration = profile["duration_minutes"]
+        start_soc = profile["start_soc"]
+        start_fuel = profile["start_fuel"]
+        ambient_temp = profile["ambient_temp"]
+        electric_only = profile.get("electric_only", False)
+        speed_pattern = profile.get("speed_pattern", "mixed")
 
     simulator = VoltSimulator(
         server_url=args.url,
@@ -785,5 +715,5 @@ Examples:
     simulator.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

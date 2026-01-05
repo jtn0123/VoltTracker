@@ -1,9 +1,9 @@
 """Calculations for MPG, SOC analysis, and trip processing."""
 
-from typing import Dict, List, Optional, Tuple
-from datetime import datetime
-import statistics
 import logging
+import statistics
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 
 from config import Config
 
@@ -42,9 +42,7 @@ def smooth_fuel_level(readings: List[float], window_size: int = 10) -> float:
 
 
 def detect_gas_mode_entry(
-    telemetry_points: List[dict],
-    soc_threshold: float = SOC_GAS_THRESHOLD,
-    rpm_threshold: float = RPM_THRESHOLD
+    telemetry_points: List[dict], soc_threshold: float = SOC_GAS_THRESHOLD, rpm_threshold: float = RPM_THRESHOLD
 ) -> Optional[dict]:
     """
     Detect when the Volt switches from electric to gas mode.
@@ -66,15 +64,15 @@ def detect_gas_mode_entry(
         return None
 
     for i, point in enumerate(telemetry_points):
-        rpm = point.get('engine_rpm', 0) or 0
-        soc = point.get('state_of_charge', 100) or 100
+        rpm = point.get("engine_rpm", 0) or 0
+        soc = point.get("state_of_charge", 100) or 100
 
         # Check if engine is running and SOC is depleted
         if rpm > rpm_threshold and soc < soc_threshold:
             # Verify it's sustained - check next 2 points if available
             sustained = True
             for j in range(i + 1, min(i + 3, len(telemetry_points))):
-                next_rpm = telemetry_points[j].get('engine_rpm', 0) or 0
+                next_rpm = telemetry_points[j].get("engine_rpm", 0) or 0
                 if next_rpm < rpm_threshold / 2:
                     sustained = False
                     break
@@ -85,11 +83,7 @@ def detect_gas_mode_entry(
     return None
 
 
-def detect_refuel_event(
-    current_fuel_level: float,
-    previous_fuel_level: float,
-    jump_threshold: float = 10.0
-) -> bool:
+def detect_refuel_event(current_fuel_level: float, previous_fuel_level: float, jump_threshold: float = 10.0) -> bool:
     """
     Detect if a refueling event occurred based on fuel level jump.
 
@@ -113,7 +107,7 @@ def calculate_gas_mpg(
     end_odometer: float,
     start_fuel_level: float,
     end_fuel_level: float,
-    tank_capacity: float = TANK_CAPACITY_GALLONS
+    tank_capacity: float = TANK_CAPACITY_GALLONS,
 ) -> Optional[float]:
     """
     Calculate MPG for gas portion of driving.
@@ -160,9 +154,7 @@ def calculate_gas_mpg(
 
 
 def calculate_electric_miles(
-    gas_entry_odometer: Optional[float],
-    trip_start_odometer: float,
-    trip_end_odometer: float
+    gas_entry_odometer: Optional[float], trip_start_odometer: float, trip_end_odometer: float
 ) -> Tuple[Optional[float], Optional[float]]:
     """
     Calculate electric and gas miles for a trip.
@@ -198,9 +190,7 @@ def calculate_average_temp(telemetry_points: List[dict]) -> Optional[float]:
         Average ambient temperature in Fahrenheit, or None
     """
     temps: List[float] = [
-        float(p.get('ambient_temp_f'))
-        for p in telemetry_points
-        if p.get('ambient_temp_f') is not None
+        float(p.get("ambient_temp_f")) for p in telemetry_points if p.get("ambient_temp_f") is not None
     ]
 
     if not temps:
@@ -221,24 +211,24 @@ def analyze_soc_floor(transitions: List[dict]) -> dict:
     """
     if not transitions:
         return {
-            'average_soc': None,
-            'min_soc': None,
-            'max_soc': None,
-            'count': 0,
-            'histogram': {},
-            'temperature_correlation': None,
+            "average_soc": None,
+            "min_soc": None,
+            "max_soc": None,
+            "count": 0,
+            "histogram": {},
+            "temperature_correlation": None,
         }
 
-    soc_values = [t['soc_at_transition'] for t in transitions if t.get('soc_at_transition')]
+    soc_values = [t["soc_at_transition"] for t in transitions if t.get("soc_at_transition")]
 
     if not soc_values:
         return {
-            'average_soc': None,
-            'min_soc': None,
-            'max_soc': None,
-            'count': 0,
-            'histogram': {},
-            'temperature_correlation': None,
+            "average_soc": None,
+            "min_soc": None,
+            "max_soc": None,
+            "count": 0,
+            "histogram": {},
+            "temperature_correlation": None,
         }
 
     # Build histogram (1% buckets)
@@ -250,9 +240,9 @@ def analyze_soc_floor(transitions: List[dict]) -> dict:
     # Temperature correlation
     temp_correlation = None
     temp_soc_pairs = [
-        (t['ambient_temp_f'], t['soc_at_transition'])
+        (t["ambient_temp_f"], t["soc_at_transition"])
         for t in transitions
-        if t.get('ambient_temp_f') is not None and t.get('soc_at_transition') is not None
+        if t.get("ambient_temp_f") is not None and t.get("soc_at_transition") is not None
     ]
 
     if len(temp_soc_pairs) >= 5:
@@ -262,25 +252,24 @@ def analyze_soc_floor(transitions: List[dict]) -> dict:
 
         if cold_socs and warm_socs:
             temp_correlation = {
-                'cold_avg_soc': round(statistics.mean(cold_socs), 1),
-                'warm_avg_soc': round(statistics.mean(warm_socs), 1),
-                'cold_count': len(cold_socs),
-                'warm_count': len(warm_socs),
+                "cold_avg_soc": round(statistics.mean(cold_socs), 1),
+                "warm_avg_soc": round(statistics.mean(warm_socs), 1),
+                "cold_count": len(cold_socs),
+                "warm_count": len(warm_socs),
             }
 
     return {
-        'average_soc': round(statistics.mean(soc_values), 1),
-        'min_soc': round(min(soc_values), 1),
-        'max_soc': round(max(soc_values), 1),
-        'count': len(soc_values),
-        'histogram': histogram,
-        'temperature_correlation': temp_correlation,
+        "average_soc": round(statistics.mean(soc_values), 1),
+        "min_soc": round(min(soc_values), 1),
+        "max_soc": round(max(soc_values), 1),
+        "count": len(soc_values),
+        "histogram": histogram,
+        "temperature_correlation": temp_correlation,
     }
 
 
 def calculate_electric_kwh(
-    telemetry_points: List[dict],
-    battery_capacity_kwh: float = BATTERY_CAPACITY_KWH
+    telemetry_points: List[dict], battery_capacity_kwh: float = BATTERY_CAPACITY_KWH
 ) -> Optional[float]:
     """
     Calculate kWh consumed during electric driving.
@@ -301,9 +290,9 @@ def calculate_electric_kwh(
 
     # Method 1: Integrate power over time if HV battery power data available
     power_readings = [
-        (p.get('timestamp'), p.get('hv_battery_power_kw'))
+        (p.get("timestamp"), p.get("hv_battery_power_kw"))
         for p in telemetry_points
-        if p.get('hv_battery_power_kw') is not None and p.get('timestamp') is not None
+        if p.get("hv_battery_power_kw") is not None and p.get("timestamp") is not None
     ]
 
     if len(power_readings) >= 2:
@@ -314,9 +303,9 @@ def calculate_electric_kwh(
 
             # Convert timestamp to datetime if string
             if isinstance(prev_time, str):
-                prev_time = datetime.fromisoformat(prev_time.replace('Z', '+00:00'))
+                prev_time = datetime.fromisoformat(prev_time.replace("Z", "+00:00"))
             if isinstance(curr_time, str):
-                curr_time = datetime.fromisoformat(curr_time.replace('Z', '+00:00'))
+                curr_time = datetime.fromisoformat(curr_time.replace("Z", "+00:00"))
 
             # Calculate time delta in hours
             delta_hours = (curr_time - prev_time).total_seconds() / 3600
@@ -335,9 +324,7 @@ def calculate_electric_kwh(
 
     # Method 2: Estimate from SOC change
     soc_readings: List[float] = [
-        float(p.get('state_of_charge'))
-        for p in telemetry_points
-        if p.get('state_of_charge') is not None
+        float(p.get("state_of_charge")) for p in telemetry_points if p.get("state_of_charge") is not None
     ]
 
     if len(soc_readings) >= 2:
@@ -353,10 +340,7 @@ def calculate_electric_kwh(
     return None
 
 
-def calculate_kwh_per_mile(
-    kwh_used: float,
-    electric_miles: float
-) -> Optional[float]:
+def calculate_kwh_per_mile(kwh_used: float, electric_miles: float) -> Optional[float]:
     """
     Calculate electric efficiency in kWh/mile.
 
@@ -385,10 +369,7 @@ def calculate_kwh_per_mile(
     return round(kwh_per_mile, 3)
 
 
-def detect_charging_session(
-    telemetry_points: List[dict],
-    min_power_kw: float = 0.5
-) -> Optional[dict]:
+def detect_charging_session(telemetry_points: List[dict], min_power_kw: float = 0.5) -> Optional[dict]:
     """
     Detect if a charging session is occurring based on telemetry data.
 
@@ -403,45 +384,36 @@ def detect_charging_session(
         return None
 
     # Check for charger connected
-    charger_readings = [
-        p for p in telemetry_points
-        if p.get('charger_connected') is True
-    ]
+    charger_readings = [p for p in telemetry_points if p.get("charger_connected") is True]
 
     if not charger_readings:
         return None
 
     # Get power readings during charging
     power_readings = [
-        p.get('charger_ac_power_kw', 0) or 0
-        for p in charger_readings
-        if p.get('charger_ac_power_kw') is not None
+        p.get("charger_ac_power_kw", 0) or 0 for p in charger_readings if p.get("charger_ac_power_kw") is not None
     ]
 
     if not power_readings or max(power_readings) < min_power_kw:
         return None
 
     # Calculate charging stats
-    soc_readings = [
-        p.get('state_of_charge')
-        for p in charger_readings
-        if p.get('state_of_charge') is not None
-    ]
+    soc_readings = [p.get("state_of_charge") for p in charger_readings if p.get("state_of_charge") is not None]
 
     result = {
-        'is_charging': True,
-        'peak_power_kw': round(max(power_readings), 2),
-        'avg_power_kw': round(statistics.mean(power_readings), 2) if power_readings else None,
-        'start_soc': soc_readings[0] if soc_readings else None,
-        'current_soc': soc_readings[-1] if soc_readings else None,
+        "is_charging": True,
+        "peak_power_kw": round(max(power_readings), 2),
+        "avg_power_kw": round(statistics.mean(power_readings), 2) if power_readings else None,
+        "start_soc": soc_readings[0] if soc_readings else None,
+        "current_soc": soc_readings[-1] if soc_readings else None,
     }
 
     # Estimate charge type based on power level
     if max(power_readings) > 6.0:
-        result['charge_type'] = 'L2'
+        result["charge_type"] = "L2"
     elif max(power_readings) > 1.2:
-        result['charge_type'] = 'L1-high'
+        result["charge_type"] = "L1-high"
     else:
-        result['charge_type'] = 'L1'
+        result["charge_type"] = "L1"
 
     return result

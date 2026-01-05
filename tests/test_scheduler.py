@@ -7,17 +7,17 @@ Tests the background jobs that run periodically:
 - check_charging_sessions: Tracks charging sessions
 """
 
-import sys
 import os
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'receiver'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "receiver"))
 
-from models import TelemetryRaw, Trip, FuelEvent, SocTransition, ChargingSession  # noqa: E402
 from config import Config  # noqa: E402
 from database import SessionLocal as Session  # noqa: E402
-from services.scheduler import close_stale_trips, check_refuel_events, check_charging_sessions  # noqa: E402
+from models import ChargingSession, FuelEvent, SocTransition, TelemetryRaw, Trip  # noqa: E402
+from services.scheduler import check_charging_sessions, check_refuel_events, close_stale_trips  # noqa: E402
 
 
 class TestCloseStaleTrips:
@@ -265,9 +265,7 @@ class TestCloseStaleTrips:
 
         close_stale_trips()
 
-        transitions = Session().query(SocTransition).filter(
-            SocTransition.trip_id == trip_id
-        ).all()
+        transitions = Session().query(SocTransition).filter(SocTransition.trip_id == trip_id).all()
         assert len(transitions) >= 1
         assert transitions[0].soc_at_transition is not None
 
@@ -552,9 +550,7 @@ class TestCheckChargingSessions:
         # No charger connected telemetry (empty or disconnected)
         check_charging_sessions()
 
-        updated = Session().query(ChargingSession).filter(
-            ChargingSession.id == session_id
-        ).first()
+        updated = Session().query(ChargingSession).filter(ChargingSession.id == session_id).first()
         assert updated.is_complete is True
 
     def test_handles_no_charger_data(self, app, db_session):
@@ -591,9 +587,7 @@ class TestCheckChargingSessions:
         # Trigger close by running check with no active charger
         check_charging_sessions()
 
-        updated = Session().query(ChargingSession).filter(
-            ChargingSession.id == session_id
-        ).first()
+        updated = Session().query(ChargingSession).filter(ChargingSession.id == session_id).first()
 
         if updated.is_complete:
             # Either kwh_added calculated or end_soc is set

@@ -34,9 +34,9 @@ class TelemetryParsingError(VoltTrackerError):
     def __init__(self, message: str, field: str = None, value: str = None):
         details: Dict[str, Any] = {}
         if field:
-            details['field'] = field
+            details["field"] = field
         if value:
-            details['value'] = value
+            details["value"] = value
         super().__init__(message, details)
         self.field = field
         self.value = value
@@ -48,9 +48,9 @@ class CSVImportError(VoltTrackerError):
     def __init__(self, message: str, row_number: int = None, filename: str = None):
         details: Dict[str, Any] = {}
         if row_number:
-            details['row_number'] = row_number
+            details["row_number"] = row_number
         if filename:
-            details['filename'] = filename
+            details["filename"] = filename
         super().__init__(message, details)
         self.row_number = row_number
         self.filename = filename
@@ -60,23 +60,18 @@ class CSVValidationError(CSVImportError):
     """CSV data validation failed."""
 
     def __init__(
-        self,
-        message: str,
-        row_number: int = None,
-        field: str = None,
-        value: str = None,
-        expected_range: tuple = None
+        self, message: str, row_number: int = None, field: str = None, value: str = None, expected_range: tuple = None
     ):
         super().__init__(message, row_number)
         self.field = field
         self.value = value
         self.expected_range = expected_range
         if field:
-            self.details['field'] = field
+            self.details["field"] = field
         if value:
-            self.details['value'] = value
+            self.details["value"] = value
         if expected_range:
-            self.details['expected_range'] = expected_range
+            self.details["expected_range"] = expected_range
 
 
 class CSVTimestampParseError(CSVImportError):
@@ -86,26 +81,20 @@ class CSVTimestampParseError(CSVImportError):
         super().__init__(message, row_number)
         self.raw_value = raw_value
         if raw_value:
-            self.details['raw_value'] = raw_value
+            self.details["raw_value"] = raw_value
 
 
 class WeatherAPIError(VoltTrackerError):
     """Weather API request failed."""
 
-    def __init__(
-        self,
-        message: str,
-        latitude: float = None,
-        longitude: float = None,
-        status_code: int = None
-    ):
+    def __init__(self, message: str, latitude: float = None, longitude: float = None, status_code: int = None):
         details: Dict[str, Any] = {}
         if latitude is not None:
-            details['latitude'] = latitude
+            details["latitude"] = latitude
         if longitude is not None:
-            details['longitude'] = longitude
+            details["longitude"] = longitude
         if status_code:
-            details['status_code'] = status_code
+            details["status_code"] = status_code
         super().__init__(message, details)
         self.latitude = latitude
         self.longitude = longitude
@@ -118,9 +107,9 @@ class TripProcessingError(VoltTrackerError):
     def __init__(self, message: str, trip_id: int = None, session_id: str = None):
         details: Dict[str, Any] = {}
         if trip_id:
-            details['trip_id'] = trip_id
+            details["trip_id"] = trip_id
         if session_id:
-            details['session_id'] = session_id
+            details["session_id"] = session_id
         super().__init__(message, details)
         self.trip_id = trip_id
         self.session_id = session_id
@@ -132,7 +121,7 @@ class ChargingSessionError(VoltTrackerError):
     def __init__(self, message: str, session_id: int = None):
         details: Dict[str, Any] = {}
         if session_id:
-            details['session_id'] = session_id
+            details["session_id"] = session_id
         super().__init__(message, details)
         self.session_id = session_id
 
@@ -143,6 +132,6 @@ class ConfigurationError(VoltTrackerError):
     def __init__(self, message: str, config_key: str = None):
         details: Dict[str, Any] = {}
         if config_key:
-            details['config_key'] = config_key
+            details["config_key"] = config_key
         super().__init__(message, details)
         self.config_key = config_key

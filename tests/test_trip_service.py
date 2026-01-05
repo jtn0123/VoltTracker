@@ -9,18 +9,18 @@ Tests the trip finalization logic including:
 - Edge cases like empty telemetry
 """
 
-import pytest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, MagicMock
 import uuid
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch  # noqa: F401
 
-from models import Trip, TelemetryRaw, SocTransition
+import pytest  # noqa: F401
+from models import SocTransition, TelemetryRaw, Trip  # noqa: F401
 from services.trip_service import (
-    calculate_trip_basics,
-    process_gas_mode,
     calculate_electric_efficiency,
+    calculate_trip_basics,
     fetch_trip_weather,
     finalize_trip,
+    process_gas_mode,
 )
 
 
@@ -258,14 +258,14 @@ class TestCalculateElectricEfficiency:
 
         points = [
             {
-                'timestamp': now - timedelta(hours=1),
-                'state_of_charge': 80.0,
-                'hv_battery_power_kw': 10.0,
+                "timestamp": now - timedelta(hours=1),
+                "state_of_charge": 80.0,
+                "hv_battery_power_kw": 10.0,
             },
             {
-                'timestamp': now,
-                'state_of_charge': 50.0,
-                'hv_battery_power_kw': 8.0,
+                "timestamp": now,
+                "state_of_charge": 50.0,
+                "hv_battery_power_kw": 8.0,
             },
         ]
 
@@ -285,7 +285,7 @@ class TestCalculateElectricEfficiency:
         )
 
         points = [
-            {'timestamp': now, 'state_of_charge': 80.0},
+            {"timestamp": now, "state_of_charge": 80.0},
         ]
 
         calculate_electric_efficiency(trip, points)
@@ -296,14 +296,14 @@ class TestCalculateElectricEfficiency:
 class TestFetchTripWeather:
     """Tests for fetch_trip_weather function."""
 
-    @patch('services.trip_service.get_weather_for_location')
+    @patch("services.trip_service.get_weather_for_location")
     def test_fetches_weather_for_gps_point(self, mock_weather, app, db_session):
         """Should fetch weather for the first GPS point."""
         mock_weather.return_value = {
-            'temperature_f': 72.0,
-            'precipitation_in': 0.0,
-            'wind_speed_mph': 10.0,
-            'conditions': 'Clear',
+            "temperature_f": 72.0,
+            "precipitation_in": 0.0,
+            "wind_speed_mph": 10.0,
+            "conditions": "Clear",
         }
 
         session_id = uuid.uuid4()
@@ -315,13 +315,13 @@ class TestFetchTripWeather:
         )
 
         points = [
-            {'latitude': 37.7749, 'longitude': -122.4194, 'timestamp': now},
+            {"latitude": 37.7749, "longitude": -122.4194, "timestamp": now},
         ]
 
         fetch_trip_weather(trip, points)
 
         assert trip.weather_temp_f == 72.0
-        assert trip.weather_conditions == 'Clear'
+        assert trip.weather_conditions == "Clear"
 
     def test_handles_no_gps_points(self, app, db_session):
         """Should not crash if no GPS data available."""
@@ -334,7 +334,7 @@ class TestFetchTripWeather:
         )
 
         points = [
-            {'timestamp': now},  # No GPS
+            {"timestamp": now},  # No GPS
         ]
 
         # Should not raise
@@ -342,7 +342,7 @@ class TestFetchTripWeather:
 
         assert trip.weather_temp_f is None
 
-    @patch('services.trip_service.get_weather_for_location')
+    @patch("services.trip_service.get_weather_for_location")
     def test_handles_weather_api_error(self, mock_weather, app, db_session):
         """Should handle weather API errors gracefully."""
         mock_weather.side_effect = Exception("API Error")
@@ -356,7 +356,7 @@ class TestFetchTripWeather:
         )
 
         points = [
-            {'latitude': 37.7749, 'longitude': -122.4194, 'timestamp': now},
+            {"latitude": 37.7749, "longitude": -122.4194, "timestamp": now},
         ]
 
         # Should not raise
