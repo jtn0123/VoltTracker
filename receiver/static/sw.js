@@ -11,8 +11,8 @@ const CDN_CACHE = `volttracker-cdn-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
     '/',
-    '/static/css/style.css',
-    '/static/js/dashboard.js',
+    '/static/dist/styles.min.css',
+    '/static/dist/dashboard.min.js',
     '/static/manifest.json'
 ];
 
