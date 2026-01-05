@@ -24,6 +24,12 @@ let modalTriggerElement = null;  // Track element that opened modal for focus re
 let statusErrorCount = 0;  // Track consecutive status fetch errors for retry logic
 const STATUS_ERROR_THRESHOLD = 3;  // Show error only after this many consecutive failures
 
+// Lazy loading state for external libraries
+let chartJsLoaded = false;
+let chartJsLoading = false;
+let leafletLoaded = false;
+let leafletLoading = false;
+
 // Cleanup intervals and connections on page unload
 window.addEventListener('beforeunload', () => {
     if (liveRefreshInterval) clearInterval(liveRefreshInterval);
@@ -64,6 +70,106 @@ async function fetchJson(url, options = {}, timeoutMs = 10000) {
     } finally {
         clearTimeout(timeout);
     }
+}
+
+/**
+ * Lazy load Chart.js library when needed
+ * @returns {Promise<void>}
+ */
+async function loadChartJs() {
+    if (chartJsLoaded) return;
+    if (chartJsLoading) return new Promise((resolve) => {
+        const checkLoaded = setInterval(() => {
+            if (chartJsLoaded) {
+                clearInterval(checkLoaded);
+                resolve();
+            }
+        }, 50);
+    });
+
+    chartJsLoading = true;
+    if (DEBUG) console.log('Loading Chart.js...');
+
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+        script.onload = () => {
+            chartJsLoaded = true;
+            chartJsLoading = false;
+            if (DEBUG) console.log('Chart.js loaded successfully');
+            resolve();
+        };
+        script.onerror = () => {
+            chartJsLoading = false;
+            reject(new Error('Failed to load Chart.js'));
+        };
+        document.head.appendChild(script);
+    });
+}
+
+/**
+ * Lazy load Leaflet.js library when needed
+ * @returns {Promise<void>}
+ */
+async function loadLeaflet() {
+    if (leafletLoaded) return;
+    if (leafletLoading) return new Promise((resolve) => {
+        const checkLoaded = setInterval(() => {
+            if (leafletLoaded) {
+                clearInterval(checkLoaded);
+                resolve();
+            }
+        }, 50);
+    });
+
+    leafletLoading = true;
+    if (DEBUG) console.log('Loading Leaflet...');
+
+    // Load CSS first
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+
+    // Load JS
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = () => {
+            leafletLoaded = true;
+            leafletLoading = false;
+            if (DEBUG) console.log('Leaflet loaded successfully');
+            resolve();
+        };
+        script.onerror = () => {
+            leafletLoading = false;
+            reject(new Error('Failed to load Leaflet'));
+        };
+        document.head.appendChild(script);
+    });
+}
+
+/**
+ * Setup Intersection Observer to lazy load Chart.js when charts section becomes visible
+ */
+function setupChartLazyLoading() {
+    const chartSections = document.querySelectorAll('.chart-section, #trip-charts');
+    if (chartSections.length === 0) return;
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting && !chartJsLoaded && !chartJsLoading) {
+                loadChartJs().catch(error => {
+                    console.error('Failed to load Chart.js:', error);
+                });
+                observer.disconnect();
+            }
+        });
+    }, {
+        rootMargin: '200px' // Start loading 200px before visible
+    });
+
+    chartSections.forEach(section => observer.observe(section));
 }
 
 // Chart gradient helper
@@ -157,6 +263,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initDatePicker();
     initWebSocket();
     initServiceWorker();
+    setupChartLazyLoading();  // Setup lazy loading for Chart.js
 
     // Load critical data in parallel for faster initial render
     // Use Promise.allSettled to prevent one failure from blocking others
@@ -822,6 +929,11 @@ async function loadMpgTrend(days) {
             return;
         }
 
+        // Ensure Chart.js is loaded before creating chart
+        if (!window.Chart) {
+            await loadChartJs();
+        }
+
         // Destroy existing chart
         if (mpgChart) {
             mpgChart.destroy();
@@ -1080,7 +1192,7 @@ function closeTripModal() {
  * - Orange: Gas mode (engine running)
  * - Blue: Regenerating (negative power flow)
  */
-function renderTripMap(telemetry) {
+async function renderTripMap(telemetry) {
     const mapEl = document.getElementById('trip-detail-map');
 
     // Filter telemetry with valid GPS coordinates
@@ -1089,6 +1201,12 @@ function renderTripMap(telemetry) {
     if (gpsPoints.length < 2) {
         mapEl.innerHTML = '<div class="no-gps">No GPS data available for this trip</div>';
         return;
+    }
+
+    // Ensure Leaflet is loaded before creating map
+    if (!window.L) {
+        mapEl.innerHTML = '<div class="loading-indicator" style="padding:2rem;text-align:center;">Loading map...</div>';
+        await loadLeaflet();
     }
 
     // Clear previous content
@@ -1405,11 +1523,16 @@ function addMapViewToggle(map, gpsPoints, isEfficiencyMode) {
 /**
  * Render trip detail charts
  */
-function renderTripCharts(telemetry) {
+async function renderTripCharts(telemetry) {
     const speedCtx = document.getElementById('trip-speed-chart');
     const socCtx = document.getElementById('trip-soc-chart');
 
     if (!speedCtx || !socCtx || telemetry.length === 0) return;
+
+    // Ensure Chart.js is loaded before creating charts
+    if (!window.Chart) {
+        await loadChartJs();
+    }
 
     const labels = telemetry.map(t => formatTime(new Date(t.timestamp)));
     const speeds = telemetry.map(t => t.speed_mph);
@@ -1545,13 +1668,18 @@ async function loadSocAnalysis() {
 /**
  * Render SOC histogram chart
  */
-function renderSocHistogram(histogram) {
+async function renderSocHistogram(histogram) {
     const ctx = document.getElementById('soc-histogram-chart');
     if (!ctx) return;
 
     // Sort and prepare data
     const labels = Object.keys(histogram).sort((a, b) => parseInt(a) - parseInt(b));
     const values = labels.map(k => histogram[k]);
+
+    // Ensure Chart.js is loaded before creating chart
+    if (!window.Chart) {
+        await loadChartJs();
+    }
 
     if (socChart) {
         socChart.destroy();
@@ -2455,7 +2583,7 @@ function renderChargingDetailSummary(session) {
 /**
  * Render charging curve chart
  */
-function renderChargingCurveChart(curveData) {
+async function renderChargingCurveChart(curveData) {
     const ctx = document.getElementById('charging-curve-chart');
     if (!ctx) return;
 
@@ -2476,6 +2604,11 @@ function renderChargingCurveChart(curveData) {
             </div>
         `;
         return;
+    }
+
+    // Ensure Chart.js is loaded before creating chart
+    if (!window.Chart) {
+        await loadChartJs();
     }
 
     const curve = curveData.curve;
