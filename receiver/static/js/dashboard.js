@@ -39,6 +39,82 @@ window.addEventListener('beforeunload', () => {
 });
 
 /**
+ * IndexedDB API Cache for client-side caching
+ */
+class APICache {
+    constructor() {
+        this.dbName = 'volttracker-cache';
+        this.storeName = 'api-responses';
+        this.db = null;
+        this.initPromise = this.init();
+    }
+
+    async init() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, 1);
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+                this.db = request.result;
+                if (DEBUG) console.log('[Cache] IndexedDB initialized');
+                resolve();
+            };
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains(this.storeName)) {
+                    const store = db.createObjectStore(this.storeName, { keyPath: 'url' });
+                    store.createIndex('timestamp', 'timestamp', { unique: false });
+                }
+            };
+        });
+    }
+
+    async get(url, maxAge = 300000) {
+        await this.initPromise;
+        return new Promise((resolve) => {
+            const tx = this.db.transaction([this.storeName], 'readonly');
+            const store = tx.objectStore(this.storeName);
+            const request = store.get(url);
+
+            request.onsuccess = () => {
+                const cached = request.result;
+                if (cached && Date.now() - cached.timestamp < maxAge) {
+                    if (DEBUG) console.log(`[Cache] Hit: ${url}`);
+                    resolve(cached.data);
+                } else {
+                    if (DEBUG) console.log(`[Cache] Miss/Expired: ${url}`);
+                    resolve(null);
+                }
+            };
+            request.onerror = () => resolve(null);
+        });
+    }
+
+    async set(url, data, maxAge = 300000) {
+        await this.initPromise;
+        const tx = this.db.transaction([this.storeName], 'readwrite');
+        const store = tx.objectStore(this.storeName);
+        store.put({
+            url,
+            data,
+            timestamp: Date.now(),
+            maxAge
+        });
+        if (DEBUG) console.log(`[Cache] Set: ${url}`);
+    }
+
+    async clear() {
+        await this.initPromise;
+        const tx = this.db.transaction([this.storeName], 'readwrite');
+        const store = tx.objectStore(this.storeName);
+        store.clear();
+        if (DEBUG) console.log('[Cache] Cleared');
+    }
+}
+
+// Initialize API cache
+const apiCache = new APICache();
+
+/**
  * Fetch helper with timeout and JSON validation.
  * @param {string} url - The URL to fetch
  * @param {object} options - Optional fetch options
@@ -47,6 +123,22 @@ window.addEventListener('beforeunload', () => {
  * @throws {Error} - If response is not ok or timeout
  */
 async function fetchJson(url, options = {}, timeoutMs = 10000) {
+    const { useCache = false, maxAge = 300000 } = options;
+
+    // Try cache first if enabled
+    if (useCache) {
+        const cached = await apiCache.get(url, maxAge);
+        if (cached) {
+            // Return cached data immediately, revalidate in background
+            fetch(url).then(res => res.json())
+                .then(data => apiCache.set(url, data, maxAge))
+                .catch(err => {
+                    if (DEBUG) console.error('[Cache] Background revalidation failed:', err);
+                });
+            return cached;
+        }
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -61,7 +153,14 @@ async function fetchJson(url, options = {}, timeoutMs = 10000) {
             throw new Error(`HTTP ${response.status}: ${errorText}`);
         }
 
-        return await response.json();
+        const data = await response.json();
+
+        // Cache if enabled
+        if (useCache) {
+            await apiCache.set(url, data, maxAge);
+        }
+
+        return data;
     } catch (error) {
         if (error.name === 'AbortError') {
             throw new Error(`Request timeout after ${timeoutMs}ms`);
@@ -828,7 +927,7 @@ function getElapsedTime(startTime) {
  */
 async function loadSummary() {
     try {
-        const data = await fetchJson('/api/efficiency/summary');
+        const data = await fetchJson('/api/efficiency/summary', { useCache: true, maxAge: 300000 });
 
         // Lifetime MPG
         const lifetimeMpg = document.getElementById('lifetime-mpg');
@@ -1007,7 +1106,7 @@ async function loadTrips() {
         if (dateFilter.start) url += `&start_date=${dateFilter.start}`;
         if (dateFilter.end) url += `&end_date=${dateFilter.end}`;
 
-        const response = await fetchJson(url);
+        const response = await fetchJson(url, { useCache: true, maxAge: 300000 });
         const trips = response.trips || response;  // Handle both paginated and legacy response
 
         const tableBody = document.getElementById('trips-table-body');
@@ -1871,7 +1970,7 @@ async function deleteTrip(tripId) {
  */
 async function loadChargingSummary() {
     try {
-        const data = await fetchJson('/api/charging/summary');
+        const data = await fetchJson('/api/charging/summary', { useCache: true, maxAge: 300000 });
 
         // Total kWh
         const totalKwh = document.getElementById('total-kwh');

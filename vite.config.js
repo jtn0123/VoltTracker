@@ -12,13 +12,15 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 dashboard: resolve(__dirname, 'receiver/static/js/dashboard.js'),
+                styles: resolve(__dirname, 'receiver/static/css/style.css'),
             },
             output: {
                 entryFileNames: '[name].min.js',
                 chunkFileNames: '[name]-[hash].js',
-                assetFileNames: '[name]-[hash].[ext]'
+                assetFileNames: '[name].min.[ext]'
             }
         },
+        cssMinify: true,
         minify: 'terser',
         terserOptions: {
             compress: {

@@ -11,6 +11,7 @@
     "build:watch": "vite build --watch",
     "preview": "vite preview",
     "dev": "vite",
+    "optimize-images": "node scripts/optimize-images.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "type": "module",
@@ -22,6 +23,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "sharp": "^0.34.5",
     "terser": "^5.44.1",
     "vite": "^7.3.0"
   }
