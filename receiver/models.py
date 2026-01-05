@@ -722,16 +722,28 @@ def get_engine(database_url):
 
     P0 Technical Improvement: Add connection pooling configuration
     to prevent connection exhaustion and improve performance.
+
+    Note: Connection pooling parameters only apply to PostgreSQL.
+    SQLite uses SingletonThreadPool which doesn't support these options.
     """
-    return create_engine(
-        database_url,
-        pool_pre_ping=True,  # Verify connections before use
-        pool_size=10,  # Max connections in pool
-        max_overflow=20,  # Allow 20 additional connections
-        pool_recycle=3600,  # Recycle connections after 1 hour
-        pool_timeout=30,  # Wait up to 30s for a connection
-        echo_pool=False,  # Set to True for debugging
-    )
+    # Base configuration
+    config = {
+        "echo_pool": False,  # Set to True for debugging
+    }
+
+    # Only add pooling parameters for PostgreSQL (not SQLite)
+    if not database_url.startswith("sqlite"):
+        config.update(
+            {
+                "pool_pre_ping": True,  # Verify connections before use
+                "pool_size": 10,  # Max connections in pool
+                "max_overflow": 20,  # Allow 20 additional connections
+                "pool_recycle": 3600,  # Recycle connections after 1 hour
+                "pool_timeout": 30,  # Wait up to 30s for a connection
+            }
+        )
+
+    return create_engine(database_url, **config)
 
 
 def get_session(engine):
