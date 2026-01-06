@@ -44,8 +44,8 @@ def get_trip_endpoints(db: Session, trip_id: int) -> Optional[Tuple]:
     if not trip:
         return None
 
-    # Get first and last telemetry points with GPS
-    telemetry = (
+    # Get first GPS point
+    start_point = (
         db.query(TelemetryRaw)
         .filter(
             and_(
@@ -55,16 +55,27 @@ def get_trip_endpoints(db: Session, trip_id: int) -> Optional[Tuple]:
             )
         )
         .order_by(TelemetryRaw.timestamp)
-        .all()
+        .first()
     )
 
-    if len(telemetry) < 2:
+    # Get last GPS point
+    end_point = (
+        db.query(TelemetryRaw)
+        .filter(
+            and_(
+                TelemetryRaw.session_id == trip.session_id,
+                TelemetryRaw.latitude.isnot(None),
+                TelemetryRaw.longitude.isnot(None),
+            )
+        )
+        .order_by(TelemetryRaw.timestamp.desc())
+        .first()
+    )
+
+    if not start_point or not end_point:
         return None
 
-    start = telemetry[0]
-    end = telemetry[-1]
-
-    return (start.latitude, start.longitude, end.latitude, end.longitude)
+    return (start_point.latitude, start_point.longitude, end_point.latitude, end_point.longitude)
 
 
 def find_matching_route(

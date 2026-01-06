@@ -85,8 +85,16 @@ def analyze_trip_powertrain(db: Session, session_id: str) -> Dict:
 
     Returns timeline of operating modes and statistics.
     """
+    # Limit to 10,000 points to prevent memory issues on very long trips
+    # At 1 point/second, this covers ~2.7 hours of data
+    MAX_TELEMETRY_POINTS = 10000
+
     telemetry = (
-        db.query(TelemetryRaw).filter(TelemetryRaw.session_id == session_id).order_by(TelemetryRaw.timestamp).all()
+        db.query(TelemetryRaw)
+        .filter(TelemetryRaw.session_id == session_id)
+        .order_by(TelemetryRaw.timestamp)
+        .limit(MAX_TELEMETRY_POINTS)
+        .all()
     )
 
     if not telemetry:
