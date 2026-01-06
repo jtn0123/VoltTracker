@@ -270,7 +270,8 @@ class TestRouteEndpoints:
         assert len(data["routes"]) == 3
         # Check structure
         assert "name" in data["routes"][0]
-        assert "start_lat" in data["routes"][0]
+        assert "start" in data["routes"][0]
+        assert "lat" in data["routes"][0]["start"]
         assert "trip_count" in data["routes"][0]
 
     def test_routes_sorted_by_trip_count(self, client, db_session):
