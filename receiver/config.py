@@ -101,3 +101,24 @@ class Config:
     MAX_KWH_PER_MILE = float(os.environ.get("MAX_KWH_PER_MILE", 1.0))
     FUEL_TANK_MIN = float(os.environ.get("FUEL_TANK_MIN", 0))
     FUEL_TANK_MAX = float(os.environ.get("FUEL_TANK_MAX", 20))
+
+    # Analytics Configuration
+    # Temperature bands for weather analytics (Fahrenheit)
+    # Format: (name, min_temp, max_temp) where None = no bound
+    ANALYTICS_TEMP_BANDS = [
+        ("freezing", None, 32),
+        ("cold", 32, 45),
+        ("cool", 45, 55),
+        ("ideal", 55, 75),
+        ("warm", 75, 85),
+        ("hot", 85, 95),
+        ("very_hot", 95, None),
+    ]
+
+    # Wind speed bands for weather analytics (MPH)
+    ANALYTICS_WIND_BANDS = [
+        ("calm", None, 5),
+        ("light", 5, 15),
+        ("moderate", 15, 25),
+        ("strong", 25, None),
+    ]
