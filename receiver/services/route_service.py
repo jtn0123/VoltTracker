@@ -75,6 +75,10 @@ def get_trip_endpoints(db: Session, trip_id: int) -> Optional[Tuple]:
     if not start_point or not end_point:
         return None
 
+    # If same point (only one GPS point in trip), return None
+    if start_point.id == end_point.id:
+        return None
+
     return (start_point.latitude, start_point.longitude, end_point.latitude, end_point.longitude)
 
 

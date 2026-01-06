@@ -1040,6 +1040,65 @@ class MonthlySummary(Base):
         }
 
 
+class AuditLog(Base):
+    """
+    Audit log for tracking data changes and operations.
+
+    Provides compliance trail and debugging information for critical operations.
+    """
+
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_entity", "entity_type", "entity_id"),
+        Index("ix_audit_logs_action", "action", "timestamp"),
+        Index("ix_audit_logs_timestamp", "timestamp"),
+        Index("ix_audit_logs_ip", "ip_address"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # What was changed
+    entity_type = Column(String(50), nullable=False)  # "trips", "charging_sessions", etc.
+    entity_id = Column(String(50), nullable=False)  # ID of the entity
+    action = Column(String(20), nullable=False)  # "create", "update", "delete", etc.
+
+    # Change details
+    old_data = Column(JSON)  # Previous state (for updates)
+    new_data = Column(JSON)  # New state (for creates/updates)
+    details = Column(Text)  # Additional context
+
+    # Who made the change
+    user_id = Column(String(50))  # User ID if authenticated
+    username = Column(String(100))  # Username if authenticated
+    ip_address = Column(String(50))  # IP address of requester
+    user_agent = Column(Text)  # Browser/app making the request
+
+    # When
+    timestamp = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    def to_dict(self):
+        """Convert to dictionary."""
+        return {
+            "id": self.id,
+            "entity_type": self.entity_type,
+            "entity_id": self.entity_id,
+            "action": self.action,
+            "old_data": self.old_data,
+            "new_data": self.new_data,
+            "details": self.details,
+            "user_id": self.user_id,
+            "username": self.username,
+            "ip_address": self.ip_address,
+            "user_agent": self.user_agent,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+        }
+
+    def save(self, db):
+        """Save audit log to database."""
+        db.add(self)
+        db.commit()
+
+
 def get_engine(database_url):
     """
     Create database engine with proper connection pooling.
