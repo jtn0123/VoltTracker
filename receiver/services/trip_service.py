@@ -20,6 +20,7 @@ from utils import (
     detect_gas_mode_entry,
     normalize_datetime,
 )
+from utils.context_enrichment import enrich_event_with_vehicle_context
 from utils.error_codes import ErrorCode, StructuredError
 from utils.weather import get_weather_for_location, get_weather_impact_factor
 from utils.wide_events import WideEvent
@@ -293,6 +294,11 @@ def finalize_trip(db, trip: Trip):
                 weather_conditions=trip.weather_conditions,
                 weather_impact_factor=trip.weather_impact_factor,
             )
+
+        # Enrich event with vehicle context (loggingsucks.com progressive enrichment pattern)
+        # Include battery health for trip finalization (business-critical operation)
+        with event.timer("context_enrichment"):
+            enrich_event_with_vehicle_context(event, db, include_battery_health=True)
 
         # Mark trip as complete
         trip.is_closed = True
