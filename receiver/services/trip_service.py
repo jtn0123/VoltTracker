@@ -114,7 +114,7 @@ def process_gas_mode(db, trip: Trip, telemetry: list, points: list) -> None:
             trip.electric_miles = 0.0
 
         # Record SOC transition for battery health tracking (avoid duplicates)
-        if trip.soc_at_gas_transition:
+        if trip.soc_at_gas_transition is not None:
             existing = db.query(SocTransition).filter(SocTransition.trip_id == trip.id).first()
             if not existing:
                 soc_transition = SocTransition(

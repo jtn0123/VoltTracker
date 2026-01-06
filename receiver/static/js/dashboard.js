@@ -1189,18 +1189,18 @@ async function loadTrips() {
         tableBody.innerHTML = trips.map(trip => `
             <tr class="clickable" onclick="openTripModal(${trip.id})">
                 <td>${formatDateTime(new Date(trip.start_time))}</td>
-                <td>${trip.distance_miles ? trip.distance_miles.toFixed(1) : '--'} mi</td>
+                <td>${trip.distance_miles != null ? trip.distance_miles.toFixed(1) : '--'} mi</td>
                 <td>${trip.electric_miles !== null && trip.electric_miles !== undefined ? trip.electric_miles.toFixed(1) : '--'} mi</td>
                 <td>
                     ${!trip.distance_miles ?
                         '<span class="badge badge-unknown">No Data</span>' :
                         (trip.gas_mode_entered ?
-                            `<span class="badge badge-gas">${trip.gas_miles ? trip.gas_miles.toFixed(1) : '0'} mi</span>` :
+                            `<span class="badge badge-gas">${trip.gas_miles != null ? trip.gas_miles.toFixed(1) : '0'} mi</span>` :
                             '<span class="badge badge-electric">Electric</span>')
                     }
                 </td>
                 <td>${trip.gas_mpg ? trip.gas_mpg + ' MPG' : '--'}</td>
-                <td>${trip.soc_at_gas_transition ? trip.soc_at_gas_transition.toFixed(1) + '%' : '--'}</td>
+                <td>${trip.soc_at_gas_transition != null ? trip.soc_at_gas_transition.toFixed(1) + '%' : '--'}</td>
                 <td>
                     <button class="btn-delete" onclick="event.stopPropagation(); deleteTrip(${trip.id})" title="Delete trip">×</button>
                 </td>
@@ -1222,7 +1222,7 @@ async function loadTrips() {
                 <div class="trip-card-stats">
                     <div class="trip-card-stat">
                         <span>Total</span>
-                        <span>${trip.distance_miles ? trip.distance_miles.toFixed(1) : '--'} mi</span>
+                        <span>${trip.distance_miles != null ? trip.distance_miles.toFixed(1) : '--'} mi</span>
                     </div>
                     <div class="trip-card-stat">
                         <span>Electric</span>
@@ -1230,7 +1230,7 @@ async function loadTrips() {
                     </div>
                     <div class="trip-card-stat">
                         <span>Gas</span>
-                        <span>${trip.gas_miles ? trip.gas_miles.toFixed(1) : '--'} mi</span>
+                        <span>${trip.gas_miles != null ? trip.gas_miles.toFixed(1) : '--'} mi</span>
                     </div>
                     <div class="trip-card-stat">
                         <span>MPG</span>
@@ -1281,15 +1281,15 @@ async function openTripModal(tripId) {
             </div>
             <div class="trip-stat">
                 <div class="trip-stat-label">Distance</div>
-                <div class="trip-stat-value">${trip.distance_miles ? trip.distance_miles.toFixed(1) + ' mi' : '--'}</div>
+                <div class="trip-stat-value">${trip.distance_miles != null ? trip.distance_miles.toFixed(1) + ' mi' : '--'}</div>
             </div>
             <div class="trip-stat">
                 <div class="trip-stat-label">Electric</div>
-                <div class="trip-stat-value">${trip.electric_miles ? trip.electric_miles.toFixed(1) + ' mi' : '--'}</div>
+                <div class="trip-stat-value">${trip.electric_miles != null ? trip.electric_miles.toFixed(1) + ' mi' : '--'}</div>
             </div>
             <div class="trip-stat">
                 <div class="trip-stat-label">Gas</div>
-                <div class="trip-stat-value">${trip.gas_miles ? trip.gas_miles.toFixed(1) + ' mi' : '--'}</div>
+                <div class="trip-stat-value">${trip.gas_miles != null ? trip.gas_miles.toFixed(1) + ' mi' : '--'}</div>
             </div>
             <div class="trip-stat">
                 <div class="trip-stat-label">MPG</div>
@@ -1783,11 +1783,11 @@ async function loadSocAnalysis() {
 
         // Update stats
         document.getElementById('soc-min').textContent =
-            data.min_soc ? `${data.min_soc}%` : '--';
+            data.min_soc != null ? `${data.min_soc}%` : '--';
         document.getElementById('soc-max').textContent =
-            data.max_soc ? `${data.max_soc}%` : '--';
+            data.max_soc != null ? `${data.max_soc}%` : '--';
         document.getElementById('soc-avg').textContent =
-            data.average_soc ? `${data.average_soc}%` : '--';
+            data.average_soc != null ? `${data.average_soc}%` : '--';
 
         // Temperature correlation
         if (data.temperature_correlation) {
@@ -2444,7 +2444,7 @@ async function loadChargingHistory() {
                         '--'
                     }
                 </td>
-                <td>${session.kwh_added ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</td>
+                <td>${session.kwh_added != null ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</td>
                 <td>
                     ${session.start_soc !== null && session.end_soc !== null ?
                         `${session.start_soc}% → ${session.end_soc}%` :
@@ -2473,7 +2473,7 @@ async function loadChargingHistory() {
                     <div class="charging-card-stats">
                         <div class="charging-card-stat">
                             <span class="charging-card-stat-label">Energy</span>
-                            <span class="charging-card-stat-value">${session.kwh_added ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</span>
+                            <span class="charging-card-stat-value">${session.kwh_added != null ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</span>
                         </div>
                         <div class="charging-card-stat">
                             <span class="charging-card-stat-label">SOC</span>
@@ -2707,7 +2707,7 @@ function renderChargingDetailSummary(session) {
             </div>
             <div class="charging-stat">
                 <div class="charging-stat-label">Energy Added</div>
-                <div class="charging-stat-value">${session.kwh_added ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</div>
+                <div class="charging-stat-value">${session.kwh_added != null ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</div>
             </div>
             <div class="charging-stat">
                 <div class="charging-stat-label">SOC Change</div>
@@ -2720,11 +2720,11 @@ function renderChargingDetailSummary(session) {
             </div>
             <div class="charging-stat">
                 <div class="charging-stat-label">Peak Power</div>
-                <div class="charging-stat-value">${session.peak_power_kw ? session.peak_power_kw.toFixed(1) + ' kW' : '--'}</div>
+                <div class="charging-stat-value">${session.peak_power_kw != null ? session.peak_power_kw.toFixed(1) + ' kW' : '--'}</div>
             </div>
             <div class="charging-stat">
                 <div class="charging-stat-label">Avg Power</div>
-                <div class="charging-stat-value">${session.avg_power_kw ? session.avg_power_kw.toFixed(1) + ' kW' : '--'}</div>
+                <div class="charging-stat-value">${session.avg_power_kw != null ? session.avg_power_kw.toFixed(1) + ' kW' : '--'}</div>
             </div>
             <div class="charging-stat">
                 <div class="charging-stat-label">Location</div>
