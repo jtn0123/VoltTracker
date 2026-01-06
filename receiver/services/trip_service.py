@@ -193,8 +193,8 @@ def finalize_trip(db, trip: Trip):
     """
     start_time = time.time()
 
-    # Initialize wide event for comprehensive logging
-    event = WideEvent("trip_finalization")
+    # Initialize wide event with trace_id to link all operations for this trip
+    event = WideEvent("trip_finalization", trace_id=str(trip.session_id))
     event.add_context(
         trip_id=trip.id,
         session_id=str(trip.session_id),
@@ -202,14 +202,22 @@ def finalize_trip(db, trip: Trip):
         start_soc=trip.start_soc,
     )
 
+    # Add feature flags to track enabled features during finalization
+    event.add_feature_flags(
+        weather_integration=Config.FEATURE_WEATHER_INTEGRATION,
+        enhanced_route_detection=Config.FEATURE_ENHANCED_ROUTE_DETECTION,
+        predictive_range=Config.FEATURE_PREDICTIVE_RANGE,
+    )
+
     try:
-        # Get all telemetry for this trip
-        telemetry = (
-            db.query(TelemetryRaw)
-            .filter(TelemetryRaw.session_id == trip.session_id)
-            .order_by(TelemetryRaw.timestamp)
-            .all()
-        )
+        # Get all telemetry for this trip with performance timing
+        with event.timer("db_query_telemetry"):
+            telemetry = (
+                db.query(TelemetryRaw)
+                .filter(TelemetryRaw.session_id == trip.session_id)
+                .order_by(TelemetryRaw.timestamp)
+                .all()
+            )
 
         event.add_business_metric("telemetry_points", len(telemetry))
 
@@ -225,8 +233,9 @@ def finalize_trip(db, trip: Trip):
         # Convert to dicts for calculation functions
         points = [t.to_dict() for t in telemetry]
 
-        # Calculate basic trip metrics
-        calculate_trip_basics(trip, telemetry)
+        # Calculate basic trip metrics with performance timing
+        with event.timer("calculate_basics"):
+            calculate_trip_basics(trip, telemetry)
 
         # Add trip metrics to event
         event.add_context(
@@ -236,7 +245,8 @@ def finalize_trip(db, trip: Trip):
         )
 
         # Process gas mode entry and related calculations
-        process_gas_mode(db, trip, telemetry, points)
+        with event.timer("process_gas_mode"):
+            process_gas_mode(db, trip, telemetry, points)
 
         # Add gas mode context
         event.add_context(
@@ -249,16 +259,24 @@ def finalize_trip(db, trip: Trip):
             event.add_business_metric("soc_at_gas_transition", trip.soc_at_gas_transition)
             event.add_business_metric("gas_mpg", trip.gas_mpg)
             event.add_business_metric("fuel_used_gallons", trip.fuel_used_gallons)
+            # Mark gas mode as critical business event (always logged)
+            event.add_business_metric("gas_mode_entered", True)
 
         # Calculate electric efficiency
-        calculate_electric_efficiency(trip, points)
+        with event.timer("calculate_efficiency"):
+            calculate_electric_efficiency(trip, points)
 
         # Add efficiency metrics
         event.add_business_metric("electric_kwh_used", trip.electric_kwh_used)
         event.add_business_metric("kwh_per_mile", trip.kwh_per_mile)
 
-        # Fetch weather data
-        fetch_trip_weather(trip, points)
+        # Fetch weather data (if feature enabled)
+        if Config.FEATURE_WEATHER_INTEGRATION:
+            with event.timer("fetch_weather"):
+                fetch_trip_weather(trip, points)
+        else:
+            # Skip weather fetch if feature disabled
+            event.add_technical_metric("weather_skipped", True)
 
         # Add weather context
         if trip.weather_temp_f:
@@ -276,8 +294,14 @@ def finalize_trip(db, trip: Trip):
         event.context["duration_ms"] = round(duration_ms, 2)
         event.mark_success()
 
-        # Emit comprehensive wide event (always emit trip finalization events)
-        event.emit(force=True)
+        # Emit comprehensive wide event with configurable sampling
+        # Default: 100% sampling for trip finalization (business critical)
+        # Always logs: errors, slow finalization (>1s), gas mode transitions
+        if event.should_emit(
+            sample_rate=Config.LOGGING_SAMPLE_RATE_TRIP,
+            slow_threshold_ms=Config.LOGGING_SLOW_THRESHOLD_MS,
+        ):
+            event.emit()
 
         logger.info(
             f"Trip {trip.id} finalized: {(trip.distance_miles or 0):.1f} mi "

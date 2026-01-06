@@ -55,12 +55,20 @@ def torque_upload(token=None):
     """
     start_time = time.time()
 
-    # Initialize wide event for comprehensive logging
+    # Initialize wide event for comprehensive logging with request/trace IDs
+    # Note: trace_id will be set to session_id after parsing to link all telemetry for this trip
     event = WideEvent("telemetry_upload")
     event.add_context(
         method=request.method,
         remote_addr=request.remote_addr,
         has_token=bool(token),
+    )
+
+    # Add feature flags to track which features are enabled
+    event.add_feature_flags(
+        weather_integration=Config.FEATURE_WEATHER_INTEGRATION,
+        enhanced_route_detection=Config.FEATURE_ENHANCED_ROUTE_DETECTION,
+        predictive_range=Config.FEATURE_PREDICTIVE_RANGE,
     )
 
     # Validate API token if configured
@@ -81,8 +89,14 @@ def torque_upload(token=None):
 
         event.add_business_metric("raw_params_count", len(form_data))
 
-        data = TorqueParser.parse(form_data)
+        # Parse telemetry data with performance timing
+        with event.timer("parse_telemetry"):
+            data = TorqueParser.parse(form_data)
+
         db = get_db()
+
+        # Set trace_id to session_id to link all telemetry uploads for this trip
+        event.context["trace_id"] = str(data["session_id"])
 
         # Add high-cardinality context
         event.add_context(
@@ -94,8 +108,9 @@ def torque_upload(token=None):
             charger_connected=data.get("charger_connected", False),
         )
 
-        # Create or get trip (handle race condition)
-        trip = db.query(Trip).filter(Trip.session_id == data["session_id"]).first()
+        # Create or get trip (handle race condition) with performance timing
+        with event.timer("db_trip_query"):
+            trip = db.query(Trip).filter(Trip.session_id == data["session_id"]).first()
 
         if not trip:
             try:
@@ -133,32 +148,33 @@ def torque_upload(token=None):
             if trip.start_odometer is None and data["odometer_miles"] is not None:
                 trip.start_odometer = data["odometer_miles"]
 
-        # Store telemetry
-        telemetry = TelemetryRaw(
-            session_id=data["session_id"],
-            timestamp=data["timestamp"],
-            latitude=data["latitude"],
-            longitude=data["longitude"],
-            speed_mph=data["speed_mph"],
-            engine_rpm=data["engine_rpm"],
-            throttle_position=data["throttle_position"],
-            coolant_temp_f=data["coolant_temp_f"],
-            intake_air_temp_f=data["intake_air_temp_f"],
-            fuel_level_percent=data["fuel_level_percent"],
-            fuel_remaining_gallons=data["fuel_remaining_gallons"],
-            state_of_charge=data["state_of_charge"],
-            battery_voltage=data["battery_voltage"],
-            ambient_temp_f=data["ambient_temp_f"],
-            odometer_miles=data["odometer_miles"],
-            hv_battery_power_kw=data["hv_battery_power_kw"],
-            hv_battery_current_a=data["hv_battery_current_a"],
-            hv_battery_voltage_v=data["hv_battery_voltage_v"],
-            charger_ac_power_kw=data["charger_ac_power_kw"],
-            charger_connected=data["charger_connected"],
-            raw_data=data["raw_data"],
-        )
-        db.add(telemetry)
-        db.commit()
+        # Store telemetry with performance timing
+        with event.timer("db_telemetry_insert"):
+            telemetry = TelemetryRaw(
+                session_id=data["session_id"],
+                timestamp=data["timestamp"],
+                latitude=data["latitude"],
+                longitude=data["longitude"],
+                speed_mph=data["speed_mph"],
+                engine_rpm=data["engine_rpm"],
+                throttle_position=data["throttle_position"],
+                coolant_temp_f=data["coolant_temp_f"],
+                intake_air_temp_f=data["intake_air_temp_f"],
+                fuel_level_percent=data["fuel_level_percent"],
+                fuel_remaining_gallons=data["fuel_remaining_gallons"],
+                state_of_charge=data["state_of_charge"],
+                battery_voltage=data["battery_voltage"],
+                ambient_temp_f=data["ambient_temp_f"],
+                odometer_miles=data["odometer_miles"],
+                hv_battery_power_kw=data["hv_battery_power_kw"],
+                hv_battery_current_a=data["hv_battery_current_a"],
+                hv_battery_voltage_v=data["hv_battery_voltage_v"],
+                charger_ac_power_kw=data["charger_ac_power_kw"],
+                charger_connected=data["charger_connected"],
+                raw_data=data["raw_data"],
+            )
+            db.add(telemetry)
+            db.commit()
 
         # Emit real-time update to WebSocket clients if socketio is available
         socketio = current_app.extensions.get("socketio")
@@ -172,8 +188,14 @@ def torque_upload(token=None):
         event.mark_success()
         event.add_business_metric("telemetry_stored", True)
 
-        # Emit wide event (uses tail sampling)
-        event.emit()
+        # Emit wide event with configurable tail sampling
+        # Always logs: errors, slow requests (>1s), new trips
+        # Samples: 5% of fast successful uploads (configurable)
+        if event.should_emit(
+            sample_rate=Config.LOGGING_SAMPLE_RATE_TELEMETRY,
+            slow_threshold_ms=Config.LOGGING_SLOW_THRESHOLD_MS,
+        ):
+            event.emit()
 
         return "OK!"
 

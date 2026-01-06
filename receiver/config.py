@@ -23,6 +23,19 @@ class Config:
     # Logging
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
+    # Wide Events Logging - Tail Sampling Configuration
+    # Always log: errors, slow requests, critical business events
+    # Sample rate for fast successful requests (0.0-1.0)
+    LOGGING_SAMPLE_RATE_TELEMETRY = float(os.environ.get("LOG_SAMPLE_TELEMETRY", 0.05))  # 5%
+    LOGGING_SAMPLE_RATE_TRIP = float(os.environ.get("LOG_SAMPLE_TRIP", 1.0))  # 100% (critical)
+    LOGGING_SAMPLE_RATE_ROUTE = float(os.environ.get("LOG_SAMPLE_ROUTE", 0.10))  # 10%
+    LOGGING_SLOW_THRESHOLD_MS = float(os.environ.get("LOG_SLOW_THRESHOLD_MS", 1000))  # 1s
+
+    # Feature Flags (for A/B testing and gradual rollouts)
+    FEATURE_ENHANCED_ROUTE_DETECTION = os.environ.get("FEATURE_ROUTE_DETECTION", "false").lower() == "true"
+    FEATURE_WEATHER_INTEGRATION = os.environ.get("FEATURE_WEATHER", "true").lower() == "true"
+    FEATURE_PREDICTIVE_RANGE = os.environ.get("FEATURE_PREDICTIVE_RANGE", "false").lower() == "true"
+
     # Volt-specific constants
     TANK_CAPACITY_GALLONS = 9.3122  # Gen 2 Volt tank capacity
     BATTERY_CAPACITY_KWH = 18.4  # Gen 2 Volt usable battery capacity
