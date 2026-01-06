@@ -15,6 +15,7 @@ from exceptions import TelemetryParsingError
 from flask import Blueprint, current_app, jsonify, request
 from models import TelemetryRaw, Trip
 from utils import TorqueParser, normalize_datetime, utc_now
+from utils.context_enrichment import enrich_event_with_vehicle_context
 from utils.error_codes import ErrorCode, StructuredError
 from utils.wide_events import WideEvent
 
@@ -193,6 +194,11 @@ def torque_upload(token=None):
         if socketio:
             emit_telemetry_update(socketio, data)
             event.add_technical_metric("websocket_emitted", True)
+
+        # Enrich event with vehicle context (loggingsucks.com progressive enrichment pattern)
+        # This adds: total_trips, total_miles, account_age_days, usage_tier, avg_efficiency
+        with event.timer("context_enrichment"):
+            enrich_event_with_vehicle_context(event, db, include_battery_health=False)
 
         # Calculate duration and mark success
         duration_ms = (time.time() - start_time) * 1000
