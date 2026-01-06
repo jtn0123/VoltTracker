@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, cast
 
 import requests
+from config import Config
 from exceptions import WeatherAPIError
 from utils.error_codes import ErrorCode, StructuredError
 from utils.timezone import normalize_datetime, utc_now
@@ -25,6 +26,10 @@ OPEN_METEO_HISTORICAL_URL = "https://archive-api.open-meteo.com/v1/archive"
 MAX_RETRIES = 2  # Reduce retries to minimize blocking time
 RETRY_DELAY_SECONDS = 0.5  # Short delay between retries
 WEATHER_API_TIMEOUT = 3  # Default timeout per request (seconds)
+
+# Simple in-memory cache for weather data
+# Key: (lat_rounded, lon_rounded, datetime_hour_str) -> Value: (data, timestamp)
+_weather_cache: Dict[tuple, tuple] = {}
 
 
 def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optional[Dict[str, Any]]:
@@ -164,9 +169,10 @@ def get_weather_for_location(
     latitude: float, longitude: float, timestamp: Optional[datetime] = None, timeout: int = WEATHER_API_TIMEOUT
 ) -> Optional[Dict[str, Any]]:
     """
-    Fetch weather data for a location at a given time.
+    Fetch weather data for a location at a given time with caching.
 
     Uses Open-Meteo API (free, no API key needed).
+    Caches results for 1 hour (configurable via WEATHER_CACHE_TIMEOUT_SECONDS).
     Total max blocking time: ~7s (2 retries × 3s timeout + 0.5s delay)
 
     Args:
@@ -181,19 +187,48 @@ def get_weather_for_location(
     if timestamp is None:
         timestamp = utc_now()
 
-    # Determine if we need historical or forecast API
-    # Normalize both datetimes to handle mixed timezone states
-    now = normalize_datetime(utc_now())
+    # Create cache key: round coordinates to 2 decimals (~1km precision) and hour
+    # This allows cache sharing between nearby locations at same time
     normalized_timestamp = normalize_datetime(timestamp)
+    cache_key = (
+        round(latitude, 2),
+        round(longitude, 2),
+        normalized_timestamp.strftime("%Y-%m-%d-%H") if normalized_timestamp else None
+    )
+
+    # Check cache
+    current_time = time.time()
+    if cache_key in _weather_cache:
+        cached_data, cache_timestamp = _weather_cache[cache_key]
+        age_seconds = current_time - cache_timestamp
+
+        if age_seconds < Config.WEATHER_CACHE_TIMEOUT_SECONDS:
+            logger.debug(
+                f"Weather cache hit for ({latitude:.2f}, {longitude:.2f}) "
+                f"at {normalized_timestamp.strftime('%Y-%m-%d %H:00')} (age: {age_seconds:.0f}s)"
+            )
+            return cached_data
+
+    # Cache miss or expired - fetch from API
+    # Determine if we need historical or forecast API
+    now = normalize_datetime(utc_now())
     days_ago = (now - normalized_timestamp).days if normalized_timestamp else 0
 
     try:
         if days_ago > 5:
             # Use historical API for older data
-            return _get_historical_weather(latitude, longitude, timestamp, timeout)
+            data = _get_historical_weather(latitude, longitude, timestamp, timeout)
         else:
             # Use forecast API for recent/current data
-            return _get_forecast_weather(latitude, longitude, timestamp, timeout)
+            data = _get_forecast_weather(latitude, longitude, timestamp, timeout)
+
+        # Cache successful result
+        if data is not None:
+            _weather_cache[cache_key] = (data, current_time)
+            logger.debug(f"Weather cached for ({latitude:.2f}, {longitude:.2f}) at {normalized_timestamp.strftime('%Y-%m-%d %H:00')}")
+
+        return data
+
     except WeatherAPIError:
         raise
     except (ValueError, KeyError, TypeError) as e:

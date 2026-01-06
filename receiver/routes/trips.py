@@ -54,7 +54,7 @@ def get_trips():
     # Unless explicitly requested with include_zero=true
     include_zero = request.args.get("include_zero", "").lower() == "true"
     if not include_zero:
-        query = query.filter((Trip.distance_miles.isnot(None)) & (Trip.distance_miles > 0.1))  # At least 0.1 miles
+        query = query.filter((Trip.distance_miles.isnot(None)) & (Trip.distance_miles > Config.MIN_TRIP_MILES))
 
     # Pagination
     try:
@@ -93,7 +93,7 @@ def get_trip_detail(trip_id):
     """Get detailed trip data including telemetry points.
 
     Query params:
-        limit: Max telemetry points to return (default 500, max 2000)
+        limit: Max telemetry points to return (configurable via API_TELEMETRY_LIMIT_DEFAULT/MAX)
         offset: Skip first N telemetry points (default 0)
     """
     db = get_db()
@@ -104,9 +104,9 @@ def get_trip_detail(trip_id):
 
     # Pagination for telemetry to avoid huge responses
     try:
-        limit = min(2000, max(1, int(request.args.get("limit", 500))))
+        limit = min(Config.API_TELEMETRY_LIMIT_MAX, max(1, int(request.args.get("limit", Config.API_TELEMETRY_LIMIT_DEFAULT))))
     except (ValueError, TypeError):
-        limit = 500
+        limit = Config.API_TELEMETRY_LIMIT_DEFAULT
 
     try:
         offset = max(0, int(request.args.get("offset", 0)))

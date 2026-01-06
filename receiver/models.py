@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     TypeDecorator,
+    UniqueConstraint,
     create_engine,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -365,6 +366,10 @@ class ChargingSession(Base):
     """Tracks charging sessions for energy analysis."""
 
     __tablename__ = "charging_sessions"
+    __table_args__ = (
+        UniqueConstraint('start_time', name='uq_charging_session_start_time'),
+        Index('ix_charging_sessions_is_complete_start_time', 'is_complete', 'start_time'),
+    )
 
     id = Column(Integer, primary_key=True)
     start_time = Column(DateTime(timezone=True), nullable=False, index=True)

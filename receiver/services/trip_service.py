@@ -160,6 +160,8 @@ def fetch_trip_weather(trip: Trip, points: list) -> None:
     """
     gps_point = None
     try:
+        import requests
+
         # Find first point with GPS coordinates
         gps_point = next((p for p in points if p.get("latitude") and p.get("longitude")), None)
         if gps_point and trip.start_time:
@@ -173,9 +175,18 @@ def fetch_trip_weather(trip: Trip, points: list) -> None:
                 logger.debug(
                     f"Weather for trip {trip.id}: " f"{weather.get('conditions')}, {weather.get('temperature_f')}°F"
                 )
-    except (ConnectionError, TimeoutError, ValueError) as e:
+    except requests.RequestException as e:
+        # Catch all requests-related exceptions (includes ConnectionError, Timeout, HTTPError, etc.)
         error = WeatherAPIError(
             f"Failed to fetch weather for trip {trip.id}: {e}",
+            latitude=gps_point.get("latitude") if gps_point else None,
+            longitude=gps_point.get("longitude") if gps_point else None,
+        )
+        logger.warning(str(error))
+    except (ValueError, KeyError, TypeError) as e:
+        # Catch data parsing errors
+        error = WeatherAPIError(
+            f"Failed to parse weather data for trip {trip.id}: {e}",
             latitude=gps_point.get("latitude") if gps_point else None,
             longitude=gps_point.get("longitude") if gps_point else None,
         )

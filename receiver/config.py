@@ -70,8 +70,17 @@ class Config:
     FLASK_HOST = os.environ.get("FLASK_HOST", "0.0.0.0")  # nosec B104 - intentional for server
     FLASK_PORT = int(os.environ.get("FLASK_PORT", 8080))
     CACHE_TIMEOUT_SECONDS = int(os.environ.get("CACHE_TIMEOUT", 60))
+    WEATHER_CACHE_TIMEOUT_SECONDS = int(os.environ.get("WEATHER_CACHE_TIMEOUT", 3600))  # 1 hour
     API_DEFAULT_PER_PAGE = int(os.environ.get("API_DEFAULT_PER_PAGE", 50))
     API_MAX_PER_PAGE = int(os.environ.get("API_MAX_PER_PAGE", 100))
+    API_TELEMETRY_LIMIT_DEFAULT = int(os.environ.get("API_TELEMETRY_LIMIT_DEFAULT", 500))
+    API_TELEMETRY_LIMIT_MAX = int(os.environ.get("API_TELEMETRY_LIMIT_MAX", 2000))
+
+    # Trip Processing Thresholds
+    MIN_TRIP_MILES = float(os.environ.get("MIN_TRIP_MILES", 0.1))  # Minimum distance for valid trip
+
+    # Charging Session Configuration
+    MAX_CHARGING_CURVE_POINTS = int(os.environ.get("MAX_CHARGING_CURVE_POINTS", 1000))  # Max curve data points
 
     # Security
     TORQUE_API_TOKEN = os.environ.get("TORQUE_API_TOKEN")  # Required in production
