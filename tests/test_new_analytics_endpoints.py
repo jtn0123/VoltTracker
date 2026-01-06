@@ -19,6 +19,28 @@ from models import BatteryHealthReading, MaintenanceRecord, Route, TelemetryRaw,
 class TestVitalsEndpoints:
     """Tests for web vitals API endpoints."""
 
+    def test_vitals_post_db_error_continues(self, client, db_session, mocker):
+        """POST /api/analytics/vitals continues even if DB fails."""
+        # Mock get_db to raise an error during commit
+        mock_db = mocker.MagicMock()
+        mock_db.add.side_effect = Exception("DB connection error")
+        mocker.patch("routes.analytics.get_db", return_value=mock_db)
+
+        vital_data = {
+            "name": "LCP",
+            "value": 1234.5,
+            "rating": "good",
+        }
+
+        response = client.post(
+            "/api/analytics/vitals",
+            json=vital_data,
+            content_type="application/json",
+        )
+
+        # Should still return 200 since logging succeeded
+        assert response.status_code == 200
+
     def test_vitals_post_success(self, client, db_session):
         """POST /api/analytics/vitals records web vital."""
         vital_data = {
@@ -65,6 +87,30 @@ class TestVitalsEndpoints:
 
 class TestPowertrainEndpoints:
     """Tests for powertrain API endpoints."""
+
+    def test_powertrain_analysis_not_found(self, client, db_session):
+        """GET /api/analytics/powertrain/<trip_id> returns 404 for missing trip."""
+        response = client.get("/api/analytics/powertrain/99999")
+        assert response.status_code == 404
+        data = json.loads(response.data)
+        assert "error" in data
+
+    def test_powertrain_analysis_db_error(self, client, db_session, mocker):
+        """GET /api/analytics/powertrain/<trip_id> handles DB errors."""
+        mocker.patch("routes.analytics.get_db", side_effect=Exception("DB error"))
+        response = client.get("/api/analytics/powertrain/1")
+        assert response.status_code == 500
+
+    def test_powertrain_summary_not_found(self, client, db_session):
+        """GET /api/analytics/powertrain/summary/<trip_id> returns 404."""
+        response = client.get("/api/analytics/powertrain/summary/99999")
+        assert response.status_code == 404
+
+    def test_powertrain_summary_db_error(self, client, db_session, mocker):
+        """GET /api/analytics/powertrain/summary/<trip_id> handles DB errors."""
+        mocker.patch("routes.analytics.get_db", side_effect=Exception("DB error"))
+        response = client.get("/api/analytics/powertrain/summary/1")
+        assert response.status_code == 500
 
     def test_powertrain_analysis_endpoint(self, client, db_session):
         """GET /api/analytics/powertrain/<trip_id> returns analysis."""
@@ -147,6 +193,12 @@ class TestPowertrainEndpoints:
 class TestRangePredictionEndpoints:
     """Tests for range prediction API endpoints."""
 
+    def test_range_prediction_db_error(self, client, db_session, mocker):
+        """GET /api/analytics/range-prediction handles DB errors."""
+        mocker.patch("routes.analytics.get_db", side_effect=Exception("DB error"))
+        response = client.get("/api/analytics/range-prediction")
+        assert response.status_code == 500
+
     def test_range_prediction_endpoint_default_params(self, client, db_session):
         """GET /api/analytics/range-prediction works with defaults."""
         # Add historical data
@@ -208,6 +260,18 @@ class TestRangePredictionEndpoints:
 
 class TestMaintenanceEndpoints:
     """Tests for maintenance tracking API endpoints."""
+
+    def test_maintenance_summary_db_error(self, client, db_session, mocker):
+        """GET /api/analytics/maintenance/summary handles DB errors."""
+        mocker.patch("routes.analytics.get_db", side_effect=Exception("DB error"))
+        response = client.get("/api/analytics/maintenance/summary")
+        assert response.status_code == 500
+
+    def test_maintenance_engine_hours_db_error(self, client, db_session, mocker):
+        """GET /api/analytics/maintenance/engine-hours handles DB errors."""
+        mocker.patch("routes.analytics.get_db", side_effect=Exception("DB error"))
+        response = client.get("/api/analytics/maintenance/engine-hours")
+        assert response.status_code == 500
 
     def test_maintenance_summary_endpoint(self, client, db_session):
         """GET /api/analytics/maintenance/summary returns all items."""

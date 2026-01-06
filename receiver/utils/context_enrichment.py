@@ -138,10 +138,11 @@ def get_battery_health_metrics(db: Session) -> Dict[str, Any]:
         avg_efficiency = None
 
     # Calculate average SOC drop per trip
+    # Trip model doesn't have end_soc, so we use soc_at_gas_transition if available
     soc_drops = []
     for trip in recent_trips:
-        if trip.start_soc is not None and trip.end_soc is not None:
-            soc_drops.append(trip.start_soc - trip.end_soc)
+        if trip.start_soc is not None and trip.soc_at_gas_transition is not None:
+            soc_drops.append(trip.start_soc - trip.soc_at_gas_transition)
 
     avg_soc_drop = sum(soc_drops) / len(soc_drops) if soc_drops else None
 
