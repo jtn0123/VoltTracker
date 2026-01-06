@@ -13,7 +13,54 @@ import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from models import BatteryHealthReading, MaintenanceRecord, Route, TelemetryRaw, Trip
+from models import BatteryHealthReading, MaintenanceRecord, Route, TelemetryRaw, Trip, WebVital
+
+
+class TestVitalsEndpoints:
+    """Tests for web vitals API endpoints."""
+
+    def test_vitals_post_success(self, client, db_session):
+        """POST /api/analytics/vitals records web vital."""
+        vital_data = {
+            "name": "LCP",
+            "value": 1234.5,
+            "rating": "good",
+            "navigationType": "navigate",
+            "url": "/dashboard",
+        }
+
+        response = client.post(
+            "/api/analytics/vitals",
+            json=vital_data,
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["status"] == "ok"
+        assert data["recorded"] == "LCP"
+
+        # Verify it was stored
+        vitals = db_session.query(WebVital).all()
+        assert len(vitals) == 1
+        assert vitals[0].name == "LCP"
+
+    def test_vitals_post_no_data(self, client, db_session):
+        """POST /api/analytics/vitals with no data returns 400."""
+        response = client.post(
+            "/api/analytics/vitals",
+            data="",
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
+
+    def test_vitals_options_request(self, client, db_session):
+        """OPTIONS /api/analytics/vitals returns 204."""
+        response = client.options("/api/analytics/vitals")
+        assert response.status_code == 204
 
 
 class TestPowertrainEndpoints:
