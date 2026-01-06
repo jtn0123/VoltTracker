@@ -21,6 +21,11 @@ from utils import (
     normalize_datetime,
 )
 from utils.context_enrichment import enrich_event_with_vehicle_context
+from utils.elevation import (
+    calculate_elevation_profile,
+    get_elevation_for_points,
+    sample_coordinates,
+)
 from utils.error_codes import ErrorCode, StructuredError
 from utils.weather import get_weather_for_location, get_weather_impact_factor
 from utils.wide_events import WideEvent
@@ -179,6 +184,62 @@ def fetch_trip_weather(trip: Trip, points: list) -> None:
         logger.exception(f"Unexpected error fetching weather for trip {trip.id}: {e}")
 
 
+def fetch_trip_elevation(trip: Trip, points: list) -> None:
+    """
+    Fetch elevation data for the trip GPS coordinates.
+
+    Samples GPS points to reduce API calls, then calculates elevation
+    gain/loss/net change.
+
+    Args:
+        trip: Trip to update
+        points: List of telemetry dicts (must have GPS data)
+    """
+    try:
+        # Extract GPS coordinates from telemetry
+        gps_points = [
+            (p["latitude"], p["longitude"])
+            for p in points
+            if p.get("latitude") and p.get("longitude")
+        ]
+
+        if len(gps_points) < 2:
+            logger.debug(f"Trip {trip.id}: Not enough GPS points for elevation ({len(gps_points)})")
+            return
+
+        # Sample coordinates to reduce API calls
+        max_samples = getattr(Config, "ELEVATION_SAMPLE_RATE", 25)
+        sampled = sample_coordinates(gps_points, max_samples=max_samples)
+
+        # Fetch elevations
+        elevations = get_elevation_for_points(sampled)
+        if not elevations:
+            logger.debug(f"Trip {trip.id}: Elevation API returned no data")
+            return
+
+        # Calculate profile
+        profile = calculate_elevation_profile(elevations)
+
+        # Update trip with elevation data
+        if elevations[0] is not None:
+            trip.elevation_start_m = elevations[0]
+        if elevations[-1] is not None:
+            trip.elevation_end_m = elevations[-1]
+        trip.elevation_gain_m = profile.get("total_gain_m")
+        trip.elevation_loss_m = profile.get("total_loss_m")
+        trip.elevation_net_change_m = profile.get("net_change_m")
+        trip.elevation_max_m = profile.get("max_elevation_m")
+        trip.elevation_min_m = profile.get("min_elevation_m")
+
+        logger.debug(
+            f"Elevation for trip {trip.id}: "
+            f"gain={trip.elevation_gain_m}m, loss={trip.elevation_loss_m}m"
+        )
+
+    except Exception as e:
+        logger.exception(f"Unexpected error fetching elevation for trip {trip.id}: {e}")
+
+
 def finalize_trip(db, trip: Trip):
     """
     Finalize a trip by calculating statistics.
@@ -209,6 +270,7 @@ def finalize_trip(db, trip: Trip):
         weather_integration=Config.FEATURE_WEATHER_INTEGRATION,
         enhanced_route_detection=Config.FEATURE_ENHANCED_ROUTE_DETECTION,
         predictive_range=Config.FEATURE_PREDICTIVE_RANGE,
+        elevation_tracking=Config.FEATURE_ELEVATION_TRACKING,
     )
 
     try:
@@ -293,6 +355,21 @@ def finalize_trip(db, trip: Trip):
                 weather_temp_f=trip.weather_temp_f,
                 weather_conditions=trip.weather_conditions,
                 weather_impact_factor=trip.weather_impact_factor,
+            )
+
+        # Fetch elevation data (if feature enabled)
+        if Config.FEATURE_ELEVATION_TRACKING:
+            with event.timer("fetch_elevation"):
+                fetch_trip_elevation(trip, points)
+        else:
+            event.add_technical_metric("elevation_skipped", True)
+
+        # Add elevation context
+        if trip.elevation_gain_m is not None:
+            event.add_context(
+                elevation_gain_m=trip.elevation_gain_m,
+                elevation_loss_m=trip.elevation_loss_m,
+                elevation_net_change_m=trip.elevation_net_change_m,
             )
 
         # Enrich event with vehicle context (loggingsucks.com progressive enrichment pattern)

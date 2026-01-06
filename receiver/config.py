@@ -45,6 +45,10 @@ class Config:
     FEATURE_ENHANCED_ROUTE_DETECTION = os.environ.get("FEATURE_ROUTE_DETECTION", "false").lower() == "true"
     FEATURE_WEATHER_INTEGRATION = os.environ.get("FEATURE_WEATHER", "true").lower() == "true"
     FEATURE_PREDICTIVE_RANGE = os.environ.get("FEATURE_PREDICTIVE_RANGE", "false").lower() == "true"
+    FEATURE_ELEVATION_TRACKING = os.environ.get("FEATURE_ELEVATION", "true").lower() == "true"
+
+    # Elevation API Configuration
+    ELEVATION_SAMPLE_RATE = int(os.environ.get("ELEVATION_SAMPLE_RATE", 25))  # Sample 1 in N GPS points
 
     # Volt-specific constants
     TANK_CAPACITY_GALLONS = 9.3122  # Gen 2 Volt tank capacity

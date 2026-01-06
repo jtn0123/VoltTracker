@@ -142,6 +142,9 @@ class TelemetryRaw(Base):
     dte_electric_miles = Column(Float)
     dte_gas_miles = Column(Float)
 
+    # Elevation (populated by elevation API during trip finalization)
+    elevation_meters = Column(Float)
+
     raw_data = Column(JSONType())
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
@@ -252,6 +255,15 @@ class Trip(Base):
     weather_conditions = Column(String(50))
     weather_impact_factor = Column(Float)  # Estimated efficiency impact multiplier
 
+    # Elevation data (from Open-Meteo Elevation API)
+    elevation_start_m = Column(Float)  # Starting elevation in meters
+    elevation_end_m = Column(Float)  # Ending elevation in meters
+    elevation_gain_m = Column(Float)  # Total elevation gained (sum of climbs)
+    elevation_loss_m = Column(Float)  # Total elevation lost (sum of descents)
+    elevation_net_change_m = Column(Float)  # Net change (end - start)
+    elevation_max_m = Column(Float)  # Maximum elevation during trip
+    elevation_min_m = Column(Float)  # Minimum elevation during trip
+
     # Relationships
     soc_transitions = relationship("SocTransition", back_populates="trip")
 
@@ -282,6 +294,13 @@ class Trip(Base):
             "weather_wind_mph": self.weather_wind_mph,
             "weather_conditions": self.weather_conditions,
             "weather_impact_factor": self.weather_impact_factor,
+            "elevation_start_m": self.elevation_start_m,
+            "elevation_end_m": self.elevation_end_m,
+            "elevation_gain_m": self.elevation_gain_m,
+            "elevation_loss_m": self.elevation_loss_m,
+            "elevation_net_change_m": self.elevation_net_change_m,
+            "elevation_max_m": self.elevation_max_m,
+            "elevation_min_m": self.elevation_min_m,
         }
 
 
@@ -699,6 +718,11 @@ class Route(Base):
     last_traveled = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
+    # Elevation data
+    elevation_profile = Column(JSONType())  # Cached elevation profile
+    avg_elevation_gain_m = Column(Float)
+    avg_elevation_loss_m = Column(Float)
+
     def to_dict(self):
         """Convert to dictionary for JSON serialization."""
         return {
@@ -713,6 +737,8 @@ class Route(Base):
             "best_efficiency": self.best_efficiency,
             "worst_efficiency": self.worst_efficiency,
             "last_traveled": self.last_traveled.isoformat() if self.last_traveled else None,
+            "avg_elevation_gain_m": self.avg_elevation_gain_m,
+            "avg_elevation_loss_m": self.avg_elevation_loss_m,
         }
 
 

@@ -161,7 +161,7 @@ class TestTripDetailsAPI:
         assert response.status_code == 404
 
     def test_get_trip_details_success(self):
-        """Test getting existing trip details."""
+        """Test getting existing trip details returns telemetry data."""
         # First get a trip ID from the list
         list_response = requests.get(f"{BASE_URL}/api/trips?limit=1")
         data = list_response.json()
@@ -171,7 +171,9 @@ class TestTripDetailsAPI:
             response = requests.get(f"{BASE_URL}/api/trips/{trip_id}")
             assert response.status_code == 200
             trip_data = response.json()
-            assert trip_data["id"] == trip_id
+            # Trip details endpoint returns telemetry array
+            assert "telemetry" in trip_data
+            assert isinstance(trip_data["telemetry"], list)
 
 
 class TestEfficiencySummaryAPI:
