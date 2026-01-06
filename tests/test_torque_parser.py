@@ -165,3 +165,165 @@ class TestTorqueParser:
         assert TorqueParser._celsius_to_fahrenheit(100) == 212
         assert TorqueParser._celsius_to_fahrenheit(-40) == -40
         assert TorqueParser._celsius_to_fahrenheit(20) == pytest.approx(68, abs=0.1)
+
+    def test_parse_odometer_km_conversion(self):
+        """Test odometer conversion from km to miles."""
+        data = {
+            "k21": "50000",  # Odometer km
+            "session": "test-session",
+            "time": "1609459200000",
+        }
+        result = TorqueParser.parse(data)
+        # 50000 km * 0.621371 = 31068.55 miles
+        assert result["odometer_miles"] == pytest.approx(31068.55, abs=0.1)
+
+    def test_parse_invalid_timestamp(self):
+        """Test handling of invalid timestamp."""
+        data = {
+            "kff1006": "37.7749",  # GPS Latitude
+            "session": "test-session",
+            "time": "invalid",  # Invalid timestamp
+        }
+        result = TorqueParser.parse(data)
+        # Should use current time
+        assert result["timestamp"] is not None
+
+    def test_parse_hv_battery_fields(self):
+        """Test parsing HV battery related PIDs."""
+        data = {
+            "k22000b": "15.5",  # HV battery power kW
+            "k22000a": "45.2",  # HV battery current A
+            "k220009": "350.5",  # HV battery voltage V
+            "k222414": "50.0",  # HV discharge amps
+            "k22434f": "25.0",  # Battery temp C
+            "k220038": "22.0",  # Battery coolant temp C
+            "session": "test-session",
+            "time": "1609459200000",
+        }
+        result = TorqueParser.parse(data)
+        assert result["hv_battery_power_kw"] == 15.5
+        assert result["hv_battery_current_a"] == 45.2
+        assert result["hv_battery_voltage_v"] == 350.5
+        assert result["hv_discharge_amps"] == 50.0
+        assert result["battery_temp_f"] == pytest.approx(77.0, abs=0.1)
+        assert result["battery_coolant_temp_f"] == pytest.approx(71.6, abs=0.1)
+
+    def test_parse_charger_fields(self):
+        """Test parsing charger related PIDs."""
+        data = {
+            "k220057": "1",  # Charger status
+            "k22006e": "3.3",  # Charger power kW
+            "k224368": "240",  # Charger AC voltage
+            "k224369": "15",  # Charger AC current
+            "k22436b": "360",  # Charger HV voltage
+            "k22436c": "10",  # Charger HV current
+            "k22437d": "5500",  # Last charge Wh
+            "session": "test-session",
+            "time": "1609459200000",
+        }
+        result = TorqueParser.parse(data)
+        assert result["charger_status"] == 1
+        assert result["charger_connected"] is True
+        assert result["charger_power_kw"] == 3.3
+        assert result["charger_ac_power_kw"] == 3.3
+        assert result["charger_ac_voltage"] == 240
+        assert result["charger_ac_current"] == 15
+        assert result["charger_hv_voltage"] == 360
+        assert result["charger_hv_current"] == 10
+        assert result["last_charge_wh"] == 5500
+
+    def test_parse_charger_power_watts(self):
+        """Test charger power in watts converts to kW."""
+        data = {
+            "k224373": "3300",  # Charger power W
+            "session": "test-session",
+            "time": "1609459200000",
+        }
+        result = TorqueParser.parse(data)
+        assert result["charger_power_w"] == 3300
+        assert result["charger_power_kw"] == 3.3
+        assert result["charger_ac_power_kw"] == 3.3
+
+    def test_parse_motor_generator_rpms(self):
+        """Test parsing motor and generator RPMs."""
+        data = {
+            "k220051": "2500",  # Motor A RPM
+            "k220052": "2300",  # Motor B RPM
+            "k220053": "1800",  # Generator RPM
+            "session": "test-session",
+            "time": "1609459200000",
+        }
+        result = TorqueParser.parse(data)
+        assert result["motor_a_rpm"] == 2500
+        assert result["motor_b_rpm"] == 2300
+        assert result["generator_rpm"] == 1800
+
+    def test_parse_motor_temperatures(self):
+        """Test parsing motor temperatures and finding max."""
+        data = {
+            "k221570": "55",  # Motor temp 1 C
+            "k221571": "60",  # Motor temp 2 C
+            "k221572": "58",  # Motor temp 3 C
+            "k221573": "62",  # Motor temp 4 C
+            "session": "test-session",
+            "time": "1609459200000",
+        }
+        result = TorqueParser.parse(data)
+        # Max is 62C = 143.6F
+        assert result["motor_temp_max_f"] == pytest.approx(143.6, abs=0.1)
+
+    def test_parse_engine_details(self):
+        """Test parsing engine related PIDs."""
+        data = {
+            "k221154": "95",  # Engine oil temp C
+            "k22203f": "150",  # Engine torque Nm
+            "k221930": "1",  # Engine running
+            "k220049": "88",  # Engine coolant temp C (Volt-specific)
+            "k220047": "75",  # Transmission temp C
+            "session": "test-session",
+            "time": "1609459200000",
+        }
+        result = TorqueParser.parse(data)
+        assert result["engine_oil_temp_f"] == pytest.approx(203, abs=1)
+        assert result["engine_torque_nm"] == 150
+        assert result["engine_running"] is True
+        assert result["coolant_temp_f"] == pytest.approx(190.4, abs=1)
+        assert result["transmission_temp_f"] == pytest.approx(167, abs=1)
+
+    def test_parse_battery_capacity(self):
+        """Test parsing battery capacity kWh."""
+        data = {
+            "k2241a3": "18.4",  # Battery capacity kWh
+            "session": "test-session",
+            "time": "1609459200000",
+        }
+        result = TorqueParser.parse(data)
+        assert result["battery_capacity_kwh"] == 18.4
+
+    def test_parse_lifetime_counters(self):
+        """Test parsing lifetime counter PIDs."""
+        data = {
+            "k224322": "25000",  # Lifetime EV miles
+            "k224323": "15000",  # Lifetime gas miles
+            "k224324": "450.5",  # Lifetime fuel gallons
+            "k224325": "5500",  # Lifetime kWh
+            "session": "test-session",
+            "time": "1609459200000",
+        }
+        result = TorqueParser.parse(data)
+        assert result["lifetime_ev_miles"] == 25000
+        assert result["lifetime_gas_miles"] == 15000
+        assert result["lifetime_fuel_gal"] == 450.5
+        assert result["lifetime_kwh"] == 5500
+
+    def test_parse_dte_fields(self):
+        """Test parsing distance to empty fields."""
+        data = {
+            "k22430a": "35",  # DTE electric miles
+            "k22430c": "250",  # DTE gas miles
+            "session": "test-session",
+            "time": "1609459200000",
+        }
+        result = TorqueParser.parse(data)
+        assert result["dte_electric_miles"] == 35
+        assert result["dte_gas_miles"] == 250
