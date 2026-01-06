@@ -48,7 +48,7 @@ class TestPowertrainEndpoints:
             db_session.add(telemetry)
         db_session.commit()
 
-        response = client.get(f"/api/analytics/powertrain/{str(session_id)}")
+        response = client.get(f"/api/analytics/powertrain/{trip.id}")
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -83,7 +83,7 @@ class TestPowertrainEndpoints:
             db_session.add(telemetry)
         db_session.commit()
 
-        response = client.get(f"/api/analytics/powertrain/summary/{str(session_id)}")
+        response = client.get(f"/api/analytics/powertrain/summary/{trip.id}")
 
         assert response.status_code == 200
         data = json.loads(response.data)
@@ -452,7 +452,7 @@ class TestEndpointPerformance:
             db_session.add(telemetry)
         db_session.commit()
 
-        response = client.get(f"/api/analytics/powertrain/{str(session_id)}")
+        response = client.get(f"/api/analytics/powertrain/{trip.id}")
 
         assert response.status_code == 200
         # Should complete in reasonable time

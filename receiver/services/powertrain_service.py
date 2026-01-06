@@ -47,32 +47,34 @@ def detect_operating_mode(
     """
     # Thresholds
     MOTOR_ACTIVE_THRESHOLD = 100  # RPM
+    MOTOR_B_SIGNIFICANT_THRESHOLD = 1500  # RPM for hybrid assist
     ENGINE_ACTIVE_THRESHOLD = 400  # RPM
     GENERATOR_ACTIVE_THRESHOLD = 100  # RPM
 
     motor_a_active = motor_a_rpm and motor_a_rpm > MOTOR_ACTIVE_THRESHOLD
     motor_b_active = motor_b_rpm and motor_b_rpm > MOTOR_ACTIVE_THRESHOLD
+    motor_b_significant = motor_b_rpm and motor_b_rpm > MOTOR_B_SIGNIFICANT_THRESHOLD
     generator_active = generator_rpm and generator_rpm > GENERATOR_ACTIVE_THRESHOLD
     engine_active = engine_rpm and engine_rpm > ENGINE_ACTIVE_THRESHOLD
 
-    # EV Mode: Motors only, no engine
-    if motor_a_active and not engine_active and not generator_active:
+    # EV Mode: Motors active, no engine (generator may spin during regen/coasting)
+    if motor_a_active and not engine_active:
         return PowertrainMode.EV_MODE
 
-    # Hold Mode: Engine and generator running, motors active
+    # Hybrid Assist: All systems active with motor B providing significant power
+    if motor_a_active and motor_b_significant and engine_active and generator_active:
+        return PowertrainMode.HYBRID_ASSIST
+
+    # Hold/Mountain Mode: Engine and generator running, motor A active
     if motor_a_active and engine_active and generator_active:
         # Check if battery is charging (Mountain mode)
-        if hv_battery_power_kw and hv_battery_power_kw < -1.0:  # Charging
+        if hv_battery_power_kw and hv_battery_power_kw <= -1.0:  # Charging at 1kW or more
             return PowertrainMode.MOUNTAIN_MODE
         return PowertrainMode.HOLD_MODE
 
     # Engine Direct: Engine running, motor B only (high speed)
     if not motor_a_active and motor_b_active and engine_active:
         return PowertrainMode.ENGINE_DIRECT
-
-    # Hybrid Assist: All systems active
-    if motor_a_active and motor_b_active and engine_active and generator_active:
-        return PowertrainMode.HYBRID_ASSIST
 
     return PowertrainMode.UNKNOWN
 
@@ -154,10 +156,11 @@ def analyze_trip_powertrain(db: Session, session_id: str) -> Dict:
     return {
         "session_id": session_id,
         "timeline": timeline,
+        "total_samples": len(telemetry),
+        "mode_percentages": mode_percentages,
         "statistics": {
             "duration_seconds": mode_durations,
             "percentages": mode_percentages,
-            "total_points": len(telemetry),
             "transitions": len(transitions),
         },
         "transitions": transitions,
@@ -186,10 +189,14 @@ def get_powertrain_summary(db: Session, trip_id: int) -> Optional[Dict]:
 
     analysis = analyze_trip_powertrain(db, str(trip.session_id))
 
+    if "error" in analysis:
+        return None
+
     return {
         "trip_id": trip_id,
         "session_id": str(trip.session_id),
         "mode_percentages": analysis["statistics"]["percentages"],
         "primary_mode": max(analysis["statistics"]["percentages"].items(), key=lambda x: x[1])[0],
         "transitions": analysis["statistics"]["transitions"],
+        "total_samples": analysis["total_samples"],
     }
