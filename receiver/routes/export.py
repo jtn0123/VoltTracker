@@ -19,6 +19,9 @@ from services.trip_service import finalize_trip
 from sqlalchemy import desc, func
 from utils import utc_now
 
+# Import limiter for rate limiting sensitive endpoints
+from app import limiter
+
 # Backup directory for imported CSV files
 CSV_BACKUP_DIR = Path(os.environ.get("CSV_BACKUP_DIR", "/app/backups/csv-imports"))
 
@@ -164,22 +167,64 @@ def export_fuel():
 
 
 @export_bp.route("/export/all", methods=["GET"])
+@limiter.limit("10 per hour")  # Limit bulk exports to prevent abuse
 def export_all():
     """
-    Export all data as JSON for backup.
+    Export data as JSON for backup with optional date range filtering.
+
+    Query parameters:
+        start_date: Start date (ISO format, optional)
+        end_date: End date (ISO format, optional)
+        limit: Max records per table (default 10000, optional)
 
     Returns trips, fuel events, SOC transitions, charging sessions, and summary stats.
     """
+    from datetime import datetime
+
     db = get_db()
 
-    trips = db.query(Trip).order_by(desc(Trip.start_time)).all()
-    fuel_events = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp)).all()
-    soc_transitions = db.query(SocTransition).order_by(SocTransition.timestamp).all()
-    charging_sessions = db.query(ChargingSession).order_by(desc(ChargingSession.start_time)).all()
+    # Parse date range filters
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    limit = min(int(request.args.get("limit", 10000)), 50000)  # Max 50k records per table
+
+    # Build queries with optional filters
+    trip_query = db.query(Trip).order_by(desc(Trip.start_time))
+    fuel_query = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp))
+    soc_query = db.query(SocTransition).order_by(SocTransition.timestamp)
+    charging_query = db.query(ChargingSession).order_by(desc(ChargingSession.start_time))
+
+    # Apply date filters if provided
+    if start_date:
+        try:
+            start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            trip_query = trip_query.filter(Trip.start_time >= start_dt)
+            fuel_query = fuel_query.filter(FuelEvent.timestamp >= start_dt)
+            soc_query = soc_query.filter(SocTransition.timestamp >= start_dt)
+            charging_query = charging_query.filter(ChargingSession.start_time >= start_dt)
+        except ValueError:
+            return jsonify({"error": "Invalid start_date format. Use ISO 8601 format."}), 400
+
+    if end_date:
+        try:
+            end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+            trip_query = trip_query.filter(Trip.start_time <= end_dt)
+            fuel_query = fuel_query.filter(FuelEvent.timestamp <= end_dt)
+            soc_query = soc_query.filter(SocTransition.timestamp <= end_dt)
+            charging_query = charging_query.filter(ChargingSession.start_time <= end_dt)
+        except ValueError:
+            return jsonify({"error": "Invalid end_date format. Use ISO 8601 format."}), 400
+
+    # Apply limit and fetch
+    trips = trip_query.limit(limit).all()
+    fuel_events = fuel_query.limit(limit).all()
+    soc_transitions = soc_query.limit(limit).all()
+    charging_sessions = charging_query.limit(limit).all()
 
     return jsonify(
         {
             "exported_at": utc_now().isoformat(),
+            "filters": {"start_date": start_date, "end_date": end_date, "limit": limit},
             "trips": [t.to_dict() for t in trips],
             "fuel_events": [e.to_dict() for e in fuel_events],
             "soc_transitions": [s.to_dict() for s in soc_transitions],
@@ -239,6 +284,7 @@ Ambient Air Temp,AmbTemp,22004F,(A-40),-40,100,C,7E4
 
 
 @export_bp.route("/import/csv", methods=["POST"])
+@limiter.limit("5 per hour")  # Limit CSV imports (resource-intensive operation)
 def import_csv():
     """
     Import telemetry data from a Torque Pro CSV log file.

@@ -27,9 +27,13 @@ MAX_RETRIES = 2  # Reduce retries to minimize blocking time
 RETRY_DELAY_SECONDS = 0.5  # Short delay between retries
 WEATHER_API_TIMEOUT = 3  # Default timeout per request (seconds)
 
-# Simple in-memory cache for weather data
+# Simple in-memory cache for weather data with LRU eviction
 # Key: (lat_rounded, lon_rounded, datetime_hour_str) -> Value: (data, timestamp)
-_weather_cache: Dict[tuple, tuple] = {}
+# Max size: 1000 entries (~1 month of unique location+hour combinations)
+from collections import OrderedDict
+
+_weather_cache: OrderedDict = OrderedDict()
+MAX_WEATHER_CACHE_SIZE = 1000  # Limit to prevent memory leak
 
 
 def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optional[Dict[str, Any]]:
@@ -196,18 +200,24 @@ def get_weather_for_location(
         normalized_timestamp.strftime("%Y-%m-%d-%H") if normalized_timestamp else None
     )
 
-    # Check cache
+    # Check cache with LRU behavior
     current_time = time.time()
     if cache_key in _weather_cache:
         cached_data, cache_timestamp = _weather_cache[cache_key]
         age_seconds = current_time - cache_timestamp
 
         if age_seconds < Config.WEATHER_CACHE_TIMEOUT_SECONDS:
+            # Move to end (LRU: mark as recently used)
+            _weather_cache.move_to_end(cache_key)
             logger.debug(
                 f"Weather cache hit for ({latitude:.2f}, {longitude:.2f}) "
                 f"at {normalized_timestamp.strftime('%Y-%m-%d %H:00')} (age: {age_seconds:.0f}s)"
             )
             return cached_data
+        else:
+            # Expired entry - remove it
+            del _weather_cache[cache_key]
+            logger.debug(f"Weather cache expired for ({latitude:.2f}, {longitude:.2f})")
 
     # Cache miss or expired - fetch from API
     # Determine if we need historical or forecast API
@@ -222,10 +232,20 @@ def get_weather_for_location(
             # Use forecast API for recent/current data
             data = _get_forecast_weather(latitude, longitude, timestamp, timeout)
 
-        # Cache successful result
+        # Cache successful result with LRU eviction
         if data is not None:
+            # Remove oldest entry if cache is full (LRU eviction)
+            if len(_weather_cache) >= MAX_WEATHER_CACHE_SIZE:
+                _weather_cache.popitem(last=False)  # Remove oldest (FIFO)
+
+            # Add new entry (moves to end in OrderedDict)
             _weather_cache[cache_key] = (data, current_time)
-            logger.debug(f"Weather cached for ({latitude:.2f}, {longitude:.2f}) at {normalized_timestamp.strftime('%Y-%m-%d %H:00')}")
+            _weather_cache.move_to_end(cache_key)  # Ensure it's at the end
+            logger.debug(
+                f"Weather cached for ({latitude:.2f}, {longitude:.2f}) "
+                f"at {normalized_timestamp.strftime('%Y-%m-%d %H:00')} "
+                f"(cache size: {len(_weather_cache)}/{MAX_WEATHER_CACHE_SIZE})"
+            )
 
         return data
 

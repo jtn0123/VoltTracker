@@ -132,9 +132,23 @@ limiter = Limiter(
 )
 
 
+@app.before_request
+def inject_request_id():
+    """Inject unique request ID for distributed tracing."""
+    import uuid
+
+    from flask import g, request
+
+    # Check if client provided X-Request-ID header, otherwise generate new one
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    g.request_id = request_id
+
+
 @app.after_request
 def add_security_headers(response):
-    """Add security headers to all responses."""
+    """Add security headers and request ID to all responses."""
+    from flask import g
+
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["X-XSS-Protection"] = "1; mode=block"
@@ -143,6 +157,11 @@ def add_security_headers(response):
     # Add HSTS in production (when not in debug mode)
     if not app.debug:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    # Add request ID to response headers for tracing
+    if hasattr(g, "request_id"):
+        response.headers["X-Request-ID"] = g.request_id
+
     return response
 
 
@@ -210,6 +229,73 @@ register_blueprints(app)
 # Apply rate limiting exemption to torque upload endpoint
 # (done after blueprint registration)
 limiter.exempt(telemetry_bp)
+
+
+# ============================================================================
+# Health Check Endpoints (Kubernetes/Docker)
+# ============================================================================
+
+
+@app.route("/health", methods=["GET"])
+@app.route("/healthz", methods=["GET"])  # Alternative naming
+def health_check():
+    """
+    Liveness probe - basic check that app is running.
+
+    Returns 200 if the application is alive (can handle requests).
+    Does not check external dependencies like database.
+    """
+    return {"status": "healthy", "service": "volttracker"}, 200
+
+
+@app.route("/ready", methods=["GET"])
+@app.route("/readiness", methods=["GET"])  # Alternative naming
+def readiness_check():
+    """
+    Readiness probe - check if app is ready to serve traffic.
+
+    Tests:
+    - Database connectivity
+    - Scheduler status (if running)
+
+    Returns 200 if ready, 503 if not ready.
+    """
+    from database import SessionLocal
+    from sqlalchemy import text
+
+    checks = {"database": False, "scheduler": False}
+    errors = []
+
+    # Check database connectivity
+    try:
+        db = SessionLocal()
+        # Simple query to verify connection
+        db.execute(text("SELECT 1"))
+        db.close()
+        checks["database"] = True
+    except Exception as e:
+        errors.append(f"Database: {str(e)[:100]}")
+
+    # Check scheduler status (if not in testing mode)
+    if not os.environ.get("FLASK_TESTING"):
+        from services.scheduler import scheduler as sched
+
+        if sched and sched.running:
+            checks["scheduler"] = True
+        else:
+            errors.append("Scheduler: not running")
+    else:
+        checks["scheduler"] = True  # Skip check in testing
+
+    # All checks must pass
+    all_healthy = all(checks.values())
+
+    response = {"status": "ready" if all_healthy else "not_ready", "checks": checks}
+
+    if errors:
+        response["errors"] = errors
+
+    return response, 200 if all_healthy else 503
 
 
 # Initialize background scheduler

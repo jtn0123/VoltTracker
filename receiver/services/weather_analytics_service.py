@@ -9,6 +9,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+from config import Config
 from sqlalchemy import and_, case, extract, func, literal_column
 from sqlalchemy.orm import Session
 
@@ -28,24 +29,9 @@ def _get_stddev_func(column):
 
 logger = logging.getLogger(__name__)
 
-# Temperature band definitions (Fahrenheit)
-TEMP_BANDS = [
-    ("freezing", None, 32),
-    ("cold", 32, 45),
-    ("cool", 45, 55),
-    ("ideal", 55, 75),
-    ("warm", 75, 85),
-    ("hot", 85, 95),
-    ("very_hot", 95, None),
-]
-
-# Wind speed bands (MPH)
-WIND_BANDS = [
-    ("calm", None, 5),
-    ("light", 5, 15),
-    ("moderate", 15, 25),
-    ("strong", 25, None),
-]
+# Use analytics constants from Config (configurable via environment)
+TEMP_BANDS = Config.ANALYTICS_TEMP_BANDS
+WIND_BANDS = Config.ANALYTICS_WIND_BANDS
 
 # Baseline efficiency for comparison (ideal conditions)
 BASELINE_KWH_PER_MILE = 0.32
