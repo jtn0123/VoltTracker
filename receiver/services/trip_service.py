@@ -153,43 +153,138 @@ def calculate_electric_efficiency(trip: Trip, points: list) -> None:
 
 def fetch_trip_weather(trip: Trip, points: list) -> None:
     """
-    Fetch weather data for the trip location and time.
+    Fetch weather data for the trip by sampling every 15 minutes and averaging.
+
+    Instead of using just the start time weather, this samples weather conditions
+    every 15 minutes throughout the trip duration and averages them to get
+    trip-representative weather data.
 
     Args:
         trip: Trip to update
-        points: List of telemetry dicts (must have GPS data)
+        points: List of telemetry dicts (must have GPS data and timestamps)
     """
-    gps_point = None
+    from datetime import datetime, timedelta
+    import statistics
+
+    sample_location = None
     try:
         import requests
 
-        # Find first point with GPS coordinates
-        gps_point = next((p for p in points if p.get("latitude") and p.get("longitude")), None)
-        if gps_point and trip.start_time:
-            weather = get_weather_for_location(gps_point["latitude"], gps_point["longitude"], trip.start_time)
+        # Filter points with GPS coordinates
+        gps_points = [p for p in points if p.get("latitude") and p.get("longitude") and p.get("timestamp")]
+
+        if not gps_points or not trip.start_time or not trip.end_time:
+            logger.debug(f"Trip {trip.id}: Insufficient data for weather sampling")
+            return
+
+        # Sample weather at configured interval (default: every 15 minutes)
+        SAMPLE_INTERVAL_MINUTES = Config.WEATHER_SAMPLE_INTERVAL_MINUTES
+        weather_samples = []
+
+        # Calculate trip duration
+        trip_duration = (trip.end_time - trip.start_time).total_seconds() / 60  # minutes
+
+        # If trip is very short (<15 min), just sample at start and end
+        if trip_duration < SAMPLE_INTERVAL_MINUTES:
+            sample_times = [trip.start_time, trip.end_time]
+        else:
+            # Create sample times every 15 minutes
+            sample_times = []
+            current_time = trip.start_time
+            while current_time <= trip.end_time:
+                sample_times.append(current_time)
+                current_time += timedelta(minutes=SAMPLE_INTERVAL_MINUTES)
+
+            # Always include the end time if not already included
+            if sample_times[-1] < trip.end_time:
+                sample_times.append(trip.end_time)
+
+        logger.debug(f"Trip {trip.id}: Sampling weather at {len(sample_times)} time points")
+
+        # For each sample time, find the nearest GPS point and fetch weather
+        for sample_time in sample_times:
+            # Find closest GPS point to this sample time
+            closest_point = min(
+                gps_points,
+                key=lambda p: abs((datetime.fromisoformat(p["timestamp"]) - sample_time).total_seconds())
+            )
+
+            sample_location = closest_point  # Track for error reporting
+
+            # Fetch weather for this point
+            weather = get_weather_for_location(
+                closest_point["latitude"],
+                closest_point["longitude"],
+                sample_time
+            )
+
             if weather:
-                trip.weather_temp_f = weather.get("temperature_f")
-                trip.weather_precipitation_in = weather.get("precipitation_in")
-                trip.weather_wind_mph = weather.get("wind_speed_mph")
-                trip.weather_conditions = weather.get("conditions")
-                trip.weather_impact_factor = get_weather_impact_factor(weather)
+                weather_samples.append(weather)
                 logger.debug(
-                    f"Weather for trip {trip.id}: " f"{weather.get('conditions')}, {weather.get('temperature_f')}°F"
+                    f"Trip {trip.id}: Weather sample at {sample_time.strftime('%H:%M')}: "
+                    f"{weather.get('temperature_f')}°F, {weather.get('conditions')}"
                 )
+
+        # If we got at least one weather sample, calculate averages
+        if weather_samples:
+            # Average temperature
+            temps = [w.get("temperature_f") for w in weather_samples if w.get("temperature_f") is not None]
+            trip.weather_temp_f = round(statistics.mean(temps), 1) if temps else None
+
+            # Average precipitation (sum it up - it's cumulative)
+            precips = [w.get("precipitation_in", 0) for w in weather_samples if w.get("precipitation_in") is not None]
+            trip.weather_precipitation_in = round(sum(precips) / len(precips), 2) if precips else None
+
+            # Average wind speed
+            winds = [w.get("wind_speed_mph") for w in weather_samples if w.get("wind_speed_mph") is not None]
+            trip.weather_wind_mph = round(statistics.mean(winds), 1) if winds else None
+
+            # Use the most common weather condition, or worst condition if tied
+            condition_counts = {}
+            for w in weather_samples:
+                cond = w.get("conditions")
+                if cond:
+                    condition_counts[cond] = condition_counts.get(cond, 0) + 1
+
+            if condition_counts:
+                # Sort by count (descending), then by severity (rain > cloudy > clear)
+                severity_order = {"Heavy Rain": 5, "Rain": 4, "Light Rain": 3, "Cloudy": 2, "Partly Cloudy": 1, "Clear": 0}
+                trip.weather_conditions = max(
+                    condition_counts.keys(),
+                    key=lambda c: (condition_counts[c], severity_order.get(c, 0))
+                )
+
+            # Calculate average impact factor
+            impact_factors = []
+            for w in weather_samples:
+                impact = get_weather_impact_factor(w)
+                if impact:
+                    impact_factors.append(impact)
+
+            trip.weather_impact_factor = round(statistics.mean(impact_factors), 3) if impact_factors else None
+
+            logger.info(
+                f"Trip {trip.id}: Averaged weather from {len(weather_samples)} samples - "
+                f"{trip.weather_temp_f}°F, {trip.weather_conditions}, "
+                f"impact factor: {trip.weather_impact_factor}"
+            )
+        else:
+            logger.warning(f"Trip {trip.id}: No weather samples collected")
+
     except requests.RequestException as e:
         # Catch all requests-related exceptions (includes ConnectionError, Timeout, HTTPError, etc.)
         error = WeatherAPIError(
             f"Failed to fetch weather for trip {trip.id}: {e}",
-            latitude=gps_point.get("latitude") if gps_point else None,
-            longitude=gps_point.get("longitude") if gps_point else None,
+            latitude=sample_location.get("latitude") if sample_location else None,
+            longitude=sample_location.get("longitude") if sample_location else None,
         )
         logger.warning(str(error))
     except (ValueError, KeyError, TypeError) as e:
         # Catch data parsing errors
         error = WeatherAPIError(
             f"Failed to parse weather data for trip {trip.id}: {e}",
-            latitude=gps_point.get("latitude") if gps_point else None,
-            longitude=gps_point.get("longitude") if gps_point else None,
+            latitude=sample_location.get("latitude") if sample_location else None,
+            longitude=sample_location.get("longitude") if sample_location else None,
         )
         logger.warning(str(error))
     except Exception as e:
