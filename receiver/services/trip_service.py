@@ -5,6 +5,7 @@ Handles trip finalization logic, calculating statistics for completed trips.
 """
 
 import logging
+import time
 from datetime import datetime
 
 from config import Config
@@ -20,6 +21,7 @@ from utils import (
     normalize_datetime,
 )
 from utils.weather import get_weather_for_location, get_weather_impact_factor
+from utils.wide_events import WideEvent
 
 logger = logging.getLogger(__name__)
 
@@ -189,34 +191,105 @@ def finalize_trip(db, trip: Trip):
         db: Database session
         trip: Trip to finalize
     """
-    # Get all telemetry for this trip
-    telemetry = (
-        db.query(TelemetryRaw).filter(TelemetryRaw.session_id == trip.session_id).order_by(TelemetryRaw.timestamp).all()
+    start_time = time.time()
+
+    # Initialize wide event for comprehensive logging
+    event = WideEvent("trip_finalization")
+    event.add_context(
+        trip_id=trip.id,
+        session_id=str(trip.session_id),
+        start_odometer=trip.start_odometer,
+        start_soc=trip.start_soc,
     )
 
-    if not telemetry:
+    try:
+        # Get all telemetry for this trip
+        telemetry = (
+            db.query(TelemetryRaw)
+            .filter(TelemetryRaw.session_id == trip.session_id)
+            .order_by(TelemetryRaw.timestamp)
+            .all()
+        )
+
+        event.add_business_metric("telemetry_points", len(telemetry))
+
+        if not telemetry:
+            trip.is_closed = True
+            event.add_context(no_telemetry=True)
+            event.mark_failure("no_telemetry_data")
+            duration_ms = (time.time() - start_time) * 1000
+            event.context["duration_ms"] = round(duration_ms, 2)
+            event.emit(level="warning", force=True)
+            return
+
+        # Convert to dicts for calculation functions
+        points = [t.to_dict() for t in telemetry]
+
+        # Calculate basic trip metrics
+        calculate_trip_basics(trip, telemetry)
+
+        # Add trip metrics to event
+        event.add_context(
+            end_odometer=trip.end_odometer,
+            distance_miles=trip.distance_miles,
+            avg_temp_f=trip.ambient_temp_avg_f,
+        )
+
+        # Process gas mode entry and related calculations
+        process_gas_mode(db, trip, telemetry, points)
+
+        # Add gas mode context
+        event.add_context(
+            gas_mode_entered=trip.gas_mode_entered,
+            electric_miles=trip.electric_miles,
+            gas_miles=trip.gas_miles,
+        )
+
+        if trip.gas_mode_entered:
+            event.add_business_metric("soc_at_gas_transition", trip.soc_at_gas_transition)
+            event.add_business_metric("gas_mpg", trip.gas_mpg)
+            event.add_business_metric("fuel_used_gallons", trip.fuel_used_gallons)
+
+        # Calculate electric efficiency
+        calculate_electric_efficiency(trip, points)
+
+        # Add efficiency metrics
+        event.add_business_metric("electric_kwh_used", trip.electric_kwh_used)
+        event.add_business_metric("kwh_per_mile", trip.kwh_per_mile)
+
+        # Fetch weather data
+        fetch_trip_weather(trip, points)
+
+        # Add weather context
+        if trip.weather_temp_f:
+            event.add_context(
+                weather_temp_f=trip.weather_temp_f,
+                weather_conditions=trip.weather_conditions,
+                weather_impact_factor=trip.weather_impact_factor,
+            )
+
+        # Mark trip as complete
         trip.is_closed = True
-        return
 
-    # Convert to dicts for calculation functions
-    points = [t.to_dict() for t in telemetry]
+        # Calculate duration and mark success
+        duration_ms = (time.time() - start_time) * 1000
+        event.context["duration_ms"] = round(duration_ms, 2)
+        event.mark_success()
 
-    # Calculate basic trip metrics
-    calculate_trip_basics(trip, telemetry)
+        # Emit comprehensive wide event (always emit trip finalization events)
+        event.emit(force=True)
 
-    # Process gas mode entry and related calculations
-    process_gas_mode(db, trip, telemetry, points)
+        logger.info(
+            f"Trip {trip.id} finalized: {(trip.distance_miles or 0):.1f} mi "
+            f"(electric: {(trip.electric_miles or 0):.1f}, gas: {(trip.gas_miles or 0):.1f}, "
+            f"MPG: {trip.gas_mpg or 'N/A'}, kWh/mi: {trip.kwh_per_mile or 'N/A'})"
+        )
 
-    # Calculate electric efficiency
-    calculate_electric_efficiency(trip, points)
-
-    # Fetch weather data
-    fetch_trip_weather(trip, points)
-
-    # Mark trip as complete
-    trip.is_closed = True
-    logger.info(
-        f"Trip {trip.id} finalized: {(trip.distance_miles or 0):.1f} mi "
-        f"(electric: {(trip.electric_miles or 0):.1f}, gas: {(trip.gas_miles or 0):.1f}, "
-        f"MPG: {trip.gas_mpg or 'N/A'}, kWh/mi: {trip.kwh_per_mile or 'N/A'})"
-    )
+    except Exception as e:
+        # Add error to wide event
+        duration_ms = (time.time() - start_time) * 1000
+        event.context["duration_ms"] = round(duration_ms, 2)
+        event.add_error(e)
+        event.mark_failure(f"finalization_error: {type(e).__name__}")
+        event.emit(level="error", force=True)
+        raise

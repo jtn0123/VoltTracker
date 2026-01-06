@@ -5,6 +5,7 @@ Handles Torque Pro data ingestion and real-time telemetry endpoints.
 """
 
 import logging
+import time
 from datetime import timedelta
 from typing import Any, Dict
 
@@ -14,6 +15,7 @@ from exceptions import TelemetryParsingError, TripProcessingError
 from flask import Blueprint, current_app, jsonify, request
 from models import TelemetryRaw, Trip
 from utils import TorqueParser, normalize_datetime, utc_now
+from utils.wide_events import WideEvent
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +53,22 @@ def torque_upload(token=None):
         - /torque/upload (no auth, works if TORQUE_API_TOKEN not set)
         - /torque/upload/<token> (token must match TORQUE_API_TOKEN)
     """
+    start_time = time.time()
+
+    # Initialize wide event for comprehensive logging
+    event = WideEvent("telemetry_upload")
+    event.add_context(
+        method=request.method,
+        remote_addr=request.remote_addr,
+        has_token=bool(token),
+    )
+
     # Validate API token if configured
     if Config.TORQUE_API_TOKEN:
         if token != Config.TORQUE_API_TOKEN:
+            event.add_context(auth_failed=True)
+            event.mark_failure("invalid_token")
+            event.emit(level="warning", force=True)
             logger.warning(f"Invalid Torque API token attempt from {request.remote_addr}")
             return "Unauthorized", 401
 
@@ -63,8 +78,21 @@ def torque_upload(token=None):
             form_data = request.args
         else:
             form_data = request.form
+
+        event.add_business_metric("raw_params_count", len(form_data))
+
         data = TorqueParser.parse(form_data)
         db = get_db()
+
+        # Add high-cardinality context
+        event.add_context(
+            session_id=str(data["session_id"]),
+            odometer_miles=data.get("odometer_miles"),
+            state_of_charge=data.get("state_of_charge"),
+            has_gps=bool(data.get("latitude") and data.get("longitude")),
+            engine_running=(data.get("engine_rpm") or 0) > 400,
+            charger_connected=data.get("charger_connected", False),
+        )
 
         # Create or get trip (handle race condition)
         trip = db.query(Trip).filter(Trip.session_id == data["session_id"]).first()
@@ -79,16 +107,24 @@ def torque_upload(token=None):
                 )
                 db.add(trip)
                 db.flush()
+                event.add_business_metric("trip_created", True)
+                event.add_context(trip_id=trip.id)
                 logger.info(f"New trip started: {trip.session_id}")
             except Exception as e:
                 # Race condition - trip was created by another request
+                event.add_technical_metric("trip_race_condition", True)
                 error = TripProcessingError(f"Trip race condition handled: {e}", session_id=str(data["session_id"]))
                 logger.debug(str(error))
                 db.rollback()
                 trip = db.query(Trip).filter(Trip.session_id == data["session_id"]).first()
                 # If trip is still None after retry (rare - possibly deleted), skip trip updates
                 if trip is None:
+                    event.add_context(trip_missing_after_retry=True)
                     logger.warning(f"Trip not found after race condition retry: {data['session_id']}")
+                else:
+                    event.add_context(trip_id=trip.id)
+        else:
+            event.add_context(trip_id=trip.id)
 
         # Update trip start values if they were null initially
         if trip is not None:
@@ -128,18 +164,39 @@ def torque_upload(token=None):
         socketio = current_app.extensions.get("socketio")
         if socketio:
             emit_telemetry_update(socketio, data)
+            event.add_technical_metric("websocket_emitted", True)
+
+        # Calculate duration and mark success
+        duration_ms = (time.time() - start_time) * 1000
+        event.context["duration_ms"] = round(duration_ms, 2)
+        event.mark_success()
+        event.add_business_metric("telemetry_stored", True)
+
+        # Emit wide event (uses tail sampling)
+        event.emit()
 
         return "OK!"
 
     except Exception as e:
+        # Add error to wide event
+        duration_ms = (time.time() - start_time) * 1000
+        event.context["duration_ms"] = round(duration_ms, 2)
+        event.add_error(e)
+        event.mark_failure(f"parsing_error: {type(e).__name__}")
+
+        # Log raw request data for debugging
+        if request.method == "GET":
+            event.add_context(failed_params=dict(request.args))
+        else:
+            event.add_context(failed_params=dict(request.form))
+
+        # Emit wide event (always emitted on errors)
+        event.emit(level="error", force=True)
+
         # Log full exception details for debugging (data is often malformed from Torque)
         error = TelemetryParsingError(f"Error processing Torque upload: {e}")
         logger.error(str(error), exc_info=True)
-        # Log raw request data to help debug parsing issues
-        if request.method == "GET":
-            logger.debug(f"Failed request args: {dict(request.args)}")
-        else:
-            logger.debug(f"Failed request form: {dict(request.form)}")
+
         # Return OK to avoid Torque retries (Torque doesn't handle errors gracefully)
         # Data loss is logged above for later investigation
         return "OK!"
