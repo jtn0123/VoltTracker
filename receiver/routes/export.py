@@ -20,7 +20,7 @@ from sqlalchemy import desc, func
 from utils import utc_now
 
 # Import limiter for rate limiting sensitive endpoints
-from app import limiter
+from extensions import limiter
 
 # Backup directory for imported CSV files
 CSV_BACKUP_DIR = Path(os.environ.get("CSV_BACKUP_DIR", "/app/backups/csv-imports"))
