@@ -326,8 +326,9 @@ class TorqueCSVImporter:
                 elif field_name == "throttle_position":
                     record["throttle_position"] = float(value)
                 elif field_name == "fuel_level_percent":
+                    from utils import fuel_percent_to_gallons
                     record["fuel_level_percent"] = float(value)
-                    record["fuel_remaining_gallons"] = float(value) / 100 * Config.TANK_CAPACITY_GALLONS
+                    record["fuel_remaining_gallons"] = fuel_percent_to_gallons(float(value))
                 elif field_name == "state_of_charge":
                     record["state_of_charge"] = float(value)
                 elif field_name == "battery_voltage":

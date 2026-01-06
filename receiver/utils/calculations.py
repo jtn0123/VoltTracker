@@ -17,6 +17,34 @@ MIN_GAS_MILES_FOR_MPG = 1.0  # Minimum gas miles for reliable MPG calculation
 BATTERY_CAPACITY_KWH = Config.BATTERY_CAPACITY_KWH
 
 
+def soc_to_kwh(soc_percent: float, battery_capacity_kwh: float = BATTERY_CAPACITY_KWH) -> float:
+    """
+    Convert State of Charge percentage to kWh.
+
+    Args:
+        soc_percent: Battery state of charge (0-100%)
+        battery_capacity_kwh: Total battery capacity in kWh
+
+    Returns:
+        Energy in kWh
+    """
+    return (soc_percent / 100.0) * battery_capacity_kwh
+
+
+def fuel_percent_to_gallons(fuel_percent: float, tank_capacity_gallons: float = TANK_CAPACITY_GALLONS) -> float:
+    """
+    Convert fuel level percentage to gallons.
+
+    Args:
+        fuel_percent: Fuel tank level (0-100%)
+        tank_capacity_gallons: Total tank capacity in gallons
+
+    Returns:
+        Fuel volume in gallons
+    """
+    return (fuel_percent / 100.0) * tank_capacity_gallons
+
+
 def smooth_fuel_level(readings: List[float], window_size: int = 10) -> float:
     """
     Apply median filter to fuel level readings to reduce sensor noise.

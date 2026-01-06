@@ -41,9 +41,10 @@ def detect_and_finalize_charging_session(
 
         # Calculate kWh added from SOC change
         if active_session.start_soc is not None and active_session.end_soc is not None:
+            from utils import soc_to_kwh
             soc_gained = active_session.end_soc - active_session.start_soc
             if soc_gained > 0:
-                active_session.kwh_added = (soc_gained / 100) * Config.BATTERY_CAPACITY_KWH
+                active_session.kwh_added = soc_to_kwh(soc_gained)
 
         # Calculate cost if electricity rate is set
         if active_session.kwh_added and Config.ELECTRICITY_COST_PER_KWH:

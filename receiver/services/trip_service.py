@@ -105,7 +105,8 @@ def process_gas_mode(db, trip: Trip, telemetry: list, points: list) -> None:
         if trip.fuel_level_at_gas_entry and trip.fuel_level_at_end:
             fuel_change = trip.fuel_level_at_gas_entry - trip.fuel_level_at_end
             if fuel_change > 0:  # Only count fuel consumption, not refuels
-                trip.fuel_used_gallons = (fuel_change / 100) * Config.TANK_CAPACITY_GALLONS
+                from utils import fuel_percent_to_gallons
+                trip.fuel_used_gallons = fuel_percent_to_gallons(fuel_change)
             elif fuel_change < -5:  # Significant increase = refuel during trip
                 logger.info(
                     f"Refuel detected during trip {trip.id}: "

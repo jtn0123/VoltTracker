@@ -297,9 +297,10 @@ def _calculate_trip_stats(first: TelemetryRaw | None, latest: TelemetryRaw | Non
 
     # Calculate kWh used from SOC change
     if start_soc is not None and current_soc is not None:
+        from utils import soc_to_kwh
         soc_change = start_soc - current_soc
         if soc_change >= 0:  # Only count discharge, not regen gains
-            stats["kwh_used"] = soc_change / 100.0 * Config.BATTERY_CAPACITY_KWH
+            stats["kwh_used"] = soc_to_kwh(soc_change)
 
     # Detect gas mode: engine running AND low SOC
     current_rpm = float(latest.engine_rpm) if latest.engine_rpm else 0
@@ -322,9 +323,10 @@ def _calculate_trip_stats(first: TelemetryRaw | None, latest: TelemetryRaw | Non
     current_fuel = float(latest.fuel_level_percent) if latest.fuel_level_percent else None
 
     if start_fuel is not None and current_fuel is not None:
+        from utils import fuel_percent_to_gallons
         fuel_percent_used = start_fuel - current_fuel
         if fuel_percent_used > 0.5:  # Only count if meaningful fuel was used
-            fuel_gallons_used = fuel_percent_used / 100.0 * Config.TANK_CAPACITY_GALLONS
+            fuel_gallons_used = fuel_percent_to_gallons(fuel_percent_used)
             stats["fuel_used_gallons"] = fuel_gallons_used
 
             # Estimate gas miles (rough: if fuel used, assume some portion was gas driving)

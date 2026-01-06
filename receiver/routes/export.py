@@ -280,32 +280,38 @@ def import_csv():
         if not records:
             return jsonify({"message": "No valid records found in CSV", "stats": stats}), 400
 
-        # Insert records into database
+        # Insert records into database using batch operations for performance
         db = get_db()
         inserted_count = 0
 
+        # Prepare batch insert data (much faster than individual db.add() calls)
+        telemetry_batch = []
         for record in records:
-            telemetry = TelemetryRaw(
-                session_id=record["session_id"],
-                timestamp=record["timestamp"],
-                latitude=record.get("latitude"),
-                longitude=record.get("longitude"),
-                speed_mph=record.get("speed_mph"),
-                engine_rpm=record.get("engine_rpm"),
-                throttle_position=record.get("throttle_position"),
-                coolant_temp_f=record.get("coolant_temp_f"),
-                intake_air_temp_f=record.get("intake_air_temp_f"),
-                fuel_level_percent=record.get("fuel_level_percent"),
-                fuel_remaining_gallons=record.get("fuel_remaining_gallons"),
-                state_of_charge=record.get("state_of_charge"),
-                battery_voltage=record.get("battery_voltage"),
-                ambient_temp_f=record.get("ambient_temp_f"),
-                odometer_miles=record.get("odometer_miles"),
-                hv_battery_power_kw=record.get("hv_battery_power_kw"),
-                raw_data=record.get("raw_data", {}),
-            )
-            db.add(telemetry)
-            inserted_count += 1
+            telemetry_data = {
+                "session_id": record["session_id"],
+                "timestamp": record["timestamp"],
+                "latitude": record.get("latitude"),
+                "longitude": record.get("longitude"),
+                "speed_mph": record.get("speed_mph"),
+                "engine_rpm": record.get("engine_rpm"),
+                "throttle_position": record.get("throttle_position"),
+                "coolant_temp_f": record.get("coolant_temp_f"),
+                "intake_air_temp_f": record.get("intake_air_temp_f"),
+                "fuel_level_percent": record.get("fuel_level_percent"),
+                "fuel_remaining_gallons": record.get("fuel_remaining_gallons"),
+                "state_of_charge": record.get("state_of_charge"),
+                "battery_voltage": record.get("battery_voltage"),
+                "ambient_temp_f": record.get("ambient_temp_f"),
+                "odometer_miles": record.get("odometer_miles"),
+                "hv_battery_power_kw": record.get("hv_battery_power_kw"),
+                "raw_data": record.get("raw_data", {}),
+            }
+            telemetry_batch.append(telemetry_data)
+
+        # Bulk insert all records at once (10-50x faster than individual inserts)
+        if telemetry_batch:
+            db.bulk_insert_mappings(TelemetryRaw, telemetry_batch)
+            inserted_count = len(telemetry_batch)
 
         db.commit()
 
