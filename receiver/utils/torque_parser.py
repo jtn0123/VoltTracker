@@ -102,6 +102,12 @@ class TorqueParser:
         # Odometer
         "kff1271": "odometer_miles",
         "k21": "odometer_km",  # Convert to miles if present
+        # TPMS - Experimental GM PIDs (may not work on Volt)
+        # See: https://www.gm-volt.com/threads/obd2-and-vold-pids-for-android-torque-in-googledoc.45097/
+        # Formula for pressure: ((A*1373/1000) * 0.145037738) for PSI
+        # Formula for temp: (9/5*(A-40))+32 for °F
+        "k22c901": "tpms_pressure_raw",  # May contain data for multiple wheels
+        "k22c902": "tpms_temp_raw",  # May contain data for multiple wheels
     }
 
     @classmethod
@@ -169,6 +175,9 @@ class TorqueParser:
             "lifetime_kwh": None,
             "dte_electric_miles": None,
             "dte_gas_miles": None,
+            # TPMS - Experimental (may not work on Volt)
+            "tpms_pressure_raw": None,
+            "tpms_temp_raw": None,
             # Raw data
             "raw_data": dict(form_data),
         }
@@ -330,6 +339,14 @@ class TorqueParser:
             result["dte_electric_miles"] = temp_values["dte_electric_miles"]
         if "dte_gas_miles" in temp_values:
             result["dte_gas_miles"] = temp_values["dte_gas_miles"]
+
+        # TPMS - Experimental (log when data is received for debugging)
+        if "tpms_pressure_raw" in temp_values:
+            result["tpms_pressure_raw"] = temp_values["tpms_pressure_raw"]
+            logger.info(f"TPMS pressure data received (experimental): {temp_values['tpms_pressure_raw']}")
+        if "tpms_temp_raw" in temp_values:
+            result["tpms_temp_raw"] = temp_values["tpms_temp_raw"]
+            logger.info(f"TPMS temp data received (experimental): {temp_values['tpms_temp_raw']}")
 
         return result
 

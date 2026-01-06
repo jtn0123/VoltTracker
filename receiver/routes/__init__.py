@@ -7,6 +7,7 @@ This module contains Flask blueprints that handle different areas of the API.
 from routes.analytics import analytics_bp
 from routes.battery import battery_bp
 from routes.charging import charging_bp
+from routes.combined_analytics import combined_analytics_bp
 from routes.dashboard import dashboard_bp
 from routes.elevation_analytics import elevation_analytics_bp
 from routes.export import export_bp
@@ -26,6 +27,7 @@ __all__ = [
     "analytics_bp",
     "weather_analytics_bp",
     "elevation_analytics_bp",
+    "combined_analytics_bp",
 ]
 
 
@@ -41,3 +43,4 @@ def register_blueprints(app):
     app.register_blueprint(analytics_bp)
     app.register_blueprint(weather_analytics_bp)
     app.register_blueprint(elevation_analytics_bp)
+    app.register_blueprint(combined_analytics_bp)
