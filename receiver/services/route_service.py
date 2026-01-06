@@ -75,8 +75,14 @@ def find_matching_route(
 
     Args:
         threshold_miles: Max distance in miles to consider a match
+
+    Returns:
+        Closest matching route, or None if no routes within threshold
     """
     routes = db.query(Route).all()
+
+    best_match = None
+    best_distance = float("inf")
 
     for route in routes:
         start_dist = haversine_distance(start_lat, start_lon, route.start_lat, route.start_lon)
@@ -84,9 +90,12 @@ def find_matching_route(
 
         # Match if both endpoints are within threshold
         if start_dist <= threshold_miles and end_dist <= threshold_miles:
-            return route
+            total_dist = start_dist + end_dist
+            if total_dist < best_distance:
+                best_distance = total_dist
+                best_match = route
 
-    return None
+    return best_match
 
 
 def detect_routes(db: Session, min_trips: int = 3) -> List[Dict]:
