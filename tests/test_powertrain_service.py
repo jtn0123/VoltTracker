@@ -11,6 +11,7 @@ Tests the Volt Gen 2 powertrain mode detection including:
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from models import TelemetryRaw, Trip
 from services.powertrain_service import (
     PowertrainMode,
@@ -234,8 +235,11 @@ class TestAnalyzeTripPowertrain:
 
         assert result is not None
         assert result["total_samples"] == 10
-        assert result["mode_percentages"][PowertrainMode.EV_MODE] == 50.0
-        assert result["mode_percentages"][PowertrainMode.HOLD_MODE] == 50.0
+        # Duration is calculated from i=1 to i=9 (9 intervals)
+        # First 5 points are EV, last 5 are HOLD
+        # Durations: EV has i=1 to i=4 (4 intervals), HOLD has i=5 to i=9 (5 intervals)
+        assert result["mode_percentages"][PowertrainMode.EV_MODE] == pytest.approx(44.44, abs=0.01)
+        assert result["mode_percentages"][PowertrainMode.HOLD_MODE] == pytest.approx(55.56, abs=0.01)
 
     def test_detects_mode_transitions(self, app, db_session):
         """Mode transitions are detected in timeline."""
@@ -290,7 +294,7 @@ class TestAnalyzeTripPowertrain:
         assert len(result["transitions"]) >= 2  # At least 2 transitions
 
     def test_handles_trip_with_no_telemetry(self, app, db_session):
-        """Trip with no telemetry returns None."""
+        """Trip with no telemetry returns error."""
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
 
@@ -304,12 +308,16 @@ class TestAnalyzeTripPowertrain:
 
         result = analyze_trip_powertrain(db_session, str(session_id))
 
-        assert result is None
+        assert result is not None
+        assert "error" in result
+        assert result["error"] == "No telemetry data found"
 
     def test_handles_invalid_session_id(self, app, db_session):
-        """Invalid session ID returns None."""
+        """Invalid session ID returns error."""
         result = analyze_trip_powertrain(db_session, "00000000-0000-0000-0000-000000000000")
-        assert result is None
+        assert result is not None
+        assert "error" in result
+        assert result["error"] == "No telemetry data found"
 
     def test_timeline_ordered_chronologically(self, app, db_session):
         """Timeline events are in chronological order."""
@@ -382,7 +390,7 @@ class TestGetPowertrainSummary:
             db_session.add(telemetry)
         db_session.commit()
 
-        result = get_powertrain_summary(db_session, str(session_id))
+        result = get_powertrain_summary(db_session, trip.id)
 
         assert result is not None
         assert "mode_percentages" in result
