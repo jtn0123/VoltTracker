@@ -208,8 +208,8 @@ class TestMaintenanceEndpoints:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert "engine_hours" in data
-        assert data["engine_hours"] > 0
+        assert "total_engine_hours" in data
+        assert data["total_engine_hours"] > 0
 
     def test_maintenance_with_records(self, client, db_session):
         """Maintenance summary includes last service dates."""
@@ -228,8 +228,8 @@ class TestMaintenanceEndpoints:
         assert response.status_code == 200
         data = json.loads(response.data)
 
-        # Find oil change item
-        oil_item = next((item for item in data if item["type"] == "oil_change"), None)
+        # Find oil change item in maintenance_items
+        oil_item = next((item for item in data["maintenance_items"] if item["type"] == "oil_change"), None)
         assert oil_item is not None
         assert oil_item["last_service_date"] is not None
 
@@ -238,13 +238,14 @@ class TestRouteEndpoints:
     """Tests for route analysis API endpoints."""
 
     def test_routes_endpoint_empty(self, client, db_session):
-        """GET /api/analytics/routes returns empty list."""
+        """GET /api/analytics/routes returns empty dict with message."""
         response = client.get("/api/analytics/routes")
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
-        assert len(data) == 0
+        assert "total_routes" in data
+        assert data["total_routes"] == 0
+        assert "message" in data
 
     def test_routes_endpoint_with_routes(self, client, db_session):
         """Returns all routes."""
@@ -265,11 +266,12 @@ class TestRouteEndpoints:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert len(data) == 3
+        assert "routes" in data
+        assert len(data["routes"]) == 3
         # Check structure
-        assert "name" in data[0]
-        assert "start_lat" in data[0]
-        assert "trip_count" in data[0]
+        assert "name" in data["routes"][0]
+        assert "start_lat" in data["routes"][0]
+        assert "trip_count" in data["routes"][0]
 
     def test_routes_sorted_by_trip_count(self, client, db_session):
         """Routes sorted by trip count (descending)."""
@@ -297,7 +299,8 @@ class TestRouteEndpoints:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data[0]["name"] == "Route 2"  # Most trips first
+        assert "routes" in data
+        assert data["routes"][0]["name"] == "Route 2"  # Most trips first
 
 
 class TestBatteryDegradationEndpoints:
@@ -514,7 +517,9 @@ class TestEndpointResponseFormat:
         assert response.status_code == 200
         data = json.loads(response.data)
         # Should handle unicode correctly
-        assert len(data) == 1
+        assert "routes" in data
+        assert len(data["routes"]) == 1
+        assert "路线" in data["routes"][0]["name"]  # Check unicode is preserved
 
 
 class TestEndpointCaching:
