@@ -212,6 +212,10 @@ def get_maintenance_summary(db: Session) -> Dict:
         "current_odometer": current_miles,
         "total_engine_hours": round(total_engine_hours, 1),
         "maintenance_items": summary,
-        "overdue_count": sum(1 for item in summary if item["next_due"].get("overdue", False)),  # type: ignore[attr-defined]
-        "upcoming_count": sum(1 for item in summary if item["next_due"].get("status") == "upcoming"),  # type: ignore[attr-defined]
+        "overdue_count": sum(
+            1 for item in summary if item["next_due"].get("overdue", False)  # type: ignore[attr-defined]
+        ),
+        "upcoming_count": sum(
+            1 for item in summary if item["next_due"].get("status") == "upcoming"  # type: ignore[attr-defined]
+        ),
     }
