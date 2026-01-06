@@ -624,3 +624,278 @@ class TestCheckChargingSessions:
         # Session should still exist
         sessions = Session().query(ChargingSession).all()
         assert len(sessions) >= 1
+
+
+class TestSchedulerExceptionHandling:
+    """Tests for exception handling in scheduler tasks."""
+
+    def test_close_stale_trips_handles_database_error(self, app, db_session, mocker):
+        """close_stale_trips handles IntegrityError gracefully."""
+        from sqlalchemy.exc import IntegrityError
+
+        # Mock finalize_trip to raise IntegrityError
+        mock_finalize = mocker.patch("services.scheduler.finalize_trip")
+        mock_finalize.side_effect = IntegrityError("test error", None, None)
+
+        session_id = uuid.uuid4()
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=old_time,
+            start_odometer=50000.0,
+            is_closed=False,
+        )
+        db_session.add(trip)
+
+        telemetry = TelemetryRaw(
+            session_id=session_id,
+            timestamp=old_time,
+            odometer_miles=50000.0,
+        )
+        db_session.add(telemetry)
+        db_session.commit()
+
+        # Should not raise
+        close_stale_trips()
+
+    def test_close_stale_trips_handles_generic_exception(self, app, db_session, mocker):
+        """close_stale_trips handles generic exceptions gracefully."""
+        # Mock finalize_trip to raise generic exception
+        mock_finalize = mocker.patch("services.scheduler.finalize_trip")
+        mock_finalize.side_effect = RuntimeError("unexpected error")
+
+        session_id = uuid.uuid4()
+        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=old_time,
+            start_odometer=50000.0,
+            is_closed=False,
+        )
+        db_session.add(trip)
+
+        telemetry = TelemetryRaw(
+            session_id=session_id,
+            timestamp=old_time,
+            odometer_miles=50000.0,
+        )
+        db_session.add(telemetry)
+        db_session.commit()
+
+        # Should not raise
+        close_stale_trips()
+
+    def test_check_refuel_events_handles_database_error(self, app, db_session, mocker):
+        """check_refuel_events handles IntegrityError gracefully."""
+        from sqlalchemy.exc import IntegrityError
+
+        # Mock db.add to raise IntegrityError
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        telemetry_before = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(hours=1),
+            fuel_level_percent=25.0,
+            odometer_miles=50000.0,
+        )
+        telemetry_after = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now,
+            fuel_level_percent=85.0,
+            odometer_miles=50000.0,
+        )
+        db_session.add(telemetry_before)
+        db_session.add(telemetry_after)
+        db_session.commit()
+
+        # Mock the session commit to raise IntegrityError
+        mock_commit = mocker.patch("services.scheduler.get_scheduler_db")
+        mock_session = mocker.MagicMock()
+        mock_session.commit.side_effect = IntegrityError("duplicate key", None, None)
+        mock_session.query.return_value = db_session.query(TelemetryRaw)
+        mock_commit.return_value = mock_session
+
+        # Should not raise
+        check_refuel_events()
+
+    def test_check_refuel_events_handles_generic_exception(self, app, db_session, mocker):
+        """check_refuel_events handles generic exceptions gracefully."""
+        # Mock detect_refuel_event to raise exception
+        mock_detect = mocker.patch("services.scheduler.detect_refuel_event")
+        mock_detect.side_effect = ValueError("unexpected error")
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        telemetry_before = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(hours=1),
+            fuel_level_percent=25.0,
+            odometer_miles=50000.0,
+        )
+        telemetry_after = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now,
+            fuel_level_percent=85.0,
+            odometer_miles=50000.0,
+        )
+        db_session.add(telemetry_before)
+        db_session.add(telemetry_after)
+        db_session.commit()
+
+        # Should not raise
+        check_refuel_events()
+
+    def test_check_charging_sessions_handles_database_error(self, app, db_session, mocker):
+        """check_charging_sessions handles IntegrityError gracefully."""
+        from sqlalchemy.exc import IntegrityError
+
+        session_id = uuid.uuid4()
+        telemetry = TelemetryRaw(
+            session_id=session_id,
+            timestamp=datetime.utcnow(),
+            charger_connected=True,
+            charger_power_kw=3.3,
+            state_of_charge=50.0,
+        )
+        db_session.add(telemetry)
+        db_session.commit()
+
+        # Mock commit to raise IntegrityError
+        mock_commit = mocker.patch("services.scheduler.get_scheduler_db")
+        mock_session = mocker.MagicMock()
+        mock_session.commit.side_effect = IntegrityError("duplicate session", None, None)
+        mock_session.query.return_value = db_session.query(TelemetryRaw)
+        mock_commit.return_value = mock_session
+
+        # Should not raise
+        check_charging_sessions()
+
+    def test_check_charging_sessions_handles_generic_exception(self, app, db_session, mocker):
+        """check_charging_sessions handles generic exceptions gracefully."""
+        # Mock detect_charging_session to raise exception
+        mock_detect = mocker.patch("services.scheduler.detect_charging_session")
+        mock_detect.side_effect = TypeError("unexpected error")
+
+        session_id = uuid.uuid4()
+        telemetry = TelemetryRaw(
+            session_id=session_id,
+            timestamp=datetime.utcnow(),
+            charger_connected=True,
+            charger_power_kw=3.3,
+            state_of_charge=50.0,
+        )
+        db_session.add(telemetry)
+        db_session.commit()
+
+        # Should not raise
+        check_charging_sessions()
+
+
+class TestSchedulerInitShutdown:
+    """Tests for scheduler initialization and shutdown."""
+
+    def test_init_scheduler_creates_background_scheduler(self, app):
+        """init_scheduler creates and starts BackgroundScheduler."""
+        from services.scheduler import init_scheduler, shutdown_scheduler
+
+        scheduler = init_scheduler()
+
+        assert scheduler is not None
+        assert scheduler.running is True
+
+        # Clean up
+        shutdown_scheduler()
+
+    def test_shutdown_scheduler_stops_scheduler(self, app):
+        """shutdown_scheduler stops the background scheduler."""
+        from services.scheduler import init_scheduler, shutdown_scheduler
+
+        scheduler = init_scheduler()
+        assert scheduler.running is True
+
+        shutdown_scheduler()
+
+        # Scheduler should be stopped
+        assert scheduler.running is False
+
+    def test_shutdown_scheduler_handles_no_scheduler(self, app):
+        """shutdown_scheduler handles case where scheduler is None."""
+        import services.scheduler
+        from services.scheduler import shutdown_scheduler
+
+        # Set global scheduler to None
+        services.scheduler.scheduler = None
+
+        # Should not raise even if scheduler is None
+        shutdown_scheduler()
+
+
+class TestChargingSessionEdgeCases:
+    """Tests for additional charging session edge cases."""
+
+    def test_charging_session_calculates_soc_gain(self, app, db_session):
+        """Charging session correctly calculates kWh from SOC gain."""
+        # Create session with 50% SOC gain (50% of 18.4 kWh = 9.2 kWh)
+        session = ChargingSession(
+            start_time=datetime.utcnow() - timedelta(hours=2),
+            start_soc=30.0,
+            end_soc=80.0,  # 50% gain
+            is_complete=False,
+        )
+        db_session.add(session)
+        db_session.commit()
+        session_id = session.id
+
+        # Trigger session close (no active charging)
+        check_charging_sessions()
+
+        updated = Session().query(ChargingSession).filter(ChargingSession.id == session_id).first()
+        assert updated.is_complete is True
+
+        if updated.kwh_added is not None:
+            # 50% SOC gain = 50% * 18.4 kWh = 9.2 kWh
+            expected_kwh = 0.5 * Config.BATTERY_CAPACITY_KWH
+            assert abs(updated.kwh_added - expected_kwh) < 0.1
+
+    def test_charging_session_no_kwh_if_no_soc_gain(self, app, db_session):
+        """Charging session with no SOC gain doesn't calculate kWh."""
+        # Session with negative SOC change (shouldn't happen but handle it)
+        session = ChargingSession(
+            start_time=datetime.utcnow() - timedelta(hours=2),
+            start_soc=80.0,
+            end_soc=75.0,  # Negative gain
+            is_complete=False,
+        )
+        db_session.add(session)
+        db_session.commit()
+        session_id = session.id
+
+        check_charging_sessions()
+
+        updated = Session().query(ChargingSession).filter(ChargingSession.id == session_id).first()
+        assert updated.is_complete is True
+        # kwh_added should be None or 0 since SOC decreased
+        assert updated.kwh_added is None or updated.kwh_added == 0
+
+    def test_charging_session_closes_with_missing_soc_data(self, app, db_session):
+        """Charging session closes even if SOC data is missing."""
+        session = ChargingSession(
+            start_time=datetime.utcnow() - timedelta(hours=2),
+            start_soc=None,
+            end_soc=None,
+            is_complete=False,
+        )
+        db_session.add(session)
+        db_session.commit()
+        session_id = session.id
+
+        check_charging_sessions()
+
+        updated = Session().query(ChargingSession).filter(ChargingSession.id == session_id).first()
+        assert updated.is_complete is True
+        # kwh_added should be None since we can't calculate it
+        assert updated.kwh_added is None
