@@ -1099,7 +1099,7 @@ async function loadMpgTrend(days) {
         mpgChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: data.map(d => formatDate(new Date(d.date))),
+                labels: data.map(d => formatChartDate(new Date(d.date))),
                 datasets: [{
                     label: 'MPG',
                     data: data.map(d => d.mpg),
@@ -1881,12 +1881,29 @@ async function renderSocHistogram(histogram) {
 }
 
 /**
- * Format date for display
+ * Format date for display (includes year if not current year)
  */
 function formatDate(date) {
-    return date.toLocaleDateString('en-US', {
+    const now = new Date();
+    const options = {
         month: 'short',
         day: 'numeric'
+    };
+    // Include year if date is not in current year
+    if (date.getFullYear() !== now.getFullYear()) {
+        options.year = '2-digit';
+    }
+    return date.toLocaleDateString('en-US', options);
+}
+
+/**
+ * Format date for chart labels (always includes month/day)
+ */
+function formatChartDate(date) {
+    return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: '2-digit'
     });
 }
 

@@ -36041,3 +36041,539 @@ AttributeError: 'Trip' object has no attribute 'end_soc'
 2026-01-06 05:56:21,168 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:21] "GET /socket.io/?EIO=4&transport=polling&t=PkHu6yH HTTP/1.1" 200 276 0.000433
 2026-01-06 05:56:21,176 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:21] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.006340
 2026-01-06 05:56:21,179 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:21] "POST /socket.io/?EIO=4&transport=polling&t=PkHuBGo&sid=mOfzmSLiH6wKEMJDAABs HTTP/1.1" 400 136 0.000310
+2026-01-06 05:56:22,609 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:22] "GET /socket.io/?EIO=4&transport=polling&t=PkHu5Wb.0&sid=ifzPnotkDlUMo3LOAABn HTTP/1.1" 200 157 25.000361
+2026-01-06 05:56:22,618 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:22] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.006681
+2026-01-06 05:56:22,620 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:22] "POST /socket.io/?EIO=4&transport=polling&t=PkHuBGy&sid=mOfzmSLiH6wKEMJDAABs HTTP/1.1" 400 136 0.000144
+2026-01-06 05:56:22,621 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:22] "GET /socket.io/?EIO=4&transport=polling&t=PkHuBUe HTTP/1.1" 200 276 0.000334
+2026-01-06 05:56:22,625 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:22] "POST /socket.io/?EIO=4&transport=polling&t=PkHuBdV&sid=OSHGB28NhABnk74xAABt HTTP/1.1" 400 136 0.000419
+2026-01-06 05:56:23,862 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:23] "GET /socket.io/?EIO=4&transport=polling&t=PkHu5q9&sid=Inw_pr2gjOzAJPSJAABo HTTP/1.1" 200 157 25.003242
+2026-01-06 05:56:23,866 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:23] "POST /socket.io/?EIO=4&transport=polling&t=PkHuBda&sid=OSHGB28NhABnk74xAABt HTTP/1.1" 400 136 0.000270
+2026-01-06 05:56:23,989 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:23] "GET /socket.io/?EIO=4&transport=polling&t=PkHuByp HTTP/1.1" 200 276 0.000355
+2026-01-06 05:56:23,994 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:23] "POST /socket.io/?EIO=4&transport=polling&t=PkHuByt&sid=obU2coadoCyA3Kf7AABu HTTP/1.1" 400 136 0.000486
+2026-01-06 05:56:25,238 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:25] "GET /socket.io/?EIO=4&transport=polling&t=PkHu69j.0&sid=EjNwuEuQgh5e_LPlAABp HTTP/1.1" 200 157 24.996922
+2026-01-06 05:56:25,241 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:25] "POST /socket.io/?EIO=4&transport=polling&t=PkHuByy&sid=obU2coadoCyA3Kf7AABu HTTP/1.1" 400 136 0.000203
+2026-01-06 05:56:25,242 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:25] "GET /socket.io/?EIO=4&transport=polling&t=PkHuCFK HTTP/1.1" 200 276 0.000437
+2026-01-06 05:56:25,247 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:25] "POST /socket.io/?EIO=4&transport=polling&t=PkHuCGT&sid=fBtZrmYiRxeS6UWYAABv HTTP/1.1" 400 136 0.000278
+2026-01-06 05:56:26,527 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:26] "GET /socket.io/?EIO=4&transport=polling&t=PkHu6Tt.0&sid=RpBkwGgG5zsqn1JeAABq HTTP/1.1" 200 157 24.998618
+2026-01-06 05:56:26,530 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:26] "POST /socket.io/?EIO=4&transport=polling&t=PkHuCGX&sid=fBtZrmYiRxeS6UWYAABv HTTP/1.1" 400 136 0.000253
+2026-01-06 05:56:26,531 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:26] "GET /socket.io/?EIO=4&transport=polling&t=PkHuCR8 HTTP/1.1" 200 276 0.000406
+2026-01-06 05:56:26,538 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:26] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.005571
+2026-01-06 05:56:26,540 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:26] "POST /socket.io/?EIO=4&transport=polling&t=PkHuCab&sid=Pe3AS8HBT_or7acjAABw HTTP/1.1" 400 136 0.000268
+2026-01-06 05:56:27,906 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:27] "GET /socket.io/?EIO=4&transport=polling&t=PkHu6pL.0&sid=UExBHeR0WCuPvUhjAABr HTTP/1.1" 200 157 24.998102
+2026-01-06 05:56:27,909 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:27] "POST /socket.io/?EIO=4&transport=polling&t=PkHuCak&sid=Pe3AS8HBT_or7acjAABw HTTP/1.1" 400 136 0.000204
+2026-01-06 05:56:27,910 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:27] "GET /socket.io/?EIO=4&transport=polling&t=PkHuCl1 HTTP/1.1" 200 276 0.000253
+2026-01-06 05:56:27,914 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:27] "POST /socket.io/?EIO=4&transport=polling&t=PkHuCw8&sid=KW5VukaSPJJJhD2AAABx HTTP/1.1" 400 136 0.000417
+2026-01-06 05:56:46,185 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:46] "GET /socket.io/?EIO=4&transport=polling&t=PkHuBGo.0&sid=mOfzmSLiH6wKEMJDAABs HTTP/1.1" 200 157 25.005409
+2026-01-06 05:56:46,191 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:46] "POST /socket.io/?EIO=4&transport=polling&t=PkHuCwC&sid=KW5VukaSPJJJhD2AAABx HTTP/1.1" 400 136 0.000460
+2026-01-06 05:56:46,195 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:46] "GET /socket.io/?EIO=4&transport=polling&t=PkHuD9k HTTP/1.1" 200 276 0.000907
+2026-01-06 05:56:46,212 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:46] "GET /api/trips?limit=20 HTTP/1.1" 200 2141 0.014406
+2026-01-06 05:56:46,219 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:46] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.004812
+2026-01-06 05:56:46,220 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:46] "POST /socket.io/?EIO=4&transport=polling&t=PkHuHNs&sid=E0Gj-hfXUthiqTqkAABy HTTP/1.1" 400 136 0.000095
+2026-01-06 05:56:47,627 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:47] "GET /socket.io/?EIO=4&transport=polling&t=PkHuBdV.0&sid=OSHGB28NhABnk74xAABt HTTP/1.1" 200 157 25.000440
+2026-01-06 05:56:47,638 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:47] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.007994
+2026-01-06 05:56:47,641 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:47] "POST /socket.io/?EIO=4&transport=polling&t=PkHuHOF&sid=E0Gj-hfXUthiqTqkAABy HTTP/1.1" 400 136 0.000331
+2026-01-06 05:56:47,643 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:47] "GET /socket.io/?EIO=4&transport=polling&t=PkHuHht HTTP/1.1" 200 276 0.000365
+2026-01-06 05:56:47,648 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:47] "POST /socket.io/?EIO=4&transport=polling&t=PkHuHkU&sid=sirGrqcezeDC86rNAABz HTTP/1.1" 400 136 0.000222
+2026-01-06 05:56:48,997 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:48] "GET /socket.io/?EIO=4&transport=polling&t=PkHuByu&sid=obU2coadoCyA3Kf7AABu HTTP/1.1" 200 157 24.999539
+2026-01-06 05:56:49,000 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:49] "POST /socket.io/?EIO=4&transport=polling&t=PkHuHkZ&sid=sirGrqcezeDC86rNAABz HTTP/1.1" 400 136 0.000220
+2026-01-06 05:56:49,106 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:49] "GET /socket.io/?EIO=4&transport=polling&t=PkHuI5F HTTP/1.1" 200 276 0.000724
+2026-01-06 05:56:49,113 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:49] "POST /socket.io/?EIO=4&transport=polling&t=PkHuI5L&sid=yBsELzi8oQ5xX9VLAAB0 HTTP/1.1" 400 136 0.001567
+2026-01-06 05:56:50,246 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:50] "GET /socket.io/?EIO=4&transport=polling&t=PkHuCGT.0&sid=fBtZrmYiRxeS6UWYAABv HTTP/1.1" 200 157 24.995540
+2026-01-06 05:56:50,249 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:50] "POST /socket.io/?EIO=4&transport=polling&t=PkHuI5T&sid=yBsELzi8oQ5xX9VLAAB0 HTTP/1.1" 400 136 0.000264
+2026-01-06 05:56:50,252 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:50] "GET /socket.io/?EIO=4&transport=polling&t=PkHuIHV HTTP/1.1" 200 276 0.000432
+2026-01-06 05:56:50,259 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:50] "POST /socket.io/?EIO=4&transport=polling&t=PkHuINH&sid=HaeQ59i7aBSpMOTAAAB1 HTTP/1.1" 400 136 0.000303
+2026-01-06 05:56:51,533 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:51] "GET /socket.io/?EIO=4&transport=polling&t=PkHuCab.0&sid=Pe3AS8HBT_or7acjAABw HTTP/1.1" 200 157 24.991439
+2026-01-06 05:56:51,535 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:51] "POST /socket.io/?EIO=4&transport=polling&t=PkHuINM&sid=HaeQ59i7aBSpMOTAAAB1 HTTP/1.1" 400 136 0.000149
+2026-01-06 05:56:51,623 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:51] "GET /socket.io/?EIO=4&transport=polling&t=PkHuIib HTTP/1.1" 200 276 0.000543
+2026-01-06 05:56:51,628 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:51] "POST /socket.io/?EIO=4&transport=polling&t=PkHuIig&sid=cQa1OsvlfWZTxlBUAAB2 HTTP/1.1" 400 136 0.000381
+2026-01-06 05:56:52,913 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:52] "GET /socket.io/?EIO=4&transport=polling&t=PkHuCw8.0&sid=KW5VukaSPJJJhD2AAABx HTTP/1.1" 200 157 24.996913
+2026-01-06 05:56:52,916 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:52] "POST /socket.io/?EIO=4&transport=polling&t=PkHuIik&sid=cQa1OsvlfWZTxlBUAAB2 HTTP/1.1" 400 136 0.000281
+2026-01-06 05:56:52,918 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:52] "GET /socket.io/?EIO=4&transport=polling&t=PkHuIuc HTTP/1.1" 200 276 0.000440
+2026-01-06 05:56:52,929 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:56:52] "POST /socket.io/?EIO=4&transport=polling&t=PkHuJ0v&sid=JUsQcZtiYoo-a-xaAAB3 HTTP/1.1" 400 136 0.000371
+2026-01-06 05:57:10,877 - apscheduler.executors.default - INFO - Running job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-06 05:58:10 UTC)" (scheduled at 2026-01-06 05:57:10.872969+00:00)
+2026-01-06 05:57:10,893 - services.scheduler - INFO - Closing stale trip 34 (session: 89a97649-3016-477c-9c22-d43a1fcd198a)
+2026-01-06 05:57:10,955 - apscheduler.executors.default - INFO - Running job "check_refuel_events (trigger: interval[0:05:00], next run at: 2026-01-06 06:02:10 UTC)" (scheduled at 2026-01-06 05:57:10.873372+00:00)
+2026-01-06 05:57:10,962 - apscheduler.executors.default - INFO - Job "check_refuel_events (trigger: interval[0:05:00], next run at: 2026-01-06 06:02:10 UTC)" executed successfully
+2026-01-06 05:57:11,199 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:11] "GET /socket.io/?EIO=4&transport=polling&t=PkHuHNt&sid=E0Gj-hfXUthiqTqkAABy HTTP/1.1" 200 157 24.977212
+2026-01-06 05:57:11,202 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:11] "POST /socket.io/?EIO=4&transport=polling&t=PkHuJ14&sid=JUsQcZtiYoo-a-xaAAB3 HTTP/1.1" 400 136 0.000464
+2026-01-06 05:57:11,203 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:11] "GET /socket.io/?EIO=4&transport=polling&t=PkHuJ9_ HTTP/1.1" 200 276 0.000459
+2026-01-06 05:57:11,215 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:11] "GET /api/status HTTP/1.1" 200 794 0.010567
+2026-01-06 05:57:11,220 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:11] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.001607
+2026-01-06 05:57:11,220 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:11] "POST /socket.io/?EIO=4&transport=polling&t=PkHuNUd&sid=T2w3Fa3cBmuUm_cqAAB4 HTTP/1.1" 400 136 0.000069
+2026-01-06 05:57:11,739 - utils.wide_events - ERROR - {"operation": "trip_finalization", "timestamp": "2026-01-06T05:57:11.739377Z", "request_id": "85f985d0-219b-4cd2-92e6-3f45306723c3", "trace_id": "89a97649-3016-477c-9c22-d43a1fcd198a", "service": {"name": "volttracker", "version": "0.1.0-dev", "environment": "development", "deployment_id": "local-bf1d4a28a5bf", "deployed_at": "2026-01-06T05:52:10.609612", "region": "local"}, "trip_id": 34, "session_id": "89a97649-3016-477c-9c22-d43a1fcd198a", "start_odometer": 0.0, "start_soc": 14.9, "feature_flags": {"weather_integration": true, "enhanced_route_detection": false, "predictive_range": false}, "performance_breakdown": {"db_query_telemetry_ms": 31.51, "calculate_basics_ms": 13.78, "process_gas_mode_ms": 1.9, "calculate_efficiency_ms": 0.0, "fetch_weather_ms": 773.42, "context_enrichment_ms": 10.84}, "business_metrics": {"telemetry_points": 1437, "soc_at_gas_transition": 13.33, "gas_mpg": 22.7, "fuel_used_gallons": 0.6211237400000003, "gas_mode_entered": true, "electric_kwh_used": null, "kwh_per_mile": null}, "end_odometer": 14.2, "distance_miles": 14.2, "avg_temp_f": 47.5, "gas_mode_entered": true, "electric_miles": 0.0, "gas_miles": 14.2, "weather_temp_f": 56.7, "weather_conditions": "Partly Cloudy", "weather_impact_factor": 1.0, "vehicle_context": {"total_trips": 19, "total_miles": 649.7, "account_age_days": 7, "usage_tier": "light", "avg_kwh_per_mile": null, "avg_gas_mpg": 30.3}, "duration_ms": 845.67, "error": {"code": "E500", "category": "system", "message": "Trip finalization error: AttributeError", "severity": "critical", "alert": true, "exception_type": "AttributeError", "exception_message": "'Trip' object has no attribute 'end_soc'", "context": {"trip_id": 34, "session_id": "89a97649-3016-477c-9c22-d43a1fcd198a"}}, "success": false, "failure_reason": "finalization_error: AttributeError", "event": "trip_finalization_complete", "logger": "utils.wide_events", "level": "error"}
+2026-01-06 05:57:11,740 - services.scheduler - ERROR - Unexpected error closing stale trips: 'Trip' object has no attribute 'end_soc'
+Traceback (most recent call last):
+  File "/app/services/scheduler.py", line 59, in close_stale_trips
+    finalize_trip(db, trip)
+  File "/app/services/trip_service.py", line 301, in finalize_trip
+    enrich_event_with_vehicle_context(event, db, include_battery_health=True)
+  File "/app/utils/context_enrichment.py", line 212, in enrich_event_with_vehicle_context
+    battery_health = get_battery_health_metrics(db)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/utils/context_enrichment.py", line 143, in get_battery_health_metrics
+    if trip.start_soc is not None and trip.end_soc is not None:
+                                      ^^^^^^^^^^^^
+AttributeError: 'Trip' object has no attribute 'end_soc'
+2026-01-06 05:57:11,756 - apscheduler.executors.default - INFO - Job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-06 05:58:10 UTC)" executed successfully
+2026-01-06 05:57:12,648 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:12] "GET /socket.io/?EIO=4&transport=polling&t=PkHuHkU.0&sid=sirGrqcezeDC86rNAABz HTTP/1.1" 200 157 24.996551
+2026-01-06 05:57:12,658 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:12] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.007345
+2026-01-06 05:57:12,660 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:12] "POST /socket.io/?EIO=4&transport=polling&t=PkHuNUu&sid=T2w3Fa3cBmuUm_cqAAB4 HTTP/1.1" 400 136 0.000241
+2026-01-06 05:57:12,693 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:12] "GET /socket.io/?EIO=4&transport=polling&t=PkHuNrp HTTP/1.1" 200 276 0.000463
+2026-01-06 05:57:12,697 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:12] "POST /socket.io/?EIO=4&transport=polling&t=PkHuNrt&sid=FAzp6-fjtCodBdP2AAB5 HTTP/1.1" 400 136 0.000720
+2026-01-06 05:57:14,114 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:14] "GET /socket.io/?EIO=4&transport=polling&t=PkHuI5M&sid=yBsELzi8oQ5xX9VLAAB0 HTTP/1.1" 200 157 24.997211
+2026-01-06 05:57:14,118 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:14] "POST /socket.io/?EIO=4&transport=polling&t=PkHuNrw&sid=FAzp6-fjtCodBdP2AAB5 HTTP/1.1" 400 136 0.000424
+2026-01-06 05:57:14,187 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:14] "GET /socket.io/?EIO=4&transport=polling&t=PkHuOD8 HTTP/1.1" 200 276 0.000594
+2026-01-06 05:57:14,192 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:14] "POST /socket.io/?EIO=4&transport=polling&t=PkHuODE&sid=_z8s-DhPWigyVCqhAAB6 HTTP/1.1" 400 136 0.000338
+2026-01-06 05:57:15,260 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:15] "GET /socket.io/?EIO=4&transport=polling&t=PkHuINI&sid=HaeQ59i7aBSpMOTAAAB1 HTTP/1.1" 200 157 24.998904
+2026-01-06 05:57:15,262 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:15] "POST /socket.io/?EIO=4&transport=polling&t=PkHuODH&sid=_z8s-DhPWigyVCqhAAB6 HTTP/1.1" 400 136 0.000257
+2026-01-06 05:57:15,284 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:15] "GET /socket.io/?EIO=4&transport=polling&t=PkHuOUH HTTP/1.1" 200 276 0.000620
+2026-01-06 05:57:15,289 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:15] "POST /socket.io/?EIO=4&transport=polling&t=PkHuOUM&sid=QxN26vohm_51TXBOAAB7 HTTP/1.1" 400 136 0.000387
+2026-01-06 05:57:16,627 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:16] "GET /socket.io/?EIO=4&transport=polling&t=PkHuIih&sid=cQa1OsvlfWZTxlBUAAB2 HTTP/1.1" 200 157 24.997669
+2026-01-06 05:57:16,631 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:16] "POST /socket.io/?EIO=4&transport=polling&t=PkHuOUR&sid=QxN26vohm_51TXBOAAB7 HTTP/1.1" 400 136 0.000437
+2026-01-06 05:57:16,640 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:16] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.007103
+2026-01-06 05:57:16,644 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:16] "GET /socket.io/?EIO=4&transport=polling&t=PkHuOpY HTTP/1.1" 200 276 0.000468
+2026-01-06 05:57:16,647 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:16] "POST /socket.io/?EIO=4&transport=polling&t=PkHuOpb&sid=vu5U5wGpQgl0oGpZAAB8 HTTP/1.1" 400 136 0.000405
+2026-01-06 05:57:17,924 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:17] "GET /socket.io/?EIO=4&transport=polling&t=PkHuJ0w&sid=JUsQcZtiYoo-a-xaAAB3 HTTP/1.1" 200 157 24.991688
+2026-01-06 05:57:17,927 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:17] "POST /socket.io/?EIO=4&transport=polling&t=PkHuOpe&sid=vu5U5wGpQgl0oGpZAAB8 HTTP/1.1" 400 136 0.000276
+2026-01-06 05:57:17,929 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:17] "GET /socket.io/?EIO=4&transport=polling&t=PkHuOyG HTTP/1.1" 200 276 0.000497
+2026-01-06 05:57:17,934 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:17] "POST /socket.io/?EIO=4&transport=polling&t=PkHuP7h&sid=pz1tdVeb7tpwdmQjAAB9 HTTP/1.1" 400 136 0.000745
+2026-01-06 05:57:32,532 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-01-06 05:57:32,532 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-01-06 05:57:32,532 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-01-06 05:57:32,533 - apscheduler.scheduler - INFO - Added job "close_stale_trips" to job store "default"
+2026-01-06 05:57:32,533 - apscheduler.scheduler - INFO - Added job "check_refuel_events" to job store "default"
+2026-01-06 05:57:32,534 - apscheduler.scheduler - INFO - Added job "check_charging_sessions" to job store "default"
+2026-01-06 05:57:32,534 - apscheduler.scheduler - INFO - Scheduler started
+2026-01-06 05:57:32,534 - services.scheduler - INFO - Background scheduler initialized
+2026-01-06 05:57:32,914 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:32] "GET /socket.io/?EIO=4&transport=polling&t=PkHuSnc HTTP/1.1" 200 276 0.001386
+2026-01-06 05:57:32,923 - engineio.server - ERROR - http://localhost:8080 is not an accepted origin. (further occurrences of this error will be logged with level INFO)
+2026-01-06 05:57:32,924 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:32] "POST /socket.io/?EIO=4&transport=polling&t=PkHuSnu&sid=pIcnocnUeiB3JmUJAAAA HTTP/1.1" 400 136 0.001448
+2026-01-06 05:57:32,930 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:32] "POST /socket.io/?EIO=4&transport=polling&t=PkHuSn_&sid=pIcnocnUeiB3JmUJAAAA HTTP/1.1" 400 136 0.000284
+2026-01-06 05:57:33,828 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:33] "GET /socket.io/?EIO=4&transport=polling&t=PkHuT01 HTTP/1.1" 200 276 0.000503
+2026-01-06 05:57:33,834 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:33] "POST /socket.io/?EIO=4&transport=polling&t=PkHuT06&sid=oS0KtuFl39urC37gAAAB HTTP/1.1" 400 136 0.000669
+2026-01-06 05:57:33,837 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:33] "POST /socket.io/?EIO=4&transport=polling&t=PkHuT0C&sid=oS0KtuFl39urC37gAAAB HTTP/1.1" 400 136 0.000188
+2026-01-06 05:57:34,896 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:34] "GET /socket.io/?EIO=4&transport=polling&t=PkHuTGj HTTP/1.1" 200 276 0.000723
+2026-01-06 05:57:34,902 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:34] "POST /socket.io/?EIO=4&transport=polling&t=PkHuTGp&sid=4bUl017XkftdmdPZAAAC HTTP/1.1" 400 136 0.000317
+2026-01-06 05:57:34,908 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:34] "POST /socket.io/?EIO=4&transport=polling&t=PkHuTGw&sid=4bUl017XkftdmdPZAAAC HTTP/1.1" 400 136 0.000161
+2026-01-06 05:57:35,777 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:35] "GET /socket.io/?EIO=4&transport=polling&t=PkHuTUU HTTP/1.1" 200 276 0.000657
+2026-01-06 05:57:35,785 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:35] "POST /socket.io/?EIO=4&transport=polling&t=PkHuTUc&sid=B65Srd9Jt_nPgQWFAAAD HTTP/1.1" 400 136 0.000295
+2026-01-06 05:57:35,791 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:35] "POST /socket.io/?EIO=4&transport=polling&t=PkHuTUi&sid=B65Srd9Jt_nPgQWFAAAD HTTP/1.1" 400 136 0.000276
+2026-01-06 05:57:36,145 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:36] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.056306
+2026-01-06 05:57:36,173 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:36] "GET /api/status HTTP/1.1" 200 794 0.025934
+2026-01-06 05:57:36,179 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:36] "GET /api/trips?limit=20 HTTP/1.1" 200 2006 0.006164
+2026-01-06 05:57:36,772 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:36] "GET /socket.io/?EIO=4&transport=polling&t=PkHuTk1 HTTP/1.1" 200 276 0.000770
+2026-01-06 05:57:36,778 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:36] "POST /socket.io/?EIO=4&transport=polling&t=PkHuTk7&sid=18jZLgHFTbCG9uZsAAAE HTTP/1.1" 400 136 0.000334
+2026-01-06 05:57:36,782 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:36] "POST /socket.io/?EIO=4&transport=polling&t=PkHuTkC&sid=18jZLgHFTbCG9uZsAAAE HTTP/1.1" 400 136 0.000225
+2026-01-06 05:57:38,148 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:38] "GET /socket.io/?EIO=4&transport=polling&t=PkHuU3W HTTP/1.1" 200 276 0.000741
+2026-01-06 05:57:38,154 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:38] "POST /socket.io/?EIO=4&transport=polling&t=PkHuU3d&sid=nKE1GrGplwmAi0gZAAAF HTTP/1.1" 400 136 0.000575
+2026-01-06 05:57:40,681 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:40] "GET /api/mpg/trend?days=90 HTTP/1.1" 200 1088 0.006274
+2026-01-06 05:57:57,920 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:57] "GET /socket.io/?EIO=4&transport=polling&t=PkHuSnu.0&sid=pIcnocnUeiB3JmUJAAAA HTTP/1.1" 200 157 24.993481
+2026-01-06 05:57:57,935 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:57] "GET / HTTP/1.1" 200 7432 0.011250
+2026-01-06 05:57:57,938 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:57] "POST /socket.io/?EIO=4&transport=polling&t=PkHuU3i&sid=nKE1GrGplwmAi0gZAAAF HTTP/1.1" 400 136 0.000190
+2026-01-06 05:57:57,942 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:57] "GET /socket.io/?EIO=4&transport=polling&t=PkHuUHj HTTP/1.1" 200 276 0.002587
+2026-01-06 05:57:57,952 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:57] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.007060
+2026-01-06 05:57:57,953 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:57] "POST /api/analytics/vitals HTTP/1.1" 400 440 0.000626
+2026-01-06 05:57:57,956 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:57] "GET /static/css/style.css HTTP/1.1" 200 11195 0.002105
+2026-01-06 05:57:57,961 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:57] "GET /static/js/dashboard.js HTTP/1.1" 200 25057 0.003270
+2026-01-06 05:57:57,963 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:57] "POST /api/analytics/vitals HTTP/1.1" 400 440 0.008969
+2026-01-06 05:57:58,048 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /socket.io/?EIO=4&transport=polling&t=PkHuYwV HTTP/1.1" 200 276 0.000416
+2026-01-06 05:57:58,054 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.005037
+2026-01-06 05:57:58,062 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /api/status HTTP/1.1" 200 794 0.007030
+2026-01-06 05:57:58,064 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "POST /socket.io/?EIO=4&transport=polling&t=PkHuYwY&sid=tLMB7KHpn_FhRFIKAAAH HTTP/1.1" 400 136 0.000096
+2026-01-06 05:57:58,072 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /api/efficiency/summary HTTP/1.1" 200 688 0.009789
+2026-01-06 05:57:58,074 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "POST /api/analytics/vitals HTTP/1.1" 400 440 0.010556
+2026-01-06 05:57:58,079 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /api/trips?limit=20 HTTP/1.1" 200 2006 0.016011
+2026-01-06 05:57:58,081 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "POST /socket.io/?EIO=4&transport=polling&t=PkHuYwn&sid=tLMB7KHpn_FhRFIKAAAH HTTP/1.1" 400 136 0.000122
+2026-01-06 05:57:58,082 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /static/manifest.json HTTP/1.1" 304 475 0.000563
+2026-01-06 05:57:58,083 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "POST /api/analytics/vitals HTTP/1.1" 400 440 0.002969
+2026-01-06 05:57:58,087 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /static/icons/icon-192.svg HTTP/1.1" 304 474 0.000447
+2026-01-06 05:57:58,098 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /api/charging/history?limit=20 HTTP/1.1" 200 404 0.004027
+2026-01-06 05:57:58,100 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /api/mpg/trend?days=30 HTTP/1.1" 200 624 0.006186
+2026-01-06 05:57:58,105 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /api/soc/analysis HTTP/1.1" 200 645 0.003917
+2026-01-06 05:57:58,165 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /api/battery/health HTTP/1.1" 200 637 0.063434
+2026-01-06 05:57:58,167 - app - ERROR - Exception on /api/battery/cells/latest [GET]
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 922, in do_execute
+    cursor.execute(statement, parameters)
+psycopg2.errors.UndefinedTable: relation "battery_cell_readings" does not exist
+LINE 2: FROM battery_cell_readings ORDER BY battery_cell_readings.ti...
+             ^
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/flask/app.py", line 1455, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/flask/app.py", line 869, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/flask/app.py", line 867, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/flask/app.py", line 852, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/routes/battery.py", line 143, in get_latest_cell_reading
+    reading = db.query(BatteryCellReading).order_by(desc(BatteryCellReading.timestamp)).first()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/query.py", line 2748, in first
+    return self.limit(1)._iter().first()  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/query.py", line 2847, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2308, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2190, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/context.py", line 293, in orm_execute_statement
+    result = conn.execute(
+             ^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1416, in execute
+    return meth(
+           ^^^^^
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/sql/elements.py", line 516, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1639, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1848, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1988, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 2343, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+  File "/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 922, in do_execute
+    cursor.execute(statement, parameters)
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.UndefinedTable) relation "battery_cell_readings" does not exist
+LINE 2: FROM battery_cell_readings ORDER BY battery_cell_readings.ti...
+             ^
+
+[SQL: SELECT battery_cell_readings.id AS battery_cell_readings_id, battery_cell_readings.timestamp AS battery_cell_readings_timestamp, battery_cell_readings.cell_voltages AS battery_cell_readings_cell_voltages, battery_cell_readings.min_voltage AS battery_cell_readings_min_voltage, battery_cell_readings.max_voltage AS battery_cell_readings_max_voltage, battery_cell_readings.avg_voltage AS battery_cell_readings_avg_voltage, battery_cell_readings.voltage_delta AS battery_cell_readings_voltage_delta, battery_cell_readings.module1_avg AS battery_cell_readings_module1_avg, battery_cell_readings.module2_avg AS battery_cell_readings_module2_avg, battery_cell_readings.module3_avg AS battery_cell_readings_module3_avg, battery_cell_readings.ambient_temp_f AS battery_cell_readings_ambient_temp_f, battery_cell_readings.state_of_charge AS battery_cell_readings_state_of_charge, battery_cell_readings.is_charging AS battery_cell_readings_is_charging, battery_cell_readings.created_at AS battery_cell_readings_created_at 
+FROM battery_cell_readings ORDER BY battery_cell_readings.timestamp DESC 
+ LIMIT %(param_1)s]
+[parameters: {'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2026-01-06 05:57:58,171 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /api/battery/cells/latest HTTP/1.1" 500 695 0.069052
+2026-01-06 05:57:58,175 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /api/charging/summary HTTP/1.1" 200 722 0.073407
+2026-01-06 05:57:58,833 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:58] "GET /socket.io/?EIO=4&transport=polling&t=PkHuT07&sid=oS0KtuFl39urC37gAAAB HTTP/1.1" 200 157 24.998078
+2026-01-06 05:57:59,257 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:59] "GET /socket.io/?EIO=4&transport=polling&t=PkHuZDL HTTP/1.1" 200 276 0.000568
+2026-01-06 05:57:59,260 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:59] "POST /socket.io/?EIO=4&transport=polling&t=PkHuZDR&sid=Vdh2YG9pc2dkZXO1AAAI HTTP/1.1" 400 136 0.000467
+2026-01-06 05:57:59,263 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:59] "POST /socket.io/?EIO=4&transport=polling&t=PkHuZDT&sid=Vdh2YG9pc2dkZXO1AAAI HTTP/1.1" 400 136 0.000170
+2026-01-06 05:57:59,899 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:57:59] "GET /socket.io/?EIO=4&transport=polling&t=PkHuTGq&sid=4bUl017XkftdmdPZAAAC HTTP/1.1" 200 157 24.992013
+2026-01-06 05:58:00,260 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:00] "GET /socket.io/?EIO=4&transport=polling&t=PkHuZT1 HTTP/1.1" 200 276 0.000753
+2026-01-06 05:58:00,267 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:00] "POST /socket.io/?EIO=4&transport=polling&t=PkHuZT7&sid=qUjoNPxsCjMKVkcBAAAJ HTTP/1.1" 400 136 0.000383
+2026-01-06 05:58:00,272 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:00] "POST /socket.io/?EIO=4&transport=polling&t=PkHuZTE&sid=qUjoNPxsCjMKVkcBAAAJ HTTP/1.1" 400 136 0.000257
+2026-01-06 05:58:00,783 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:00] "GET /socket.io/?EIO=4&transport=polling&t=PkHuTUd&sid=B65Srd9Jt_nPgQWFAAAD HTTP/1.1" 200 157 24.995743
+2026-01-06 05:58:01,655 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:01] "GET /socket.io/?EIO=4&transport=polling&t=PkHuZoq HTTP/1.1" 200 276 0.000557
+2026-01-06 05:58:01,661 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:01] "POST /socket.io/?EIO=4&transport=polling&t=PkHuZow&sid=shsumfYRFgaxrF53AAAK HTTP/1.1" 400 136 0.000590
+2026-01-06 05:58:01,664 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:01] "POST /socket.io/?EIO=4&transport=polling&t=PkHuZo_&sid=shsumfYRFgaxrF53AAAK HTTP/1.1" 400 136 0.000179
+2026-01-06 05:58:01,780 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:01] "GET /socket.io/?EIO=4&transport=polling&t=PkHuTk8&sid=18jZLgHFTbCG9uZsAAAE HTTP/1.1" 200 157 25.001247
+2026-01-06 05:58:02,327 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:02] "GET /socket.io/?EIO=4&transport=polling&t=PkHuZzK HTTP/1.1" 200 276 0.000585
+2026-01-06 05:58:02,333 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:02] "POST /socket.io/?EIO=4&transport=polling&t=PkHuZzQ&sid=-D9rx0jMQ4aLwvC0AAAL HTTP/1.1" 400 136 0.000186
+2026-01-06 05:58:02,336 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:02] "POST /socket.io/?EIO=4&transport=polling&t=PkHuZzV&sid=-D9rx0jMQ4aLwvC0AAAL HTTP/1.1" 400 136 0.000331
+2026-01-06 05:58:02,930 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:02] "GET /socket.io/?EIO=4&transport=polling&t=PkHua6l HTTP/1.1" 200 276 0.000812
+2026-01-06 05:58:02,934 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:02] "POST /socket.io/?EIO=4&transport=polling&t=PkHua6r&sid=v0C7Xpjx6tMdN570AAAM HTTP/1.1" 400 136 0.000201
+2026-01-06 05:58:03,153 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:03] "GET /socket.io/?EIO=4&transport=polling&t=PkHuU3d.0&sid=nKE1GrGplwmAi0gZAAAF HTTP/1.1" 200 157 24.997230
+2026-01-06 05:58:23,054 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:23] "GET /socket.io/?EIO=4&transport=polling&t=PkHuYwZ&sid=tLMB7KHpn_FhRFIKAAAH HTTP/1.1" 200 157 24.988948
+2026-01-06 05:58:23,058 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:23] "POST /socket.io/?EIO=4&transport=polling&t=PkHua6u&sid=v0C7Xpjx6tMdN570AAAM HTTP/1.1" 400 136 0.000281
+2026-01-06 05:58:23,061 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:23] "GET /socket.io/?EIO=4&transport=polling&t=PkHuaKS HTTP/1.1" 200 276 0.000628
+2026-01-06 05:58:23,073 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:23] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.008354
+2026-01-06 05:58:23,078 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:23] "POST /socket.io/?EIO=4&transport=polling&t=PkHuf1O&sid=vWx6IhF8Wz5w0GrUAAAN HTTP/1.1" 400 136 0.000459
+2026-01-06 05:58:24,265 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:24] "GET /socket.io/?EIO=4&transport=polling&t=PkHuZDR.0&sid=Vdh2YG9pc2dkZXO1AAAI HTTP/1.1" 200 157 25.004000
+2026-01-06 05:58:24,273 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:24] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.006112
+2026-01-06 05:58:24,276 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:24] "POST /socket.io/?EIO=4&transport=polling&t=PkHuf1f&sid=vWx6IhF8Wz5w0GrUAAAN HTTP/1.1" 400 136 0.000220
+2026-01-06 05:58:24,552 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:24] "GET /socket.io/?EIO=4&transport=polling&t=PkHufOa HTTP/1.1" 200 276 0.000822
+2026-01-06 05:58:24,558 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:24] "POST /socket.io/?EIO=4&transport=polling&t=PkHufOh&sid=sG9GKmcCXYRIS1g4AAAO HTTP/1.1" 400 136 0.000471
+2026-01-06 05:58:25,269 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:25] "GET /socket.io/?EIO=4&transport=polling&t=PkHuZT9&sid=qUjoNPxsCjMKVkcBAAAJ HTTP/1.1" 200 157 25.000735
+2026-01-06 05:58:25,273 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:25] "POST /socket.io/?EIO=4&transport=polling&t=PkHufOm&sid=sG9GKmcCXYRIS1g4AAAO HTTP/1.1" 400 136 0.000270
+2026-01-06 05:58:25,661 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:25] "GET /socket.io/?EIO=4&transport=polling&t=PkHuffy HTTP/1.1" 200 276 0.000362
+2026-01-06 05:58:25,666 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:25] "POST /socket.io/?EIO=4&transport=polling&t=PkHufg0&sid=0k5K7cSXRf_6XCgJAAAP HTTP/1.1" 400 136 0.000819
+2026-01-06 05:58:26,664 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:26] "GET /socket.io/?EIO=4&transport=polling&t=PkHuZox&sid=shsumfYRFgaxrF53AAAK HTTP/1.1" 200 157 25.002437
+2026-01-06 05:58:26,667 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:26] "POST /socket.io/?EIO=4&transport=polling&t=PkHufg3&sid=0k5K7cSXRf_6XCgJAAAP HTTP/1.1" 400 136 0.000367
+2026-01-06 05:58:26,670 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:26] "GET /socket.io/?EIO=4&transport=polling&t=PkHufsO HTTP/1.1" 200 276 0.000468
+2026-01-06 05:58:26,675 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:26] "POST /socket.io/?EIO=4&transport=polling&t=PkHufvm&sid=_duOSLHbnl9dB48nAAAQ HTTP/1.1" 400 136 0.000339
+2026-01-06 05:58:27,335 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:27] "GET /socket.io/?EIO=4&transport=polling&t=PkHuZzR&sid=-D9rx0jMQ4aLwvC0AAAL HTTP/1.1" 200 157 25.001527
+2026-01-06 05:58:27,337 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:27] "POST /socket.io/?EIO=4&transport=polling&t=PkHufvs&sid=_duOSLHbnl9dB48nAAAQ HTTP/1.1" 400 136 0.000155
+2026-01-06 05:58:27,339 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:27] "GET /socket.io/?EIO=4&transport=polling&t=PkHug31 HTTP/1.1" 200 276 0.000429
+2026-01-06 05:58:27,342 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:27] "POST /socket.io/?EIO=4&transport=polling&t=PkHug4E&sid=dCMvxejh6MMpuB6eAAAR HTTP/1.1" 400 136 0.000190
+2026-01-06 05:58:27,936 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:27] "GET /socket.io/?EIO=4&transport=polling&t=PkHua6s&sid=v0C7Xpjx6tMdN570AAAM HTTP/1.1" 200 157 25.001162
+2026-01-06 05:58:27,942 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:27] "POST /socket.io/?EIO=4&transport=polling&t=PkHug4G&sid=dCMvxejh6MMpuB6eAAAR HTTP/1.1" 400 136 0.000234
+2026-01-06 05:58:28,076 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:28] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.007583
+2026-01-06 05:58:28,091 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:28] "GET /api/status HTTP/1.1" 200 794 0.010014
+2026-01-06 05:58:28,101 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:28] "GET /socket.io/?EIO=4&transport=polling&t=PkHugG3 HTTP/1.1" 200 276 0.000252
+2026-01-06 05:58:28,107 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:28] "POST /socket.io/?EIO=4&transport=polling&t=PkHugG8&sid=NARZusBmb3f_Qku1AAAS HTTP/1.1" 400 136 0.000238
+2026-01-06 05:58:32,536 - apscheduler.executors.default - INFO - Running job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-06 05:58:32 UTC)" (scheduled at 2026-01-06 05:58:32.532265+00:00)
+2026-01-06 05:58:32,551 - services.scheduler - INFO - Closing stale trip 34 (session: 89a97649-3016-477c-9c22-d43a1fcd198a)
+2026-01-06 05:58:33,449 - utils.wide_events - INFO - {"operation": "trip_finalization", "timestamp": "2026-01-06T05:58:33.449681Z", "request_id": "b5f12da7-029b-4e2a-8f2e-16cddb457681", "trace_id": "89a97649-3016-477c-9c22-d43a1fcd198a", "service": {"name": "volttracker", "version": "0.1.0-dev", "environment": "development", "deployment_id": "local-462e2835efa9", "deployed_at": "2026-01-06T05:57:32.232662", "region": "local"}, "trip_id": 34, "session_id": "89a97649-3016-477c-9c22-d43a1fcd198a", "start_odometer": 0.0, "start_soc": 14.9, "feature_flags": {"weather_integration": true, "enhanced_route_detection": false, "predictive_range": false}, "performance_breakdown": {"db_query_telemetry_ms": 45.34, "calculate_basics_ms": 12.28, "process_gas_mode_ms": 3.27, "calculate_efficiency_ms": 0.0, "fetch_weather_ms": 811.94, "context_enrichment_ms": 12.1}, "business_metrics": {"telemetry_points": 1437, "soc_at_gas_transition": 13.33, "gas_mpg": 22.7, "fuel_used_gallons": 0.6211237400000003, "gas_mode_entered": true, "electric_kwh_used": null, "kwh_per_mile": null}, "end_odometer": 14.2, "distance_miles": 14.2, "avg_temp_f": 47.5, "gas_mode_entered": true, "electric_miles": 0.0, "gas_miles": 14.2, "weather_temp_f": 56.7, "weather_conditions": "Partly Cloudy", "weather_impact_factor": 1.0, "vehicle_context": {"total_trips": 19, "total_miles": 649.7, "account_age_days": 7, "usage_tier": "light", "avg_kwh_per_mile": null, "avg_gas_mpg": 30.3, "recent_avg_electric_miles": 0.0, "recent_avg_efficiency_kwh_per_mile": null, "recent_avg_soc_drop_percent": 2.4, "sample_size_trips": 16}, "duration_ms": 897.57, "success": true, "event": "trip_finalization_complete", "logger": "utils.wide_events", "level": "info"}
+2026-01-06 05:58:33,450 - services.trip_service - INFO - Trip 34 finalized: 14.2 mi (electric: 0.0, gas: 14.2, MPG: 22.7, kWh/mi: N/A)
+2026-01-06 05:58:33,454 - apscheduler.executors.default - INFO - Job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-06 05:59:32 UTC)" executed successfully
+2026-01-06 05:58:48,071 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:48] "GET /socket.io/?EIO=4&transport=polling&t=PkHuf1P&sid=vWx6IhF8Wz5w0GrUAAAN HTTP/1.1" 200 157 24.990722
+2026-01-06 05:58:48,074 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:48] "POST /socket.io/?EIO=4&transport=polling&t=PkHugGE&sid=NARZusBmb3f_Qku1AAAS HTTP/1.1" 400 136 0.000361
+2026-01-06 05:58:48,076 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:48] "GET /socket.io/?EIO=4&transport=polling&t=PkHugQj HTTP/1.1" 200 276 0.001027
+2026-01-06 05:58:48,090 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:48] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.013008
+2026-01-06 05:58:48,093 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:48] "POST /socket.io/?EIO=4&transport=polling&t=PkHul8E&sid=gjebnpIqu_mnvWhJAAAT HTTP/1.1" 400 136 0.000098
+2026-01-06 05:58:49,558 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:49] "GET /socket.io/?EIO=4&transport=polling&t=PkHufOh.0&sid=sG9GKmcCXYRIS1g4AAAO HTTP/1.1" 200 157 24.998953
+2026-01-06 05:58:49,566 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:49] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.006031
+2026-01-06 05:58:49,569 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:49] "POST /socket.io/?EIO=4&transport=polling&t=PkHul8V&sid=gjebnpIqu_mnvWhJAAAT HTTP/1.1" 400 136 0.000181
+2026-01-06 05:58:49,585 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:49] "GET /socket.io/?EIO=4&transport=polling&t=PkHulVk HTTP/1.1" 200 276 0.000393
+2026-01-06 05:58:49,588 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:49] "POST /socket.io/?EIO=4&transport=polling&t=PkHulVp&sid=OT3RNhg0K9grlm71AAAU HTTP/1.1" 400 136 0.000224
+2026-01-06 05:58:50,665 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:50] "GET /socket.io/?EIO=4&transport=polling&t=PkHufg0.0&sid=0k5K7cSXRf_6XCgJAAAP HTTP/1.1" 200 157 24.998908
+2026-01-06 05:58:50,670 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:50] "POST /socket.io/?EIO=4&transport=polling&t=PkHulVs&sid=OT3RNhg0K9grlm71AAAU HTTP/1.1" 400 136 0.000232
+2026-01-06 05:58:50,672 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:50] "GET /socket.io/?EIO=4&transport=polling&t=PkHull0 HTTP/1.1" 200 276 0.000400
+2026-01-06 05:58:50,675 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:50] "POST /socket.io/?EIO=4&transport=polling&t=PkHulmo&sid=QMvJalu_pzti9agyAAAV HTTP/1.1" 400 136 0.000473
+2026-01-06 05:58:51,675 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:51] "GET /socket.io/?EIO=4&transport=polling&t=PkHufvn&sid=_duOSLHbnl9dB48nAAAQ HTTP/1.1" 200 157 24.997979
+2026-01-06 05:58:51,677 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:51] "POST /socket.io/?EIO=4&transport=polling&t=PkHulmr&sid=QMvJalu_pzti9agyAAAV HTTP/1.1" 400 136 0.000190
+2026-01-06 05:58:51,679 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:51] "GET /socket.io/?EIO=4&transport=polling&t=PkHul-f HTTP/1.1" 200 276 0.000403
+2026-01-06 05:58:51,683 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:51] "POST /socket.io/?EIO=4&transport=polling&t=PkHum0W&sid=MlTOUUlrj5bCxgE2AAAW HTTP/1.1" 400 136 0.000994
+2026-01-06 05:58:52,347 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:52] "GET /socket.io/?EIO=4&transport=polling&t=PkHug4E.0&sid=dCMvxejh6MMpuB6eAAAR HTTP/1.1" 200 157 25.003594
+2026-01-06 05:58:52,351 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:52] "POST /socket.io/?EIO=4&transport=polling&t=PkHum0a&sid=MlTOUUlrj5bCxgE2AAAW HTTP/1.1" 400 136 0.000249
+2026-01-06 05:58:53,104 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:53] "GET /socket.io/?EIO=4&transport=polling&t=PkHugG9&sid=NARZusBmb3f_Qku1AAAS HTTP/1.1" 200 157 24.993657
+2026-01-06 05:58:53,141 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:53] "GET /socket.io/?EIO=4&transport=polling&t=PkHumNJ HTTP/1.1" 200 276 0.000646
+2026-01-06 05:58:53,144 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:53] "POST /socket.io/?EIO=4&transport=polling&t=PkHumNN&sid=QSWCYv9_Al6uDgFLAAAX HTTP/1.1" 400 136 0.000234
+2026-01-06 05:58:53,149 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:53] "POST /socket.io/?EIO=4&transport=polling&t=PkHumNR&sid=QSWCYv9_Al6uDgFLAAAX HTTP/1.1" 400 136 0.000143
+2026-01-06 05:58:54,409 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:54] "GET /socket.io/?EIO=4&transport=polling&t=PkHumh4 HTTP/1.1" 200 276 0.000919
+2026-01-06 05:58:54,413 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:58:54] "POST /socket.io/?EIO=4&transport=polling&t=PkHumhB&sid=uDIX2XK9jlK_M0UBAAAY HTTP/1.1" 400 136 0.000336
+2026-01-06 05:59:13,084 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:13] "GET /socket.io/?EIO=4&transport=polling&t=PkHul8F&sid=gjebnpIqu_mnvWhJAAAT HTTP/1.1" 200 157 24.988460
+2026-01-06 05:59:13,088 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:13] "POST /socket.io/?EIO=4&transport=polling&t=PkHumhE&sid=uDIX2XK9jlK_M0UBAAAY HTTP/1.1" 400 136 0.000554
+2026-01-06 05:59:13,092 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:13] "GET /socket.io/?EIO=4&transport=polling&t=PkHumwe HTTP/1.1" 200 276 0.001135
+2026-01-06 05:59:13,112 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:13] "GET /api/trips?limit=20 HTTP/1.1" 200 2015 0.017905
+2026-01-06 05:59:13,119 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:13] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.003624
+2026-01-06 05:59:13,120 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:13] "POST /socket.io/?EIO=4&transport=polling&t=PkHurF6&sid=jdNkv-lSO9CodmnCAAAZ HTTP/1.1" 400 136 0.000116
+2026-01-06 05:59:14,587 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:14] "GET /socket.io/?EIO=4&transport=polling&t=PkHulVp.0&sid=OT3RNhg0K9grlm71AAAU HTTP/1.1" 200 157 24.998382
+2026-01-06 05:59:14,596 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:14] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.004920
+2026-01-06 05:59:14,600 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:14] "POST /socket.io/?EIO=4&transport=polling&t=PkHurFY&sid=jdNkv-lSO9CodmnCAAAZ HTTP/1.1" 400 136 0.000191
+2026-01-06 05:59:14,602 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:14] "GET /socket.io/?EIO=4&transport=polling&t=PkHurWO HTTP/1.1" 200 276 0.000378
+2026-01-06 05:59:14,605 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:14] "POST /socket.io/?EIO=4&transport=polling&t=PkHurch&sid=7u95tsvF74I5IlLbAAAa HTTP/1.1" 400 136 0.000266
+2026-01-06 05:59:15,676 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:15] "GET /socket.io/?EIO=4&transport=polling&t=PkHulmo.0&sid=QMvJalu_pzti9agyAAAV HTTP/1.1" 200 157 24.999985
+2026-01-06 05:59:15,679 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:15] "POST /socket.io/?EIO=4&transport=polling&t=PkHurcl&sid=7u95tsvF74I5IlLbAAAa HTTP/1.1" 400 136 0.000211
+2026-01-06 05:59:15,681 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:15] "GET /socket.io/?EIO=4&transport=polling&t=PkHurmz HTTP/1.1" 200 276 0.000448
+2026-01-06 05:59:15,685 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:15] "POST /socket.io/?EIO=4&transport=polling&t=PkHurtZ&sid=jyqXspTcEIx0sG7qAAAb HTTP/1.1" 400 136 0.000346
+2026-01-06 05:59:16,687 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:16] "GET /socket.io/?EIO=4&transport=polling&t=PkHum0X&sid=MlTOUUlrj5bCxgE2AAAW HTTP/1.1" 200 157 25.003122
+2026-01-06 05:59:16,690 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:16] "POST /socket.io/?EIO=4&transport=polling&t=PkHurtc&sid=jyqXspTcEIx0sG7qAAAb HTTP/1.1" 400 136 0.000215
+2026-01-06 05:59:17,185 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:17] "GET /socket.io/?EIO=4&transport=polling&t=PkHusE_ HTTP/1.1" 200 276 0.001040
+2026-01-06 05:59:17,189 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:17] "POST /socket.io/?EIO=4&transport=polling&t=PkHusF4&sid=QZlwIfYyQxlB86iAAAAc HTTP/1.1" 400 136 0.000331
+2026-01-06 05:59:18,150 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:18] "GET /socket.io/?EIO=4&transport=polling&t=PkHumNO&sid=QSWCYv9_Al6uDgFLAAAX HTTP/1.1" 200 157 25.001392
+2026-01-06 05:59:18,152 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:18] "POST /socket.io/?EIO=4&transport=polling&t=PkHusF6&sid=QZlwIfYyQxlB86iAAAAc HTTP/1.1" 400 136 0.000169
+2026-01-06 05:59:18,157 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:18] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.004503
+2026-01-06 05:59:18,653 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:18] "GET /socket.io/?EIO=4&transport=polling&t=PkHusby HTTP/1.1" 200 276 0.000456
+2026-01-06 05:59:18,658 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:18] "POST /socket.io/?EIO=4&transport=polling&t=PkHusc0&sid=FF3d4I_rMcqk4uOmAAAd HTTP/1.1" 400 136 0.000356
+2026-01-06 05:59:19,414 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:19] "GET /socket.io/?EIO=4&transport=polling&t=PkHumhC&sid=uDIX2XK9jlK_M0UBAAAY HTTP/1.1" 200 157 25.000230
+2026-01-06 05:59:19,417 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:19] "POST /socket.io/?EIO=4&transport=polling&t=PkHusc4&sid=FF3d4I_rMcqk4uOmAAAd HTTP/1.1" 400 136 0.000242
+2026-01-06 05:59:19,451 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:19] "GET /socket.io/?EIO=4&transport=polling&t=PkHusoP HTTP/1.1" 200 276 0.000743
+2026-01-06 05:59:19,454 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:19] "POST /socket.io/?EIO=4&transport=polling&t=PkHusoT&sid=enm9SQ2wr6VoCWWZAAAe HTTP/1.1" 400 136 0.000265
+2026-01-06 05:59:32,539 - apscheduler.executors.default - INFO - Running job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-06 06:00:32 UTC)" (scheduled at 2026-01-06 05:59:32.532265+00:00)
+2026-01-06 05:59:32,542 - apscheduler.executors.default - INFO - Job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-06 06:00:32 UTC)" executed successfully
+2026-01-06 05:59:32,542 - apscheduler.executors.default - INFO - Running job "check_charging_sessions (trigger: interval[0:02:00], next run at: 2026-01-06 05:59:32 UTC)" (scheduled at 2026-01-06 05:59:32.532701+00:00)
+2026-01-06 05:59:32,594 - apscheduler.executors.default - INFO - Job "check_charging_sessions (trigger: interval[0:02:00], next run at: 2026-01-06 05:59:32 UTC)" executed successfully
+2026-01-06 05:59:38,099 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:38] "GET /socket.io/?EIO=4&transport=polling&t=PkHurF7&sid=jdNkv-lSO9CodmnCAAAZ HTTP/1.1" 200 157 24.977620
+2026-01-06 05:59:38,101 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:38] "POST /socket.io/?EIO=4&transport=polling&t=PkHusoW&sid=enm9SQ2wr6VoCWWZAAAe HTTP/1.1" 400 136 0.000205
+2026-01-06 05:59:38,103 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:38] "GET /socket.io/?EIO=4&transport=polling&t=PkHut6J HTTP/1.1" 200 276 0.000351
+2026-01-06 05:59:38,110 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:38] "GET /api/mpg/trend?days=7 HTTP/1.1" 200 620 0.005944
+2026-01-06 05:59:38,117 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:38] "GET /api/mpg/trend?days=30 HTTP/1.1" 200 620 0.005175
+2026-01-06 05:59:38,122 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:38] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.003690
+2026-01-06 05:59:38,124 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:38] "POST /socket.io/?EIO=4&transport=polling&t=PkHuxLu&sid=bSI_VrR2pq1pm4xIAAAf HTTP/1.1" 400 136 0.000113
+2026-01-06 05:59:39,608 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:39] "GET /socket.io/?EIO=4&transport=polling&t=PkHurci&sid=7u95tsvF74I5IlLbAAAa HTTP/1.1" 200 157 25.001817
+2026-01-06 05:59:39,618 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:39] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.008116
+2026-01-06 05:59:39,621 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:39] "POST /socket.io/?EIO=4&transport=polling&t=PkHuxMF&sid=bSI_VrR2pq1pm4xIAAAf HTTP/1.1" 400 136 0.000257
+2026-01-06 05:59:39,622 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:39] "GET /socket.io/?EIO=4&transport=polling&t=PkHuxX9 HTTP/1.1" 200 276 0.000375
+2026-01-06 05:59:39,627 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:39] "POST /api/analytics/vitals HTTP/1.1" 400 440 0.002506
+2026-01-06 05:59:39,628 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:39] "POST /socket.io/?EIO=4&transport=polling&t=PkHuxje&sid=NEWH--HhPJMc_TKKAAAg HTTP/1.1" 400 136 0.000163
+2026-01-06 05:59:40,685 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:40] "GET /socket.io/?EIO=4&transport=polling&t=PkHurta&sid=jyqXspTcEIx0sG7qAAAb HTTP/1.1" 200 157 24.998763
+2026-01-06 05:59:40,688 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:40] "POST /socket.io/?EIO=4&transport=polling&t=PkHuxjj&sid=NEWH--HhPJMc_TKKAAAg HTTP/1.1" 400 136 0.000336
+2026-01-06 05:59:40,690 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:40] "GET /socket.io/?EIO=4&transport=polling&t=PkHuxsx HTTP/1.1" 200 276 0.000358
+2026-01-06 05:59:40,693 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:40] "POST /api/analytics/vitals HTTP/1.1" 400 440 0.002000
+2026-01-06 05:59:40,695 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:40] "POST /socket.io/?EIO=4&transport=polling&t=PkHux-K&sid=QPsphOGr3FG0rcI8AAAh HTTP/1.1" 400 136 0.000233
+2026-01-06 05:59:42,189 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:42] "GET /socket.io/?EIO=4&transport=polling&t=PkHusF4.0&sid=QZlwIfYyQxlB86iAAAAc HTTP/1.1" 200 157 24.998555
+2026-01-06 05:59:42,191 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:42] "POST /socket.io/?EIO=4&transport=polling&t=PkHux-P&sid=QPsphOGr3FG0rcI8AAAh HTTP/1.1" 400 136 0.000139
+2026-01-06 05:59:42,192 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:42] "GET /socket.io/?EIO=4&transport=polling&t=PkHuyH0 HTTP/1.1" 200 276 0.000337
+2026-01-06 05:59:42,195 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:42] "POST /socket.io/?EIO=4&transport=polling&t=PkHuyLo&sid=ctmY6tPP6sNbhqteAAAi HTTP/1.1" 400 136 0.000331
+2026-01-06 05:59:43,663 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:43] "GET /socket.io/?EIO=4&transport=polling&t=PkHusc1&sid=FF3d4I_rMcqk4uOmAAAd HTTP/1.1" 200 157 25.001410
+2026-01-06 05:59:43,665 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:43] "POST /socket.io/?EIO=4&transport=polling&t=PkHuyLq&sid=ctmY6tPP6sNbhqteAAAi HTTP/1.1" 400 136 0.000215
+2026-01-06 05:59:43,668 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:43] "GET /socket.io/?EIO=4&transport=polling&t=PkHuyZD HTTP/1.1" 200 276 0.000689
+2026-01-06 05:59:43,672 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:43] "POST /socket.io/?EIO=4&transport=polling&t=PkHuyis&sid=xMof2funGQynF4sEAAAj HTTP/1.1" 400 136 0.000626
+2026-01-06 05:59:44,460 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:44] "GET /socket.io/?EIO=4&transport=polling&t=PkHusoU&sid=enm9SQ2wr6VoCWWZAAAe HTTP/1.1" 200 157 25.004050
+2026-01-06 05:59:44,462 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:44] "POST /socket.io/?EIO=4&transport=polling&t=PkHuyiv&sid=xMof2funGQynF4sEAAAj HTTP/1.1" 400 136 0.000186
+2026-01-06 05:59:44,654 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:44] "GET /socket.io/?EIO=4&transport=polling&t=PkHuyyB HTTP/1.1" 200 276 0.001104
+2026-01-06 05:59:44,656 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 05:59:44] "POST /socket.io/?EIO=4&transport=polling&t=PkHuyyG&sid=k1R8WtLFVLjn_dMSAAAk HTTP/1.1" 400 136 0.000402
+2026-01-06 06:00:03,108 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:03] "GET /socket.io/?EIO=4&transport=polling&t=PkHuxLv&sid=bSI_VrR2pq1pm4xIAAAf HTTP/1.1" 200 157 24.982716
+2026-01-06 06:00:03,110 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:03] "POST /socket.io/?EIO=4&transport=polling&t=PkHuyyH&sid=k1R8WtLFVLjn_dMSAAAk HTTP/1.1" 400 136 0.000191
+2026-01-06 06:00:03,111 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:03] "GET /socket.io/?EIO=4&transport=polling&t=PkHuzEO HTTP/1.1" 200 276 0.000449
+2026-01-06 06:00:03,122 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:03] "GET /api/status HTTP/1.1" 200 505 0.009641
+2026-01-06 06:00:03,127 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:03] "GET /api/trips?limit=20 HTTP/1.1" 200 2015 0.003150
+2026-01-06 06:00:03,130 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:03] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.001313
+2026-01-06 06:00:03,130 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:03] "POST /socket.io/?EIO=4&transport=polling&t=PkHv1Sf&sid=pGaQt4YTtoUZ8K2-AAAl HTTP/1.1" 400 136 0.000041
+2026-01-06 06:00:04,626 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:04] "GET /socket.io/?EIO=4&transport=polling&t=PkHuxjf&sid=NEWH--HhPJMc_TKKAAAg HTTP/1.1" 200 157 24.995746
+2026-01-06 06:00:04,635 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:04] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.006870
+2026-01-06 06:00:04,637 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:04] "POST /socket.io/?EIO=4&transport=polling&t=PkHv1Sy&sid=pGaQt4YTtoUZ8K2-AAAl HTTP/1.1" 400 136 0.000319
+2026-01-06 06:00:04,640 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:04] "GET /socket.io/?EIO=4&transport=polling&t=PkHv1dR HTTP/1.1" 200 276 0.000529
+2026-01-06 06:00:04,644 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:04] "POST /socket.io/?EIO=4&transport=polling&t=PkHv1qY&sid=Y-JDqIjoSPfLcH7FAAAm HTTP/1.1" 400 136 0.000712
+2026-01-06 06:00:05,695 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:05] "GET /socket.io/?EIO=4&transport=polling&t=PkHux-K.0&sid=QPsphOGr3FG0rcI8AAAh HTTP/1.1" 200 157 24.997729
+2026-01-06 06:00:05,699 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:05] "POST /socket.io/?EIO=4&transport=polling&t=PkHv1qb&sid=Y-JDqIjoSPfLcH7FAAAm HTTP/1.1" 400 136 0.000626
+2026-01-06 06:00:05,702 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:05] "GET /socket.io/?EIO=4&transport=polling&t=PkHv24C HTTP/1.1" 200 276 0.000436
+2026-01-06 06:00:05,709 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:05] "POST /socket.io/?EIO=4&transport=polling&t=PkHv259&sid=OOOKFwDQZgbqKoKEAAAn HTTP/1.1" 400 136 0.000853
+2026-01-06 06:00:07,194 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:07] "GET /socket.io/?EIO=4&transport=polling&t=PkHuyLo.0&sid=ctmY6tPP6sNbhqteAAAi HTTP/1.1" 200 157 24.997750
+2026-01-06 06:00:07,197 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:07] "POST /socket.io/?EIO=4&transport=polling&t=PkHv25G&sid=OOOKFwDQZgbqKoKEAAAn HTTP/1.1" 400 136 0.000345
+2026-01-06 06:00:07,199 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:07] "GET /socket.io/?EIO=4&transport=polling&t=PkHv2QW HTTP/1.1" 200 276 0.000840
+2026-01-06 06:00:07,203 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:07] "POST /socket.io/?EIO=4&transport=polling&t=PkHv2SX&sid=2M0y72r8wodJ6nL2AAAo HTTP/1.1" 400 136 0.000396
+2026-01-06 06:00:08,677 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:08] "GET /socket.io/?EIO=4&transport=polling&t=PkHuyis.0&sid=xMof2funGQynF4sEAAAj HTTP/1.1" 200 157 25.003436
+2026-01-06 06:00:08,681 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:08] "POST /socket.io/?EIO=4&transport=polling&t=PkHv2Sb&sid=2M0y72r8wodJ6nL2AAAo HTTP/1.1" 400 136 0.000407
+2026-01-06 06:00:08,690 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:08] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.006897
+2026-01-06 06:00:08,694 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:08] "GET /socket.io/?EIO=4&transport=polling&t=PkHv2gL HTTP/1.1" 200 276 0.000648
+2026-01-06 06:00:08,700 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:08] "POST /socket.io/?EIO=4&transport=polling&t=PkHv2pv&sid=GrGx0KumXt1mKTq4AAAp HTTP/1.1" 400 136 0.000957
+2026-01-06 06:00:09,657 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:09] "GET /socket.io/?EIO=4&transport=polling&t=PkHuyyG.0&sid=k1R8WtLFVLjn_dMSAAAk HTTP/1.1" 200 157 25.000033
+2026-01-06 06:00:09,659 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:09] "POST /socket.io/?EIO=4&transport=polling&t=PkHv2p-&sid=GrGx0KumXt1mKTq4AAAp HTTP/1.1" 400 136 0.000185
+2026-01-06 06:00:09,661 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:09] "GET /socket.io/?EIO=4&transport=polling&t=PkHv2z3 HTTP/1.1" 200 276 0.000372
+2026-01-06 06:00:09,664 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:09] "POST /socket.io/?EIO=4&transport=polling&t=PkHv32_&sid=qORGS2G2AnPlzuUCAAAq HTTP/1.1" 400 136 0.000423
+2026-01-06 06:00:28,118 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:28] "GET /socket.io/?EIO=4&transport=polling&t=PkHv1Sg&sid=pGaQt4YTtoUZ8K2-AAAl HTTP/1.1" 200 157 24.986671
+2026-01-06 06:00:28,122 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:28] "POST /socket.io/?EIO=4&transport=polling&t=PkHv332&sid=qORGS2G2AnPlzuUCAAAq HTTP/1.1" 400 136 0.000430
+2026-01-06 06:00:28,126 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:28] "GET /socket.io/?EIO=4&transport=polling&t=PkHv3QN HTTP/1.1" 200 276 0.000808
+2026-01-06 06:00:28,138 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:28] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.008363
+2026-01-06 06:00:28,142 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:28] "GET /api/status HTTP/1.1" 200 505 0.003017
+2026-01-06 06:00:28,143 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:28] "POST /socket.io/?EIO=4&transport=polling&t=PkHv7ZX&sid=-iLALbs3A67cfVATAAAr HTTP/1.1" 400 136 0.000082
+2026-01-06 06:00:29,647 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:29] "GET /socket.io/?EIO=4&transport=polling&t=PkHv1qY.0&sid=Y-JDqIjoSPfLcH7FAAAm HTTP/1.1" 200 157 25.001710
+2026-01-06 06:00:29,660 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:29] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.009364
+2026-01-06 06:00:29,663 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:29] "POST /socket.io/?EIO=4&transport=polling&t=PkHv7Zo&sid=-iLALbs3A67cfVATAAAr HTTP/1.1" 400 136 0.000176
+2026-01-06 06:00:29,665 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:29] "GET /socket.io/?EIO=4&transport=polling&t=PkHv7qc HTTP/1.1" 200 276 0.000479
+2026-01-06 06:00:29,669 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:29] "POST /socket.io/?EIO=4&transport=polling&t=PkHv7xa&sid=7d7nqIRS4nlX8XwqAAAs HTTP/1.1" 400 136 0.000446
+2026-01-06 06:00:30,711 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:30] "GET /socket.io/?EIO=4&transport=polling&t=PkHv25A&sid=OOOKFwDQZgbqKoKEAAAn HTTP/1.1" 200 157 25.000539
+2026-01-06 06:00:30,714 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:30] "POST /socket.io/?EIO=4&transport=polling&t=PkHv7xe&sid=7d7nqIRS4nlX8XwqAAAs HTTP/1.1" 400 136 0.000192
+2026-01-06 06:00:30,875 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:30] "GET /socket.io/?EIO=4&transport=polling&t=PkHv8EO HTTP/1.1" 200 276 0.000483
+2026-01-06 06:00:30,879 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:30] "POST /socket.io/?EIO=4&transport=polling&t=PkHv8ET&sid=RLCBFGb206Fw-_uvAAAt HTTP/1.1" 400 136 0.000721
+2026-01-06 06:00:32,209 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:32] "GET /socket.io/?EIO=4&transport=polling&t=PkHv2SY&sid=2M0y72r8wodJ6nL2AAAo HTTP/1.1" 200 157 25.003024
+2026-01-06 06:00:32,212 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:32] "POST /socket.io/?EIO=4&transport=polling&t=PkHv8EX&sid=RLCBFGb206Fw-_uvAAAt HTTP/1.1" 400 136 0.000248
+2026-01-06 06:00:32,214 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:32] "GET /socket.io/?EIO=4&transport=polling&t=PkHv8TX HTTP/1.1" 200 276 0.000475
+2026-01-06 06:00:32,220 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:32] "POST /socket.io/?EIO=4&transport=polling&t=PkHv8ZP&sid=Rrm1UoVy2Fmg2fW5AAAu HTTP/1.1" 400 136 0.000596
+2026-01-06 06:00:32,539 - apscheduler.executors.default - INFO - Running job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-06 06:01:32 UTC)" (scheduled at 2026-01-06 06:00:32.532265+00:00)
+2026-01-06 06:00:32,544 - apscheduler.executors.default - INFO - Job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-06 06:01:32 UTC)" executed successfully
+2026-01-06 06:00:33,701 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:33] "GET /socket.io/?EIO=4&transport=polling&t=PkHv2pv.0&sid=GrGx0KumXt1mKTq4AAAp HTTP/1.1" 200 157 24.999194
+2026-01-06 06:00:33,702 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:33] "POST /socket.io/?EIO=4&transport=polling&t=PkHv8ZV&sid=Rrm1UoVy2Fmg2fW5AAAu HTTP/1.1" 400 136 0.000075
+2026-01-06 06:00:33,703 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:33] "GET /socket.io/?EIO=4&transport=polling&t=PkHv8j- HTTP/1.1" 200 276 0.000132
+2026-01-06 06:00:33,706 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:33] "POST /socket.io/?EIO=4&transport=polling&t=PkHv8wf&sid=B3tFNWQX61-Vx0VTAAAv HTTP/1.1" 400 136 0.000098
+2026-01-06 06:00:34,666 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:34] "GET /socket.io/?EIO=4&transport=polling&t=PkHv32_.0&sid=qORGS2G2AnPlzuUCAAAq HTTP/1.1" 200 157 24.999824
+2026-01-06 06:00:34,670 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:34] "POST /socket.io/?EIO=4&transport=polling&t=PkHv8wi&sid=B3tFNWQX61-Vx0VTAAAv HTTP/1.1" 400 136 0.000383
+2026-01-06 06:00:34,674 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:34] "GET /socket.io/?EIO=4&transport=polling&t=PkHv96g HTTP/1.1" 200 276 0.000832
+2026-01-06 06:00:34,680 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:34] "POST /socket.io/?EIO=4&transport=polling&t=PkHv99r&sid=IF1nXOgDsRZqDizRAAAw HTTP/1.1" 400 136 0.000688
+2026-01-06 06:00:53,133 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:53] "GET /socket.io/?EIO=4&transport=polling&t=PkHv7ZX.0&sid=-iLALbs3A67cfVATAAAr HTTP/1.1" 200 157 24.988642
+2026-01-06 06:00:53,137 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:53] "POST /socket.io/?EIO=4&transport=polling&t=PkHv99w&sid=IF1nXOgDsRZqDizRAAAw HTTP/1.1" 400 136 0.000355
+2026-01-06 06:00:53,141 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:53] "GET /socket.io/?EIO=4&transport=polling&t=PkHv9Qi HTTP/1.1" 200 276 0.000727
+2026-01-06 06:00:53,155 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:53] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.011957
+2026-01-06 06:00:53,157 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:53] "POST /socket.io/?EIO=4&transport=polling&t=PkHvDgO&sid=J90RAEVxmcz7_xLuAAAx HTTP/1.1" 400 136 0.000084
+2026-01-06 06:00:54,673 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:54] "GET /socket.io/?EIO=4&transport=polling&t=PkHv7xa.0&sid=7d7nqIRS4nlX8XwqAAAs HTTP/1.1" 200 157 25.001282
+2026-01-06 06:00:54,682 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:54] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.006893
+2026-01-06 06:00:54,685 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:54] "POST /socket.io/?EIO=4&transport=polling&t=PkHvDgd&sid=J90RAEVxmcz7_xLuAAAx HTTP/1.1" 400 136 0.000319
+2026-01-06 06:00:54,688 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:54] "GET /socket.io/?EIO=4&transport=polling&t=PkHvE06 HTTP/1.1" 200 276 0.000609
+2026-01-06 06:00:54,692 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:54] "POST /socket.io/?EIO=4&transport=polling&t=PkHvE2Y&sid=KRVyr8KldmTHzYk7AAAy HTTP/1.1" 400 136 0.000304
+2026-01-06 06:00:55,881 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:55] "GET /socket.io/?EIO=4&transport=polling&t=PkHv8ET.0&sid=RLCBFGb206Fw-_uvAAAt HTTP/1.1" 200 157 25.000293
+2026-01-06 06:00:55,885 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:55] "POST /socket.io/?EIO=4&transport=polling&t=PkHvE2c&sid=KRVyr8KldmTHzYk7AAAy HTTP/1.1" 400 136 0.000299
+2026-01-06 06:00:55,888 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:55] "GET /socket.io/?EIO=4&transport=polling&t=PkHvEBa HTTP/1.1" 200 276 0.000808
+2026-01-06 06:00:55,895 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:55] "POST /socket.io/?EIO=4&transport=polling&t=PkHvELJ&sid=91HOuc7XVU4IwI0wAAAz HTTP/1.1" 400 136 0.000319
+2026-01-06 06:00:57,221 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:57] "GET /socket.io/?EIO=4&transport=polling&t=PkHv8ZQ&sid=Rrm1UoVy2Fmg2fW5AAAu HTTP/1.1" 200 157 24.995860
+2026-01-06 06:00:57,225 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:57] "POST /socket.io/?EIO=4&transport=polling&t=PkHvELP&sid=91HOuc7XVU4IwI0wAAAz HTTP/1.1" 400 136 0.000376
+2026-01-06 06:00:57,228 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:57] "GET /socket.io/?EIO=4&transport=polling&t=PkHvEaL HTTP/1.1" 200 276 0.000598
+2026-01-06 06:00:57,235 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:57] "POST /socket.io/?EIO=4&transport=polling&t=PkHvEgG&sid=12B41IhN9W6ifpC1AAA0 HTTP/1.1" 400 136 0.000839
+2026-01-06 06:00:58,706 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:58] "GET /socket.io/?EIO=4&transport=polling&t=PkHv8wf.0&sid=B3tFNWQX61-Vx0VTAAAv HTTP/1.1" 200 157 24.999312
+2026-01-06 06:00:58,709 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:58] "POST /socket.io/?EIO=4&transport=polling&t=PkHvEgL&sid=12B41IhN9W6ifpC1AAA0 HTTP/1.1" 400 136 0.000259
+2026-01-06 06:00:58,717 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:58] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.006438
+2026-01-06 06:00:58,727 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:58] "GET /api/status HTTP/1.1" 200 505 0.008008
+2026-01-06 06:00:58,736 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:58] "GET /api/trips?limit=20 HTTP/1.1" 200 2015 0.007720
+2026-01-06 06:00:58,739 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:58] "GET /socket.io/?EIO=4&transport=polling&t=PkHvEvl HTTP/1.1" 200 276 0.000628
+2026-01-06 06:00:58,742 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:58] "POST /socket.io/?EIO=4&transport=polling&t=PkHvF1r&sid=_RgOdLlNn8J2HqFuAAA1 HTTP/1.1" 400 136 0.000108
+2026-01-06 06:00:59,679 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:59] "GET /socket.io/?EIO=4&transport=polling&t=PkHv99s&sid=IF1nXOgDsRZqDizRAAAw HTTP/1.1" 200 157 24.997704
+2026-01-06 06:00:59,682 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:59] "POST /socket.io/?EIO=4&transport=polling&t=PkHvF1u&sid=_RgOdLlNn8J2HqFuAAA1 HTTP/1.1" 400 136 0.000391
+2026-01-06 06:00:59,683 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:59] "GET /socket.io/?EIO=4&transport=polling&t=PkHvFAc HTTP/1.1" 200 276 0.000379
+2026-01-06 06:00:59,685 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:00:59] "POST /socket.io/?EIO=4&transport=polling&t=PkHvFGb&sid=IIL2PKQNS__1maRYAAA2 HTTP/1.1" 400 136 0.000307
+2026-01-06 06:01:18,146 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:18] "GET /socket.io/?EIO=4&transport=polling&t=PkHvDgP&sid=J90RAEVxmcz7_xLuAAAx HTTP/1.1" 200 157 24.987408
+2026-01-06 06:01:18,148 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:18] "POST /socket.io/?EIO=4&transport=polling&t=PkHvFGc&sid=IIL2PKQNS__1maRYAAA2 HTTP/1.1" 400 136 0.000231
+2026-01-06 06:01:18,150 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:18] "GET /socket.io/?EIO=4&transport=polling&t=PkHvFSv HTTP/1.1" 200 276 0.000397
+2026-01-06 06:01:18,158 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:18] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.006433
+2026-01-06 06:01:18,160 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:18] "POST /socket.io/?EIO=4&transport=polling&t=PkHvJn8&sid=DYFh8CEXslXM0V0XAAA3 HTTP/1.1" 400 136 0.000121
+2026-01-06 06:01:19,696 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:19] "GET /socket.io/?EIO=4&transport=polling&t=PkHvE2Z&sid=KRVyr8KldmTHzYk7AAAy HTTP/1.1" 200 157 25.001689
+2026-01-06 06:01:19,704 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:19] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.005955
+2026-01-06 06:01:19,707 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:19] "POST /socket.io/?EIO=4&transport=polling&t=PkHvJnH&sid=DYFh8CEXslXM0V0XAAA3 HTTP/1.1" 400 136 0.000331
+2026-01-06 06:01:19,709 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:19] "GET /socket.io/?EIO=4&transport=polling&t=PkHvJzg HTTP/1.1" 200 276 0.000326
+2026-01-06 06:01:19,711 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:19] "POST /socket.io/?EIO=4&transport=polling&t=PkHvK9U&sid=5b6qZl6FzZGBlZitAAA4 HTTP/1.1" 400 136 0.000127
+2026-01-06 06:01:20,894 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:20] "GET /socket.io/?EIO=4&transport=polling&t=PkHvELK&sid=91HOuc7XVU4IwI0wAAAz HTTP/1.1" 200 157 24.996883
+2026-01-06 06:01:20,896 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:20] "POST /socket.io/?EIO=4&transport=polling&t=PkHvK9W&sid=5b6qZl6FzZGBlZitAAA4 HTTP/1.1" 400 136 0.000242
+2026-01-06 06:01:20,900 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:20] "GET /socket.io/?EIO=4&transport=polling&t=PkHvKQ4 HTTP/1.1" 200 276 0.001475
+2026-01-06 06:01:20,902 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:20] "POST /socket.io/?EIO=4&transport=polling&t=PkHvKS5&sid=kag3vHccJ_E5t-o2AAA5 HTTP/1.1" 400 136 0.000238
+2026-01-06 06:01:22,237 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:22] "GET /socket.io/?EIO=4&transport=polling&t=PkHvEgH&sid=12B41IhN9W6ifpC1AAA0 HTTP/1.1" 200 157 25.000285
+2026-01-06 06:01:22,266 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:22] "POST /socket.io/?EIO=4&transport=polling&t=PkHvKS9&sid=kag3vHccJ_E5t-o2AAA5 HTTP/1.1" 400 136 0.000228
+2026-01-06 06:01:22,267 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:22] "GET /socket.io/?EIO=4&transport=polling&t=PkHvKhT HTTP/1.1" 200 276 0.000274
+2026-01-06 06:01:22,269 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:22] "POST /socket.io/?EIO=4&transport=polling&t=PkHvKnS&sid=vsk02i56288BKVPlAAA6 HTTP/1.1" 400 136 0.000463
+2026-01-06 06:01:23,747 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:23] "GET /socket.io/?EIO=4&transport=polling&t=PkHvF1s&sid=_RgOdLlNn8J2HqFuAAA1 HTTP/1.1" 200 157 25.003792
+2026-01-06 06:01:23,750 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:23] "POST /socket.io/?EIO=4&transport=polling&t=PkHvKnU&sid=vsk02i56288BKVPlAAA6 HTTP/1.1" 400 136 0.000245
+2026-01-06 06:01:23,752 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:23] "GET /socket.io/?EIO=4&transport=polling&t=PkHvKyN HTTP/1.1" 200 276 0.000265
+2026-01-06 06:01:23,757 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:23] "POST /socket.io/?EIO=4&transport=polling&t=PkHvL8h&sid=jF3TqPou7GuJ8ZyNAAA7 HTTP/1.1" 400 136 0.000333
+2026-01-06 06:01:24,690 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:24] "GET /socket.io/?EIO=4&transport=polling&t=PkHvFGb.0&sid=IIL2PKQNS__1maRYAAA2 HTTP/1.1" 200 157 25.004194
+2026-01-06 06:01:24,693 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:24] "POST /socket.io/?EIO=4&transport=polling&t=PkHvL8k&sid=jF3TqPou7GuJ8ZyNAAA7 HTTP/1.1" 400 136 0.000191
+2026-01-06 06:01:24,694 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:24] "GET /socket.io/?EIO=4&transport=polling&t=PkHvLM3 HTTP/1.1" 200 276 0.000439
+2026-01-06 06:01:24,699 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:24] "POST /socket.io/?EIO=4&transport=polling&t=PkHvLNP&sid=COrGR0y_QtoRuHWFAAA8 HTTP/1.1" 400 136 0.000704
+2026-01-06 06:01:32,540 - apscheduler.executors.default - INFO - Running job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-06 06:02:32 UTC)" (scheduled at 2026-01-06 06:01:32.532265+00:00)
+2026-01-06 06:01:32,548 - apscheduler.executors.default - INFO - Job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-06 06:02:32 UTC)" executed successfully
+2026-01-06 06:01:32,549 - apscheduler.executors.default - INFO - Running job "check_charging_sessions (trigger: interval[0:02:00], next run at: 2026-01-06 06:03:32 UTC)" (scheduled at 2026-01-06 06:01:32.532701+00:00)
+2026-01-06 06:01:32,598 - apscheduler.executors.default - INFO - Job "check_charging_sessions (trigger: interval[0:02:00], next run at: 2026-01-06 06:03:32 UTC)" executed successfully
+2026-01-06 06:01:43,164 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:43] "GET /socket.io/?EIO=4&transport=polling&t=PkHvJn8.0&sid=DYFh8CEXslXM0V0XAAA3 HTTP/1.1" 200 157 25.002179
+2026-01-06 06:01:43,206 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:43] "POST /socket.io/?EIO=4&transport=polling&t=PkHvLNS&sid=COrGR0y_QtoRuHWFAAA8 HTTP/1.1" 400 136 0.000926
+2026-01-06 06:01:43,210 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:43] "GET /socket.io/?EIO=4&transport=polling&t=PkHvLbG HTTP/1.1" 200 276 0.001414
+2026-01-06 06:01:43,233 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:43] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.022033
+2026-01-06 06:01:43,242 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:43] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.003059
+2026-01-06 06:01:43,244 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:43] "POST /socket.io/?EIO=4&transport=polling&t=PkHvPum&sid=Pk7qogFXzj0a5JplAAA9 HTTP/1.1" 400 136 0.000217
+2026-01-06 06:01:44,711 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:44] "GET /socket.io/?EIO=4&transport=polling&t=PkHvK9U.0&sid=5b6qZl6FzZGBlZitAAA4 HTTP/1.1" 200 157 24.999852
+2026-01-06 06:01:44,714 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:44] "POST /socket.io/?EIO=4&transport=polling&t=PkHvPvE&sid=Pk7qogFXzj0a5JplAAA9 HTTP/1.1" 400 136 0.000199
+2026-01-06 06:01:44,716 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:44] "GET /socket.io/?EIO=4&transport=polling&t=PkHvQ9j HTTP/1.1" 200 276 0.000322
+2026-01-06 06:01:44,719 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:44] "POST /socket.io/?EIO=4&transport=polling&t=PkHvQGD&sid=Wh3yrty5HfkryzvGAAA- HTTP/1.1" 400 136 0.000416
+2026-01-06 06:01:45,908 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:45] "GET /socket.io/?EIO=4&transport=polling&t=PkHvKS6&sid=kag3vHccJ_E5t-o2AAA5 HTTP/1.1" 200 157 25.002952
+2026-01-06 06:01:45,911 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:45] "POST /socket.io/?EIO=4&transport=polling&t=PkHvQGG&sid=Wh3yrty5HfkryzvGAAA- HTTP/1.1" 400 136 0.000344
+2026-01-06 06:01:45,915 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:45] "GET /socket.io/?EIO=4&transport=polling&t=PkHvQPV HTTP/1.1" 200 276 0.000648
+2026-01-06 06:01:45,919 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:45] "POST /socket.io/?EIO=4&transport=polling&t=PkHvQYz&sid=GvhjATWAm7BttlJAAAA_ HTTP/1.1" 400 136 0.000316
+2026-01-06 06:01:47,272 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:47] "GET /socket.io/?EIO=4&transport=polling&t=PkHvKnT&sid=vsk02i56288BKVPlAAA6 HTTP/1.1" 200 157 25.001470
+2026-01-06 06:01:47,275 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:47] "POST /socket.io/?EIO=4&transport=polling&t=PkHvQZ1&sid=GvhjATWAm7BttlJAAAA_ HTTP/1.1" 400 136 0.000307
+2026-01-06 06:01:47,277 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:47] "GET /socket.io/?EIO=4&transport=polling&t=PkHvQp- HTTP/1.1" 200 276 0.000517
+2026-01-06 06:01:47,282 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:47] "POST /socket.io/?EIO=4&transport=polling&t=PkHvQuF&sid=7o3EKCKFIcsoZ4PSAABA HTTP/1.1" 400 136 0.000352
+2026-01-06 06:01:48,761 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:48] "GET /socket.io/?EIO=4&transport=polling&t=PkHvL8i&sid=jF3TqPou7GuJ8ZyNAAA7 HTTP/1.1" 200 157 25.002349
+2026-01-06 06:01:48,766 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:48] "POST /socket.io/?EIO=4&transport=polling&t=PkHvQuL&sid=7o3EKCKFIcsoZ4PSAABA HTTP/1.1" 400 136 0.001441
+2026-01-06 06:01:48,778 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:48] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.009806
+2026-01-06 06:01:48,780 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:48] "GET /socket.io/?EIO=4&transport=polling&t=PkHvR5j HTTP/1.1" 200 276 0.000209
+2026-01-06 06:01:48,783 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:48] "POST /socket.io/?EIO=4&transport=polling&t=PkHvRFk&sid=wfAAL31sQ50e4T9yAABB HTTP/1.1" 400 136 0.000453
+2026-01-06 06:01:49,701 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:49] "GET /socket.io/?EIO=4&transport=polling&t=PkHvLNP.0&sid=COrGR0y_QtoRuHWFAAA8 HTTP/1.1" 200 157 25.000047
+2026-01-06 06:01:49,706 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:49] "POST /socket.io/?EIO=4&transport=polling&t=PkHvRFn&sid=wfAAL31sQ50e4T9yAABB HTTP/1.1" 400 136 0.000276
+2026-01-06 06:01:50,178 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:50] "GET /socket.io/?EIO=4&transport=polling&t=PkHvRbW HTTP/1.1" 200 276 0.000497
+2026-01-06 06:01:50,183 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:01:50] "POST /socket.io/?EIO=4&transport=polling&t=PkHvRbb&sid=fJK1b_7tj4N46nGqAABC HTTP/1.1" 400 136 0.000378
+2026-01-06 06:02:08,239 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:08] "GET /socket.io/?EIO=4&transport=polling&t=PkHvPuy&sid=Pk7qogFXzj0a5JplAAA9 HTTP/1.1" 200 157 24.993935
+2026-01-06 06:02:08,242 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:08] "POST /socket.io/?EIO=4&transport=polling&t=PkHvRbf&sid=fJK1b_7tj4N46nGqAABC HTTP/1.1" 400 136 0.000242
+2026-01-06 06:02:08,245 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:08] "GET /socket.io/?EIO=4&transport=polling&t=PkHvRsW HTTP/1.1" 200 276 0.000486
+2026-01-06 06:02:08,263 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:08] "GET /api/trips?limit=20 HTTP/1.1" 200 2015 0.016134
+2026-01-06 06:02:08,269 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:08] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.003398
+2026-01-06 06:02:08,271 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:08] "POST /socket.io/?EIO=4&transport=polling&t=PkHvV_u&sid=4D17Gh5aOSzmiggUAABD HTTP/1.1" 400 136 0.000105
+2026-01-06 06:02:09,723 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:09] "GET /socket.io/?EIO=4&transport=polling&t=PkHvQGE&sid=Wh3yrty5HfkryzvGAAA- HTTP/1.1" 200 157 25.003357
+2026-01-06 06:02:09,732 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:09] "GET /api/telemetry/latest HTTP/1.1" 200 419 0.006945
+2026-01-06 06:02:09,735 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:09] "POST /socket.io/?EIO=4&transport=polling&t=PkHvW0H&sid=4D17Gh5aOSzmiggUAABD HTTP/1.1" 400 136 0.000302
+2026-01-06 06:02:09,737 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:09] "GET /socket.io/?EIO=4&transport=polling&t=PkHvWLS HTTP/1.1" 200 276 0.000747
+2026-01-06 06:02:09,742 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:09] "POST /socket.io/?EIO=4&transport=polling&t=PkHvWNC&sid=IgERMWfVvK4Kx3mhAABE HTTP/1.1" 400 136 0.000627
+2026-01-06 06:02:10,921 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:10] "GET /socket.io/?EIO=4&transport=polling&t=PkHvQYz.0&sid=GvhjATWAm7BttlJAAAA_ HTTP/1.1" 200 157 24.998788
+2026-01-06 06:02:10,924 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:10] "POST /socket.io/?EIO=4&transport=polling&t=PkHvWNG&sid=IgERMWfVvK4Kx3mhAABE HTTP/1.1" 400 136 0.000221
+2026-01-06 06:02:10,926 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:10] "GET /socket.io/?EIO=4&transport=polling&t=PkHvWZ7 HTTP/1.1" 200 276 0.000371
+2026-01-06 06:02:10,931 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:10] "POST /socket.io/?EIO=4&transport=polling&t=PkHvWfm&sid=cYWgHPq2-fk-x6z6AABF HTTP/1.1" 400 136 0.000653
+2026-01-06 06:02:12,281 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:12] "GET /socket.io/?EIO=4&transport=polling&t=PkHvQuG&sid=7o3EKCKFIcsoZ4PSAABA HTTP/1.1" 200 157 24.996489
+2026-01-06 06:02:12,285 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:12] "POST /socket.io/?EIO=4&transport=polling&t=PkHvWfr&sid=cYWgHPq2-fk-x6z6AABF HTTP/1.1" 400 136 0.000228
+2026-01-06 06:02:12,287 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:12] "GET /socket.io/?EIO=4&transport=polling&t=PkHvWv7 HTTP/1.1" 200 276 0.000499
+2026-01-06 06:02:12,291 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:12] "POST /socket.io/?EIO=4&transport=polling&t=PkHvW_1&sid=zE8KiPV0jX329wbDAABG HTTP/1.1" 400 136 0.000446
+2026-01-06 06:02:13,789 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:13] "GET /socket.io/?EIO=4&transport=polling&t=PkHvRFk.0&sid=wfAAL31sQ50e4T9yAABB HTTP/1.1" 200 157 25.002633
+2026-01-06 06:02:13,793 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:13] "POST /socket.io/?EIO=4&transport=polling&t=PkHvW_5&sid=zE8KiPV0jX329wbDAABG HTTP/1.1" 400 136 0.000290
+2026-01-06 06:02:13,795 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:13] "GET /socket.io/?EIO=4&transport=polling&t=PkHvXHY HTTP/1.1" 200 276 0.000672
+2026-01-06 06:02:13,801 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:13] "POST /socket.io/?EIO=4&transport=polling&t=PkHvXMc&sid=1oj6LqV_7aH0Y1k6AABH HTTP/1.1" 400 136 0.000503
+2026-01-06 06:02:15,187 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:15] "GET /socket.io/?EIO=4&transport=polling&t=PkHvRbc&sid=fJK1b_7tj4N46nGqAABC HTTP/1.1" 200 157 25.001795
+2026-01-06 06:02:15,191 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:15] "POST /socket.io/?EIO=4&transport=polling&t=PkHvXMg&sid=1oj6LqV_7aH0Y1k6AABH HTTP/1.1" 400 136 0.000275
+2026-01-06 06:02:15,273 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:15] "GET /socket.io/?EIO=4&transport=polling&t=PkHvXjc HTTP/1.1" 200 276 0.000633
+2026-01-06 06:02:15,278 - geventwebsocket.handler - INFO - 151.101.202.132 - - [2026-01-06 06:02:15] "POST /socket.io/?EIO=4&transport=polling&t=PkHvXjh&sid=xNcU9zQGHYBrWV3sAABI HTTP/1.1" 400 136 0.000497

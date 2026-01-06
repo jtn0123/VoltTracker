@@ -1,0 +1,10 @@
+2026-01-05 22:01:56,665 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-01-05 22:01:56,665 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-01-05 22:01:56,665 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-01-05 22:01:56,666 - apscheduler.scheduler - INFO - Added job "close_stale_trips" to job store "default"
+2026-01-05 22:01:56,666 - apscheduler.scheduler - INFO - Added job "check_refuel_events" to job store "default"
+2026-01-05 22:01:56,666 - apscheduler.scheduler - INFO - Added job "check_charging_sessions" to job store "default"
+2026-01-05 22:01:56,666 - apscheduler.scheduler - INFO - Scheduler started
+2026-01-05 22:01:56,666 - services.scheduler - INFO - Background scheduler initialized
+2026-01-05 22:01:56,824 - apscheduler.scheduler - INFO - Scheduler has been shut down
+2026-01-05 22:01:56,828 - services.scheduler - INFO - Background scheduler shut down

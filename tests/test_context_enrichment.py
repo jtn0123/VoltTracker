@@ -263,12 +263,12 @@ class TestEnrichEventWithVehicleContext:
             db_session.add(trip)
         db_session.commit()
 
-        event = WideEvent(event_type="test_event")
+        event = WideEvent(operation="test_operation")
         enrich_event_with_vehicle_context(event, db_session)
 
-        context = event.to_dict()
-        assert "total_trips" in context
-        assert context["total_trips"] == 3
+        # Vehicle context is nested under 'vehicle_context' key
+        assert "vehicle_context" in event.context
+        assert event.context["vehicle_context"]["total_trips"] == 3
 
     def test_enriches_with_battery_health(self, app, db_session):
         """Enriches event with battery health when requested."""
@@ -282,14 +282,14 @@ class TestEnrichEventWithVehicleContext:
             electric_miles=25.0,
             kwh_per_mile=0.3,
             start_soc=80.0,
-            end_soc=50.0,
             is_closed=True,
         )
         db_session.add(trip)
         db_session.commit()
 
-        event = WideEvent(event_type="test_event")
+        event = WideEvent(operation="test_operation")
         enrich_event_with_vehicle_context(event, db_session, include_battery_health=True)
 
-        context = event.to_dict()
-        assert "recent_avg_electric_miles" in context
+        # Vehicle context is nested under 'vehicle_context' key
+        assert "vehicle_context" in event.context
+        assert "recent_avg_electric_miles" in event.context["vehicle_context"]
