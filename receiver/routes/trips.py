@@ -23,21 +23,52 @@ trips_bp = Blueprint("trips", __name__)
 @trips_bp.route("/trips", methods=["GET"])
 def get_trips():
     """
-    Get trip list with summary statistics.
+    Get trip list with summary statistics and advanced filtering.
 
     Query params:
+        # Date filters
         start_date: Filter trips after this date (ISO format)
         end_date: Filter trips before this date (ISO format)
+
+        # Mode filters
         gas_only: If true, only return trips with gas usage
+        ev_only: If true, only return pure EV trips (no gas)
+
+        # Weather filters
+        extreme_weather: If true, only return trips with extreme weather
+        min_temp: Minimum temperature (°F)
+        max_temp: Maximum temperature (°F)
+
+        # Efficiency filters
+        min_efficiency: Minimum kWh/mile
+        max_efficiency: Maximum kWh/mile
+        min_mpg: Minimum gas MPG
+
+        # Distance/Elevation filters
+        min_distance: Minimum distance in miles
+        max_distance: Maximum distance in miles
+        min_elevation: Minimum elevation gain (meters)
+        max_elevation: Maximum elevation gain (meters)
+
+        # Location filters (requires GPS data)
+        near_lat: Latitude for proximity search
+        near_lon: Longitude for proximity search
+        radius_miles: Search radius in miles (default 5, max 50)
+
+        # Pagination
         page: Page number (default 1)
         per_page: Items per page (default 50, max 100)
+
+        # Sorting
+        sort_by: Field to sort by (start_time, distance_miles, kwh_per_mile, mpg)
+        sort_order: asc or desc (default desc)
     """
     db = get_db()
 
     # Filter for closed trips that aren't soft-deleted
     query = db.query(Trip).filter(Trip.is_closed.is_(True), Trip.deleted_at.is_(None))
 
-    # Apply filters
+    # Date filters
     start_date = request.args.get("start_date")
     if start_date:
         query = query.filter(Trip.start_time >= start_date)
@@ -46,15 +77,115 @@ def get_trips():
     if end_date:
         query = query.filter(Trip.start_time <= end_date)
 
+    # Mode filters
     gas_only = request.args.get("gas_only", "").lower() == "true"
     if gas_only:
         query = query.filter(Trip.gas_mode_entered.is_(True))
+
+    ev_only = request.args.get("ev_only", "").lower() == "true"
+    if ev_only:
+        query = query.filter(Trip.gas_mode_entered.is_(False))
+
+    # Weather filters
+    extreme_weather = request.args.get("extreme_weather", "").lower() == "true"
+    if extreme_weather:
+        query = query.filter(Trip.extreme_weather.is_(True))
+
+    min_temp = request.args.get("min_temp")
+    if min_temp:
+        try:
+            query = query.filter(Trip.weather_temp_f >= float(min_temp))
+        except (ValueError, TypeError):
+            pass
+
+    max_temp = request.args.get("max_temp")
+    if max_temp:
+        try:
+            query = query.filter(Trip.weather_temp_f <= float(max_temp))
+        except (ValueError, TypeError):
+            pass
+
+    # Efficiency filters
+    min_efficiency = request.args.get("min_efficiency")
+    if min_efficiency:
+        try:
+            query = query.filter(Trip.kwh_per_mile >= float(min_efficiency))
+        except (ValueError, TypeError):
+            pass
+
+    max_efficiency = request.args.get("max_efficiency")
+    if max_efficiency:
+        try:
+            query = query.filter(Trip.kwh_per_mile <= float(max_efficiency))
+        except (ValueError, TypeError):
+            pass
+
+    min_mpg = request.args.get("min_mpg")
+    if min_mpg:
+        try:
+            query = query.filter(Trip.mpg >= float(min_mpg))
+        except (ValueError, TypeError):
+            pass
+
+    # Distance filters
+    min_distance = request.args.get("min_distance")
+    if min_distance:
+        try:
+            query = query.filter(Trip.distance_miles >= float(min_distance))
+        except (ValueError, TypeError):
+            pass
+
+    max_distance = request.args.get("max_distance")
+    if max_distance:
+        try:
+            query = query.filter(Trip.distance_miles <= float(max_distance))
+        except (ValueError, TypeError):
+            pass
+
+    # Elevation filters
+    min_elevation = request.args.get("min_elevation")
+    if min_elevation:
+        try:
+            query = query.filter(Trip.elevation_gain_m >= float(min_elevation))
+        except (ValueError, TypeError):
+            pass
+
+    max_elevation = request.args.get("max_elevation")
+    if max_elevation:
+        try:
+            query = query.filter(Trip.elevation_gain_m <= float(max_elevation))
+        except (ValueError, TypeError):
+            pass
 
     # Filter out trips with 0 or very small distance (likely GPS errors or no movement)
     # Unless explicitly requested with include_zero=true
     include_zero = request.args.get("include_zero", "").lower() == "true"
     if not include_zero:
         query = query.filter((Trip.distance_miles.isnot(None)) & (Trip.distance_miles > Config.MIN_TRIP_MILES))
+
+    # Sorting
+    sort_by = request.args.get("sort_by", "start_time")
+    sort_order = request.args.get("sort_order", "desc").lower()
+
+    # Map sort fields to Trip model attributes
+    sort_fields = {
+        "start_time": Trip.start_time,
+        "distance_miles": Trip.distance_miles,
+        "kwh_per_mile": Trip.kwh_per_mile,
+        "gas_mpg": Trip.gas_mpg,
+        "elevation_gain_m": Trip.elevation_gain_m,
+        "weather_temp_f": Trip.weather_temp_f,
+    }
+
+    if sort_by in sort_fields:
+        sort_column = sort_fields[sort_by]
+        if sort_order == "asc":
+            query = query.order_by(sort_column.asc())
+        else:
+            query = query.order_by(sort_column.desc())
+    else:
+        # Default sort
+        query = query.order_by(desc(Trip.start_time))
 
     # Pagination
     try:
@@ -72,7 +203,7 @@ def get_trips():
 
     # Apply pagination
     offset = (page - 1) * per_page
-    trips = query.order_by(desc(Trip.start_time)).offset(offset).limit(per_page).all()
+    trips = query.offset(offset).limit(per_page).all()
 
     # Return consistent paginated response with metadata
     return jsonify(
@@ -427,3 +558,127 @@ def get_mpg_trend():
             for t in trips
         ]
     )
+
+
+@trips_bp.route("/trips/compare", methods=["POST"])
+def compare_trips():
+    """
+    Compare multiple trips side-by-side.
+
+    Request body:
+        {
+            "trip_ids": [1, 2, 3, ...],  # List of trip IDs to compare (max 10)
+            "metrics": ["efficiency", "weather", "elevation"]  # Optional: specific metrics
+        }
+
+    Returns:
+        Side-by-side comparison with statistical analysis
+    """
+    db = get_db()
+
+    try:
+        data = request.get_json()
+        if not data or "trip_ids" not in data:
+            return jsonify({"error": "trip_ids required in request body"}), 400
+
+        trip_ids = data.get("trip_ids", [])
+        if not trip_ids:
+            return jsonify({"error": "At least one trip_id required"}), 400
+
+        if len(trip_ids) > 10:
+            return jsonify({"error": "Maximum 10 trips can be compared at once"}), 400
+
+        # Fetch trips
+        trips = db.query(Trip).filter(Trip.id.in_(trip_ids), Trip.is_closed.is_(True)).all()
+
+        if not trips:
+            return jsonify({"error": "No trips found with provided IDs"}), 404
+
+        # Build comparison data
+        comparison = {
+            "trip_count": len(trips),
+            "trips": [],
+            "statistics": {},
+        }
+
+        # Collect metrics for each trip
+        for trip in trips:
+            trip_data = {
+                "id": trip.id,
+                "start_time": trip.start_time.isoformat() if trip.start_time else None,
+                "distance_miles": trip.distance_miles,
+                "electric_miles": trip.electric_miles,
+                "gas_miles": trip.gas_miles,
+                "kwh_per_mile": trip.kwh_per_mile,
+                "gas_mpg": trip.gas_mpg,
+                "weather_temp_f": trip.weather_temp_f,
+                "weather_conditions": trip.weather_conditions,
+                "extreme_weather": trip.extreme_weather,
+                "elevation_gain_m": trip.elevation_gain_m,
+                "avg_speed_mph": trip.avg_speed_mph,
+                "gas_mode_entered": trip.gas_mode_entered,
+                "weather_impact_factor": trip.weather_impact_factor,
+            }
+            comparison["trips"].append(trip_data)
+
+        # Calculate aggregate statistics
+        distances = [t.distance_miles for t in trips if t.distance_miles]
+        efficiencies = [t.kwh_per_mile for t in trips if t.kwh_per_mile]
+        temps = [t.weather_temp_f for t in trips if t.weather_temp_f]
+        elevations = [t.elevation_gain_m for t in trips if t.elevation_gain_m]
+
+        comparison["statistics"] = {
+            "distance": {
+                "min": round(min(distances), 1) if distances else None,
+                "max": round(max(distances), 1) if distances else None,
+                "avg": round(statistics.mean(distances), 1) if distances else None,
+                "total": round(sum(distances), 1) if distances else None,
+            },
+            "efficiency": {
+                "best": round(min(efficiencies), 3) if efficiencies else None,
+                "worst": round(max(efficiencies), 3) if efficiencies else None,
+                "avg": round(statistics.mean(efficiencies), 3) if efficiencies else None,
+                "variance": round(statistics.variance(efficiencies), 3) if len(efficiencies) > 1 else None,
+            },
+            "weather": {
+                "coldest": round(min(temps), 1) if temps else None,
+                "warmest": round(max(temps), 1) if temps else None,
+                "avg_temp": round(statistics.mean(temps), 1) if temps else None,
+                "extreme_weather_count": sum(1 for t in trips if t.extreme_weather),
+            },
+            "elevation": {
+                "min_gain": round(min(elevations), 0) if elevations else None,
+                "max_gain": round(max(elevations), 0) if elevations else None,
+                "avg_gain": round(statistics.mean(elevations), 0) if elevations else None,
+                "total_gain": round(sum(elevations), 0) if elevations else None,
+            },
+            "modes": {
+                "ev_only": sum(1 for t in trips if not t.gas_mode_entered),
+                "gas_used": sum(1 for t in trips if t.gas_mode_entered),
+            },
+        }
+
+        # Add insights/recommendations
+        insights = []
+
+        if efficiencies and len(efficiencies) > 1:
+            variance = statistics.variance(efficiencies)
+            if variance > 0.01:  # High variance
+                insights.append("High efficiency variance detected - consider analyzing conditions causing differences")
+
+        if temps and len(temps) > 1:
+            temp_range = max(temps) - min(temps)
+            if temp_range > 30:  # Large temperature range
+                insights.append(f"Wide temperature range ({temp_range:.0f}°F) - expect efficiency variations")
+
+        extreme_count = sum(1 for t in trips if t.extreme_weather)
+        if extreme_count > 0:
+            insights.append(f"{extreme_count}/{len(trips)} trips had extreme weather conditions")
+
+        comparison["insights"] = insights
+
+        return jsonify(comparison)
+
+    except Exception as e:
+        logger.error(f"Error comparing trips: {e}", exc_info=True)
+        return jsonify({"error": "Internal server error"}), 500
