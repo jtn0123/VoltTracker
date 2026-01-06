@@ -29,6 +29,36 @@ def get_scheduler_db():
     return SessionLocal()
 
 
+def _finalize_charging_session(db, active_session, end_time=None, reason="completed"):
+    """
+    Finalize a charging session by setting end time, calculating kWh added, and logging.
+
+    Args:
+        db: Database session
+        active_session: ChargingSession object to finalize
+        end_time: Optional end time (defaults to now)
+        reason: Reason for finalization (for logging)
+    """
+    active_session.end_time = end_time or utc_now()
+    active_session.is_complete = True
+
+    # Calculate kWh added from SOC change
+    if active_session.start_soc is not None and active_session.end_soc is not None:
+        soc_gained = active_session.end_soc - active_session.start_soc
+        if soc_gained > 0:
+            active_session.kwh_added = (soc_gained / 100) * Config.BATTERY_CAPACITY_KWH
+
+    db.commit()
+
+    # Safely format SOC values (may be None)
+    start_soc_str = f"{active_session.start_soc:.0f}" if active_session.start_soc is not None else "?"
+    end_soc_str = f"{active_session.end_soc:.0f}" if active_session.end_soc is not None else "?"
+    logger.info(
+        f"Charging session {reason}: {active_session.kwh_added or 0:.2f} kWh added, "
+        f"SOC {start_soc_str}% -> {end_soc_str}%"
+    )
+
+
 def close_stale_trips():
     """
     Close trips that have no new data for TRIP_TIMEOUT_SECONDS.
@@ -74,12 +104,17 @@ def check_refuel_events():
     """Check for refueling events based on fuel level jumps."""
     db = get_scheduler_db()
     try:
-        # Get recent telemetry ordered by timestamp
+        # Get recent telemetry from last 24 hours (more efficient than last 100 points)
+        # This covers typical refueling patterns while limiting query scope
+        cutoff_time = utc_now() - timedelta(hours=24)
         recent = (
             db.query(TelemetryRaw)
-            .filter(TelemetryRaw.fuel_level_percent.isnot(None))
+            .filter(
+                TelemetryRaw.fuel_level_percent.isnot(None),
+                TelemetryRaw.timestamp >= cutoff_time
+            )
             .order_by(desc(TelemetryRaw.timestamp))
-            .limit(100)
+            .limit(200)  # Safety limit to prevent excessive processing
             .all()
         )
 
@@ -147,19 +182,7 @@ def check_charging_sessions():
 
             if active_session:
                 # Charger disconnected - finalize session
-                active_session.end_time = utc_now()
-                active_session.is_complete = True
-
-                # Calculate kWh added from SOC change
-                if active_session.start_soc is not None and active_session.end_soc is not None:
-                    soc_gained = active_session.end_soc - active_session.start_soc
-                    if soc_gained > 0:
-                        active_session.kwh_added = (soc_gained / 100) * Config.BATTERY_CAPACITY_KWH
-
-                db.commit()
-                logger.info(
-                    f"Charging session completed (no charger data): " f"{active_session.kwh_added or 0:.2f} kWh added"
-                )
+                _finalize_charging_session(db, active_session, reason="completed (no charger data)")
             return
 
         # Convert to dicts for the detection function
@@ -202,7 +225,15 @@ def check_charging_sessions():
             active_session.peak_power_kw = session_info.get("peak_power_kw")
             active_session.avg_power_kw = session_info.get("avg_power_kw")
 
-            db.commit()
+            try:
+                db.commit()
+            except IntegrityError as e:
+                # Unique constraint violation - duplicate charging session
+                # This can happen in rare race conditions, just log and continue
+                db.rollback()
+                logger.warning(f"Duplicate charging session detected (start_time constraint): {e}")
+                # Re-query the existing session to continue tracking
+                active_session = db.query(ChargingSession).filter(ChargingSession.is_complete.is_(False)).first()
 
         else:
             # Check if we need to close an active session
@@ -210,23 +241,8 @@ def check_charging_sessions():
 
             if active_session:
                 # Charger disconnected - finalize session
-                active_session.end_time = db.query(func.max(TelemetryRaw.timestamp)).scalar()
-                active_session.is_complete = True
-
-                # Calculate kWh added from SOC change
-                if active_session.start_soc is not None and active_session.end_soc is not None:
-                    soc_gained = active_session.end_soc - active_session.start_soc
-                    if soc_gained > 0:
-                        active_session.kwh_added = (soc_gained / 100) * Config.BATTERY_CAPACITY_KWH
-
-                db.commit()
-                # Safely format SOC values (may be None)
-                start_soc_str = f"{active_session.start_soc:.0f}" if active_session.start_soc is not None else "?"
-                end_soc_str = f"{active_session.end_soc:.0f}" if active_session.end_soc is not None else "?"
-                logger.info(
-                    f"Charging session completed: {active_session.kwh_added or 0:.2f} kWh added, "
-                    f"SOC {start_soc_str}% -> {end_soc_str}%"
-                )
+                end_time = db.query(func.max(TelemetryRaw.timestamp)).scalar()
+                _finalize_charging_session(db, active_session, end_time=end_time, reason="completed")
 
     except (IntegrityError, OperationalError) as e:
         error = ChargingSessionError(f"Failed to check charging sessions: {e}")

@@ -128,10 +128,9 @@ def update_charging_session(session: ChargingSession, telemetry: TelemetryRaw) -
     if current_power > (session.peak_power_kw or 0):
         session.peak_power_kw = current_power
 
-    # Add to charging curve if we have data (limit to 1000 points max)
+    # Add to charging curve if we have data
     # A typical L2 charge session is ~4 hours with 1-minute intervals = ~240 points
-    # 1000 points allows for longer sessions while preventing unbounded growth
-    MAX_CURVE_POINTS = 1000
+    # MAX_CHARGING_CURVE_POINTS allows for longer sessions while preventing unbounded growth
 
     if session.charging_curve is None:
         session.charging_curve = []
@@ -142,9 +141,9 @@ def update_charging_session(session: ChargingSession, telemetry: TelemetryRaw) -
         "soc": telemetry.state_of_charge,
     }
 
-    if len(session.charging_curve) < MAX_CURVE_POINTS:
+    if len(session.charging_curve) < Config.MAX_CHARGING_CURVE_POINTS:
         session.charging_curve.append(curve_point)
-    elif len(session.charging_curve) == MAX_CURVE_POINTS:
+    elif len(session.charging_curve) == Config.MAX_CHARGING_CURVE_POINTS:
         # Log once when we hit the limit
-        logger.debug(f"Charging curve reached max size ({MAX_CURVE_POINTS} points)")
+        logger.debug(f"Charging curve reached max size ({Config.MAX_CHARGING_CURVE_POINTS} points)")
         session.charging_curve.append(curve_point)  # Allow one more to indicate truncation

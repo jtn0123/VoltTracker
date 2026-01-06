@@ -407,7 +407,7 @@ def get_latest_telemetry():
                 "engine_running": (
                     latest.engine_running
                     if latest.engine_running is not None
-                    else (latest.engine_rpm and latest.engine_rpm > 500)
+                    else (latest.engine_rpm and latest.engine_rpm > Config.RPM_THRESHOLD)
                 ),
                 "engine_oil_temp_f": float(latest.engine_oil_temp_f) if latest.engine_oil_temp_f else None,
                 # Battery health
