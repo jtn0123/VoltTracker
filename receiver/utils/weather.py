@@ -170,10 +170,15 @@ def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optio
 
 
 def get_weather_for_location(
-    latitude: float, longitude: float, timestamp: Optional[datetime] = None, timeout: int = WEATHER_API_TIMEOUT
+    latitude: float, longitude: float, timestamp: Optional[datetime] = None, timeout: int = WEATHER_API_TIMEOUT, db_session=None
 ) -> Optional[Dict[str, Any]]:
     """
-    Fetch weather data for a location at a given time with caching.
+    Fetch weather data for a location at a given time with 2-tier caching.
+
+    Caching strategy:
+    1. Check database cache (persistent, survives restarts)
+    2. Check in-memory cache (fast, but lost on restart)
+    3. Fetch from API and store in both caches
 
     Uses Open-Meteo API (free, no API key needed).
     Caches results for 1 hour (configurable via WEATHER_CACHE_TIMEOUT_SECONDS).
@@ -184,6 +189,7 @@ def get_weather_for_location(
         longitude: GPS longitude
         timestamp: Time to get weather for (defaults to now)
         timeout: Request timeout in seconds (default: 3s to avoid blocking scheduler)
+        db_session: Optional database session for persistent cache (if None, skips DB cache)
 
     Returns:
         Dictionary with weather data or None if request failed
@@ -194,13 +200,46 @@ def get_weather_for_location(
     # Create cache key: round coordinates to 2 decimals (~1km precision) and hour
     # This allows cache sharing between nearby locations at same time
     normalized_timestamp = normalize_datetime(timestamp)
-    cache_key = (
-        round(latitude, 2),
-        round(longitude, 2),
-        normalized_timestamp.strftime("%Y-%m-%d-%H") if normalized_timestamp else None
-    )
+    timestamp_hour = normalized_timestamp.strftime("%Y-%m-%d-%H") if normalized_timestamp else None
+    lat_key, lon_key, _ = (round(latitude, 2), round(longitude, 2), timestamp_hour)
 
-    # Check cache with LRU behavior
+    # Check database cache first (persistent across restarts)
+    if db_session and timestamp_hour:
+        try:
+            from models import WeatherCache
+            from datetime import timedelta
+
+            db_cache = db_session.query(WeatherCache).filter(
+                WeatherCache.latitude_key == lat_key,
+                WeatherCache.longitude_key == lon_key,
+                WeatherCache.timestamp_hour == timestamp_hour
+            ).first()
+
+            if db_cache:
+                # Check if cache is still fresh
+                cache_age = utc_now() - db_cache.fetched_at
+                if cache_age.total_seconds() < Config.WEATHER_CACHE_TIMEOUT_SECONDS:
+                    logger.debug(
+                        f"DB cache hit for ({latitude:.2f}, {longitude:.2f}) "
+                        f"at {timestamp_hour} (age: {cache_age.total_seconds():.0f}s)"
+                    )
+                    # Populate in-memory cache for faster subsequent lookups
+                    cache_key = (lat_key, lon_key, timestamp_hour)
+                    _weather_cache[cache_key] = (db_cache.to_dict(), time.time())
+                    if len(_weather_cache) > MAX_WEATHER_CACHE_SIZE:
+                        _weather_cache.popitem(last=False)
+                    return db_cache.to_dict()
+                else:
+                    # Expired - delete it
+                    db_session.delete(db_cache)
+                    db_session.commit()
+                    logger.debug(f"DB cache expired for ({latitude:.2f}, {longitude:.2f}), deleted")
+        except Exception as e:
+            logger.warning(f"Error checking database cache: {e}")
+            # Continue to in-memory cache if DB cache fails
+
+    # Check in-memory cache with LRU behavior
+    cache_key = (lat_key, lon_key, timestamp_hour)
     current_time = time.time()
     if cache_key in _weather_cache:
         cached_data, cache_timestamp = _weather_cache[cache_key]
@@ -210,14 +249,14 @@ def get_weather_for_location(
             # Move to end (LRU: mark as recently used)
             _weather_cache.move_to_end(cache_key)
             logger.debug(
-                f"Weather cache hit for ({latitude:.2f}, {longitude:.2f}) "
-                f"at {normalized_timestamp.strftime('%Y-%m-%d %H:00')} (age: {age_seconds:.0f}s)"
+                f"Memory cache hit for ({latitude:.2f}, {longitude:.2f}) "
+                f"at {timestamp_hour} (age: {age_seconds:.0f}s)"
             )
             return cached_data
         else:
             # Expired entry - remove it
             del _weather_cache[cache_key]
-            logger.debug(f"Weather cache expired for ({latitude:.2f}, {longitude:.2f})")
+            logger.debug(f"Memory cache expired for ({latitude:.2f}, {longitude:.2f})")
 
     # Cache miss or expired - fetch from API
     # Determine if we need historical or forecast API
@@ -225,6 +264,8 @@ def get_weather_for_location(
     days_ago = (now - normalized_timestamp).days if normalized_timestamp else 0
 
     try:
+        api_source = "historical" if days_ago > 5 else "forecast"
+
         if days_ago > 5:
             # Use historical API for older data
             data = _get_historical_weather(latitude, longitude, timestamp, timeout)
@@ -232,19 +273,44 @@ def get_weather_for_location(
             # Use forecast API for recent/current data
             data = _get_forecast_weather(latitude, longitude, timestamp, timeout)
 
-        # Cache successful result with LRU eviction
+        # Cache successful result in both caches
         if data is not None:
-            # Remove oldest entry if cache is full (LRU eviction)
+            # Store in in-memory cache with LRU eviction
             if len(_weather_cache) >= MAX_WEATHER_CACHE_SIZE:
                 _weather_cache.popitem(last=False)  # Remove oldest (FIFO)
 
-            # Add new entry (moves to end in OrderedDict)
             _weather_cache[cache_key] = (data, current_time)
             _weather_cache.move_to_end(cache_key)  # Ensure it's at the end
+
+            # Store in database cache for persistence
+            if db_session and timestamp_hour:
+                try:
+                    from models import WeatherCache
+
+                    db_cache = WeatherCache(
+                        latitude_key=lat_key,
+                        longitude_key=lon_key,
+                        timestamp_hour=timestamp_hour,
+                        temperature_f=data.get("temperature_f"),
+                        precipitation_in=data.get("precipitation_in"),
+                        wind_speed_mph=data.get("wind_speed_mph"),
+                        weather_code=data.get("weather_code"),
+                        conditions=data.get("conditions"),
+                        api_source=api_source,
+                        fetched_at=utc_now()
+                    )
+                    db_session.add(db_cache)
+                    db_session.commit()
+                    logger.debug(f"Stored in DB cache for ({latitude:.2f}, {longitude:.2f}) at {timestamp_hour}")
+                except Exception as e:
+                    logger.warning(f"Failed to store in database cache: {e}")
+                    db_session.rollback()
+                    # Continue - in-memory cache still works
+
             logger.debug(
                 f"Weather cached for ({latitude:.2f}, {longitude:.2f}) "
-                f"at {normalized_timestamp.strftime('%Y-%m-%d %H:00')} "
-                f"(cache size: {len(_weather_cache)}/{MAX_WEATHER_CACHE_SIZE})"
+                f"at {timestamp_hour} "
+                f"(memory: {len(_weather_cache)}/{MAX_WEATHER_CACHE_SIZE})"
             )
 
         return data

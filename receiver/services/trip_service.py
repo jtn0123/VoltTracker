@@ -151,7 +151,7 @@ def calculate_electric_efficiency(trip: Trip, points: list) -> None:
             trip.kwh_per_mile = calculate_kwh_per_mile(trip.electric_kwh_used, trip.electric_miles)
 
 
-def fetch_trip_weather(trip: Trip, points: list) -> None:
+def fetch_trip_weather(trip: Trip, points: list, db_session=None) -> None:
     """
     Fetch weather data for the trip by sampling every 15 minutes and averaging.
 
@@ -159,9 +159,12 @@ def fetch_trip_weather(trip: Trip, points: list) -> None:
     every 15 minutes throughout the trip duration and averages them to get
     trip-representative weather data.
 
+    Uses 2-tier caching (database + in-memory) to minimize API calls.
+
     Args:
         trip: Trip to update
         points: List of telemetry dicts (must have GPS data and timestamps)
+        db_session: Optional database session for persistent cache
     """
     from datetime import datetime, timedelta
     import statistics
@@ -211,11 +214,12 @@ def fetch_trip_weather(trip: Trip, points: list) -> None:
 
             sample_location = closest_point  # Track for error reporting
 
-            # Fetch weather for this point
+            # Fetch weather for this point (with database caching)
             weather = get_weather_for_location(
                 closest_point["latitude"],
                 closest_point["longitude"],
-                sample_time
+                sample_time,
+                db_session=db_session
             )
 
             if weather:
@@ -263,10 +267,33 @@ def fetch_trip_weather(trip: Trip, points: list) -> None:
 
             trip.weather_impact_factor = round(statistics.mean(impact_factors), 3) if impact_factors else None
 
+            # Flag extreme weather conditions for analysis
+            is_extreme = False
+            extreme_reasons = []
+
+            if trip.weather_temp_f is not None:
+                if trip.weather_temp_f < 32:
+                    is_extreme = True
+                    extreme_reasons.append("freezing")
+                elif trip.weather_temp_f > 95:
+                    is_extreme = True
+                    extreme_reasons.append("very hot")
+
+            if trip.weather_precipitation_in is not None and trip.weather_precipitation_in > 0.25:
+                is_extreme = True
+                extreme_reasons.append("heavy rain")
+
+            if trip.weather_wind_mph is not None and trip.weather_wind_mph > 25:
+                is_extreme = True
+                extreme_reasons.append("strong wind")
+
+            trip.extreme_weather = is_extreme
+
             logger.info(
                 f"Trip {trip.id}: Averaged weather from {len(weather_samples)} samples - "
                 f"{trip.weather_temp_f}°F, {trip.weather_conditions}, "
                 f"impact factor: {trip.weather_impact_factor}"
+                + (f" [EXTREME: {', '.join(extreme_reasons)}]" if is_extreme else "")
             )
         else:
             logger.warning(f"Trip {trip.id}: No weather samples collected")
@@ -451,7 +478,7 @@ def finalize_trip(db, trip: Trip):
         # Fetch weather data (if feature enabled)
         if Config.FEATURE_WEATHER_INTEGRATION:
             with event.timer("fetch_weather"):
-                fetch_trip_weather(trip, points)
+                fetch_trip_weather(trip, points, db_session=db)
         else:
             # Skip weather fetch if feature disabled
             event.add_technical_metric("weather_skipped", True)

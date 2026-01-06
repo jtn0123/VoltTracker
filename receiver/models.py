@@ -255,6 +255,7 @@ class Trip(Base):
     weather_wind_mph = Column(Float)
     weather_conditions = Column(String(50))
     weather_impact_factor = Column(Float)  # Estimated efficiency impact multiplier
+    extreme_weather = Column(Boolean, default=False)  # Flagged if conditions were extreme (freezing, very hot, heavy rain, strong wind)
 
     # Elevation data (from Open-Meteo Elevation API)
     elevation_start_m = Column(Float)  # Starting elevation in meters
@@ -295,6 +296,7 @@ class Trip(Base):
             "weather_wind_mph": self.weather_wind_mph,
             "weather_conditions": self.weather_conditions,
             "weather_impact_factor": self.weather_impact_factor,
+            "extreme_weather": self.extreme_weather,
             "elevation_start_m": self.elevation_start_m,
             "elevation_end_m": self.elevation_end_m,
             "elevation_gain_m": self.elevation_gain_m,
@@ -745,6 +747,77 @@ class Route(Base):
             "avg_elevation_gain_m": self.avg_elevation_gain_m,
             "avg_elevation_loss_m": self.avg_elevation_loss_m,
         }
+
+
+class WeatherCache(Base):
+    """
+    Persistent cache for weather API responses.
+
+    Stores weather data from Open-Meteo API to reduce redundant API calls.
+    Cache key is based on rounded coordinates and hour timestamp.
+    """
+
+    __tablename__ = "weather_cache"
+    __table_args__ = (
+        # Composite unique constraint on cache key components
+        UniqueConstraint("latitude_key", "longitude_key", "timestamp_hour", name="uq_weather_cache_key"),
+        # Index for cache lookups
+        Index("ix_weather_cache_lookup", "latitude_key", "longitude_key", "timestamp_hour"),
+        # Index for cleanup queries (find expired entries)
+        Index("ix_weather_cache_fetched_at", "fetched_at"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Cache key components (rounded to reduce cache entries)
+    latitude_key = Column(Float, nullable=False)  # Rounded to 2 decimals (~1km precision)
+    longitude_key = Column(Float, nullable=False)  # Rounded to 2 decimals
+    timestamp_hour = Column(String(16), nullable=False)  # Format: "YYYY-MM-DD-HH"
+
+    # Weather data (denormalized for fast retrieval)
+    temperature_f = Column(Float)
+    precipitation_in = Column(Float)
+    wind_speed_mph = Column(Float)
+    weather_code = Column(Integer)
+    conditions = Column(String(50))  # Human-readable: "Clear", "Rain", etc.
+
+    # Cache metadata
+    fetched_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    api_source = Column(String(20))  # "forecast" or "historical"
+
+    def to_dict(self):
+        """Convert to weather data dict (same format as API response)."""
+        return {
+            "temperature_f": self.temperature_f,
+            "precipitation_in": self.precipitation_in,
+            "wind_speed_mph": self.wind_speed_mph,
+            "weather_code": self.weather_code,
+            "conditions": self.conditions,
+            "timestamp": self.timestamp_hour,
+            "is_cached": True,
+            "cached_at": self.fetched_at.isoformat() if self.fetched_at else None,
+        }
+
+    @classmethod
+    def create_cache_key(cls, latitude: float, longitude: float, timestamp_hour: str):
+        """
+        Create cache key components from coordinates and timestamp.
+
+        Rounds coordinates to 2 decimals (~1km precision) to increase cache hit rate.
+
+        Args:
+            latitude: GPS latitude
+            longitude: GPS longitude
+            timestamp_hour: Hour string in format "YYYY-MM-DD-HH"
+
+        Returns:
+            Tuple of (latitude_key, longitude_key, timestamp_hour)
+        """
+        return (
+            round(latitude, 2),
+            round(longitude, 2),
+            timestamp_hour
+        )
 
 
 def get_engine(database_url):
