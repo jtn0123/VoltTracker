@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Dict
 from models import Trip
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from utils.timezone import utc_now
+from utils.timezone import normalize_datetime, utc_now
 
 if TYPE_CHECKING:
     from utils.wide_events import WideEvent
@@ -47,7 +47,7 @@ def get_vehicle_statistics(db: Session) -> Dict[str, Any]:
     first_trip = db.query(Trip).order_by(Trip.start_time.asc()).first()
 
     if first_trip:
-        account_age_days = (utc_now() - first_trip.start_time).days
+        account_age_days = (utc_now() - normalize_datetime(first_trip.start_time)).days
     else:
         account_age_days = 0
 
@@ -176,7 +176,7 @@ def get_current_trip_context(db: Session, session_id: str) -> Dict[str, Any]:
     }
 
     if trip.start_time:
-        duration_seconds = (utc_now() - trip.start_time).total_seconds()
+        duration_seconds = (utc_now() - normalize_datetime(trip.start_time)).total_seconds()
         context["trip_duration_seconds"] = int(duration_seconds)
 
     if trip.start_soc is not None:

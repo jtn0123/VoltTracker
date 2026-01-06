@@ -10,6 +10,7 @@ from typing import Dict, Optional
 
 from models import MaintenanceRecord, TelemetryRaw, Trip
 from sqlalchemy.orm import Session
+from utils.timezone import normalize_datetime, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,7 @@ def calculate_next_due(
     # Time-based interval
     if "interval_months" in interval:
         next_due_date = last_service_date + timedelta(days=interval["interval_months"] * 30)
-        days_remaining = (next_due_date - datetime.utcnow()).days
+        days_remaining = (normalize_datetime(next_due_date) - utc_now()).days
         result["due_by"].append(f"{abs(days_remaining)} days")
         result["days_remaining"] = days_remaining
         result["next_due_date"] = next_due_date.isoformat()
