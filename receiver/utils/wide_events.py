@@ -10,7 +10,9 @@ Following loggingsucks.com recommendations:
 Instead of logging what your code is doing, log what happened to this request.
 """
 
+import random
 import time
+import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -41,20 +43,39 @@ class WideEvent:
     Accumulates context throughout an operation, then emits one comprehensive log event.
 
     Usage:
-        event = WideEvent("telemetry_upload")
+        event = WideEvent("telemetry_upload", trace_id=session_id)
         event.add_context(session_id="abc123", odometer_miles=50000)
         event.add_business_metric("data_points", 42)
+
+        with event.timer("db_query"):
+            db.query(...).all()
+
+        event.add_feature_flags(new_algorithm=True)
         event.emit()
     """
 
-    def __init__(self, operation: str):
-        """Initialize a wide event for a specific operation."""
+    def __init__(self, operation: str, request_id: Optional[str] = None, trace_id: Optional[str] = None):
+        """
+        Initialize a wide event for a specific operation.
+
+        Args:
+            operation: Name of the operation (e.g., "telemetry_upload")
+            request_id: Unique ID for this specific request (auto-generated if not provided)
+            trace_id: ID that connects related operations (e.g., session_id for all telemetry uploads)
+        """
         self.operation = operation
+        self.timers: Dict[str, float] = {}  # Track timer start times
         self.context: Dict[str, Any] = {
             "operation": operation,
             "timestamp": datetime.utcnow().isoformat(),
             "start_time": time.time(),
+            "request_id": request_id or str(uuid.uuid4()),
         }
+
+        # Add trace_id if provided (connects related operations)
+        if trace_id:
+            self.context["trace_id"] = trace_id
+
         self.logger = structlog.get_logger()
 
     def add_context(self, **kwargs) -> "WideEvent":
@@ -104,6 +125,29 @@ class WideEvent:
         self.context["feature_flags"].update(flags)
         return self
 
+    @contextmanager
+    def timer(self, operation_name: str):
+        """
+        Context manager to time a specific operation within the request.
+
+        Usage:
+            with event.timer("db_query"):
+                db.query(...).all()
+
+            with event.timer("weather_api"):
+                fetch_weather()
+
+            # Outputs: {"performance_breakdown": {"db_query_ms": 45.2, "weather_api_ms": 342.5}}
+        """
+        start = time.time()
+        try:
+            yield
+        finally:
+            duration_ms = (time.time() - start) * 1000
+            if "performance_breakdown" not in self.context:
+                self.context["performance_breakdown"] = {}
+            self.context["performance_breakdown"][f"{operation_name}_ms"] = round(duration_ms, 2)
+
     def set_duration(self) -> "WideEvent":
         """Calculate and set the duration of the operation."""
         if "start_time" in self.context:
@@ -112,24 +156,34 @@ class WideEvent:
             del self.context["start_time"]  # Remove start_time from final log
         return self
 
-    def should_emit(self, sample_rate: float = 0.05) -> bool:
+    def should_emit(self, sample_rate: float = 0.05, slow_threshold_ms: float = 1000) -> bool:
         """
         Implement tail sampling logic:
         - Always emit errors
-        - Always emit slow requests (>1s)
+        - Always emit slow requests (>slow_threshold_ms)
+        - Always emit critical business events (trip_created, gas_mode_transition, etc.)
         - Sample successful fast requests at sample_rate (default 5%)
         """
         # Always log errors
         if not self.context.get("success", True):
             return True
 
-        # Always log slow requests (>1000ms)
-        if self.context.get("duration_ms", 0) > 1000:
+        # Always log slow requests
+        if self.context.get("duration_ms", 0) > slow_threshold_ms:
+            return True
+
+        # Always log critical business events
+        business_metrics = self.context.get("business_metrics", {})
+        critical_events = [
+            "trip_created",
+            "gas_mode_entered",
+            "charging_session_started",
+            "refuel_detected",
+        ]
+        if any(business_metrics.get(event) for event in critical_events):
             return True
 
         # Sample successful fast requests
-        import random
-
         return random.random() < sample_rate
 
     def emit(self, level: str = "info", force: bool = False) -> None:
