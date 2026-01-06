@@ -5,6 +5,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -818,6 +819,225 @@ class WeatherCache(Base):
             round(longitude, 2),
             timestamp_hour
         )
+
+
+class TripDailyStats(Base):
+    """
+    Daily aggregation of trip statistics for fast analytics.
+
+    Instead of querying raw telemetry, use these pre-aggregated stats
+    for dashboards and historical charts.
+    """
+
+    __tablename__ = "trip_daily_stats"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    date = Column(Date, nullable=False, unique=True)
+
+    # Trip counts
+    total_trips = Column(Integer, default=0)
+    ev_only_trips = Column(Integer, default=0)
+    gas_mode_trips = Column(Integer, default=0)
+    extreme_weather_trips = Column(Integer, default=0)
+
+    # Distance aggregations
+    total_distance_miles = Column(Float, default=0)
+    total_electric_miles = Column(Float, default=0)
+    total_gas_miles = Column(Float, default=0)
+    avg_trip_distance = Column(Float)
+
+    # Efficiency metrics
+    avg_kwh_per_mile = Column(Float)
+    best_kwh_per_mile = Column(Float)
+    worst_kwh_per_mile = Column(Float)
+    avg_mpg = Column(Float)
+
+    # Elevation metrics
+    total_elevation_gain_m = Column(Float, default=0)
+    avg_elevation_gain_m = Column(Float)
+
+    # Weather metrics
+    avg_temp_f = Column(Float)
+    min_temp_f = Column(Float)
+    max_temp_f = Column(Float)
+    avg_wind_mph = Column(Float)
+    total_precipitation_in = Column(Float, default=0)
+
+    # Speed metrics
+    avg_speed_mph = Column(Float)
+    max_speed_mph = Column(Float)
+
+    # Energy metrics
+    total_kwh_used = Column(Float, default=0)
+    avg_weather_impact_factor = Column(Float)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    def to_dict(self):
+        """Convert to dictionary."""
+        return {
+            "date": self.date.isoformat() if self.date else None,
+            "total_trips": self.total_trips,
+            "ev_only_trips": self.ev_only_trips,
+            "gas_mode_trips": self.gas_mode_trips,
+            "extreme_weather_trips": self.extreme_weather_trips,
+            "total_distance_miles": round(self.total_distance_miles, 1) if self.total_distance_miles else 0,
+            "total_electric_miles": round(self.total_electric_miles, 1) if self.total_electric_miles else 0,
+            "total_gas_miles": round(self.total_gas_miles, 1) if self.total_gas_miles else 0,
+            "avg_trip_distance": round(self.avg_trip_distance, 1) if self.avg_trip_distance else None,
+            "avg_kwh_per_mile": round(self.avg_kwh_per_mile, 3) if self.avg_kwh_per_mile else None,
+            "best_kwh_per_mile": round(self.best_kwh_per_mile, 3) if self.best_kwh_per_mile else None,
+            "worst_kwh_per_mile": round(self.worst_kwh_per_mile, 3) if self.worst_kwh_per_mile else None,
+            "avg_mpg": round(self.avg_mpg, 1) if self.avg_mpg else None,
+            "total_elevation_gain_m": round(self.total_elevation_gain_m, 0) if self.total_elevation_gain_m else 0,
+            "avg_elevation_gain_m": round(self.avg_elevation_gain_m, 0) if self.avg_elevation_gain_m else None,
+            "avg_temp_f": round(self.avg_temp_f, 1) if self.avg_temp_f else None,
+            "min_temp_f": round(self.min_temp_f, 1) if self.min_temp_f else None,
+            "max_temp_f": round(self.max_temp_f, 1) if self.max_temp_f else None,
+            "avg_wind_mph": round(self.avg_wind_mph, 1) if self.avg_wind_mph else None,
+            "total_precipitation_in": round(self.total_precipitation_in, 2) if self.total_precipitation_in else 0,
+            "avg_speed_mph": round(self.avg_speed_mph, 1) if self.avg_speed_mph else None,
+            "max_speed_mph": round(self.max_speed_mph, 1) if self.max_speed_mph else None,
+            "total_kwh_used": round(self.total_kwh_used, 2) if self.total_kwh_used else 0,
+            "avg_weather_impact_factor": round(self.avg_weather_impact_factor, 2) if self.avg_weather_impact_factor else None,
+        }
+
+
+class ChargingHourlyStats(Base):
+    """
+    Hourly aggregation of charging statistics.
+
+    Pre-aggregated charging data for fast analytics and charts.
+    """
+
+    __tablename__ = "charging_hourly_stats"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    hour_timestamp = Column(DateTime(timezone=True), nullable=False, unique=True)
+
+    # Session counts
+    total_sessions = Column(Integer, default=0)
+    l1_sessions = Column(Integer, default=0)
+    l2_sessions = Column(Integer, default=0)
+    dcfc_sessions = Column(Integer, default=0)
+    completed_sessions = Column(Integer, default=0)
+
+    # Energy metrics
+    total_kwh_added = Column(Float, default=0)
+    avg_kwh_per_session = Column(Float)
+    avg_peak_power_kw = Column(Float)
+    avg_avg_power_kw = Column(Float)
+
+    # SOC metrics
+    avg_start_soc = Column(Float)
+    avg_end_soc = Column(Float)
+    avg_soc_gained = Column(Float)
+
+    # Duration metrics (in minutes)
+    avg_session_duration = Column(Float)
+    total_charging_minutes = Column(Float, default=0)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    def to_dict(self):
+        """Convert to dictionary."""
+        return {
+            "hour": self.hour_timestamp.isoformat() if self.hour_timestamp else None,
+            "total_sessions": self.total_sessions,
+            "l1_sessions": self.l1_sessions,
+            "l2_sessions": self.l2_sessions,
+            "dcfc_sessions": self.dcfc_sessions,
+            "completed_sessions": self.completed_sessions,
+            "total_kwh_added": round(self.total_kwh_added, 2) if self.total_kwh_added else 0,
+            "avg_kwh_per_session": round(self.avg_kwh_per_session, 2) if self.avg_kwh_per_session else None,
+            "avg_peak_power_kw": round(self.avg_peak_power_kw, 1) if self.avg_peak_power_kw else None,
+            "avg_avg_power_kw": round(self.avg_avg_power_kw, 1) if self.avg_avg_power_kw else None,
+            "avg_start_soc": round(self.avg_start_soc, 1) if self.avg_start_soc else None,
+            "avg_end_soc": round(self.avg_end_soc, 1) if self.avg_end_soc else None,
+            "avg_soc_gained": round(self.avg_soc_gained, 1) if self.avg_soc_gained else None,
+            "avg_session_duration": round(self.avg_session_duration, 1) if self.avg_session_duration else None,
+            "total_charging_minutes": round(self.total_charging_minutes, 1) if self.total_charging_minutes else 0,
+        }
+
+
+class MonthlySummary(Base):
+    """
+    Monthly summary statistics for high-level overview.
+
+    Used for dashboard summary cards and year-over-year comparisons.
+    """
+
+    __tablename__ = "monthly_summary"
+    __table_args__ = (UniqueConstraint("year", "month", name="uq_monthly_year_month"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+
+    # Trip summary
+    total_trips = Column(Integer, default=0)
+    total_distance_miles = Column(Float, default=0)
+    total_electric_miles = Column(Float, default=0)
+    total_gas_miles = Column(Float, default=0)
+    electric_percentage = Column(Float)
+
+    # Efficiency summary
+    avg_kwh_per_mile = Column(Float)
+    avg_mpg = Column(Float)
+    total_kwh_used = Column(Float, default=0)
+    total_gallons_used = Column(Float, default=0)
+
+    # Charging summary
+    total_charging_sessions = Column(Integer, default=0)
+    total_kwh_charged = Column(Float, default=0)
+    l1_sessions = Column(Integer, default=0)
+    l2_sessions = Column(Integer, default=0)
+    dcfc_sessions = Column(Integer, default=0)
+
+    # Cost estimates
+    estimated_electricity_cost = Column(Float)
+    estimated_gas_cost = Column(Float)
+
+    # Environmental impact
+    co2_avoided_lbs = Column(Float)
+
+    # Weather summary
+    avg_temp_f = Column(Float)
+    extreme_weather_trips = Column(Integer, default=0)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    def to_dict(self):
+        """Convert to dictionary."""
+        return {
+            "year": self.year,
+            "month": self.month,
+            "total_trips": self.total_trips,
+            "total_distance_miles": round(self.total_distance_miles, 1) if self.total_distance_miles else 0,
+            "total_electric_miles": round(self.total_electric_miles, 1) if self.total_electric_miles else 0,
+            "total_gas_miles": round(self.total_gas_miles, 1) if self.total_gas_miles else 0,
+            "electric_percentage": round(self.electric_percentage, 1) if self.electric_percentage else None,
+            "avg_kwh_per_mile": round(self.avg_kwh_per_mile, 3) if self.avg_kwh_per_mile else None,
+            "avg_mpg": round(self.avg_mpg, 1) if self.avg_mpg else None,
+            "total_kwh_used": round(self.total_kwh_used, 2) if self.total_kwh_used else 0,
+            "total_gallons_used": round(self.total_gallons_used, 2) if self.total_gallons_used else 0,
+            "total_charging_sessions": self.total_charging_sessions,
+            "total_kwh_charged": round(self.total_kwh_charged, 2) if self.total_kwh_charged else 0,
+            "l1_sessions": self.l1_sessions,
+            "l2_sessions": self.l2_sessions,
+            "dcfc_sessions": self.dcfc_sessions,
+            "estimated_electricity_cost": round(self.estimated_electricity_cost, 2) if self.estimated_electricity_cost else None,
+            "estimated_gas_cost": round(self.estimated_gas_cost, 2) if self.estimated_gas_cost else None,
+            "co2_avoided_lbs": round(self.co2_avoided_lbs, 1) if self.co2_avoided_lbs else None,
+            "avg_temp_f": round(self.avg_temp_f, 1) if self.avg_temp_f else None,
+            "extreme_weather_trips": self.extreme_weather_trips,
+        }
 
 
 def get_engine(database_url):

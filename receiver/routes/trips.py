@@ -369,7 +369,10 @@ def get_soc_analysis():
     """
     db = get_db()
 
-    transitions = db.query(SocTransition).order_by(SocTransition.timestamp).all()
+    # Limit to most recent 500 transitions to prevent memory issues
+    # This is enough data for meaningful analysis while keeping response fast
+    transitions = db.query(SocTransition).order_by(SocTransition.timestamp.desc()).limit(500).all()
+    transitions.reverse()  # Put back in chronological order for analysis
 
     transition_dicts = [t.to_dict() for t in transitions]
     analysis = analyze_soc_floor(transition_dicts)
