@@ -1,8 +1,18 @@
 import os
+import socket
+from datetime import datetime
 
 
 class Config:
     """Application configuration from environment variables."""
+
+    # Service Metadata (for loggingsucks.com service-aware logging)
+    SERVICE_NAME = "volttracker"
+    APP_VERSION = os.environ.get("APP_VERSION", "0.1.0-dev")
+    ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
+    DEPLOYMENT_ID = os.environ.get("DEPLOYMENT_ID", f"local-{socket.gethostname()}")
+    DEPLOYMENT_TIMESTAMP = os.environ.get("DEPLOYMENT_TIMESTAMP", datetime.utcnow().isoformat())
+    REGION = os.environ.get("REGION", "local")
 
     # Database
     DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://volt:changeme@localhost:5432/volt_tracker")

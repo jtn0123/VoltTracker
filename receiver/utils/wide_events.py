@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 import structlog
+from config import Config
 
 if TYPE_CHECKING:
     from utils.error_codes import StructuredError
@@ -78,6 +79,16 @@ class WideEvent:
         # Add trace_id if provided (connects related operations)
         if trace_id:
             self.context["trace_id"] = trace_id
+
+        # Add service metadata (loggingsucks.com requirement for service-aware logging)
+        self.context["service"] = {
+            "name": Config.SERVICE_NAME,
+            "version": Config.APP_VERSION,
+            "environment": Config.ENVIRONMENT,
+            "deployment_id": Config.DEPLOYMENT_ID,
+            "deployed_at": Config.DEPLOYMENT_TIMESTAMP,
+            "region": Config.REGION,
+        }
 
         self.logger = structlog.get_logger()
 
@@ -199,10 +210,12 @@ class WideEvent:
 
     def should_emit(self, sample_rate: float = 0.05, slow_threshold_ms: float = 1000) -> bool:
         """
-        Implement tail sampling logic:
+        Implement tier-based tail sampling logic (loggingsucks.com pattern):
         - Always emit errors
         - Always emit slow requests (>slow_threshold_ms)
         - Always emit critical business events (trip_created, gas_mode_transition, etc.)
+        - Always emit heavy users (100+ trips) - VIP customer visibility
+        - Increase sampling for new users (first 30 days) to 25%
         - Sample successful fast requests at sample_rate (default 5%)
         """
         # Always log errors
@@ -224,7 +237,19 @@ class WideEvent:
         if any(business_metrics.get(event) for event in critical_events):
             return True
 
-        # Sample successful fast requests
+        # Tier-based sampling (loggingsucks.com VIP user pattern)
+        vehicle_context = self.context.get("vehicle_context", {})
+
+        # Always sample heavy users (100+ trips) - equivalent to "enterprise" tier
+        if vehicle_context.get("usage_tier") == "heavy":
+            return True
+
+        # Increase sampling for new users (first 30 days) to 25%
+        account_age_days = vehicle_context.get("account_age_days", 999)
+        if account_age_days < 30:
+            return random.random() < 0.25  # 25% sampling for new users
+
+        # Sample successful fast requests at configured rate
         return random.random() < sample_rate
 
     def emit(self, level: str = "info", force: bool = False) -> None:
