@@ -20,6 +20,7 @@ from utils import (
     detect_gas_mode_entry,
     normalize_datetime,
 )
+from utils.error_codes import ErrorCode, StructuredError
 from utils.weather import get_weather_for_location, get_weather_impact_factor
 from utils.wide_events import WideEvent
 
@@ -224,6 +225,13 @@ def finalize_trip(db, trip: Trip):
         if not telemetry:
             trip.is_closed = True
             event.add_context(no_telemetry=True)
+            structured_error = StructuredError(
+                ErrorCode.E402_NO_TELEMETRY_DATA,
+                f"Trip {trip.id} has no telemetry data",
+                trip_id=trip.id,
+                session_id=str(trip.session_id),
+            )
+            event.add_error(structured_error)
             event.mark_failure("no_telemetry_data")
             duration_ms = (time.time() - start_time) * 1000
             event.context["duration_ms"] = round(duration_ms, 2)
@@ -310,10 +318,26 @@ def finalize_trip(db, trip: Trip):
         )
 
     except Exception as e:
-        # Add error to wide event
+        # Add error to wide event with appropriate error code
         duration_ms = (time.time() - start_time) * 1000
         event.context["duration_ms"] = round(duration_ms, 2)
-        event.add_error(e)
+
+        # Determine error code based on exception type
+        if isinstance(e, (ValueError, ZeroDivisionError, TypeError)):
+            error_code = ErrorCode.E405_EFFICIENCY_CALCULATION_FAILED
+        elif hasattr(e, "__module__") and "sqlalchemy" in e.__module__:
+            error_code = ErrorCode.E200_DB_CONNECTION_FAILED
+        else:
+            error_code = ErrorCode.E500_INTERNAL_SERVER_ERROR
+
+        structured_error = StructuredError(
+            error_code,
+            f"Trip finalization error: {type(e).__name__}",
+            exception=e,
+            trip_id=trip.id,
+            session_id=str(trip.session_id),
+        )
+        event.add_error(structured_error)
         event.mark_failure(f"finalization_error: {type(e).__name__}")
         event.emit(level="error", force=True)
         raise
