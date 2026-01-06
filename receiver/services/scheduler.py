@@ -64,30 +64,42 @@ def close_stale_trips():
     """
     Close trips that have no new data for TRIP_TIMEOUT_SECONDS.
     Calculate trip statistics and detect gas mode transitions.
+
+    Optimized to avoid N+1 queries by using a subquery to get latest telemetry.
     """
     db = get_scheduler_db()
     try:
         cutoff_time = utc_now() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS)
 
-        # Find open trips with no recent telemetry
-        open_trips = db.query(Trip).filter(Trip.is_closed.is_(False)).all()
-
-        for trip in open_trips:
-            # Get latest telemetry for this trip
-            latest = (
-                db.query(TelemetryRaw)
-                .filter(TelemetryRaw.session_id == trip.session_id)
-                .order_by(desc(TelemetryRaw.timestamp))
-                .first()
+        # Use subquery to get latest telemetry timestamp for each session (avoids N+1)
+        latest_telemetry_subq = (
+            db.query(
+                TelemetryRaw.session_id,
+                func.max(TelemetryRaw.timestamp).label('latest_timestamp')
             )
+            .group_by(TelemetryRaw.session_id)
+            .subquery()
+        )
 
-            if latest:
-                # normalize_datetime handles both naive and timezone-aware datetimes
-                latest_ts = normalize_datetime(latest.timestamp)
+        # Find open trips with their latest telemetry timestamp in one query
+        stale_trips = (
+            db.query(Trip)
+            .outerjoin(
+                latest_telemetry_subq,
+                Trip.session_id == latest_telemetry_subq.c.session_id
+            )
+            .filter(Trip.is_closed.is_(False))
+            .filter(
+                # Either no telemetry OR telemetry older than cutoff
+                (latest_telemetry_subq.c.latest_timestamp.is_(None)) |
+                (latest_telemetry_subq.c.latest_timestamp < cutoff_time)
+            )
+            .all()
+        )
 
-                if latest_ts < cutoff_time:
-                    logger.info(f"Closing stale trip {trip.id} (session: {trip.session_id})")
-                    finalize_trip(db, trip)
+        for trip in stale_trips:
+            logger.info(f"Closing stale trip {trip.id} (session: {trip.session_id})")
+            finalize_trip(db, trip)
 
         db.commit()
     except (IntegrityError, OperationalError) as e:

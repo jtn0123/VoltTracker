@@ -10,6 +10,7 @@ from typing import Dict, Optional
 
 from models import MaintenanceRecord, TelemetryRaw, Trip
 from sqlalchemy.orm import Session
+from utils.query_cache import cached_query
 from utils.timezone import normalize_datetime, utc_now
 
 logger = logging.getLogger(__name__)
@@ -60,18 +61,28 @@ MAINTENANCE_INTERVALS = {
 }
 
 
+@cached_query(ttl=600, key_prefix="maintenance")  # Cache for 10 minutes
 def calculate_engine_hours(db: Session, since_date: Optional[datetime] = None) -> float:
     """
     Calculate total engine hours from telemetry.
 
     Engine hour = 1 hour when engine_rpm > 400
+
+    Note: For very large datasets, this may need to be optimized with
+    aggregation queries or time-based batching.
+
+    Cached for 10 minutes to avoid expensive recomputation.
     """
+    # Limit to most recent 50,000 points to prevent memory issues
+    # This covers ~13 hours of engine runtime at 1 point/second
+    MAX_ENGINE_TELEMETRY_POINTS = 50000
+
     query = db.query(TelemetryRaw).filter(TelemetryRaw.engine_rpm > 400)
 
     if since_date:
         query = query.filter(TelemetryRaw.timestamp >= since_date)
 
-    telemetry = query.order_by(TelemetryRaw.timestamp).all()
+    telemetry = query.order_by(TelemetryRaw.timestamp).limit(MAX_ENGINE_TELEMETRY_POINTS).all()
 
     if len(telemetry) < 2:
         return 0.0
@@ -152,9 +163,12 @@ def calculate_next_due(
     return result
 
 
+@cached_query(ttl=300, key_prefix="maintenance")  # Cache for 5 minutes
 def get_maintenance_summary(db: Session) -> Dict:
     """
     Get summary of all maintenance items and their status.
+
+    Cached for 5 minutes to avoid expensive recomputation on dashboard refreshes.
     """
     current_miles = get_current_odometer(db)
     total_engine_hours = calculate_engine_hours(db)

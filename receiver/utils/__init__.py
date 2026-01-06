@@ -10,7 +10,9 @@ from .calculations import (
     detect_charging_session,
     detect_gas_mode_entry,
     detect_refuel_event,
+    fuel_percent_to_gallons,
     smooth_fuel_level,
+    soc_to_kwh,
 )
 from .timezone import ensure_utc, is_after, is_before, normalize_datetime, utc_now
 from .torque_parser import TorqueParser
@@ -27,6 +29,8 @@ __all__ = [
     "calculate_electric_kwh",
     "calculate_kwh_per_mile",
     "detect_charging_session",
+    "fuel_percent_to_gallons",
+    "soc_to_kwh",
     "utc_now",
     "normalize_datetime",
     "ensure_utc",
