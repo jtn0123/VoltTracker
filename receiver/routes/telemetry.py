@@ -11,10 +11,11 @@ from typing import Any, Dict
 
 from config import Config
 from database import get_db
-from exceptions import TelemetryParsingError, TripProcessingError
+from exceptions import TelemetryParsingError
 from flask import Blueprint, current_app, jsonify, request
 from models import TelemetryRaw, Trip
 from utils import TorqueParser, normalize_datetime, utc_now
+from utils.error_codes import ErrorCode, StructuredError
 from utils.wide_events import WideEvent
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,12 @@ def torque_upload(token=None):
     if Config.TORQUE_API_TOKEN:
         if token != Config.TORQUE_API_TOKEN:
             event.add_context(auth_failed=True)
+            structured_error = StructuredError(
+                ErrorCode.E001_INVALID_TOKEN,
+                "Invalid Torque API token",
+                remote_addr=request.remote_addr,
+            )
+            event.add_error(structured_error)
             event.mark_failure("invalid_token")
             event.emit(level="warning", force=True)
             logger.warning(f"Invalid Torque API token attempt from {request.remote_addr}")
@@ -128,8 +135,13 @@ def torque_upload(token=None):
             except Exception as e:
                 # Race condition - trip was created by another request
                 event.add_technical_metric("trip_race_condition", True)
-                error = TripProcessingError(f"Trip race condition handled: {e}", session_id=str(data["session_id"]))
-                logger.debug(str(error))
+                structured_error = StructuredError(
+                    ErrorCode.E204_DB_RACE_CONDITION,
+                    "Trip race condition handled",
+                    exception=e,
+                    session_id=str(data["session_id"]),
+                )
+                logger.debug(str(structured_error))
                 db.rollback()
                 trip = db.query(Trip).filter(Trip.session_id == data["session_id"]).first()
                 # If trip is still None after retry (rare - possibly deleted), skip trip updates
@@ -200,10 +212,24 @@ def torque_upload(token=None):
         return "OK!"
 
     except Exception as e:
-        # Add error to wide event
+        # Add error to wide event with appropriate error code
         duration_ms = (time.time() - start_time) * 1000
         event.context["duration_ms"] = round(duration_ms, 2)
-        event.add_error(e)
+
+        # Determine error code based on exception type
+        if isinstance(e, (ValueError, KeyError, TypeError)):
+            error_code = ErrorCode.E300_TORQUE_PARSE_FAILED
+        elif hasattr(e, "__module__") and "sqlalchemy" in e.__module__:
+            error_code = ErrorCode.E200_DB_CONNECTION_FAILED
+        else:
+            error_code = ErrorCode.E500_INTERNAL_SERVER_ERROR
+
+        structured_error = StructuredError(
+            error_code,
+            f"Error processing Torque upload: {type(e).__name__}",
+            exception=e,
+        )
+        event.add_error(structured_error)
         event.mark_failure(f"parsing_error: {type(e).__name__}")
 
         # Log raw request data for debugging

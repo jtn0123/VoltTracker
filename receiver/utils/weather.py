@@ -12,7 +12,9 @@ from typing import Any, Dict, Optional, cast
 
 import requests
 from exceptions import WeatherAPIError
+from utils.error_codes import ErrorCode, StructuredError
 from utils.timezone import normalize_datetime, utc_now
+from utils.wide_events import WideEvent
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,8 @@ def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optio
     """
     Make an HTTP GET request with retry logic and exponential backoff.
 
+    Emits service boundary event for external API tracking.
+
     Args:
         url: API endpoint URL
         params: Query parameters
@@ -37,42 +41,122 @@ def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optio
     Returns:
         JSON response as dict, or None if all retries failed
     """
+    # Create service boundary event for external API call
+    event = WideEvent("external_api_weather")
+    event.add_context(
+        service="open_meteo",
+        url=url,
+        latitude=params.get("latitude"),
+        longitude=params.get("longitude"),
+        timeout_seconds=timeout,
+    )
+
     last_error: Optional[Exception] = None
     delay = RETRY_DELAY_SECONDS
+    total_attempts = 0
 
     for attempt in range(MAX_RETRIES):
+        total_attempts += 1
         try:
-            response = requests.get(url, params=params, timeout=timeout)
-            response.raise_for_status()
-            return cast(Dict[str, Any], response.json())
+            # Time the individual request attempt
+            with event.timer(f"request_attempt_{attempt + 1}"):
+                response = requests.get(url, params=params, timeout=timeout)
+                response.raise_for_status()
+                data = cast(Dict[str, Any], response.json())
+
+            # Success!
+            event.add_context(
+                attempts=total_attempts,
+                status_code=response.status_code,
+                response_size_bytes=len(response.content),
+            )
+            event.mark_success()
+            event.emit()  # Always emit service boundary events
+            return data
+
         except requests.exceptions.Timeout as e:
             last_error = e
             logger.warning(f"Weather API timeout (attempt {attempt + 1}/{MAX_RETRIES})")
+            event.add_technical_metric(f"attempt_{attempt + 1}_timeout", True)
+
         except requests.exceptions.ConnectionError as e:
             last_error = e
             logger.warning(f"Weather API connection error (attempt {attempt + 1}/{MAX_RETRIES})")
+            event.add_technical_metric(f"attempt_{attempt + 1}_connection_error", True)
+
         except requests.exceptions.HTTPError as e:
-            # Don't retry on 4xx client errors (bad request, not found, etc.)
-            if e.response is not None and 400 <= e.response.status_code < 500:
-                logger.warning(f"Weather API client error: {e}")
-                return None
             last_error = e
+            # Don't retry on 4xx client errors (bad request, not found, etc.)
+            if e.response is not None:
+                status_code = e.response.status_code
+                event.add_context(status_code=status_code)
+
+                if 400 <= status_code < 500:
+                    logger.warning(f"Weather API client error: {e}")
+                    structured_error = StructuredError(
+                        ErrorCode.E102_WEATHER_API_INVALID_RESPONSE,
+                        f"Weather API client error: HTTP {status_code}",
+                        exception=e,
+                        latitude=params.get("latitude"),
+                        longitude=params.get("longitude"),
+                    )
+                    event.add_error(structured_error)
+                    event.add_context(attempts=total_attempts)
+                    event.emit(level="warning", force=True)
+                    return None
+
             logger.warning(f"Weather API HTTP error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+            event.add_technical_metric(f"attempt_{attempt + 1}_http_error", True)
+
         except requests.exceptions.JSONDecodeError as e:
+            last_error = e
             # Invalid JSON response - don't retry
             logger.warning(f"Weather API invalid JSON response: {e}")
+            structured_error = StructuredError(
+                ErrorCode.E102_WEATHER_API_INVALID_RESPONSE,
+                "Weather API returned invalid JSON",
+                exception=e,
+                latitude=params.get("latitude"),
+                longitude=params.get("longitude"),
+            )
+            event.add_error(structured_error)
+            event.add_context(attempts=total_attempts)
+            event.emit(level="warning", force=True)
             return None
+
         except Exception as e:
+            last_error = e
             # Log full traceback for unexpected errors
             logger.exception(f"Weather API unexpected error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
-            last_error = e
+            event.add_technical_metric(f"attempt_{attempt + 1}_unexpected_error", True)
 
         # Wait before retrying (exponential backoff)
         if attempt < MAX_RETRIES - 1:
             time.sleep(delay)
             delay *= 2  # Double delay for next attempt
 
+    # All retries failed
     logger.warning(f"Weather API failed after {MAX_RETRIES} attempts: {last_error}")
+
+    # Emit failure event with appropriate error code
+    if isinstance(last_error, requests.exceptions.Timeout):
+        error_code = ErrorCode.E100_WEATHER_API_TIMEOUT
+    elif isinstance(last_error, requests.exceptions.ConnectionError):
+        error_code = ErrorCode.E101_WEATHER_API_CONNECTION
+    else:
+        error_code = ErrorCode.E102_WEATHER_API_INVALID_RESPONSE
+
+    structured_error = StructuredError(
+        error_code,
+        f"Weather API failed after {total_attempts} attempts: {type(last_error).__name__}",
+        exception=last_error,
+        latitude=params.get("latitude"),
+        longitude=params.get("longitude"),
+    )
+    event.add_error(structured_error)
+    event.add_context(attempts=total_attempts)
+    event.emit(level="warning", force=True)
+
     return None
 
 

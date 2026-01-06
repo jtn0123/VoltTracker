@@ -15,9 +15,12 @@ import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 import structlog
+
+if TYPE_CHECKING:
+    from utils.error_codes import StructuredError
 
 # Configure structlog for JSON output
 structlog.configure(
@@ -97,13 +100,27 @@ class WideEvent:
         self.context["technical_metrics"][key] = value
         return self
 
-    def add_error(self, error: Exception, **kwargs) -> "WideEvent":
-        """Add error details to the event."""
-        self.context["error"] = {
-            "type": type(error).__name__,
-            "message": str(error),
-            "details": kwargs,
-        }
+    def add_error(self, error: Union[Exception, "StructuredError"], **kwargs) -> "WideEvent":
+        """
+        Add error details to the event.
+
+        Args:
+            error: Either a regular Exception or a StructuredError with error code
+            **kwargs: Additional error context
+        """
+        # Check if this is a StructuredError (duck typing to avoid circular import)
+        if hasattr(error, "to_dict") and hasattr(error, "code"):
+            # StructuredError with error code taxonomy
+            error_dict = error.to_dict()
+            self.context["error"] = error_dict
+        else:
+            # Regular Exception
+            self.context["error"] = {
+                "type": type(error).__name__,
+                "message": str(error),
+                "details": kwargs,
+            }
+
         self.context["success"] = False
         return self
 
@@ -123,6 +140,30 @@ class WideEvent:
         if "feature_flags" not in self.context:
             self.context["feature_flags"] = {}
         self.context["feature_flags"].update(flags)
+        return self
+
+    def add_vehicle_context(self, **context) -> "WideEvent":
+        """
+        Add vehicle/user context for enriched debugging.
+
+        Following loggingsucks.com recommendations for context enrichment:
+        - Battery health metrics
+        - Total trips and miles driven
+        - Account age and usage patterns
+
+        Example:
+            event.add_vehicle_context(
+                total_trips=145,
+                total_miles=3250.5,
+                battery_capacity_kwh=17.8,
+                battery_health_percent=96.7,
+                account_age_days=365,
+                avg_kwh_per_mile=0.28,
+            )
+        """
+        if "vehicle_context" not in self.context:
+            self.context["vehicle_context"] = {}
+        self.context["vehicle_context"].update(context)
         return self
 
     @contextmanager
