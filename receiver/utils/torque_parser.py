@@ -232,9 +232,10 @@ class TorqueParser:
         if "throttle_position" in temp_values:
             result["throttle_position"] = temp_values["throttle_position"]
         if "fuel_level_percent" in temp_values:
+            from utils import fuel_percent_to_gallons
             result["fuel_level_percent"] = temp_values["fuel_level_percent"]
             # Calculate gallons remaining using configured tank capacity
-            result["fuel_remaining_gallons"] = temp_values["fuel_level_percent"] / 100 * Config.TANK_CAPACITY_GALLONS
+            result["fuel_remaining_gallons"] = fuel_percent_to_gallons(temp_values["fuel_level_percent"])
         if "state_of_charge" in temp_values:
             result["state_of_charge"] = temp_values["state_of_charge"]
         if "battery_voltage" in temp_values:
