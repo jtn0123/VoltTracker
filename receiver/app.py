@@ -13,9 +13,8 @@ from flask import Flask
 from flask_caching import Cache
 from flask_compress import Compress
 from flask_httpauth import HTTPBasicAuth
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from flask_socketio import SocketIO
+from extensions import limiter
 from routes import register_blueprints
 from services.scheduler import init_scheduler, shutdown_scheduler
 from werkzeug.security import check_password_hash
@@ -123,13 +122,10 @@ def verify_password(username, password):
 
 
 # Initialize rate limiter
-limiter = Limiter(
-    key_func=get_remote_address,
-    app=app,
-    default_limits=["200 per day", "50 per hour"] if Config.RATE_LIMIT_ENABLED else [],
-    storage_uri="memory://",
-    enabled=Config.RATE_LIMIT_ENABLED,
-)
+limiter.init_app(app)
+if Config.RATE_LIMIT_ENABLED:
+    limiter._default_limits = ["200 per day", "50 per hour"]
+limiter._enabled = Config.RATE_LIMIT_ENABLED
 
 
 @app.before_request
