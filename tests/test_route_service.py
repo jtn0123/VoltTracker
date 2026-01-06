@@ -9,9 +9,18 @@ Tests the route detection and analysis including:
 - Edge cases and validation
 """
 
+import uuid
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from models import Route
-from services.route_service import find_matching_route, haversine_distance
+from models import Route, TelemetryRaw, Trip
+from services.route_service import (
+    detect_routes,
+    find_matching_route,
+    get_route_summary,
+    get_trip_endpoints,
+    haversine_distance,
+)
 
 
 class TestHaversineDistance:
@@ -217,6 +226,237 @@ class TestFindMatchingRoute:
 
         assert found is not None
         assert found.name == "Route 2"
+
+
+class TestGetTripEndpoints:
+    """Tests for get_trip_endpoints function."""
+
+    def test_returns_endpoints_with_gps_data(self, app, db_session):
+        """Returns start and end coordinates from telemetry."""
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(minutes=30),
+            end_time=now,
+            distance_miles=10.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Add telemetry with GPS data
+        telemetry_points = [
+            (37.7749, -122.4194),  # Start
+            (37.7850, -122.4100),  # Middle
+            (37.8044, -122.2712),  # End
+        ]
+
+        for i, (lat, lon) in enumerate(telemetry_points):
+            telemetry = TelemetryRaw(
+                session_id=session_id,
+                timestamp=now - timedelta(minutes=30 - i * 10),
+                latitude=lat,
+                longitude=lon,
+            )
+            db_session.add(telemetry)
+        db_session.commit()
+
+        result = get_trip_endpoints(db_session, trip.id)
+
+        assert result is not None
+        start_lat, start_lon, end_lat, end_lon = result
+        assert start_lat == 37.7749
+        assert start_lon == -122.4194
+        assert end_lat == 37.8044
+        assert end_lon == -122.2712
+
+    def test_returns_none_for_nonexistent_trip(self, app, db_session):
+        """Returns None for trip that doesn't exist."""
+        result = get_trip_endpoints(db_session, 99999)
+        assert result is None
+
+    def test_returns_none_without_gps_data(self, app, db_session):
+        """Returns None for trip without GPS telemetry."""
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(minutes=30),
+            end_time=now,
+            distance_miles=10.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Add telemetry without GPS
+        telemetry = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(minutes=20),
+            speed_mph=30.0,
+        )
+        db_session.add(telemetry)
+        db_session.commit()
+
+        result = get_trip_endpoints(db_session, trip.id)
+        assert result is None
+
+    def test_returns_none_with_single_gps_point(self, app, db_session):
+        """Returns None when less than 2 GPS points."""
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(minutes=30),
+            end_time=now,
+            distance_miles=10.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Add only one GPS point
+        telemetry = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(minutes=20),
+            latitude=37.7749,
+            longitude=-122.4194,
+        )
+        db_session.add(telemetry)
+        db_session.commit()
+
+        result = get_trip_endpoints(db_session, trip.id)
+        assert result is None
+
+
+class TestDetectRoutes:
+    """Tests for detect_routes function."""
+
+    def test_creates_new_route_from_trip(self, app, db_session):
+        """Creates new route from trip with GPS data."""
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(minutes=30),
+            end_time=now,
+            distance_miles=10.5,
+            electric_miles=10.5,
+            kwh_per_mile=0.2,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Add GPS telemetry
+        for i, (lat, lon) in enumerate([(37.7749, -122.4194), (37.8044, -122.2712)]):
+            telemetry = TelemetryRaw(
+                session_id=session_id,
+                timestamp=now - timedelta(minutes=30 - i * 15),
+                latitude=lat,
+                longitude=lon,
+            )
+            db_session.add(telemetry)
+        db_session.commit()
+
+        routes = detect_routes(db_session, min_trips=1)
+
+        assert len(routes) >= 1
+        # Should create at least one route
+
+    def test_groups_similar_trips_into_route(self, app, db_session):
+        """Groups trips with similar endpoints into same route."""
+        now = datetime.now(timezone.utc)
+
+        # Create 3 similar trips
+        for trip_num in range(3):
+            session_id = uuid.uuid4()
+
+            trip = Trip(
+                session_id=session_id,
+                start_time=now - timedelta(days=trip_num, minutes=30),
+                end_time=now - timedelta(days=trip_num),
+                distance_miles=10.0,
+                electric_miles=10.0,
+                kwh_per_mile=0.2,
+                is_closed=True,
+            )
+            db_session.add(trip)
+            db_session.flush()
+
+            # Same endpoints with slight variation
+            for i, (lat, lon) in enumerate([(37.7749, -122.4194), (37.8044, -122.2712)]):
+                telemetry = TelemetryRaw(
+                    session_id=session_id,
+                    timestamp=now - timedelta(days=trip_num, minutes=30 - i * 15),
+                    latitude=lat + trip_num * 0.0001,  # Slight variation
+                    longitude=lon + trip_num * 0.0001,
+                )
+                db_session.add(telemetry)
+        db_session.commit()
+
+        routes = detect_routes(db_session, min_trips=2)
+
+        # Should group similar trips
+        assert len(routes) >= 1
+
+
+class TestGetRouteSummary:
+    """Tests for get_route_summary function."""
+
+    def test_returns_empty_summary_no_routes(self, app, db_session):
+        """Returns empty summary when no routes exist."""
+        summary = get_route_summary(db_session)
+
+        assert summary["total_routes"] == 0
+        assert "message" in summary
+
+    def test_returns_summary_with_routes(self, app, db_session):
+        """Returns summary with route information."""
+        # Create routes
+        for i in range(3):
+            route = Route(
+                name=f"Route {i + 1}",
+                start_lat=37.7749 + i * 0.01,
+                start_lon=-122.4194,
+                end_lat=37.8044,
+                end_lon=-122.2712 + i * 0.01,
+                trip_count=i + 1,
+            )
+            db_session.add(route)
+        db_session.commit()
+
+        summary = get_route_summary(db_session)
+
+        assert summary["total_routes"] == 3
+        assert "routes" in summary
+        assert "most_frequent" in summary
+        assert len(summary["routes"]) <= 10  # Top 10 limit
+
+    def test_limits_to_top_10_routes(self, app, db_session):
+        """Returns at most top 10 routes."""
+        # Create 15 routes
+        for i in range(15):
+            route = Route(
+                name=f"Route {i + 1}",
+                start_lat=37.7749 + i * 0.001,
+                start_lon=-122.4194,
+                end_lat=37.8044,
+                end_lon=-122.2712 + i * 0.001,
+                trip_count=i + 1,
+            )
+            db_session.add(route)
+        db_session.commit()
+
+        summary = get_route_summary(db_session)
+
+        assert summary["total_routes"] == 15
+        assert len(summary["routes"]) == 10  # Limited to 10
 
 
 class TestRouteValidation:
