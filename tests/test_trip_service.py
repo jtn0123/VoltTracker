@@ -307,14 +307,16 @@ class TestFetchTripWeather:
 
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
+        end_time = now + timedelta(minutes=10)
 
         trip = Trip(
             session_id=session_id,
             start_time=now,
+            end_time=end_time,
         )
 
         points = [
-            {"latitude": 37.7749, "longitude": -122.4194, "timestamp": now},
+            {"latitude": 37.7749, "longitude": -122.4194, "timestamp": now.isoformat()},
         ]
 
         fetch_trip_weather(trip, points)
