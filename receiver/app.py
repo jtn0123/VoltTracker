@@ -244,6 +244,96 @@ def health_check():
     return {"status": "healthy", "service": "volttracker"}, 200
 
 
+@app.route("/clear-cache", methods=["GET"])
+def clear_cache_page():
+    """
+    Utility page to clear service worker and browser caches.
+
+    This page serves inline JavaScript that bypasses any cached JS,
+    allowing users to recover from broken service worker states.
+    """
+    from flask import Response
+
+    html = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear Cache - VoltTracker</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
+        .status { padding: 15px; border-radius: 8px; margin: 10px 0; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #cce5ff; color: #004085; }
+        button { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 8px; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        h1 { color: #333; }
+    </style>
+</head>
+<body>
+    <h1>VoltTracker Cache Clear</h1>
+    <p>This will unregister all service workers and clear browser caches for this site.</p>
+    <button id="clearBtn" onclick="clearAll()">Clear Cache & Reload</button>
+    <div id="log"></div>
+
+    <script>
+        function log(msg, type) {
+            const div = document.createElement('div');
+            div.className = 'status ' + type;
+            div.textContent = msg;
+            document.getElementById('log').appendChild(div);
+        }
+
+        async function clearAll() {
+            const btn = document.getElementById('clearBtn');
+            btn.disabled = true;
+            btn.textContent = 'Clearing...';
+
+            try {
+                // 1. Unregister all service workers
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (const reg of registrations) {
+                        await reg.unregister();
+                        log('Unregistered service worker: ' + reg.scope, 'success');
+                    }
+                    if (registrations.length === 0) {
+                        log('No service workers found', 'info');
+                    }
+                } else {
+                    log('Service workers not supported', 'info');
+                }
+
+                // 2. Clear all caches
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    for (const name of cacheNames) {
+                        await caches.delete(name);
+                        log('Deleted cache: ' + name, 'success');
+                    }
+                    if (cacheNames.length === 0) {
+                        log('No caches found', 'info');
+                    }
+                }
+
+                log('Cache cleared! Redirecting in 2 seconds...', 'success');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 2000);
+
+            } catch (err) {
+                log('Error: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Try Again';
+            }
+        }
+    </script>
+</body>
+</html>"""
+    return Response(html, mimetype='text/html')
+
+
 @app.route("/ready", methods=["GET"])
 @app.route("/readiness", methods=["GET"])  # Alternative naming
 def readiness_check():

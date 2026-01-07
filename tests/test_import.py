@@ -289,7 +289,8 @@ class TestCSVImportEndpoint:
 
         assert response.status_code == 200
         json_data = response.get_json()
-        assert "trip_id" in json_data["stats"]
+        # trip_id is at top level in new response format
+        assert "trip_id" in json_data or "trip_id" in json_data.get("stats", {})
 
     def test_import_csv_invalid_content(self, client, db_session):
         """Test import with no valid records."""

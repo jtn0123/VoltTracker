@@ -2,8 +2,25 @@
  * Volt Efficiency Tracker - Dashboard JavaScript
  */
 
+// Service Worker Recovery - unregister broken SW if requested
+// Usage: Add ?clear-sw=1 to URL to force unregister service worker
+(function() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('clear-sw') === '1' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+            registrations.forEach(reg => reg.unregister());
+            console.log('[SW Recovery] Unregistered all service workers');
+            // Remove the query param and reload
+            params.delete('clear-sw');
+            const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+            window.location.replace(newUrl);
+        });
+        return; // Stop execution, page will reload
+    }
+})();
+
 // Debug mode - set to true to enable console logging
-const DEBUG = false;
+const DEBUG = true;  // Temporarily enabled for debugging import issues
 
 // State
 let mpgChart = null;
@@ -3070,6 +3087,9 @@ function setActiveNavItem(sectionName) {
 /**
  * Handle CSV import form submission (supports multiple files)
  */
+// Store import results for copy functionality
+let lastImportResults = [];
+
 async function handleImport(event) {
     event.preventDefault();
 
@@ -3086,9 +3106,11 @@ async function handleImport(event) {
 
     // Show loading state
     importBtn.disabled = true;
+    lastImportResults = [];
 
     let totalImported = 0;
     let totalSkipped = 0;
+    let totalDuplicates = 0;
     let failedFiles = [];
 
     for (let i = 0; i < files.length; i++) {
@@ -3099,48 +3121,81 @@ async function handleImport(event) {
         formData.append('file', file);
 
         try {
+            console.log(`[Import] Starting import for: ${file.name}`);
             const response = await fetch('/api/import/csv', {
                 method: 'POST',
                 body: formData
             });
+            console.log(`[Import] Response status: ${response.status} ${response.statusText}`);
 
             // Parse JSON safely - server may return non-JSON on errors
             let data;
             try {
                 data = await response.json();
+                console.log(`[Import] Response data:`, data);
             } catch (parseError) {
                 const errorText = await response.text().catch(() => 'Unknown error');
-                showImportStatus(`Import failed for ${file.name}: Invalid server response`, 'error');
+                console.error(`[Import] JSON parse error for ${file.name}:`, parseError, errorText);
+                lastImportResults.push({
+                    filename: file.name,
+                    status: 'failed',
+                    failure_reason: 'invalid_response',
+                    message: 'Invalid server response'
+                });
                 failedFiles.push(file.name);
                 continue;
             }
 
-            if (response.ok) {
-                totalImported += data.stats?.parsed_rows || 0;
+            // Store result for modal/copy
+            lastImportResults.push({
+                filename: file.name,
+                ...data
+            });
+
+            const status = data.status || (response.ok ? 'success' : 'failed');
+            const parsedRows = data.stats?.parsed_rows || 0;
+            const duplicateRows = data.stats?.duplicate_rows || 0;
+
+            if (status === 'success' || status === 'partial') {
+                totalImported += parsedRows;
                 totalSkipped += data.stats?.skipped_rows || 0;
+                totalDuplicates += duplicateRows;
+            } else if (status === 'duplicate') {
+                // Exact file duplicate - already imported
+                console.log(`[Import] Duplicate file: ${file.name} (${data.original_import_code})`);
             } else {
-                // Show specific error from server
-                const errorMsg = data.error || data.message || 'Unknown error';
-                showImportStatus(`Import failed for ${file.name}: ${errorMsg}`, 'error');
                 failedFiles.push(file.name);
             }
         } catch (error) {
-            if (DEBUG) console.error('Import error:', error);
-            showImportStatus(`Import failed for ${file.name}: ${error.message}`, 'error');
+            console.error(`[Import] Network/JS error for ${file.name}:`, error);
+            lastImportResults.push({
+                filename: file.name,
+                status: 'failed',
+                failure_reason: 'network_error',
+                message: error.message
+            });
             failedFiles.push(file.name);
         }
     }
 
-    // Show final summary
-    let message = `Imported ${totalImported} records from ${totalFiles - failedFiles.length} files.`;
-    if (totalSkipped > 0) {
-        message += ` Skipped ${totalSkipped} invalid rows.`;
-    }
-    if (failedFiles.length > 0) {
-        message += ` Failed: ${failedFiles.join(', ')}`;
-        showImportStatus(message, 'error');
+    // Show import result modal for single file, status bar for multiple
+    if (totalFiles === 1 && lastImportResults.length === 1) {
+        showImportResultModal(lastImportResults[0]);
     } else {
-        showImportStatus(message, 'success');
+        // Show summary status for multiple files
+        let message = `Imported ${totalImported} records from ${totalFiles - failedFiles.length} files.`;
+        if (totalSkipped > 0) {
+            message += ` Skipped ${totalSkipped} invalid rows.`;
+        }
+        if (totalDuplicates > 0) {
+            message += ` ${totalDuplicates} duplicate rows detected.`;
+        }
+        if (failedFiles.length > 0) {
+            message += ` Failed: ${failedFiles.join(', ')}`;
+            showImportStatus(message, 'error');
+        } else {
+            showImportStatus(message, 'success');
+        }
     }
 
     // Reload data once at the end
@@ -3156,12 +3211,163 @@ async function handleImport(event) {
 }
 
 /**
- * Show import status message
+ * Show import status message in the status bar
  */
 function showImportStatus(message, type) {
     const statusDiv = document.getElementById('import-status');
     statusDiv.textContent = message;
     statusDiv.className = `import-status show ${type}`;
+}
+
+/**
+ * Show import result in modal dialog
+ */
+function showImportResultModal(data) {
+    const modal = document.getElementById('import-result-modal');
+    if (!modal) return;
+
+    // Set import code
+    const codeEl = document.getElementById('import-code-text');
+    if (codeEl) {
+        codeEl.textContent = data.import_code || 'N/A';
+    }
+
+    // Set status badge with color
+    const statusEl = document.getElementById('import-status-badge');
+    if (statusEl) {
+        const status = data.status || 'unknown';
+        statusEl.textContent = status.toUpperCase();
+        statusEl.className = `import-status-badge status-${status}`;
+    }
+
+    // Set message
+    const messageEl = document.getElementById('import-message');
+    if (messageEl) {
+        messageEl.textContent = data.message || '';
+    }
+
+    // Set stats
+    const stats = data.stats || {};
+    document.getElementById('import-total-rows').textContent = stats.total_rows || 0;
+    document.getElementById('import-parsed-rows').textContent = stats.parsed_rows || 0;
+    document.getElementById('import-skipped-rows').textContent = stats.skipped_rows || 0;
+    document.getElementById('import-duplicate-rows').textContent = stats.duplicate_rows || 0;
+
+    // Show/hide error section
+    const errorSection = document.getElementById('import-error-section');
+    if (data.failure_reason) {
+        errorSection.style.display = 'block';
+        document.getElementById('import-error-reason').textContent = data.failure_reason;
+        document.getElementById('import-error-suggestion').textContent = data.suggestion || '';
+    } else {
+        errorSection.style.display = 'none';
+    }
+
+    // Show columns detected (for debugging failed imports)
+    const columnsDetails = document.getElementById('import-columns-details');
+    const columnsList = document.getElementById('import-columns-list');
+    if (stats.columns_detected && stats.columns_detected.length > 0) {
+        columnsDetails.style.display = 'block';
+        columnsList.textContent = stats.columns_detected.join(', ');
+    } else {
+        columnsDetails.style.display = 'none';
+    }
+
+    // Store reportable for copy
+    modal.dataset.reportable = data.reportable || generateReportable(data);
+
+    // Show modal
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+/**
+ * Generate reportable string if not provided by server
+ */
+function generateReportable(data) {
+    const parts = [
+        data.import_code || 'UNKNOWN',
+        (data.status || 'UNKNOWN').toUpperCase()
+    ];
+
+    if (data.failure_reason) {
+        parts.push(data.failure_reason);
+    }
+
+    const stats = data.stats || {};
+    parts.push(`${stats.parsed_rows || 0}/${stats.total_rows || 0} rows`);
+
+    if (data.trip_id) {
+        parts.push(`trip_id=${data.trip_id}`);
+    }
+
+    return parts.join(' | ');
+}
+
+/**
+ * Close import result modal
+ */
+function closeImportResultModal() {
+    const modal = document.getElementById('import-result-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
+}
+
+/**
+ * Copy just the import code to clipboard
+ */
+function copyImportCode() {
+    const codeEl = document.getElementById('import-code-text');
+    if (codeEl) {
+        navigator.clipboard.writeText(codeEl.textContent).then(() => {
+            showToast('Import code copied');
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+        });
+    }
+}
+
+/**
+ * Copy full import report to clipboard
+ */
+function copyImportReport() {
+    const modal = document.getElementById('import-result-modal');
+    const reportable = modal?.dataset?.reportable;
+
+    if (reportable) {
+        navigator.clipboard.writeText(reportable).then(() => {
+            showToast('Report copied to clipboard');
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+        });
+    }
+}
+
+/**
+ * Show a toast notification
+ */
+function showToast(message) {
+    // Check if toast container exists, create if not
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.className = 'toast-container';
+        document.body.appendChild(toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    toastContainer.appendChild(toast);
+
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 /**

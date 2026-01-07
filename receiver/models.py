@@ -1099,6 +1099,83 @@ class AuditLog(Base):
         db.commit()
 
 
+class CsvImport(Base):
+    """
+    Track every CSV import attempt for audit trail and duplicate detection.
+
+    Every import gets a unique import_code (IMP-YYYYMMDD-XXXXXX) that users
+    can reference when reporting issues. File hash prevents exact duplicate imports.
+    """
+
+    __tablename__ = "csv_imports"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    import_code = Column(String(20), unique=True, nullable=False)  # e.g., "IMP-20260107-A1B2C3"
+    filename = Column(String(255), nullable=False)
+    file_hash = Column(String(64), nullable=False, unique=True)  # SHA-256
+    file_size_bytes = Column(Integer, nullable=False)
+
+    # Results
+    status = Column(String(20), nullable=False)  # 'success', 'partial', 'failed', 'duplicate'
+    failure_reason = Column(String(100))
+    failure_details = Column(JSONType())  # Full error context
+    suggestion = Column(Text)
+
+    # Stats
+    total_rows = Column(Integer, default=0)
+    parsed_rows = Column(Integer, default=0)
+    skipped_rows = Column(Integer, default=0)
+    duplicate_rows = Column(Integer, default=0)
+
+    # Column info
+    columns_detected = Column(JSONType())
+    columns_mapped = Column(JSONType())
+    timestamp_range_start = Column(DateTime(timezone=True))
+    timestamp_range_end = Column(DateTime(timezone=True))
+
+    # Links
+    trip_id = Column(Integer, ForeignKey("trips.id", ondelete="SET NULL"), nullable=True)
+    session_id = Column(String(36))
+
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+    def to_dict(self):
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "import_code": self.import_code,
+            "filename": self.filename,
+            "file_hash": self.file_hash,
+            "file_size_bytes": self.file_size_bytes,
+            "status": self.status,
+            "failure_reason": self.failure_reason,
+            "failure_details": self.failure_details,
+            "suggestion": self.suggestion,
+            "total_rows": self.total_rows,
+            "parsed_rows": self.parsed_rows,
+            "skipped_rows": self.skipped_rows,
+            "duplicate_rows": self.duplicate_rows,
+            "columns_detected": self.columns_detected,
+            "columns_mapped": self.columns_mapped,
+            "timestamp_range_start": self.timestamp_range_start.isoformat() if self.timestamp_range_start else None,
+            "timestamp_range_end": self.timestamp_range_end.isoformat() if self.timestamp_range_end else None,
+            "trip_id": self.trip_id,
+            "session_id": self.session_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    @property
+    def reportable(self):
+        """Generate copy-pasteable string for error reporting."""
+        parts = [self.import_code, self.status.upper()]
+        if self.failure_reason:
+            parts.append(self.failure_reason)
+        parts.append(f"{self.parsed_rows}/{self.total_rows} rows")
+        if self.trip_id:
+            parts.append(f"trip_id={self.trip_id}")
+        return " | ".join(parts)
+
+
 def get_engine(database_url):
     """
     Create database engine with proper connection pooling.

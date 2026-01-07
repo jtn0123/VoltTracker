@@ -572,6 +572,74 @@
         </div>
     </div>
 
+    <!-- Import Result Modal -->
+    <div class="modal" id="import-result-modal" role="dialog" aria-modal="true" aria-labelledby="import-result-title" aria-hidden="true">
+        <div class="modal-backdrop" onclick="closeImportResultModal()"></div>
+        <div class="modal-content modal-import-result">
+            <div class="modal-header">
+                <h2 id="import-result-title">Import Result</h2>
+                <button class="modal-close" onclick="closeImportResultModal()" aria-label="Close import result">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Import Code -->
+                <div class="import-code-display" role="region" aria-label="Import code">
+                    <span class="import-code-text" id="import-code-text">IMP-XXXXXXXX-XXXXXX</span>
+                    <button class="btn-copy-code" onclick="copyImportCode()" title="Copy import code" aria-label="Copy import code">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Status Badge -->
+                <div class="import-status-display" role="status">
+                    <span class="import-status-badge" id="import-status-badge">--</span>
+                </div>
+
+                <!-- Message -->
+                <p class="import-message" id="import-message">--</p>
+
+                <!-- Stats Grid -->
+                <div class="import-stats-grid" id="import-stats-grid">
+                    <div class="import-stat">
+                        <div class="import-stat-value" id="import-total-rows">0</div>
+                        <div class="import-stat-label">Total Rows</div>
+                    </div>
+                    <div class="import-stat">
+                        <div class="import-stat-value" id="import-parsed-rows">0</div>
+                        <div class="import-stat-label">Parsed</div>
+                    </div>
+                    <div class="import-stat">
+                        <div class="import-stat-value" id="import-skipped-rows">0</div>
+                        <div class="import-stat-label">Skipped</div>
+                    </div>
+                    <div class="import-stat">
+                        <div class="import-stat-value" id="import-duplicate-rows">0</div>
+                        <div class="import-stat-label">Duplicates</div>
+                    </div>
+                </div>
+
+                <!-- Error Section (hidden by default) -->
+                <div class="import-error-section" id="import-error-section" style="display: none;">
+                    <div class="import-error-reason" id="import-error-reason">--</div>
+                    <div class="import-error-suggestion" id="import-error-suggestion">--</div>
+                </div>
+
+                <!-- Columns Detected (for debugging) -->
+                <details class="import-columns-details" id="import-columns-details" style="display: none;">
+                    <summary>Columns Detected</summary>
+                    <div class="import-columns-list" id="import-columns-list">--</div>
+                </details>
+
+                <!-- Copy Report Button -->
+                <button class="btn-copy-report" onclick="copyImportReport()" aria-label="Copy full import report">
+                    Copy Full Report
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Bottom Navigation (Mobile) -->
     <nav class="bottom-nav" aria-label="Main navigation">
         <a href="#summary-section" class="bottom-nav-item active" data-section="summary">
