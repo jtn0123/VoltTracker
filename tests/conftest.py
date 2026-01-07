@@ -1,5 +1,7 @@
 """
 Pytest fixtures for VoltTracker tests.
+
+Includes standard fixtures and custom plugins for enhanced testing.
 """
 
 import os
@@ -8,6 +10,9 @@ import uuid
 from datetime import datetime, timezone
 
 import pytest
+
+# Enable custom pytest plugins
+pytest_plugins = ['tests.pytest_plugins']
 
 # Add receiver to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "receiver"))
