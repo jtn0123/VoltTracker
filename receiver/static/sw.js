@@ -4,15 +4,16 @@
  */
 
 // Cache version - update on each deploy to ensure fresh assets
-const CACHE_VERSION = '2025-01-05-v2';
+const CACHE_VERSION = '2026-01-07-v4';
 const STATIC_CACHE = `volttracker-static-${CACHE_VERSION}`;
 const API_CACHE = `volttracker-api-${CACHE_VERSION}`;
 const CDN_CACHE = `volttracker-cdn-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
     '/',
-    '/static/dist/styles.min.css',
-    '/static/dist/dashboard.min.js',
+    '/static/css/style.css',
+    '/static/css/critical.css',
+    '/static/js/dashboard.js',
     '/static/manifest.json'
 ];
 
@@ -37,10 +38,21 @@ const CACHEABLE_API_ENDPOINTS = [
 self.addEventListener('install', (event) => {
     event.waitUntil(
         Promise.all([
-            // Cache static assets
+            // Cache static assets - use allSettled to not fail if some assets 404
             caches.open(STATIC_CACHE).then((cache) => {
                 console.log('[SW] Caching static assets');
-                return cache.addAll(STATIC_ASSETS);
+                return Promise.allSettled(
+                    STATIC_ASSETS.map(url =>
+                        fetch(url).then(response => {
+                            if (response.ok) {
+                                return cache.put(url, response);
+                            }
+                            console.log('[SW] Could not cache asset (not ok):', url, response.status);
+                        }).catch((err) => {
+                            console.log('[SW] Could not cache static asset:', url, err.message);
+                        })
+                    )
+                );
             }),
             // Cache CDN assets
             caches.open(CDN_CACHE).then((cache) => {

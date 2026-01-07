@@ -1521,6 +1521,239 @@ body {
 }
 
 /* ============================================
+   Import Result Modal
+   ============================================ */
+.modal-import-result {
+    max-width: 480px;
+}
+
+.import-code-display {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 1.25rem;
+    background: var(--bg-primary);
+    padding: 12px 16px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+}
+
+.import-code-text {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.btn-copy-code {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    transition: color 0.2s, background-color 0.2s;
+}
+
+.btn-copy-code:hover {
+    color: var(--text-primary);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.import-status-display {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.import-status-badge {
+    display: inline-block;
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.import-status-badge.status-success {
+    background: #22c55e;
+    color: white;
+}
+
+.import-status-badge.status-partial {
+    background: #f59e0b;
+    color: white;
+}
+
+.import-status-badge.status-failed {
+    background: #ef4444;
+    color: white;
+}
+
+.import-status-badge.status-duplicate {
+    background: #6366f1;
+    color: white;
+}
+
+.import-message {
+    text-align: center;
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.import-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.import-stat {
+    background: var(--bg-primary);
+    padding: 12px 8px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+}
+
+.import-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.import-stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.import-error-section {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 1rem;
+}
+
+.import-error-reason {
+    font-family: monospace;
+    font-size: 0.875rem;
+    color: #ef4444;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.import-error-suggestion {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.import-columns-details {
+    background: var(--bg-primary);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+}
+
+.import-columns-details summary {
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.import-columns-details summary:hover {
+    color: var(--text-primary);
+}
+
+.import-columns-list {
+    padding: 0 16px 16px;
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    word-break: break-word;
+}
+
+.btn-copy-report {
+    width: 100%;
+    padding: 14px;
+    background: var(--accent-light);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-copy-report:hover {
+    background: var(--accent);
+}
+
+/* Toast Notifications */
+.toast-container {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.toast {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    padding: 12px 24px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    font-size: 0.875rem;
+    animation: toast-in 0.3s ease-out;
+}
+
+.toast.fade-out {
+    animation: toast-out 0.3s ease-in forwards;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes toast-out {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+}
+
+/* Responsive import modal */
+@media (max-width: 480px) {
+    .import-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .import-code-display {
+        font-size: 1rem;
+    }
+}
+
+/* ============================================
    Battery Health Card
    ============================================ */
 .battery-health-section {

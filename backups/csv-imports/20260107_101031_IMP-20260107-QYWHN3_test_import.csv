@@ -1,0 +1,3 @@
+GPS Time,Latitude,Longitude,GPS Speed (Meters/second)
+2026-01-07 10:15:00,37.7749,-122.4194,10.5
+2026-01-07 10:15:05,37.7750,-122.4195,11.2 curl -s -X POST http://localhost:8080/api/import/csv  -F file=@/tmp/test_import.csv

@@ -8,16 +8,20 @@ import csv
 import io
 import logging
 import os
-from datetime import datetime
+import json
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from database import get_db
 from exceptions import CSVImportError
 from flask import Blueprint, Response, jsonify, request
-from models import ChargingSession, FuelEvent, SocTransition, TelemetryRaw, Trip
+from models import ChargingSession, CsvImport, FuelEvent, SocTransition, TelemetryRaw, Trip
 from services.trip_service import finalize_trip
-from sqlalchemy import desc, func
+from sqlalchemy import and_, desc, func, or_
+from sqlalchemy.exc import IntegrityError
 from utils import utc_now
+from utils.import_utils import generate_import_code, get_file_hash, format_reportable, get_failure_suggestion
 
 # Import limiter for rate limiting sensitive endpoints
 from extensions import limiter
@@ -291,43 +295,250 @@ def import_csv():
 
     Accepts multipart form data with a CSV file.
 
+    Features:
+    - Generates unique import code (IMP-YYYYMMDD-XXXXXX) for tracking
+    - File hash duplicate detection (rejects exact duplicate files)
+    - Timestamp duplicate detection (skips records already in DB)
+    - Records all imports in csv_imports table for audit trail
+
     Returns:
-        JSON with import statistics (rows imported, skipped, errors)
+        JSON with import code, status, statistics, and reportable string
     """
     from utils.csv_importer import TorqueCSVImporter
 
+    db = get_db()
+
+    # Generate unique import code for this attempt
+    import_code = generate_import_code()
+
+    # Start timing for wide event
+    start_time = time.time()
+
+    # Build import event context (loggingsucks.com wide event pattern)
+    import_event = {
+        "event": "csv_import",
+        "import_code": import_code,
+        "filename": None,
+        "file_size_bytes": 0,
+        "file_hash": None,
+        "success": False,
+        "failure_reason": None,
+        "total_rows": 0,
+        "parsed_rows": 0,
+        "skipped_rows": 0,
+        "duplicate_rows": 0,
+        "inserted_count": 0,
+        "trip_id": None,
+        "session_id": None,
+        "columns_detected": [],
+        "columns_mapped": [],
+        "timestamp_column_found": False,
+        "errors_count": 0,
+        "first_error": None,
+        "duration_ms": 0,
+    }
+
+    def _log_import_event():
+        """Emit the wide event at end of import."""
+        import_event["duration_ms"] = int((time.time() - start_time) * 1000)
+        # Log as structured JSON for easy parsing
+        logger.info(f"csv_import_complete: {json.dumps(import_event)}")
+
+    def _record_import(status: str, failure_reason: str = None, suggestion: str = None,
+                       stats: dict = None, trip_id: int = None, session_id: str = None,
+                       file_hash: str = None, filename: str = None, file_size: int = 0):
+        """Record import attempt in csv_imports table."""
+        try:
+            csv_import = CsvImport(
+                import_code=import_code,
+                filename=filename or import_event.get("filename") or "unknown",
+                file_hash=file_hash or import_event.get("file_hash") or "unknown",
+                file_size_bytes=file_size or import_event.get("file_size_bytes") or 0,
+                status=status,
+                failure_reason=failure_reason,
+                failure_details={"first_error": import_event.get("first_error")} if import_event.get("first_error") else None,
+                suggestion=suggestion,
+                total_rows=stats.get("total_rows", 0) if stats else import_event.get("total_rows", 0),
+                parsed_rows=stats.get("parsed_rows", 0) if stats else import_event.get("parsed_rows", 0),
+                skipped_rows=stats.get("skipped_rows", 0) if stats else import_event.get("skipped_rows", 0),
+                duplicate_rows=stats.get("duplicates_removed", 0) if stats else import_event.get("duplicate_rows", 0),
+                columns_detected=stats.get("columns_detected") if stats else import_event.get("columns_detected"),
+                columns_mapped=stats.get("columns_mapped") if stats else import_event.get("columns_mapped"),
+                timestamp_range_start=stats.get("timestamp_range_start") if stats else None,
+                timestamp_range_end=stats.get("timestamp_range_end") if stats else None,
+                trip_id=trip_id,
+                session_id=session_id,
+            )
+            db.add(csv_import)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            logger.warning(f"Failed to record import {import_code} (possible duplicate hash)")
+        except Exception as e:
+            db.rollback()
+            logger.warning(f"Failed to record import {import_code}: {e}")
+
+    def _build_response(status: str, message: str, failure_reason: str = None, suggestion: str = None,
+                        stats: dict = None, trip_id: int = None, http_status: int = 200):
+        """Build standardized import response."""
+        response = {
+            "status": status,
+            "import_code": import_code,
+            "message": message,
+        }
+        if failure_reason:
+            response["failure_reason"] = failure_reason
+        if suggestion:
+            response["suggestion"] = suggestion
+        if stats:
+            response["stats"] = {
+                "total_rows": stats.get("total_rows", 0),
+                "parsed_rows": stats.get("parsed_rows", 0),
+                "skipped_rows": stats.get("skipped_rows", 0),
+                "duplicate_rows": stats.get("duplicates_removed", 0),
+                "columns_detected": stats.get("columns_detected", []),
+                "columns_mapped": stats.get("columns_mapped", []),
+            }
+            if stats.get("timestamp_range_start") and stats.get("timestamp_range_end"):
+                response["stats"]["timestamp_range"] = {
+                    "start": stats["timestamp_range_start"].isoformat() if hasattr(stats["timestamp_range_start"], 'isoformat') else str(stats["timestamp_range_start"]),
+                    "end": stats["timestamp_range_end"].isoformat() if hasattr(stats["timestamp_range_end"], 'isoformat') else str(stats["timestamp_range_end"]),
+                }
+        if trip_id:
+            response["trip_id"] = trip_id
+
+        # Generate reportable string for easy copy-paste
+        response["reportable"] = format_reportable(
+            import_code=import_code,
+            status=status,
+            failure_reason=failure_reason,
+            parsed_rows=stats.get("parsed_rows", 0) if stats else 0,
+            total_rows=stats.get("total_rows", 0) if stats else 0,
+            trip_id=trip_id,
+            columns_detected=stats.get("columns_detected") if stats else None,
+        )
+
+        return jsonify(response), http_status
+
     if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
+        import_event["failure_reason"] = "no_file_provided"
+        _log_import_event()
+        _record_import("failed", "no_file_provided", "No file was provided in the request")
+        return _build_response("failed", "No file provided", "no_file_provided",
+                               "Please select a CSV file to upload", http_status=400)
 
     file = request.files["file"]
+    import_event["filename"] = file.filename
+
     if file.filename == "":
-        return jsonify({"error": "No file selected"}), 400
+        import_event["failure_reason"] = "no_file_selected"
+        _log_import_event()
+        _record_import("failed", "no_file_selected", "No file was selected")
+        return _build_response("failed", "No file selected", "no_file_selected",
+                               "Please select a CSV file to upload", http_status=400)
 
     if not file.filename.lower().endswith(".csv"):
-        return jsonify({"error": "File must be a CSV"}), 400
+        import_event["failure_reason"] = "not_csv_file"
+        _log_import_event()
+        _record_import("failed", "not_csv_file", "Only CSV files are supported", filename=file.filename)
+        return _build_response("failed", "File must be a CSV", "not_csv_file",
+                               "Only CSV files are supported. Please upload a .csv file", http_status=400)
 
     try:
-        # Read and parse CSV
-        csv_content = file.read().decode("utf-8")
+        # Read file content as bytes first for hashing
+        file_bytes = file.read()
+        file_hash = get_file_hash(file_bytes)
+        import_event["file_hash"] = file_hash
+        import_event["file_size_bytes"] = len(file_bytes)
+
+        # Check for exact duplicate file (same hash already imported)
+        # Include "all_duplicates" failures since that means records already exist
+        existing_import = db.query(CsvImport).filter(
+            CsvImport.file_hash == file_hash,
+            or_(
+                CsvImport.status.in_(["success", "partial"]),
+                and_(CsvImport.status == "failed", CsvImport.failure_reason == "all_duplicates")
+            )
+        ).first()
+
+        if existing_import:
+            import_event["failure_reason"] = "duplicate_file"
+            _log_import_event()
+            _record_import("duplicate", "duplicate_file",
+                           f"This exact file was already imported as {existing_import.import_code}",
+                           filename=file.filename, file_hash=file_hash, file_size=len(file_bytes))
+            return jsonify({
+                "status": "duplicate",
+                "import_code": import_code,
+                "message": "This exact file was already imported",
+                "original_import_code": existing_import.import_code,
+                "original_import_date": existing_import.created_at.isoformat() if existing_import.created_at else None,
+                "original_trip_id": existing_import.trip_id,
+                "reportable": f"{import_code} | DUPLICATE | Same as {existing_import.import_code}",
+            }), 409
+
+        # Decode file content
+        csv_content = file_bytes.decode("utf-8")
 
         # Backup original CSV file
         try:
             CSV_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             safe_filename = "".join(c for c in file.filename if c.isalnum() or c in "._-")
-            backup_path = CSV_BACKUP_DIR / f"{timestamp}_{safe_filename}"
+            backup_path = CSV_BACKUP_DIR / f"{timestamp}_{import_code}_{safe_filename}"
             backup_path.write_text(csv_content, encoding="utf-8")
-            logger.info(f"Backed up CSV to {backup_path}")
+            logger.debug(f"Backed up CSV to {backup_path}")
         except Exception as e:
             logger.warning(f"Failed to backup CSV: {e}")  # Don't fail import if backup fails
 
-        records, stats = TorqueCSVImporter.parse_csv(csv_content)
+        # Get existing timestamps from last 60 days for duplicate detection
+        cutoff = datetime.utcnow() - timedelta(days=60)
+        existing_timestamps = set(
+            t[0] for t in db.query(TelemetryRaw.timestamp)
+            .filter(TelemetryRaw.timestamp >= cutoff)
+            .all()
+        )
+        logger.debug(f"Loaded {len(existing_timestamps)} existing timestamps for duplicate detection")
+
+        # Parse CSV with duplicate detection enabled
+        records, stats = TorqueCSVImporter.parse_csv(csv_content, existing_timestamps=existing_timestamps)
+
+        # Update import event with stats
+        import_event["total_rows"] = stats.get("total_rows", 0)
+        import_event["parsed_rows"] = stats.get("parsed_rows", 0)
+        import_event["skipped_rows"] = stats.get("skipped_rows", 0)
+        import_event["duplicate_rows"] = stats.get("duplicates_removed", 0)
+        import_event["columns_detected"] = stats.get("columns_detected", [])
+        import_event["columns_mapped"] = stats.get("columns_mapped", [])
+        import_event["timestamp_column_found"] = stats.get("timestamp_column_found", False)
+        import_event["errors_count"] = stats.get("total_errors", 0)
+        import_event["failure_reason"] = stats.get("failure_reason")
+
+        # Capture first error for quick debugging
+        errors = stats.get("errors", [])
+        if errors and isinstance(errors[0], dict):
+            import_event["first_error"] = errors[0]
 
         if not records:
-            return jsonify({"message": "No valid records found in CSV", "stats": stats}), 400
+            _log_import_event()
+            failure_reason = stats.get("failure_reason", "no_valid_rows")
+            suggestion = get_failure_suggestion(failure_reason, stats.get("columns_detected"))
+            _record_import("failed", failure_reason, suggestion, stats,
+                           filename=file.filename, file_hash=file_hash, file_size=len(file_bytes))
+            return _build_response("failed", "No valid records found in CSV", failure_reason,
+                                   suggestion, stats, http_status=400)
+
+        # Check if all records were duplicates
+        if stats.get("duplicates_removed", 0) > 0 and len(records) == 0:
+            _log_import_event()
+            _record_import("failed", "all_duplicates",
+                           "All records in this file already exist in the database",
+                           stats, filename=file.filename, file_hash=file_hash, file_size=len(file_bytes))
+            return _build_response("failed", "All records already imported", "all_duplicates",
+                                   "All records in this file already exist in the database. "
+                                   "This file may have been imported previously.", stats, http_status=400)
 
         # Insert records into database using batch operations for performance
-        db = get_db()
         inserted_count = 0
 
         # Prepare batch insert data (much faster than individual db.add() calls)
@@ -361,9 +572,19 @@ def import_csv():
 
         db.commit()
 
+        # Get timestamp range for the import
+        if records:
+            timestamps = [r["timestamp"] for r in records if r.get("timestamp")]
+            if timestamps:
+                stats["timestamp_range_start"] = min(timestamps)
+                stats["timestamp_range_end"] = max(timestamps)
+
         # Create a trip for the imported data
+        trip_id = None
+        session_id_str = None
         if records:
             session_id = records[0]["session_id"]
+            session_id_str = str(session_id)
             first_record = records[0]
             last_record = records[-1]
 
@@ -373,7 +594,20 @@ def import_csv():
                 logger.info(f"Skipping duplicate trip for session {session_id} (existing trip ID: {existing_trip.id})")
                 stats["skipped_duplicate"] = True
                 stats["existing_trip_id"] = existing_trip.id
-                return jsonify({"message": f"Imported {inserted_count} records (trip already exists)", "stats": stats})
+                trip_id = existing_trip.id
+
+                import_event["inserted_count"] = inserted_count
+                import_event["success"] = True
+                import_event["trip_id"] = trip_id
+                import_event["session_id"] = session_id_str
+                _log_import_event()
+
+                status = "partial" if stats.get("duplicates_removed", 0) > 0 else "success"
+                _record_import(status, None, None, stats, trip_id, session_id_str,
+                               file_hash, file.filename, len(file_bytes))
+                return _build_response(status,
+                                       f"Imported {inserted_count} records (trip already exists)",
+                                       stats=stats, trip_id=trip_id)
 
             # Query MIN/MAX odometer from all telemetry (more reliable than first/last record)
             odometer_range = (
@@ -425,21 +659,94 @@ def import_csv():
                 trip.is_closed = True
                 db.commit()
 
-            stats["trip_id"] = trip.id
+            trip_id = trip.id
+            stats["trip_id"] = trip_id
+            import_event["trip_id"] = trip_id
 
-        logger.info(f"Imported {inserted_count} telemetry records from CSV")
+        import_event["inserted_count"] = inserted_count
+        import_event["success"] = True
+        import_event["session_id"] = session_id_str
+        _log_import_event()
 
-        return jsonify({"message": f"Successfully imported {inserted_count} records", "stats": stats})
+        # Determine final status
+        status = "success"
+        if stats.get("duplicates_removed", 0) > 0:
+            status = "partial"
 
-    except UnicodeDecodeError:
-        return jsonify({"error": "File encoding error. Please use UTF-8 encoded CSV"}), 400
+        _record_import(status, None, None, stats, trip_id, session_id_str,
+                       file_hash, file.filename, len(file_bytes))
+        return _build_response(status, f"Successfully imported {inserted_count} records",
+                               stats=stats, trip_id=trip_id)
+
+    except UnicodeDecodeError as e:
+        import_event["failure_reason"] = "encoding_error"
+        import_event["first_error"] = {"error_type": "UnicodeDecodeError", "reason": str(e)}
+        _log_import_event()
+        suggestion = get_failure_suggestion("encoding_error")
+        _record_import("failed", "encoding_error", suggestion, filename=file.filename)
+        return _build_response("failed", "File encoding error. Please use UTF-8 encoded CSV",
+                               "encoding_error", suggestion, http_status=400)
     except CSVImportError as e:
-        logger.error(str(e))
-        return jsonify({"error": f"Import failed: {e.message}"}), 400
+        import_event["failure_reason"] = "csv_import_error"
+        import_event["first_error"] = {"error_type": "CSVImportError", "reason": str(e)}
+        _log_import_event()
+        _record_import("failed", "csv_import_error", str(e), filename=file.filename)
+        return _build_response("failed", f"Import failed: {e.message}", "csv_import_error",
+                               http_status=400)
     except Exception as e:
-        error = CSVImportError(f"CSV import error: {e}")
-        logger.error(str(error))
-        return jsonify({"error": f"Import failed: {str(e)}"}), 500
+        import_event["failure_reason"] = "database_error"
+        import_event["first_error"] = {"error_type": type(e).__name__, "reason": str(e)}
+        _log_import_event()
+        logger.exception(f"CSV import failed with unexpected error: {e}")
+        suggestion = get_failure_suggestion("database_error")
+        _record_import("failed", "database_error", suggestion, filename=file.filename if file else None)
+        return _build_response("failed", f"Import failed: {str(e)}", "database_error",
+                               suggestion, http_status=500)
+
+
+@export_bp.route("/imports", methods=["GET"])
+def get_import_history():
+    """
+    Get CSV import history.
+
+    Query params:
+        limit: Number of records to return (default: 20, max: 100)
+        status: Filter by status (success, partial, failed, duplicate)
+
+    Returns:
+        JSON array of import records
+    """
+    db = get_db()
+
+    limit = min(int(request.args.get("limit", 20)), 100)
+    status_filter = request.args.get("status")
+
+    query = db.query(CsvImport).order_by(desc(CsvImport.created_at))
+
+    if status_filter:
+        query = query.filter(CsvImport.status == status_filter)
+
+    imports = query.limit(limit).all()
+
+    return jsonify([imp.to_dict() for imp in imports])
+
+
+@export_bp.route("/imports/<import_code>", methods=["GET"])
+def get_import_details(import_code):
+    """
+    Get details for a specific import by import code.
+
+    Returns:
+        JSON with import details or 404 if not found
+    """
+    db = get_db()
+
+    csv_import = db.query(CsvImport).filter(CsvImport.import_code == import_code).first()
+
+    if not csv_import:
+        return jsonify({"error": "Import not found"}), 404
+
+    return jsonify(csv_import.to_dict())
 
 
 @export_bp.route("/docs", methods=["GET"])

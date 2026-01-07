@@ -160,6 +160,16 @@ class TorqueCSVImporter:
         if not existing_timestamps:
             return records, 0
 
+        # Normalize existing_timestamps to naive UTC for consistent comparison
+        # Database returns timezone-aware, CSV parsing may return either
+        normalized_existing = set()
+        for ts in existing_timestamps:
+            if ts.tzinfo is not None:
+                # Convert to UTC then strip timezone
+                normalized_existing.add(ts.replace(tzinfo=None))
+            else:
+                normalized_existing.add(ts)
+
         unique_records = []
         duplicate_count = 0
 
@@ -174,7 +184,7 @@ class TorqueCSVImporter:
             else:
                 ts_key = ts
 
-            if ts_key in existing_timestamps:
+            if ts_key in normalized_existing:
                 duplicate_count += 1
             else:
                 unique_records.append(record)
@@ -203,9 +213,16 @@ class TorqueCSVImporter:
             "duplicates_removed": 0,
             "validation_warnings": 0,
             "total_errors": 0,
-            "columns_found": [],
-            "errors": [],
+            # Enhanced column tracking
+            "columns_detected": [],  # All columns in the CSV
+            "columns_mapped": [],  # Columns we recognized and mapped
+            "columns_found": [],  # Legacy alias for columns_mapped
+            "timestamp_column_found": False,  # Critical for understanding failures
+            # Structured errors instead of just strings
+            "errors": [],  # [{row, field, value, reason, error_type}]
             "warnings": [],
+            # Failure analysis
+            "failure_reason": None,  # High-level reason if import fails
         }
 
         try:
@@ -219,11 +236,14 @@ class TorqueCSVImporter:
         # Map columns to our field names
         column_mapping = {}
         if reader.fieldnames:
+            stats["columns_detected"] = list(reader.fieldnames)  # All CSV columns
             for col in reader.fieldnames:
                 col_lower = col.lower().strip()
                 if col_lower in cls.COLUMN_MAP:
                     column_mapping[col] = cls.COLUMN_MAP[col_lower]
-            stats["columns_found"] = list(column_mapping.values())
+            stats["columns_mapped"] = list(column_mapping.values())
+            stats["columns_found"] = stats["columns_mapped"]  # Legacy alias
+            stats["timestamp_column_found"] = "timestamp" in stats["columns_mapped"] or "device_time" in stats["columns_mapped"]
 
         # Generate a session ID for this import
         session_id = uuid.uuid4()
@@ -244,22 +264,61 @@ class TorqueCSVImporter:
                     records.append(record)
                     stats["parsed_rows"] += 1
                 else:
+                    # Record was parsed but has no timestamp - structured error
                     stats["skipped_rows"] += 1
+                    stats["total_errors"] += 1
+                    if len(stats["errors"]) < 50:  # Keep more errors for debugging
+                        # Get sample of raw values from row for debugging
+                        sample_values = {k: v[:50] if v else None for k, v in list(row.items())[:5]}
+                        stats["errors"].append({
+                            "row": row_num,
+                            "field": "timestamp",
+                            "value": None,
+                            "reason": "no_timestamp_value" if not stats["timestamp_column_found"] else "timestamp_parse_failed",
+                            "error_type": "MissingTimestamp",
+                            "sample_data": sample_values
+                        })
             except CSVImportError as e:
                 stats["skipped_rows"] += 1
                 stats["total_errors"] += 1
-                if len(stats["errors"]) < 10:
-                    stats["errors"].append(str(e))
+                if len(stats["errors"]) < 50:
+                    stats["errors"].append({
+                        "row": row_num,
+                        "field": None,
+                        "value": None,
+                        "reason": str(e),
+                        "error_type": "CSVImportError"
+                    })
             except Exception as e:
                 stats["skipped_rows"] += 1
                 stats["total_errors"] += 1
-                error = CSVImportError(f"Failed to parse row: {e}", row_number=row_num)
-                if len(stats["errors"]) < 10:
-                    stats["errors"].append(str(error))
+                if len(stats["errors"]) < 50:
+                    stats["errors"].append({
+                        "row": row_num,
+                        "field": None,
+                        "value": None,
+                        "reason": str(e),
+                        "error_type": type(e).__name__
+                    })
+
+        # Determine failure reason if no records were parsed
+        if stats["parsed_rows"] == 0:
+            if stats["total_rows"] == 0:
+                stats["failure_reason"] = "empty_file"
+            elif not stats["timestamp_column_found"]:
+                stats["failure_reason"] = "no_timestamp_column"
+            else:
+                stats["failure_reason"] = "all_timestamps_unparseable"
 
         # Add truncation note if there were more errors than shown
-        if stats["total_errors"] > 10:
-            stats["errors"].append(f"... and {stats['total_errors'] - 10} more errors (showing first 10 only)")
+        if stats["total_errors"] > 50:
+            stats["errors"].append({
+                "row": None,
+                "field": None,
+                "value": None,
+                "reason": f"... and {stats['total_errors'] - 50} more errors (showing first 50)",
+                "error_type": "Truncated"
+            })
 
         # Remove duplicates
         records, duplicate_count = cls._find_duplicates(records, existing_timestamps)
