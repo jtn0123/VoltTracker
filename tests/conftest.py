@@ -26,6 +26,29 @@ from database import engine  # noqa: E402
 from models import Base, TelemetryRaw, Trip  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def clear_caches():
+    """Clear all caches before each test (autouse=True means it runs automatically)."""
+    # Clear in-memory weather cache
+    from utils import weather
+    weather._weather_cache.clear()
+
+    # Reset rate limiter
+    from extensions import limiter
+    try:
+        limiter.reset()
+    except Exception:
+        try:
+            limiter.storage.reset()
+        except Exception:
+            pass
+
+    yield
+
+    # Clean up after test as well
+    weather._weather_cache.clear()
+
+
 @pytest.fixture
 def app():
     """Create application for testing."""
@@ -36,6 +59,16 @@ def app():
 
     # Create all tables in the test database
     Base.metadata.create_all(engine)
+
+    # Clear database weather cache
+    try:
+        from models import WeatherCache
+        session = Session()
+        session.query(WeatherCache).delete()
+        session.commit()
+        session.close()
+    except Exception:
+        pass
 
     yield flask_app
 
