@@ -286,11 +286,13 @@ class FuelEventFactory(BaseFactory):
     def get_defaults(cls) -> Dict[str, Any]:
         return {
             "timestamp": datetime.now(timezone.utc),
-            "gallons": 8.5,
+            "gallons_added": 8.5,
             "odometer_miles": 50000.0,
-            "fuel_level_percent": 95.0,
-            "cost_usd": 32.50,
-            "location": "Gas Station",
+            "fuel_level_before": 25.0,
+            "fuel_level_after": 95.0,
+            "price_per_gallon": 3.50,
+            "total_cost": 29.75,
+            "notes": "Fill up",
         }
 
 
