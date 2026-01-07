@@ -570,6 +570,170 @@ class BatteryCellReading(Base):
         )
 
 
+class AuxBatteryHealthReading(Base):
+    """Tracks 12V auxiliary battery voltage over time for health analysis.
+
+    The 12V AGM battery voltage is a key indicator of battery health.
+    Healthy voltage: 12.4-12.6V at rest, 13.2-14.5V when charging.
+    AGM batteries degrade over time (typical lifespan: 3-5 years).
+    """
+
+    __tablename__ = "aux_battery_health_readings"
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    # 12V battery voltage
+    voltage_v = Column(Float, nullable=False)
+
+    # Charging status affects voltage interpretation
+    is_charging = Column(Boolean, default=False)
+    charger_connected = Column(Boolean, default=False)
+    engine_running = Column(Boolean, default=False)
+
+    # Current draw (if available from OBD)
+    current_a = Column(Float)
+
+    # Environmental context
+    ambient_temp_f = Column(Float)
+    battery_temp_f = Column(Float)
+
+    # Trip context
+    odometer_miles = Column(Float)
+    state_of_charge = Column(Float)  # HV battery SOC (context)
+
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "voltage_v": self.voltage_v,
+            "is_charging": self.is_charging,
+            "charger_connected": self.charger_connected,
+            "engine_running": self.engine_running,
+            "current_a": self.current_a,
+            "ambient_temp_f": self.ambient_temp_f,
+            "battery_temp_f": self.battery_temp_f,
+            "odometer_miles": self.odometer_miles,
+            "state_of_charge": self.state_of_charge,
+        }
+
+    @property
+    def health_status(self):
+        """Calculate health status based on voltage.
+
+        Thresholds based on GM Volt forum recommendations:
+        - Healthy: >= 12.4V at rest, >= 13.2V charging
+        - Warning: 12.0-12.4V at rest, 12.6-13.2V charging
+        - Critical: < 12.0V at rest, < 12.6V charging
+        """
+        if self.is_charging or self.charger_connected or self.engine_running:
+            # Charging state
+            if self.voltage_v >= 13.2:
+                return "healthy"
+            elif self.voltage_v >= 12.6:
+                return "warning"
+            else:
+                return "critical"
+        else:
+            # At rest
+            if self.voltage_v >= 12.4:
+                return "healthy"
+            elif self.voltage_v >= 12.0:
+                return "warning"
+            else:
+                return "critical"
+
+    @property
+    def health_percentage(self):
+        """Estimate health percentage based on voltage.
+
+        AGM battery health is best measured by internal resistance,
+        but voltage can provide a rough estimate:
+        - 12.6V+ at rest = 100%
+        - 12.4V at rest = 75-90%
+        - 12.0V at rest = 50-75%
+        - < 12.0V at rest = < 50%
+        """
+        if self.is_charging or self.charger_connected or self.engine_running:
+            # Can't estimate during charging
+            return None
+
+        # Simple linear mapping (rough estimate)
+        if self.voltage_v >= 12.6:
+            return 100
+        elif self.voltage_v >= 12.4:
+            return 90
+        elif self.voltage_v >= 12.2:
+            return 75
+        elif self.voltage_v >= 12.0:
+            return 60
+        elif self.voltage_v >= 11.8:
+            return 40
+        else:
+            return 20
+
+
+class AuxBatteryEvent(Base):
+    """Logs anomalies and events for the 12V auxiliary battery.
+
+    Tracks voltage drops, charging issues, parasitic drain, and fault codes
+    that may indicate 12V battery problems.
+    """
+
+    __tablename__ = "aux_battery_events"
+    __table_args__ = (
+        Index("ix_aux_battery_events_type_timestamp", "event_type", "timestamp"),
+        Index("ix_aux_battery_events_severity", "severity"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    # Event classification
+    event_type = Column(String(50), nullable=False)  # 'low_voltage', 'voltage_drop', 'charging_issue', 'parasitic_drain'
+    severity = Column(String(20), nullable=False)  # 'info', 'warning', 'critical'
+
+    # Event details
+    voltage_v = Column(Float)
+    voltage_change_v = Column(Float)  # For voltage drop events
+    duration_seconds = Column(Integer)  # How long the event lasted
+
+    # Context
+    description = Column(Text)
+    is_charging = Column(Boolean, default=False)
+    charger_connected = Column(Boolean, default=False)
+    engine_running = Column(Boolean, default=False)
+    ambient_temp_f = Column(Float)
+    odometer_miles = Column(Float)
+
+    # Resolution
+    resolved_at = Column(DateTime(timezone=True))
+    resolution_notes = Column(Text)
+
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "event_type": self.event_type,
+            "severity": self.severity,
+            "voltage_v": self.voltage_v,
+            "voltage_change_v": self.voltage_change_v,
+            "duration_seconds": self.duration_seconds,
+            "description": self.description,
+            "is_charging": self.is_charging,
+            "charger_connected": self.charger_connected,
+            "engine_running": self.engine_running,
+            "ambient_temp_f": self.ambient_temp_f,
+            "odometer_miles": self.odometer_miles,
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "resolution_notes": self.resolution_notes,
+        }
+
+
 class WebVital(Base):
     """Stores Web Vitals performance metrics from the frontend.
 

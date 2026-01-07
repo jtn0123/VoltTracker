@@ -12,7 +12,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from config import Config
 from database import SessionLocal
 from exceptions import ChargingSessionError, DatabaseError
-from models import ChargingSession, FuelEvent, TelemetryRaw, Trip
+from models import AuxBatteryEvent, AuxBatteryHealthReading, ChargingSession, FuelEvent, TelemetryRaw, Trip
+from services import auxiliary_battery_service
 from services.trip_service import finalize_trip
 from sqlalchemy import desc, func
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -268,6 +269,116 @@ def check_charging_sessions():
         SessionLocal.remove()
 
 
+def monitor_12v_battery():
+    """
+    Monitor 12V auxiliary battery voltage and detect anomalies.
+
+    Samples voltage readings from recent telemetry, creates health records,
+    and logs any detected events (low voltage, voltage drops, charging issues).
+    """
+    db = get_scheduler_db()
+    try:
+        # Get recent telemetry from last 15 minutes with voltage data
+        cutoff_time = utc_now() - timedelta(minutes=15)
+        recent_telemetry = (
+            db.query(TelemetryRaw)
+            .filter(
+                TelemetryRaw.battery_voltage.isnot(None),
+                TelemetryRaw.battery_voltage > 0,
+                TelemetryRaw.timestamp >= cutoff_time,
+            )
+            .order_by(desc(TelemetryRaw.timestamp))
+            .limit(100)
+            .all()
+        )
+
+        if not recent_telemetry:
+            return
+
+        # Sample voltage readings (every ~5th reading to avoid too many rows)
+        # Take the most recent reading for immediate tracking
+        sampled_readings = [recent_telemetry[0]]  # Always include latest
+        sampled_readings.extend(recent_telemetry[4::5])  # Then every 5th
+
+        # Create AuxBatteryHealthReading records
+        for telemetry in sampled_readings:
+            # Check if we already have a reading for this exact timestamp
+            existing = (
+                db.query(AuxBatteryHealthReading)
+                .filter(AuxBatteryHealthReading.timestamp == telemetry.timestamp)
+                .first()
+            )
+
+            if not existing:
+                health_reading = AuxBatteryHealthReading(
+                    timestamp=telemetry.timestamp,
+                    voltage_v=telemetry.battery_voltage,
+                    is_charging=telemetry.charger_connected or False,
+                    charger_connected=telemetry.charger_connected or False,
+                    engine_running=(telemetry.engine_rpm or 0) > 400,
+                    current_a=None,  # Not available from standard OBD
+                    ambient_temp_f=telemetry.ambient_temp_f,
+                    battery_temp_f=telemetry.battery_temp_f,
+                    odometer_miles=telemetry.odometer_miles,
+                    state_of_charge=telemetry.state_of_charge,
+                )
+                db.add(health_reading)
+
+        # Detect anomalies from the recent telemetry batch
+        anomalies = auxiliary_battery_service.detect_voltage_anomalies(db, recent_telemetry)
+
+        # Log detected events
+        events_logged = 0
+        for anomaly_data in anomalies:
+            # Check if we already logged this event (avoid duplicates)
+            # Use a 1-minute window to detect duplicates
+            window_start = anomaly_data["timestamp"] - timedelta(minutes=1)
+            window_end = anomaly_data["timestamp"] + timedelta(minutes=1)
+
+            existing_event = (
+                db.query(AuxBatteryEvent)
+                .filter(
+                    AuxBatteryEvent.event_type == anomaly_data["event_type"],
+                    AuxBatteryEvent.timestamp >= window_start,
+                    AuxBatteryEvent.timestamp <= window_end,
+                )
+                .first()
+            )
+
+            if not existing_event:
+                event = AuxBatteryEvent(
+                    timestamp=anomaly_data["timestamp"],
+                    event_type=anomaly_data["event_type"],
+                    severity=anomaly_data["severity"],
+                    voltage_v=anomaly_data.get("voltage_v"),
+                    voltage_change_v=anomaly_data.get("voltage_change_v"),
+                    duration_seconds=anomaly_data.get("duration_seconds"),
+                    description=anomaly_data["description"],
+                    is_charging=anomaly_data.get("is_charging", False),
+                    charger_connected=anomaly_data.get("charger_connected", False),
+                    engine_running=anomaly_data.get("engine_running", False),
+                    ambient_temp_f=anomaly_data.get("ambient_temp_f"),
+                    odometer_miles=anomaly_data.get("odometer_miles"),
+                )
+                db.add(event)
+                events_logged += 1
+
+        db.commit()
+
+        if events_logged > 0:
+            logger.info(f"12V battery monitoring: {events_logged} new event(s) logged")
+
+    except (IntegrityError, OperationalError) as e:
+        error = DatabaseError(f"Failed to monitor 12V battery: {e}")
+        logger.error(str(error), exc_info=True)
+        db.rollback()
+    except Exception as e:
+        logger.exception(f"Unexpected error monitoring 12V battery: {e}")
+        db.rollback()
+    finally:
+        SessionLocal.remove()
+
+
 def init_scheduler():
     """
     Initialize and start the background scheduler.
@@ -280,6 +391,7 @@ def init_scheduler():
     scheduler.add_job(close_stale_trips, "interval", minutes=1)
     scheduler.add_job(check_refuel_events, "interval", minutes=5)
     scheduler.add_job(check_charging_sessions, "interval", minutes=2)
+    scheduler.add_job(monitor_12v_battery, "interval", minutes=5)  # Check every 5 minutes
     scheduler.start()
     logger.info("Background scheduler initialized")
     return scheduler
