@@ -520,23 +520,25 @@ def import_csv():
             import_event["first_error"] = errors[0]
 
         if not records:
-            _log_import_event()
-            failure_reason = stats.get("failure_reason", "no_valid_rows")
-            suggestion = get_failure_suggestion(failure_reason, stats.get("columns_detected"))
-            _record_import("failed", failure_reason, suggestion, stats,
-                           filename=file.filename, file_hash=file_hash, file_size=len(file_bytes))
-            return _build_response("failed", "No valid records found in CSV", failure_reason,
-                                   suggestion, stats, http_status=400)
-
-        # Check if all records were duplicates
-        if stats.get("duplicates_removed", 0) > 0 and len(records) == 0:
-            _log_import_event()
-            _record_import("failed", "all_duplicates",
-                           "All records in this file already exist in the database",
-                           stats, filename=file.filename, file_hash=file_hash, file_size=len(file_bytes))
-            return _build_response("failed", "All records already imported", "all_duplicates",
-                                   "All records in this file already exist in the database. "
-                                   "This file may have been imported previously.", stats, http_status=400)
+            # Check if all records were duplicates (detected before other failure reasons)
+            if stats.get("duplicates_removed", 0) > 0:
+                failure_reason = "all_duplicates"
+                import_event["failure_reason"] = failure_reason
+                _log_import_event()
+                suggestion = "All records in this file already exist in the database. This file may have been imported previously."
+                _record_import("failed", failure_reason, suggestion, stats,
+                               filename=file.filename, file_hash=file_hash, file_size=len(file_bytes))
+                return _build_response("failed", "All records already imported", failure_reason,
+                                       suggestion, stats, http_status=400)
+            else:
+                failure_reason = stats.get("failure_reason", "no_valid_rows")
+                import_event["failure_reason"] = failure_reason
+                _log_import_event()
+                suggestion = get_failure_suggestion(failure_reason, stats.get("columns_detected"))
+                _record_import("failed", failure_reason, suggestion, stats,
+                               filename=file.filename, file_hash=file_hash, file_size=len(file_bytes))
+                return _build_response("failed", "No valid records found in CSV", failure_reason,
+                                       suggestion, stats, http_status=400)
 
         # Insert records into database using batch operations for performance
         inserted_count = 0
