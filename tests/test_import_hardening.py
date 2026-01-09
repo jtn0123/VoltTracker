@@ -435,3 +435,95 @@ class TestCsvImportModel:
         assert data["status"] == "partial"
         assert data["total_rows"] == 50
         assert data["parsed_rows"] == 40
+
+
+class TestTimezoneAwareDedup:
+    """Tests for timezone-aware timestamp duplicate detection."""
+
+    def test_timezone_aware_timestamp_dedup(self, client, db_session):
+        """Test that timezone-aware DB timestamps match timezone-naive CSV timestamps."""
+        import uuid
+        from datetime import timezone
+
+        # Insert existing record with timezone-aware timestamp
+        existing = TelemetryRaw(
+            timestamp=datetime(2026, 1, 6, 10, 30, 0, tzinfo=timezone.utc),
+            session_id=uuid.uuid4(),
+        )
+        db_session.add(existing)
+        db_session.commit()
+
+        # Import CSV with same timestamp (will be parsed as timezone-naive then converted)
+        csv_content = b"""GPS Time,Latitude
+2026-01-06 10:30:00,37.7749
+"""
+        data = {"file": (io.BytesIO(csv_content), "tz_test.csv")}
+        response = client.post("/api/import/csv", data=data, content_type="multipart/form-data")
+
+        json_data = response.get_json()
+        # Should detect the duplicate despite timezone difference
+        assert json_data["stats"]["duplicate_rows"] == 1
+
+
+class TestAllDuplicatesFailureBlocking:
+    """Tests for blocking re-import of files that failed with all_duplicates."""
+
+    def test_all_duplicates_failure_blocks_reimport(self, client, db_session):
+        """Test that files which failed with 'all_duplicates' are blocked on re-import."""
+        # First import succeeds
+        csv_content = b"""GPS Time,Latitude
+2026-01-06 11:30:00,37.7749
+"""
+        data1 = {"file": (io.BytesIO(csv_content), "first.csv")}
+        response1 = client.post("/api/import/csv", data=data1, content_type="multipart/form-data")
+        assert response1.status_code == 200
+
+        # Create a new file with same timestamp but different hash (add extra column)
+        # This will parse successfully but all timestamps already exist
+        csv_content2_modified = b"""GPS Time,Latitude,Extra
+2026-01-06 11:30:00,37.7749,extra_value
+"""
+        data2 = {"file": (io.BytesIO(csv_content2_modified), "second.csv")}
+        response2 = client.post("/api/import/csv", data=data2, content_type="multipart/form-data")
+
+        # Should fail with all_duplicates (all records already exist)
+        assert response2.status_code == 400
+        json_data2 = response2.get_json()
+        assert json_data2.get("status") == "failed"
+        # Failure reason should indicate all records were duplicates
+        assert "all" in json_data2.get("failure_reason", "").lower() or json_data2["stats"]["duplicate_rows"] == 1
+
+        # Third attempt with same modified content should be blocked as duplicate
+        data3 = {"file": (io.BytesIO(csv_content2_modified), "third.csv")}
+        response3 = client.post("/api/import/csv", data=data3, content_type="multipart/form-data")
+
+        assert response3.status_code == 409
+        assert response3.get_json()["status"] == "duplicate"
+
+
+class TestStatsMapping:
+    """Tests for correct stats key mapping."""
+
+    def test_stats_duplicate_rows_correctly_mapped(self, client, db_session):
+        """Test that duplicate_rows in response matches duplicates_removed from parser."""
+        # First import
+        csv_content1 = b"""GPS Time,Latitude
+2026-01-06 12:30:00,37.7749
+2026-01-06 12:30:05,37.7750
+"""
+        data1 = {"file": (io.BytesIO(csv_content1), "first.csv")}
+        client.post("/api/import/csv", data=data1, content_type="multipart/form-data")
+
+        # Second import with overlapping timestamps
+        csv_content2 = b"""GPS Time,Latitude
+2026-01-06 12:30:00,37.7749
+2026-01-06 12:30:05,37.7750
+2026-01-06 12:30:10,37.7751
+"""
+        data2 = {"file": (io.BytesIO(csv_content2), "second.csv")}
+        response2 = client.post("/api/import/csv", data=data2, content_type="multipart/form-data")
+
+        json_data = response2.get_json()
+        # Should report 2 duplicates (the overlapping timestamps)
+        assert json_data["stats"]["duplicate_rows"] == 2
+        assert json_data["stats"]["total_rows"] == 3
