@@ -1,72 +1,38 @@
-"""Calculations for MPG, SOC analysis, and trip processing."""
+"""
+Calculations for MPG, SOC analysis, and trip processing.
+
+DEPRECATED: This module now re-exports functions from the new consolidated
+calculations package (receiver.calculations). All new code should import
+from `calculations` directly.
+
+This file maintains backward compatibility for existing code.
+"""
 
 import logging
 import statistics
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-from config import Config
+# Import from consolidated calculations package
+from receiver.calculations import (
+    calculate_energy_from_soc_change,
+    calculate_gas_mpg,
+    calculate_kwh_per_mile,
+    detect_refuel_event,
+    fuel_percent_to_gallons,
+    smooth_fuel_level,
+    soc_to_kwh,
+)
+from receiver.calculations.constants import (
+    BATTERY_CAPACITY_KWH,
+    MIN_GAS_MILES_FOR_MPG,
+    RPM_THRESHOLD,
+    SOC_GAS_THRESHOLD,
+    TANK_CAPACITY_GALLONS,
+)
+from receiver.config import Config
 
 logger = logging.getLogger(__name__)
-
-# Use centralized config values
-TANK_CAPACITY_GALLONS = Config.TANK_CAPACITY_GALLONS
-SOC_GAS_THRESHOLD = Config.SOC_GAS_THRESHOLD
-RPM_THRESHOLD = Config.RPM_THRESHOLD
-MIN_GAS_MILES_FOR_MPG = 1.0  # Minimum gas miles for reliable MPG calculation
-BATTERY_CAPACITY_KWH = Config.BATTERY_CAPACITY_KWH
-
-
-def soc_to_kwh(soc_percent: float, battery_capacity_kwh: float = BATTERY_CAPACITY_KWH) -> float:
-    """
-    Convert State of Charge percentage to kWh.
-
-    Args:
-        soc_percent: Battery state of charge (0-100%)
-        battery_capacity_kwh: Total battery capacity in kWh
-
-    Returns:
-        Energy in kWh
-    """
-    return (soc_percent / 100.0) * battery_capacity_kwh
-
-
-def fuel_percent_to_gallons(fuel_percent: float, tank_capacity_gallons: float = TANK_CAPACITY_GALLONS) -> float:
-    """
-    Convert fuel level percentage to gallons.
-
-    Args:
-        fuel_percent: Fuel tank level (0-100%)
-        tank_capacity_gallons: Total tank capacity in gallons
-
-    Returns:
-        Fuel volume in gallons
-    """
-    return (fuel_percent / 100.0) * tank_capacity_gallons
-
-
-def smooth_fuel_level(readings: List[float], window_size: int = 10) -> float:
-    """
-    Apply median filter to fuel level readings to reduce sensor noise.
-
-    Args:
-        readings: List of recent fuel level percentages
-        window_size: Number of readings to consider
-
-    Returns:
-        Smoothed fuel level percentage
-    """
-    if not readings:
-        return 0.0
-
-    # Use the last N readings
-    recent = readings[-window_size:]
-
-    if len(recent) == 1:
-        return recent[0]
-
-    # Return median value
-    return statistics.median(recent)
 
 
 def detect_gas_mode_entry(
@@ -109,76 +75,6 @@ def detect_gas_mode_entry(
                 return point
 
     return None
-
-
-def detect_refuel_event(current_fuel_level: float, previous_fuel_level: float, jump_threshold: float = 10.0) -> bool:
-    """
-    Detect if a refueling event occurred based on fuel level jump.
-
-    Args:
-        current_fuel_level: Current fuel level percentage
-        previous_fuel_level: Previous fuel level percentage
-        jump_threshold: Minimum percentage increase to consider a refuel
-
-    Returns:
-        True if refueling detected, False otherwise
-    """
-    if previous_fuel_level is None or current_fuel_level is None:
-        return False
-
-    increase = current_fuel_level - previous_fuel_level
-    return increase >= jump_threshold
-
-
-def calculate_gas_mpg(
-    start_odometer: float,
-    end_odometer: float,
-    start_fuel_level: float,
-    end_fuel_level: float,
-    tank_capacity: float = TANK_CAPACITY_GALLONS,
-) -> Optional[float]:
-    """
-    Calculate MPG for gas portion of driving.
-
-    Args:
-        start_odometer: Odometer reading at gas mode entry
-        end_odometer: Odometer reading at trip end or gas mode exit
-        start_fuel_level: Fuel level percentage at gas mode entry
-        end_fuel_level: Fuel level percentage at end
-        tank_capacity: Tank capacity in gallons
-
-    Returns:
-        MPG value, or None if calculation not possible
-    """
-    if any(v is None for v in [start_odometer, end_odometer, start_fuel_level, end_fuel_level]):
-        return None
-
-    gas_miles = end_odometer - start_odometer
-
-    if gas_miles < MIN_GAS_MILES_FOR_MPG:
-        logger.debug(f"Gas segment too short for MPG: {gas_miles:.1f} miles")
-        return None
-
-    # Calculate gallons used from fuel level change
-    fuel_change_percent = start_fuel_level - end_fuel_level
-
-    if fuel_change_percent <= 0:
-        logger.debug("No fuel consumption detected (or refuel occurred)")
-        return None
-
-    gallons_used = (fuel_change_percent / 100) * tank_capacity
-
-    if gallons_used <= 0.01:  # Less than 0.01 gallons is noise
-        return None
-
-    mpg = gas_miles / gallons_used
-
-    # Sanity check - Volt should get 15-60 MPG in gas mode
-    if mpg < Config.MIN_MPG or mpg > Config.MAX_MPG:
-        logger.warning(f"Rejecting outlier MPG: {mpg:.1f} (miles: {gas_miles:.1f}, gallons: {gallons_used:.2f})")
-        return None  # Reject outliers instead of returning bad data
-
-    return round(mpg, 1)
 
 
 def calculate_electric_miles(
@@ -313,6 +209,8 @@ def calculate_electric_kwh(
     Returns:
         kWh consumed, or None if insufficient data
     """
+    from receiver.calculations.energy import integrate_power_over_time
+
     if len(telemetry_points) < 2:
         return None
 
@@ -324,31 +222,9 @@ def calculate_electric_kwh(
     ]
 
     if len(power_readings) >= 2:
-        total_kwh = 0.0
-        for i in range(1, len(power_readings)):
-            prev_time, prev_power = power_readings[i - 1]
-            curr_time, curr_power = power_readings[i]
-
-            # Convert timestamp to datetime if string
-            if isinstance(prev_time, str):
-                prev_time = datetime.fromisoformat(prev_time.replace("Z", "+00:00"))
-            if isinstance(curr_time, str):
-                curr_time = datetime.fromisoformat(curr_time.replace("Z", "+00:00"))
-
-            # Calculate time delta in hours
-            delta_hours = (curr_time - prev_time).total_seconds() / 3600
-
-            # Skip if timestamps are identical or reversed
-            if delta_hours <= 0:
-                continue
-
-            # Average power during interval (only count positive = discharging)
-            avg_power = (prev_power + curr_power) / 2
-            if avg_power > 0:  # Positive = discharging (consuming energy)
-                total_kwh += avg_power * delta_hours
-
-        if total_kwh > 0:
-            return float(round(total_kwh, 2))
+        result = integrate_power_over_time(power_readings)
+        if result is not None:
+            return result
 
     # Method 2: Estimate from SOC change
     soc_readings: List[float] = [
@@ -358,43 +234,9 @@ def calculate_electric_kwh(
     if len(soc_readings) >= 2:
         start_soc = soc_readings[0]
         end_soc = soc_readings[-1]
-
-        # Only calculate if SOC decreased (not charging)
-        if start_soc > end_soc:
-            soc_change = start_soc - end_soc
-            kwh_used = (soc_change / 100) * battery_capacity_kwh
-            return float(round(kwh_used, 2))
+        return calculate_energy_from_soc_change(start_soc, end_soc, battery_capacity_kwh)
 
     return None
-
-
-def calculate_kwh_per_mile(kwh_used: float, electric_miles: float) -> Optional[float]:
-    """
-    Calculate electric efficiency in kWh/mile.
-
-    Args:
-        kwh_used: Total kWh consumed
-        electric_miles: Miles driven on electric
-
-    Returns:
-        kWh/mile efficiency, or None if insufficient data
-    """
-    if kwh_used is None or electric_miles is None:
-        return None
-
-    if electric_miles <= 0:  # Guard against division by zero
-        return None
-
-    if electric_miles < 0.5:  # Need at least half a mile for meaningful data
-        return None
-
-    kwh_per_mile = kwh_used / electric_miles
-
-    # Sanity check - Volt typically gets 0.25-0.40 kWh/mile
-    if kwh_per_mile < Config.MIN_KWH_PER_MILE or kwh_per_mile > Config.MAX_KWH_PER_MILE:
-        logger.warning(f"Unusual kWh/mile: {kwh_per_mile:.3f} (kWh: {kwh_used:.2f}, miles: {electric_miles:.1f})")
-
-    return round(kwh_per_mile, 3)
 
 
 def detect_charging_session(telemetry_points: List[dict], min_power_kw: float = 0.5) -> Optional[dict]:

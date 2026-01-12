@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from config import Config
+from receiver.calculations import calculate_efficiency_impact_percent, BASELINE_KWH_PER_MILE
 from sqlalchemy import and_, case, extract, func, literal_column
 from sqlalchemy.orm import Session
 
@@ -33,9 +34,6 @@ logger = logging.getLogger(__name__)
 TEMP_BANDS = Config.ANALYTICS_TEMP_BANDS
 WIND_BANDS = Config.ANALYTICS_WIND_BANDS
 
-# Baseline efficiency for comparison (ideal conditions)
-BASELINE_KWH_PER_MILE = 0.32
-
 
 def _get_base_trip_filter():
     """Return base filter for valid trips with efficiency data."""
@@ -48,14 +46,6 @@ def _get_base_trip_filter():
         Trip.electric_miles.isnot(None),
         Trip.electric_miles > 0.5,  # Minimum trip distance
     )
-
-
-def _calculate_efficiency_impact(avg_efficiency: float) -> float:
-    """Calculate efficiency impact as percentage vs baseline."""
-    if avg_efficiency is None or BASELINE_KWH_PER_MILE == 0:
-        return 0.0
-    # Higher kWh/mile = worse efficiency = negative impact
-    return round(((avg_efficiency - BASELINE_KWH_PER_MILE) / BASELINE_KWH_PER_MILE) * 100, 1)
 
 
 def get_efficiency_by_temperature_bands(
@@ -136,7 +126,7 @@ def get_efficiency_by_temperature_bands(
             "worst_efficiency": round(row.worst_efficiency, 4) if row.worst_efficiency else None,
             "avg_temp_f": round(row.avg_temp, 1) if row.avg_temp else None,
             "total_miles": round(row.total_miles, 1) if row.total_miles else None,
-            "efficiency_impact_percent": _calculate_efficiency_impact(avg_eff) if avg_eff else None,
+            "efficiency_impact_percent": calculate_efficiency_impact_percent(avg_eff) if avg_eff else None,
         }
 
     # Build ordered list
@@ -223,7 +213,7 @@ def get_efficiency_by_precipitation(
                 "sample_count": row.sample_count,
                 "avg_precipitation_in": round(row.avg_precip, 3) if row.avg_precip else 0,
                 "total_miles": round(row.total_miles, 1) if row.total_miles else None,
-                "efficiency_impact_percent": _calculate_efficiency_impact(avg_eff) if avg_eff else None,
+                "efficiency_impact_percent": calculate_efficiency_impact_percent(avg_eff) if avg_eff else None,
             }
         )
 
@@ -299,7 +289,7 @@ def get_efficiency_by_wind(
             "sample_count": row.sample_count,
             "avg_wind_mph": round(row.avg_wind, 1) if row.avg_wind else None,
             "total_miles": round(row.total_miles, 1) if row.total_miles else None,
-            "efficiency_impact_percent": _calculate_efficiency_impact(avg_eff) if avg_eff else None,
+            "efficiency_impact_percent": calculate_efficiency_impact_percent(avg_eff) if avg_eff else None,
         }
 
     # Build ordered list
@@ -363,7 +353,7 @@ def get_seasonal_trends(
                 "trip_count": row.trip_count,
                 "avg_temp_f": round(row.avg_temp, 1) if row.avg_temp else None,
                 "total_miles": round(row.total_miles, 1) if row.total_miles else None,
-                "efficiency_impact_percent": _calculate_efficiency_impact(avg_eff) if avg_eff else None,
+                "efficiency_impact_percent": calculate_efficiency_impact_percent(avg_eff) if avg_eff else None,
             }
         )
 
