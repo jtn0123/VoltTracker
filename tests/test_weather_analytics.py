@@ -1,5 +1,5 @@
 """
-Tests for weather analytics service.
+Tests for weather analytics service and routes.
 
 Tests weather-efficiency correlation analysis, temperature band grouping,
 precipitation impact, wind impact, and seasonal trends.
@@ -8,7 +8,8 @@ precipitation impact, wind impact, and seasonal trends.
 import os
 import sys
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -19,6 +20,7 @@ from receiver.calculations import (  # noqa: E402
     BASELINE_KWH_PER_MILE,
     calculate_efficiency_impact_percent,
 )
+from routes.weather_analytics import _parse_date  # noqa: E402
 from services.weather_analytics_service import (  # noqa: E402
     get_best_driving_conditions,
     get_efficiency_by_precipitation,
@@ -47,7 +49,7 @@ def db_session():
 def sample_trips(db_session):
     """Create sample trips with various weather conditions."""
     trips = []
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # Create trips in different temperature bands
     trip_data = [
@@ -92,7 +94,7 @@ def sample_trips(db_session):
 def precipitation_trips(db_session):
     """Create trips with various precipitation levels."""
     trips = []
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     precip_data = [
         # Dry conditions
@@ -136,7 +138,7 @@ def precipitation_trips(db_session):
 def wind_trips(db_session):
     """Create trips with various wind speeds."""
     trips = []
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     wind_data = [
         # Calm
@@ -252,7 +254,7 @@ class TestGetEfficiencyByTemperatureBands:
 
     def test_date_filter_works(self, db_session, sample_trips):
         """Date filtering reduces results appropriately."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         result_all = get_efficiency_by_temperature_bands(db_session)
         result_recent = get_efficiency_by_temperature_bands(
             db_session, start_date=now - timedelta(days=20)
@@ -412,7 +414,7 @@ class TestGetWeatherEfficiencyCorrelation:
 
     def test_date_filter_works(self, db_session, sample_trips):
         """Date filtering works correctly."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         result_all = get_weather_efficiency_correlation(db_session)
         result_recent = get_weather_efficiency_correlation(
             db_session, start_date=now - timedelta(days=20)
@@ -426,7 +428,7 @@ class TestInvalidDataHandling:
 
     def test_excludes_invalid_efficiency(self, db_session):
         """Trips with invalid efficiency are excluded."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Create trip with invalid efficiency (> 1.0)
         invalid_trip = Trip(
@@ -447,7 +449,7 @@ class TestInvalidDataHandling:
 
     def test_excludes_deleted_trips(self, db_session):
         """Soft-deleted trips are excluded."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         deleted_trip = Trip(
             session_id=uuid.uuid4(),
@@ -467,7 +469,7 @@ class TestInvalidDataHandling:
 
     def test_excludes_open_trips(self, db_session):
         """Open (not closed) trips are excluded."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         open_trip = Trip(
             session_id=uuid.uuid4(),
@@ -485,7 +487,7 @@ class TestInvalidDataHandling:
 
     def test_excludes_trips_without_weather(self, db_session):
         """Trips without weather data are excluded from weather analysis."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         no_weather_trip = Trip(
             session_id=uuid.uuid4(),
@@ -502,3 +504,297 @@ class TestInvalidDataHandling:
 
         result = get_efficiency_by_temperature_bands(db_session)
         assert result["total_trips_analyzed"] == 0
+
+
+class TestParseDateHelper:
+    """Tests for _parse_date helper function."""
+
+    def test_parse_date_valid_iso_string(self):
+        """Parse valid ISO date string."""
+        result = _parse_date("2024-01-15T10:30:00Z")
+        assert result is not None
+        assert result.year == 2024
+        assert result.month == 1
+        assert result.day == 15
+        assert result.hour == 10
+        assert result.minute == 30
+
+    def test_parse_date_with_timezone_offset(self):
+        """Parse date with timezone offset."""
+        result = _parse_date("2024-01-15T10:30:00+05:00")
+        assert result is not None
+        assert result.year == 2024
+
+    def test_parse_date_empty_string(self):
+        """Empty string returns None."""
+        result = _parse_date("")
+        assert result is None
+
+    def test_parse_date_none(self):
+        """None returns None."""
+        result = _parse_date(None)
+        assert result is None
+
+    def test_parse_date_invalid_string(self):
+        """Invalid string returns None."""
+        result = _parse_date("not-a-date")
+        assert result is None
+
+    def test_parse_date_replaces_z_suffix(self):
+        """Z suffix is properly replaced with +00:00."""
+        result = _parse_date("2024-01-15T10:30:00Z")
+        assert result is not None
+        # Should have timezone info
+        assert result.tzinfo is not None
+
+
+class TestWeatherAnalyticsRoutes:
+    """Tests for weather analytics API routes."""
+
+    @pytest.fixture
+    def mock_service(self):
+        """Mock the weather analytics service."""
+        with patch("routes.weather_analytics.weather_analytics_service") as mock:
+            yield mock
+
+    def test_get_efficiency_correlation_success(self, client, mock_service):
+        """GET /api/analytics/weather/efficiency-correlation returns 200."""
+        mock_service.get_weather_efficiency_correlation.return_value = {
+            "summary": {"total_trips": 100},
+            "efficiency": {"avg_kwh_per_mile": 0.30},
+        }
+
+        response = client.get("/api/analytics/weather/efficiency-correlation")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "summary" in data
+        assert data["summary"]["total_trips"] == 100
+
+    def test_get_efficiency_correlation_with_dates(self, client, mock_service):
+        """Efficiency correlation with date parameters."""
+        mock_service.get_weather_efficiency_correlation.return_value = {
+            "summary": {"total_trips": 50}
+        }
+
+        response = client.get(
+            "/api/analytics/weather/efficiency-correlation"
+            "?start_date=2024-01-01T00:00:00Z&end_date=2024-01-31T23:59:59Z"
+        )
+        assert response.status_code == 200
+
+        # Verify service was called with parsed dates
+        call_args = mock_service.get_weather_efficiency_correlation.call_args
+        assert call_args[1]["start_date"] is not None
+        assert call_args[1]["end_date"] is not None
+
+    def test_get_efficiency_correlation_error(self, client, mock_service):
+        """Efficiency correlation handles service errors."""
+        mock_service.get_weather_efficiency_correlation.side_effect = Exception("DB error")
+
+        response = client.get("/api/analytics/weather/efficiency-correlation")
+        assert response.status_code == 500
+        data = response.get_json()
+        assert "error" in data
+
+    def test_get_temperature_bands_success(self, client, mock_service):
+        """GET /api/analytics/weather/temperature-bands returns 200."""
+        mock_service.get_efficiency_by_temperature_bands.return_value = {
+            "temperature_bands": [
+                {"band": "ideal", "avg_kwh_per_mile": 0.28},
+                {"band": "freezing", "avg_kwh_per_mile": 0.42},
+            ],
+            "total_trips_analyzed": 100,
+        }
+
+        response = client.get("/api/analytics/weather/temperature-bands")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "temperature_bands" in data
+        assert len(data["temperature_bands"]) == 2
+
+    def test_get_temperature_bands_with_dates(self, client, mock_service):
+        """Temperature bands with date filtering."""
+        mock_service.get_efficiency_by_temperature_bands.return_value = {
+            "temperature_bands": []
+        }
+
+        response = client.get(
+            "/api/analytics/weather/temperature-bands"
+            "?start_date=2024-01-01T00:00:00Z&end_date=2024-01-31T23:59:59Z"
+        )
+        assert response.status_code == 200
+
+    def test_get_temperature_bands_error(self, client, mock_service):
+        """Temperature bands handles service errors."""
+        mock_service.get_efficiency_by_temperature_bands.side_effect = Exception("DB error")
+
+        response = client.get("/api/analytics/weather/temperature-bands")
+        assert response.status_code == 500
+        data = response.get_json()
+        assert "error" in data
+
+    def test_get_precipitation_impact_success(self, client, mock_service):
+        """GET /api/analytics/weather/precipitation-impact returns 200."""
+        mock_service.get_efficiency_by_precipitation.return_value = {
+            "precipitation_conditions": [
+                {"condition": "dry", "avg_kwh_per_mile": 0.30},
+                {"condition": "heavy_rain", "avg_kwh_per_mile": 0.38},
+            ]
+        }
+
+        response = client.get("/api/analytics/weather/precipitation-impact")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "precipitation_conditions" in data
+        assert len(data["precipitation_conditions"]) == 2
+
+    def test_get_precipitation_impact_with_dates(self, client, mock_service):
+        """Precipitation impact with date filtering."""
+        mock_service.get_efficiency_by_precipitation.return_value = {
+            "precipitation_conditions": []
+        }
+
+        response = client.get(
+            "/api/analytics/weather/precipitation-impact"
+            "?start_date=2024-01-01T00:00:00Z"
+        )
+        assert response.status_code == 200
+
+    def test_get_precipitation_impact_error(self, client, mock_service):
+        """Precipitation impact handles service errors."""
+        mock_service.get_efficiency_by_precipitation.side_effect = Exception("Error")
+
+        response = client.get("/api/analytics/weather/precipitation-impact")
+        assert response.status_code == 500
+
+    def test_get_wind_impact_success(self, client, mock_service):
+        """GET /api/analytics/weather/wind-impact returns 200."""
+        mock_service.get_efficiency_by_wind.return_value = {
+            "wind_bands": [
+                {"band": "calm", "avg_kwh_per_mile": 0.29},
+                {"band": "strong", "avg_kwh_per_mile": 0.38},
+            ]
+        }
+
+        response = client.get("/api/analytics/weather/wind-impact")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "wind_bands" in data
+        assert len(data["wind_bands"]) == 2
+
+    def test_get_wind_impact_with_dates(self, client, mock_service):
+        """Wind impact with date filtering."""
+        mock_service.get_efficiency_by_wind.return_value = {"wind_bands": []}
+
+        response = client.get(
+            "/api/analytics/weather/wind-impact"
+            "?start_date=2024-01-01T00:00:00Z&end_date=2024-12-31T23:59:59Z"
+        )
+        assert response.status_code == 200
+
+    def test_get_wind_impact_error(self, client, mock_service):
+        """Wind impact handles service errors."""
+        mock_service.get_efficiency_by_wind.side_effect = Exception("DB error")
+
+        response = client.get("/api/analytics/weather/wind-impact")
+        assert response.status_code == 500
+        data = response.get_json()
+        assert "error" in data
+
+    def test_get_seasonal_trends_success(self, client, mock_service):
+        """GET /api/analytics/weather/seasonal-trends returns 200."""
+        mock_service.get_seasonal_trends.return_value = {
+            "monthly_trends": [
+                {"month": "2024-01", "avg_kwh_per_mile": 0.35, "trip_count": 20}
+            ],
+            "seasonal_averages": {"winter": 0.38, "summer": 0.28},
+        }
+
+        response = client.get("/api/analytics/weather/seasonal-trends")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "monthly_trends" in data
+        assert "seasonal_averages" in data
+
+    def test_get_seasonal_trends_with_months_param(self, client, mock_service):
+        """Seasonal trends with months parameter."""
+        mock_service.get_seasonal_trends.return_value = {"monthly_trends": []}
+
+        response = client.get("/api/analytics/weather/seasonal-trends?months=12")
+        assert response.status_code == 200
+
+        # Verify service was called with months_back=12
+        call_args = mock_service.get_seasonal_trends.call_args
+        assert call_args[1]["months_back"] == 12
+
+    def test_get_seasonal_trends_limits_months_to_60(self, client, mock_service):
+        """Seasonal trends limits months parameter to max 60."""
+        mock_service.get_seasonal_trends.return_value = {"monthly_trends": []}
+
+        response = client.get("/api/analytics/weather/seasonal-trends?months=100")
+        assert response.status_code == 200
+
+        # Should be clamped to 60
+        call_args = mock_service.get_seasonal_trends.call_args
+        assert call_args[1]["months_back"] == 60
+
+    def test_get_seasonal_trends_limits_months_to_minimum_1(self, client, mock_service):
+        """Seasonal trends limits months parameter to minimum 1."""
+        mock_service.get_seasonal_trends.return_value = {"monthly_trends": []}
+
+        response = client.get("/api/analytics/weather/seasonal-trends?months=0")
+        assert response.status_code == 200
+
+        # Should be clamped to 1
+        call_args = mock_service.get_seasonal_trends.call_args
+        assert call_args[1]["months_back"] == 1
+
+    def test_get_seasonal_trends_error(self, client, mock_service):
+        """Seasonal trends handles service errors."""
+        mock_service.get_seasonal_trends.side_effect = Exception("Error")
+
+        response = client.get("/api/analytics/weather/seasonal-trends")
+        assert response.status_code == 500
+
+    def test_get_best_conditions_success(self, client, mock_service):
+        """GET /api/analytics/weather/best-conditions returns 200."""
+        mock_service.get_best_driving_conditions.return_value = {
+            "optimal_conditions": {
+                "temperature": {"avg_f": 68, "range_f": "60-75"},
+                "precipitation": {"ideal": "dry"},
+            },
+            "best_efficiency_achieved": 0.25,
+        }
+
+        response = client.get("/api/analytics/weather/best-conditions")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "optimal_conditions" in data
+        assert "best_efficiency_achieved" in data
+
+    def test_get_best_conditions_error(self, client, mock_service):
+        """Best conditions handles service errors."""
+        mock_service.get_best_driving_conditions.side_effect = Exception("DB error")
+
+        response = client.get("/api/analytics/weather/best-conditions")
+        assert response.status_code == 500
+        data = response.get_json()
+        assert "error" in data
+
+    def test_routes_handle_invalid_dates_gracefully(self, client, mock_service):
+        """Routes handle invalid date strings gracefully."""
+        mock_service.get_weather_efficiency_correlation.return_value = {
+            "summary": {"total_trips": 100}
+        }
+
+        # Invalid dates should be parsed as None
+        response = client.get(
+            "/api/analytics/weather/efficiency-correlation"
+            "?start_date=invalid&end_date=also-invalid"
+        )
+        assert response.status_code == 200
+
+        # Service should be called with None dates
+        call_args = mock_service.get_weather_efficiency_correlation.call_args
+        assert call_args[1]["start_date"] is None
+        assert call_args[1]["end_date"] is None
