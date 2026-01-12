@@ -1,0 +1,4 @@
+# file: /home/user/VoltTracker/receiver/calculations/financial.py
+# hypothesis_version: 6.150.1
+
+[0.0, 30.0, 100, 'cost_per_mile', 'electric_cost', 'electric_miles', 'gas_cost', 'gas_miles', 'gas_only_cost', 'miles', 'savings', 'savings_percent', 'total_cost', 'total_miles']

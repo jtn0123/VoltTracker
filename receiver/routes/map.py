@@ -196,10 +196,10 @@ def get_trips_map_data():
         for t in telemetry:
             # Calculate instantaneous efficiency if data available
             efficiency = None
-            if t.hv_battery_power and t.speed_mph and t.speed_mph > 5:
+            if t.hv_battery_power_kw and t.speed_mph and t.speed_mph > 5:
                 # kW to kWh (power * time), distance = speed * time
                 # Simplified: kWh/mile ≈ kW / mph
-                efficiency = abs(t.hv_battery_power) / t.speed_mph if t.hv_battery_power > 0 else None
+                efficiency = abs(t.hv_battery_power_kw) / t.speed_mph if t.hv_battery_power_kw > 0 else None
 
             points.append({
                 'lat': float(t.latitude),
@@ -236,7 +236,7 @@ def get_trips_map_data():
             'gas_mpg': round(trip.gas_mpg, 1) if trip.gas_mpg else None,
             'electric_miles': round(trip.electric_miles, 2) if trip.electric_miles else 0,
             'gas_miles': round(trip.gas_miles, 2) if trip.gas_miles else 0,
-            'avg_temp_f': round(trip.avg_temp_f, 1) if trip.avg_temp_f else None,
+            'avg_temp_f': round(trip.ambient_temp_avg_f, 1) if trip.ambient_temp_avg_f else None,
             'points': points,
             'bounds': bounds,
             'point_count': len(telemetry)  # Original point count before subsampling
@@ -303,7 +303,7 @@ def get_trip_route_detailed(trip_id: str):
             point.update({
                 'speed_mph': float(t.speed_mph) if t.speed_mph else 0,
                 'soc': float(t.state_of_charge) if t.state_of_charge else None,
-                'hv_power': float(t.hv_battery_power) if t.hv_battery_power else None,
+                'hv_power': float(t.hv_battery_power_kw) if t.hv_battery_power_kw else None,
                 'engine_rpm': int(t.engine_rpm) if t.engine_rpm else 0,
                 'ambient_temp': float(t.ambient_temp_f) if t.ambient_temp_f else None
             })
@@ -507,9 +507,9 @@ def generate_gpx(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
     for t in telemetry:
         gpx.append(f'      <trkpt lat="{t.latitude}" lon="{t.longitude}">')
 
-        # Add elevation if available (convert from altitude_ft to meters)
-        if t.altitude_ft:
-            elevation_m = t.altitude_ft * 0.3048
+        # Add elevation if available (already in meters)
+        if t.elevation_meters:
+            elevation_m = t.elevation_meters
             gpx.append(f'        <ele>{elevation_m:.1f}</ele>')
 
         # Add timestamp
@@ -522,8 +522,8 @@ def generate_gpx(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
             gpx.append(f'          <speed>{t.speed_mph * 0.44704:.2f}</speed>')  # Convert to m/s
         if t.state_of_charge is not None:
             gpx.append(f'          <soc>{t.state_of_charge:.1f}</soc>')
-        if t.hv_battery_power is not None:
-            gpx.append(f'          <power>{t.hv_battery_power:.2f}</power>')
+        if t.hv_battery_power_kw is not None:
+            gpx.append(f'          <power>{t.hv_battery_power_kw:.2f}</power>')
         if t.ambient_temp_f is not None:
             gpx.append(f'          <temp>{t.ambient_temp_f:.1f}</temp>')
         gpx.append('        </extensions>')
@@ -622,8 +622,8 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         desc_parts.append(f'Efficiency: {trip.kwh_per_mile:.3f} kWh/mi')
     if trip.gas_mpg:
         desc_parts.append(f'MPG: {trip.gas_mpg:.1f}')
-    if trip.avg_temp_f:
-        desc_parts.append(f'Avg Temp: {trip.avg_temp_f:.0f}°F')
+    if trip.ambient_temp_avg_f:
+        desc_parts.append(f'Avg Temp: {trip.ambient_temp_avg_f:.0f}°F')
 
     kml.append(f'      <description>{", ".join(desc_parts)}</description>')
     kml.append('      <styleUrl>#routeStyle</styleUrl>')
@@ -633,7 +633,7 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
 
     # Add coordinates (lon,lat,alt format for KML)
     for t in telemetry:
-        alt = t.altitude_ft * 0.3048 if t.altitude_ft else 0
+        alt = t.elevation_meters if t.elevation_meters else 0
         kml.append(f'          {t.longitude},{t.latitude},{alt}')
 
     kml.append('        </coordinates>')

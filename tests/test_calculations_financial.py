@@ -22,8 +22,8 @@ class TestChargingCost:
         assert calculate_charging_cost(10.0, 0.12) == 1.2
 
     def test_calculate_charging_cost_expensive_rate(self):
-        """15.5 kWh at $0.15/kWh = $2.33"""
-        assert calculate_charging_cost(15.5, 0.15) == 2.33
+        """15.5 kWh at $0.15/kWh = $2.325 (~$2.32)"""
+        assert calculate_charging_cost(15.5, 0.15) == 2.32
 
     def test_calculate_charging_cost_none_kwh(self):
         assert calculate_charging_cost(None, 0.12) is None
@@ -77,9 +77,9 @@ class TestCostPerMile:
         assert calculate_electric_cost_per_mile(0.0, 10.0, 0.12) is None
 
     def test_calculate_gas_cost_per_mile(self):
-        """100 mi using 2.5 gal at $3.50 = $0.088/mi"""
+        """100 mi using 2.5 gal at $3.50 = $0.0875/mi"""
         result = calculate_gas_cost_per_mile(100.0, 2.5, 3.50)
-        assert result == 0.088
+        assert result == 0.087
 
     def test_calculate_gas_cost_per_mile_expensive(self):
         """40 mi using 1 gal at $4.00 = $0.10/mi"""

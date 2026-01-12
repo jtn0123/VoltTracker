@@ -15,9 +15,11 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "receiver"))
 
 from models import Base, Trip  # noqa: E402
-from services.weather_analytics_service import (  # noqa: E402
+from receiver.calculations import (  # noqa: E402
     BASELINE_KWH_PER_MILE,
-    _calculate_efficiency_impact,
+    calculate_efficiency_impact_percent,
+)
+from services.weather_analytics_service import (  # noqa: E402
     get_best_driving_conditions,
     get_efficiency_by_precipitation,
     get_efficiency_by_temperature_bands,
@@ -174,28 +176,28 @@ def wind_trips(db_session):
 
 
 class TestCalculateEfficiencyImpact:
-    """Tests for _calculate_efficiency_impact helper."""
+    """Tests for calculate_efficiency_impact_percent helper."""
 
     def test_baseline_efficiency_returns_zero(self):
         """Baseline efficiency returns 0% impact."""
-        result = _calculate_efficiency_impact(BASELINE_KWH_PER_MILE)
+        result = calculate_efficiency_impact_percent(BASELINE_KWH_PER_MILE)
         assert result == 0.0
 
     def test_worse_efficiency_returns_positive(self):
         """Worse efficiency (higher kWh/mile) returns positive impact."""
-        result = _calculate_efficiency_impact(0.40)  # 25% worse than 0.32
+        result = calculate_efficiency_impact_percent(0.40)  # 25% worse than 0.32
         assert result > 0
         assert result == pytest.approx(25.0, rel=0.1)
 
     def test_better_efficiency_returns_negative(self):
         """Better efficiency (lower kWh/mile) returns negative impact."""
-        result = _calculate_efficiency_impact(0.24)  # 25% better than 0.32
+        result = calculate_efficiency_impact_percent(0.24)  # 25% better than 0.32
         assert result < 0
         assert result == pytest.approx(-25.0, rel=0.1)
 
     def test_none_returns_zero(self):
         """None efficiency returns 0% impact."""
-        result = _calculate_efficiency_impact(None)
+        result = calculate_efficiency_impact_percent(None)
         assert result == 0.0
 
 

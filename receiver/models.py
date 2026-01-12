@@ -1184,15 +1184,25 @@ def get_engine(database_url):
     to prevent connection exhaustion and improve performance.
 
     Note: Connection pooling parameters only apply to PostgreSQL.
-    SQLite uses SingletonThreadPool which doesn't support these options.
+    SQLite uses StaticPool for in-memory databases to share state across connections.
     """
+    from sqlalchemy.pool import StaticPool
+
     # Base configuration
     config = {
         "echo_pool": False,  # Set to True for debugging
     }
 
+    # Handle SQLite in-memory database (used in tests)
+    if database_url == "sqlite:///:memory:":
+        config.update(
+            {
+                "connect_args": {"check_same_thread": False},
+                "poolclass": StaticPool,  # Share in-memory DB across connections
+            }
+        )
     # Only add pooling parameters for PostgreSQL (not SQLite)
-    if not database_url.startswith("sqlite"):
+    elif not database_url.startswith("sqlite"):
         config.update(
             {
                 "pool_pre_ping": True,  # Verify connections before use

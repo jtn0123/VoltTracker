@@ -8,6 +8,10 @@ Tests interactions with:
 - Rate limiting and caching
 
 Uses `responses` library to mock HTTP requests without hitting real APIs.
+
+NOTE: These tests are skipped because they reference a weather_service and
+elevation_service interface that doesn't exist in the current codebase.
+The actual weather functionality is in utils/weather.py and jobs/weather_jobs.py.
 """
 
 import pytest
@@ -15,6 +19,11 @@ import responses
 import json
 from datetime import datetime, timezone
 from unittest.mock import patch
+
+# Skip all tests in this module - they're placeholder tests for a non-existent interface
+pytestmark = pytest.mark.skip(
+    reason="Placeholder tests - weather_service and elevation_service modules don't exist"
+)
 
 
 # ============================================================================
