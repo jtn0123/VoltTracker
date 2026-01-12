@@ -20,11 +20,27 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: volt-tracker-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   receiver:
     build: ./receiver
     container_name: volt-tracker-receiver
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-volt}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-volt_tracker}
+      REDIS_URL: redis://redis:6379/0
       FLASK_ENV: ${FLASK_ENV:-production}
       SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
       ELECTRICITY_COST: ${ELECTRICITY_COST:-0.12}
@@ -34,10 +50,14 @@ services:
       DASHBOARD_USER: ${DASHBOARD_USER:-admin}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      WEBSOCKET_AUTH_ENABLED: ${WEBSOCKET_AUTH_ENABLED:-true}
+      WEBSOCKET_TOKEN: ${WEBSOCKET_TOKEN:-}
     ports:
       - "8080:8080"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     volumes:
@@ -45,5 +65,24 @@ services:
       - ./torque-config:/app/torque-config:ro
       - ./backups/csv-imports:/app/backups/csv-imports
 
+  worker:
+    build: ./receiver
+    container_name: volt-tracker-worker
+    command: rq worker high default low --url redis://redis:6379/1 --verbose
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-volt}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-volt_tracker}
+      REDIS_URL: redis://redis:6379/0
+      FLASK_ENV: ${FLASK_ENV:-production}
+      SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+
 volumes:
   postgres_data:
+  redis_data:
