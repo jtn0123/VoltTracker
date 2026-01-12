@@ -1340,6 +1340,10 @@ async function openTripModal(tripId) {
         // Render charts
         renderTripCharts(telemetry);
 
+        // Set export links
+        document.getElementById('trip-export-gpx').href = `/api/trips/${tripId}/gpx`;
+        document.getElementById('trip-export-kml').href = `/api/trips/${tripId}/kml`;
+
     } catch (error) {
         console.error('Failed to load trip details:', error);
     }

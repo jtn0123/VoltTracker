@@ -1394,6 +1394,35 @@ body {
     transform: scale(0.95);
 }
 
+/* Map View Button */
+.btn-map-view {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.btn-map-view:hover {
+    background-color: var(--accent);
+}
+
+.btn-map-view:active {
+    transform: scale(0.95);
+}
+
+.btn-map-view svg {
+    flex-shrink: 0;
+}
+
 /* ============================================
    Date Filter
    ============================================ */
