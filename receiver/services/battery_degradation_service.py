@@ -8,6 +8,12 @@ import logging
 from typing import Dict, List, Tuple
 
 from models import BatteryHealthReading, Trip
+from receiver.calculations import (
+    capacity_kwh_to_percent,
+    calculate_degradation_rate_per_10k_miles,
+    is_degradation_rate_normal,
+    predict_capacity_at_mileage,
+)
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
@@ -117,10 +123,10 @@ def forecast_degradation(db: Session) -> Dict:
     if latest_reading:
         # Calculate capacity percent from normalized kWh
         if latest_reading.normalized_capacity_kwh:
-            current_capacity_pct = (latest_reading.normalized_capacity_kwh / 18.4) * 100
+            current_capacity_pct = capacity_kwh_to_percent(latest_reading.normalized_capacity_kwh)
         elif latest_reading.capacity_kwh:
             # Fallback to raw capacity if normalized not available
-            current_capacity_pct = (latest_reading.capacity_kwh / 18.4) * 100
+            current_capacity_pct = capacity_kwh_to_percent(latest_reading.capacity_kwh)
 
         # Get current mileage from reading or latest trip
         if latest_reading.odometer_miles:
@@ -139,11 +145,10 @@ def forecast_degradation(db: Session) -> Dict:
             continue
 
         # Predict capacity in kWh using regression model
-        predicted_capacity_kwh = slope * miles + intercept
-        predicted_capacity_kwh = max(12.88, min(18.4, predicted_capacity_kwh))  # Clamp to 70-100% of 18.4kWh
+        predicted_capacity_kwh = predict_capacity_at_mileage(miles, slope, intercept)
 
         # Convert to percent
-        predicted_capacity_pct = (predicted_capacity_kwh / 18.4) * 100
+        predicted_capacity_pct = capacity_kwh_to_percent(predicted_capacity_kwh)
 
         forecasts.append(
             {
@@ -153,12 +158,11 @@ def forecast_degradation(db: Session) -> Dict:
             }
         )
 
-    # Calculate degradation rate in kWh per 10k miles, then convert to percent
-    degradation_kwh_per_10k = abs(slope * 10000)
-    degradation_per_10k = (degradation_kwh_per_10k / 18.4) * 100  # Convert to percent
+    # Calculate degradation rate in percent per 10k miles
+    degradation_per_10k = calculate_degradation_rate_per_10k_miles(slope)
 
-    # Typical Volt Gen 2 degradation: 2-3% per 50k miles = 0.4-0.6% per 10k
-    is_normal = 0.2 <= degradation_per_10k <= 0.8
+    # Check if degradation rate is normal
+    is_normal = is_degradation_rate_normal(degradation_per_10k)
 
     return {
         "current_status": {
