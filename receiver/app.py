@@ -429,6 +429,50 @@ def clear_cache_page():
     return Response(html, mimetype='text/html')
 
 
+@app.route("/cache/stats", methods=["GET"])
+def cache_stats():
+    """
+    Get Redis cache statistics.
+
+    Returns cache hit rate, memory usage, and performance metrics.
+    Useful for monitoring cache effectiveness.
+    """
+    from utils.cache_utils import get_cache_stats
+
+    stats = get_cache_stats()
+    return jsonify(stats), 200
+
+
+@app.route("/cache/invalidate", methods=["POST"])
+def cache_invalidate():
+    """
+    Invalidate cache entries by pattern or tag.
+
+    Request body (JSON):
+        pattern: Redis key pattern to invalidate (e.g., "trip:*")
+        tag: Tag to invalidate (e.g., "trips")
+
+    Either pattern or tag must be provided.
+    """
+    from flask import request
+    from utils.cache_utils import invalidate_cache_pattern, invalidate_cache_by_tag
+
+    data = request.get_json() or {}
+    pattern = data.get("pattern")
+    tag = data.get("tag")
+
+    if not pattern and not tag:
+        return jsonify({"error": "Either 'pattern' or 'tag' must be provided"}), 400
+
+    deleted = 0
+    if pattern:
+        deleted += invalidate_cache_pattern(pattern)
+    if tag:
+        deleted += invalidate_cache_by_tag(tag)
+
+    return jsonify({"deleted": deleted, "message": f"Invalidated {deleted} cache entries"}), 200
+
+
 @app.route("/ready", methods=["GET"])
 @app.route("/readiness", methods=["GET"])  # Alternative naming
 def readiness_check():
