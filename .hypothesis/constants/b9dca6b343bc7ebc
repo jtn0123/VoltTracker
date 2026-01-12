@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/blinker/base.py
+# hypothesis_version: 6.150.1
+
+['ANY', 'P', 'T', 'T_callable', 'receiver_connected']

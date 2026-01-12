@@ -22,6 +22,7 @@ class TestTimeParsing:
     """Property-based tests for time parsing utilities."""
 
     @given(st.datetimes(min_value=datetime(2000, 1, 1), max_value=datetime(2099, 12, 31)))
+    @settings(suppress_health_check=[HealthCheck.too_slow])
     def test_datetime_round_trip_iso(self, dt):
         """
         Property: Parsing an ISO formatted datetime should return equivalent datetime.
