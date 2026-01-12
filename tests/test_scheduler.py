@@ -715,7 +715,10 @@ class TestSchedulerExceptionHandling:
         mock_commit = mocker.patch("services.scheduler.get_scheduler_db")
         mock_session = mocker.MagicMock()
         mock_session.commit.side_effect = IntegrityError("duplicate key", None, None)
-        mock_session.query.return_value = db_session.query(TelemetryRaw)
+        # Create a side_effect function that returns the correct query based on the model
+        def query_side_effect(model):
+            return db_session.query(model)
+        mock_session.query.side_effect = query_side_effect
         mock_commit.return_value = mock_session
 
         # Should not raise
@@ -768,7 +771,10 @@ class TestSchedulerExceptionHandling:
         mock_commit = mocker.patch("services.scheduler.get_scheduler_db")
         mock_session = mocker.MagicMock()
         mock_session.commit.side_effect = IntegrityError("duplicate session", None, None)
-        mock_session.query.return_value = db_session.query(TelemetryRaw)
+        # Create a side_effect function that returns the correct query based on the model
+        def query_side_effect(model):
+            return db_session.query(model)
+        mock_session.query.side_effect = query_side_effect
         mock_commit.return_value = mock_session
 
         # Should not raise

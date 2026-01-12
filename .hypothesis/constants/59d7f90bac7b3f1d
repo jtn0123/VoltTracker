@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/blinker/_utilities.py
+# hypothesis_version: 6.150.1
+
+['__func__', '__self__', 'im_func', 'im_self', 'symbol']
