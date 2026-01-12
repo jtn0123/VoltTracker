@@ -108,18 +108,25 @@ timestamp=now - timedelta(minutes=25 + i * 5),  # ✅ All timestamps in past
 
 ## Test Coverage Gaps
 
+### Recently Improved Files
+
+1. **utils/auth_utils.py** - **100% coverage** ✅ (was 35%)
+   - Complete test coverage added
+   - All security-critical functions tested
+   - APIKeyManager fully tested
+
+2. **utils/time_utils.py** - **77% coverage** (was 66%, +11%)
+   - Comprehensive datetime parsing tests
+   - Date shortcut tests
+   - Edge case handling
+
 ### Low Coverage Files (< 50%)
 
 1. **routes/weather_analytics.py** - 26% coverage
    - Missing tests for weather condition analysis
    - No tests for extreme weather detection
 
-2. **utils/auth_utils.py** - 35% coverage
-   - APIKeyManager class mostly untested
-   - Key rotation logic not tested
-   - Expiration cleanup not tested
-
-3. **utils/cache_utils.py** - 34% coverage
+2. **utils/cache_utils.py** - 34% coverage
    - Cache invalidation logic untested
    - TTL expiration not fully tested
    - Redis fallback scenarios untested
@@ -188,7 +195,11 @@ Fixed mock query side effects to return correct model queries instead of always 
 - **Critical Bugs Found:** 2
 - **Medium Severity Issues:** 1
 - **Test Bugs Fixed:** 3
-- **Test Coverage Increase:** 72% → 75% (+3%)
-- **New Tests Added:** 48 tests (test_bulk_operations.py + test_statistics.py)
-- **Total Tests Passing:** 1,333
+- **Test Coverage Increase:** 72% → 76% (+4%)
+- **New Tests Added:** 166 tests total
+  - 48 tests (test_bulk_operations.py + test_statistics.py)
+  - 79 tests (test_auth_utils.py)
+  - 39 tests (test_time_utils.py)
+- **Total Tests Passing:** 1,411
 - **Files with Bugs:** 9+ files
+- **Files Brought to 100% Coverage:** 1 (auth_utils.py)
