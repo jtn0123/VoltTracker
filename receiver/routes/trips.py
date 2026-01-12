@@ -135,7 +135,7 @@ def get_trips():
     min_mpg = request.args.get("min_mpg")
     if min_mpg:
         try:
-            query = query.filter(Trip.mpg >= float(min_mpg))
+            query = query.filter(Trip.gas_mpg >= float(min_mpg))
         except (ValueError, TypeError):
             pass
 
@@ -627,7 +627,6 @@ def compare_trips():
                 "weather_conditions": trip.weather_conditions,
                 "extreme_weather": trip.extreme_weather,
                 "elevation_gain_m": trip.elevation_gain_m,
-                "avg_speed_mph": trip.avg_speed_mph,
                 "gas_mode_entered": trip.gas_mode_entered,
                 "weather_impact_factor": trip.weather_impact_factor,
             }
