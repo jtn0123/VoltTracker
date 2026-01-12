@@ -1,4 +1,0 @@
-# file: /home/user/VoltTracker/receiver/calculations/__init__.py
-# hypothesis_version: 6.150.1
-
-['1.0.0', 'BATTERY_CAPACITY_KWH', 'GAS_COST_PER_GALLON', 'MAX_KWH_PER_MILE', 'MAX_MPG', 'MIN_KWH_PER_MILE', 'MIN_MPG', 'RPM_THRESHOLD', 'SOC_GAS_THRESHOLD', 'calculate_fuel_cost', 'calculate_gas_mpg', 'calculate_mpg', 'calculate_mpge', 'calculate_soc_buffer', 'calculate_trip_cost', 'calculate_z_score', 'detect_refuel_event', 'estimate_fuel_range', 'filter_outliers', 'kwh_to_soc', 'smooth_fuel_level', 'soc_to_kwh']

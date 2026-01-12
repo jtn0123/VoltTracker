@@ -1,4 +1,0 @@
-# file: /home/user/VoltTracker/receiver/utils/import_utils.py
-# hypothesis_version: 6.150.1
-
-[' | ', '%Y%m%d', ', ', 'all_duplicates', 'date_parse_error', 'empty_file', 'encoding_error', 'failed', 'invalid_csv', 'missing_coordinates', 'no_timestamp_column', 'no_valid_rows']
