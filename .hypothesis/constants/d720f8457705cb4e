@@ -1,0 +1,4 @@
+# file: /usr/lib/python3/dist-packages/blinker/__init__.py
+# hypothesis_version: 6.150.1
+
+['1.7.0', 'ANY', 'NamedSignal', 'Namespace', 'Signal', 'WeakNamespace', 'receiver_connected', 'signal']

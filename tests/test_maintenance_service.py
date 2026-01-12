@@ -166,7 +166,7 @@ class TestCalculateEngineHours:
         for i in range(5):
             telemetry = TelemetryRaw(
                 session_id=session_id,
-                timestamp=now - timedelta(minutes=25 - i * 5),
+                timestamp=now - timedelta(minutes=25 + i * 5),
                 engine_rpm=400.0,
             )
             db_session.add(telemetry)
@@ -175,7 +175,7 @@ class TestCalculateEngineHours:
         for i in range(5, 10):
             telemetry = TelemetryRaw(
                 session_id=session_id,
-                timestamp=now - timedelta(minutes=25 - i * 5),
+                timestamp=now - timedelta(minutes=(10 - i) * 5),
                 engine_rpm=401.0,
             )
             db_session.add(telemetry)
