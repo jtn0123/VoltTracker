@@ -13,7 +13,8 @@ from database import get_db
 from flask import Blueprint, jsonify, request
 from models import FuelEvent, SocTransition, TelemetryRaw, Trip
 from sqlalchemy import desc, func
-from utils import analyze_soc_floor, utc_now
+from utils import analyze_soc_floor
+from utils.time_utils import utc_now, parse_query_date_range, parse_date_shortcut
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,9 @@ def get_trips():
 
     Query params:
         # Date filters
-        start_date: Filter trips after this date (ISO format)
+        start_date: Filter trips after this date (ISO format or shortcut)
         end_date: Filter trips before this date (ISO format)
+        date_range: Date shortcut (today, yesterday, last_7_days, last_30_days, last_90_days)
 
         # Mode filters
         gas_only: If true, only return trips with gas usage
@@ -68,14 +70,24 @@ def get_trips():
     # Filter for closed trips that aren't soft-deleted
     query = db.query(Trip).filter(Trip.is_closed.is_(True), Trip.deleted_at.is_(None))
 
-    # Date filters
-    start_date = request.args.get("start_date")
-    if start_date:
-        query = query.filter(Trip.start_time >= start_date)
-
-    end_date = request.args.get("end_date")
-    if end_date:
-        query = query.filter(Trip.start_time <= end_date)
+    # Date filters - support both explicit dates and shortcuts
+    date_range_shortcut = request.args.get("date_range")
+    if date_range_shortcut:
+        # Use shortcut (e.g., "last_7_days", "last_30_days")
+        date_range = parse_date_shortcut(date_range_shortcut)
+        if date_range:
+            start_date_dt, end_date_dt = date_range
+            query = query.filter(Trip.start_time >= start_date_dt, Trip.start_time <= end_date_dt)
+    else:
+        # Use explicit start/end dates if provided
+        start_date = request.args.get("start_date")
+        end_date = request.args.get("end_date")
+        if start_date or end_date:
+            start_date_dt, end_date_dt = parse_query_date_range(request.args, default_days=365)
+            if start_date:
+                query = query.filter(Trip.start_time >= start_date_dt)
+            if end_date:
+                query = query.filter(Trip.start_time <= end_date_dt)
 
     # Mode filters
     gas_only = request.args.get("gas_only", "").lower() == "true"
