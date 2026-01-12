@@ -20,6 +20,7 @@ build/
 htmlcov/
 .coverage
 coverage.xml
+.hypothesis/
 
 # Environment
 .env
