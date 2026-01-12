@@ -37,16 +37,20 @@ export_bp = Blueprint("export", __name__)
 @export_bp.route("/export/trips", methods=["GET"])
 def export_trips():
     """
-    Export trips as CSV or JSON.
+    Export trips as CSV or JSON with streaming support for large datasets.
 
     Query params:
         format: 'csv' (default) or 'json'
         start_date: Filter trips after this date
         end_date: Filter trips before this date
         gas_only: If true, only export trips with gas usage
+        stream: If 'true', use streaming mode (default for CSV, recommended for >1000 trips)
+
+    Streaming mode processes trips in batches to avoid memory exhaustion.
     """
     db = get_db()
     export_format = request.args.get("format", "csv").lower()
+    use_streaming = request.args.get("stream", "true" if export_format == "csv" else "false").lower() == "true"
 
     query = db.query(Trip).filter(Trip.is_closed.is_(True))
 
@@ -63,55 +67,96 @@ def export_trips():
     if gas_only:
         query = query.filter(Trip.gas_mode_entered.is_(True))
 
-    trips = query.order_by(desc(Trip.start_time)).all()
+    query = query.order_by(desc(Trip.start_time))
 
+    # JSON export (non-streaming, loads all into memory)
     if export_format == "json":
-        return jsonify([t.to_dict() for t in trips])
+        if use_streaming:
+            # Streaming JSON (newline-delimited JSON)
+            def generate_json():
+                for trip in query.yield_per(100):
+                    yield json.dumps(trip.to_dict()) + "\n"
 
-    # CSV export
+            return Response(
+                generate_json(),
+                mimetype="application/x-ndjson",
+                headers={"Content-Disposition": "attachment; filename=trips.ndjson"}
+            )
+        else:
+            trips = query.all()
+            return jsonify([t.to_dict() for t in trips])
+
+    # CSV export with streaming
+    if use_streaming:
+        def generate_csv():
+            """Generator function that yields CSV data in chunks."""
+            # Yield header row
+            header_buffer = io.StringIO()
+            header_writer = csv.writer(header_buffer)
+            header_writer.writerow([
+                "id", "session_id", "start_time", "end_time",
+                "distance_miles", "electric_miles", "gas_miles",
+                "start_soc", "soc_at_gas_transition", "gas_mpg",
+                "fuel_used_gallons", "ambient_temp_avg_f",
+            ])
+            yield header_buffer.getvalue()
+
+            # Yield data rows in batches
+            for trip in query.yield_per(100):  # Process 100 trips at a time
+                row_buffer = io.StringIO()
+                row_writer = csv.writer(row_buffer)
+                row_writer.writerow([
+                    trip.id,
+                    str(trip.session_id),
+                    trip.start_time.isoformat() if trip.start_time else "",
+                    trip.end_time.isoformat() if trip.end_time else "",
+                    trip.distance_miles or "",
+                    trip.electric_miles or "",
+                    trip.gas_miles or "",
+                    trip.start_soc or "",
+                    trip.soc_at_gas_transition or "",
+                    trip.gas_mpg or "",
+                    trip.fuel_used_gallons or "",
+                    trip.ambient_temp_avg_f or "",
+                ])
+                yield row_buffer.getvalue()
+
+        return Response(
+            generate_csv(),
+            mimetype="text/csv",
+            headers={"Content-Disposition": "attachment; filename=trips.csv"}
+        )
+
+    # Non-streaming CSV (legacy, for small datasets)
+    trips = query.all()
     output = io.StringIO()
     writer = csv.writer(output)
 
     # Header row
-    writer.writerow(
-        [
-            "id",
-            "session_id",
-            "start_time",
-            "end_time",
-            "distance_miles",
-            "electric_miles",
-            "gas_miles",
-            "start_soc",
-            "soc_at_gas_transition",
-            "gas_mpg",
-            "fuel_used_gallons",
-            "ambient_temp_avg_f",
-        ]
-    )
+    writer.writerow([
+        "id", "session_id", "start_time", "end_time",
+        "distance_miles", "electric_miles", "gas_miles",
+        "start_soc", "soc_at_gas_transition", "gas_mpg",
+        "fuel_used_gallons", "ambient_temp_avg_f",
+    ])
 
     # Data rows
     for t in trips:
-        writer.writerow(
-            [
-                t.id,
-                str(t.session_id),
-                t.start_time.isoformat() if t.start_time else "",
-                t.end_time.isoformat() if t.end_time else "",
-                t.distance_miles or "",
-                t.electric_miles or "",
-                t.gas_miles or "",
-                t.start_soc or "",
-                t.soc_at_gas_transition or "",
-                t.gas_mpg or "",
-                t.fuel_used_gallons or "",
-                t.ambient_temp_avg_f or "",
-            ]
-        )
+        writer.writerow([
+            t.id, str(t.session_id),
+            t.start_time.isoformat() if t.start_time else "",
+            t.end_time.isoformat() if t.end_time else "",
+            t.distance_miles or "", t.electric_miles or "", t.gas_miles or "",
+            t.start_soc or "", t.soc_at_gas_transition or "",
+            t.gas_mpg or "", t.fuel_used_gallons or "",
+            t.ambient_temp_avg_f or "",
+        ])
 
     output.seek(0)
     return Response(
-        output.getvalue(), mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=trips.csv"}
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=trips.csv"}
     )
 
 
