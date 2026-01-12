@@ -1,4 +1,0 @@
-# file: /home/user/VoltTracker/receiver/utils/calculations.py
-# hypothesis_version: 6.150.1
-
-[0.5, 1.2, 6.0, 100, 'L1', 'L1-high', 'L2', 'ambient_temp_f', 'average_soc', 'avg_power_kw', 'charge_type', 'charger_ac_power_kw', 'charger_connected', 'cold_avg_soc', 'cold_count', 'count', 'current_soc', 'engine_rpm', 'histogram', 'hv_battery_power_kw', 'is_charging', 'max_soc', 'min_soc', 'peak_power_kw', 'soc_at_transition', 'start_soc', 'state_of_charge', 'timestamp', 'warm_avg_soc', 'warm_count']
