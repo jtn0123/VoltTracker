@@ -20,6 +20,12 @@ def dashboard():
     return render_template("index.html")
 
 
+@dashboard_bp.route("/map")
+def map_view():
+    """Serve the GPS track map view HTML."""
+    return render_template("map.html")
+
+
 @dashboard_bp.route("/api/status", methods=["GET"])
 def get_status():
     """Get system status and last sync time."""

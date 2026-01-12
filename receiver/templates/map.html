@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Track Map - VoltTracker</title>
+
+    <!-- Preconnect -->
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin">
+
+    <!-- Critical CSS -->
+    <style>:root{--bg-primary:#1a1a2e;--bg-secondary:#16213e;--bg-card:#0f3460;--accent:#0f4c75;--accent-light:#3282b8;--text-primary:#fff;--text-secondary:#b8b8b8;--border-color:#2d3748;--success:#28a745;--electric:#00d4aa;--z-map:1;--z-sidebar:100;--z-controls:110}*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:var(--bg-primary);color:var(--text-primary);overflow:hidden}#map-container{position:absolute;top:0;left:0;right:0;bottom:0;z-index:var(--z-map)}</style>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/toast.css">
+    <link rel="stylesheet" href="/static/css/map_view.css">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet MarkerCluster CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <!-- Leaflet.heat CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.css" />
+
+    <!-- PWA Support -->
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#27ae60">
+</head>
+<body>
+    <!-- Header -->
+    <header class="map-header" role="banner">
+        <div class="map-header-left">
+            <a href="/" class="back-button" aria-label="Back to dashboard">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm.707-10.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L9.414 11H13a1 1 0 100-2H9.414l1.293-1.293z"/>
+                </svg>
+                Dashboard
+            </a>
+            <h1>GPS Track Map</h1>
+        </div>
+        <div class="map-header-right">
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle dark/light theme">
+                <span class="theme-icon" id="theme-icon" aria-hidden="true">🌙</span>
+            </button>
+            <button class="btn-filters" id="btn-filters" onclick="toggleFilters()" aria-label="Toggle filter sidebar">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z"/>
+                </svg>
+                Filters
+            </button>
+            <button class="btn-trip-list" id="btn-trip-list" onclick="toggleTripList()" aria-label="Toggle trip list">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/>
+                </svg>
+                Trips
+            </button>
+        </div>
+    </header>
+
+    <!-- Map Container -->
+    <div id="map-container" role="region" aria-label="GPS track map">
+        <!-- Leaflet map will be rendered here -->
+    </div>
+
+    <!-- Filter Sidebar -->
+    <aside class="filter-sidebar" id="filter-sidebar" role="complementary" aria-label="Map filters">
+        <div class="sidebar-header">
+            <h2>Filters</h2>
+            <button class="btn-close" onclick="toggleFilters()" aria-label="Close filters">
+                ×
+            </button>
+        </div>
+
+        <div class="sidebar-content">
+            <!-- Date Filter -->
+            <div class="filter-group">
+                <label for="date-range-filter">Date Range</label>
+                <select id="date-range-filter" onchange="applyFilters()">
+                    <option value="last_7_days">Last 7 Days</option>
+                    <option value="last_30_days" selected>Last 30 Days</option>
+                    <option value="last_90_days">Last 90 Days</option>
+                    <option value="all">All Time</option>
+                </select>
+            </div>
+
+            <!-- Mode Filter -->
+            <div class="filter-group">
+                <label>Trip Mode</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="mode" value="all" checked onchange="applyFilters()">
+                        <span>All Trips</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="mode" value="ev_only" onchange="applyFilters()">
+                        <span>EV Only</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="mode" value="gas_only" onchange="applyFilters()">
+                        <span>Used Gas</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Efficiency Filter -->
+            <div class="filter-group">
+                <label for="efficiency-filter">Efficiency (kWh/mi)</label>
+                <div class="range-inputs">
+                    <input type="number" id="min-efficiency" placeholder="Min" step="0.1" min="0" max="1" onchange="applyFilters()">
+                    <span>to</span>
+                    <input type="number" id="max-efficiency" placeholder="Max" step="0.1" min="0" max="1" onchange="applyFilters()">
+                </div>
+            </div>
+
+            <!-- Distance Filter -->
+            <div class="filter-group">
+                <label for="distance-filter">Distance (miles)</label>
+                <div class="range-inputs">
+                    <input type="number" id="min-distance" placeholder="Min" step="1" min="0" onchange="applyFilters()">
+                    <span>to</span>
+                    <input type="number" id="max-distance" placeholder="Max" step="1" min="0" onchange="applyFilters()">
+                </div>
+            </div>
+
+            <!-- Map Layer -->
+            <div class="filter-group">
+                <label>Map Layer</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="layer" value="routes" checked onchange="changeMapLayer()">
+                        <span>Routes</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="layer" value="heatmap-density" onchange="changeMapLayer()">
+                        <span>Heatmap (Density)</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="layer" value="heatmap-speed" onchange="changeMapLayer()">
+                        <span>Heatmap (Speed)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="filter-actions">
+                <button class="btn-primary" onclick="applyFilters()">Apply Filters</button>
+                <button class="btn-secondary" onclick="clearFilters()">Clear All</button>
+            </div>
+
+            <!-- Stats -->
+            <div class="filter-stats">
+                <div class="stat">
+                    <span class="stat-label">Trips Shown:</span>
+                    <span class="stat-value" id="trips-count">--</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Total Distance:</span>
+                    <span class="stat-value" id="total-distance">-- mi</span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Trip List Sidebar -->
+    <aside class="trip-list-sidebar" id="trip-list-sidebar" role="complementary" aria-label="Trip list">
+        <div class="sidebar-header">
+            <h2>Trips</h2>
+            <button class="btn-close" onclick="toggleTripList()" aria-label="Close trip list">
+                ×
+            </button>
+        </div>
+
+        <div class="sidebar-content">
+            <div class="trip-list-controls">
+                <button class="btn-compare" id="btn-compare" onclick="startComparison()" disabled>
+                    Compare Selected
+                </button>
+                <button class="btn-clear-selection" id="btn-clear-selection" onclick="clearSelection()" style="display: none;">
+                    Clear Selection
+                </button>
+            </div>
+
+            <div id="trip-list-container" class="trip-list-container">
+                <div class="loading-spinner">Loading trips...</div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Trip Detail Modal -->
+    <div class="modal" id="trip-detail-modal" role="dialog" aria-modal="true" aria-labelledby="trip-detail-title" aria-hidden="true">
+        <div class="modal-backdrop" onclick="closeTripDetail()"></div>
+        <div class="modal-content modal-trip-detail">
+            <div class="modal-header">
+                <h2 id="trip-detail-title">Trip Details</h2>
+                <button class="modal-close" onclick="closeTripDetail()" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="trip-detail-content">
+                    <!-- Populated by JavaScript -->
+                </div>
+                <div class="trip-detail-actions">
+                    <a href="#" id="export-gpx-link" class="btn-export" download>
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M13 8V2H7v6H2l8 8 8-8h-5zM0 18h20v2H0v-2z"/>
+                        </svg>
+                        Export GPX
+                    </a>
+                    <a href="#" id="export-kml-link" class="btn-export" download>
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M13 8V2H7v6H2l8 8 8-8h-5zM0 18h20v2H0v-2z"/>
+                        </svg>
+                        Export KML
+                    </a>
+                    <button class="btn-secondary" onclick="findSimilarTrips()">
+                        Find Similar Routes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Map Controls -->
+    <div class="map-controls" role="group" aria-label="Map controls">
+        <button class="map-control-btn" id="btn-zoom-to-fit" onclick="zoomToFitAll()" title="Zoom to fit all routes" aria-label="Zoom to fit all routes">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M3 3h4v2H5v2H3V3zm0 12H5v2h2v2H3v-4zm14 0h-2v2h-2v2h4v-4zm0-12h-2V3h-2v2h4v4h-2V5z"/>
+            </svg>
+        </button>
+        <button class="map-control-btn" id="btn-my-location" onclick="goToMyLocation()" title="Go to my location" aria-label="Go to my location">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 14a6 6 0 110-12 6 6 0 010 12zm0-4a2 2 0 100-4 2 2 0 000 4z"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-spinner-large">
+            <div class="spinner"></div>
+            <p>Loading GPS data...</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/toast.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="/static/js/map_view.js"></script>
+</body>
+</html>
