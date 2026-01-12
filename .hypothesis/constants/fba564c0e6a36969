@@ -1,4 +1,0 @@
-# file: /home/user/VoltTracker/receiver/utils/toast_emitter.py
-# hypothesis_version: 6.150.1
-
-[2000, 3000, 4000, 5000, 'New trip detected', 'actions', 'duration', 'error', 'info', 'message', 'success', 'toast', 'type', 'warning']

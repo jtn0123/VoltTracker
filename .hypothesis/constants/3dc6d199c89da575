@@ -1,4 +1,0 @@
-# file: /home/user/VoltTracker/receiver/exceptions.py
-# hypothesis_version: 6.150.1
-
-['config_key', 'expected_range', 'field', 'filename', 'latitude', 'longitude', 'raw_value', 'row_number', 'session_id', 'status_code', 'trip_id', 'value']
