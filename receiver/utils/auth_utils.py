@@ -11,7 +11,7 @@ Provides functions for:
 import hashlib
 import secrets
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -118,7 +118,7 @@ class APIKeyManager:
         """
         self.keys[key_id] = {
             "hash": key_hash,
-            "created_at": created_at or datetime.utcnow(),
+            "created_at": created_at or datetime.now(timezone.utc),
             "expires_at": expires_at,
             "description": description,
             "last_used": None,
@@ -142,13 +142,13 @@ class APIKeyManager:
         key_info = self.keys[key_id]
 
         # Check expiry
-        if key_info["expires_at"] and datetime.utcnow() > key_info["expires_at"]:
+        if key_info["expires_at"] and datetime.now(timezone.utc) > key_info["expires_at"]:
             logger.warning(f"Expired API key used: {key_id}")
             return False
 
         # Verify hash
         if verify_api_key(api_key, key_info["hash"]):
-            self.keys[key_id]["last_used"] = datetime.utcnow()
+            self.keys[key_id]["last_used"] = datetime.now(timezone.utc)
             return True
 
         return False
@@ -173,7 +173,7 @@ class APIKeyManager:
             raise ValueError(f"Key {old_key_id} not found")
 
         # Generate new key
-        new_key_id = f"{old_key_id}_rotated_{datetime.utcnow().strftime('%Y%m%d')}"
+        new_key_id = f"{old_key_id}_rotated_{datetime.now(timezone.utc).strftime('%Y%m%d')}"
         new_api_key = generate_api_token()
         new_hash = hash_api_key(new_api_key)
 
@@ -185,7 +185,7 @@ class APIKeyManager:
         )
 
         # Schedule old key for expiry
-        self.keys[old_key_id]["expires_at"] = datetime.utcnow() + timedelta(days=grace_period_days)
+        self.keys[old_key_id]["expires_at"] = datetime.now(timezone.utc) + timedelta(days=grace_period_days)
         logger.info(f"Rotated key {old_key_id} -> {new_key_id} (grace period: {grace_period_days} days)")
 
         return new_key_id, new_api_key
@@ -221,7 +221,7 @@ class APIKeyManager:
                 "expires_at": info["expires_at"],
                 "last_used": info["last_used"],
                 "description": info["description"],
-                "is_expired": info["expires_at"] and datetime.utcnow() > info["expires_at"] if info["expires_at"] else False,
+                "is_expired": info["expires_at"] is not None and datetime.now(timezone.utc) > info["expires_at"],
             })
         return result
 
@@ -232,7 +232,7 @@ class APIKeyManager:
         Returns:
             Number of keys removed
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expired = [
             key_id for key_id, info in self.keys.items()
             if info["expires_at"] and now > info["expires_at"]
