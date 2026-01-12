@@ -183,9 +183,9 @@ class TestCorrelation:
     def test_calculate_correlation_no_correlation(self):
         """No correlation = ~0.0"""
         x = [1, 2, 3, 4]
-        y = [2, 1, 4, 3]
+        y = [3, 1, 4, 2]  # Rearranged to have zero correlation
         result = calculate_correlation_simple(x, y)
-        assert -0.5 < result < 0.5
+        assert -0.1 < result < 0.1
 
     def test_calculate_correlation_mismatched_lengths(self):
         """Different lengths should return None"""

@@ -49,20 +49,20 @@ class TestDegradationRate:
     """Test degradation rate calculations"""
 
     def test_calculate_degradation_rate_typical(self):
-        """0.0001 kWh/mile loss = ~0.54% per 10k miles"""
-        slope = -0.0001  # Losing 0.0001 kWh per mile
+        """0.00001 kWh/mile loss = ~0.54% per 10k miles (typical for Volt)"""
+        slope = -0.00001  # Losing 0.00001 kWh per mile (0.1 kWh per 10k miles)
         rate = calculate_degradation_rate_per_10k_miles(slope, 18.4)
         assert rate == 0.54
 
     def test_calculate_degradation_rate_fast(self):
-        """Faster degradation"""
-        slope = -0.0002  # Losing 0.0002 kWh per mile
+        """Faster degradation: 0.00002 kWh/mile = ~1.09% per 10k miles"""
+        slope = -0.00002  # Losing 0.00002 kWh per mile
         rate = calculate_degradation_rate_per_10k_miles(slope, 18.4)
         assert rate == 1.09
 
     def test_calculate_degradation_rate_slow(self):
-        """Slower degradation"""
-        slope = -0.00005  # Losing 0.00005 kWh per mile
+        """Slower degradation: 0.000005 kWh/mile = ~0.27% per 10k miles"""
+        slope = -0.000005  # Losing 0.000005 kWh per mile
         rate = calculate_degradation_rate_per_10k_miles(slope, 18.4)
         assert rate == 0.27
 

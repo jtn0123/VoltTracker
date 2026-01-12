@@ -84,8 +84,11 @@ def parse_datetime(
     if date_string.isdigit():
         try:
             timestamp = int(date_string)
+            # Reject unreasonably large timestamps (> year 3000)
+            if timestamp > 32503680000:
+                return default
             return datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        except (ValueError, OSError):
+        except (ValueError, OSError, OverflowError):
             pass
 
     # Try dateutil parser (handles most formats)
@@ -95,7 +98,7 @@ def parse_datetime(
         if assume_utc and dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         pass
 
     # Try explicit formats

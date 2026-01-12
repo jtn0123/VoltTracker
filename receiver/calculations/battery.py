@@ -84,8 +84,8 @@ def calculate_degradation_rate_per_10k_miles(
         Degradation rate as percentage per 10k miles
 
     Examples:
-        >>> # 0.0001 kWh/mile loss = 1 kWh per 10k miles
-        >>> calculate_degradation_rate_per_10k_miles(-0.0001, 18.4)
+        >>> # 0.00001 kWh/mile loss = 0.1 kWh per 10k miles = 0.54% degradation
+        >>> calculate_degradation_rate_per_10k_miles(-0.00001, 18.4)
         0.54
     """
     degradation_kwh_per_10k = abs(slope_kwh_per_mile * 10000)

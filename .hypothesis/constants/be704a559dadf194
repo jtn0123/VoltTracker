@@ -1,0 +1,4 @@
+# file: /home/user/VoltTracker/receiver/utils/route_clustering.py
+# hypothesis_version: 6.150.1
+
+[0.0, 0.2, 0.5, 70.0, 75.0, 100, 500, 3959, 'center_lat', 'center_lon', 'distance_miles', 'east', 'end_point', 'gas_mpg', 'kwh_per_mile', 'lat', 'lon', 'north', 'similarity_score', 'south', 'start_point', 'start_time', 'trip_id', 'west']
