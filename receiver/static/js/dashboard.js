@@ -40,6 +40,7 @@ let useWebSocket = true;  // Will fallback to polling if WebSocket fails
 let modalTriggerElement = null;  // Track element that opened modal for focus restoration
 let statusErrorCount = 0;  // Track consecutive status fetch errors for retry logic
 const STATUS_ERROR_THRESHOLD = 3;  // Show error only after this many consecutive failures
+let liveTripActive = false;  // Track if live trip is currently active for toast notifications
 
 // Lazy loading state for external libraries
 let chartJsLoaded = false;
@@ -508,11 +509,13 @@ function initWebSocket() {
             if (DEBUG) console.log('WebSocket connected');
             useWebSocket = true;
             updateConnectionStatus('connected');
+            showInfo('Live updates connected', 2000);
         });
 
         socket.on('disconnect', () => {
             if (DEBUG) console.log('WebSocket disconnected');
             updateConnectionStatus('disconnected');
+            showWarning('Live updates disconnected, using fallback', 4000);
             // Start polling as fallback
             if (!liveRefreshInterval) {
                 liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);
@@ -521,6 +524,11 @@ function initWebSocket() {
 
         socket.on('telemetry', (data) => {
             handleRealtimeTelemetry(data);
+        });
+
+        socket.on('toast', (data) => {
+            // Handle toast notifications from server
+            showToast(data.message, data.type, data.duration, data.actions);
         });
 
         socket.on('connect_error', (error) => {
@@ -546,6 +554,12 @@ function handleRealtimeTelemetry(data) {
     // Show live trip section
     const liveSection = document.getElementById('live-trip-section');
     const powerFlowSection = document.getElementById('power-flow-section');
+
+    // Show toast when a new trip is detected
+    if (liveSection && !liveTripActive) {
+        showInfo('New trip detected', 3000);
+        liveTripActive = true;
+    }
 
     if (liveSection) {
         liveSection.style.display = 'block';
@@ -817,6 +831,12 @@ async function loadLiveTelemetry() {
                 liveRefreshInterval = setInterval(loadLiveTelemetry, 5000);
             }
         } else {
+            // Trip ended - show notification if trip was previously active
+            if (liveTripActive) {
+                showSuccess('Trip completed', 3000);
+                liveTripActive = false;
+            }
+
             liveSection.style.display = 'none';
             if (powerFlowSection) {
                 powerFlowSection.style.display = 'none';
@@ -2033,6 +2053,9 @@ async function deleteTrip(tripId) {
         });
 
         if (response.ok) {
+            // Show success toast
+            showSuccess('Trip deleted successfully');
+
             // Reload trips and summary
             loadTrips();
             loadSummary();
@@ -2046,11 +2069,11 @@ async function deleteTrip(tripId) {
             } catch {
                 errorMsg = `HTTP ${response.status}`;
             }
-            alert(`Failed to delete trip: ${errorMsg}`);
+            showError(`Failed to delete trip: ${errorMsg}`);
         }
     } catch (error) {
         if (DEBUG) console.error('Failed to delete trip:', error);
-        alert('Failed to delete trip. Please try again.');
+        showError('Failed to delete trip. Please try again.');
     }
 }
 
@@ -3181,6 +3204,14 @@ async function handleImport(event) {
     // Show import result modal for single file, status bar for multiple
     if (totalFiles === 1 && lastImportResults.length === 1) {
         showImportResultModal(lastImportResults[0]);
+        const result = lastImportResults[0];
+        if (result.status === 'success' || result.status === 'partial') {
+            showSuccess(`Import complete: ${result.stats?.parsed_rows || 0} records added`, 4000);
+        } else if (result.status === 'duplicate') {
+            showInfo('File already imported previously', 3000);
+        } else {
+            showError(`Import failed: ${result.message || 'Unknown error'}`);
+        }
     } else {
         // Show summary status for multiple files
         let message = `Imported ${totalImported} records from ${totalFiles - failedFiles.length} files.`;
@@ -3193,8 +3224,10 @@ async function handleImport(event) {
         if (failedFiles.length > 0) {
             message += ` Failed: ${failedFiles.join(', ')}`;
             showImportStatus(message, 'error');
+            showError(`Import errors: ${failedFiles.length} of ${totalFiles} files failed`);
         } else {
             showImportStatus(message, 'success');
+            showSuccess(`Successfully imported ${totalImported} records from ${totalFiles} files`, 5000);
         }
     }
 
