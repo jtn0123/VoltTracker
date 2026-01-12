@@ -88,7 +88,74 @@ Redundant conditional expression in `is_expired` calculation:
 
 ---
 
-### 4. Test Timestamp Bug
+### 4. SQLAlchemy Loader Options Bug in query_utils.py 🐛
+**File:** `receiver/utils/query_utils.py:41`
+**Severity:** HIGH - Runtime error
+
+**Description:**
+The `eager_load_trip_relationships()` function uses string-based loader options which are not supported in SQLAlchemy 2.0+:
+
+```python
+# Line 41 - WRONG
+return query.options(
+    selectinload('soc_transitions')  # ❌ Strings not accepted
+)
+```
+
+**Error:**
+```
+sqlalchemy.exc.ArgumentError: Strings are not accepted for attribute names in loader options;
+please use class-bound attributes directly.
+```
+
+**Fixed to:**
+```python
+from models import Trip
+return query.options(
+    selectinload(Trip.soc_transitions)  # ✅ Use model attribute
+)
+```
+
+**Impact:**
+- Would crash at runtime when eager loading is used
+- Affects TripQueryBuilder.with_relationships() method
+- Any code using optimize_trip_list_query(include_relationships=True) would fail
+
+---
+
+### 5. SQLAlchemy Batch Load Bug in query_utils.py 🐛
+**File:** `receiver/utils/query_utils.py:304`
+**Severity:** HIGH - Runtime error
+
+**Description:**
+The `batch_load_relationships()` function uses string-based relationship names with selectinload:
+
+```python
+# Line 304 - WRONG
+.options(selectinload(relationship_name))  # ❌ relationship_name is a string
+```
+
+**Fixed to:**
+```python
+# Get the relationship attribute from the model class
+try:
+    relationship_attr = getattr(model_class, relationship_name)
+except AttributeError:
+    logger.warning(f"Relationship {relationship_name} not found on {model_class.__name__}")
+    return items
+
+# Use the attribute, not the string
+.options(selectinload(relationship_attr))  # ✅ Use actual attribute
+```
+
+**Impact:**
+- Would crash with ArgumentError when batch loading relationships
+- No error handling for missing relationships
+- Affects any code using batch_load_relationships()
+
+---
+
+### 6. Test Timestamp Bug
 **File:** `tests/test_maintenance_service.py:169`
 **Severity:** LOW - Test bug (already fixed)
 
@@ -110,36 +177,38 @@ timestamp=now - timedelta(minutes=25 + i * 5),  # ✅ All timestamps in past
 
 ### Recently Improved Files
 
-1. **utils/auth_utils.py** - **100% coverage** ✅ (was 35%)
+1. **utils/auth_utils.py** - **100% coverage** ✅ (was 35%, +65%)
    - Complete test coverage added
    - All security-critical functions tested
    - APIKeyManager fully tested
 
-2. **utils/time_utils.py** - **77% coverage** (was 66%, +11%)
+2. **routes/weather_analytics.py** - **100% coverage** ✅ (was 26%, +74%)
+   - All 6 weather analytics endpoints tested
+   - Date parsing helper fully tested
+   - Error handling verified
+
+3. **utils/query_utils.py** - **96% coverage** ✅ (was 0%, +96%)
+   - TripQueryBuilder fluent API fully tested
+   - Eager loading functions tested
+   - Batch relationship loading tested
+   - Fixed 2 critical SQLAlchemy bugs
+
+4. **utils/time_utils.py** - **77% coverage** (was 66%, +11%)
    - Comprehensive datetime parsing tests
    - Date shortcut tests
    - Edge case handling
 
+5. **routes/trips.py** - **82% coverage** (was 60%, +22%)
+   - Fixed Trip.mpg → Trip.gas_mpg bug
+   - Fixed avg_speed_mph AttributeError
+   - 26 new route tests added
+
 ### Low Coverage Files (< 50%)
 
-1. **routes/weather_analytics.py** - 26% coverage
-   - Missing tests for weather condition analysis
-   - No tests for extreme weather detection
-
-2. **utils/cache_utils.py** - 34% coverage
+1. **utils/cache_utils.py** - 34% coverage
    - Cache invalidation logic untested
    - TTL expiration not fully tested
    - Redis fallback scenarios untested
-
-4. **utils/time_utils.py** - 66% coverage
-   - Edge cases for date parsing
-   - Timezone conversion edge cases
-   - Date range shortcuts
-
-5. **routes/trips.py** - 60% coverage
-   - Error handling paths
-   - Complex query filters
-   - Trip deletion logic
 
 ### Completely Untested Files (0% coverage)
 
@@ -147,7 +216,6 @@ timestamp=now - timedelta(minutes=25 + i * 5),  # ✅ All timestamps in past
 2. **scripts/backfill_elevation.py** - 0%
 3. **utils/audit_log.py** - 0%
 4. **utils/job_queue.py** - 0%
-5. **utils/query_utils.py** - 0%
 
 ---
 
@@ -192,14 +260,20 @@ Fixed mock query side effects to return correct model queries instead of always 
 
 ## Summary Statistics
 
-- **Critical Bugs Found:** 2
+- **Critical Bugs Found:** 4 (2 new SQLAlchemy bugs in query_utils.py)
 - **Medium Severity Issues:** 1
 - **Test Bugs Fixed:** 3
-- **Test Coverage Increase:** 72% → 76% (+4%)
-- **New Tests Added:** 166 tests total
+- **Test Coverage Increase:** 72% → 80% (+8%)
+- **New Tests Added:** 271 tests total
   - 48 tests (test_bulk_operations.py + test_statistics.py)
   - 79 tests (test_auth_utils.py)
   - 39 tests (test_time_utils.py)
-- **Total Tests Passing:** 1,411
-- **Files with Bugs:** 9+ files
-- **Files Brought to 100% Coverage:** 1 (auth_utils.py)
+  - 26 tests (test_trips_routes.py)
+  - 20 tests (test_weather_analytics.py routes)
+  - 6 tests (test_weather_analytics.py _parse_date helper)
+  - 39 tests (test_query_utils.py)
+  - 7 tests (deprecated datetime.utcnow() fixes in test_weather_analytics.py)
+- **Total Tests Passing:** 1,503
+- **Files with Bugs:** 11+ files
+- **Files Brought to 100% Coverage:** 2 (auth_utils.py, weather_analytics.py routes)
+- **Files Brought to 96%+ Coverage:** 1 (query_utils.py: 0% → 96%)
