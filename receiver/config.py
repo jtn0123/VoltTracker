@@ -17,6 +17,11 @@ class Config:
     # Database
     DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://volt:changeme@localhost:5432/volt_tracker")
 
+    # Redis Configuration (for caching and async job queue)
+    REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+    REDIS_CACHE_DB = int(os.environ.get("REDIS_CACHE_DB", 0))  # DB 0 for cache
+    REDIS_QUEUE_DB = int(os.environ.get("REDIS_QUEUE_DB", 1))  # DB 1 for job queue
+
     # Flask
     FLASK_ENV = os.environ.get("FLASK_ENV", "production")
     DEBUG = FLASK_ENV == "development"
@@ -88,6 +93,21 @@ class Config:
     DASHBOARD_USER = os.environ.get("DASHBOARD_USER", "admin")
     DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")  # Required in production
     RATE_LIMIT_ENABLED = os.environ.get("RATE_LIMIT_ENABLED", "true").lower() == "true"
+
+    # WebSocket Authentication - uses DASHBOARD_PASSWORD for auth unless separate token provided
+    WEBSOCKET_AUTH_ENABLED = os.environ.get("WEBSOCKET_AUTH_ENABLED", "true").lower() == "true"
+    # If not set, WebSocket auth will use DASHBOARD_PASSWORD. Set this for separate WebSocket tokens.
+    WEBSOCKET_TOKEN = os.environ.get("WEBSOCKET_TOKEN")
+
+    # API Key Management
+    # Format: <key_id>:<hashed_key> (comma-separated for multiple keys)
+    # Example: "key1:pbkdf2:sha256:...,key2:pbkdf2:sha256:..."
+    API_KEYS = os.environ.get("API_KEYS", "")  # Optional, for advanced API key management
+
+    # Request size limits (prevent DoS via large uploads)
+    MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", 50 * 1024 * 1024))  # 50MB default
+    MAX_CSV_FILE_SIZE = int(os.environ.get("MAX_CSV_FILE_SIZE", 25 * 1024 * 1024))  # 25MB for CSV imports
+    MAX_CSV_ROWS = int(os.environ.get("MAX_CSV_ROWS", 100000))  # Max rows in CSV import
 
     # CORS - WebSocket allowed origins
     # Default allows local development and common private network ranges

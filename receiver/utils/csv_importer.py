@@ -251,6 +251,19 @@ class TorqueCSVImporter:
         for row_num, row in enumerate(reader, start=2):  # Start at 2 (header is row 1)
             stats["total_rows"] += 1
 
+            # Check row count limit to prevent memory exhaustion
+            if stats["total_rows"] > Config.MAX_CSV_ROWS:
+                stats["failure_reason"] = "too_many_rows"
+                error_msg = f"CSV file exceeds maximum row limit of {Config.MAX_CSV_ROWS:,} rows"
+                stats["errors"].append({
+                    "row": row_num,
+                    "field": "row_count",
+                    "value": stats["total_rows"],
+                    "reason": error_msg,
+                    "error_type": "validation"
+                })
+                raise CSVImportError(error_msg, row_number=row_num, field="row_count")
+
             try:
                 record = cls._parse_row(row, column_mapping, session_id)
                 if record and record.get("timestamp"):
