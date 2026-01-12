@@ -9,7 +9,7 @@ import logging
 
 from config import Config
 from database import init_app as init_db
-from flask import Flask
+from flask import Flask, jsonify
 from flask_caching import Cache
 from flask_compress import Compress
 from flask_httpauth import HTTPBasicAuth
@@ -71,6 +71,9 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config.from_object(Config)
 
+# Set request size limits
+app.config['MAX_CONTENT_LENGTH'] = Config.MAX_CONTENT_LENGTH
+
 # Initialize gzip compression (60-80% smaller API responses)
 compress = Compress()
 compress.init_app(app)
@@ -95,6 +98,87 @@ init_cache(app)
 socketio = SocketIO(
     app, cors_allowed_origins=Config.CORS_ALLOWED_ORIGINS, async_mode="gevent", logger=False, engineio_logger=False
 )
+
+
+# ============================================================================
+# WebSocket Authentication
+# ============================================================================
+
+@socketio.on('connect')
+def handle_connect(auth):
+    """
+    Handle WebSocket connection with authentication.
+
+    Clients must provide authentication via one of:
+    - auth dict with 'token' field (preferred)
+    - auth dict with 'password' field (uses DASHBOARD_PASSWORD)
+    - query parameter 'token' in connection URL
+
+    If WEBSOCKET_AUTH_ENABLED is False, allows unauthenticated connections.
+    """
+    import flask
+    from flask_socketio import disconnect
+
+    # Skip auth if disabled (development mode)
+    if not Config.WEBSOCKET_AUTH_ENABLED:
+        logger.debug("WebSocket connection established (auth disabled)")
+        return True
+
+    # Check if auth is required
+    if not Config.DASHBOARD_PASSWORD and not Config.WEBSOCKET_TOKEN:
+        logger.debug("WebSocket connection established (no auth configured)")
+        return True
+
+    # Extract authentication credentials
+    provided_token = None
+    provided_password = None
+
+    # 1. Check auth dict (Socket.IO client's auth parameter)
+    if auth:
+        provided_token = auth.get('token')
+        provided_password = auth.get('password')
+
+    # 2. Check query parameters (fallback for simple clients)
+    if not provided_token and not provided_password:
+        if hasattr(flask.request, 'args'):
+            provided_token = flask.request.args.get('token')
+            provided_password = flask.request.args.get('password')
+
+    # Validate credentials
+    is_authenticated = False
+
+    # Prefer dedicated WebSocket token if configured
+    if Config.WEBSOCKET_TOKEN and provided_token:
+        if provided_token == Config.WEBSOCKET_TOKEN:
+            is_authenticated = True
+            logger.info("WebSocket authenticated with token")
+
+    # Fall back to dashboard password
+    elif Config.DASHBOARD_PASSWORD and provided_password:
+        # Support hashed passwords
+        if Config.DASHBOARD_PASSWORD.startswith("pbkdf2:") or Config.DASHBOARD_PASSWORD.startswith("scrypt:"):
+            if check_password_hash(Config.DASHBOARD_PASSWORD, provided_password):
+                is_authenticated = True
+                logger.info("WebSocket authenticated with dashboard password")
+        else:
+            if provided_password == Config.DASHBOARD_PASSWORD:
+                is_authenticated = True
+                logger.info("WebSocket authenticated with dashboard password")
+
+    # Reject unauthorized connections
+    if not is_authenticated:
+        logger.warning(f"Unauthorized WebSocket connection attempt from {flask.request.remote_addr}")
+        disconnect()
+        return False
+
+    logger.info(f"WebSocket connection established from {flask.request.remote_addr}")
+    return True
+
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle WebSocket disconnection."""
+    logger.debug("WebSocket client disconnected")
 
 # ============================================================================
 # Security: Authentication & Rate Limiting
@@ -138,6 +222,17 @@ def inject_request_id():
     # Check if client provided X-Request-ID header, otherwise generate new one
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     g.request_id = request_id
+
+
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    """Handle requests that exceed MAX_CONTENT_LENGTH."""
+    max_size_mb = Config.MAX_CONTENT_LENGTH / (1024 * 1024)
+    return jsonify({
+        "error": "Request entity too large",
+        "message": f"Request body exceeds maximum allowed size of {max_size_mb:.1f} MB",
+        "max_size_bytes": Config.MAX_CONTENT_LENGTH
+    }), 413
 
 
 @app.after_request

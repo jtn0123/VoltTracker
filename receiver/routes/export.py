@@ -447,9 +447,25 @@ def import_csv():
     try:
         # Read file content as bytes first for hashing
         file_bytes = file.read()
+        file_size = len(file_bytes)
+
+        # Validate file size
+        from config import Config as AppConfig
+        if file_size > AppConfig.MAX_CSV_FILE_SIZE:
+            max_size_mb = AppConfig.MAX_CSV_FILE_SIZE / (1024 * 1024)
+            actual_size_mb = file_size / (1024 * 1024)
+            import_event["failure_reason"] = "file_too_large"
+            _log_import_event()
+            _record_import("failed", "file_too_large",
+                          f"File size ({actual_size_mb:.1f} MB) exceeds maximum ({max_size_mb:.1f} MB)",
+                          filename=file.filename, file_size=file_size)
+            return _build_response("failed", "File too large", "file_too_large",
+                                  f"CSV file must be less than {max_size_mb:.1f} MB. Your file is {actual_size_mb:.1f} MB.",
+                                  http_status=413)
+
         file_hash = get_file_hash(file_bytes)
         import_event["file_hash"] = file_hash
-        import_event["file_size_bytes"] = len(file_bytes)
+        import_event["file_size_bytes"] = file_size
 
         # Check for exact duplicate file (same hash already imported)
         # Include "all_duplicates" failures since that means records already exist
