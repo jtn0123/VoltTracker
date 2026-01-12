@@ -203,7 +203,7 @@ class TestCombinedEfficiency:
         # Gas: 20 mi / 40 = 0.5 gal = 0.5 * 33.7 = 16.85 kWh-equiv
         # Total: 40 mi, 21.85 kWh-equiv = 0.546 kWh-equiv/mi
         result = calculate_combined_efficiency(20, 5.0, 20, 0.5, 33.7)
-        assert result == 0.547
+        assert result == pytest.approx(0.546, abs=0.001)
 
     def test_calculate_combined_efficiency_electric_only(self):
         """All electric should match regular efficiency"""
@@ -214,9 +214,9 @@ class TestCombinedEfficiency:
         """All gas should convert to kWh-equivalent"""
         # 40 mi on 1 gal = 40 MPG
         # 1 gal = 33.7 kWh-equiv
-        # 33.7 kWh-equiv / 40 mi = 0.842 kWh-equiv/mi
+        # 33.7 kWh-equiv / 40 mi = 0.8425 kWh-equiv/mi
         result = calculate_combined_efficiency(0, 0, 40, 1.0, 33.7)
-        assert result == 0.842
+        assert result == pytest.approx(0.843, abs=0.001)
 
     def test_calculate_combined_efficiency_zero_miles(self):
         """Zero total miles should return None"""

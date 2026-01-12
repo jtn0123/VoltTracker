@@ -1,0 +1,4 @@
+# file: /home/user/VoltTracker/receiver/calculations/statistics.py
+# hypothesis_version: 6.150.1
+
+[0.5, 1.5, 100, 'change_percent', 'change_value', 'ci_lower', 'ci_upper', 'direction', 'down', 'iqr', 'lower_bound', 'margin', 'mean', 'neutral', 'q1', 'q3', 'sample_size', 'stable', 'std_dev', 'up', 'upper_bound']

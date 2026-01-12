@@ -1,0 +1,4 @@
+# file: /home/user/VoltTracker/receiver/calculations/energy.py
+# hypothesis_version: 6.150.1
+
+[0.0, 100.0, 3600, '+00:00', 'Z']

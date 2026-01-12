@@ -53,9 +53,9 @@ class TestGasMPG:
         assert result == 44.4
 
     def test_calculate_gas_mpg_efficient(self):
-        """50 miles, 90% -> 80% fuel = 50 MPG"""
+        """50 miles, 90% -> 80% fuel = 55.6 MPG (50mi / 0.9gal)"""
         result = calculate_gas_mpg(1000, 1050, 90.0, 80.0, 9.0)
-        assert result == 50.0
+        assert result == 55.6
 
     def test_calculate_gas_mpg_too_short(self):
         """Trip < 1 mile should return None"""

@@ -379,7 +379,7 @@ def get_seasonal_trends(
             seasonal_averages[season] = {
                 "avg_kwh_per_mile": round(avg, 4),
                 "sample_months": len(valid_values),
-                "efficiency_impact_percent": _calculate_efficiency_impact(avg),
+                "efficiency_impact_percent": calculate_efficiency_impact_percent(avg),
             }
 
     return {

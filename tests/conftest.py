@@ -19,11 +19,23 @@ os.environ["FLASK_ENV"] = "development"  # Avoid SECRET_KEY requirement
 
 from datetime import timedelta  # noqa: E402
 
+# Import models and create test engine BEFORE importing database or app
+# This ensures StaticPool is used so all connections share the same in-memory database
+from models import Base, TelemetryRaw, Trip, get_engine  # noqa: E402
+from sqlalchemy.orm import scoped_session, sessionmaker  # noqa: E402
+
+# Create the test engine with StaticPool
+engine = get_engine(os.environ["DATABASE_URL"])
+Session = scoped_session(sessionmaker(bind=engine))
+
+# Import database module and patch BEFORE app import
+import database  # noqa: E402
+database.engine = engine
+database.SessionLocal = Session
+
+# Now import app (which will use our patched database module)
 from app import app as flask_app  # noqa: E402
 from app import init_cache  # noqa: E402
-from database import SessionLocal as Session  # noqa: E402
-from database import engine  # noqa: E402
-from models import Base, TelemetryRaw, Trip  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
