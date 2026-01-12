@@ -37,8 +37,9 @@ def eager_load_trip_relationships(query: Query) -> Query:
         >>>     # No N+1 query here!
         >>>     transitions = trip.soc_transitions
     """
+    from models import Trip
     return query.options(
-        selectinload('soc_transitions')  # Load in separate query (best for one-to-many)
+        selectinload(Trip.soc_transitions)  # Load in separate query (best for one-to-many)
     )
 
 
@@ -297,11 +298,18 @@ def batch_load_relationships(items: List[Any], relationship_name: str) -> List[A
     # Get the model class from the first item
     model_class = type(items[0])
 
+    # Get the relationship attribute from the model class
+    try:
+        relationship_attr = getattr(model_class, relationship_name)
+    except AttributeError:
+        logger.warning(f"Relationship {relationship_name} not found on {model_class.__name__}")
+        return items
+
     # Re-query with eager loading
     loaded_items = (
         session.query(model_class)
         .filter(model_class.id.in_(ids))
-        .options(selectinload(relationship_name))
+        .options(selectinload(relationship_attr))
         .all()
     )
 
