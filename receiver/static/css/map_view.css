@@ -1,0 +1,583 @@
+/**
+ * Map View Styles
+ * Full-screen GPS track map visualization
+ */
+
+/* Map Header */
+.map-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+    z-index: var(--z-sidebar);
+    backdrop-filter: blur(10px);
+}
+
+.map-header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.map-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.back-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+    font-size: 0.875rem;
+}
+
+.back-button:hover {
+    background: var(--accent);
+}
+
+.map-header h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+/* Map Container */
+#map-container {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-map);
+}
+
+/* Sidebars */
+.filter-sidebar,
+.trip-list-sidebar {
+    position: fixed;
+    top: 60px;
+    bottom: 0;
+    width: 320px;
+    background-color: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    z-index: var(--z-sidebar);
+    display: flex;
+    flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+}
+
+.filter-sidebar {
+    left: 0;
+}
+
+.trip-list-sidebar {
+    right: 0;
+    left: auto;
+    border-right: none;
+    border-left: 1px solid var(--border-color);
+    transform: translateX(100%);
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
+}
+
+.filter-sidebar.open {
+    transform: translateX(0);
+}
+
+.trip-list-sidebar.open {
+    transform: translateX(0);
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-header h2 {
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.btn-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.btn-close:hover {
+    background-color: var(--bg-card);
+}
+
+.sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+/* Filter Groups */
+.filter-group {
+    margin-bottom: 1.5rem;
+}
+
+.filter-group label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.filter-group select,
+.filter-group input[type="number"] {
+    width: 100%;
+    padding: 0.5rem;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.filter-group select:focus,
+.filter-group input:focus {
+    outline: 2px solid var(--accent-light);
+    outline-offset: 2px;
+}
+
+.radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.radio-label:hover {
+    background-color: var(--bg-card);
+}
+
+.radio-label input[type="radio"] {
+    width: 16px;
+    height: 16px;
+}
+
+.radio-label span {
+    font-size: 0.875rem;
+}
+
+.range-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.range-inputs input {
+    flex: 1;
+}
+
+.range-inputs span {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Filter Actions */
+.filter-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.filter-actions button {
+    flex: 1;
+}
+
+/* Filter Stats */
+.filter-stats {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: var(--bg-card);
+    border-radius: 8px;
+}
+
+.filter-stats .stat {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.filter-stats .stat:last-child {
+    margin-bottom: 0;
+}
+
+.stat-label {
+    color: var(--text-secondary);
+}
+
+.stat-value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Trip List */
+.trip-list-controls {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.btn-compare,
+.btn-clear-selection {
+    flex: 1;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.trip-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.trip-card {
+    padding: 1rem;
+    background-color: var(--bg-card);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.trip-card:hover {
+    background-color: var(--accent);
+}
+
+.trip-card.selected {
+    border-color: var(--electric);
+}
+
+.trip-card.highlighted {
+    border-color: var(--accent-light);
+    background-color: var(--accent);
+}
+
+.trip-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 0.5rem;
+}
+
+.trip-card-date {
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.trip-card-checkbox {
+    width: 18px;
+    height: 18px;
+}
+
+.trip-card-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    font-size: 0.75rem;
+}
+
+.trip-stat {
+    color: var(--text-secondary);
+}
+
+.trip-stat-value {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+/* Map Controls */
+.map-controls {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: var(--z-controls);
+}
+
+.map-control-btn {
+    width: 44px;
+    height: 44px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.map-control-btn:hover {
+    background-color: var(--accent);
+    transform: scale(1.05);
+}
+
+.map-control-btn:active {
+    transform: scale(0.95);
+}
+
+/* Buttons */
+.btn-filters,
+.btn-trip-list {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-filters:hover,
+.btn-trip-list:hover {
+    background-color: var(--accent);
+}
+
+.btn-filters.active,
+.btn-trip-list.active {
+    background-color: var(--accent-light);
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-export {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: none;
+}
+
+.btn-primary {
+    background-color: var(--electric);
+    color: var(--bg-primary);
+}
+
+.btn-primary:hover {
+    background-color: var(--success);
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background-color: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    background-color: var(--bg-card);
+}
+
+.btn-export {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-export:hover {
+    background-color: var(--accent);
+}
+
+/* Modal */
+.modal-trip-detail {
+    max-width: 600px;
+}
+
+.trip-detail-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+
+/* Loading */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(26, 26, 46, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.loading-spinner-large {
+    text-align: center;
+}
+
+.loading-spinner-large .spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--electric);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-spinner-large p {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .filter-sidebar,
+    .trip-list-sidebar {
+        width: 280px;
+    }
+
+    .map-header {
+        padding: 0 1rem;
+    }
+
+    .map-header h1 {
+        font-size: 1rem;
+    }
+
+    .back-button {
+        padding: 0.5rem;
+    }
+
+    .back-button span {
+        display: none;
+    }
+
+    .map-controls {
+        bottom: 80px; /* Account for mobile nav bar */
+    }
+}
+
+@media (max-width: 480px) {
+    .filter-sidebar,
+    .trip-list-sidebar {
+        width: 100%;
+        max-width: 320px;
+    }
+
+    .trip-detail-actions {
+        flex-direction: column;
+    }
+
+    .trip-detail-actions .btn-export,
+    .trip-detail-actions .btn-secondary {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Dark Mode Adjustments */
+@media (prefers-color-scheme: light) {
+    .loading-overlay {
+        background-color: rgba(255, 255, 255, 0.9);
+    }
+}
+
+/* Leaflet Customizations */
+.leaflet-container {
+    background-color: var(--bg-primary);
+}
+
+.leaflet-popup-content-wrapper {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 8px;
+}
+
+.leaflet-popup-tip {
+    background-color: var(--bg-secondary);
+}
+
+/* Custom Marker Cluster Colors */
+.marker-cluster-small {
+    background-color: rgba(0, 212, 170, 0.6);
+}
+
+.marker-cluster-small div {
+    background-color: rgba(0, 212, 170, 0.8);
+}
+
+.marker-cluster-medium {
+    background-color: rgba(245, 158, 11, 0.6);
+}
+
+.marker-cluster-medium div {
+    background-color: rgba(245, 158, 11, 0.8);
+}
+
+.marker-cluster-large {
+    background-color: rgba(239, 68, 68, 0.6);
+}
+
+.marker-cluster-large div {
+    background-color: rgba(239, 68, 68, 0.8);
+}
