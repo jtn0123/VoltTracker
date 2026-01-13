@@ -21,7 +21,7 @@ from datetime import timedelta  # noqa: E402
 
 # Import models and create test engine BEFORE importing database or app
 # This ensures StaticPool is used so all connections share the same in-memory database
-from models import Base, TelemetryRaw, Trip, get_engine  # noqa: E402
+from models import Base, MaintenanceRecord, TelemetryRaw, Trip, get_engine  # noqa: E402
 from sqlalchemy.orm import scoped_session, sessionmaker  # noqa: E402
 
 # Create the test engine with StaticPool
@@ -59,6 +59,23 @@ def clear_caches():
 
     # Clean up after test as well
     weather._weather_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def clean_test_tables(app):
+    """Clean database tables that commonly cause test pollution.
+
+    Uses engine.execute to bypass session scoping issues.
+    """
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        try:
+            # Clear tables that commonly cause test isolation issues
+            conn.execute(text("DELETE FROM telemetry_raw"))
+            conn.execute(text("DELETE FROM maintenance_records"))
+        except Exception:
+            pass
+    yield
 
 
 @pytest.fixture

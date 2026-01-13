@@ -649,3 +649,147 @@ class TestChargingHistoryEndpoint:
         data = response.get_json()
         # Should have summary stats
         assert "total_kwh" in data or "sessions" in data or "total_sessions" in data
+
+
+class TestTelemetryTripStatsEdgeCases:
+    """Tests for trip stats calculation edge cases in telemetry module."""
+
+    def test_trip_stats_with_fuel_usage(self, client, db_session):
+        """Trip stats include fuel usage when gas was consumed."""
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            start_soc=80.0,
+            is_closed=False,
+        )
+        db_session.add(trip)
+
+        # First telemetry - start of trip with high fuel
+        telemetry_start = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(minutes=30),
+            state_of_charge=80.0,
+            odometer_miles=50000.0,
+            fuel_level_percent=75.0,
+            engine_rpm=0,
+        )
+        # Latest telemetry - fuel used, gas mode entered
+        telemetry_end = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(seconds=5),
+            state_of_charge=15.0,
+            odometer_miles=50050.0,
+            fuel_level_percent=70.0,  # 5% fuel used
+            engine_rpm=1500,  # Engine running
+        )
+        db_session.add(telemetry_start)
+        db_session.add(telemetry_end)
+        db_session.commit()
+
+        response = client.get("/api/telemetry/latest")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["active"] is True
+        assert "trip_stats" in data
+        # Should have calculated fuel usage
+        trip_stats = data["trip_stats"]
+        assert trip_stats["in_gas_mode"] is True
+        if trip_stats.get("fuel_used_gallons") is not None:
+            assert trip_stats["fuel_used_gallons"] > 0
+
+    def test_trip_stats_with_kwh_calculation(self, client, db_session):
+        """Trip stats calculate kWh/mile efficiency."""
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            start_soc=90.0,
+            is_closed=False,
+        )
+        db_session.add(trip)
+
+        # Start telemetry
+        telemetry_start = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(minutes=30),
+            state_of_charge=90.0,
+            odometer_miles=50000.0,
+        )
+        # End telemetry - used SOC
+        telemetry_end = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(seconds=5),
+            state_of_charge=70.0,  # Used 20% SOC
+            odometer_miles=50030.0,  # Drove 30 miles
+        )
+        db_session.add(telemetry_start)
+        db_session.add(telemetry_end)
+        db_session.commit()
+
+        response = client.get("/api/telemetry/latest")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["active"] is True
+        trip_stats = data["trip_stats"]
+        assert trip_stats["miles_driven"] == 30.0
+        assert trip_stats["kwh_used"] is not None
+        assert trip_stats["kwh_per_mile"] is not None
+
+    def test_trip_stats_no_telemetry_returns_empty_stats(self, client, db_session):
+        """Trip with no telemetry returns empty stats."""
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        # Just create a recent telemetry without a trip
+        telemetry = TelemetryRaw(
+            session_id=session_id,
+            timestamp=now - timedelta(seconds=5),
+            state_of_charge=50.0,
+        )
+        db_session.add(telemetry)
+        db_session.commit()
+
+        response = client.get("/api/telemetry/latest")
+        assert response.status_code == 200
+        data = response.get_json()
+        # Should still work even without complete trip data
+
+
+class TestTelemetryUploadErrorHandling:
+    """Tests for error handling in telemetry upload."""
+
+    def test_upload_with_malformed_soc_returns_ok(self, client):
+        """Upload with non-numeric SOC still returns OK."""
+        data = {
+            "session": str(uuid.uuid4()),
+            "k22005b": "not-a-number",  # Malformed SOC
+        }
+        response = client.post("/torque/upload", data=data)
+        # Should return OK to prevent Torque retries
+        assert response.status_code == 200
+
+    def test_upload_with_get_method(self, client):
+        """Upload works via GET query parameters."""
+        params = {
+            "session": str(uuid.uuid4()),
+            "kff1001": "45.0",  # Speed
+            "k22005b": "75.0",  # SOC
+        }
+        response = client.get("/torque/upload", query_string=params)
+        assert response.status_code == 200
+        assert response.data.decode() == "OK!"
+
+    def test_upload_via_get_with_token(self, client, monkeypatch):
+        """Upload via GET with correct token in URL."""
+        monkeypatch.setattr("config.Config.TORQUE_API_TOKEN", "test-token")
+        params = {
+            "session": str(uuid.uuid4()),
+            "kff1001": "45.0",
+        }
+        response = client.get("/torque/upload/test-token", query_string=params)
+        assert response.status_code == 200

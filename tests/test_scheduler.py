@@ -905,3 +905,122 @@ class TestChargingSessionEdgeCases:
         assert updated.is_complete is True
         # kwh_added should be None since we can't calculate it
         assert updated.kwh_added is None
+
+
+class TestChargingSessionCreation:
+    """Tests for charging session creation in check_charging_sessions()."""
+
+    def test_creates_new_charging_session_when_charger_detected(self, app, db_session):
+        """Creates a new charging session when charger detected and no active session exists."""
+        session_id = uuid.uuid4()
+        now = datetime.utcnow()
+
+        # Add telemetry with AC power (needed by detect_charging_session)
+        for i in range(3):
+            telemetry = TelemetryRaw(
+                session_id=session_id,
+                timestamp=now - timedelta(minutes=i),
+                charger_connected=True,
+                charger_ac_power_kw=3.3,  # L2 charging
+                state_of_charge=50.0 + i,
+                latitude=37.7749,
+                longitude=-122.4194,
+            )
+            db_session.add(telemetry)
+        db_session.commit()
+
+        # Ensure no active session exists
+        active_before = Session().query(ChargingSession).filter(ChargingSession.is_complete.is_(False)).first()
+        assert active_before is None
+
+        check_charging_sessions()
+
+        # Should have created a new session
+        sessions = Session().query(ChargingSession).filter(ChargingSession.is_complete.is_(False)).all()
+        assert len(sessions) >= 1
+
+    def test_updates_active_session_with_new_soc(self, app, db_session):
+        """Updates existing active session with latest SOC data."""
+        session_id = uuid.uuid4()
+        now = datetime.utcnow()
+
+        # Create an active charging session
+        session = ChargingSession(
+            start_time=now - timedelta(hours=1),
+            start_soc=30.0,
+            is_complete=False,
+        )
+        db_session.add(session)
+        db_session.commit()
+        session_db_id = session.id
+
+        # Add telemetry showing charging continuing
+        for i in range(3):
+            telemetry = TelemetryRaw(
+                session_id=session_id,
+                timestamp=now - timedelta(minutes=i),
+                charger_connected=True,
+                charger_ac_power_kw=6.6,  # L2 charging
+                state_of_charge=60.0 + i,
+            )
+            db_session.add(telemetry)
+        db_session.commit()
+
+        check_charging_sessions()
+
+        # Session should be updated with new SOC
+        updated = Session().query(ChargingSession).filter(ChargingSession.id == session_db_id).first()
+        assert updated is not None
+        assert updated.is_complete is False
+        # end_soc should be updated
+        assert updated.end_soc is not None
+
+    def test_handles_duplicate_session_integrity_error(self, app, db_session, mocker):
+        """Handles IntegrityError when duplicate session detected."""
+        from sqlalchemy.exc import IntegrityError
+
+        session_id = uuid.uuid4()
+        now = datetime.utcnow()
+
+        # Add charging telemetry
+        for i in range(3):
+            telemetry = TelemetryRaw(
+                session_id=session_id,
+                timestamp=now - timedelta(minutes=i),
+                charger_connected=True,
+                charger_ac_power_kw=3.3,
+                state_of_charge=50.0,
+            )
+            db_session.add(telemetry)
+        db_session.commit()
+
+        # Mock detect_charging_session to return charging info
+        mock_detect = mocker.patch("services.scheduler.detect_charging_session")
+        mock_detect.return_value = {
+            "is_charging": True,
+            "charge_type": "L2",
+            "start_soc": 30.0,
+            "current_soc": 50.0,
+            "peak_power_kw": 6.6,
+            "avg_power_kw": 5.5,
+        }
+
+        # Mock the db session to raise IntegrityError on commit
+        def mock_db():
+            mock_session = mocker.MagicMock()
+            mock_session.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
+                db_session.query(TelemetryRaw).filter(TelemetryRaw.charger_connected.is_(True)).all()
+            )
+            # First filter for locking returns None
+            mock_session.query.return_value.filter.return_value.with_for_update.return_value.order_by.return_value.first.return_value = None
+            # Second filter returns None (no existing)
+            mock_session.query.return_value.filter.return_value.first.return_value = None
+            # Commit raises IntegrityError
+            mock_session.commit.side_effect = IntegrityError("duplicate", None, None)
+            mock_session.rollback = mocker.MagicMock()
+            return mock_session
+
+        mocker.patch("services.scheduler.get_scheduler_db", mock_db)
+
+        # Should not raise - handles IntegrityError gracefully
+        check_charging_sessions()
