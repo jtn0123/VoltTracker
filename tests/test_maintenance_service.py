@@ -18,20 +18,16 @@ from services.maintenance_service import MAINTENANCE_INTERVALS, calculate_engine
 
 
 class TestCalculateEngineHours:
-    """Tests for calculate_engine_hours function."""
+    """Tests for calculate_engine_hours function.
 
-    @pytest.fixture(autouse=True)
-    def clean_telemetry(self, db_session):
-        """Clear telemetry data before each test for isolation."""
-        from sqlalchemy import text
-        db_session.execute(text("DELETE FROM telemetry_raw"))
-        db_session.commit()
-        yield
+    Note: Tests use since_date filter to isolate from data created by other tests.
+    """
 
     def test_calculates_hours_from_engine_rpm(self, app, db_session):
         """Calculate hours when engine_rpm > 400."""
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
+        since = now - timedelta(hours=2)
 
         # Add telemetry with engine running for 1 hour
         # 12 readings, 5 minutes apart = 1 hour total
@@ -44,7 +40,7 @@ class TestCalculateEngineHours:
             db_session.add(telemetry)
         db_session.commit()
 
-        hours = calculate_engine_hours(db_session)
+        hours = calculate_engine_hours(db_session, since_date=since)
 
         # Should be approximately 1 hour (55 minutes of intervals)
         assert hours > 0.8
@@ -54,6 +50,7 @@ class TestCalculateEngineHours:
         """RPM <= 400 is not counted as engine hours."""
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
+        since = now - timedelta(hours=3)
 
         # Mix of engine on and off
         for i in range(20):
@@ -65,7 +62,7 @@ class TestCalculateEngineHours:
             db_session.add(telemetry)
         db_session.commit()
 
-        hours = calculate_engine_hours(db_session)
+        hours = calculate_engine_hours(db_session, since_date=since)
 
         # Should be approximately 0.75 hours (45 minutes of engine time)
         # First 10 readings have engine on, with 9 intervals between them
@@ -76,6 +73,7 @@ class TestCalculateEngineHours:
         """Intervals > 10 minutes are excluded."""
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
+        since = now - timedelta(hours=3)
 
         # Create readings with large gap
         telemetry1 = TelemetryRaw(
@@ -103,7 +101,7 @@ class TestCalculateEngineHours:
 
         db_session.commit()
 
-        hours = calculate_engine_hours(db_session)
+        hours = calculate_engine_hours(db_session, since_date=since)
 
         # Should only count the 5-minute interval
         assert hours < 0.2
@@ -143,14 +141,17 @@ class TestCalculateEngineHours:
         assert recent_hours > 0.2
 
     def test_no_telemetry_returns_zero(self, app, db_session):
-        """No telemetry returns 0 hours."""
-        hours = calculate_engine_hours(db_session)
+        """No telemetry in date range returns 0 hours."""
+        # Use a future date so no existing data matches
+        future = datetime.now(timezone.utc) + timedelta(days=365)
+        hours = calculate_engine_hours(db_session, since_date=future)
         assert hours == 0.0
 
     def test_handles_null_engine_rpm(self, app, db_session):
         """Null engine_rpm is handled gracefully."""
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
+        since = now - timedelta(hours=1)
 
         for i in range(5):
             telemetry = TelemetryRaw(
@@ -161,7 +162,7 @@ class TestCalculateEngineHours:
             db_session.add(telemetry)
         db_session.commit()
 
-        hours = calculate_engine_hours(db_session)
+        hours = calculate_engine_hours(db_session, since_date=since)
 
         # Should return 0 since no valid engine RPM
         assert hours == 0.0
@@ -170,6 +171,7 @@ class TestCalculateEngineHours:
         """Test 400 RPM threshold boundary."""
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
+        since = now - timedelta(hours=1)
 
         # Exactly 400 RPM - should not count
         for i in range(5):
@@ -191,7 +193,7 @@ class TestCalculateEngineHours:
 
         db_session.commit()
 
-        hours = calculate_engine_hours(db_session)
+        hours = calculate_engine_hours(db_session, since_date=since)
 
         # Should only count the 401 RPM readings
         assert hours > 0
