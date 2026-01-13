@@ -12,6 +12,7 @@ from database import get_db
 from flask import Blueprint, jsonify, request
 from models import ChargingSession, Trip
 from sqlalchemy import desc, func
+from sqlalchemy.exc import IntegrityError, OperationalError
 from utils import utc_now
 
 logger = logging.getLogger(__name__)
@@ -80,8 +81,18 @@ def add_charging_session():
         notes=data.get("notes"),
         is_complete=end_time is not None,
     )
-    db.add(session)
-    db.commit()
+
+    try:
+        db.add(session)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        logger.warning("Failed to add charging session: database constraint violation")
+        return jsonify({"error": "Database constraint violation"}), 409
+    except OperationalError as e:
+        db.rollback()
+        logger.error(f"Database error adding charging session: {e}")
+        return jsonify({"error": "Database error"}), 500
 
     return jsonify(session.to_dict()), 201
 
@@ -172,8 +183,13 @@ def delete_charging_session(session_id):
     if not session:
         return jsonify({"error": "Charging session not found"}), 404
 
-    db.delete(session)
-    db.commit()
+    try:
+        db.delete(session)
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        logger.error(f"Database error deleting charging session {session_id}: {e}")
+        return jsonify({"error": "Database error"}), 500
 
     logger.info(f"Deleted charging session {session_id}")
     return jsonify({"message": f"Charging session {session_id} deleted successfully"})
@@ -216,7 +232,16 @@ def update_charging_session(session_id):
             else:
                 setattr(session, field, data[field])
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        logger.warning(f"Failed to update charging session {session_id}: database constraint violation")
+        return jsonify({"error": "Database constraint violation"}), 409
+    except OperationalError as e:
+        db.rollback()
+        logger.error(f"Database error updating charging session {session_id}: {e}")
+        return jsonify({"error": "Database error"}), 500
 
     logger.info(f"Updated charging session {session_id}: {data}")
     return jsonify(session.to_dict())
