@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from config import Config
-from receiver.calculations import calculate_efficiency_impact_percent, BASELINE_KWH_PER_MILE
+from calculations import calculate_efficiency_impact_percent, BASELINE_KWH_PER_MILE
 from sqlalchemy import and_, case, extract, func, literal_column
 from sqlalchemy.orm import Session
 
