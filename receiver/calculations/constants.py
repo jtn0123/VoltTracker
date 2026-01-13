@@ -5,7 +5,7 @@ Centralized location for all mathematical and physical constants used in calcula
 All values should be imported from Config where possible to maintain single source of truth.
 """
 
-from receiver.config import Config
+from config import Config
 
 # Battery Constants
 BATTERY_CAPACITY_KWH = Config.BATTERY_CAPACITY_KWH  # Total usable battery capacity

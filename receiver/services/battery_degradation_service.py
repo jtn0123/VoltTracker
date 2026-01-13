@@ -8,7 +8,7 @@ import logging
 from typing import Dict, List, Tuple
 
 from models import BatteryHealthReading, Trip
-from receiver.calculations import (
+from calculations import (
     capacity_kwh_to_percent,
     calculate_degradation_rate_per_10k_miles,
     is_degradation_rate_normal,
