@@ -95,8 +95,11 @@ def init_cache(app):
 init_cache(app)
 
 # Initialize SocketIO for real-time updates
+# Use 'threading' async_mode in testing to avoid gevent dependency
+import os
+_async_mode = "threading" if os.environ.get("FLASK_TESTING") else "gevent"
 socketio = SocketIO(
-    app, cors_allowed_origins=Config.CORS_ALLOWED_ORIGINS, async_mode="gevent", logger=False, engineio_logger=False
+    app, cors_allowed_origins=Config.CORS_ALLOWED_ORIGINS, async_mode=_async_mode, logger=False, engineio_logger=False
 )
 
 
