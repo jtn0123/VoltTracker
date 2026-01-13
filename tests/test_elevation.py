@@ -173,6 +173,77 @@ class TestElevationUtility:
         # When API fails, returns None for each coordinate
         assert result == [None, None]
 
+    @patch("utils.elevation.requests.get")
+    def test_get_elevation_for_points_timeout_error(self, mock_get):
+        """Test batch fetch handles Timeout exception."""
+        import requests
+
+        mock_get.side_effect = requests.exceptions.Timeout("Request timed out")
+
+        coords = [(37.0, -122.0)]
+        result = get_elevation_for_points(coords)
+
+        # When API times out, returns None for each coordinate
+        assert result == [None]
+
+    @patch("utils.elevation.requests.get")
+    def test_get_elevation_for_points_connection_error(self, mock_get):
+        """Test batch fetch handles ConnectionError."""
+        import requests
+
+        mock_get.side_effect = requests.exceptions.ConnectionError("Connection failed")
+
+        coords = [(37.0, -122.0)]
+        result = get_elevation_for_points(coords)
+
+        # When connection fails, returns None for each coordinate
+        assert result == [None]
+
+    @patch("utils.elevation.requests.get")
+    def test_get_elevation_for_points_http_client_error(self, mock_get):
+        """Test batch fetch handles 4xx HTTP errors."""
+        import requests
+
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        error = requests.exceptions.HTTPError("Bad request")
+        error.response = mock_response
+        mock_get.side_effect = error
+
+        coords = [(37.0, -122.0)]
+        result = get_elevation_for_points(coords)
+
+        # Client errors return None without retry
+        assert result == [None]
+
+    @patch("utils.elevation.requests.get")
+    def test_get_elevation_for_points_single_value_response(self, mock_get):
+        """Test batch fetch handles single value instead of list."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"elevation": 150.0}  # Single value, not list
+        mock_get.return_value = mock_response
+
+        coords = [(37.0, -122.0)]
+        result = get_elevation_for_points(coords)
+
+        # Should wrap single value in list
+        assert result == [150.0]
+
+    @patch("utils.elevation.requests.get")
+    def test_get_elevation_for_points_unexpected_format(self, mock_get):
+        """Test batch fetch handles unexpected response format."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"elevation": "invalid"}  # Unexpected string
+        mock_get.return_value = mock_response
+
+        coords = [(37.0, -122.0)]
+        result = get_elevation_for_points(coords)
+
+        # Should return None for unexpected format
+        assert result == [None]
+
 
 class TestElevationAnalyticsService:
     """Tests for elevation analytics service."""
