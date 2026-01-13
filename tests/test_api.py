@@ -38,6 +38,140 @@ class TestTorqueUpload:
         assert response.status_code == 200
         assert response.data.decode() == "OK!"
 
+    def test_upload_via_get_request(self, client, sample_torque_data):
+        """Test that upload works via GET query params."""
+        # Convert sample data to query string
+        response = client.get("/torque/upload", query_string=sample_torque_data)
+
+        assert response.status_code == 200
+        assert response.data.decode() == "OK!"
+
+    def test_upload_with_token(self, client, sample_torque_data, monkeypatch):
+        """Test upload with token in URL."""
+        # Test with correct token
+        monkeypatch.setattr("config.Config.TORQUE_API_TOKEN", "test-token")
+        response = client.post("/torque/upload/test-token", data=sample_torque_data)
+
+        assert response.status_code == 200
+        assert response.data.decode() == "OK!"
+
+    def test_upload_with_invalid_token(self, client, sample_torque_data, monkeypatch):
+        """Test upload with invalid token returns 401."""
+        monkeypatch.setattr("config.Config.TORQUE_API_TOKEN", "correct-token")
+        response = client.post("/torque/upload/wrong-token", data=sample_torque_data)
+
+        assert response.status_code == 401
+
+    def test_upload_malformed_data_returns_ok(self, client):
+        """Test upload with malformed data still returns OK (to avoid Torque retries)."""
+        data = {
+            "session": "test-session",
+            "kff1001": "not-a-number",  # Invalid speed
+            "kff1005": "abc",  # Invalid RPM
+        }
+        response = client.post("/torque/upload", data=data)
+
+        # Should still return OK to avoid Torque retries
+        assert response.status_code == 200
+        assert response.data.decode() == "OK!"
+
+    def test_upload_creates_trip_with_start_values(self, client, sample_torque_data, db_session):
+        """Test that upload creates trip and sets start values."""
+        from models import Trip
+
+        response = client.post("/torque/upload", data=sample_torque_data)
+        assert response.status_code == 200
+
+        # Verify trip was created with start values
+        trip = db_session.query(Trip).first()
+        assert trip is not None
+        assert trip.start_soc is not None
+        assert trip.start_odometer is not None
+
+    def test_upload_updates_null_start_values(self, client, sample_torque_data, db_session):
+        """Test that upload updates trip start values if they were null initially."""
+        import uuid
+        from datetime import datetime, timezone
+        from models import Trip
+
+        # Create a trip without start values (but with required start_time)
+        session_id = uuid.UUID(sample_torque_data["session"])
+        trip = Trip(
+            session_id=session_id,
+            start_time=datetime.now(timezone.utc),
+            start_soc=None,
+            start_odometer=None,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        # Upload telemetry - should update start values
+        response = client.post("/torque/upload", data=sample_torque_data)
+        assert response.status_code == 200
+
+        # Verify start values were updated (re-query to get updated values)
+        from models import Trip
+        updated_trip = db_session.query(Trip).filter(Trip.session_id == session_id).first()
+        assert updated_trip is not None
+        assert updated_trip.start_soc is not None
+        assert updated_trip.start_odometer is not None
+
+    def test_upload_exception_returns_ok(self, client, monkeypatch):
+        """Test that upload returns OK even on database errors to avoid Torque retries."""
+        from unittest.mock import MagicMock, patch
+
+        # Mock get_db to raise an exception
+        def mock_get_db():
+            raise Exception("Database connection error")
+
+        with patch("routes.telemetry.get_db", mock_get_db):
+            response = client.post("/torque/upload", data={"session": "test-123"})
+
+            # Should still return OK to avoid Torque retries
+            assert response.status_code == 200
+            assert response.data.decode() == "OK!"
+
+    def test_upload_sqlalchemy_exception_returns_ok(self, client, monkeypatch):
+        """Test that SQLAlchemy errors are handled gracefully."""
+        from unittest.mock import MagicMock, patch
+
+        # Create a mock exception that looks like SQLAlchemy
+        class MockSQLAlchemyError(Exception):
+            __module__ = "sqlalchemy.exc"
+
+        mock_db = MagicMock()
+        mock_db.query.side_effect = MockSQLAlchemyError("Connection failed")
+
+        with patch("routes.telemetry.get_db", return_value=mock_db):
+            response = client.post("/torque/upload", data={"session": "test-123"})
+
+            # Should still return OK
+            assert response.status_code == 200
+            assert response.data.decode() == "OK!"
+
+    def test_upload_race_condition_handled(self, client, db_session, sample_torque_data):
+        """Test that race condition in trip creation is handled gracefully."""
+        import uuid
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock, patch
+        from models import Trip
+
+        # Pre-create the trip to simulate race condition
+        session_id = uuid.UUID(sample_torque_data["session"])
+        trip = Trip(
+            session_id=session_id,
+            start_time=datetime.now(timezone.utc),
+            start_soc=50.0,
+            start_odometer=10000.0,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        # Upload should work despite trip already existing
+        response = client.post("/torque/upload", data=sample_torque_data)
+        assert response.status_code == 200
+        assert response.data.decode() == "OK!"
+
 
 class TestStatusEndpoint:
     """Tests for /api/status endpoint."""
@@ -1568,3 +1702,55 @@ class TestEfficiencyWithData:
         assert response.status_code == 200
         data = json.loads(response.data)
         assert "ev_percentage" in data or "electric_ratio" in data or "total_electric_miles" in data
+
+
+class TestClearCacheEndpoint:
+    """Tests for /clear-cache utility endpoint."""
+
+    def test_clear_cache_returns_html(self, client):
+        """Clear cache endpoint returns HTML page."""
+        response = client.get("/clear-cache")
+
+        assert response.status_code == 200
+        assert "text/html" in response.content_type
+
+    def test_clear_cache_has_clear_button(self, client):
+        """Clear cache page has a clear button."""
+        response = client.get("/clear-cache")
+        html = response.data.decode()
+
+        assert "Clear Cache" in html or "clearBtn" in html
+
+    def test_clear_cache_has_service_worker_script(self, client):
+        """Clear cache page has service worker unregistration script."""
+        response = client.get("/clear-cache")
+        html = response.data.decode()
+
+        assert "serviceWorker" in html
+
+
+class TestReadinessEndpoint:
+    """Tests for readiness/liveness probes."""
+
+    def test_health_endpoint_returns_healthy(self, client):
+        """Health endpoint returns healthy status."""
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data.get("status") == "healthy"
+        assert data.get("service") == "volttracker"
+
+    def test_ready_endpoint_returns_status(self, client):
+        """Ready endpoint returns status."""
+        response = client.get("/ready")
+
+        # May return 200 (ready) or 503 (not ready)
+        assert response.status_code in (200, 503)
+
+    def test_readiness_endpoint_returns_status(self, client):
+        """Readiness endpoint (alternate path) returns status."""
+        response = client.get("/readiness")
+
+        # May return 200 (ready) or 503 (not ready)
+        assert response.status_code in (200, 503)

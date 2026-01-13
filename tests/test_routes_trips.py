@@ -617,3 +617,209 @@ class TestCompareTrips:
 
         # Comparing single trip should fail or return minimal comparison
         assert response.status_code in [200, 400]
+
+    def test_compare_trips_empty_ids_list(self, client):
+        """Test comparing trips with empty trip_ids list."""
+        data = {"trip_ids": []}
+
+        response = client.post(
+            "/api/trips/compare",
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        result = json.loads(response.data)
+        assert "error" in result
+
+
+# ============================================================================
+# Filter Parameter Validation Tests
+# ============================================================================
+
+
+class TestTripsFilterValidation:
+    """Tests for invalid filter parameter handling."""
+
+    def test_invalid_min_temp_filter(self, client, sample_trips):
+        """Test that invalid min_temp is gracefully handled."""
+        response = client.get("/api/trips?min_temp=not_a_number")
+        assert response.status_code == 200
+
+    def test_invalid_max_temp_filter(self, client, sample_trips):
+        """Test that invalid max_temp is gracefully handled."""
+        response = client.get("/api/trips?max_temp=invalid")
+        assert response.status_code == 200
+
+    def test_invalid_min_efficiency_filter(self, client, sample_trips):
+        """Test that invalid min_efficiency is gracefully handled."""
+        response = client.get("/api/trips?min_efficiency=abc")
+        assert response.status_code == 200
+
+    def test_invalid_max_efficiency_filter(self, client, sample_trips):
+        """Test that invalid max_efficiency is gracefully handled."""
+        response = client.get("/api/trips?max_efficiency=xyz")
+        assert response.status_code == 200
+
+    def test_invalid_min_mpg_filter(self, client, sample_trips):
+        """Test that invalid min_mpg is gracefully handled."""
+        response = client.get("/api/trips?min_mpg=bad")
+        assert response.status_code == 200
+
+    def test_invalid_min_distance_filter(self, client, sample_trips):
+        """Test that invalid min_distance is gracefully handled."""
+        response = client.get("/api/trips?min_distance=invalid")
+        assert response.status_code == 200
+
+    def test_invalid_max_distance_filter(self, client, sample_trips):
+        """Test that invalid max_distance is gracefully handled."""
+        response = client.get("/api/trips?max_distance=xyz")
+        assert response.status_code == 200
+
+    def test_invalid_min_elevation_filter(self, client, sample_trips):
+        """Test that invalid min_elevation is gracefully handled."""
+        response = client.get("/api/trips?min_elevation=not_number")
+        assert response.status_code == 200
+
+    def test_invalid_max_elevation_filter(self, client, sample_trips):
+        """Test that invalid max_elevation is gracefully handled."""
+        response = client.get("/api/trips?max_elevation=bad_value")
+        assert response.status_code == 200
+
+
+# ============================================================================
+# Sorting Tests
+# ============================================================================
+
+
+class TestTripsSorting:
+    """Tests for trip sorting functionality."""
+
+    def test_sort_by_distance_asc(self, client, sample_trips):
+        """Test sorting by distance ascending."""
+        response = client.get("/api/trips?sort_by=distance_miles&sort_order=asc")
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        trips = data.get("trips", data)
+        if len(trips) > 1:
+            for i in range(len(trips) - 1):
+                if trips[i]["distance_miles"] and trips[i+1]["distance_miles"]:
+                    assert trips[i]["distance_miles"] <= trips[i+1]["distance_miles"]
+
+    def test_sort_by_invalid_field_uses_default(self, client, sample_trips):
+        """Test that invalid sort_by uses default ordering."""
+        response = client.get("/api/trips?sort_by=invalid_field")
+
+        assert response.status_code == 200
+        # Should default to start_time desc
+
+    def test_sort_by_kwh_per_mile(self, client, sample_trips):
+        """Test sorting by efficiency."""
+        response = client.get("/api/trips?sort_by=kwh_per_mile&sort_order=asc")
+
+        assert response.status_code == 200
+
+
+# ============================================================================
+# Efficiency Summary with Fuel Events
+# ============================================================================
+
+
+class TestEfficiencySummaryWithFuel:
+    """Tests for efficiency summary with fuel event data."""
+
+    def test_efficiency_summary_with_fuel_event(self, client, sample_trips, db_session):
+        """Test efficiency summary includes current tank MPG when fuel event exists."""
+        from models import FuelEvent
+
+        now = datetime.now(timezone.utc)
+
+        # Add a fuel event before the trips
+        fuel_event = FuelEvent(
+            timestamp=now - timedelta(days=5),
+            odometer_miles=49990.0,
+            gallons_added=8.0,
+            fuel_level_before=25.0,
+            fuel_level_after=90.0,
+        )
+        db_session.add(fuel_event)
+        db_session.commit()
+
+        response = client.get("/api/efficiency/summary")
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # Should include current tank metrics
+        assert "current_tank_mpg" in data
+        assert "current_tank_miles" in data
+
+
+# ============================================================================
+# SOC Analysis with Trend
+# ============================================================================
+
+
+class TestSocAnalysisTrend:
+    """Tests for SOC analysis with trend calculation."""
+
+    def test_soc_analysis_trend(self, client, db_session):
+        """Test SOC analysis calculates trend when enough data exists."""
+        from models import SocTransition, Trip
+        import uuid
+
+        now = datetime.now(timezone.utc)
+
+        # Create a trip first
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=now - timedelta(days=30),
+            end_time=now - timedelta(days=30, hours=-1),
+            start_odometer=40000.0,
+            end_odometer=40030.0,
+            distance_miles=30.0,
+            gas_mode_entered=True,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Add 25 SOC transitions for trend analysis (need >= 20)
+        for i in range(25):
+            transition = SocTransition(
+                trip_id=trip.id,
+                timestamp=now - timedelta(days=25 - i),
+                soc_at_transition=18.0 + (i * 0.2),  # Gradually increasing
+                ambient_temp_f=70.0,
+                odometer_miles=40000.0 + i * 10,
+            )
+            db_session.add(transition)
+
+        db_session.commit()
+
+        response = client.get("/api/soc/analysis")
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # Should have trend data
+        assert "trend" in data
+        if data["trend"]:
+            assert "early_avg" in data["trend"]
+            assert "recent_avg" in data["trend"]
+            assert "direction" in data["trend"]
+
+
+# ============================================================================
+# MPG Trend Invalid Days Parameter
+# ============================================================================
+
+
+class TestMpgTrendValidation:
+    """Tests for MPG trend parameter validation."""
+
+    def test_mpg_trend_invalid_days(self, client):
+        """Test MPG trend handles invalid days parameter."""
+        response = client.get("/api/mpg/trend?days=invalid")
+
+        assert response.status_code == 200
+        # Should use default days value

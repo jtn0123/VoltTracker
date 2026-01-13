@@ -394,3 +394,85 @@ class TestUpdateChargingSession:
 
         assert session.charging_curve is not None
         assert len(session.charging_curve) == 1
+
+
+class TestChargingCurveMaxSize:
+    """Tests for charging curve size limit handling."""
+
+    def test_charging_curve_respects_max_size(self, app, db_session, monkeypatch):
+        """Charging curve should respect MAX_CHARGING_CURVE_POINTS."""
+        # Set a small max for testing
+        monkeypatch.setattr("config.Config.MAX_CHARGING_CURVE_POINTS", 3)
+
+        session = ChargingSession(
+            start_time=datetime.now(timezone.utc) - timedelta(hours=1),
+            start_soc=25.0,
+            is_complete=False,
+            charging_curve=[],
+        )
+        db_session.add(session)
+        db_session.flush()
+
+        # Add multiple telemetry points
+        for i in range(5):
+            telemetry = TelemetryRaw(
+                session_id=uuid.uuid4(),
+                timestamp=datetime.now(timezone.utc) + timedelta(minutes=i),
+                state_of_charge=30.0 + i * 10,
+                charger_power_kw=6.6,
+            )
+            db_session.add(telemetry)
+            db_session.flush()
+            update_charging_session(session, telemetry)
+
+        # Should have at most max + 1 (allows one more to indicate truncation)
+        assert len(session.charging_curve) <= 4  # MAX + 1
+
+
+class TestFinalizingExceptionHandling:
+    """Tests for exception handling in finalize_charging_session."""
+
+    def test_handles_integrity_error(self, app, db_session):
+        """IntegrityError during finalization is handled and re-raised."""
+        from unittest.mock import patch
+        from sqlalchemy.exc import IntegrityError
+
+        session = ChargingSession(
+            start_time=datetime.now(timezone.utc) - timedelta(hours=1),
+            start_soc=25.0,
+            end_soc=80.0,
+            is_complete=False,
+        )
+        db_session.add(session)
+        db_session.flush()
+
+        with patch.object(db_session, "commit") as mock_commit:
+            mock_commit.side_effect = IntegrityError("INSERT", {}, Exception())
+
+            try:
+                detect_and_finalize_charging_session(db_session, session, None)
+                assert False, "Should have raised IntegrityError"
+            except IntegrityError:
+                pass  # Expected
+
+    def test_handles_generic_exception(self, app, db_session):
+        """Generic exception during finalization is handled and re-raised."""
+        from unittest.mock import patch
+
+        session = ChargingSession(
+            start_time=datetime.now(timezone.utc) - timedelta(hours=1),
+            start_soc=25.0,
+            end_soc=80.0,
+            is_complete=False,
+        )
+        db_session.add(session)
+        db_session.flush()
+
+        with patch.object(db_session, "commit") as mock_commit:
+            mock_commit.side_effect = Exception("Test error")
+
+            try:
+                detect_and_finalize_charging_session(db_session, session, None)
+                assert False, "Should have raised Exception"
+            except Exception as e:
+                assert "Test error" in str(e)

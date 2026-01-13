@@ -12,12 +12,21 @@ Tests the Volt maintenance tracking including:
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from models import MaintenanceRecord, TelemetryRaw
 from services.maintenance_service import MAINTENANCE_INTERVALS, calculate_engine_hours, get_maintenance_summary
 
 
 class TestCalculateEngineHours:
     """Tests for calculate_engine_hours function."""
+
+    @pytest.fixture(autouse=True)
+    def clean_telemetry(self, db_session):
+        """Clear telemetry data before each test for isolation."""
+        from sqlalchemy import text
+        db_session.execute(text("DELETE FROM telemetry_raw"))
+        db_session.commit()
+        yield
 
     def test_calculates_hours_from_engine_rpm(self, app, db_session):
         """Calculate hours when engine_rpm > 400."""

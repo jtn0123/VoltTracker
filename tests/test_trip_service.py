@@ -462,3 +462,455 @@ class TestZeroSOCEdgeCases:
 
         # The function should complete without error - that's the main assertion
         # Gas detection depends on SOC transition, not just low SOC value
+
+
+class TestGasModeEdgeCases:
+    """Tests for gas mode edge cases."""
+
+    def test_gas_mode_fallback_when_odometer_missing(self, app, db_session):
+        """Gas mode calculation uses distance_miles when odometer is missing."""
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            start_odometer=50000.0,
+            distance_miles=30.0,  # Distance known
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Telemetry with SOC transition but no odometer
+        telemetry = []
+        points = []
+        for i in range(5):
+            soc = 20.0 - i * 5 if i < 3 else 0.0  # Drops below threshold
+            t = TelemetryRaw(
+                session_id=session_id,
+                timestamp=now - timedelta(minutes=(5 - i) * 10),
+                odometer_miles=None,  # No odometer data
+                state_of_charge=soc,
+                engine_rpm=1200 if soc < 10 else 0,
+                fuel_level_percent=80.0 - i,
+            )
+            telemetry.append(t)
+            points.append(t.to_dict())
+            db_session.add(t)
+        db_session.flush()
+
+        process_gas_mode(db_session, trip, telemetry, points)
+
+        # Should use fallback (distance_miles) for gas_miles
+        if trip.gas_mode_entered:
+            assert trip.gas_miles is not None
+
+    def test_refuel_detection_during_trip(self, app, db_session):
+        """Detects refuel when fuel level increases significantly during trip."""
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            start_odometer=50000.0,
+            end_odometer=50030.0,
+            distance_miles=30.0,
+            gas_mode_entered=True,
+            fuel_level_at_gas_entry=30.0,  # Started with 30%
+            fuel_level_at_end=80.0,  # Ended with 80% - refueled!
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Simple telemetry with gas mode
+        telemetry = []
+        points = []
+        for i in range(3):
+            t = TelemetryRaw(
+                session_id=session_id,
+                timestamp=now - timedelta(minutes=(3 - i) * 20),
+                odometer_miles=50000.0 + i * 10,
+                state_of_charge=5.0,
+                engine_rpm=1200,
+                fuel_level_percent=30.0 + (i * 25),  # Fuel increases
+            )
+            telemetry.append(t)
+            points.append(t.to_dict())
+            db_session.add(t)
+        db_session.flush()
+
+        # This should detect the refuel and handle it gracefully
+        process_gas_mode(db_session, trip, telemetry, points)
+
+        # Fuel used should not be negative
+        if trip.fuel_used_gallons is not None:
+            assert trip.fuel_used_gallons >= 0
+
+
+class TestWeatherFeatureFlag:
+    """Tests for weather feature flag behavior."""
+
+    def test_weather_skipped_when_feature_disabled(self, app, db_session, monkeypatch):
+        """Weather is skipped when FEATURE_WEATHER_INTEGRATION is False."""
+        from services.trip_service import finalize_trip
+
+        monkeypatch.setattr("config.Config.FEATURE_WEATHER_INTEGRATION", False)
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            start_odometer=50000.0,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Add some telemetry
+        for i in range(3):
+            t = TelemetryRaw(
+                session_id=session_id,
+                timestamp=now - timedelta(minutes=(3 - i) * 20),
+                odometer_miles=50000.0 + i * 10,
+                state_of_charge=80.0 - i * 5,
+                latitude=37.0 + i * 0.01,
+                longitude=-122.0 + i * 0.01,
+            )
+            db_session.add(t)
+        db_session.flush()
+
+        finalize_trip(db_session, trip)
+
+        # Weather should not be populated
+        assert trip.weather_temp_f is None
+
+    def test_elevation_skipped_when_feature_disabled(self, app, db_session, monkeypatch):
+        """Elevation is skipped when FEATURE_ELEVATION_TRACKING is False."""
+        from services.trip_service import finalize_trip
+
+        monkeypatch.setattr("config.Config.FEATURE_ELEVATION_TRACKING", False)
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            start_odometer=50000.0,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Add some telemetry
+        for i in range(3):
+            t = TelemetryRaw(
+                session_id=session_id,
+                timestamp=now - timedelta(minutes=(3 - i) * 20),
+                odometer_miles=50000.0 + i * 10,
+                state_of_charge=80.0 - i * 5,
+                latitude=37.0 + i * 0.01,
+                longitude=-122.0 + i * 0.01,
+            )
+            db_session.add(t)
+        db_session.flush()
+
+        finalize_trip(db_session, trip)
+
+        # Elevation should not be populated
+        assert trip.elevation_gain_m is None
+
+
+class TestFinalizeExceptionHandling:
+    """Tests for exception handling in finalize_trip."""
+
+    def test_finalize_trip_calculation_error_is_raised(self, app, db_session, monkeypatch):
+        """finalize_trip raises exceptions for calculation errors."""
+        from services.trip_service import finalize_trip
+        from unittest.mock import patch
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            start_odometer=50000.0,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Add telemetry so the function doesn't return early
+        for i in range(3):
+            t = TelemetryRaw(
+                session_id=session_id,
+                timestamp=now - timedelta(minutes=(3 - i) * 20),
+                odometer_miles=50000.0 + i * 10,
+                state_of_charge=80.0 - i * 5,
+            )
+            db_session.add(t)
+        db_session.flush()
+
+        # Mock calculate_trip_basics to raise an error
+        with patch("services.trip_service.calculate_trip_basics") as mock_calc:
+            mock_calc.side_effect = ValueError("Test calculation error")
+
+            try:
+                finalize_trip(db_session, trip)
+                assert False, "Should have raised an exception"
+            except ValueError as e:
+                assert "Test calculation error" in str(e)
+
+    def test_finalize_trip_sqlalchemy_error_is_raised(self, app, db_session, monkeypatch):
+        """finalize_trip raises exceptions for SQLAlchemy errors."""
+        from services.trip_service import finalize_trip
+        from unittest.mock import patch, MagicMock
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            start_odometer=50000.0,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Add telemetry so the function doesn't return early
+        for i in range(3):
+            t = TelemetryRaw(
+                session_id=session_id,
+                timestamp=now - timedelta(minutes=(3 - i) * 20),
+                odometer_miles=50000.0 + i * 10,
+                state_of_charge=80.0 - i * 5,
+            )
+            db_session.add(t)
+        db_session.flush()
+
+        # Create a mock SQLAlchemy-like error
+        class MockSQLAlchemyError(Exception):
+            __module__ = "sqlalchemy.exc"
+
+        # Mock to raise SQLAlchemy-like error
+        with patch("services.trip_service.calculate_trip_basics") as mock_calc:
+            mock_calc.side_effect = MockSQLAlchemyError("Database error")
+
+            try:
+                finalize_trip(db_session, trip)
+                assert False, "Should have raised an exception"
+            except MockSQLAlchemyError:
+                pass  # Expected
+
+
+class TestExtremeWeatherDetection:
+    """Tests for extreme weather flag detection."""
+
+    def test_freezing_temperature_flagged_as_extreme(self, app, db_session):
+        """Freezing temperatures are flagged as extreme weather."""
+        from services.trip_service import fetch_trip_weather
+        from unittest.mock import patch
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            end_time=now,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Mock weather API to return freezing temp
+        mock_weather = {"temperature_f": 25.0, "conditions": "Clear", "wind_speed_mph": 5.0}
+        with patch("services.trip_service.get_weather_for_location", return_value=mock_weather):
+            points = [{"timestamp": now.isoformat(), "latitude": 37.0, "longitude": -122.0}]
+            fetch_trip_weather(trip, points, db_session=db_session)
+
+        # Should be flagged as extreme (freezing)
+        assert trip.extreme_weather is True
+        assert trip.weather_temp_f < 32
+
+    def test_high_temperature_flagged_as_extreme(self, app, db_session):
+        """High temperatures are flagged as extreme weather."""
+        from services.trip_service import fetch_trip_weather
+        from unittest.mock import patch
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            end_time=now,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Mock weather API to return hot temp
+        mock_weather = {"temperature_f": 100.0, "conditions": "Clear", "wind_speed_mph": 5.0}
+        with patch("services.trip_service.get_weather_for_location", return_value=mock_weather):
+            points = [{"timestamp": now.isoformat(), "latitude": 37.0, "longitude": -122.0}]
+            fetch_trip_weather(trip, points, db_session=db_session)
+
+        # Should be flagged as extreme (hot)
+        assert trip.extreme_weather is True
+        assert trip.weather_temp_f > 95
+
+    def test_heavy_rain_flagged_as_extreme(self, app, db_session):
+        """Heavy precipitation is flagged as extreme weather."""
+        from services.trip_service import fetch_trip_weather
+        from unittest.mock import patch
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            end_time=now,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Mock weather API to return heavy rain
+        mock_weather = {"temperature_f": 60.0, "conditions": "Heavy Rain", "wind_speed_mph": 5.0, "precipitation_in": 0.5}
+        with patch("services.trip_service.get_weather_for_location", return_value=mock_weather):
+            points = [{"timestamp": now.isoformat(), "latitude": 37.0, "longitude": -122.0}]
+            fetch_trip_weather(trip, points, db_session=db_session)
+
+        # Should be flagged as extreme (precipitation)
+        assert trip.extreme_weather is True
+
+    def test_strong_wind_flagged_as_extreme(self, app, db_session):
+        """Strong wind is flagged as extreme weather."""
+        from services.trip_service import fetch_trip_weather
+        from unittest.mock import patch
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            end_time=now,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Mock weather API to return strong wind
+        mock_weather = {"temperature_f": 60.0, "conditions": "Clear", "wind_speed_mph": 30.0}
+        with patch("services.trip_service.get_weather_for_location", return_value=mock_weather):
+            points = [{"timestamp": now.isoformat(), "latitude": 37.0, "longitude": -122.0}]
+            fetch_trip_weather(trip, points, db_session=db_session)
+
+        # Should be flagged as extreme (wind)
+        assert trip.extreme_weather is True
+
+
+class TestWeatherExceptionHandling:
+    """Tests for exception handling in weather fetching."""
+
+    def test_requests_exception_handled(self, app, db_session):
+        """RequestException during weather fetch is handled gracefully."""
+        from services.trip_service import fetch_trip_weather
+        from unittest.mock import patch
+        import requests
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            end_time=now,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Mock weather API to raise RequestException
+        with patch("services.trip_service.get_weather_for_location") as mock_weather:
+            mock_weather.side_effect = requests.RequestException("Connection failed")
+            points = [{"timestamp": now.isoformat(), "latitude": 37.0, "longitude": -122.0}]
+            fetch_trip_weather(trip, points, db_session=db_session)
+
+        # Should not crash - weather data should be None
+        assert trip.weather_temp_f is None
+
+    def test_value_error_in_weather_handled(self, app, db_session):
+        """ValueError during weather parsing is handled gracefully."""
+        from services.trip_service import fetch_trip_weather
+        from unittest.mock import patch
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+            end_time=now,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Mock to raise ValueError (during parsing)
+        with patch("services.trip_service.get_weather_for_location") as mock_weather:
+            mock_weather.side_effect = ValueError("Invalid data format")
+            points = [{"timestamp": now.isoformat(), "latitude": 37.0, "longitude": -122.0}]
+            fetch_trip_weather(trip, points, db_session=db_session)
+
+        # Should not crash
+        assert trip.weather_temp_f is None
+
+
+class TestElevationExceptionHandling:
+    """Tests for exception handling in elevation fetching."""
+
+    def test_elevation_api_returns_no_data(self, app, db_session):
+        """Handles case where elevation API returns no data."""
+        from services.trip_service import fetch_trip_elevation
+        from unittest.mock import patch
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Mock elevation API to return empty list
+        with patch("services.trip_service.get_elevation_for_points", return_value=[]):
+            points = [{"latitude": 37.0, "longitude": -122.0}]
+            fetch_trip_elevation(trip, points)
+
+        # Should not crash - elevation should be None
+        assert trip.elevation_gain_m is None
+
+    def test_elevation_exception_handled(self, app, db_session):
+        """Exception during elevation fetch is handled gracefully."""
+        from services.trip_service import fetch_trip_elevation
+        from unittest.mock import patch
+
+        session_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+
+        trip = Trip(
+            session_id=session_id,
+            start_time=now - timedelta(hours=1),
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Mock elevation API to raise exception
+        with patch("services.trip_service.get_elevation_for_points") as mock_elev:
+            mock_elev.side_effect = Exception("API error")
+            points = [{"latitude": 37.0, "longitude": -122.0}]
+            fetch_trip_elevation(trip, points)
+
+        # Should not crash
+        assert trip.elevation_gain_m is None

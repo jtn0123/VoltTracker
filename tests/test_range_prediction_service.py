@@ -547,3 +547,145 @@ class TestRangePredictionValidation:
         assert result is not None
         # Should be clamped to 1.0
         assert result["factors"]["health_factor"] == 1.0
+
+
+class TestHistoricalEfficiencyEdgeCases:
+    """Tests for edge cases in get_historical_efficiency."""
+
+    def test_uses_battery_health_reading_capacity(self, app, db_session):
+        """Uses battery health capacity for efficiency calculation."""
+        from models import BatteryHealthReading
+
+        now = datetime.now(timezone.utc)
+
+        # Create trip
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=now - timedelta(days=2),
+            end_time=now - timedelta(days=2, hours=-1),
+            distance_miles=25.0,
+            electric_miles=25.0,
+            electric_kwh_used=5.0,
+            kwh_per_mile=5.0 / 25.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+
+        # Add battery health reading
+        health = BatteryHealthReading(
+            timestamp=now - timedelta(days=5),
+            capacity_kwh=17.0,  # Only capacity_kwh, no normalized
+            normalized_capacity_kwh=None,
+            soc_at_reading=100.0,
+        )
+        db_session.add(health)
+        db_session.commit()
+
+        result = get_historical_efficiency(db_session, days=30)
+
+        assert len(result) >= 1
+
+    def test_trip_with_very_short_duration(self, app, db_session):
+        """Handles trip with very short duration (edge case)."""
+        now = datetime.now(timezone.utc)
+
+        # Create trip with very short duration
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=now - timedelta(days=1),
+            end_time=now - timedelta(days=1, seconds=10),  # 10 second trip
+            distance_miles=0.1,
+            electric_miles=0.1,
+            electric_kwh_used=0.05,
+            kwh_per_mile=0.05 / 0.1,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        # Should not crash
+        result = get_historical_efficiency(db_session, days=30)
+        assert isinstance(result, list)
+
+
+class TestGetCurrentConditions:
+    """Tests for get_current_conditions function."""
+
+    def test_returns_conditions_with_recent_trips(self, app, db_session):
+        """Returns driving conditions from recent trips."""
+        from services.range_prediction_service import get_current_conditions
+
+        now = datetime.now(timezone.utc)
+
+        # Create trips with distance and duration
+        for i in range(5):
+            trip = Trip(
+                session_id=uuid.uuid4(),
+                start_time=now - timedelta(days=i, hours=1),
+                end_time=now - timedelta(days=i),  # 1 hour trips
+                distance_miles=30.0,  # 30 miles in 1 hour = 30 mph
+                is_closed=True,
+                ambient_temp_avg_f=70.0,
+            )
+            db_session.add(trip)
+        db_session.commit()
+
+        result = get_current_conditions(db_session)
+
+        assert "avg_speed_mph" in result
+        assert result["avg_speed_mph"] > 0
+
+    def test_returns_conditions_with_battery_health(self, app, db_session):
+        """Returns battery health from recent readings."""
+        from services.range_prediction_service import get_current_conditions
+        from models import BatteryHealthReading
+
+        now = datetime.now(timezone.utc)
+
+        # Add battery health reading with only capacity_kwh
+        health = BatteryHealthReading(
+            timestamp=now - timedelta(days=2),
+            capacity_kwh=16.0,
+            normalized_capacity_kwh=None,
+            soc_at_reading=100.0,
+        )
+        db_session.add(health)
+        db_session.commit()
+
+        result = get_current_conditions(db_session)
+
+        assert "battery_health_pct" in result
+        assert result["battery_health_pct"] > 0
+
+    def test_returns_default_conditions_when_no_data(self, app, db_session):
+        """Returns default conditions when no data exists."""
+        from services.range_prediction_service import get_current_conditions
+
+        result = get_current_conditions(db_session)
+
+        # Should have defaults
+        assert result["battery_health_pct"] == 100.0
+        assert result["battery_capacity_kwh"] == 16.5
+        assert result["avg_speed_mph"] == 30.0
+        assert result["temperature_f"] == 70.0
+
+    def test_speed_calculation_with_zero_duration_trips(self, app, db_session):
+        """Handles trips where duration calculation might be zero."""
+        from services.range_prediction_service import get_current_conditions
+
+        now = datetime.now(timezone.utc)
+
+        # Create trip where start_time equals end_time (zero duration)
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=now - timedelta(days=1),
+            end_time=now - timedelta(days=1),  # Same time - zero duration
+            distance_miles=10.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        # Should not crash, should use default
+        result = get_current_conditions(db_session)
+        assert result["avg_speed_mph"] >= 0
