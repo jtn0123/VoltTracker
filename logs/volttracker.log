@@ -13866,3 +13866,9 @@
 2026-01-13 05:03:46,242 - apscheduler.executors.default - INFO - Job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-13 05:04:46 UTC)" executed successfully
 2026-01-13 05:03:46,242 - apscheduler.executors.default - INFO - Running job "check_charging_sessions (trigger: interval[0:02:00], next run at: 2026-01-13 05:05:46 UTC)" (scheduled at 2026-01-13 05:03:46.194800+00:00)
 2026-01-13 05:03:46,247 - apscheduler.executors.default - INFO - Job "check_charging_sessions (trigger: interval[0:02:00], next run at: 2026-01-13 05:05:46 UTC)" executed successfully
+2026-01-13 05:04:46,204 - apscheduler.executors.default - INFO - Running job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-13 05:05:46 UTC)" (scheduled at 2026-01-13 05:04:46.194000+00:00)
+2026-01-13 05:04:46,214 - apscheduler.executors.default - INFO - Job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-13 05:05:46 UTC)" executed successfully
+2026-01-13 05:05:46,201 - apscheduler.executors.default - INFO - Running job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-13 05:06:46 UTC)" (scheduled at 2026-01-13 05:05:46.194000+00:00)
+2026-01-13 05:05:46,211 - apscheduler.executors.default - INFO - Job "close_stale_trips (trigger: interval[0:01:00], next run at: 2026-01-13 05:06:46 UTC)" executed successfully
+2026-01-13 05:05:46,211 - apscheduler.executors.default - INFO - Running job "check_charging_sessions (trigger: interval[0:02:00], next run at: 2026-01-13 05:07:46 UTC)" (scheduled at 2026-01-13 05:05:46.194800+00:00)
+2026-01-13 05:05:46,216 - apscheduler.executors.default - INFO - Job "check_charging_sessions (trigger: interval[0:02:00], next run at: 2026-01-13 05:07:46 UTC)" executed successfully

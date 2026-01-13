@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 # Import from consolidated calculations package
-from receiver.calculations import (
+from calculations import (
     calculate_energy_from_soc_change,
     calculate_gas_mpg,
     calculate_kwh_per_mile,
@@ -23,14 +23,14 @@ from receiver.calculations import (
     smooth_fuel_level,
     soc_to_kwh,
 )
-from receiver.calculations.constants import (
+from calculations.constants import (
     BATTERY_CAPACITY_KWH,
     MIN_GAS_MILES_FOR_MPG,
     RPM_THRESHOLD,
     SOC_GAS_THRESHOLD,
     TANK_CAPACITY_GALLONS,
 )
-from receiver.config import Config
+from config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +209,7 @@ def calculate_electric_kwh(
     Returns:
         kWh consumed, or None if insufficient data
     """
-    from receiver.calculations.energy import integrate_power_over_time
+    from calculations.energy import integrate_power_over_time
 
     if len(telemetry_points) < 2:
         return None
