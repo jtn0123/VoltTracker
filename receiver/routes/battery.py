@@ -13,6 +13,7 @@ from database import get_db
 from flask import Blueprint, jsonify, request
 from models import BatteryCellReading, BatteryHealthReading, TelemetryRaw
 from sqlalchemy import desc, func
+from sqlalchemy.exc import IntegrityError, OperationalError
 from utils import utc_now
 
 logger = logging.getLogger(__name__)
@@ -281,8 +282,17 @@ def add_cell_reading():
     if not reading:
         return jsonify({"error": "Could not create reading from provided data"}), 400
 
-    db.add(reading)
-    db.commit()
+    try:
+        db.add(reading)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        logger.warning("Failed to add cell reading: database constraint violation")
+        return jsonify({"error": "Database constraint violation"}), 409
+    except OperationalError as e:
+        db.rollback()
+        logger.error(f"Database error adding cell reading: {e}")
+        return jsonify({"error": "Database error"}), 500
 
     logger.info(f"Added cell reading: delta={reading.voltage_delta}V")
 

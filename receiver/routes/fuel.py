@@ -11,6 +11,7 @@ from database import get_db
 from flask import Blueprint, jsonify, request
 from models import FuelEvent
 from sqlalchemy import desc
+from sqlalchemy.exc import IntegrityError, OperationalError
 from utils import utc_now
 
 logger = logging.getLogger(__name__)
@@ -98,8 +99,18 @@ def add_fuel_event():
         total_cost=data.get("total_cost"),
         notes=data.get("notes"),
     )
-    db.add(fuel_event)
-    db.commit()
+
+    try:
+        db.add(fuel_event)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        logger.warning("Failed to add fuel event: database constraint violation")
+        return jsonify({"error": "Database constraint violation"}), 409
+    except OperationalError as e:
+        db.rollback()
+        logger.error(f"Database error adding fuel event: {e}")
+        return jsonify({"error": "Database error"}), 500
 
     return jsonify(fuel_event.to_dict()), 201
 
@@ -113,8 +124,13 @@ def delete_fuel_event(fuel_id):
     if not event:
         return jsonify({"error": "Fuel event not found"}), 404
 
-    db.delete(event)
-    db.commit()
+    try:
+        db.delete(event)
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        logger.error(f"Database error deleting fuel event {fuel_id}: {e}")
+        return jsonify({"error": "Database error"}), 500
 
     logger.info(f"Deleted fuel event {fuel_id}")
     return jsonify({"message": f"Fuel event {fuel_id} deleted successfully"})
@@ -153,7 +169,16 @@ def update_fuel_event(fuel_id):
         if field in data:
             setattr(event, field, data[field])
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        logger.warning(f"Failed to update fuel event {fuel_id}: database constraint violation")
+        return jsonify({"error": "Database constraint violation"}), 409
+    except OperationalError as e:
+        db.rollback()
+        logger.error(f"Database error updating fuel event {fuel_id}: {e}")
+        return jsonify({"error": "Database error"}), 500
 
     logger.info(f"Updated fuel event {fuel_id}: {data}")
     return jsonify(event.to_dict())
