@@ -161,6 +161,10 @@ def calculate_moving_average(
         >>> calculate_moving_average([1, 2, 3, 4, 5], 3)
         [2.0, 3.0, 4.0]
     """
+    # Validate window_size to prevent division by zero and infinite loops
+    if window_size <= 0:
+        return []
+
     if len(values) < window_size:
         return []
 

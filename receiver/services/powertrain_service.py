@@ -200,11 +200,18 @@ def get_powertrain_summary(db: Session, trip_id: int) -> Optional[Dict]:
     if "error" in analysis:
         return None
 
+    percentages = analysis["statistics"]["percentages"]
+    # Safely get primary mode - handle empty percentages dict
+    if percentages:
+        primary_mode = max(percentages.items(), key=lambda x: x[1])[0]
+    else:
+        primary_mode = PowertrainMode.UNKNOWN
+
     return {
         "trip_id": trip_id,
         "session_id": str(trip.session_id),
-        "mode_percentages": analysis["statistics"]["percentages"],
-        "primary_mode": max(analysis["statistics"]["percentages"].items(), key=lambda x: x[1])[0],
+        "mode_percentages": percentages,
+        "primary_mode": primary_mode,
         "transitions": analysis["statistics"]["transitions"],
         "total_samples": analysis["total_samples"],
     }

@@ -128,7 +128,7 @@ def calculate_efficiency_impact_percent(
         >>> calculate_efficiency_impact_percent(0.25, 0.32)
         -21.9
     """
-    if actual_efficiency is None or baseline_efficiency == 0:
+    if actual_efficiency is None or baseline_efficiency is None or baseline_efficiency == 0:
         return 0.0
 
     impact = ((actual_efficiency - baseline_efficiency) / baseline_efficiency) * 100

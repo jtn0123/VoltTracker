@@ -360,8 +360,15 @@ def get_seasonal_trends(
     # Calculate seasonal averages
     seasons = {"winter": [], "spring": [], "summer": [], "fall": []}
     for data in monthly_data:
-        if data["month"]:
-            month_num = int(data["month"].split("-")[1])
+        if data["month"] and "-" in data["month"]:
+            month_parts = data["month"].split("-")
+            if len(month_parts) >= 2:
+                try:
+                    month_num = int(month_parts[1])
+                except (ValueError, TypeError):
+                    continue
+            else:
+                continue
             if month_num in [12, 1, 2]:
                 seasons["winter"].append(data["avg_kwh_per_mile"])
             elif month_num in [3, 4, 5]:

@@ -90,11 +90,14 @@ def predict_range_simple(
 
     # Calculate baseline efficiency (mi/kWh)
     # Use historical average if available, otherwise use default Volt efficiency
+    DEFAULT_BASELINE_EFFICIENCY = 5.0  # Default Volt Gen 2 efficiency: ~5.0 mi/kWh (0.2 kWh/mile)
     if len(historical) >= 3:
         baseline_efficiency = sum(eff for _, _, _, eff in historical) / len(historical)
+        # Guard against zero or negative baseline efficiency from bad data
+        if baseline_efficiency <= 0:
+            baseline_efficiency = DEFAULT_BASELINE_EFFICIENCY
     else:
-        # Default Volt Gen 2 efficiency: ~5.0 mi/kWh (0.2 kWh/mile)
-        baseline_efficiency = 5.0
+        baseline_efficiency = DEFAULT_BASELINE_EFFICIENCY
 
     # Temperature adjustment (based on typical EV patterns)
     # Efficiency peaks around 70°F, drops at extremes

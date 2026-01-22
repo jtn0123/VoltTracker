@@ -162,6 +162,10 @@ def smooth_fuel_level(
     if not readings:
         return 0.0
 
+    # Validate window_size to prevent unexpected slicing behavior
+    if window_size <= 0:
+        window_size = len(readings)  # Use all readings if invalid window_size
+
     # Use the last N readings
     recent = readings[-window_size:]
 

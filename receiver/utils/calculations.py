@@ -254,7 +254,8 @@ def detect_charging_session(telemetry_points: List[dict], min_power_kw: float = 
         return None
 
     # Check for charger connected
-    charger_readings = [p for p in telemetry_points if p.get("charger_connected") is True]
+    # Use truthiness check instead of 'is True' to handle different truthy values
+    charger_readings = [p for p in telemetry_points if p.get("charger_connected")]
 
     if not charger_readings:
         return None

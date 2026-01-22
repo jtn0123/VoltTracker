@@ -7,6 +7,7 @@ Tracks data changes, deletions, and critical operations for compliance and debug
 import logging
 from datetime import datetime
 from enum import Enum
+from functools import wraps
 from typing import Any, Dict, Optional
 
 from database import get_db
@@ -185,6 +186,7 @@ def audit_endpoint(entity_type: str):
     """
 
     def decorator(func):
+        @wraps(func)
         def wrapper(*args, **kwargs):
             try:
                 # Execute the function
@@ -204,7 +206,6 @@ def audit_endpoint(entity_type: str):
                 logger.error(f"API Error: {request.method} {request.path} - {str(e)}")
                 raise
 
-        wrapper.__name__ = func.__name__
         return wrapper
 
     return decorator

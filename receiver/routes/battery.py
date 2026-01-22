@@ -64,7 +64,7 @@ def get_battery_health():
         current_capacity = float(telemetry_capacity.avg_capacity)
         capacity_readings_count = telemetry_capacity.count
 
-    if current_capacity:
+    if current_capacity and original_capacity and original_capacity > 0:
         health_percent = round((current_capacity / original_capacity) * 100, 1)
 
     # Calculate trend if we have enough historical data
