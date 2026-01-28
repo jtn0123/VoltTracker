@@ -235,7 +235,10 @@ def export_all():
     # Parse date range filters
     start_date = request.args.get("start_date")
     end_date = request.args.get("end_date")
-    limit = min(int(request.args.get("limit", 10000)), 50000)  # Max 50k records per table
+    try:
+        limit = min(int(request.args.get("limit", 10000)), 50000)  # Max 50k records per table
+    except (ValueError, TypeError):
+        limit = 10000  # Use default on invalid input
 
     # Build queries with optional filters
     trip_query = db.query(Trip).order_by(desc(Trip.start_time))
@@ -808,7 +811,10 @@ def get_import_history():
     """
     db = get_db()
 
-    limit = min(int(request.args.get("limit", 20)), 100)
+    try:
+        limit = min(int(request.args.get("limit", 20)), 100)
+    except (ValueError, TypeError):
+        limit = 20  # Use default on invalid input
     status_filter = request.args.get("status")
 
     query = db.query(CsvImport).order_by(desc(CsvImport.created_at))
