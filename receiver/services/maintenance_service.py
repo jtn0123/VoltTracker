@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
+from config import Config
 from models import MaintenanceRecord, TelemetryRaw, Trip
 from sqlalchemy.orm import Session
 from utils.query_cache import cached_query
@@ -73,16 +74,14 @@ def calculate_engine_hours(db: Session, since_date: Optional[datetime] = None) -
 
     Cached for 10 minutes to avoid expensive recomputation.
     """
-    # Limit to most recent 50,000 points to prevent memory issues
-    # This covers ~13 hours of engine runtime at 1 point/second
-    MAX_ENGINE_TELEMETRY_POINTS = 50000
-
+    # Limit to configurable max points to prevent memory issues
+    # Default 50,000 covers ~13 hours of engine runtime at 1 point/second
     query = db.query(TelemetryRaw).filter(TelemetryRaw.engine_rpm > 400)
 
     if since_date:
         query = query.filter(TelemetryRaw.timestamp >= since_date)
 
-    telemetry = query.order_by(TelemetryRaw.timestamp).limit(MAX_ENGINE_TELEMETRY_POINTS).all()
+    telemetry = query.order_by(TelemetryRaw.timestamp).limit(Config.MAX_ENGINE_TELEMETRY_POINTS).all()
 
     if len(telemetry) < 2:
         return 0.0
@@ -102,7 +101,9 @@ def get_current_odometer(db: Session) -> float:
     """Get current odometer reading from latest trip."""
     latest_trip = db.query(Trip).filter(Trip.end_odometer.isnot(None)).order_by(Trip.start_time.desc()).first()
 
-    return float(latest_trip.end_odometer) if latest_trip else 0.0
+    if latest_trip is not None and latest_trip.end_odometer is not None:
+        return float(latest_trip.end_odometer)
+    return 0.0
 
 
 def calculate_next_due(
