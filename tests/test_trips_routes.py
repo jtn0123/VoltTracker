@@ -11,6 +11,7 @@ Tests trip route endpoints including:
 - Trip comparison endpoint
 """
 
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -430,7 +431,7 @@ class TestTripListingFilters:
         assert data["pagination"]["total"] >= 1
 
     def test_get_trips_invalid_filter_values(self, client, db_session):
-        """Invalid filter values are ignored gracefully."""
+        """Invalid filter values return 400 with error message."""
         from models import Trip
 
         trip = Trip(
@@ -443,10 +444,12 @@ class TestTripListingFilters:
         db_session.add(trip)
         db_session.commit()
 
-        # Invalid numeric values should be ignored (not cause errors)
-        response = client.get("/api/trips?min_distance=invalid&max_temp=not_a_number")
+        # Invalid numeric values now return 400 with error message
+        response = client.get("/api/trips?min_distance=invalid")
 
-        assert response.status_code == 200
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
 
 
 class TestTripSorting:

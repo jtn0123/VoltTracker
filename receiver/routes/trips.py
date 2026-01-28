@@ -108,14 +108,16 @@ def get_trips():
         try:
             query = query.filter(Trip.weather_temp_f >= float(min_temp))
         except (ValueError, TypeError):
-            pass
+            logger.warning(f"Invalid min_temp parameter: {min_temp}")
+            return jsonify({"error": f"Invalid min_temp value: {min_temp}. Must be a number."}), 400
 
     max_temp = request.args.get("max_temp")
     if max_temp:
         try:
             query = query.filter(Trip.weather_temp_f <= float(max_temp))
         except (ValueError, TypeError):
-            pass
+            logger.warning(f"Invalid max_temp parameter: {max_temp}")
+            return jsonify({"error": f"Invalid max_temp value: {max_temp}. Must be a number."}), 400
 
     # Efficiency filters
     min_efficiency = request.args.get("min_efficiency")
@@ -123,21 +125,24 @@ def get_trips():
         try:
             query = query.filter(Trip.kwh_per_mile >= float(min_efficiency))
         except (ValueError, TypeError):
-            pass
+            logger.warning(f"Invalid min_efficiency parameter: {min_efficiency}")
+            return jsonify({"error": f"Invalid min_efficiency value: {min_efficiency}. Must be a number."}), 400
 
     max_efficiency = request.args.get("max_efficiency")
     if max_efficiency:
         try:
             query = query.filter(Trip.kwh_per_mile <= float(max_efficiency))
         except (ValueError, TypeError):
-            pass
+            logger.warning(f"Invalid max_efficiency parameter: {max_efficiency}")
+            return jsonify({"error": f"Invalid max_efficiency value: {max_efficiency}. Must be a number."}), 400
 
     min_mpg = request.args.get("min_mpg")
     if min_mpg:
         try:
             query = query.filter(Trip.gas_mpg >= float(min_mpg))
         except (ValueError, TypeError):
-            pass
+            logger.warning(f"Invalid min_mpg parameter: {min_mpg}")
+            return jsonify({"error": f"Invalid min_mpg value: {min_mpg}. Must be a number."}), 400
 
     # Distance filters
     min_distance = request.args.get("min_distance")
@@ -145,14 +150,16 @@ def get_trips():
         try:
             query = query.filter(Trip.distance_miles >= float(min_distance))
         except (ValueError, TypeError):
-            pass
+            logger.warning(f"Invalid min_distance parameter: {min_distance}")
+            return jsonify({"error": f"Invalid min_distance value: {min_distance}. Must be a number."}), 400
 
     max_distance = request.args.get("max_distance")
     if max_distance:
         try:
             query = query.filter(Trip.distance_miles <= float(max_distance))
         except (ValueError, TypeError):
-            pass
+            logger.warning(f"Invalid max_distance parameter: {max_distance}")
+            return jsonify({"error": f"Invalid max_distance value: {max_distance}. Must be a number."}), 400
 
     # Elevation filters
     min_elevation = request.args.get("min_elevation")
@@ -160,14 +167,16 @@ def get_trips():
         try:
             query = query.filter(Trip.elevation_gain_m >= float(min_elevation))
         except (ValueError, TypeError):
-            pass
+            logger.warning(f"Invalid min_elevation parameter: {min_elevation}")
+            return jsonify({"error": f"Invalid min_elevation value: {min_elevation}. Must be a number."}), 400
 
     max_elevation = request.args.get("max_elevation")
     if max_elevation:
         try:
             query = query.filter(Trip.elevation_gain_m <= float(max_elevation))
         except (ValueError, TypeError):
-            pass
+            logger.warning(f"Invalid max_elevation parameter: {max_elevation}")
+            return jsonify({"error": f"Invalid max_elevation value: {max_elevation}. Must be a number."}), 400
 
     # Filter out trips with 0 or very small distance (likely GPS errors or no movement)
     # Unless explicitly requested with include_zero=true
@@ -298,19 +307,29 @@ def delete_trip(trip_id: int):
 
     # Soft delete for imported trips (protect CSV imports)
     if trip.is_imported:
-        trip.deleted_at = utc_now()
-        db.commit()
-        logger.info(f"Soft-deleted imported trip {trip_id}")
-        return jsonify({"message": f"Trip {trip_id} archived (can be restored)"})
+        try:
+            trip.deleted_at = utc_now()
+            db.commit()
+            logger.info(f"Soft-deleted imported trip {trip_id}")
+            return jsonify({"message": f"Trip {trip_id} archived (can be restored)"})
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to soft-delete trip {trip_id}: {e}", exc_info=True)
+            return jsonify({"error": "Failed to archive trip"}), 500
 
     # Hard delete for real-time trips
-    db.query(SocTransition).filter(SocTransition.trip_id == trip_id).delete()
-    db.query(TelemetryRaw).filter(TelemetryRaw.session_id == trip.session_id).delete()
-    db.delete(trip)
-    db.commit()
+    try:
+        db.query(SocTransition).filter(SocTransition.trip_id == trip_id).delete()
+        db.query(TelemetryRaw).filter(TelemetryRaw.session_id == trip.session_id).delete()
+        db.delete(trip)
+        db.commit()
 
-    logger.info(f"Deleted trip {trip_id}")
-    return jsonify({"message": f"Trip {trip_id} deleted successfully"})
+        logger.info(f"Deleted trip {trip_id}")
+        return jsonify({"message": f"Trip {trip_id} deleted successfully"})
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to delete trip {trip_id}: {e}", exc_info=True)
+        return jsonify({"error": "Failed to delete trip"}), 500
 
 
 @trips_bp.route("/trips/<int:trip_id>/restore", methods=["POST"])
@@ -325,11 +344,16 @@ def restore_trip(trip_id: int):
     if not trip.deleted_at:
         return jsonify({"error": "Trip is not deleted"}), 400
 
-    trip.deleted_at = None
-    db.commit()
+    try:
+        trip.deleted_at = None
+        db.commit()
 
-    logger.info(f"Restored trip {trip_id}")
-    return jsonify({"message": f"Trip {trip_id} restored successfully"})
+        logger.info(f"Restored trip {trip_id}")
+        return jsonify({"message": f"Trip {trip_id} restored successfully"})
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to restore trip {trip_id}: {e}", exc_info=True)
+        return jsonify({"error": "Failed to restore trip"}), 500
 
 
 @trips_bp.route("/trips/<int:trip_id>", methods=["PATCH"])
@@ -383,10 +407,15 @@ def update_trip(trip_id):
 
             setattr(trip, field, value)
 
-    db.commit()
+    try:
+        db.commit()
 
-    logger.info(f"Updated trip {trip_id}: {data}")
-    return jsonify(trip.to_dict())
+        logger.info(f"Updated trip {trip_id}: {data}")
+        return jsonify(trip.to_dict())
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to update trip {trip_id}: {e}", exc_info=True)
+        return jsonify({"error": "Failed to update trip"}), 500
 
 
 @trips_bp.route("/efficiency/summary", methods=["GET"])

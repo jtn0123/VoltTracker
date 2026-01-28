@@ -190,7 +190,8 @@ def bulk_update_trips():
         return jsonify({"error": "Maximum 1000 trips per batch"}), 400
 
     # Validate allowed fields (prevent updating critical fields)
-    allowed_fields = ["notes", "tags"]
+    # Note: Only fields that exist on the Trip model and are safe to bulk update
+    allowed_fields = ["gas_mpg", "gas_miles", "electric_miles", "fuel_used_gallons"]
     invalid_fields = [f for f in updates.keys() if f not in allowed_fields]
 
     if invalid_fields:

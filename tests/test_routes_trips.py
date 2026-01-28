@@ -562,8 +562,8 @@ class TestCompareTrips:
         assert "statistics" in result
         assert "insights" in result
 
-    def test_compare_trips_handles_server_error(self, client, sample_trips):
-        """Test that compare trips returns 500 on internal error (covers lines 682-684)."""
+    def test_compare_trips_succeeds(self, client, sample_trips):
+        """Test that compare trips successfully compares trips."""
         trip_ids = [sample_trips[0].id, sample_trips[1].id]
         data = {"trip_ids": trip_ids}
 
@@ -573,10 +573,10 @@ class TestCompareTrips:
             content_type="application/json",
         )
 
-        # Due to bug in endpoint (missing avg_speed_mph), this returns 500
-        assert response.status_code == 500
+        assert response.status_code == 200
         result = json.loads(response.data)
-        assert "error" in result
+        assert "trip_count" in result
+        assert result["trip_count"] == 2
 
     def test_compare_trips_no_ids(self, client):
         """Test comparing with no trip IDs returns error."""
@@ -656,52 +656,79 @@ class TestCompareTrips:
 
 
 class TestTripsFilterValidation:
-    """Tests for invalid filter parameter handling."""
+    """Tests for invalid filter parameter handling - returns 400 with error message."""
 
     def test_invalid_min_temp_filter(self, client, sample_trips):
-        """Test that invalid min_temp is gracefully handled."""
+        """Test that invalid min_temp returns 400 with error message."""
         response = client.get("/api/trips?min_temp=not_a_number")
-        assert response.status_code == 200
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
+        assert "min_temp" in data["error"]
 
     def test_invalid_max_temp_filter(self, client, sample_trips):
-        """Test that invalid max_temp is gracefully handled."""
+        """Test that invalid max_temp returns 400 with error message."""
         response = client.get("/api/trips?max_temp=invalid")
-        assert response.status_code == 200
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
+        assert "max_temp" in data["error"]
 
     def test_invalid_min_efficiency_filter(self, client, sample_trips):
-        """Test that invalid min_efficiency is gracefully handled."""
+        """Test that invalid min_efficiency returns 400 with error message."""
         response = client.get("/api/trips?min_efficiency=abc")
-        assert response.status_code == 200
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
+        assert "min_efficiency" in data["error"]
 
     def test_invalid_max_efficiency_filter(self, client, sample_trips):
-        """Test that invalid max_efficiency is gracefully handled."""
+        """Test that invalid max_efficiency returns 400 with error message."""
         response = client.get("/api/trips?max_efficiency=xyz")
-        assert response.status_code == 200
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
+        assert "max_efficiency" in data["error"]
 
     def test_invalid_min_mpg_filter(self, client, sample_trips):
-        """Test that invalid min_mpg is gracefully handled."""
+        """Test that invalid min_mpg returns 400 with error message."""
         response = client.get("/api/trips?min_mpg=bad")
-        assert response.status_code == 200
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
+        assert "min_mpg" in data["error"]
 
     def test_invalid_min_distance_filter(self, client, sample_trips):
-        """Test that invalid min_distance is gracefully handled."""
+        """Test that invalid min_distance returns 400 with error message."""
         response = client.get("/api/trips?min_distance=invalid")
-        assert response.status_code == 200
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
+        assert "min_distance" in data["error"]
 
     def test_invalid_max_distance_filter(self, client, sample_trips):
-        """Test that invalid max_distance is gracefully handled."""
+        """Test that invalid max_distance returns 400 with error message."""
         response = client.get("/api/trips?max_distance=xyz")
-        assert response.status_code == 200
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
+        assert "max_distance" in data["error"]
 
     def test_invalid_min_elevation_filter(self, client, sample_trips):
-        """Test that invalid min_elevation is gracefully handled."""
+        """Test that invalid min_elevation returns 400 with error message."""
         response = client.get("/api/trips?min_elevation=not_number")
-        assert response.status_code == 200
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
+        assert "min_elevation" in data["error"]
 
     def test_invalid_max_elevation_filter(self, client, sample_trips):
-        """Test that invalid max_elevation is gracefully handled."""
+        """Test that invalid max_elevation returns 400 with error message."""
         response = client.get("/api/trips?max_elevation=bad_value")
-        assert response.status_code == 200
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "error" in data
+        assert "max_elevation" in data["error"]
 
 
 # ============================================================================
