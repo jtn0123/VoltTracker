@@ -187,7 +187,19 @@ def torque_upload(token=None):
                 raw_data=data["raw_data"],
             )
             db.add(telemetry)
-            db.commit()
+            try:
+                db.commit()
+            except Exception as commit_error:
+                db.rollback()
+                logger.error(f"Failed to commit telemetry: {commit_error}", exc_info=True)
+                event.add_error(StructuredError(
+                    ErrorCode.E200_DB_CONNECTION_FAILED,
+                    "Failed to commit telemetry",
+                    exception=commit_error,
+                ))
+                event.mark_failure("db_commit_failed")
+                event.emit(level="error", force=True)
+                return "OK!"  # Return OK to prevent Torque retries
 
         # Emit real-time update to WebSocket clients if socketio is available
         socketio = current_app.extensions.get("socketio")

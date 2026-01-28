@@ -56,19 +56,26 @@ def record_vitals():
         )
 
         # Store in database for historical analysis
+        db_stored = False
         try:
             db = get_db()
             web_vital = WebVital.create_from_frontend(data)
             db.add(web_vital)
             db.commit()
-
+            db_stored = True
             logger.debug(f"Stored Web Vital {metric_name} to database (id={web_vital.id})")
         except Exception as db_error:
+            db.rollback()
             logger.error(f"Failed to store Web Vital in database: {db_error}", exc_info=True)
             # Continue execution - logging is more important than DB storage
             # The metric was already logged, so we don't fail the request
 
-        return jsonify({"status": "ok", "recorded": metric_name}), 200
+        return jsonify({
+            "status": "ok",
+            "recorded": metric_name,
+            "persisted": db_stored,
+            "warning": None if db_stored else "Metric logged but database storage failed"
+        }), 200
 
     except Exception as e:
         logger.error(f"Error recording web vital: {e}", exc_info=True)

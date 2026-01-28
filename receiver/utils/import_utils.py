@@ -10,7 +10,7 @@ Provides functions for:
 import hashlib
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 # Characters that are unambiguous when read aloud or displayed
@@ -31,7 +31,7 @@ def generate_import_code() -> str:
     Returns:
         str: Unique import code
     """
-    date_part = datetime.utcnow().strftime("%Y%m%d")
+    date_part = datetime.now(timezone.utc).strftime("%Y%m%d")
     random_part = "".join(random.choices(UNAMBIGUOUS_CHARS, k=6))
     return f"IMP-{date_part}-{random_part}"
 

@@ -14,7 +14,7 @@ import random
 import time
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 import structlog
@@ -71,7 +71,7 @@ class WideEvent:
         self.timers: Dict[str, float] = {}  # Track timer start times
         self.context: Dict[str, Any] = {
             "operation": operation,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "start_time": time.time(),
             "request_id": request_id or str(uuid.uuid4()),
         }
