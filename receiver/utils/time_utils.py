@@ -226,6 +226,10 @@ DATE_SHORTCUTS = {
         utc_now().replace(day=1, hour=0, minute=0, second=0),
         utc_now()
     ),
+    "this_year": lambda: (
+        utc_now().replace(month=1, day=1, hour=0, minute=0, second=0),
+        utc_now()
+    ),
     "last_month": lambda: (
         (utc_now().replace(day=1) - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0),
         (utc_now().replace(day=1) - timedelta(days=1)).replace(hour=23, minute=59, second=59)
