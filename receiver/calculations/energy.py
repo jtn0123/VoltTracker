@@ -155,6 +155,10 @@ def integrate_power_over_time(
         if delta_hours <= 0:
             continue
 
+        # Skip if power values are None
+        if prev_power is None or curr_power is None:
+            continue
+
         # Average power during interval (only count positive = discharging)
         avg_power = (prev_power + curr_power) / 2
         if avg_power > 0:  # Positive = discharging (consuming energy)

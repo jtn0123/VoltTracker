@@ -48,8 +48,9 @@ class AuditLogger:
         ip_address = request.remote_addr if request else None
 
         # Try to get forwarded IP if behind proxy
-        if request and request.headers.get("X-Forwarded-For"):
-            ip_address = request.headers["X-Forwarded-For"].split(",")[0].strip()
+        forwarded_for = request.headers.get("X-Forwarded-For") if request else None
+        if forwarded_for:
+            ip_address = forwarded_for.split(",")[0].strip()
 
         # Get user agent
         user_agent = request.headers.get("User-Agent") if request else None

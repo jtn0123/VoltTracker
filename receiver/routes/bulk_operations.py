@@ -12,7 +12,7 @@ from flask import Blueprint, jsonify, request
 from database import get_db
 from models import Trip, TelemetryRaw, FuelEvent
 from sqlalchemy import and_
-from datetime import datetime, timezone
+from utils import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ def bulk_delete_trips():
         else:
             # Soft delete - mark as deleted
             for trip in trips:
-                trip.deleted_at = datetime.now(timezone.utc)
+                trip.deleted_at = utc_now()
 
             db.commit()
 

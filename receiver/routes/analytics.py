@@ -204,7 +204,10 @@ def get_routes():
 
         # Optional: Re-detect routes
         if request.args.get("refresh") == "true":
-            min_trips = int(request.args.get("min_trips", 3))
+            try:
+                min_trips = int(request.args.get("min_trips", 3))
+            except (ValueError, TypeError):
+                min_trips = 3  # Use default on invalid input
             routes = route_service.detect_routes(db, min_trips)
         else:
             routes = route_service.get_route_summary(db)
