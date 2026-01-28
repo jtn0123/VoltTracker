@@ -31,3 +31,6 @@ pre-commit>=3.6.0
 # Security scanning
 bandit>=1.7.6
 pip-audit>=2.6.0
+
+# Mutation testing
+mutmut>=2.4.0

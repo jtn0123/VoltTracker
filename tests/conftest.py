@@ -61,23 +61,6 @@ def clear_caches():
     weather._weather_cache.clear()
 
 
-@pytest.fixture(autouse=True)
-def clean_test_tables(app):
-    """Clean database tables that commonly cause test pollution.
-
-    Uses engine.execute to bypass session scoping issues.
-    """
-    from sqlalchemy import text
-    with engine.begin() as conn:
-        try:
-            # Clear tables that commonly cause test isolation issues
-            conn.execute(text("DELETE FROM telemetry_raw"))
-            conn.execute(text("DELETE FROM maintenance_records"))
-        except Exception:
-            pass
-    yield
-
-
 @pytest.fixture
 def app():
     """Create application for testing."""
@@ -113,7 +96,12 @@ def client(app):
 
 @pytest.fixture
 def db_session(app):
-    """Provide a database session for tests."""
+    """Provide a database session for tests with automatic rollback.
+
+    After each test, the session is rolled back to ensure test isolation.
+    Note: If tests call commit(), those changes will persist until the
+    table cleanup in the app fixture.
+    """
     session = Session()
     yield session
     session.rollback()

@@ -208,22 +208,109 @@ class TestBatchFetchWeather:
 
 
 class TestFetchElevationForTrip:
-    """Tests for fetch_elevation_for_trip function.
+    """Tests for fetch_elevation_for_trip function."""
 
-    NOTE: The fetch_elevation_for_trip function imports from 'services.elevation_service'
-    which does not exist. This is a known bug (BUG: weather_jobs references non-existent module).
-    These tests are skipped until the bug is fixed.
-    """
-
-    @pytest.mark.skip(reason="BUG: weather_jobs.py references non-existent services.elevation_service module")
     def test_fetch_elevation_for_trip_not_found(self, app, db_session):
         """Test elevation fetch for non-existent trip."""
-        pass
+        mock_weather_service = MagicMock()
+        mock_elevation_service = MagicMock()
+        mock_elevation_service.fetch_and_update_elevations = MagicMock(return_value=0)
 
-    @pytest.mark.skip(reason="BUG: weather_jobs.py references non-existent services.elevation_service module")
+        with patch.dict(
+            sys.modules,
+            {"services.weather_service": mock_weather_service, "services.elevation_service": mock_elevation_service},
+        ):
+            import importlib
+            import jobs.weather_jobs as weather_jobs
+
+            importlib.reload(weather_jobs)
+
+            result = weather_jobs.fetch_elevation_for_trip(99999, db_session)
+
+        assert result["status"] == "failed"
+        assert result["reason"] == "trip_not_found"
+
     def test_fetch_elevation_for_trip_no_gps_data(self, app, db_session):
         """Test elevation fetch when trip has no GPS data."""
-        pass
+        from models import Trip
+
+        # Create a trip without GPS telemetry
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            start_odometer=50000.0,
+            start_soc=80.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.commit()
+        trip_id = trip.id
+
+        mock_weather_service = MagicMock()
+        mock_elevation_service = MagicMock()
+        mock_elevation_service.fetch_and_update_elevations = MagicMock(return_value=0)
+
+        with patch.dict(
+            sys.modules,
+            {"services.weather_service": mock_weather_service, "services.elevation_service": mock_elevation_service},
+        ):
+            import importlib
+            import jobs.weather_jobs as weather_jobs
+
+            importlib.reload(weather_jobs)
+
+            result = weather_jobs.fetch_elevation_for_trip(trip_id, db_session)
+
+        assert result["status"] == "skipped"
+        assert result["reason"] == "no_gps_data"
+
+    def test_fetch_elevation_for_trip_success(self, app, db_session):
+        """Test successful elevation fetch for a trip with GPS data."""
+        from models import Trip, TelemetryRaw
+
+        # Create a trip
+        session_id = uuid.uuid4()
+        trip = Trip(
+            session_id=session_id,
+            start_time=datetime.now(timezone.utc),
+            start_odometer=50000.0,
+            start_soc=80.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        # Add telemetry with GPS coordinates
+        for i in range(5):
+            telemetry = TelemetryRaw(
+                session_id=session_id,
+                timestamp=datetime.now(timezone.utc),
+                latitude=37.7749 + i * 0.001,
+                longitude=-122.4194 + i * 0.001,
+                speed_mph=45.0,
+            )
+            db_session.add(telemetry)
+        db_session.commit()
+        trip_id = trip.id
+
+        mock_weather_service = MagicMock()
+        mock_elevation_service = MagicMock()
+        mock_elevation_service.fetch_and_update_elevations = MagicMock(return_value=5)
+
+        with patch.dict(
+            sys.modules,
+            {"services.weather_service": mock_weather_service, "services.elevation_service": mock_elevation_service},
+        ):
+            import importlib
+            import jobs.weather_jobs as weather_jobs
+
+            importlib.reload(weather_jobs)
+
+            result = weather_jobs.fetch_elevation_for_trip(trip_id, db_session)
+
+        assert result["status"] == "success"
+        assert result["trip_id"] == trip_id
+        assert result["elevation_points"] == 5
 
 
 class TestBatchFetchWeatherAndElevation:
