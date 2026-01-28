@@ -1,6 +1,6 @@
 import os
 import socket
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Config:
@@ -11,7 +11,7 @@ class Config:
     APP_VERSION = os.environ.get("APP_VERSION", "0.1.0-dev")
     ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
     DEPLOYMENT_ID = os.environ.get("DEPLOYMENT_ID", f"local-{socket.gethostname()}")
-    DEPLOYMENT_TIMESTAMP = os.environ.get("DEPLOYMENT_TIMESTAMP", datetime.utcnow().isoformat())
+    DEPLOYMENT_TIMESTAMP = os.environ.get("DEPLOYMENT_TIMESTAMP", datetime.now(timezone.utc).isoformat())
     REGION = os.environ.get("REGION", "local")
 
     # Database
@@ -89,10 +89,26 @@ class Config:
     MAX_CHARGING_CURVE_POINTS = int(os.environ.get("MAX_CHARGING_CURVE_POINTS", 1000))  # Max curve data points
 
     # Security
-    TORQUE_API_TOKEN = os.environ.get("TORQUE_API_TOKEN")  # Required in production
+    TORQUE_API_TOKEN = os.environ.get("TORQUE_API_TOKEN")
     DASHBOARD_USER = os.environ.get("DASHBOARD_USER", "admin")
-    DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")  # Required in production
+    DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")
     RATE_LIMIT_ENABLED = os.environ.get("RATE_LIMIT_ENABLED", "true").lower() == "true"
+
+    # Production security validation - warn if critical security vars are missing
+    _missing_security_vars = []
+    if FLASK_ENV != "development":
+        if not TORQUE_API_TOKEN:
+            _missing_security_vars.append("TORQUE_API_TOKEN")
+        if not DASHBOARD_PASSWORD:
+            _missing_security_vars.append("DASHBOARD_PASSWORD")
+
+    if _missing_security_vars:
+        import logging
+        _config_logger = logging.getLogger(__name__)
+        _config_logger.warning(
+            f"Security variables not set in production: {', '.join(_missing_security_vars)}. "
+            "This leaves the application vulnerable. Set these environment variables."
+        )
 
     # WebSocket Authentication - uses DASHBOARD_PASSWORD for auth unless separate token provided
     WEBSOCKET_AUTH_ENABLED = os.environ.get("WEBSOCKET_AUTH_ENABLED", "true").lower() == "true"

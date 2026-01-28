@@ -6,7 +6,7 @@ Uses linear regression to predict electric range based on conditions.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
 
 from models import BatteryHealthReading, Trip
@@ -22,7 +22,7 @@ def get_historical_efficiency(db: Session, days: int = 90) -> List[Tuple[float, 
 
     Returns: List of (temperature, battery_health, avg_speed, efficiency)
     """
-    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
     trips = (
         db.query(Trip)

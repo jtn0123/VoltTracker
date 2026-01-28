@@ -246,9 +246,11 @@ def cleanup_old_jobs(days: int = 7) -> int:
     Returns:
         Number of jobs cleaned up
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    # Also keep a naive version for comparison with naive datetimes
+    cutoff_naive = cutoff.replace(tzinfo=None)
     cleaned = 0
 
     for queue_name in ["default", "high", "low"]:
@@ -258,9 +260,16 @@ def cleanup_old_jobs(days: int = 7) -> int:
         for job_id in queue.finished_job_registry.get_job_ids():
             try:
                 job = Job.fetch(job_id, connection=get_redis_connection())
-                if job.ended_at and job.ended_at < cutoff:
-                    job.delete()
-                    cleaned += 1
+                if job.ended_at:
+                    # Handle both timezone-aware and naive datetimes
+                    ended_at = job.ended_at
+                    if ended_at.tzinfo is None:
+                        is_old = ended_at < cutoff_naive
+                    else:
+                        is_old = ended_at < cutoff
+                    if is_old:
+                        job.delete()
+                        cleaned += 1
             except Exception as e:
                 logger.warning(f"Failed to clean job {job_id}: {e}")
 

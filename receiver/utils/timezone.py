@@ -28,7 +28,9 @@ def utc_now() -> datetime:
     Returns:
         Current UTC time without tzinfo
     """
-    return datetime.utcnow()
+    # Use datetime.now(tz.utc) and strip tzinfo for Python 3.12+ compatibility
+    # datetime.utcnow() is deprecated
+    return datetime.now(tz.utc).replace(tzinfo=None)
 
 
 def normalize_datetime(dt: Optional[datetime]) -> Optional[datetime]:

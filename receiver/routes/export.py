@@ -10,7 +10,7 @@ import logging
 import os
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from database import get_db
@@ -553,7 +553,7 @@ def import_csv():
             logger.warning(f"Failed to backup CSV: {e}")  # Don't fail import if backup fails
 
         # Get existing timestamps from last 60 days for duplicate detection
-        cutoff = datetime.utcnow() - timedelta(days=60)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=60)
         existing_timestamps = set(
             t[0] for t in db.query(TelemetryRaw.timestamp)
             .filter(TelemetryRaw.timestamp >= cutoff)
@@ -633,7 +633,18 @@ def import_csv():
             db.bulk_insert_mappings(TelemetryRaw, telemetry_batch)
             inserted_count = len(telemetry_batch)
 
-        db.commit()
+        try:
+            db.commit()
+        except Exception as commit_error:
+            db.rollback()
+            import_event["failure_reason"] = "database_commit_error"
+            import_event["first_error"] = {"error_type": type(commit_error).__name__, "reason": str(commit_error)}
+            _log_import_event()
+            logger.error(f"CSV import commit failed: {commit_error}", exc_info=True)
+            _record_import("failed", "database_commit_error", "Database commit failed during bulk insert",
+                           filename=file.filename if file else None, file_hash=file_hash, file_size=len(file_bytes))
+            return _build_response("failed", f"Database commit failed: {str(commit_error)}", "database_commit_error",
+                                   http_status=500)
 
         # Get timestamp range for the import
         if records:
@@ -710,7 +721,19 @@ def import_csv():
                 trip.distance_miles = abs(trip.end_odometer - trip.start_odometer)
 
             db.add(trip)
-            db.commit()
+            try:
+                db.commit()
+            except Exception as trip_commit_error:
+                db.rollback()
+                import_event["failure_reason"] = "trip_commit_error"
+                import_event["first_error"] = {"error_type": type(trip_commit_error).__name__, "reason": str(trip_commit_error)}
+                _log_import_event()
+                logger.error(f"Failed to create trip for import: {trip_commit_error}", exc_info=True)
+                _record_import("partial", "trip_creation_failed",
+                               f"Telemetry imported but trip creation failed: {trip_commit_error}",
+                               stats, None, session_id_str, file_hash, file.filename, len(file_bytes))
+                return _build_response("partial", f"Telemetry imported ({inserted_count} records) but trip creation failed",
+                                       "trip_creation_failed", stats=stats, http_status=200)
 
             # Finalize trip to calculate electric_miles, gas_mpg, etc.
             try:
@@ -720,7 +743,11 @@ def import_csv():
                 logger.warning(f"Failed to finalize imported trip {trip.id}: {e}")
                 # Still mark as closed even if finalization has issues
                 trip.is_closed = True
-                db.commit()
+                try:
+                    db.commit()
+                except Exception as close_error:
+                    db.rollback()
+                    logger.error(f"Failed to close trip {trip.id}: {close_error}")
 
             trip_id = trip.id
             stats["trip_id"] = trip_id

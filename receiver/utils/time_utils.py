@@ -86,10 +86,11 @@ def parse_datetime(
             timestamp = int(date_string)
             # Reject unreasonably large timestamps (> year 3000)
             if timestamp > 32503680000:
+                logger.debug(f"Rejected timestamp {timestamp} as too large (> year 3000)")
                 return default
             return datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        except (ValueError, OSError, OverflowError):
-            pass
+        except (ValueError, OSError, OverflowError) as e:
+            logger.debug(f"Failed to parse '{date_string}' as Unix timestamp: {e}")
 
     # Try dateutil parser (handles most formats)
     try:
@@ -98,8 +99,8 @@ def parse_datetime(
         if assume_utc and dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
-    except (ValueError, TypeError, OverflowError):
-        pass
+    except (ValueError, TypeError, OverflowError) as e:
+        logger.debug(f"dateutil failed to parse '{date_string}': {e}")
 
     # Try explicit formats
     for fmt in DATETIME_FORMATS:
