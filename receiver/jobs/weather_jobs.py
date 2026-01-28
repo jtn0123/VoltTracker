@@ -131,12 +131,12 @@ def fetch_elevation_for_trip(trip_id: int, db_session: Optional[Session] = None)
             logger.warning(f"Trip {trip_id} not found for elevation fetch")
             return {"status": "failed", "reason": "trip_not_found"}
 
-        # Get telemetry points for the trip
+        # Get telemetry points for the trip using session_id
         telemetry_points = db_session.query(TelemetryRaw).filter(
-            TelemetryRaw.trip_id == trip_id,
+            TelemetryRaw.session_id == trip.session_id,
             TelemetryRaw.latitude.isnot(None),
             TelemetryRaw.longitude.isnot(None)
-        ).all()
+        ).order_by(TelemetryRaw.timestamp).all()
 
         if not telemetry_points:
             return {"status": "skipped", "reason": "no_gps_data"}

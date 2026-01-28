@@ -543,7 +543,6 @@ class TestMpgTrend:
 class TestCompareTrips:
     """Tests for POST /api/trips/compare."""
 
-    @pytest.mark.skip(reason="Compare endpoint has bug - trips.py uses trip.avg_speed_mph which doesn't exist on Trip model")
     def test_compare_trips_success(self, client, sample_trips):
         """Test comparing multiple trips."""
         trip_ids = [sample_trips[0].id, sample_trips[1].id]
@@ -621,7 +620,6 @@ class TestCompareTrips:
         # Should return 200 with empty/partial results or 404
         assert response.status_code in [200, 404]
 
-    @pytest.mark.skip(reason="Compare endpoint has bug - trips.py uses trip.avg_speed_mph which doesn't exist on Trip model")
     def test_compare_trips_single_id(self, client, sample_trips):
         """Test comparing single trip returns minimal comparison."""
         data = {"trip_ids": [sample_trips[0].id]}
