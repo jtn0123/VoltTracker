@@ -69,7 +69,9 @@ def calculate_trend_vs_previous(current_value, previous_value):
     Returns:
         Dict with change_value, change_percent, direction, is_improving
     """
-    if previous_value is None or previous_value == 0:
+    # Use epsilon comparison for floating point safety
+    EPSILON = 1e-9
+    if previous_value is None or abs(previous_value) < EPSILON:
         return {
             "change_value": None,
             "change_percent": None,

@@ -88,6 +88,17 @@ class Config:
     # Charging Session Configuration
     MAX_CHARGING_CURVE_POINTS = int(os.environ.get("MAX_CHARGING_CURVE_POINTS", 1000))  # Max curve data points
 
+    # Maintenance Service Configuration
+    MAX_ENGINE_TELEMETRY_POINTS = int(os.environ.get("MAX_ENGINE_TELEMETRY_POINTS", 50000))  # Limit for engine hours calc
+
+    # External API Configuration
+    WEATHER_API_MAX_RETRIES = int(os.environ.get("WEATHER_API_MAX_RETRIES", 2))
+    WEATHER_API_RETRY_DELAY = float(os.environ.get("WEATHER_API_RETRY_DELAY", 0.5))
+    WEATHER_API_TIMEOUT = int(os.environ.get("WEATHER_API_TIMEOUT", 3))
+    ELEVATION_API_MAX_RETRIES = int(os.environ.get("ELEVATION_API_MAX_RETRIES", 2))
+    ELEVATION_API_RETRY_DELAY = float(os.environ.get("ELEVATION_API_RETRY_DELAY", 0.5))
+    ELEVATION_API_TIMEOUT = int(os.environ.get("ELEVATION_API_TIMEOUT", 5))
+
     # Security
     TORQUE_API_TOKEN = os.environ.get("TORQUE_API_TOKEN")
     DASHBOARD_USER = os.environ.get("DASHBOARD_USER", "admin")

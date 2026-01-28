@@ -22,10 +22,9 @@ logger = logging.getLogger(__name__)
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_HISTORICAL_URL = "https://archive-api.open-meteo.com/v1/archive"
 
-# Retry configuration - keep short to avoid blocking scheduler
-MAX_RETRIES = 2  # Reduce retries to minimize blocking time
-RETRY_DELAY_SECONDS = 0.5  # Short delay between retries
-WEATHER_API_TIMEOUT = 3  # Default timeout per request (seconds)
+# Retry configuration - now configurable via Config
+# Defaults: 2 retries, 0.5s delay, 3s timeout
+# Keep short to avoid blocking scheduler
 
 # Simple in-memory cache for weather data with LRU eviction
 # Key: (lat_rounded, lon_rounded, datetime_hour_str) -> Value: (data, timestamp)
@@ -61,10 +60,11 @@ def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optio
     )
 
     last_error: Optional[Exception] = None
-    delay = RETRY_DELAY_SECONDS
+    delay = Config.WEATHER_API_RETRY_DELAY
     total_attempts = 0
+    max_retries = Config.WEATHER_API_MAX_RETRIES
 
-    for attempt in range(MAX_RETRIES):
+    for attempt in range(max_retries):
         total_attempts += 1
         try:
             # Time the individual request attempt
@@ -85,12 +85,12 @@ def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optio
 
         except requests.exceptions.Timeout as e:
             last_error = e
-            logger.warning(f"Weather API timeout (attempt {attempt + 1}/{MAX_RETRIES})")
+            logger.warning(f"Weather API timeout (attempt {attempt + 1}/{max_retries})")
             event.add_technical_metric(f"attempt_{attempt + 1}_timeout", True)
 
         except requests.exceptions.ConnectionError as e:
             last_error = e
-            logger.warning(f"Weather API connection error (attempt {attempt + 1}/{MAX_RETRIES})")
+            logger.warning(f"Weather API connection error (attempt {attempt + 1}/{max_retries})")
             event.add_technical_metric(f"attempt_{attempt + 1}_connection_error", True)
 
         except requests.exceptions.HTTPError as e:
@@ -114,7 +114,7 @@ def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optio
                     event.emit(level="warning", force=True)
                     return None
 
-            logger.warning(f"Weather API HTTP error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+            logger.warning(f"Weather API HTTP error (attempt {attempt + 1}/{max_retries}): {e}")
             event.add_technical_metric(f"attempt_{attempt + 1}_http_error", True)
 
         except requests.exceptions.JSONDecodeError as e:
@@ -136,16 +136,16 @@ def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optio
         except Exception as e:
             last_error = e
             # Log full traceback for unexpected errors
-            logger.exception(f"Weather API unexpected error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+            logger.exception(f"Weather API unexpected error (attempt {attempt + 1}/{max_retries}): {e}")
             event.add_technical_metric(f"attempt_{attempt + 1}_unexpected_error", True)
 
         # Wait before retrying (exponential backoff)
-        if attempt < MAX_RETRIES - 1:
+        if attempt < max_retries - 1:
             time.sleep(delay)
             delay *= 2  # Double delay for next attempt
 
     # All retries failed
-    logger.warning(f"Weather API failed after {MAX_RETRIES} attempts: {last_error}")
+    logger.warning(f"Weather API failed after {max_retries} attempts: {last_error}")
 
     # Emit failure event with appropriate error code
     if isinstance(last_error, requests.exceptions.Timeout):
@@ -170,7 +170,7 @@ def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optio
 
 
 def get_weather_for_location(
-    latitude: float, longitude: float, timestamp: Optional[datetime] = None, timeout: int = WEATHER_API_TIMEOUT, db_session=None
+    latitude: float, longitude: float, timestamp: Optional[datetime] = None, timeout: Optional[int] = None, db_session=None
 ) -> Optional[Dict[str, Any]]:
     """
     Fetch weather data for a location at a given time with 2-tier caching.
@@ -196,6 +196,9 @@ def get_weather_for_location(
     """
     if timestamp is None:
         timestamp = utc_now()
+
+    if timeout is None:
+        timeout = Config.WEATHER_API_TIMEOUT
 
     # Create cache key: round coordinates to 2 decimals (~1km precision) and hour
     # This allows cache sharing between nearby locations at same time
