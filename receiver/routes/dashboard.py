@@ -5,6 +5,7 @@ Handles the main dashboard page and status endpoints.
 """
 
 from database import get_db
+from extensions import limiter
 from flask import Blueprint, jsonify, render_template
 from models import TelemetryRaw, Trip
 from sqlalchemy import desc
@@ -27,6 +28,7 @@ def map_view():
 
 
 @dashboard_bp.route("/api/status", methods=["GET"])
+@limiter.limit("60 per minute")  # Rate limit status endpoint to prevent abuse
 def get_status():
     """Get system status and last sync time."""
     db = get_db()

@@ -57,6 +57,7 @@ def record_vitals():
 
         # Store in database for historical analysis
         db_stored = False
+        db = None
         try:
             db = get_db()
             web_vital = WebVital.create_from_frontend(data)
@@ -65,7 +66,11 @@ def record_vitals():
             db_stored = True
             logger.debug(f"Stored Web Vital {metric_name} to database (id={web_vital.id})")
         except Exception as db_error:
-            db.rollback()
+            if db is not None:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass  # Rollback failed, but we're already handling the original error
             logger.error(f"Failed to store Web Vital in database: {db_error}", exc_info=True)
             # Continue execution - logging is more important than DB storage
             # The metric was already logged, so we don't fail the request

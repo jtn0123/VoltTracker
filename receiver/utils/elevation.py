@@ -18,15 +18,13 @@ logger = logging.getLogger(__name__)
 
 ELEVATION_API_URL = "https://api.open-meteo.com/v1/elevation"
 MAX_POINTS_PER_REQUEST = 100  # Open-Meteo accepts up to 100 coordinates per request
-MAX_RETRIES = 2
-RETRY_DELAY_SECONDS = 0.5
-DEFAULT_TIMEOUT = 5  # seconds
+# Retry configuration now uses Config values (ELEVATION_API_MAX_RETRIES, etc.)
 
 
 def get_elevation_for_point(
     latitude: float,
     longitude: float,
-    timeout: int = DEFAULT_TIMEOUT,
+    timeout: Optional[int] = None,
 ) -> Optional[float]:
     """
     Get elevation for a single GPS coordinate.
@@ -34,18 +32,20 @@ def get_elevation_for_point(
     Args:
         latitude: GPS latitude
         longitude: GPS longitude
-        timeout: Request timeout in seconds
+        timeout: Request timeout in seconds (default: Config.ELEVATION_API_TIMEOUT)
 
     Returns:
         Elevation in meters, or None if request failed
     """
+    if timeout is None:
+        timeout = Config.ELEVATION_API_TIMEOUT
     result = get_elevation_for_points([(latitude, longitude)], timeout=timeout)
     return result[0] if result else None
 
 
 def get_elevation_for_points(
     coordinates: List[Tuple[float, float]],
-    timeout: int = DEFAULT_TIMEOUT,
+    timeout: Optional[int] = None,
 ) -> List[Optional[float]]:
     """
     Batch elevation lookup for multiple coordinates.
@@ -54,13 +54,16 @@ def get_elevation_for_points(
 
     Args:
         coordinates: List of (latitude, longitude) tuples
-        timeout: Request timeout in seconds
+        timeout: Request timeout in seconds (default: Config.ELEVATION_API_TIMEOUT)
 
     Returns:
         List of elevations in meters (same order as input), None for failed lookups
     """
     if not coordinates:
         return []
+
+    if timeout is None:
+        timeout = Config.ELEVATION_API_TIMEOUT
 
     # Check feature flag
     if hasattr(Config, "FEATURE_ELEVATION_TRACKING") and not Config.FEATURE_ELEVATION_TRACKING:
@@ -116,9 +119,10 @@ def _request_with_retry(
         List of elevations, or None if all retries failed
     """
     last_error: Optional[Exception] = None
-    delay = RETRY_DELAY_SECONDS
+    delay = Config.ELEVATION_API_RETRY_DELAY
+    max_retries = Config.ELEVATION_API_MAX_RETRIES
 
-    for attempt in range(MAX_RETRIES):
+    for attempt in range(max_retries):
         try:
             response = requests.get(ELEVATION_API_URL, params=params, timeout=timeout)
             response.raise_for_status()
@@ -136,12 +140,12 @@ def _request_with_retry(
 
         except requests.exceptions.Timeout as e:
             last_error = e
-            logger.warning(f"Elevation API timeout (attempt {attempt + 1}/{MAX_RETRIES})")
+            logger.warning(f"Elevation API timeout (attempt {attempt + 1}/{max_retries})")
             event.add_technical_metric(f"attempt_{attempt + 1}_timeout", True)
 
         except requests.exceptions.ConnectionError as e:
             last_error = e
-            logger.warning(f"Elevation API connection error (attempt {attempt + 1}/{MAX_RETRIES})")
+            logger.warning(f"Elevation API connection error (attempt {attempt + 1}/{max_retries})")
             event.add_technical_metric(f"attempt_{attempt + 1}_connection_error", True)
 
         except requests.exceptions.HTTPError as e:
@@ -151,7 +155,7 @@ def _request_with_retry(
                 if 400 <= status_code < 500:
                     logger.warning(f"Elevation API client error: HTTP {status_code}")
                     return None
-            logger.warning(f"Elevation API HTTP error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+            logger.warning(f"Elevation API HTTP error (attempt {attempt + 1}/{max_retries}): {e}")
 
         except Exception as e:
             last_error = e
@@ -159,11 +163,11 @@ def _request_with_retry(
             event.add_technical_metric(f"attempt_{attempt + 1}_unexpected_error", True)
 
         # Wait before retrying
-        if attempt < MAX_RETRIES - 1:
+        if attempt < max_retries - 1:
             time.sleep(delay)
             delay *= 2
 
-    logger.warning(f"Elevation API failed after {MAX_RETRIES} attempts: {last_error}")
+    logger.warning(f"Elevation API failed after {max_retries} attempts: {last_error}")
     return None
 
 

@@ -61,8 +61,9 @@ def add_charging_session():
     if data.get("end_time"):
         try:
             end_time = datetime.fromisoformat(data["end_time"])
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid end_time format '{data['end_time']}': {e}")
+            return jsonify({"error": f"Invalid end_time format: {data['end_time']}. Use ISO 8601 format."}), 400
 
     session = ChargingSession(
         start_time=start_time,
@@ -91,8 +92,8 @@ def add_charging_session():
         return jsonify({"error": "Database constraint violation"}), 409
     except OperationalError as e:
         db.rollback()
-        logger.error(f"Database error adding charging session: {e}")
-        return jsonify({"error": "Database error"}), 500
+        logger.error(f"Database error adding charging session: {e}", exc_info=True)
+        return jsonify({"error": "Database error while saving charging session. Please try again."}), 500
 
     return jsonify(session.to_dict()), 201
 
