@@ -175,7 +175,7 @@ def smooth_fuel_level(
 def calculate_fuel_cost(
     gallons_consumed: float,
     price_per_gallon: float
-) -> float:
+) -> Optional[float]:
     """
     Calculate cost of fuel consumed.
 
@@ -184,14 +184,20 @@ def calculate_fuel_cost(
         price_per_gallon: Gas price ($/gallon)
 
     Returns:
-        Total fuel cost in dollars
+        Total fuel cost in dollars, or None if inputs are invalid
 
     Examples:
         >>> calculate_fuel_cost(10.0, 3.50)
         35.0
         >>> calculate_fuel_cost(5.5, 4.00)
         22.0
+        >>> calculate_fuel_cost(-1.0, 3.50)
+        None
     """
+    if gallons_consumed is None or gallons_consumed < 0:
+        return None
+    if price_per_gallon is None or price_per_gallon < 0:
+        return None
     return round(gallons_consumed * price_per_gallon, 2)
 
 
