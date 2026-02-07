@@ -1,9 +1,12 @@
 # Node modules
 node_modules/
-package-lock.json
 
 # Build outputs
 receiver/static/dist/
+
+# Allow frontend lock file and built JS
+!receiver/frontend/package-lock.json
+!receiver/static/js/dist/
 
 # Python
 __pycache__/

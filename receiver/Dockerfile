@@ -1,3 +1,10 @@
+FROM node:20-slim AS frontend-builder
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ .
+RUN npm run build
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -14,6 +21,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
+
+# Copy built frontend assets from builder stage
+COPY --from=frontend-builder /static/js/dist/ /app/static/js/dist/
 
 # Create logs directory
 RUN mkdir -p /app/logs

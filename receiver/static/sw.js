@@ -4,7 +4,7 @@
  */
 
 // Cache version - update on each deploy to ensure fresh assets
-const CACHE_VERSION = '2026-01-07-v4';
+const CACHE_VERSION = '2026-02-07-v5';
 const STATIC_CACHE = `volttracker-static-${CACHE_VERSION}`;
 const API_CACHE = `volttracker-api-${CACHE_VERSION}`;
 const CDN_CACHE = `volttracker-cdn-${CACHE_VERSION}`;
@@ -13,7 +13,8 @@ const STATIC_ASSETS = [
     '/',
     '/static/css/style.css',
     '/static/css/critical.css',
-    '/static/js/dashboard.js',
+    '/static/js/dist/main.js',
+    '/static/js/toast.js',
     '/static/manifest.json'
 ];
 
