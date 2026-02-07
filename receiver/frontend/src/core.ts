@@ -6,7 +6,7 @@
 import type { ImportResult } from './types/api';
 
 // Debug mode
-export const DEBUG = true;
+export const DEBUG = new URLSearchParams(window.location.search).has('debug');
 
 /** Mutable application state shared across modules */
 export interface AppState {

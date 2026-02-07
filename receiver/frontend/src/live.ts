@@ -20,7 +20,16 @@ export function initWebSocket(): void {
   }
 
   try {
-    state.socket = io();
+    // Read WebSocket auth credential from meta tag injected by the server
+    const wsTokenMeta = document.querySelector('meta[name="ws-token"]');
+    const wsToken = wsTokenMeta?.getAttribute('content') || '';
+
+    state.socket = io(undefined, {
+      auth: { token: wsToken, password: wsToken },
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 30000,
+      reconnectionAttempts: 10,
+    });
 
     state.socket.on('connect', () => {
       if (DEBUG) console.log('WebSocket connected');

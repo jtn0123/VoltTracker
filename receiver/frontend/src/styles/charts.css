@@ -1,0 +1,111 @@
+.dashboard-row {
+    display: grid;
+    gap: var(--space-lg);
+    margin-bottom: var(--space-xl);
+}
+
+@media (min-width: 1024px) {
+    .dashboard-row {
+        grid-template-columns: 3fr 2fr;
+    }
+
+    .dashboard-row.equal {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* Section Dividers */
+.section-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+    margin: var(--space-xl) 0;
+}
+
+@media (min-width: 1024px) {
+    .section-divider {
+        margin: var(--space-2xl) 0;
+    }
+}
+
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.chart-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.timeframe-selector {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.timeframe-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--text-primary);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+}
+
+.timeframe-btn:hover {
+    background-color: var(--accent);
+}
+
+.timeframe-btn.active {
+    background-color: var(--accent);
+    border-color: var(--accent-light);
+}
+
+.chart-container {
+    position: relative;
+    height: 300px;
+}
+
+/* Trips Table */
+
+/* ============================================
+   Responsive Chart Containers
+   ============================================ */
+
+.chart-container {
+    position: relative;
+    width: 100%;
+}
+
+@media (max-width: 480px) {
+    .chart-container {
+        min-height: 200px;
+    }
+
+    .chart-section {
+        padding: 1rem;
+    }
+
+    .chart-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .timeframe-selector {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.25rem;
+    }
+
+    .timeframe-btn {
+        font-size: 0.75rem;
+        padding: 0.5rem;
+    }
+}

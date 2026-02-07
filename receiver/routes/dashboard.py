@@ -6,6 +6,7 @@ Handles the main dashboard page and status endpoints.
 
 from database import get_db
 from extensions import limiter
+from config import Config
 from flask import Blueprint, jsonify, render_template
 from models import TelemetryRaw, Trip
 from sqlalchemy import desc
@@ -18,7 +19,9 @@ def dashboard():
     """Serve the dashboard HTML."""
     # Auth is handled by the @auth.login_required decorator in app.py
     # For blueprint, we need to check if auth is required
-    return render_template("index.html")
+    # Pass WebSocket auth token so the frontend can authenticate its Socket.IO connection
+    ws_token = Config.WEBSOCKET_TOKEN or Config.DASHBOARD_PASSWORD or ""
+    return render_template("index.html", ws_token=ws_token)
 
 
 @dashboard_bp.route("/map")

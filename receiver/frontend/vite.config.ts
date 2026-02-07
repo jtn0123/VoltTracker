@@ -5,6 +5,7 @@ export default defineConfig({
   build: {
     outDir: '../static/js/dist',
     emptyOutDir: true,
+    cssCodeSplit: false,
     rollupOptions: {
       input: 'src/main.ts',
       output: {

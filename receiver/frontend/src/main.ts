@@ -3,6 +3,23 @@
  * Imports all modules, wires up event listeners, and initializes the app
  */
 
+// CSS modules — Vite bundles these into the output
+import './styles/base.css';
+import './styles/layout.css';
+import './styles/cards.css';
+import './styles/charts.css';
+import './styles/trips.css';
+import './styles/map.css';
+import './styles/charging.css';
+import './styles/battery.css';
+import './styles/import.css';
+import './styles/nav.css';
+import './styles/modals.css';
+import './styles/forms.css';
+import './styles/live.css';
+import './styles/theme.css';
+import './styles/utilities.css';
+
 import { state } from './core';
 import { setupChartLazyLoading } from './charts';
 import { loadTrips, openTripModal, closeTripModal, deleteTrip, renderTripCharts, setTimeframe } from './trips';
