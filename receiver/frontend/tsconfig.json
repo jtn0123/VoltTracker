@@ -8,6 +8,10 @@
     "noUnusedParameters": false,
     "outDir": "./dist",
     "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "declaration": false,
     "sourceMap": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"]

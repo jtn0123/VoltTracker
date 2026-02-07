@@ -1,513 +1,513 @@
 .charging-cards {
-    display: none;
+  display: none;
 }
 
 .charging-card {
-    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.8) 100%);
-    border-radius: var(--radius-lg);
-    padding: var(--space-base);
-    margin-bottom: var(--space-base);
-    border: 1px solid var(--border-color);
-    cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.8) 100%);
+  border-radius: var(--radius-lg);
+  padding: var(--space-base);
+  margin-bottom: var(--space-base);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .charging-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .charging-card:active {
-    transform: scale(0.98);
+  transform: scale(0.98);
 }
 
 .charging-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
 }
 
 .charging-card-date {
-    font-weight: 600;
-    font-size: var(--font-base);
-    color: var(--text-primary);
+  font-weight: 600;
+  font-size: var(--font-base);
+  color: var(--text-primary);
 }
 
 .charging-card-badge {
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--radius-full);
-    font-size: var(--font-xs);
-    font-weight: 600;
-    text-transform: uppercase;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-full);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 .charging-card-badge.l1 {
-    background-color: rgba(108, 117, 125, 0.2);
-    color: #adb5bd;
+  background-color: rgba(108, 117, 125, 0.2);
+  color: #adb5bd;
 }
 
 .charging-card-badge.l2 {
-    background-color: var(--electric-glow);
-    color: var(--electric);
+  background-color: var(--electric-glow);
+  color: var(--electric);
 }
 
 .charging-card-badge.dcfc {
-    background-color: rgba(255, 193, 7, 0.2);
-    color: var(--gas);
+  background-color: rgba(255, 193, 7, 0.2);
+  color: var(--gas);
 }
 
 .charging-card-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-sm);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
 }
 
 .charging-card-stat {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
 }
 
 .charging-card-stat-label {
-    font-size: var(--font-xs);
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .charging-card-stat-value {
-    font-size: var(--font-base);
-    color: var(--text-primary);
-    font-weight: 500;
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-    .header {
-        padding: 1rem;
-    }
+  .header {
+    padding: 1rem;
+  }
 
-    .header h1 {
-        font-size: 1.25rem;
-    }
+  .header h1 {
+    font-size: 1.25rem;
+  }
 
-    .container {
-        padding: 1rem;
-    }
+  .container {
+    padding: 1rem;
+  }
 
-    .cards-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-    }
+  .cards-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
 
-    .card {
-        padding: 1rem;
-    }
+  .card {
+    padding: 1rem;
+  }
 
-    .card-value {
-        font-size: 1.75rem;
-    }
+  .card-value {
+    font-size: 1.75rem;
+  }
 
-    .chart-container {
-        height: 250px;
-    }
+  .chart-container {
+    height: 250px;
+  }
 
-    .soc-section {
-        grid-template-columns: 1fr;
-    }
+  .soc-section {
+    grid-template-columns: 1fr;
+  }
 
-    /* Hide table, show cards on mobile */
-    .trips-table-wrapper {
-        display: none;
-    }
+  /* Hide table, show cards on mobile */
+  .trips-table-wrapper {
+    display: none;
+  }
 
-    .trip-cards {
-        display: block;
-    }
+  .trip-cards {
+    display: block;
+  }
 
-    /* Hide charging table, show cards on mobile */
-    .charging-table-wrapper {
-        display: none;
-    }
+  /* Hide charging table, show cards on mobile */
+  .charging-table-wrapper {
+    display: none;
+  }
 
-    .charging-cards {
-        display: block;
-    }
+  .charging-cards {
+    display: block;
+  }
 
-    .timeframe-selector {
-        width: 100%;
-        justify-content: center;
-    }
+  .timeframe-selector {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 @media (max-width: 480px) {
-    .cards-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: var(--space-sm);
-    }
+  .cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-sm);
+  }
 
-    .card {
-        padding: var(--space-md);
-    }
+  .card {
+    padding: var(--space-md);
+  }
 
-    .card-value {
-        font-size: var(--font-xl);
-    }
+  .card-value {
+    font-size: var(--font-xl);
+  }
 
-    .card-label {
-        font-size: var(--font-xs);
-    }
+  .card-label {
+    font-size: var(--font-xs);
+  }
 
-    .status-bar {
-        flex-direction: column;
-        align-items: flex-start;
-    }
+  .status-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
-
 
 /* ============================================
    Charging Section
    ============================================ */
 .charging-section {
-    background-color: var(--bg-secondary);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-top: 2rem;
+  background-color: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-top: 2rem;
 }
 
 .charging-stats-row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-lg);
-    margin-bottom: var(--space-lg);
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
 }
 
 @media (min-width: 768px) {
-    .charging-stats-row {
-        grid-template-columns: 1fr 1fr;
-    }
+  .charging-stats-row {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .charging-stats {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-base);
-    padding: var(--space-lg);
-    background: linear-gradient(145deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.85) 100%);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
-    position: relative;
-    overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-base);
+  padding: var(--space-lg);
+  background: linear-gradient(145deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.85) 100%);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  position: relative;
+  overflow: hidden;
 }
 
 .charging-stats::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
 }
 
 /* Cost Comparison Section */
 .cost-comparison {
-    padding: var(--space-lg);
-    background: linear-gradient(145deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.85) 100%);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
-    position: relative;
-    overflow: hidden;
+  padding: var(--space-lg);
+  background: linear-gradient(145deg, var(--bg-card) 0%, rgba(15, 52, 96, 0.85) 100%);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  position: relative;
+  overflow: hidden;
 }
 
 .cost-comparison::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
 }
 
 .cost-comparison h4 {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    margin-bottom: var(--space-md);
-    letter-spacing: 0.1em;
-    font-weight: 500;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: var(--space-md);
+  letter-spacing: 0.1em;
+  font-weight: 500;
 }
 
 .cost-compare-grid {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 0.75rem;
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .cost-item {
-    flex: 1;
-    text-align: center;
-    padding: 0.5rem;
-    border-radius: 6px;
-    background-color: rgba(0, 0, 0, 0.2);
+  flex: 1;
+  text-align: center;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background-color: rgba(0, 0, 0, 0.2);
 }
 
 .cost-item.electric {
-    border-left: 3px solid #00d4aa;
+  border-left: 3px solid #00d4aa;
 }
 
 .cost-item.gas {
-    border-left: 3px solid #ffc107;
+  border-left: 3px solid #ffc107;
 }
 
 .cost-label {
-    display: block;
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    margin-bottom: 0.25rem;
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
 }
 
 .cost-value {
-    display: block;
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--text-primary);
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .cost-savings {
-    text-align: center;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    padding: 0.5rem;
-    background-color: rgba(0, 0, 0, 0.1);
-    border-radius: 6px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 0.5rem;
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
 }
 
 .cost-savings.positive {
-    color: #00d4aa;
-    background-color: rgba(0, 212, 170, 0.1);
+  color: #00d4aa;
+  background-color: rgba(0, 212, 170, 0.1);
 }
 
 .cost-savings.negative {
-    color: #ffc107;
-    background-color: rgba(255, 193, 7, 0.1);
+  color: #ffc107;
+  background-color: rgba(255, 193, 7, 0.1);
 }
 
 .charging-table-wrapper {
-    overflow-x: auto;
+  overflow-x: auto;
 }
 
 .charging-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.875rem;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
 }
 
 .charging-table th,
 .charging-table td {
-    padding: 1rem 1.25rem;
-    text-align: left;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 1rem 1.25rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .charging-table th {
-    color: var(--text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.75rem;
-    letter-spacing: 0.1em;
-    background-color: rgba(0, 0, 0, 0.2);
-    position: sticky;
-    top: 0;
-    z-index: 1;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  background-color: rgba(0, 0, 0, 0.2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 /* Zebra striping */
 .charging-table tbody tr:nth-child(even) {
-    background-color: rgba(255, 255, 255, 0.02);
+  background-color: rgba(255, 255, 255, 0.02);
 }
 
 .charging-table tbody tr {
-    transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
 .charging-table tbody tr:hover {
-    background-color: rgba(50, 130, 184, 0.1);
+  background-color: rgba(50, 130, 184, 0.1);
 }
 
 .charging-table tbody tr.clickable {
-    cursor: pointer;
+  cursor: pointer;
 }
 
 /* Desktop charging table enhancements */
 @media (min-width: 1024px) {
-    .charging-table th,
-    .charging-table td {
-        padding: 1.125rem 1.5rem;
-    }
+  .charging-table th,
+  .charging-table td {
+    padding: 1.125rem 1.5rem;
+  }
 
-    .charging-table {
-        font-size: 1rem;
-    }
+  .charging-table {
+    font-size: 1rem;
+  }
 
-    .charging-table th {
-        font-size: 0.8rem;
-    }
+  .charging-table th {
+    font-size: 0.8rem;
+  }
 }
 
 .btn-add {
-    padding: 0.625rem 1.25rem;
-    background-color: var(--electric);
-    color: var(--bg-primary);
-    border: none;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: 0.875rem;
-    font-weight: 600;
-    transition: all 0.2s ease-out;
-    box-shadow: 0 2px 8px rgba(0, 212, 170, 0.25);
+  padding: 0.625rem 1.25rem;
+  background-color: var(--electric);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.2s ease-out;
+  box-shadow: 0 2px 8px rgba(0, 212, 170, 0.25);
 }
 
 .btn-add:hover {
-    background-color: var(--electric-dark);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 212, 170, 0.35);
+  background-color: var(--electric-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 212, 170, 0.35);
 }
 
 .btn-add:active {
-    transform: translateY(0) scale(0.98);
-    box-shadow: 0 1px 4px rgba(0, 212, 170, 0.2);
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 1px 4px rgba(0, 212, 170, 0.2);
 }
 
 /* Enhanced Interactive States */
 .btn-primary,
 .btn-secondary {
-    transition: all 0.2s ease-out;
+  transition: all 0.2s ease-out;
 }
 
 .btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 .btn-primary:active,
 .btn-secondary:active {
-    transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.98);
 }
 
 /* Timeframe button enhancements */
 .timeframe-btn {
-    transition: all 0.2s ease-out;
+  transition: all 0.2s ease-out;
 }
 
 .timeframe-btn:hover {
-    transform: translateY(-1px);
+  transform: translateY(-1px);
 }
 
 .timeframe-btn:active {
-    transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.98);
 }
 
 /* Export button polish */
 .export-btn {
-    transition: all 0.2s ease-out;
+  transition: all 0.2s ease-out;
 }
 
 .export-btn:hover {
-    transform: translateY(-1px);
+  transform: translateY(-1px);
 }
 
 .export-btn:active {
-    transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.98);
 }
-
 
 /* ============================================
    Charging Detail Modal
    ============================================ */
 .charging-detail-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 .charging-stat {
-    background-color: var(--bg-secondary);
-    padding: 1rem;
-    border-radius: 8px;
-    text-align: center;
+  background-color: var(--bg-secondary);
+  padding: 1rem;
+  border-radius: 8px;
+  text-align: center;
 }
 
 .charging-stat-label {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.5rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .charging-stat-value {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .charging-curve-container {
-    margin-bottom: 1.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .charging-curve-container h3 {
-    font-size: 1rem;
-    color: var(--text-secondary);
-    margin-bottom: 1rem;
+  font-size: 1rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
 }
 
 .charging-cost-breakdown h3 {
-    font-size: 1rem;
-    color: var(--text-secondary);
-    margin-bottom: 1rem;
+  font-size: 1rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
 }
 
 .cost-breakdown-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
 }
 
 .cost-breakdown-grid .cost-item {
-    display: flex;
-    flex-direction: column;
-    background-color: var(--bg-secondary);
-    padding: 0.75rem;
-    border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-secondary);
+  padding: 0.75rem;
+  border-radius: 8px;
 }
 
 .cost-breakdown-grid .cost-label {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
 }
 
 .cost-breakdown-grid .cost-value {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--text-primary);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .cost-breakdown-grid .cost-value.estimated {
-    color: var(--text-secondary);
+  color: var(--text-secondary);
 }
 
 .savings-callout {
-    background-color: rgba(39, 174, 96, 0.15);
-    color: #27ae60;
-    padding: 0.75rem 1rem;
-    border-radius: 8px;
-    text-align: center;
-    font-size: 1rem;
+  background-color: rgba(39, 174, 96, 0.15);
+  color: #27ae60;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 1rem;
 }

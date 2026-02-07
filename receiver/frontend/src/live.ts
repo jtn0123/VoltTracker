@@ -3,8 +3,10 @@
  * WebSocket connection, real-time updates, and power flow
  */
 
-import { DEBUG, state, fetchJson, formatDateTime, getElapsedTime } from './core';
-import type { LiveTelemetryResponse, TelemetryPoint, WsTelemetryData, WsToastData } from './types/api';
+import { DEBUG, state, store, fetchJson, formatDateTime, getElapsedTime } from '@/core';
+import type { LiveTelemetryResponse, TelemetryPoint, WsTelemetryData, WsToastData } from '@/types/api';
+import { LiveTelemetryResponseSchema, validateResponse } from '@/types/schemas';
+import { ConnectionStatus, PowerFlowState } from '@/types/enums';
 
 /**
  * Initialize WebSocket connection for real-time updates
@@ -34,12 +36,12 @@ export function initWebSocket(): void {
     state.socket.on('connect', () => {
       if (DEBUG) console.log('WebSocket connected');
       state.useWebSocket = true;
-      updateConnectionStatus('connected');
+      updateConnectionStatus(ConnectionStatus.Connected);
     });
 
     state.socket.on('disconnect', () => {
       if (DEBUG) console.log('WebSocket disconnected');
-      updateConnectionStatus('disconnected');
+      updateConnectionStatus(ConnectionStatus.Disconnected);
       if (!state.liveRefreshInterval) {
         state.liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);
       }
@@ -113,7 +115,8 @@ export function handleRealtimeTelemetry(data: WsTelemetryData): void {
     }
   }
 
-  updateConnectionStatus('live');
+  updateConnectionStatus(ConnectionStatus.Live);
+  store.emit('telemetry:update', data);
 }
 
 /**
@@ -129,22 +132,9 @@ export function updateLiveValue(elementId: string, value: number | null, decimal
 /**
  * Update connection status indicator
  */
-export function updateConnectionStatus(status: string): void {
-  const statusDot = document.getElementById('status-dot');
-  const lastSync = document.getElementById('last-sync');
-
-  if (statusDot) {
-    statusDot.classList.remove('offline', 'live');
-    if (status === 'live' || status === 'connected') {
-      statusDot.classList.add('live');
-    } else if (status === 'disconnected') {
-      statusDot.classList.add('offline');
-    }
-  }
-
-  if (lastSync && status === 'live') {
-    lastSync.textContent = 'Live';
-  }
+export function updateConnectionStatus(status: ConnectionStatus): void {
+  // Use the reactive store — subscribers in main.ts handle the DOM updates
+  store.setState({ connectionStatus: status });
 }
 
 /**
@@ -152,7 +142,8 @@ export function updateConnectionStatus(status: string): void {
  */
 export async function loadLiveTelemetry(): Promise<void> {
   try {
-    const data = await fetchJson<LiveTelemetryResponse>('/api/telemetry/latest');
+    const raw = await fetchJson<LiveTelemetryResponse>('/api/telemetry/latest');
+    const data = validateResponse(LiveTelemetryResponseSchema, raw, '/api/telemetry/latest');
 
     const liveSection = document.getElementById('live-trip-section');
     const liveContent = document.getElementById('live-trip-content');
@@ -164,7 +155,13 @@ export async function loadLiveTelemetry(): Promise<void> {
       liveSection.style.display = 'block';
 
       const elapsed = getElapsedTime(data.start_time!);
-      const stats = data.trip_stats || { in_gas_mode: false, gas_mpg: null, miles_driven: null, kwh_used: null, kwh_per_mile: null };
+      const stats = data.trip_stats || {
+        in_gas_mode: false,
+        gas_mpg: null,
+        miles_driven: null,
+        kwh_used: null,
+        kwh_per_mile: null,
+      };
 
       let modeLabel: string, modeValue: string, modeClass: string;
       if (stats.in_gas_mode) {
@@ -269,10 +266,11 @@ export async function loadStatus(): Promise<void> {
 export function updatePowerFlow(telemetry: TelemetryPoint, section: HTMLElement | null): void {
   if (!section) return;
 
-  const hasPowerData = telemetry.hv_battery_power_kw !== null ||
-                       telemetry.hv_battery_voltage_v !== null ||
-                       telemetry.motor_a_rpm !== null ||
-                       (telemetry.engine_rpm != null && telemetry.engine_rpm > 500);
+  const hasPowerData =
+    telemetry.hv_battery_power_kw !== null ||
+    telemetry.hv_battery_voltage_v !== null ||
+    telemetry.motor_a_rpm !== null ||
+    (telemetry.engine_rpm != null && telemetry.engine_rpm > 500);
 
   if (!hasPowerData) {
     section.style.display = 'none';
@@ -286,26 +284,27 @@ export function updatePowerFlow(telemetry: TelemetryPoint, section: HTMLElement 
   const current = telemetry.hv_battery_current_a;
   const soc = telemetry.soc || 0;
 
-  let mode = 'idle';
+  let mode: PowerFlowState = PowerFlowState.Idle;
   let modeLabel = 'Idle';
   let powerDisplay = '0.0 kW';
 
   if (powerKw !== null) {
     if (powerKw > 0.5) {
-      mode = 'discharging';
+      mode = PowerFlowState.Discharging;
       modeLabel = 'Driving';
       powerDisplay = `${powerKw.toFixed(1)} kW`;
     } else if (powerKw < -0.5) {
-      mode = 'regenerating';
+      mode = PowerFlowState.Regenerating;
       modeLabel = 'Regen';
       powerDisplay = `${Math.abs(powerKw).toFixed(1)} kW`;
     }
   }
 
-  const isCharging = (telemetry.charger_status != null && telemetry.charger_status > 0) ||
-                     (powerKw !== null && powerKw < -1 && (telemetry.speed_mph == null || telemetry.speed_mph < 1));
+  const isCharging =
+    (telemetry.charger_status != null && telemetry.charger_status > 0) ||
+    (powerKw !== null && powerKw < -1 && (telemetry.speed_mph == null || telemetry.speed_mph < 1));
   if (isCharging) {
-    mode = 'charging';
+    mode = PowerFlowState.Charging;
     modeLabel = 'Charging';
   }
 
@@ -334,10 +333,10 @@ export function updatePowerFlow(telemetry: TelemetryPoint, section: HTMLElement 
 
   const powerDirection = document.getElementById('power-direction');
   if (powerDirection) {
-    if (mode === 'regenerating' || mode === 'charging') {
+    if (mode === PowerFlowState.Regenerating || mode === PowerFlowState.Charging) {
       powerDirection.classList.add('reverse');
       powerDirection.classList.remove('active');
-    } else if (mode === 'discharging') {
+    } else if (mode === PowerFlowState.Discharging) {
       powerDirection.classList.add('active');
       powerDirection.classList.remove('reverse');
     } else {
@@ -347,20 +346,20 @@ export function updatePowerFlow(telemetry: TelemetryPoint, section: HTMLElement 
 
   const motorARpm = document.getElementById('motor-a-rpm');
   if (motorARpm) {
-    motorARpm.textContent = telemetry.motor_a_rpm !== null ?
-      `${Math.round(telemetry.motor_a_rpm).toLocaleString()} RPM` : '-- RPM';
+    motorARpm.textContent =
+      telemetry.motor_a_rpm !== null ? `${Math.round(telemetry.motor_a_rpm).toLocaleString()} RPM` : '-- RPM';
   }
 
   const motorBRpm = document.getElementById('motor-b-rpm');
   if (motorBRpm) {
-    motorBRpm.textContent = telemetry.motor_b_rpm !== null ?
-      `${Math.round(telemetry.motor_b_rpm).toLocaleString()} RPM` : '-- RPM';
+    motorBRpm.textContent =
+      telemetry.motor_b_rpm !== null ? `${Math.round(telemetry.motor_b_rpm).toLocaleString()} RPM` : '-- RPM';
   }
 
   const generatorRpm = document.getElementById('generator-rpm');
   if (generatorRpm) {
-    generatorRpm.textContent = telemetry.generator_rpm !== null ?
-      `${Math.round(telemetry.generator_rpm).toLocaleString()} RPM` : '-- RPM';
+    generatorRpm.textContent =
+      telemetry.generator_rpm !== null ? `${Math.round(telemetry.generator_rpm).toLocaleString()} RPM` : '-- RPM';
   }
 
   const engineStatus = document.getElementById('engine-status');
@@ -378,12 +377,12 @@ export function updatePowerFlow(telemetry: TelemetryPoint, section: HTMLElement 
       telemetry.motor_temp_1_f,
       telemetry.motor_temp_2_f,
       telemetry.motor_temp_3_f,
-      telemetry.motor_temp_4_f
+      telemetry.motor_temp_4_f,
     ].filter((t): t is number => t !== null && t !== undefined);
 
     if (temps.length > 0) {
       motorTempsRow.style.display = 'flex';
-      motorTemps.textContent = temps.map(t => `${Math.round(t)}°F`).join(' / ');
+      motorTemps.textContent = temps.map((t) => `${Math.round(t)}°F`).join(' / ');
     } else {
       motorTempsRow.style.display = 'none';
     }

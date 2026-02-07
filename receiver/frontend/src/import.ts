@@ -3,11 +3,13 @@
  * CSV import handling, status display, and result modals
  */
 
-import { DEBUG, state } from './core';
-import { loadTrips } from './trips';
-import { loadSummary, loadMpgTrend } from './summary';
-import { loadSocAnalysis } from './battery';
-import type { ImportResult } from './types/api';
+import { state } from '@/core';
+import { loadTrips } from '@/trips';
+import { loadSummary, loadMpgTrend } from '@/summary';
+// Lazy import — battery is a dynamically loaded chunk
+const loadSocAnalysis = async () => (await import('@/battery')).loadSocAnalysis();
+import type { ImportResult } from '@/types/api';
+import { ImportStatus } from '@/types/enums';
 
 /**
  * Handle CSV import form submission (supports multiple files)
@@ -45,7 +47,7 @@ export async function handleImport(event: Event): Promise<void> {
       console.log(`[Import] Starting import for: ${file.name}`);
       const response = await fetch('/api/import/csv', {
         method: 'POST',
-        body: formData
+        body: formData,
       });
       console.log(`[Import] Response status: ${response.status} ${response.statusText}`);
 
@@ -57,11 +59,11 @@ export async function handleImport(event: Event): Promise<void> {
         console.error(`[Import] JSON parse error for ${file.name}:`, parseError);
         state.lastImportResults.push({
           filename: file.name,
-          status: 'failed',
+          status: ImportStatus.Failed,
           failure_reason: 'invalid_response',
           message: 'Invalid server response',
           import_code: null,
-          stats: { total_rows: 0, parsed_rows: 0, skipped_rows: 0, duplicate_rows: 0, columns_detected: [] }
+          stats: { total_rows: 0, parsed_rows: 0, skipped_rows: 0, duplicate_rows: 0, columns_detected: [] },
         });
         failedFiles.push(file.name);
         continue;
@@ -69,15 +71,15 @@ export async function handleImport(event: Event): Promise<void> {
 
       state.lastImportResults.push({ filename: file.name, ...data });
 
-      const status = data.status || (response.ok ? 'success' : 'failed');
+      const status = data.status || (response.ok ? ImportStatus.Success : ImportStatus.Failed);
       const parsedRows = data.stats?.parsed_rows || 0;
       const duplicateRows = data.stats?.duplicate_rows || 0;
 
-      if (status === 'success' || status === 'partial') {
+      if (status === ImportStatus.Success || status === ImportStatus.Partial) {
         totalImported += parsedRows;
         totalSkipped += data.stats?.skipped_rows || 0;
         totalDuplicates += duplicateRows;
-      } else if (status === 'duplicate') {
+      } else if (status === ImportStatus.Duplicate) {
         console.log(`[Import] Duplicate file: ${file.name} (${data.original_import_code})`);
       } else {
         failedFiles.push(file.name);
@@ -86,11 +88,11 @@ export async function handleImport(event: Event): Promise<void> {
       console.error(`[Import] Network/JS error for ${file.name}:`, error);
       state.lastImportResults.push({
         filename: file.name,
-        status: 'failed',
+        status: ImportStatus.Failed,
         failure_reason: 'network_error',
         message: (error as Error).message,
         import_code: null,
-        stats: { total_rows: 0, parsed_rows: 0, skipped_rows: 0, duplicate_rows: 0, columns_detected: [] }
+        stats: { total_rows: 0, parsed_rows: 0, skipped_rows: 0, duplicate_rows: 0, columns_detected: [] },
       });
       failedFiles.push(file.name);
     }
@@ -99,9 +101,9 @@ export async function handleImport(event: Event): Promise<void> {
   if (totalFiles === 1 && state.lastImportResults.length === 1) {
     showImportResultModal(state.lastImportResults[0]);
     const result = state.lastImportResults[0];
-    if (result.status === 'success' || result.status === 'partial') {
+    if (result.status === ImportStatus.Success || result.status === ImportStatus.Partial) {
       showSuccess(`Import complete: ${result.stats?.parsed_rows || 0} records added`, 4000);
-    } else if (result.status === 'duplicate') {
+    } else if (result.status === ImportStatus.Duplicate) {
       showInfo('File already imported previously', 3000);
     } else {
       showError(`Import failed: ${result.message || 'Unknown error'}`);
@@ -162,7 +164,13 @@ export function showImportResultModal(data: ImportResult): void {
   const messageEl = document.getElementById('import-message');
   if (messageEl) messageEl.textContent = data.message || '';
 
-  const stats = data.stats || { total_rows: 0, parsed_rows: 0, skipped_rows: 0, duplicate_rows: 0, columns_detected: [] };
+  const stats = data.stats || {
+    total_rows: 0,
+    parsed_rows: 0,
+    skipped_rows: 0,
+    duplicate_rows: 0,
+    columns_detected: [],
+  };
 
   const setVal = (id: string, val: number) => {
     const el = document.getElementById(id);
@@ -207,14 +215,17 @@ export function showImportResultModal(data: ImportResult): void {
  * Generate reportable string if not provided by server
  */
 export function generateReportable(data: ImportResult): string {
-  const parts = [
-    data.import_code || 'UNKNOWN',
-    (data.status || 'UNKNOWN').toUpperCase()
-  ];
+  const parts = [data.import_code || 'UNKNOWN', (data.status || 'UNKNOWN').toUpperCase()];
 
   if (data.failure_reason) parts.push(data.failure_reason);
 
-  const stats = data.stats || { total_rows: 0, parsed_rows: 0, skipped_rows: 0, duplicate_rows: 0, columns_detected: [] };
+  const stats = data.stats || {
+    total_rows: 0,
+    parsed_rows: 0,
+    skipped_rows: 0,
+    duplicate_rows: 0,
+    columns_detected: [],
+  };
   parts.push(`${stats.parsed_rows || 0}/${stats.total_rows || 0} rows`);
 
   if (data.trip_id) parts.push(`trip_id=${data.trip_id}`);
@@ -239,11 +250,14 @@ export function closeImportResultModal(): void {
 export function copyImportCode(): void {
   const codeEl = document.getElementById('import-code-text');
   if (codeEl) {
-    navigator.clipboard.writeText(codeEl.textContent || '').then(() => {
-      showToast('Import code copied');
-    }).catch(err => {
-      console.error('Failed to copy:', err);
-    });
+    navigator.clipboard
+      .writeText(codeEl.textContent || '')
+      .then(() => {
+        showToast('Import code copied');
+      })
+      .catch((err) => {
+        console.error('Failed to copy:', err);
+      });
   }
 }
 
@@ -255,10 +269,13 @@ export function copyImportReport(): void {
   const reportable = modal?.dataset?.reportable;
 
   if (reportable) {
-    navigator.clipboard.writeText(reportable).then(() => {
-      showToast('Report copied to clipboard');
-    }).catch(err => {
-      console.error('Failed to copy:', err);
-    });
+    navigator.clipboard
+      .writeText(reportable)
+      .then(() => {
+        showToast('Report copied to clipboard');
+      })
+      .catch((err) => {
+        console.error('Failed to copy:', err);
+      });
   }
 }

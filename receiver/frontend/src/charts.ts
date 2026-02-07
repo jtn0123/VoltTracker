@@ -3,21 +3,22 @@
  * Chart.js lazy loading and shared chart configuration helpers
  */
 
-import { DEBUG, state } from './core';
+import { DEBUG, state } from '@/core';
 
 /**
  * Lazy load Chart.js library when needed
  */
 export async function loadChartJs(): Promise<void> {
   if (state.chartJsLoaded) return;
-  if (state.chartJsLoading) return new Promise((resolve) => {
-    const checkLoaded = setInterval(() => {
-      if (state.chartJsLoaded) {
-        clearInterval(checkLoaded);
-        resolve();
-      }
-    }, 50);
-  });
+  if (state.chartJsLoading)
+    return new Promise((resolve) => {
+      const checkLoaded = setInterval(() => {
+        if (state.chartJsLoaded) {
+          clearInterval(checkLoaded);
+          resolve();
+        }
+      }, 50);
+    });
 
   state.chartJsLoading = true;
   if (DEBUG) console.log('Loading Chart.js...');
@@ -46,20 +47,23 @@ export function setupChartLazyLoading(): void {
   const chartSections = document.querySelectorAll('.chart-section, #trip-charts');
   if (chartSections.length === 0) return;
 
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting && !state.chartJsLoaded && !state.chartJsLoading) {
-        loadChartJs().catch(error => {
-          console.error('Failed to load Chart.js:', error);
-        });
-        observer.disconnect();
-      }
-    });
-  }, {
-    rootMargin: '200px'
-  });
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && !state.chartJsLoaded && !state.chartJsLoading) {
+          loadChartJs().catch((error) => {
+            console.error('Failed to load Chart.js:', error);
+          });
+          observer.disconnect();
+        }
+      });
+    },
+    {
+      rootMargin: '200px',
+    },
+  );
 
-  chartSections.forEach(section => observer.observe(section));
+  chartSections.forEach((section) => observer.observe(section));
 }
 
 /**
@@ -86,15 +90,15 @@ export function getChartDefaults(): ChartFontDefaults {
   return {
     font: {
       size: isDesktop ? 13 : 11,
-      family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+      family: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
     },
     tickFont: {
-      size: isDesktop ? 12 : 10
+      size: isDesktop ? 12 : 10,
     },
     titleFont: {
       size: isDesktop ? 14 : 12,
-      weight: '600'
-    }
+      weight: '600',
+    },
   };
 }
 
@@ -118,7 +122,7 @@ export function getEnhancedTooltip(additionalCallbacks: ChartConfig = {}): Chart
     bodyFont: { size: defaults.font.size - 1 },
     displayColors: true,
     boxPadding: 4,
-    ...additionalCallbacks
+    ...additionalCallbacks,
   };
 }
 
@@ -135,8 +139,8 @@ export function getEnhancedLegend(display = true): ChartConfig {
       font: { size: defaults.font.size },
       padding: 16,
       usePointStyle: true,
-      pointStyle: 'circle'
-    }
+      pointStyle: 'circle',
+    },
   };
 }
 
@@ -148,20 +152,22 @@ export function getEnhancedAxis(options: ChartConfig = {}): ChartConfig {
   return {
     grid: {
       color: 'rgba(255, 255, 255, 0.08)',
-      ...(options.grid as ChartConfig || {})
+      ...((options.grid as ChartConfig) || {}),
     },
     ticks: {
       color: '#b8b8b8',
       font: { size: defaults.tickFont.size },
       padding: 8,
-      ...(options.ticks as ChartConfig || {})
+      ...((options.ticks as ChartConfig) || {}),
     },
-    title: options.title ? {
-      display: true,
-      font: defaults.titleFont,
-      padding: { top: 8, bottom: 8 },
-      ...(options.title as ChartConfig)
-    } : undefined,
-    ...options
+    title: options.title
+      ? {
+          display: true,
+          font: defaults.titleFont,
+          padding: { top: 8, bottom: 8 },
+          ...(options.title as ChartConfig),
+        }
+      : undefined,
+    ...options,
   };
 }

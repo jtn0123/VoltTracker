@@ -3,12 +3,13 @@
  * Trip loading, display, modal, and deletion
  */
 
-import { DEBUG, state, fetchJson, formatDate, formatDateTime, formatTime, formatDuration } from './core';
-import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from './charts';
-import { renderTripMap } from './map';
-import { loadSummary, loadMpgTrend } from './summary';
-import { loadSocAnalysis } from './battery';
-import type { TripSummary, TripDetail, TelemetryPoint } from './types/api';
+import { DEBUG, state, fetchJson, formatDate, formatDateTime, formatTime, formatDuration } from '@/core';
+import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from '@/charts';
+import { renderTripMap } from '@/map';
+import { loadSummary, loadMpgTrend } from '@/summary';
+// Lazy import — battery is a dynamically loaded chunk
+const loadSocAnalysis = async () => (await import('@/battery')).loadSocAnalysis();
+import type { TripSummary, TripDetail, TelemetryPoint } from '@/types/api';
 
 /**
  * Load recent trips
@@ -19,8 +20,11 @@ export async function loadTrips(): Promise<void> {
     if (state.dateFilter.start) url += `&start_date=${state.dateFilter.start}`;
     if (state.dateFilter.end) url += `&end_date=${state.dateFilter.end}`;
 
-    const response = await fetchJson<{ trips?: TripSummary[] } | TripSummary[]>(url, { useCache: true, maxAge: 300000 });
-    const trips: TripSummary[] = Array.isArray(response) ? response : (response.trips || []);
+    const response = await fetchJson<{ trips?: TripSummary[] } | TripSummary[]>(url, {
+      useCache: true,
+      maxAge: 300000,
+    });
+    const trips: TripSummary[] = Array.isArray(response) ? response : response.trips || [];
 
     const tableBody = document.getElementById('trips-table-body');
     const tripCards = document.getElementById('trip-cards');
@@ -45,17 +49,20 @@ export async function loadTrips(): Promise<void> {
       return;
     }
 
-    tableBody.innerHTML = trips.map(trip => `
+    tableBody.innerHTML = trips
+      .map(
+        (trip) => `
       <tr class="clickable" onclick="openTripModal(${trip.id})">
         <td>${formatDateTime(new Date(trip.start_time))}</td>
         <td>${trip.distance_miles != null ? trip.distance_miles.toFixed(1) : '--'} mi</td>
         <td>${trip.electric_miles !== null && trip.electric_miles !== undefined ? trip.electric_miles.toFixed(1) : '--'} mi</td>
         <td>
-          ${!trip.distance_miles ?
-            '<span class="badge badge-unknown">No Data</span>' :
-            (trip.gas_mode_entered ?
-              `<span class="badge badge-gas">${trip.gas_miles != null ? trip.gas_miles.toFixed(1) : '0'} mi</span>` :
-              '<span class="badge badge-electric">Electric</span>')
+          ${
+            !trip.distance_miles
+              ? '<span class="badge badge-unknown">No Data</span>'
+              : trip.gas_mode_entered
+                ? `<span class="badge badge-gas">${trip.gas_miles != null ? trip.gas_miles.toFixed(1) : '0'} mi</span>`
+                : '<span class="badge badge-electric">Electric</span>'
           }
         </td>
         <td>${trip.gas_mpg ? trip.gas_mpg + ' MPG' : '--'}</td>
@@ -64,17 +71,22 @@ export async function loadTrips(): Promise<void> {
           <button class="btn-delete" onclick="event.stopPropagation(); deleteTrip(${trip.id})" title="Delete trip">×</button>
         </td>
       </tr>
-    `).join('');
+    `,
+      )
+      .join('');
 
-    tripCards.innerHTML = trips.map(trip => `
+    tripCards.innerHTML = trips
+      .map(
+        (trip) => `
       <div class="trip-card clickable" onclick="openTripModal(${trip.id})">
         <div class="trip-card-header">
           <span class="trip-card-date">${formatDate(new Date(trip.start_time))}</span>
-          ${!trip.distance_miles ?
-            '<span class="badge badge-unknown">No Data</span>' :
-            (trip.gas_mode_entered ?
-              '<span class="badge badge-gas">Gas</span>' :
-              '<span class="badge badge-electric">Electric</span>')
+          ${
+            !trip.distance_miles
+              ? '<span class="badge badge-unknown">No Data</span>'
+              : trip.gas_mode_entered
+                ? '<span class="badge badge-gas">Gas</span>'
+                : '<span class="badge badge-electric">Electric</span>'
           }
         </div>
         <div class="trip-card-stats">
@@ -96,7 +108,9 @@ export async function loadTrips(): Promise<void> {
           </div>
         </div>
       </div>
-    `).join('');
+    `,
+      )
+      .join('');
   } catch (error) {
     console.error('Failed to load trips:', error);
   }
@@ -175,9 +189,18 @@ export function closeTripModal(): void {
   modal.setAttribute('aria-hidden', 'true');
   document.body.style.overflow = '';
 
-  if (state.tripSpeedChart) { state.tripSpeedChart.destroy(); state.tripSpeedChart = null; }
-  if (state.tripSocChart) { state.tripSocChart.destroy(); state.tripSocChart = null; }
-  if (state.tripMap) { state.tripMap.remove(); state.tripMap = null; }
+  if (state.tripSpeedChart) {
+    state.tripSpeedChart.destroy();
+    state.tripSpeedChart = null;
+  }
+  if (state.tripSocChart) {
+    state.tripSocChart.destroy();
+    state.tripSocChart = null;
+  }
+  if (state.tripMap) {
+    state.tripMap.remove();
+    state.tripMap = null;
+  }
 
   if (state.modalTriggerElement && typeof state.modalTriggerElement.focus === 'function') {
     state.modalTriggerElement.focus();
@@ -189,7 +212,8 @@ export function closeTripModal(): void {
  * Delete a trip
  */
 export async function deleteTrip(tripId: number): Promise<void> {
-  if (!confirm('Are you sure you want to delete this trip? This will also delete all associated telemetry data.')) return;
+  if (!confirm('Are you sure you want to delete this trip? This will also delete all associated telemetry data.'))
+    return;
 
   try {
     const response = await fetch(`/api/trips/${tripId}`, { method: 'DELETE' });
@@ -227,9 +251,9 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
 
   if (!window.Chart) await loadChartJs();
 
-  const labels = telemetry.map(t => formatTime(new Date(t.timestamp)));
-  const speeds = telemetry.map(t => t.speed_mph);
-  const socs = telemetry.map(t => t.state_of_charge);
+  const labels = telemetry.map((t) => formatTime(new Date(t.timestamp)));
+  const speeds = telemetry.map((t) => t.speed_mph);
+  const socs = telemetry.map((t) => t.state_of_charge);
 
   const speedContext = speedCtx.getContext('2d');
   const socContext = socCtx.getContext('2d');
@@ -243,17 +267,19 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
     type: 'line',
     data: {
       labels,
-      datasets: [{
-        label: 'Speed (MPH)',
-        data: speeds,
-        borderColor: '#3282b8',
-        backgroundColor: speedGradient,
-        borderWidth: 2,
-        fill: true,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 4
-      }]
+      datasets: [
+        {
+          label: 'Speed (MPH)',
+          data: speeds,
+          borderColor: '#3282b8',
+          backgroundColor: speedGradient,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+        },
+      ],
     },
     options: {
       responsive: true,
@@ -261,13 +287,13 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: getEnhancedLegend(true),
-        tooltip: getEnhancedTooltip()
+        tooltip: getEnhancedTooltip(),
       },
       scales: {
         x: { display: false },
-        y: getEnhancedAxis({ title: { text: 'MPH', color: '#3282b8' } })
-      }
-    }
+        y: getEnhancedAxis({ title: { text: 'MPH', color: '#3282b8' } }),
+      },
+    },
   });
 
   if (state.tripSocChart) state.tripSocChart.destroy();
@@ -275,17 +301,19 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
     type: 'line',
     data: {
       labels,
-      datasets: [{
-        label: 'Battery SOC (%)',
-        data: socs,
-        borderColor: '#28a745',
-        backgroundColor: socGradient,
-        borderWidth: 2,
-        fill: true,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 4
-      }]
+      datasets: [
+        {
+          label: 'Battery SOC (%)',
+          data: socs,
+          borderColor: '#28a745',
+          backgroundColor: socGradient,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+        },
+      ],
     },
     options: {
       responsive: true,
@@ -293,13 +321,13 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: getEnhancedLegend(true),
-        tooltip: getEnhancedTooltip()
+        tooltip: getEnhancedTooltip(),
       },
       scales: {
         x: { display: false },
-        y: getEnhancedAxis({ min: 0, max: 100, title: { text: 'SOC %', color: '#28a745' } })
-      }
-    }
+        y: getEnhancedAxis({ min: 0, max: 100, title: { text: 'SOC %', color: '#28a745' } }),
+      },
+    },
   });
 }
 
@@ -308,7 +336,7 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
  */
 export function setTimeframe(days: number): void {
   const buttons = document.querySelectorAll('.timeframe-btn');
-  buttons.forEach(btn => {
+  buttons.forEach((btn) => {
     const btnDays = parseInt(btn.getAttribute('data-days') || '0');
     const isActive = btnDays === days;
     btn.classList.toggle('active', isActive);

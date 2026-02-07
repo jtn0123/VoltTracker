@@ -3,16 +3,21 @@
  * Efficiency summary and MPG trend chart
  */
 
-import { state, fetchJson, formatChartDate } from './core';
-import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from './charts';
-import type { EfficiencySummary, MpgTrendPoint } from './types/api';
+import { state, formatChartDate } from '@/core';
+import { api } from '@/api';
+import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from '@/charts';
+import type { EfficiencySummary, MpgTrendPoint } from '@/types/api';
+import { EfficiencySummarySchema, MpgTrendPointSchema } from '@/types/schemas';
+import { z } from 'zod';
 
 /**
  * Load efficiency summary
  */
 export async function loadSummary(): Promise<void> {
   try {
-    const data = await fetchJson<EfficiencySummary>('/api/efficiency/summary', { useCache: true, maxAge: 300000 });
+    const result = await api<EfficiencySummary>('/api/efficiency/summary', { useCache: true, maxAge: 300000, schema: EfficiencySummarySchema });
+    if (result.error || !result.data) return;
+    const data = result.data;
 
     const lifetimeMpg = document.getElementById('lifetime-mpg');
     if (lifetimeMpg) {
@@ -97,12 +102,14 @@ export async function loadMpgTrend(days: number): Promise<void> {
   try {
     state.currentTimeframe = days;
 
-    document.querySelectorAll('.timeframe-btn').forEach(btn => {
+    document.querySelectorAll('.timeframe-btn').forEach((btn) => {
       const btnEl = btn as HTMLElement;
       btn.classList.toggle('active', parseInt(btnEl.dataset.days || '0') === days);
     });
 
-    const data = await fetchJson<MpgTrendPoint[]>(`/api/mpg/trend?days=${days}`);
+    const result = await api<MpgTrendPoint[]>(`/api/mpg/trend?days=${days}`, { schema: z.array(MpgTrendPointSchema) });
+    if (result.error || !result.data) return;
+    const data = result.data;
 
     const ctx = document.getElementById('mpg-chart') as HTMLCanvasElement | null;
     if (!ctx) return;
@@ -136,21 +143,23 @@ export async function loadMpgTrend(days: number): Promise<void> {
     state.mpgChart = new Chart(ctx, {
       type: 'line',
       data: {
-        labels: data.map(d => formatChartDate(new Date(d.date))),
-        datasets: [{
-          label: 'MPG',
-          data: data.map(d => d.mpg),
-          borderColor: '#3282b8',
-          backgroundColor: gradient,
-          borderWidth: 2.5,
-          fill: true,
-          tension: 0.4,
-          pointRadius: 5,
-          pointHoverRadius: 7,
-          pointBackgroundColor: '#3282b8',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2
-        }]
+        labels: data.map((d) => formatChartDate(new Date(d.date))),
+        datasets: [
+          {
+            label: 'MPG',
+            data: data.map((d) => d.mpg),
+            borderColor: '#3282b8',
+            backgroundColor: gradient,
+            borderWidth: 2.5,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointBackgroundColor: '#3282b8',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+          },
+        ],
       },
       options: {
         responsive: true,
@@ -165,21 +174,21 @@ export async function loadMpgTrend(days: number): Promise<void> {
                 return [
                   `MPG: ${point.mpg}`,
                   `Miles: ${point.gas_miles.toFixed(1)} mi`,
-                  point.ambient_temp ? `Temp: ${point.ambient_temp}°F` : ''
+                  point.ambient_temp ? `Temp: ${point.ambient_temp}°F` : '',
                 ].filter(Boolean);
-              }
-            }
-          })
+              },
+            },
+          }),
         },
         scales: {
           x: getEnhancedAxis(),
           y: getEnhancedAxis({
             suggestedMin: 20,
             suggestedMax: 50,
-            title: { text: 'MPG', color: '#3282b8' }
-          })
-        }
-      }
+            title: { text: 'MPG', color: '#3282b8' },
+          }),
+        },
+      },
     });
   } catch (error) {
     console.error('Failed to load MPG trend:', error);

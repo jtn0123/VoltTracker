@@ -3,16 +3,19 @@
  * Charging summary, history, session management, and detail modals
  */
 
-import { state, fetchJson, formatDate, formatDateTime, formatTime } from './core';
-import { loadChartJs, createGradient, getChartDefaults, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from './charts';
-import type { ChargingSummary, ChargingSession, ChargingCurveResponse } from './types/api';
+import { state, fetchJson, formatDate, formatDateTime, formatTime } from '@/core';
+import { api } from '@/api';
+import { loadChartJs, createGradient, getChartDefaults, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from '@/charts';
+import type { ChargingSummary, ChargingSession, ChargingCurveResponse } from '@/types/api';
 
 /**
  * Load charging summary for electric efficiency cards
  */
 export async function loadChargingSummary(): Promise<void> {
   try {
-    const data = await fetchJson<ChargingSummary>('/api/charging/summary', { useCache: true, maxAge: 300000 });
+    const result = await api<ChargingSummary>('/api/charging/summary', { useCache: true, maxAge: 300000 });
+    if (result.error || !result.data) return;
+    const data = result.data;
 
     const totalKwh = document.getElementById('total-kwh');
     if (totalKwh) {
@@ -120,7 +123,9 @@ export function formatChargingDuration(startTime: string, endTime: string): stri
  */
 export async function loadChargingHistory(): Promise<void> {
   try {
-    const sessions = await fetchJson<ChargingSession[]>('/api/charging/history?limit=20');
+    const result = await api<ChargingSession[]>('/api/charging/history?limit=20');
+    if (result.error || !result.data) return;
+    const sessions = result.data;
 
     const tableBody = document.getElementById('charging-table-body');
     const cardsContainer = document.getElementById('charging-cards');
@@ -147,20 +152,24 @@ export async function loadChargingHistory(): Promise<void> {
       return;
     }
 
-    tableBody.innerHTML = sessions.map(session => `
+    tableBody.innerHTML = sessions
+      .map(
+        (session) => `
       <tr class="clickable" onclick="openChargingDetailModal(${session.id})">
         <td>${formatDateTime(new Date(session.start_time))}</td>
         <td>
-          ${session.charge_type ?
-            `<span class="badge badge-${session.charge_type.toLowerCase()}">${session.charge_type}</span>` :
-            '--'
+          ${
+            session.charge_type
+              ? `<span class="badge badge-${session.charge_type.toLowerCase()}">${session.charge_type}</span>`
+              : '--'
           }
         </td>
         <td>${session.kwh_added != null ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</td>
         <td>
-          ${session.start_soc !== null && session.end_soc !== null ?
-            `${session.start_soc}% → ${session.end_soc}%` :
-            '--'
+          ${
+            session.start_soc !== null && session.end_soc !== null
+              ? `${session.start_soc}% → ${session.end_soc}%`
+              : '--'
           }
         </td>
         <td>${session.end_time ? formatChargingDuration(session.start_time, session.end_time) : '--'}</td>
@@ -169,16 +178,21 @@ export async function loadChargingHistory(): Promise<void> {
           <button class="btn-delete" onclick="event.stopPropagation(); deleteChargingSession(${session.id})" title="Delete session">×</button>
         </td>
       </tr>
-    `).join('');
+    `,
+      )
+      .join('');
 
     if (cardsContainer) {
-      cardsContainer.innerHTML = sessions.map(session => `
+      cardsContainer.innerHTML = sessions
+        .map(
+          (session) => `
         <div class="charging-card" role="listitem" onclick="openChargingDetailModal(${session.id})">
           <div class="charging-card-header">
             <span class="charging-card-date">${formatDateTime(new Date(session.start_time))}</span>
-            ${session.charge_type ?
-              `<span class="charging-card-badge ${session.charge_type.toLowerCase()}">${session.charge_type}</span>` :
-              ''
+            ${
+              session.charge_type
+                ? `<span class="charging-card-badge ${session.charge_type.toLowerCase()}">${session.charge_type}</span>`
+                : ''
             }
           </div>
           <div class="charging-card-stats">
@@ -200,7 +214,9 @@ export async function loadChargingHistory(): Promise<void> {
             </div>
           </div>
         </div>
-      `).join('');
+      `,
+        )
+        .join('');
     }
   } catch (error) {
     console.error('Failed to load charging history:', error);
@@ -258,7 +274,7 @@ export async function submitChargingSession(event: Event): Promise<void> {
     charge_type: getValue('charge-type') || null,
     cost: parseFloat(getValue('charge-cost')) || null,
     location_name: getValue('charge-location') || null,
-    notes: getValue('charge-notes') || null
+    notes: getValue('charge-notes') || null,
   };
 
   // Remove null/empty values
@@ -271,7 +287,7 @@ export async function submitChargingSession(event: Event): Promise<void> {
     const response = await fetch('/api/charging/add', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cleanData)
+      body: JSON.stringify(cleanData),
     });
 
     if (response.ok) {
@@ -326,7 +342,7 @@ export async function openChargingDetailModal(sessionId: number): Promise<void> 
   try {
     const [session, curveData] = await Promise.all([
       fetchJson<ChargingSession>(`/api/charging/${sessionId}`),
-      fetchJson<ChargingCurveResponse>(`/api/charging/${sessionId}/curve`)
+      fetchJson<ChargingCurveResponse>(`/api/charging/${sessionId}/curve`),
     ]);
 
     renderChargingDetailSummary(session);
@@ -361,8 +377,7 @@ export function renderChargingDetailSummary(session: ChargingSession): void {
   const summaryEl = document.getElementById('charging-detail-summary');
   if (!summaryEl) return;
 
-  const duration = session.end_time ?
-    formatChargingDuration(session.start_time, session.end_time) : 'In progress';
+  const duration = session.end_time ? formatChargingDuration(session.start_time, session.end_time) : 'In progress';
 
   summaryEl.innerHTML = `
     <div class="charging-detail-grid">
@@ -377,9 +392,10 @@ export function renderChargingDetailSummary(session: ChargingSession): void {
       <div class="charging-stat">
         <div class="charging-stat-label">Type</div>
         <div class="charging-stat-value">
-          ${session.charge_type ?
-            `<span class="badge badge-${session.charge_type.toLowerCase()}">${session.charge_type}</span>` :
-            '--'
+          ${
+            session.charge_type
+              ? `<span class="badge badge-${session.charge_type.toLowerCase()}">${session.charge_type}</span>`
+              : '--'
           }
         </div>
       </div>
@@ -390,9 +406,10 @@ export function renderChargingDetailSummary(session: ChargingSession): void {
       <div class="charging-stat">
         <div class="charging-stat-label">SOC Change</div>
         <div class="charging-stat-value">
-          ${session.start_soc !== null && session.end_soc !== null ?
-            `${session.start_soc}% → ${session.end_soc}%` :
-            '--'
+          ${
+            session.start_soc !== null && session.end_soc !== null
+              ? `${session.start_soc}% → ${session.end_soc}%`
+              : '--'
           }
         </div>
       </div>
@@ -442,9 +459,9 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
   if (!window.Chart) await loadChartJs();
 
   const curve = curveData.curve;
-  const labels = curve.map(d => formatTime(new Date(d.timestamp)));
-  const powerData = curve.map(d => d.power_kw);
-  const socData = curve.map(d => d.soc);
+  const labels = curve.map((d) => formatTime(new Date(d.timestamp)));
+  const powerData = curve.map((d) => d.power_kw);
+  const socData = curve.map((d) => d.soc);
 
   const context = ctx.getContext('2d');
   if (!context) return;
@@ -468,7 +485,7 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
           tension: 0.4,
           pointRadius: 0,
           pointHoverRadius: 4,
-          yAxisID: 'y'
+          yAxisID: 'y',
         },
         {
           label: 'SOC (%)',
@@ -480,9 +497,9 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
           tension: 0.4,
           pointRadius: 0,
           pointHoverRadius: 4,
-          yAxisID: 'y1'
-        }
-      ]
+          yAxisID: 'y1',
+        },
+      ],
     },
     options: {
       responsive: true,
@@ -496,9 +513,9 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
               const label = context.dataset.label || '';
               const value = context.parsed.y;
               return label.includes('Power') ? `${label}: ${value.toFixed(1)} kW` : `${label}: ${value.toFixed(0)}%`;
-            }
-          }
-        })
+            },
+          },
+        }),
       },
       scales: {
         x: getEnhancedAxis({ display: true, ticks: { maxTicksLimit: 8 } }),
@@ -509,7 +526,7 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
           title: { display: true, text: 'Power (kW)', color: '#27ae60', font: defaults.titleFont },
           grid: { color: 'rgba(255, 255, 255, 0.08)' },
           ticks: { color: '#27ae60', font: { size: defaults.tickFont.size }, padding: 8 },
-          min: 0
+          min: 0,
         },
         y1: {
           type: 'linear',
@@ -519,10 +536,10 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
           grid: { drawOnChartArea: false },
           ticks: { color: '#3282b8', font: { size: defaults.tickFont.size }, padding: 8 },
           min: 0,
-          max: 100
-        }
-      }
-    }
+          max: 100,
+        },
+      },
+    },
   });
 }
 
@@ -542,7 +559,7 @@ export function renderChargingCostBreakdown(session: ChargingSession): void {
   const milesPerKwh = 3.5;
   const equivalentMiles = kwh * milesPerKwh;
   const gasGallons = equivalentMiles / 35;
-  const gasCost = gasGallons * 3.50;
+  const gasCost = gasGallons * 3.5;
   const savings = gasCost - actualCost;
 
   breakdownEl.innerHTML = `
@@ -567,10 +584,14 @@ export function renderChargingCostBreakdown(session: ChargingSession): void {
         <span class="cost-value">$${gasCost.toFixed(2)}</span>
       </div>
     </div>
-    ${savings > 0 ? `
+    ${
+      savings > 0
+        ? `
       <div class="savings-callout">
         <strong>Savings vs Gas:</strong> $${savings.toFixed(2)}
       </div>
-    ` : ''}
+    `
+        : ''
+    }
   `;
 }

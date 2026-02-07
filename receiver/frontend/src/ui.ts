@@ -3,20 +3,21 @@
  * Theme, date picker, navigation, and general UI initialization
  */
 
-import { DEBUG, state } from './core';
-import { loadTrips } from './trips';
+import { DEBUG, state } from '@/core';
+import { loadTrips } from '@/trips';
+import { Theme } from '@/types/enums';
 
 /**
  * Initialize theme from localStorage
  */
 export function initTheme(): void {
-  const savedTheme = localStorage.getItem('theme') || 'dark';
+  const savedTheme = (localStorage.getItem('theme') as Theme) || Theme.Dark;
   document.documentElement.setAttribute('data-theme', savedTheme);
   updateThemeIcon(savedTheme);
 
   const themeBtn = document.querySelector('.theme-toggle');
   if (themeBtn) {
-    themeBtn.setAttribute('aria-pressed', savedTheme === 'dark' ? 'true' : 'false');
+    themeBtn.setAttribute('aria-pressed', savedTheme === Theme.Dark ? 'true' : 'false');
   }
 }
 
@@ -25,14 +26,14 @@ export function initTheme(): void {
  */
 export function toggleTheme(): void {
   const currentTheme = document.documentElement.getAttribute('data-theme');
-  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  const newTheme = currentTheme === Theme.Dark ? Theme.Light : Theme.Dark;
   document.documentElement.setAttribute('data-theme', newTheme);
   localStorage.setItem('theme', newTheme);
   updateThemeIcon(newTheme);
 
   const themeBtn = document.querySelector('.theme-toggle');
   if (themeBtn) {
-    themeBtn.setAttribute('aria-pressed', newTheme === 'dark' ? 'true' : 'false');
+    themeBtn.setAttribute('aria-pressed', newTheme === Theme.Dark ? 'true' : 'false');
   }
 }
 
@@ -41,7 +42,7 @@ export function toggleTheme(): void {
  */
 export function updateThemeIcon(theme: string): void {
   const icon = document.getElementById('theme-icon');
-  if (icon) icon.textContent = theme === 'dark' ? '🌙' : '☀️';
+  if (icon) icon.textContent = theme === Theme.Dark ? '🌙' : '☀️';
 }
 
 /**
@@ -55,7 +56,7 @@ export function initDatePicker(): void {
     mode: 'range',
     dateFormat: 'M j, Y',
     theme: 'dark',
-    onChange: function(selectedDates: Date[]) {
+    onChange: function (selectedDates: Date[]) {
       if (selectedDates.length === 2) {
         state.dateFilter.start = selectedDates[0].toISOString().split('T')[0];
         state.dateFilter.end = selectedDates[1].toISOString().split('T')[0];
@@ -63,7 +64,7 @@ export function initDatePicker(): void {
         if (clearBtn) clearBtn.style.display = 'block';
         loadTrips();
       }
-    }
+    },
   });
 }
 
@@ -107,10 +108,10 @@ export function initBottomNav(): void {
     { id: 'summary-section', nav: 'summary' },
     { id: 'trips-section', nav: 'trips' },
     { id: 'charging-section', nav: 'charging' },
-    { id: 'soc-section', nav: 'analysis' }
+    { id: 'soc-section', nav: 'analysis' },
   ];
 
-  navItems.forEach(item => {
+  navItems.forEach((item) => {
     item.addEventListener('click', (e) => {
       e.preventDefault();
       const anchor = item as HTMLAnchorElement;
@@ -160,7 +161,7 @@ export function updateActiveNavOnScroll(sections: NavSection[]): void {
  */
 export function setActiveNavItem(sectionName: string): void {
   const navItems = document.querySelectorAll('.bottom-nav-item');
-  navItems.forEach(item => {
+  navItems.forEach((item) => {
     const el = item as HTMLElement;
     if (el.dataset.section === sectionName) {
       item.classList.add('active');
@@ -225,8 +226,13 @@ export function initBackToTop(): void {
  */
 export function initServiceWorker(): void {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js')
-      .then(() => { if (DEBUG) console.log('Service Worker registered'); })
-      .catch(err => { console.log('Service Worker registration failed:', err); });
+    navigator.serviceWorker
+      .register('/static/sw.js')
+      .then(() => {
+        if (DEBUG) console.log('Service Worker registered');
+      })
+      .catch((err) => {
+        console.log('Service Worker registration failed:', err);
+      });
   }
 }

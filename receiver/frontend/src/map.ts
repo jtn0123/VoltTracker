@@ -3,22 +3,23 @@
  * Leaflet lazy loading and trip map rendering
  */
 
-import { DEBUG, state } from './core';
-import type { TelemetryPoint } from './types/api';
+import { DEBUG, state } from '@/core';
+import type { TelemetryPoint } from '@/types/api';
 
 /**
  * Lazy load Leaflet.js library when needed
  */
 export async function loadLeaflet(): Promise<void> {
   if (state.leafletLoaded) return;
-  if (state.leafletLoading) return new Promise((resolve) => {
-    const checkLoaded = setInterval(() => {
-      if (state.leafletLoaded) {
-        clearInterval(checkLoaded);
-        resolve();
-      }
-    }, 50);
-  });
+  if (state.leafletLoading)
+    return new Promise((resolve) => {
+      const checkLoaded = setInterval(() => {
+        if (state.leafletLoaded) {
+          clearInterval(checkLoaded);
+          resolve();
+        }
+      }, 50);
+    });
 
   state.leafletLoading = true;
   if (DEBUG) console.log('Loading Leaflet...');
@@ -52,7 +53,7 @@ export async function renderTripMap(telemetry: TelemetryPoint[]): Promise<void> 
   const mapEl = document.getElementById('trip-detail-map');
   if (!mapEl) return;
 
-  const gpsPoints = telemetry.filter(t => t.latitude && t.longitude);
+  const gpsPoints = telemetry.filter((t) => t.latitude && t.longitude);
 
   if (gpsPoints.length < 2) {
     mapEl.innerHTML = '<div class="no-gps">No GPS data available for this trip</div>';
@@ -69,59 +70,62 @@ export async function renderTripMap(telemetry: TelemetryPoint[]): Promise<void> 
   state.tripMap = L.map(mapEl).setView([gpsPoints[0].latitude!, gpsPoints[0].longitude!], 13);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
+    attribution: '&copy; OpenStreetMap contributors',
   }).addTo(state.tripMap);
 
-  const hasPowerData = gpsPoints.some(p =>
-    p.engine_rpm !== undefined || p.hv_battery_power_kw !== undefined
-  );
+  const hasPowerData = gpsPoints.some((p) => p.engine_rpm !== undefined || p.hv_battery_power_kw !== undefined);
 
   if (hasPowerData) {
     const useEfficiencyView = localStorage.getItem('mapEfficiencyView') !== 'false';
 
     addMapViewToggle(state.tripMap, gpsPoints, useEfficiencyView);
 
-    const segments = useEfficiencyView
-      ? createEfficiencySegments(gpsPoints)
-      : createColorCodedSegments(gpsPoints);
+    const segments = useEfficiencyView ? createEfficiencySegments(gpsPoints) : createColorCodedSegments(gpsPoints);
 
-    segments.forEach(segment => {
+    segments.forEach((segment) => {
       if (segment.points.length >= 2) {
         L.polyline(segment.points, {
           color: segment.color,
           weight: 4,
-          opacity: 0.9
+          opacity: 0.9,
         }).addTo(state.tripMap!);
       }
     });
 
     addMapLegend(state.tripMap, useEfficiencyView);
 
-    const allPoints: [number, number][] = gpsPoints.map(p => [p.latitude!, p.longitude!]);
+    const allPoints: [number, number][] = gpsPoints.map((p) => [p.latitude!, p.longitude!]);
     const bounds = L.latLngBounds(allPoints);
     state.tripMap.fitBounds(bounds, { padding: [20, 20] });
   } else {
-    const latlngs: [number, number][] = gpsPoints.map(p => [p.latitude!, p.longitude!]);
+    const latlngs: [number, number][] = gpsPoints.map((p) => [p.latitude!, p.longitude!]);
     const polyline = L.polyline(latlngs, { color: '#3282b8', weight: 4 }).addTo(state.tripMap);
     state.tripMap.fitBounds(polyline.getBounds(), { padding: [20, 20] });
   }
 
   const startPoint: [number, number] = [gpsPoints[0].latitude!, gpsPoints[0].longitude!];
-  const endPoint: [number, number] = [gpsPoints[gpsPoints.length - 1].latitude!, gpsPoints[gpsPoints.length - 1].longitude!];
+  const endPoint: [number, number] = [
+    gpsPoints[gpsPoints.length - 1].latitude!,
+    gpsPoints[gpsPoints.length - 1].longitude!,
+  ];
 
   L.marker(startPoint, {
     icon: L.divIcon({
       className: 'map-marker-start',
-      html: '<div style="background:#28a745;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>'
-    })
-  }).addTo(state.tripMap).bindPopup('Start');
+      html: '<div style="background:#28a745;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>',
+    }),
+  })
+    .addTo(state.tripMap)
+    .bindPopup('Start');
 
   L.marker(endPoint, {
     icon: L.divIcon({
       className: 'map-marker-end',
-      html: '<div style="background:#dc3545;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>'
-    })
-  }).addTo(state.tripMap).bindPopup('End');
+      html: '<div style="background:#dc3545;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>',
+    }),
+  })
+    .addTo(state.tripMap)
+    .bindPopup('End');
 }
 
 interface RouteSegment {
@@ -149,7 +153,7 @@ export function createColorCodedSegments(points: TelemetryPoint[]): RouteSegment
       }
       currentSegment = {
         color,
-        points: currentSegment ? [currentSegment.points[currentSegment.points.length - 1]] : []
+        points: currentSegment ? [currentSegment.points[currentSegment.points.length - 1]] : [],
       };
       currentSegment.points.push(latlng);
       segments.push(currentSegment);
@@ -205,12 +209,11 @@ export function getEfficiencyColor(efficiency: number | null, isGasMode: boolean
  */
 export function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 3959;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-            Math.cos(lat1 * Math.PI / 180) *
-            Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) ** 2;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -236,15 +239,21 @@ export function createEfficiencySegments(points: TelemetryPoint[]): RouteSegment
     if (isGasMode) {
       const prevFuel = prev.fuel_level_percent;
       const currFuel = curr.fuel_level_percent;
-      if (prevFuel !== undefined && prevFuel !== null && currFuel !== undefined && currFuel !== null && prevFuel > currFuel) {
-        const fuelUsed = (prevFuel - currFuel) / 100 * 9.31;
+      if (
+        prevFuel !== undefined &&
+        prevFuel !== null &&
+        currFuel !== undefined &&
+        currFuel !== null &&
+        prevFuel > currFuel
+      ) {
+        const fuelUsed = ((prevFuel - currFuel) / 100) * 9.31;
         if (fuelUsed > 0.001) efficiency = distance / fuelUsed;
       }
     } else {
       const prevSoc = prev.state_of_charge;
       const currSoc = curr.state_of_charge;
       if (prevSoc !== undefined && prevSoc !== null && currSoc !== undefined && currSoc !== null && prevSoc > currSoc) {
-        const kwUsed = (prevSoc - currSoc) / 100 * 18.4;
+        const kwUsed = ((prevSoc - currSoc) / 100) * 18.4;
         if (kwUsed > 0.001) efficiency = distance / kwUsed;
       }
     }
@@ -273,7 +282,7 @@ export function createEfficiencySegments(points: TelemetryPoint[]): RouteSegment
 export function addMapLegend(map: L.LeafletMap, isEfficiencyMode = false): void {
   const legend = L.control({ position: 'bottomright' });
 
-  legend.onAdd = function() {
+  legend.onAdd = function () {
     const div = L.DomUtil.create('div', 'map-legend');
     if (isEfficiencyMode) {
       div.innerHTML = `
@@ -308,7 +317,7 @@ export function addMapLegend(map: L.LeafletMap, isEfficiencyMode = false): void 
 export function addMapViewToggle(map: L.LeafletMap, gpsPoints: TelemetryPoint[], isEfficiencyMode: boolean): void {
   const toggle = L.control({ position: 'topleft' });
 
-  toggle.onAdd = function() {
+  toggle.onAdd = function () {
     const div = L.DomUtil.create('div', 'map-view-toggle');
     div.innerHTML = `
       <div style="background:rgba(255,255,255,0.95);padding:6px 10px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.2);font-size:12px;">
@@ -321,8 +330,8 @@ export function addMapViewToggle(map: L.LeafletMap, gpsPoints: TelemetryPoint[],
 
     L.DomEvent.disableClickPropagation(div);
 
-    const checkbox = div.querySelector('#map-efficiency-toggle') as HTMLInputElement;
-    checkbox.addEventListener('change', function() {
+    const checkbox = div.querySelector('#map-efficiency-toggle') as HTMLInputElement | null;
+    if (checkbox) checkbox.addEventListener('change', function() {
       localStorage.setItem('mapEfficiencyView', String(this.checked));
       renderTripMap(gpsPoints);
     });

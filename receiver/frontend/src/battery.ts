@@ -3,9 +3,9 @@
  * Battery health, cell voltages, and SOC analysis
  */
 
-import { fetchJson, formatDateTime, state } from './core';
-import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from './charts';
-import type { BatteryHealthResponse, BatteryCellsResponse, CellReading, SocAnalysis } from './types/api';
+import { fetchJson, formatDateTime, state } from '@/core';
+import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from '@/charts';
+import type { BatteryHealthResponse, BatteryCellsResponse, CellReading, SocAnalysis } from '@/types/api';
 
 /**
  * Load battery health data
@@ -113,23 +113,23 @@ export function updateModuleBars(reading: CellReading): void {
   const modules = [
     { bar: 'module1-bar', voltage: 'module1-voltage', avg: reading.module1_avg },
     { bar: 'module2-bar', voltage: 'module2-voltage', avg: reading.module2_avg },
-    { bar: 'module3-bar', voltage: 'module3-voltage', avg: reading.module3_avg }
+    { bar: 'module3-bar', voltage: 'module3-voltage', avg: reading.module3_avg },
   ];
 
-  const avgValues = modules.map(m => m.avg).filter((v): v is number => v !== null);
+  const avgValues = modules.map((m) => m.avg).filter((v): v is number => v !== null);
   if (avgValues.length === 0) return;
 
   const minAvg = Math.min(...avgValues);
   const maxAvg = Math.max(...avgValues);
   const range = maxAvg - minAvg || 0.01;
 
-  modules.forEach(module => {
+  modules.forEach((module) => {
     const barEl = document.getElementById(module.bar);
     const voltageEl = document.getElementById(module.voltage);
 
     if (barEl && module.avg !== null) {
       const normalizedValue = (module.avg - minAvg) / range;
-      const width = 80 + (normalizedValue * 20);
+      const width = 80 + normalizedValue * 20;
       barEl.style.width = `${width}%`;
     }
 
@@ -152,16 +152,18 @@ export function renderCellHeatmap(reading: CellReading): void {
   const maxV = reading.max_voltage ?? Math.max(...validVoltages);
   const range = maxV - minV || 0.01;
 
-  heatmap.innerHTML = voltages.map((voltage, index) => {
-    if (voltage === null || voltage === undefined) {
-      return `<div class="cell" style="background-color: var(--bg-secondary);" title="Cell ${index + 1}: N/A"></div>`;
-    }
+  heatmap.innerHTML = voltages
+    .map((voltage, index) => {
+      if (voltage === null || voltage === undefined) {
+        return `<div class="cell" style="background-color: var(--bg-secondary);" title="Cell ${index + 1}: N/A"></div>`;
+      }
 
-    const normalized = (voltage - minV) / range;
-    const color = getHeatmapColor(normalized);
+      const normalized = (voltage - minV) / range;
+      const color = getHeatmapColor(normalized);
 
-    return `<div class="cell" style="background-color: ${color};" title="Cell ${index + 1}: ${voltage.toFixed(3)}V"></div>`;
-  }).join('');
+      return `<div class="cell" style="background-color: ${color};" title="Cell ${index + 1}: ${voltage.toFixed(3)}V"></div>`;
+    })
+    .join('');
 }
 
 /**
@@ -173,7 +175,7 @@ export function getHeatmapColor(value: number): string {
     { pos: 0.25, r: 243, g: 156, b: 18 },
     { pos: 0.5, r: 39, g: 174, b: 96 },
     { pos: 0.75, r: 50, g: 130, b: 184 },
-    { pos: 1, r: 155, g: 89, b: 182 }
+    { pos: 1, r: 155, g: 89, b: 182 },
   ];
 
   let lower = colors[0];
@@ -218,18 +220,21 @@ export function checkWeakCells(reading: CellReading): void {
       weakCells.push({
         index: index + 1,
         voltage,
-        deviation: (voltage - reading.avg_voltage!) * 1000
+        deviation: (voltage - reading.avg_voltage!) * 1000,
       });
     }
   });
 
   if (weakCells.length > 0) {
     warningEl.style.display = 'flex';
-    const cellNumbers = weakCells.slice(0, 3).map(c => c.index).join(', ');
+    const cellNumbers = weakCells
+      .slice(0, 3)
+      .map((c) => c.index)
+      .join(', ');
     const moreText = weakCells.length > 3 ? ` and ${weakCells.length - 3} more` : '';
     textEl.textContent = `Weak cells detected: #${cellNumbers}${moreText}`;
 
-    weakCells.forEach(cell => {
+    weakCells.forEach((cell) => {
       const cellEl = document.querySelectorAll('#cell-heatmap .cell')[cell.index - 1];
       if (cellEl) cellEl.classList.add('weak');
     });
@@ -268,17 +273,24 @@ export async function loadSocAnalysis(): Promise<void> {
     setEl('soc-avg', data.average_soc != null ? `${data.average_soc}%` : '--');
 
     if (data.temperature_correlation) {
-      setEl('soc-cold', `${data.temperature_correlation.cold_avg_soc}% (${data.temperature_correlation.cold_count} trips)`);
-      setEl('soc-warm', `${data.temperature_correlation.warm_avg_soc}% (${data.temperature_correlation.warm_count} trips)`);
+      setEl(
+        'soc-cold',
+        `${data.temperature_correlation.cold_avg_soc}% (${data.temperature_correlation.cold_count} trips)`,
+      );
+      setEl(
+        'soc-warm',
+        `${data.temperature_correlation.warm_avg_soc}% (${data.temperature_correlation.warm_count} trips)`,
+      );
     } else {
       setEl('soc-cold', '--');
       setEl('soc-warm', '--');
     }
 
     if (data.trend) {
-      setEl('soc-trend',
+      setEl(
+        'soc-trend',
         `${data.trend.direction === 'increasing' ? 'Increasing' : 'Decreasing'} ` +
-        `(${data.trend.early_avg}% -> ${data.trend.recent_avg}%)`
+          `(${data.trend.early_avg}% -> ${data.trend.recent_avg}%)`,
       );
     } else {
       setEl('soc-trend', 'Not enough data');
@@ -300,7 +312,7 @@ export async function renderSocHistogram(histogram: Record<string, number>): Pro
   if (!ctx) return;
 
   const labels = Object.keys(histogram).sort((a, b) => parseInt(a) - parseInt(b));
-  const values = labels.map(k => histogram[k]);
+  const values = labels.map((k) => histogram[k]);
 
   if (!window.Chart) await loadChartJs();
 
@@ -314,16 +326,18 @@ export async function renderSocHistogram(histogram: Record<string, number>): Pro
   state.socChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: labels.map(l => `${l}%`),
-      datasets: [{
-        label: 'Transitions',
-        data: values,
-        backgroundColor: barGradient,
-        borderColor: 'rgba(50, 130, 184, 0.8)',
-        borderWidth: 1,
-        borderRadius: 6,
-        hoverBackgroundColor: '#3282b8'
-      }]
+      labels: labels.map((l) => `${l}%`),
+      datasets: [
+        {
+          label: 'Transitions',
+          data: values,
+          backgroundColor: barGradient,
+          borderColor: 'rgba(50, 130, 184, 0.8)',
+          borderWidth: 1,
+          borderRadius: 6,
+          hoverBackgroundColor: '#3282b8',
+        },
+      ],
     },
     options: {
       responsive: true,
@@ -333,18 +347,18 @@ export async function renderSocHistogram(histogram: Record<string, number>): Pro
         tooltip: getEnhancedTooltip({
           callbacks: {
             title: (items: any[]) => `SOC: ${items[0].label}`,
-            label: (context: any) => `${context.parsed.y} transition${context.parsed.y !== 1 ? 's' : ''}`
-          }
-        })
+            label: (context: any) => `${context.parsed.y} transition${context.parsed.y !== 1 ? 's' : ''}`,
+          },
+        }),
       },
       scales: {
         x: getEnhancedAxis({ grid: { display: false } }),
         y: getEnhancedAxis({
           beginAtZero: true,
           ticks: { stepSize: 1 },
-          title: { text: 'Frequency', color: '#b8b8b8' }
-        })
-      }
-    }
+          title: { text: 'Frequency', color: '#b8b8b8' },
+        }),
+      },
+    },
   });
 }

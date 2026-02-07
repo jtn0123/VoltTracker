@@ -95,16 +95,16 @@ interface Window {
   toggleTheme: () => void;
   clearDateFilter: () => void;
   toggleExportMenu: () => void;
-  openAddChargingModal: () => void;
-  closeChargingModal: () => void;
+  openAddChargingModal: () => void | Promise<void>;
+  closeChargingModal: () => void | Promise<void>;
   submitChargingSession: (event: Event) => Promise<void>;
   deleteChargingSession: (sessionId: number) => Promise<void>;
   openChargingDetailModal: (sessionId: number) => Promise<void>;
-  closeChargingDetailModal: () => void;
+  closeChargingDetailModal: () => void | Promise<void>;
   handleImport: (event: Event) => Promise<void>;
-  closeImportResultModal: () => void;
-  copyImportCode: () => void;
-  copyImportReport: () => void;
+  closeImportResultModal: () => void | Promise<void>;
+  copyImportCode: () => void | Promise<void>;
+  copyImportReport: () => void | Promise<void>;
   Chart?: typeof Chart;
   L?: typeof L;
 }

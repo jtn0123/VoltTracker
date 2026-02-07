@@ -1,65 +1,15 @@
 /**
  * VoltTracker - Core Module
- * State variables, utilities, caching, and shared helpers
+ * Utilities, caching, and shared helpers.
+ * State is now managed by the reactive store (@/store).
  */
 
-import type { ImportResult } from './types/api';
+// Re-export state and store from the reactive store module
+export { state, store } from '@/store';
+export type { AppState } from '@/store';
 
 // Debug mode
 export const DEBUG = new URLSearchParams(window.location.search).has('debug');
-
-/** Mutable application state shared across modules */
-export interface AppState {
-  mpgChart: Chart | null;
-  socChart: Chart | null;
-  tripSpeedChart: Chart | null;
-  tripSocChart: Chart | null;
-  chargingCurveChart: Chart | null;
-  tripMap: L.LeafletMap | null;
-  currentTimeframe: number;
-  dateFilter: { start: string | null; end: string | null };
-  flatpickrInstance: FlatpickrInstance | null;
-  liveRefreshInterval: ReturnType<typeof setInterval> | null;
-  statusRefreshInterval: ReturnType<typeof setInterval> | null;
-  tripsRefreshInterval: ReturnType<typeof setInterval> | null;
-  socket: SocketIOClient | null;
-  useWebSocket: boolean;
-  modalTriggerElement: HTMLElement | null;
-  statusErrorCount: number;
-  STATUS_ERROR_THRESHOLD: number;
-  liveTripActive: boolean;
-  chartJsLoaded: boolean;
-  chartJsLoading: boolean;
-  leafletLoaded: boolean;
-  leafletLoading: boolean;
-  lastImportResults: ImportResult[];
-}
-
-export const state: AppState = {
-  mpgChart: null,
-  socChart: null,
-  tripSpeedChart: null,
-  tripSocChart: null,
-  chargingCurveChart: null,
-  tripMap: null,
-  currentTimeframe: 30,
-  dateFilter: { start: null, end: null },
-  flatpickrInstance: null,
-  liveRefreshInterval: null,
-  statusRefreshInterval: null,
-  tripsRefreshInterval: null,
-  socket: null,
-  useWebSocket: true,
-  modalTriggerElement: null,
-  statusErrorCount: 0,
-  STATUS_ERROR_THRESHOLD: 3,
-  liveTripActive: false,
-  chartJsLoaded: false,
-  chartJsLoading: false,
-  leafletLoaded: false,
-  leafletLoading: false,
-  lastImportResults: []
-};
 
 /**
  * HTML Escaping Helper
@@ -190,9 +140,10 @@ export async function fetchJson<T = unknown>(url: string, options: FetchOptions 
     const cached = await apiCache.get(url, maxAge);
     if (cached) {
       // Background revalidation
-      fetch(url).then(res => res.json())
-        .then(data => apiCache.set(url, data, maxAge))
-        .catch(err => {
+      fetch(url)
+        .then((res) => res.json())
+        .then((data) => apiCache.set(url, data, maxAge))
+        .catch((err) => {
           if (DEBUG) console.error('[Cache] Background revalidation failed:', err);
         });
       return cached as T;
@@ -205,7 +156,7 @@ export async function fetchJson<T = unknown>(url: string, options: FetchOptions 
   try {
     const response = await fetch(url, {
       ...fetchOpts,
-      signal: controller.signal
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -249,7 +200,7 @@ export function formatChartDate(date: Date): string {
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
-    year: '2-digit'
+    year: '2-digit',
   });
 }
 
@@ -261,7 +212,7 @@ export function formatDateTime(date: Date): string {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
-    minute: '2-digit'
+    minute: '2-digit',
   });
 }
 
@@ -271,7 +222,7 @@ export function formatDateTime(date: Date): string {
 export function formatTime(date: Date): string {
   return date.toLocaleTimeString('en-US', {
     hour: 'numeric',
-    minute: '2-digit'
+    minute: '2-digit',
   });
 }
 

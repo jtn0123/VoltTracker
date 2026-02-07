@@ -1,83 +1,82 @@
 /* ============================================
    Light Theme
    ============================================ */
-[data-theme="light"] {
-    --bg-primary: #f5f5f5;
-    --bg-secondary: #ffffff;
-    --bg-card: #ffffff;
-    --accent: #0f4c75;
-    --accent-light: #3282b8;
-    --text-primary: #1a1a2e;
-    --text-secondary: #4a4a4a;
-    --text-muted: #6c757d;
-    --success: #28a745;
-    --warning: #e6a700;
-    --danger: #dc3545;
-    --border-color: #dee2e6;
+[data-theme='light'] {
+  --bg-primary: #f5f5f5;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --accent: #0f4c75;
+  --accent-light: #3282b8;
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a4a4a;
+  --text-muted: #6c757d;
+  --success: #28a745;
+  --warning: #e6a700;
+  --danger: #dc3545;
+  --border-color: #dee2e6;
 }
 
-[data-theme="light"] .trips-table tr:hover {
-    background-color: rgba(0, 0, 0, 0.03);
+[data-theme='light'] .trips-table tr:hover {
+  background-color: rgba(0, 0, 0, 0.03);
 }
 
-[data-theme="light"] .trip-card {
-    background-color: rgba(0, 0, 0, 0.03);
+[data-theme='light'] .trip-card {
+  background-color: rgba(0, 0, 0, 0.03);
 }
 
 /* Theme Toggle */
 .theme-toggle {
-    background: transparent;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    padding: var(--space-sm);
-    cursor: pointer;
-    font-size: var(--font-xl);
-    line-height: 1;
-    transition: all 0.2s;
-    min-width: var(--touch-target-min);
-    min-height: var(--touch-target-min);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  cursor: pointer;
+  font-size: var(--font-xl);
+  line-height: 1;
+  transition: all 0.2s;
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .theme-toggle:hover {
-    background-color: var(--accent);
+  background-color: var(--accent);
 }
 
 .theme-toggle:active {
-    transform: scale(0.95);
+  transform: scale(0.95);
 }
 
 /* Map View Button */
 .btn-map-view {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    background: transparent;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    color: var(--text-primary);
-    text-decoration: none;
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: all 0.2s;
-    cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  cursor: pointer;
 }
 
 .btn-map-view:hover {
-    background-color: var(--accent);
+  background-color: var(--accent);
 }
 
 .btn-map-view:active {
-    transform: scale(0.95);
+  transform: scale(0.95);
 }
 
 .btn-map-view svg {
-    flex-shrink: 0;
+  flex-shrink: 0;
 }
-
 
 /* ============================================
    Color Contrast Improvements (WCAG 2.1 AA)
@@ -85,75 +84,76 @@
 
 /* Ensure minimum 4.5:1 contrast ratio for normal text */
 :root {
-    /* Adjusted colors for better contrast */
-    --text-secondary-contrast: #c4c4c4;  /* Lighter for better contrast */
+  /* Adjusted colors for better contrast */
+  --text-secondary-contrast: #c4c4c4; /* Lighter for better contrast */
 }
 
 /* Use higher contrast colors for important text */
 .card-value {
-    color: var(--text-primary);
-    font-weight: 600;
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .card-label {
-    color: var(--text-secondary-contrast, var(--text-secondary));
+  color: var(--text-secondary-contrast, var(--text-secondary));
 }
 
 .stat-label {
-    color: var(--text-secondary-contrast, var(--text-secondary));
+  color: var(--text-secondary-contrast, var(--text-secondary));
 }
 
 /* High contrast mode support */
 @media (prefers-contrast: high) {
-    :root {
-        --bg-primary: #000000;
-        --bg-secondary: #0a0a0a;
-        --bg-card: #111111;
-        --text-primary: #ffffff;
-        --text-secondary: #e0e0e0;
-        --border-color: #555555;
-        --accent: #4a9fd4;
-        --accent-light: #6bb8e8;
-    }
+  :root {
+    --bg-primary: #000000;
+    --bg-secondary: #0a0a0a;
+    --bg-card: #111111;
+    --text-primary: #ffffff;
+    --text-secondary: #e0e0e0;
+    --border-color: #555555;
+    --accent: #4a9fd4;
+    --accent-light: #6bb8e8;
+  }
 
-    .card {
-        border: 2px solid var(--border-color);
-    }
+  .card {
+    border: 2px solid var(--border-color);
+  }
 
-    .trips-table th,
-    .charging-table th {
-        border-bottom: 2px solid var(--border-color);
-    }
+  .trips-table th,
+  .charging-table th {
+    border-bottom: 2px solid var(--border-color);
+  }
 
-    button, a {
-        text-decoration: underline;
-    }
+  button,
+  a {
+    text-decoration: underline;
+  }
 
-    button:focus,
-    a:focus,
-    input:focus,
-    select:focus {
-        outline: 3px solid var(--accent-light);
-        outline-offset: 2px;
-    }
+  button:focus,
+  a:focus,
+  input:focus,
+  select:focus {
+    outline: 3px solid var(--accent-light);
+    outline-offset: 2px;
+  }
 }
 
 /* Reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-    }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 
-    .modal-content {
-        animation: none;
-    }
+  .modal-content {
+    animation: none;
+  }
 
-    .spinner {
-        animation: none;
-        opacity: 0.5;
-    }
+  .spinner {
+    animation: none;
+    opacity: 0.5;
+  }
 }

@@ -1,6 +1,6 @@
 /**
  * VoltTracker - Main Entry Point
- * Imports all modules, wires up event listeners, and initializes the app
+ * Lazy loading, store subscriptions, and app initialization
  */
 
 // CSS modules — Vite bundles these into the output
@@ -20,22 +20,84 @@ import './styles/live.css';
 import './styles/theme.css';
 import './styles/utilities.css';
 
-import { state } from './core';
-import { setupChartLazyLoading } from './charts';
-import { loadTrips, openTripModal, closeTripModal, deleteTrip, renderTripCharts, setTimeframe } from './trips';
-import { loadSummary, loadMpgTrend } from './summary';
-import { initWebSocket, loadLiveTelemetry, loadStatus } from './live';
-import { loadChargingSummary, loadChargingHistory, openAddChargingModal, closeChargingModal, submitChargingSession, deleteChargingSession, openChargingDetailModal, closeChargingDetailModal } from './charging';
-import { loadBatteryHealth, loadBatteryCells, loadSocAnalysis } from './battery';
-import { handleImport, showImportStatus, showImportResultModal, closeImportResultModal, copyImportCode, copyImportReport } from './import';
-import { initTheme, toggleTheme, initDatePicker, clearDateFilter, toggleExportMenu, initBottomNav, initHeaderScroll, initBackToTop, initServiceWorker } from './ui';
+// ── Critical (above-the-fold) imports ────────────────────────────────────────
+import { state, store } from '@/store';
+import {
+  initTheme,
+  toggleTheme,
+  initDatePicker,
+  clearDateFilter,
+  toggleExportMenu,
+  initBottomNav,
+  initHeaderScroll,
+  initBackToTop,
+  initServiceWorker,
+} from '@/ui';
+import { initWebSocket, loadLiveTelemetry, loadStatus } from '@/live';
+import { loadSummary, loadMpgTrend } from '@/summary';
+import { setupChartLazyLoading } from '@/charts';
+import { loadTrips, openTripModal, closeTripModal, deleteTrip, setTimeframe } from '@/trips';
 
-// Service Worker Recovery - unregister broken SW if requested
-(function() {
+// ── Lazy-loaded modules (below the fold / on demand) ─────────────────────────
+const loadBatteryModule = () => import('@/battery');
+const loadChargingModule = () => import('@/charging');
+const loadImportModule = () => import('@/import');
+
+// Cache loaded modules to avoid re-importing
+let batteryMod: Awaited<ReturnType<typeof loadBatteryModule>> | null = null;
+let chargingMod: Awaited<ReturnType<typeof loadChargingModule>> | null = null;
+let importMod: Awaited<ReturnType<typeof loadImportModule>> | null = null;
+
+async function getBattery() {
+  return (batteryMod ??= await loadBatteryModule());
+}
+async function getCharging() {
+  return (chargingMod ??= await loadChargingModule());
+}
+async function getImport() {
+  return (importMod ??= await loadImportModule());
+}
+
+// ── Store subscriptions (reactive state → UI) ───────────────────────────────
+
+// 1. Connection status → UI indicator
+store.subscribe('connectionStatus', (status) => {
+  const statusDot = document.getElementById('status-dot');
+  const lastSync = document.getElementById('last-sync');
+  if (statusDot) {
+    statusDot.classList.remove('offline', 'live');
+    if (status === 'live' || status === 'connected') statusDot.classList.add('live');
+    else if (status === 'disconnected') statusDot.classList.add('offline');
+  }
+  if (lastSync && status === 'live') lastSync.textContent = 'Live';
+});
+
+// 2. Theme changes → update charts
+store.subscribe('theme', (newTheme) => {
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('theme', newTheme);
+  // Re-render charts if they exist (theme colors changed)
+  if (state.mpgChart) state.mpgChart.update();
+  if (state.socChart) state.socChart.update();
+});
+
+// 3. Timeframe changes → reload trend data
+store.subscribe('currentTimeframe', (days) => {
+  loadMpgTrend(days);
+});
+
+// 4. Live telemetry updates via custom event
+store.on('telemetry:update', () => {
+  // Dashboard live section is updated inline by the handler in live.ts
+  // Additional reactions can be wired here
+});
+
+// ── Service Worker Recovery ──────────────────────────────────────────────────
+(function () {
   const params = new URLSearchParams(window.location.search);
   if (params.get('clear-sw') === '1' && 'serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(registrations => {
-      registrations.forEach(reg => reg.unregister());
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      registrations.forEach((reg) => reg.unregister());
       console.log('[SW Recovery] Unregistered all service workers');
       params.delete('clear-sw');
       const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
@@ -45,7 +107,8 @@ import { initTheme, toggleTheme, initDatePicker, clearDateFilter, toggleExportMe
   }
 })();
 
-// Expose functions called from inline HTML handlers to window
+// ── Window function exposure (for inline HTML onclick handlers) ──────────────
+// Critical modules — available immediately
 window.openTripModal = openTripModal;
 window.closeTripModal = closeTripModal;
 window.deleteTrip = deleteTrip;
@@ -53,18 +116,40 @@ window.setTimeframe = setTimeframe;
 window.toggleTheme = toggleTheme;
 window.clearDateFilter = clearDateFilter;
 window.toggleExportMenu = toggleExportMenu;
-window.openAddChargingModal = openAddChargingModal;
-window.closeChargingModal = closeChargingModal;
-window.submitChargingSession = submitChargingSession;
-window.deleteChargingSession = deleteChargingSession;
-window.openChargingDetailModal = openChargingDetailModal;
-window.closeChargingDetailModal = closeChargingDetailModal;
-window.handleImport = handleImport;
-window.closeImportResultModal = closeImportResultModal;
-window.copyImportCode = copyImportCode;
-window.copyImportReport = copyImportReport;
 
-// Cleanup intervals and connections on page unload
+// Lazy-loaded modules — thunks that import on first call
+window.openAddChargingModal = async () => {
+  (await getCharging()).openAddChargingModal();
+};
+window.closeChargingModal = async () => {
+  (await getCharging()).closeChargingModal();
+};
+window.submitChargingSession = async (e: Event) => {
+  (await getCharging()).submitChargingSession(e);
+};
+window.deleteChargingSession = async (id: number) => {
+  (await getCharging()).deleteChargingSession(id);
+};
+window.openChargingDetailModal = async (id: number) => {
+  (await getCharging()).openChargingDetailModal(id);
+};
+window.closeChargingDetailModal = async () => {
+  (await getCharging()).closeChargingDetailModal();
+};
+window.handleImport = async (e: Event) => {
+  (await getImport()).handleImport(e);
+};
+window.closeImportResultModal = async () => {
+  (await getImport()).closeImportResultModal();
+};
+window.copyImportCode = async () => {
+  (await getImport()).copyImportCode();
+};
+window.copyImportReport = async () => {
+  (await getImport()).copyImportReport();
+};
+
+// ── Cleanup ──────────────────────────────────────────────────────────────────
 window.addEventListener('beforeunload', () => {
   if (state.liveRefreshInterval) clearInterval(state.liveRefreshInterval);
   if (state.statusRefreshInterval) clearInterval(state.statusRefreshInterval);
@@ -87,8 +172,9 @@ document.addEventListener('click', (event) => {
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     closeTripModal();
-    closeChargingModal();
-    closeChargingDetailModal();
+    // Lazy modules — only call if already loaded
+    chargingMod?.closeChargingModal();
+    chargingMod?.closeChargingDetailModal();
 
     const menu = document.getElementById('export-menu');
     const btn = document.getElementById('export-btn');
@@ -102,7 +188,47 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-// Initialize dashboard on load
+// ── Lazy section loading with IntersectionObserver ───────────────────────────
+function setupSectionObservers(): void {
+  const sectionMap: Record<string, () => Promise<void>> = {
+    'battery-section': async () => {
+      const mod = await getBattery();
+      mod.loadBatteryHealth();
+      mod.loadBatteryCells();
+      mod.loadSocAnalysis();
+    },
+    'charging-section': async () => {
+      const mod = await getCharging();
+      mod.loadChargingSummary();
+      mod.loadChargingHistory();
+    },
+    'import-section': async () => {
+      await getImport(); // pre-load the module
+    },
+  };
+
+  const loaded = new Set<string>();
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const id = entry.target.id;
+        if (entry.isIntersecting && !loaded.has(id) && sectionMap[id]) {
+          loaded.add(id);
+          sectionMap[id]().catch((err) => console.error(`Lazy load ${id} failed:`, err));
+          observer.unobserve(entry.target);
+        }
+      }
+    },
+    { rootMargin: '200px' },
+  );
+
+  for (const id of Object.keys(sectionMap)) {
+    const el = document.getElementById(id);
+    if (el) observer.observe(el);
+  }
+}
+
+// ── Initialize dashboard ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   initDatePicker();
@@ -136,25 +262,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (importForm) {
-    importForm.addEventListener('submit', handleImport);
+    importForm.addEventListener('submit', async (e) => {
+      (await getImport()).handleImport(e);
+    });
   }
 
   if (importBtn) {
-    importBtn.addEventListener('click', (e) => {
+    importBtn.addEventListener('click', async (e) => {
       if (importBtn.disabled) {
         e.preventDefault();
-        showImportStatus('Please select CSV files first', 'error');
+        const mod = await getImport();
+        mod.showImportStatus('Please select CSV files first', 'error');
       }
     });
   }
 
   // Load critical data in parallel
-  const results = await Promise.allSettled([
-    loadStatus(),
-    loadSummary(),
-    loadTrips(),
-    loadLiveTelemetry()
-  ]);
+  const results = await Promise.allSettled([loadStatus(), loadSummary(), loadTrips(), loadLiveTelemetry()]);
 
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
@@ -163,26 +287,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Defer non-critical data loading
-  if (typeof requestIdleCallback !== 'undefined') {
-    requestIdleCallback(() => {
-      loadMpgTrend(state.currentTimeframe);
-      loadSocAnalysis();
-      loadChargingSummary();
-      loadChargingHistory();
-      loadBatteryHealth();
-      loadBatteryCells();
-    });
-  } else {
-    setTimeout(() => {
-      loadMpgTrend(state.currentTimeframe);
-      loadSocAnalysis();
-      loadChargingSummary();
-      loadChargingHistory();
-      loadBatteryHealth();
-      loadBatteryCells();
-    }, 100);
+  // Defer non-critical sections via IntersectionObserver
+  setupSectionObservers();
+
+  // If battery/charging sections don't exist as elements, fall back to idle loading
+  if (!document.getElementById('battery-section') && !document.getElementById('charging-section')) {
+    const loadDeferred = async () => {
+      const [bat, chg] = await Promise.all([getBattery(), getCharging()]);
+      bat.loadBatteryHealth();
+      bat.loadBatteryCells();
+      bat.loadSocAnalysis();
+      chg.loadChargingSummary();
+      chg.loadChargingHistory();
+    };
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(() => {
+        loadDeferred();
+      });
+    } else {
+      setTimeout(loadDeferred, 100);
+    }
   }
+
+  // Load MPG trend
+  loadMpgTrend(state.currentTimeframe);
 
   // Refresh status every 30 seconds
   state.statusRefreshInterval = setInterval(loadStatus, 30000);
