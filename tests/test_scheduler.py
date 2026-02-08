@@ -715,6 +715,7 @@ class TestSchedulerExceptionHandling:
         mock_commit = mocker.patch("services.scheduler.get_scheduler_db")
         mock_session = mocker.MagicMock()
         mock_session.commit.side_effect = IntegrityError("duplicate key", None, None)
+
         # Create a side_effect function that returns the correct query based on the model
         def query_side_effect(model):
             return db_session.query(model)
@@ -771,6 +772,7 @@ class TestSchedulerExceptionHandling:
         mock_commit = mocker.patch("services.scheduler.get_scheduler_db")
         mock_session = mocker.MagicMock()
         mock_session.commit.side_effect = IntegrityError("duplicate session", None, None)
+
         # Create a side_effect function that returns the correct query based on the model
         def query_side_effect(model):
             return db_session.query(model)
@@ -1008,11 +1010,14 @@ class TestChargingSessionCreation:
         # Mock the db session to raise IntegrityError on commit
         def mock_db():
             mock_session = mocker.MagicMock()
-            mock_session.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
-                db_session.query(TelemetryRaw).filter(TelemetryRaw.charger_connected.is_(True)).all()
+            mock_query = mock_session.query.return_value
+            mock_query.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
+                db_session.query(TelemetryRaw)
+                .filter(TelemetryRaw.charger_connected.is_(True)).all()
             )
             # First filter for locking returns None
-            mock_session.query.return_value.filter.return_value.with_for_update.return_value.order_by.return_value.first.return_value = None
+            mock_filter = mock_query.filter.return_value
+            mock_filter.with_for_update.return_value.order_by.return_value.first.return_value = None
             # Second filter returns None (no existing)
             mock_session.query.return_value.filter.return_value.first.return_value = None
             # Commit raises IntegrityError

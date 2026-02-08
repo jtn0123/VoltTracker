@@ -2,8 +2,7 @@
 Tests for job queue infrastructure.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta
 
 

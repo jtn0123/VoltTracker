@@ -243,7 +243,10 @@ class TorqueCSVImporter:
                     column_mapping[col] = cls.COLUMN_MAP[col_lower]
             stats["columns_mapped"] = list(column_mapping.values())
             stats["columns_found"] = stats["columns_mapped"]  # Legacy alias
-            stats["timestamp_column_found"] = "timestamp" in stats["columns_mapped"] or "device_time" in stats["columns_mapped"]
+            stats["timestamp_column_found"] = (
+                "timestamp" in stats["columns_mapped"]
+                or "device_time" in stats["columns_mapped"]
+            )
 
         # Generate a session ID for this import
         session_id = uuid.uuid4()
@@ -262,7 +265,7 @@ class TorqueCSVImporter:
                     "reason": error_msg,
                     "error_type": "validation"
                 })
-                raise CSVImportError(error_msg, row_number=row_num, field="row_count")
+                raise CSVImportError(error_msg, row_number=row_num)
 
             try:
                 record = cls._parse_row(row, column_mapping, session_id)
@@ -287,7 +290,11 @@ class TorqueCSVImporter:
                             "row": row_num,
                             "field": "timestamp",
                             "value": None,
-                            "reason": "no_timestamp_value" if not stats["timestamp_column_found"] else "timestamp_parse_failed",
+                            "reason": (
+                                "no_timestamp_value"
+                                if not stats["timestamp_column_found"]
+                                else "timestamp_parse_failed"
+                            ),
                             "error_type": "MissingTimestamp",
                             "sample_data": sample_values
                         })

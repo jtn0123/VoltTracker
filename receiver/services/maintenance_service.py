@@ -6,7 +6,7 @@ Calculate engine hours, predict maintenance due dates for Volt Gen 2.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from config import Config
 from models import MaintenanceRecord, TelemetryRaw, Trip
@@ -17,7 +17,7 @@ from utils.timezone import normalize_datetime, utc_now
 logger = logging.getLogger(__name__)
 
 # Volt Gen 2 maintenance intervals
-MAINTENANCE_INTERVALS = {
+MAINTENANCE_INTERVALS: Dict[str, Dict[str, Any]] = {
     "oil_change": {
         "name": "Engine Oil Change",
         "interval_months": 24,
@@ -120,7 +120,7 @@ def calculate_next_due(
     if not interval:
         return {}
 
-    result = {"due_by": [], "days_remaining": None, "miles_remaining": None}
+    result: Dict[str, Any] = {"due_by": [], "days_remaining": None, "miles_remaining": None}
 
     # Time-based interval
     if "interval_months" in interval:
@@ -178,7 +178,7 @@ def get_maintenance_summary(db: Session) -> Dict:
     records = db.query(MaintenanceRecord).all()
 
     # Get latest service for each type
-    latest_services = {}
+    latest_services: Dict[str, Any] = {}
     for record in records:
         mtype = record.maintenance_type
         if mtype not in latest_services or record.service_date > latest_services[mtype].service_date:

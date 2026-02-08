@@ -82,7 +82,7 @@ def get_elevation_for_points(
     all_elevations: List[Optional[float]] = []
 
     for batch_start in range(0, len(coordinates), MAX_POINTS_PER_REQUEST):
-        batch = coordinates[batch_start : batch_start + MAX_POINTS_PER_REQUEST]
+        batch = coordinates[batch_start:batch_start + MAX_POINTS_PER_REQUEST]
 
         # Build API parameters
         latitudes = ",".join(str(lat) for lat, _ in batch)

@@ -2,7 +2,6 @@
 Tests for fuel-related calculations
 """
 
-import pytest
 from receiver.calculations.fuel import (
     calculate_fuel_consumed_gallons,
     calculate_gas_mpg,

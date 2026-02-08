@@ -13,7 +13,6 @@ operations these tests need to validate.
 """
 
 import pytest
-import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -129,7 +128,7 @@ class TestConcurrentChargingSession:
         """
         Test that concurrent charging detection doesn't create duplicate sessions.
         """
-        from models import ChargingSession
+        from models import ChargingSession  # noqa: F401
         from services.charging_service import detect_or_update_charging_session
 
         session_id = uuid.uuid4()
@@ -393,7 +392,7 @@ def db_session():
     try:
         session.rollback()
         session.close()
-    except:
+    except Exception:
         pass
 
 

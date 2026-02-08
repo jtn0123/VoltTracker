@@ -28,6 +28,7 @@ def _get_stddev_func(column):
     except Exception:
         return literal_column("NULL")
 
+
 logger = logging.getLogger(__name__)
 
 # Use analytics constants from Config (configurable via environment)
@@ -65,7 +66,7 @@ def get_efficiency_by_temperature_bands(
         Dictionary with temperature band analysis
     """
     # Build temperature band case expression
-    temp_band_case = case(
+    temp_band_case = case(  # type: ignore[call-overload]  # SA 1.4+ positional syntax
         (Trip.weather_temp_f < 32, "freezing"),
         (Trip.weather_temp_f < 45, "cold"),
         (Trip.weather_temp_f < 55, "cool"),
@@ -161,7 +162,7 @@ def get_efficiency_by_precipitation(
         Dictionary with precipitation impact analysis
     """
     # Build precipitation case expression
-    precip_case = case(
+    precip_case = case(  # type: ignore[call-overload]  # SA 1.4+ positional syntax
         (Trip.weather_precipitation_in.is_(None), "unknown"),
         (Trip.weather_precipitation_in == 0, "dry"),
         (Trip.weather_precipitation_in <= 0.1, "light_rain"),
@@ -240,7 +241,7 @@ def get_efficiency_by_wind(
         Dictionary with wind impact analysis
     """
     # Build wind speed case expression
-    wind_case = case(
+    wind_case = case(  # type: ignore[call-overload]  # SA 1.4+ positional syntax
         (Trip.weather_wind_mph < 5, "calm"),
         (Trip.weather_wind_mph < 15, "light"),
         (Trip.weather_wind_mph < 25, "moderate"),
@@ -358,7 +359,7 @@ def get_seasonal_trends(
         )
 
     # Calculate seasonal averages
-    seasons = {"winter": [], "spring": [], "summer": [], "fall": []}
+    seasons: Dict[str, List[Any]] = {"winter": [], "spring": [], "summer": [], "fall": []}
     for data in monthly_data:
         if data["month"] and "-" in data["month"]:
             try:

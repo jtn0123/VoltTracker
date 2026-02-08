@@ -746,8 +746,8 @@ class TestTripsSorting:
         trips = data.get("trips", data)
         if len(trips) > 1:
             for i in range(len(trips) - 1):
-                if trips[i]["distance_miles"] and trips[i+1]["distance_miles"]:
-                    assert trips[i]["distance_miles"] <= trips[i+1]["distance_miles"]
+                if trips[i]["distance_miles"] and trips[i + 1]["distance_miles"]:
+                    assert trips[i]["distance_miles"] <= trips[i + 1]["distance_miles"]
 
     def test_sort_by_invalid_field_uses_default(self, client, sample_trips):
         """Test that invalid sort_by uses default ordering."""

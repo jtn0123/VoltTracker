@@ -2,7 +2,6 @@
 Tests for statistical calculations
 """
 
-import pytest
 from receiver.calculations.statistics import (
     calculate_confidence_interval,
     calculate_trend_vs_previous,

@@ -17,7 +17,6 @@ Usage:
            TripReadOnlyUser --users 50 --spawn-rate 5 --run-time 2m
 """
 
-import json
 import random
 from datetime import datetime, timedelta
 from locust import HttpUser, task, between, SequentialTaskSet

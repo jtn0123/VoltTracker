@@ -2,7 +2,6 @@
 Tests for financial calculations
 """
 
-import pytest
 from receiver.calculations.financial import (
     calculate_charging_cost,
     calculate_fuel_cost,

@@ -9,12 +9,11 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "receiver"))
 
-from datetime import datetime, timedelta
 from collections import OrderedDict
+from datetime import datetime, timedelta
 
 
 class TestHealthCheckEndpoints:
@@ -109,13 +108,11 @@ class TestWeatherCacheLRU:
         assert MAX_WEATHER_CACHE_SIZE == 1000
 
         # Verify cache is an OrderedDict (required for LRU)
-        from collections import OrderedDict
         assert isinstance(_weather_cache, OrderedDict)
 
     def test_weather_cache_evicts_oldest_entries(self):
         """LRU cache implementation uses OrderedDict for proper eviction."""
         from utils.weather import _weather_cache
-        from collections import OrderedDict
 
         _weather_cache.clear()
 
@@ -136,7 +133,6 @@ class TestWeatherCacheLRU:
     def test_weather_cache_hit_moves_to_end(self, mock_get):
         """Cache hit moves entry to end (marks as recently used)."""
         from utils.weather import get_weather_for_location, _weather_cache
-        import time
 
         _weather_cache.clear()
 
@@ -254,7 +250,7 @@ class TestExportPagination:
     def test_export_all_with_date_range(self, client, db_session):
         """Export endpoint filters by date range."""
         from models import Trip
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timezone
         import uuid
 
         # Create trips from different dates

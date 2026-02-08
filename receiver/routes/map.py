@@ -5,17 +5,14 @@ Handles GPS track visualization, route clustering, and map data export.
 """
 
 import logging
-from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 from flask import Blueprint, jsonify, request, Response
-from sqlalchemy import func, and_, or_
-from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Trip, TelemetryRaw
 from utils.time_utils import parse_query_date_range, parse_date_shortcut
-from utils.route_clustering import find_similar_trips, calculate_route_bounds
+from utils.route_clustering import find_similar_trips
 
 logger = logging.getLogger(__name__)
 
@@ -477,7 +474,6 @@ def generate_gpx(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
     Returns:
         GPX XML string
     """
-    from xml.sax.saxutils import escape
 
     # GPX header
     gpx = [
@@ -548,7 +544,6 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
     Returns:
         KML XML string
     """
-    from xml.sax.saxutils import escape
 
     # KML header
     kml = [
@@ -556,7 +551,7 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         '<kml xmlns="http://www.opengis.net/kml/2.2">',
         '  <Document>',
         f'    <name>Volt Trip - {trip.start_time.strftime("%Y-%m-%d %H:%M")}</name>',
-        f'    <description>VoltTracker trip export</description>',
+        '    <description>VoltTracker trip export</description>',
         '',
         '    <!-- Styles -->',
         '    <Style id="routeStyle">',
@@ -604,7 +599,8 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         kml.append('    <Placemark>')
         kml.append('      <name>End</name>')
         end_time = trip.end_time if trip.end_time else last.timestamp
-        kml.append(f'      <description>Trip end: {end_time.strftime("%Y-%m-%d %H:%M") if end_time else "Unknown"}</description>')
+        end_str = end_time.strftime("%Y-%m-%d %H:%M") if end_time else "Unknown"
+        kml.append(f'      <description>Trip end: {end_str}</description>')
         kml.append('      <styleUrl>#endPoint</styleUrl>')
         kml.append('      <Point>')
         kml.append(f'        <coordinates>{last.longitude},{last.latitude},0</coordinates>')
@@ -614,7 +610,7 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
 
     # Route line
     kml.append('    <Placemark>')
-    kml.append(f'      <name>Trip Route</name>')
+    kml.append('      <name>Trip Route</name>')
 
     # Build description with trip stats
     desc_parts = [f'Distance: {trip.distance_miles:.2f} mi']

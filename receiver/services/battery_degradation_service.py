@@ -118,7 +118,7 @@ def forecast_degradation(db: Session) -> Dict:
     latest_reading = db.query(BatteryHealthReading).order_by(BatteryHealthReading.timestamp.desc()).first()
 
     current_miles = 0
-    current_capacity_pct = 100
+    current_capacity_pct: float = 100
 
     if latest_reading:
         # Calculate capacity percent from normalized kWh

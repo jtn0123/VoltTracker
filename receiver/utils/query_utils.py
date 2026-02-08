@@ -9,8 +9,7 @@ Provides helpers for:
 
 import logging
 from typing import List, Optional, Any
-from sqlalchemy.orm import Query, joinedload, subqueryload, selectinload
-from sqlalchemy import and_, or_
+from sqlalchemy.orm import Query, selectinload
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ def eager_load_trip_relationships(query: Query) -> Query:
         >>>     transitions = trip.soc_transitions
     """
     from models import Trip
-    return query.options(
+    return query.options(  # type: ignore[no-any-return]  # sqlalchemy stubs limitation
         selectinload(Trip.soc_transitions)  # Load in separate query (best for one-to-many)
     )
 
@@ -231,11 +230,12 @@ class TripQueryBuilder:
         """
         if self._include_relationships:
             self.query = eager_load_trip_relationships(self.query)
-        return self.query
+        return self.query  # type: ignore[no-any-return]  # sqlalchemy stubs limitation
 
     def all(self) -> List[Any]:
         """Execute query and return all results."""
-        return self.build().all()
+        result: List[Any] = self.build().all()
+        return result
 
     def first(self) -> Optional[Any]:
         """Execute query and return first result."""
@@ -243,7 +243,8 @@ class TripQueryBuilder:
 
     def count(self) -> int:
         """Return count of matching records."""
-        return self.query.count()
+        result: int = self.query.count()
+        return result
 
     def paginate(self, page: int = 1, per_page: int = 50):
         """
@@ -313,4 +314,5 @@ def batch_load_relationships(items: List[Any], relationship_name: str) -> List[A
         .all()
     )
 
-    return loaded_items
+    result: List[Any] = loaded_items
+    return result

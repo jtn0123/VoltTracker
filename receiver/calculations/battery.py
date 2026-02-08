@@ -7,7 +7,6 @@ Handles battery capacity, health, and degradation calculations:
 - Battery health metrics
 """
 
-from typing import Optional
 
 from .constants import (
     MAX_BATTERY_CAPACITY_KWH,

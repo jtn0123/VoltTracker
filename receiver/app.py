@@ -187,6 +187,7 @@ def handle_disconnect():
 # Security: Authentication & Rate Limiting
 # ============================================================================
 
+
 # Initialize HTTP Basic Auth for dashboard
 auth = HTTPBasicAuth()
 
@@ -211,8 +212,10 @@ def verify_password(username, password):
 # Initialize rate limiter
 limiter.init_app(app)
 if Config.RATE_LIMIT_ENABLED:
-    limiter._default_limits = ["200 per day", "50 per hour"]
-limiter._enabled = Config.RATE_LIMIT_ENABLED
+    limiter._default_limits = [  # type: ignore[attr-defined]
+        "200 per day", "50 per hour"
+    ]
+limiter._enabled = Config.RATE_LIMIT_ENABLED  # type: ignore[attr-defined]
 
 
 @app.before_request
@@ -359,12 +362,14 @@ def clear_cache_page():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clear Cache - VoltTracker</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+               padding: 20px; max-width: 600px; margin: 0 auto; }
         .status { padding: 15px; border-radius: 8px; margin: 10px 0; }
         .success { background: #d4edda; color: #155724; }
         .error { background: #f8d7da; color: #721c24; }
         .info { background: #cce5ff; color: #004085; }
-        button { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 8px; }
+        button { padding: 15px 30px; font-size: 18px; cursor: pointer;
+                 background: #007bff; color: white; border: none; border-radius: 8px; }
         button:disabled { background: #6c757d; cursor: not-allowed; }
         h1 { color: #333; }
     </style>

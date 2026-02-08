@@ -12,9 +12,9 @@ Features:
 """
 
 import logging
-from typing import Optional, Any, Dict
+from typing import Any, Callable, Dict, Optional
 from redis import Redis
-from rq import Queue, Worker, Retry
+from rq import Queue, Retry
 from rq.job import Job
 from config import Config
 
@@ -65,7 +65,7 @@ def get_job_queue(queue_name: str = "default") -> Queue:
 
 
 def enqueue_job(
-    func: callable,
+    func: Callable[..., Any],
     *args,
     queue_name: str = "default",
     job_timeout: int = 300,

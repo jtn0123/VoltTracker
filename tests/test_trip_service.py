@@ -665,7 +665,7 @@ class TestFinalizeExceptionHandling:
     def test_finalize_trip_sqlalchemy_error_is_raised(self, app, db_session, monkeypatch):
         """finalize_trip raises exceptions for SQLAlchemy errors."""
         from services.trip_service import finalize_trip
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
 
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
@@ -776,7 +776,10 @@ class TestExtremeWeatherDetection:
         db_session.flush()
 
         # Mock weather API to return heavy rain
-        mock_weather = {"temperature_f": 60.0, "conditions": "Heavy Rain", "wind_speed_mph": 5.0, "precipitation_in": 0.5}
+        mock_weather = {
+            "temperature_f": 60.0, "conditions": "Heavy Rain",
+            "wind_speed_mph": 5.0, "precipitation_in": 0.5
+        }
         with patch("services.trip_service.get_weather_for_location", return_value=mock_weather):
             points = [{"timestamp": now.isoformat(), "latitude": 37.0, "longitude": -122.0}]
             fetch_trip_weather(trip, points, db_session=db_session)

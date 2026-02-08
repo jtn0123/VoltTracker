@@ -3,7 +3,7 @@ Tests for toast notification emitter
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from receiver.utils.toast_emitter import (
     emit_toast,
     emit_success,

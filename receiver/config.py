@@ -76,7 +76,8 @@ class Config:
     FLASK_PORT = int(os.environ.get("FLASK_PORT", 8080))
     CACHE_TIMEOUT_SECONDS = int(os.environ.get("CACHE_TIMEOUT", 60))
     WEATHER_CACHE_TIMEOUT_SECONDS = int(os.environ.get("WEATHER_CACHE_TIMEOUT", 3600))  # 1 hour
-    WEATHER_SAMPLE_INTERVAL_MINUTES = int(os.environ.get("WEATHER_SAMPLE_INTERVAL", 15))  # Sample weather every N minutes
+    # Sample weather every N minutes
+    WEATHER_SAMPLE_INTERVAL_MINUTES = int(os.environ.get("WEATHER_SAMPLE_INTERVAL", 15))
     API_DEFAULT_PER_PAGE = int(os.environ.get("API_DEFAULT_PER_PAGE", 50))
     API_MAX_PER_PAGE = int(os.environ.get("API_MAX_PER_PAGE", 100))
     API_TELEMETRY_LIMIT_DEFAULT = int(os.environ.get("API_TELEMETRY_LIMIT_DEFAULT", 500))
@@ -89,7 +90,8 @@ class Config:
     MAX_CHARGING_CURVE_POINTS = int(os.environ.get("MAX_CHARGING_CURVE_POINTS", 1000))  # Max curve data points
 
     # Maintenance Service Configuration
-    MAX_ENGINE_TELEMETRY_POINTS = int(os.environ.get("MAX_ENGINE_TELEMETRY_POINTS", 50000))  # Limit for engine hours calc
+    # Limit for engine hours calc
+    MAX_ENGINE_TELEMETRY_POINTS = int(os.environ.get("MAX_ENGINE_TELEMETRY_POINTS", 50000))
 
     # External API Configuration
     WEATHER_API_MAX_RETRIES = int(os.environ.get("WEATHER_API_MAX_RETRIES", 2))

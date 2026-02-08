@@ -16,8 +16,7 @@ import json
 import logging
 import pickle
 from functools import wraps
-from typing import Any, Optional, Callable, List, Union
-from datetime import timedelta
+from typing import Optional, Callable, List
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ def generate_cache_key(prefix: str, *args, **kwargs) -> str:
 
     # Hash the combined parts for consistent key length
     key_string = ":".join(key_parts)
-    key_hash = hashlib.md5(key_string.encode()).hexdigest()
+    key_hash = hashlib.md5(key_string.encode(), usedforsecurity=False).hexdigest()
 
     return f"{prefix}:{key_hash}"
 
@@ -139,7 +138,7 @@ def cache_result(
                 cached_value = redis.get(cache_key)
                 if cached_value is not None:
                     logger.debug(f"Cache hit: {cache_key}")
-                    return pickle.loads(cached_value)
+                    return pickle.loads(cached_value)  # nosec B301
 
                 logger.debug(f"Cache miss: {cache_key}")
 
@@ -220,7 +219,7 @@ def invalidate_cache_by_tag(tag: str) -> int:
             return 0
 
         # Delete all cache entries
-        deleted = redis.delete(*cache_keys)
+        deleted: int = redis.delete(*cache_keys)
 
         # Delete the tag set itself
         redis.delete(tag_key)
@@ -355,7 +354,17 @@ def get_cache_stats() -> dict:
 
 
 # Convenience decorators for common TTLs
-cache_5min = lambda prefix, tags=None: cache_result(prefix, ttl=300, tags=tags)
-cache_15min = lambda prefix, tags=None: cache_result(prefix, ttl=900, tags=tags)
-cache_1hour = lambda prefix, tags=None: cache_result(prefix, ttl=3600, tags=tags)
-cache_1day = lambda prefix, tags=None: cache_result(prefix, ttl=86400, tags=tags)
+def cache_5min(prefix, tags=None):
+    return cache_result(prefix, ttl=300, tags=tags)
+
+
+def cache_15min(prefix, tags=None):
+    return cache_result(prefix, ttl=900, tags=tags)
+
+
+def cache_1hour(prefix, tags=None):
+    return cache_result(prefix, ttl=3600, tags=tags)
+
+
+def cache_1day(prefix, tags=None):
+    return cache_result(prefix, ttl=86400, tags=tags)

@@ -5,8 +5,7 @@ Note: These jobs use local imports inside functions, which makes testing
 more complex. We use sys.modules manipulation to properly mock dependencies.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 from datetime import datetime, timezone
 import uuid
 import sys

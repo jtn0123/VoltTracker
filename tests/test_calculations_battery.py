@@ -2,7 +2,6 @@
 Tests for battery-related calculations
 """
 
-import pytest
 from receiver.calculations.battery import (
     capacity_kwh_to_percent,
     capacity_percent_to_kwh,

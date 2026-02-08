@@ -756,7 +756,7 @@ class TestTelemetryTripStatsEdgeCases:
 
         response = client.get("/api/telemetry/latest")
         assert response.status_code == 200
-        data = response.get_json()
+        _data = response.get_json()  # noqa: F841
         # Should still work even without complete trip data
 
 

@@ -8,7 +8,6 @@ type coercion, and other edge cases across the codebase.
 import math
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -307,7 +306,7 @@ class TestCalculationsEdgeCases:
             {"engine_rpm": 200.0, "state_of_charge": 25.0},  # Below threshold
             {"engine_rpm": 1500.0, "state_of_charge": 23.0},
         ]
-        result = detect_gas_mode_entry(telemetry)
+        _result = detect_gas_mode_entry(telemetry)  # noqa: F841
         # Not sustained, should not detect
 
 

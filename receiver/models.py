@@ -1,4 +1,5 @@
 import uuid as uuid_module
+from typing import Any
 
 from config import Config
 from sqlalchemy import (
@@ -22,7 +23,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from utils.timezone import utc_now
 
-Base = declarative_base()
+Base: Any = declarative_base()
 
 
 # Custom UUID type that works with both PostgreSQL and SQLite
@@ -256,7 +257,8 @@ class Trip(Base):
     weather_wind_mph = Column(Float)
     weather_conditions = Column(String(50))
     weather_impact_factor = Column(Float)  # Estimated efficiency impact multiplier
-    extreme_weather = Column(Boolean, default=False)  # Flagged if conditions were extreme (freezing, very hot, heavy rain, strong wind)
+    # Flagged if conditions were extreme (freezing, very hot, heavy rain, strong wind)
+    extreme_weather = Column(Boolean, default=False)
 
     # Elevation data (from Open-Meteo Elevation API)
     elevation_start_m = Column(Float)  # Starting elevation in meters
@@ -901,7 +903,10 @@ class TripDailyStats(Base):
             "avg_speed_mph": round(self.avg_speed_mph, 1) if self.avg_speed_mph else None,
             "max_speed_mph": round(self.max_speed_mph, 1) if self.max_speed_mph else None,
             "total_kwh_used": round(self.total_kwh_used, 2) if self.total_kwh_used else 0,
-            "avg_weather_impact_factor": round(self.avg_weather_impact_factor, 2) if self.avg_weather_impact_factor else None,
+            "avg_weather_impact_factor": (
+                round(self.avg_weather_impact_factor, 2)
+                if self.avg_weather_impact_factor else None
+            ),
         }
 
 
@@ -1032,8 +1037,14 @@ class MonthlySummary(Base):
             "l1_sessions": self.l1_sessions,
             "l2_sessions": self.l2_sessions,
             "dcfc_sessions": self.dcfc_sessions,
-            "estimated_electricity_cost": round(self.estimated_electricity_cost, 2) if self.estimated_electricity_cost else None,
-            "estimated_gas_cost": round(self.estimated_gas_cost, 2) if self.estimated_gas_cost else None,
+            "estimated_electricity_cost": (
+                round(self.estimated_electricity_cost, 2)
+                if self.estimated_electricity_cost else None
+            ),
+            "estimated_gas_cost": (
+                round(self.estimated_gas_cost, 2)
+                if self.estimated_gas_cost else None
+            ),
             "co2_avoided_lbs": round(self.co2_avoided_lbs, 1) if self.co2_avoided_lbs else None,
             "avg_temp_f": round(self.avg_temp_f, 1) if self.avg_temp_f else None,
             "extreme_weather_trips": self.extreme_weather_trips,

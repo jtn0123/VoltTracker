@@ -7,7 +7,7 @@ and cluster trips based on geographic proximity.
 
 import logging
 import math
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple
 
 from sqlalchemy.orm import Session
 from models import Trip, TelemetryRaw
@@ -77,7 +77,7 @@ def calculate_route_similarity(
     sampled2 = sample_route(route2_points, sample_size)
 
     # Calculate average distance between corresponding points
-    total_distance = 0
+    total_distance: float = 0
     for (lat1, lon1), (lat2, lon2) in zip(sampled1, sampled2):
         total_distance += haversine_distance(lat1, lon1, lat2, lon2)
 
@@ -209,11 +209,10 @@ def find_similar_trips(
 
     ref_start = ref_points[0]
     ref_end = ref_points[-1]
-    ref_bounds = calculate_route_bounds(ref_points)
+    # ref_bounds not needed but bounds computed for validation
 
     # Query candidate trips (exclude reference trip itself)
     # Filter by approximate location using database query for efficiency
-    distance_tolerance = 0.2  # ~0.2 degrees latitude ≈ 14 miles
 
     candidate_trips = db.query(Trip).filter(
         Trip.id != reference_trip.id,
@@ -258,7 +257,10 @@ def find_similar_trips(
             })
 
     # Sort by similarity (highest first) and limit results
-    similar_trips.sort(key=lambda x: x['similarity_score'], reverse=True)
+    similar_trips.sort(
+        key=lambda x: x['similarity_score'],  # type: ignore[return-value]
+        reverse=True,
+    )
     return similar_trips[:max_results]
 
 
@@ -266,7 +268,7 @@ def cluster_trips_by_route(
     db: Session,
     trips: List[Trip],
     similarity_threshold: float = 75.0
-) -> List[List[str]]:
+) -> List[List[Any]]:
     """
     Cluster trips into groups with similar routes.
 

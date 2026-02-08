@@ -34,7 +34,7 @@ class TestTripsAPI:
 
     def test_get_trips_returns_list(self):
         """Test that trips endpoint returns a list of trips."""
-        response = requests.get(f"{BASE_URL}/api/trips")
+        response = requests.get(f"{BASE_URL}/api/trips", timeout=30)
         assert response.status_code == 200
         data = response.json()
         assert "trips" in data
@@ -43,7 +43,7 @@ class TestTripsAPI:
 
     def test_get_trips_pagination(self):
         """Test trips endpoint pagination structure."""
-        response = requests.get(f"{BASE_URL}/api/trips?limit=5&page=1")
+        response = requests.get(f"{BASE_URL}/api/trips?limit=5&page=1", timeout=30)
         assert response.status_code == 200
         data = response.json()
         # API returns default per_page of 50 regardless of limit param
@@ -54,7 +54,7 @@ class TestTripsAPI:
 
     def test_get_trips_has_required_fields(self):
         """Test that trip objects have required fields."""
-        response = requests.get(f"{BASE_URL}/api/trips?limit=1")
+        response = requests.get(f"{BASE_URL}/api/trips?limit=1", timeout=30)
         assert response.status_code == 200
         data = response.json()
 
@@ -72,28 +72,28 @@ class TestMPGTrendAPI:
 
     def test_get_mpg_trend_returns_list(self):
         """Test that MPG trend endpoint returns a list."""
-        response = requests.get(f"{BASE_URL}/api/mpg/trend")
+        response = requests.get(f"{BASE_URL}/api/mpg/trend", timeout=30)
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
 
     def test_get_mpg_trend_with_days_param(self):
         """Test MPG trend with days parameter."""
-        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=30")
+        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=30", timeout=30)
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
 
     def test_get_mpg_trend_with_all_time(self):
         """Test MPG trend with large days parameter (all time)."""
-        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=365")
+        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=365", timeout=30)
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
 
     def test_mpg_trend_has_required_fields(self):
         """Test that MPG trend data points have required fields."""
-        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=90")
+        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=90", timeout=30)
         assert response.status_code == 200
         data = response.json()
 
@@ -105,7 +105,7 @@ class TestMPGTrendAPI:
 
     def test_mpg_trend_dates_are_iso_format(self):
         """Test that dates are in ISO format."""
-        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=90")
+        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=90", timeout=30)
         assert response.status_code == 200
         data = response.json()
 
@@ -119,7 +119,7 @@ class TestMPGTrendAPI:
 
     def test_mpg_trend_only_includes_gas_trips(self):
         """Test that MPG trend only includes trips with valid MPG."""
-        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=90")
+        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=90", timeout=30)
         assert response.status_code == 200
         data = response.json()
 
@@ -129,7 +129,7 @@ class TestMPGTrendAPI:
 
     def test_mpg_trend_ordered_by_date(self):
         """Test that MPG trend data is ordered by date."""
-        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=90")
+        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=90", timeout=30)
         assert response.status_code == 200
         data = response.json()
 
@@ -139,7 +139,7 @@ class TestMPGTrendAPI:
 
     def test_mpg_trend_includes_december_dates(self):
         """Test that MPG trend includes December 2025 dates when available."""
-        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=90")
+        response = requests.get(f"{BASE_URL}/api/mpg/trend?days=90", timeout=30)
         assert response.status_code == 200
         data = response.json()
 
@@ -157,18 +157,18 @@ class TestTripDetailsAPI:
 
     def test_get_trip_details_not_found(self):
         """Test getting non-existent trip returns 404."""
-        response = requests.get(f"{BASE_URL}/api/trips/999999")
+        response = requests.get(f"{BASE_URL}/api/trips/999999", timeout=30)
         assert response.status_code == 404
 
     def test_get_trip_details_success(self):
         """Test getting existing trip details returns telemetry data."""
         # First get a trip ID from the list
-        list_response = requests.get(f"{BASE_URL}/api/trips?limit=1")
+        list_response = requests.get(f"{BASE_URL}/api/trips?limit=1", timeout=30)
         data = list_response.json()
 
         if data["trips"]:
             trip_id = data["trips"][0]["id"]
-            response = requests.get(f"{BASE_URL}/api/trips/{trip_id}")
+            response = requests.get(f"{BASE_URL}/api/trips/{trip_id}", timeout=30)
             assert response.status_code == 200
             trip_data = response.json()
             # Trip details endpoint returns telemetry array
@@ -181,7 +181,7 @@ class TestEfficiencySummaryAPI:
 
     def test_get_efficiency_summary(self):
         """Test efficiency summary endpoint."""
-        response = requests.get(f"{BASE_URL}/api/efficiency/summary")
+        response = requests.get(f"{BASE_URL}/api/efficiency/summary", timeout=30)
         assert response.status_code == 200
         data = response.json()
 
@@ -192,7 +192,7 @@ class TestEfficiencySummaryAPI:
 
     def test_efficiency_summary_values_are_valid(self):
         """Test that efficiency values are valid numbers or None."""
-        response = requests.get(f"{BASE_URL}/api/efficiency/summary")
+        response = requests.get(f"{BASE_URL}/api/efficiency/summary", timeout=30)
         assert response.status_code == 200
         data = response.json()
 
@@ -214,7 +214,7 @@ class TestSOCAnalysisAPI:
 
     def test_get_soc_analysis(self):
         """Test SOC analysis endpoint."""
-        response = requests.get(f"{BASE_URL}/api/soc/analysis")
+        response = requests.get(f"{BASE_URL}/api/soc/analysis", timeout=30)
         assert response.status_code == 200
         data = response.json()
         # Check that response is valid JSON
@@ -226,7 +226,7 @@ class TestStatusAPI:
 
     def test_get_status(self):
         """Test status endpoint."""
-        response = requests.get(f"{BASE_URL}/api/status")
+        response = requests.get(f"{BASE_URL}/api/status", timeout=30)
         assert response.status_code == 200
         data = response.json()
 
@@ -235,7 +235,7 @@ class TestStatusAPI:
 
     def test_status_database_connected(self):
         """Test that database shows as connected."""
-        response = requests.get(f"{BASE_URL}/api/status")
+        response = requests.get(f"{BASE_URL}/api/status", timeout=30)
         assert response.status_code == 200
         data = response.json()
 

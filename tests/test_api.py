@@ -118,7 +118,7 @@ class TestTorqueUpload:
 
     def test_upload_exception_returns_ok(self, client, monkeypatch):
         """Test that upload returns OK even on database errors to avoid Torque retries."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
 
         # Mock get_db to raise an exception
         def mock_get_db():
@@ -133,7 +133,7 @@ class TestTorqueUpload:
 
     def test_upload_sqlalchemy_exception_returns_ok(self, client, monkeypatch):
         """Test that SQLAlchemy errors are handled gracefully."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch, MagicMock
 
         # Create a mock exception that looks like SQLAlchemy
         class MockSQLAlchemyError(Exception):
@@ -153,7 +153,6 @@ class TestTorqueUpload:
         """Test that race condition in trip creation is handled gracefully."""
         import uuid
         from datetime import datetime, timezone
-        from unittest.mock import MagicMock, patch
         from models import Trip
 
         # Pre-create the trip to simulate race condition

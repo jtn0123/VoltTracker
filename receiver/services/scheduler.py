@@ -16,7 +16,7 @@ from models import ChargingSession, FuelEvent, TelemetryRaw, Trip
 from services.trip_service import finalize_trip
 from sqlalchemy import desc, func
 from sqlalchemy.exc import IntegrityError, OperationalError
-from utils import detect_charging_session, detect_refuel_event, normalize_datetime, utc_now
+from utils import detect_charging_session, detect_refuel_event, utc_now
 
 logger = logging.getLogger(__name__)
 

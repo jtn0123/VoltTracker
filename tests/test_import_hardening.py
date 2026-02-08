@@ -10,10 +10,9 @@ Tests the comprehensive import system hardening:
 
 import io
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 
-import pytest
-from receiver.models import CsvImport, TelemetryRaw, Trip
+from receiver.models import CsvImport, TelemetryRaw
 from receiver.utils.import_utils import (
     UNAMBIGUOUS_CHARS,
     format_reportable,
@@ -278,7 +277,7 @@ class TestImportHistoryEndpoint:
         # Create some test imports
         for i in range(3):
             csv_content = f"""GPS Time,Latitude
-2024-01-{15+i} 10:30:00,37.{7749+i}
+2024-01-{15 + i} 10:30:00,37.{7749 + i}
 """.encode()
             data = {"file": (io.BytesIO(csv_content), f"test{i}.csv")}
             client.post("/api/import/csv", data=data, content_type="multipart/form-data")
@@ -295,7 +294,7 @@ class TestImportHistoryEndpoint:
         # Create 5 imports
         for i in range(5):
             csv_content = f"""GPS Time,Latitude
-2024-01-{10+i} 10:30:00,37.{7749+i}
+2024-01-{10 + i} 10:30:00,37.{7749 + i}
 """.encode()
             data = {"file": (io.BytesIO(csv_content), f"limit_test{i}.csv")}
             client.post("/api/import/csv", data=data, content_type="multipart/form-data")
@@ -352,7 +351,7 @@ class TestTimestampDuplicateDetection:
         data1 = {"file": (io.BytesIO(csv_content1), "first.csv")}
         response1 = client.post("/api/import/csv", data=data1, content_type="multipart/form-data")
         assert response1.status_code == 200
-        first_json = response1.get_json()
+        _first_json = response1.get_json()  # noqa: F841
 
         # Count telemetry records after first import
         from receiver.models import TelemetryRaw

@@ -248,7 +248,7 @@ class TestTrackOperation:
         mock_logger = mock_get_logger.return_value
 
         with pytest.raises(ValueError):
-            with track_operation("test_op") as event:
+            with track_operation("test_op") as _event:  # noqa: F841
                 raise ValueError("Test error")
 
         # Should emit error

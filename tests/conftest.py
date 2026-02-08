@@ -21,7 +21,7 @@ from datetime import timedelta  # noqa: E402
 
 # Import models and create test engine BEFORE importing database or app
 # This ensures StaticPool is used so all connections share the same in-memory database
-from models import Base, MaintenanceRecord, TelemetryRaw, Trip, get_engine  # noqa: E402
+from models import Base, TelemetryRaw, Trip, get_engine  # noqa: E402
 from sqlalchemy.orm import scoped_session, sessionmaker  # noqa: E402
 
 # Create the test engine with StaticPool

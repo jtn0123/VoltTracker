@@ -7,6 +7,7 @@ Handles trip finalization logic, calculating statistics for completed trips.
 import logging
 import time
 from datetime import datetime
+from typing import Dict
 
 from config import Config
 from exceptions import WeatherAPIError
@@ -244,7 +245,7 @@ def fetch_trip_weather(trip: Trip, points: list, db_session=None) -> None:
             trip.weather_wind_mph = round(statistics.mean(winds), 1) if winds else None
 
             # Use the most common weather condition, or worst condition if tied
-            condition_counts = {}
+            condition_counts: Dict[str, int] = {}
             for w in weather_samples:
                 cond = w.get("conditions")
                 if cond:
@@ -252,7 +253,10 @@ def fetch_trip_weather(trip: Trip, points: list, db_session=None) -> None:
 
             if condition_counts:
                 # Sort by count (descending), then by severity (rain > cloudy > clear)
-                severity_order = {"Heavy Rain": 5, "Rain": 4, "Light Rain": 3, "Cloudy": 2, "Partly Cloudy": 1, "Clear": 0}
+                severity_order = {
+                    "Heavy Rain": 5, "Rain": 4, "Light Rain": 3,
+                    "Cloudy": 2, "Partly Cloudy": 1, "Clear": 0
+                }
                 trip.weather_conditions = max(
                     condition_counts.keys(),
                     key=lambda c: (condition_counts[c], severity_order.get(c, 0))

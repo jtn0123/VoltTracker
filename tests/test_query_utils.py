@@ -11,7 +11,7 @@ Tests query optimization helpers including:
 import os
 import sys
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import pytest
 

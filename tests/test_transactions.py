@@ -253,7 +253,6 @@ class TestSavepoints:
     def test_savepoint_rollback(self, db_session):
         """Test rolling back to a savepoint."""
         from models import Trip
-        from sqlalchemy import text
 
         session_id1 = uuid.uuid4()
         session_id2 = uuid.uuid4()
@@ -491,7 +490,7 @@ def db_session():
     try:
         session.rollback()
         session.close()
-    except:
+    except Exception:
         pass
 
 

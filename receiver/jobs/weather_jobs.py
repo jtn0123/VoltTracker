@@ -5,7 +5,6 @@ These jobs run asynchronously to avoid blocking trip finalization.
 """
 
 import logging
-from datetime import datetime
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
@@ -81,7 +80,7 @@ def batch_fetch_weather(trip_ids: List[int]) -> Dict[str, Any]:
     from database import SessionLocal
 
     db_session = SessionLocal()
-    results = {"success": 0, "failed": 0, "trip_results": []}
+    results: Dict[str, Any] = {"success": 0, "failed": 0, "trip_results": []}
 
     try:
         for trip_id in trip_ids:
@@ -180,7 +179,7 @@ def batch_fetch_weather_and_elevation(trip_ids: List[int]) -> Dict[str, Any]:
     from database import SessionLocal
 
     db_session = SessionLocal()
-    results = {
+    results: Dict[str, Any] = {
         "weather_success": 0,
         "weather_failed": 0,
         "elevation_success": 0,
@@ -190,7 +189,7 @@ def batch_fetch_weather_and_elevation(trip_ids: List[int]) -> Dict[str, Any]:
 
     try:
         for trip_id in trip_ids:
-            trip_result = {"trip_id": trip_id}
+            trip_result: Dict[str, Any] = {"trip_id": trip_id}
 
             # Fetch weather
             weather_result = fetch_weather_for_trip(trip_id, db_session)

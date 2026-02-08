@@ -8,11 +8,10 @@ Provides functions for:
 - Managing multiple API keys
 """
 
-import hashlib
 import secrets
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from werkzeug.security import generate_password_hash, check_password_hash
 
 logger = logging.getLogger(__name__)
@@ -72,7 +71,7 @@ def hash_api_key(api_key: str, method: str = "pbkdf2:sha256") -> str:
         >>> print(hashed)
         pbkdf2:sha256:...
     """
-    return generate_password_hash(api_key, method=method)
+    return str(generate_password_hash(api_key, method=method))
 
 
 def verify_api_key(api_key: str, hashed_key: str) -> bool:
@@ -86,7 +85,7 @@ def verify_api_key(api_key: str, hashed_key: str) -> bool:
     Returns:
         True if the key matches, False otherwise
     """
-    return check_password_hash(hashed_key, api_key)
+    return bool(check_password_hash(hashed_key, api_key))
 
 
 class APIKeyManager:
@@ -206,7 +205,7 @@ class APIKeyManager:
             return True
         return False
 
-    def list_keys(self) -> List[Dict[str, any]]:
+    def list_keys(self) -> List[Dict[str, Any]]:
         """
         List all API keys with metadata (excluding hashes).
 

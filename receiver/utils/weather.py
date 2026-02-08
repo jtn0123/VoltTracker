@@ -170,7 +170,9 @@ def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optio
 
 
 def get_weather_for_location(
-    latitude: float, longitude: float, timestamp: Optional[datetime] = None, timeout: Optional[int] = None, db_session=None
+    latitude: float, longitude: float,
+    timestamp: Optional[datetime] = None,
+    timeout: Optional[int] = None, db_session=None
 ) -> Optional[Dict[str, Any]]:
     """
     Fetch weather data for a location at a given time with 2-tier caching.
@@ -210,7 +212,6 @@ def get_weather_for_location(
     if db_session and timestamp_hour:
         try:
             from models import WeatherCache
-            from datetime import timedelta
 
             db_cache = db_session.query(WeatherCache).filter(
                 WeatherCache.latitude_key == lat_key,
@@ -231,7 +232,8 @@ def get_weather_for_location(
                     _weather_cache[cache_key] = (db_cache.to_dict(), time.time())
                     if len(_weather_cache) > MAX_WEATHER_CACHE_SIZE:
                         _weather_cache.popitem(last=False)
-                    return db_cache.to_dict()
+                    result: dict[str, Any] = db_cache.to_dict()
+                    return result
                 else:
                     # Expired - delete it
                     db_session.delete(db_cache)
@@ -255,7 +257,8 @@ def get_weather_for_location(
                 f"Memory cache hit for ({latitude:.2f}, {longitude:.2f}) "
                 f"at {timestamp_hour} (age: {age_seconds:.0f}s)"
             )
-            return cached_data
+            cached_result: dict[str, Any] = cached_data
+            return cached_result
         else:
             # Expired entry - remove it
             del _weather_cache[cache_key]

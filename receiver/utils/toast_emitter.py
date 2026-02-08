@@ -143,7 +143,7 @@ def emit_trip_finalized(
     if mpg and mpg > 0:
         message += f", {mpg:.0f} MPG"
     elif electric_miles and electric_miles > 0:
-        message += f" (all electric)"
+        message += " (all electric)"
 
     emit_success(message, duration=4000)
 

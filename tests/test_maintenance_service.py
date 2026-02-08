@@ -12,7 +12,6 @@ Tests the Volt maintenance tracking including:
 import uuid
 from datetime import datetime, timedelta, timezone
 
-import pytest
 from models import MaintenanceRecord, TelemetryRaw
 from services.maintenance_service import MAINTENANCE_INTERVALS, calculate_engine_hours, get_maintenance_summary
 

@@ -10,11 +10,10 @@ This file maintains backward compatibility for existing code.
 
 import logging
 import statistics
-from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 # Import from consolidated calculations package
-from calculations import (
+from calculations import (  # noqa: F401
     calculate_energy_from_soc_change,
     calculate_gas_mpg,
     calculate_kwh_per_mile,
@@ -23,14 +22,13 @@ from calculations import (
     smooth_fuel_level,
     soc_to_kwh,
 )
-from calculations.constants import (
+from calculations.constants import (  # noqa: F401
     BATTERY_CAPACITY_KWH,
     MIN_GAS_MILES_FOR_MPG,
     RPM_THRESHOLD,
     SOC_GAS_THRESHOLD,
     TANK_CAPACITY_GALLONS,
 )
-from config import Config
 
 logger = logging.getLogger(__name__)
 

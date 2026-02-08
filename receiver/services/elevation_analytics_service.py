@@ -6,14 +6,13 @@ elevation changes and trip efficiency.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, case, func
 from sqlalchemy.orm import Session
 
 from models import Route, Trip
-from utils.timezone import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ def get_efficiency_by_elevation_change(
         Dictionary with elevation category analysis
     """
     # Build elevation category case expression
-    elevation_case = case(
+    elevation_case = case(  # type: ignore[call-overload]  # SA 1.4+ positional syntax
         (Trip.elevation_net_change_m < -50, "steep_downhill"),
         (Trip.elevation_net_change_m < -10, "moderate_downhill"),
         (Trip.elevation_net_change_m < 10, "flat"),
@@ -164,7 +163,7 @@ def get_efficiency_by_gradient(
         return {"gradient_analysis": [], "total_trips_analyzed": 0}
 
     # Group by gradient bands
-    bands = {
+    bands: Dict[str, Dict[str, Any]] = {
         "very_flat": {"min": 0, "max": 10, "label": "Very flat (<10m/mi)", "trips": []},
         "gentle": {"min": 10, "max": 30, "label": "Gentle (10-30m/mi)", "trips": []},
         "moderate": {"min": 30, "max": 60, "label": "Moderate (30-60m/mi)", "trips": []},
@@ -197,7 +196,7 @@ def get_efficiency_by_gradient(
 
     return {
         "gradient_analysis": gradient_list,
-        "total_trips_analyzed": sum(len(b["trips"]) for b in bands.values()),
+        "total_trips_analyzed": sum(len(b["trips"]) for b in bands.values()),  # type: ignore[arg-type]
     }
 
 

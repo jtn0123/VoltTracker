@@ -293,7 +293,8 @@ def calculate_correlation_simple(
         return None
 
     correlation = covariance / (std_x * std_y)
-    return round(correlation, 3)
+    result: float = round(correlation, 3)
+    return result
 
 
 def calculate_z_score(value: float, mean: float, std_dev: float) -> Optional[float]:

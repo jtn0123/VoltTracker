@@ -8,7 +8,6 @@ and event enrichment following loggingsucks.com patterns.
 import uuid
 from datetime import datetime, timedelta, timezone
 
-import pytest
 from models import Trip
 from utils.context_enrichment import (
     classify_usage_tier,

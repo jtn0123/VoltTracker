@@ -7,7 +7,7 @@ Tests Redis caching decorators, cache invalidation, and cache management.
 import os
 import sys
 import pickle
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

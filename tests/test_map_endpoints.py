@@ -2,7 +2,6 @@
 Tests for GPS map visualization endpoints
 """
 
-import pytest
 import uuid
 from datetime import datetime, timezone, timedelta
 from receiver.models import Trip, TelemetryRaw

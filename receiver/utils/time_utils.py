@@ -94,7 +94,7 @@ def parse_datetime(
 
     # Try dateutil parser (handles most formats)
     try:
-        dt = date_parser.parse(date_string)
+        dt: datetime = date_parser.parse(date_string)
         # Add UTC timezone if naive and assume_utc is True
         if assume_utc and dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)

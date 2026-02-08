@@ -5,7 +5,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from config import Config
 from utils.timezone import utc_now
 
 logger = logging.getLogger(__name__)

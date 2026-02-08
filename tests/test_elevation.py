@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models import Route, TelemetryRaw, Trip
+from models import Route, Trip
 from services import elevation_analytics_service
 from utils.elevation import (
     calculate_elevation_profile,

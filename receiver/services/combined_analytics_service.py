@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, case, extract, func
+from sqlalchemy import and_, extract, func
 from sqlalchemy.orm import Session
 
 from models import Trip

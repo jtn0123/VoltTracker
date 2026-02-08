@@ -404,7 +404,10 @@ def import_csv():
                 file_size_bytes=file_size or import_event.get("file_size_bytes") or 0,
                 status=status,
                 failure_reason=failure_reason,
-                failure_details={"first_error": import_event.get("first_error")} if import_event.get("first_error") else None,
+                failure_details=(
+                    {"first_error": import_event.get("first_error")}
+                    if import_event.get("first_error") else None
+                ),
                 suggestion=suggestion,
                 total_rows=stats.get("total_rows", 0) if stats else import_event.get("total_rows", 0),
                 parsed_rows=stats.get("parsed_rows", 0) if stats else import_event.get("parsed_rows", 0),
@@ -449,8 +452,16 @@ def import_csv():
             }
             if stats.get("timestamp_range_start") and stats.get("timestamp_range_end"):
                 response["stats"]["timestamp_range"] = {
-                    "start": stats["timestamp_range_start"].isoformat() if hasattr(stats["timestamp_range_start"], 'isoformat') else str(stats["timestamp_range_start"]),
-                    "end": stats["timestamp_range_end"].isoformat() if hasattr(stats["timestamp_range_end"], 'isoformat') else str(stats["timestamp_range_end"]),
+                    "start": (
+                        stats["timestamp_range_start"].isoformat()
+                        if hasattr(stats["timestamp_range_start"], 'isoformat')
+                        else str(stats["timestamp_range_start"])
+                    ),
+                    "end": (
+                        stats["timestamp_range_end"].isoformat()
+                        if hasattr(stats["timestamp_range_end"], 'isoformat')
+                        else str(stats["timestamp_range_end"])
+                    ),
                 }
         if trip_id:
             response["trip_id"] = trip_id
@@ -504,12 +515,19 @@ def import_csv():
             actual_size_mb = file_size / (1024 * 1024)
             import_event["failure_reason"] = "file_too_large"
             _log_import_event()
-            _record_import("failed", "file_too_large",
-                          f"File size ({actual_size_mb:.1f} MB) exceeds maximum ({max_size_mb:.1f} MB)",
-                          filename=file.filename, file_size=file_size)
-            return _build_response("failed", "File too large", "file_too_large",
-                                  f"CSV file must be less than {max_size_mb:.1f} MB. Your file is {actual_size_mb:.1f} MB.",
-                                  http_status=413)
+            _record_import(
+                "failed", "file_too_large",
+                f"File size ({actual_size_mb:.1f} MB) exceeds maximum ({max_size_mb:.1f} MB)",
+                filename=file.filename, file_size=file_size
+            )
+            msg = (
+                f"CSV file must be less than {max_size_mb:.1f} MB."
+                f" Your file is {actual_size_mb:.1f} MB."
+            )
+            return _build_response(
+                "failed", "File too large", "file_too_large",
+                msg, http_status=413
+            )
 
         file_hash = get_file_hash(file_bytes)
         import_event["file_hash"] = file_hash
@@ -589,7 +607,10 @@ def import_csv():
                 failure_reason = "all_duplicates"
                 import_event["failure_reason"] = failure_reason
                 _log_import_event()
-                suggestion = "All records in this file already exist in the database. This file may have been imported previously."
+                suggestion = (
+                    "All records in this file already exist in the"
+                    " database. This file may have been imported previously."
+                )
                 _record_import("failed", failure_reason, suggestion, stats,
                                filename=file.filename, file_hash=file_hash, file_size=len(file_bytes))
                 return _build_response("failed", "All records already imported", failure_reason,
@@ -729,14 +750,20 @@ def import_csv():
             except Exception as trip_commit_error:
                 db.rollback()
                 import_event["failure_reason"] = "trip_commit_error"
-                import_event["first_error"] = {"error_type": type(trip_commit_error).__name__, "reason": str(trip_commit_error)}
+                import_event["first_error"] = {
+                    "error_type": type(trip_commit_error).__name__,
+                    "reason": str(trip_commit_error)
+                }
                 _log_import_event()
                 logger.error(f"Failed to create trip for import: {trip_commit_error}", exc_info=True)
                 _record_import("partial", "trip_creation_failed",
                                f"Telemetry imported but trip creation failed: {trip_commit_error}",
                                stats, None, session_id_str, file_hash, file.filename, len(file_bytes))
-                return _build_response("partial", f"Telemetry imported ({inserted_count} records) but trip creation failed",
-                                       "trip_creation_failed", stats=stats, http_status=200)
+                msg = f"Telemetry imported ({inserted_count} records) but trip creation failed"
+                return _build_response(
+                    "partial", msg,
+                    "trip_creation_failed", stats=stats, http_status=200
+                )
 
             # Finalize trip to calculate electric_miles, gas_mpg, etc.
             try:

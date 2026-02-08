@@ -16,9 +16,7 @@ The actual weather functionality is in utils/weather.py and jobs/weather_jobs.py
 
 import pytest
 import responses
-import json
 from datetime import datetime, timezone
-from unittest.mock import patch
 
 # Skip all tests in this module - they're placeholder tests for a non-existent interface
 pytestmark = pytest.mark.skip(
@@ -275,10 +273,10 @@ class TestElevationAPIIntegration:
         from services import elevation_service
 
         # Large list of coordinates
-        all_coordinates = [(37.7749 + i*0.0001, -122.4194 + i*0.0001) for i in range(100)]
+        all_coordinates = [(37.7749 + i * 0.0001, -122.4194 + i * 0.0001) for i in range(100)]
 
         # Sample and fetch (e.g., every 10th point)
-        elevations = elevation_service.fetch_elevations_sampled(
+        _elevations = elevation_service.fetch_elevations_sampled(  # noqa: F841
             all_coordinates,
             sample_rate=0.1  # 10% sampling
         )
@@ -389,7 +387,7 @@ class TestAPIRetryLogic:
 
         @retry_with_exponential_backoff(max_retries=3, base_delay=0.1)
         def fetch_data():
-            resp = requests.get("https://api.example.com/data")
+            resp = requests.get("https://api.example.com/data", timeout=30)
             resp.raise_for_status()
             return resp.json()
 

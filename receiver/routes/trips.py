@@ -256,7 +256,8 @@ def get_trip_detail(trip_id):
 
     # Pagination for telemetry to avoid huge responses
     try:
-        limit = min(Config.API_TELEMETRY_LIMIT_MAX, max(1, int(request.args.get("limit", Config.API_TELEMETRY_LIMIT_DEFAULT))))
+        raw_limit = int(request.args.get("limit", Config.API_TELEMETRY_LIMIT_DEFAULT))
+        limit = min(Config.API_TELEMETRY_LIMIT_MAX, max(1, raw_limit))
     except (ValueError, TypeError):
         limit = Config.API_TELEMETRY_LIMIT_DEFAULT
 

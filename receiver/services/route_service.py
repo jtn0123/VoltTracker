@@ -7,7 +7,7 @@ Simplified implementation without complex ML libraries.
 
 import logging
 from math import asin, cos, radians, sin, sqrt
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from models import Route, TelemetryRaw, Trip
 from sqlalchemy import and_
@@ -110,7 +110,7 @@ def find_matching_route(
                 best_distance = total_dist
                 best_match = route
 
-    return best_match
+    return best_match  # type: ignore[no-any-return]  # SQLAlchemy query result typed as Any
 
 
 def detect_routes(db: Session, min_trips: int = 3) -> List[Dict]:
@@ -127,7 +127,7 @@ def detect_routes(db: Session, min_trips: int = 3) -> List[Dict]:
         .all()
     )
 
-    routes_data = []
+    routes_data: list[Dict[str, Any]] = []
 
     for trip in trips:
         endpoints = get_trip_endpoints(db, trip.id)

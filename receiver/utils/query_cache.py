@@ -37,8 +37,8 @@ class TTLCache:
         """
         self.max_size = max_size
         self.default_ttl = default_ttl
-        self._cache = OrderedDict()
-        self._timestamps = {}
+        self._cache: OrderedDict[str, Any] = OrderedDict()
+        self._timestamps: dict[str, float] = {}
 
     def get(self, key: str) -> Optional[Any]:
         """
@@ -142,7 +142,7 @@ def cache_key(*args, **kwargs) -> str:
 
     # Hash the serialized data
     key_json = json.dumps(key_data, sort_keys=True, default=str)
-    return hashlib.md5(key_json.encode()).hexdigest()
+    return hashlib.md5(key_json.encode(), usedforsecurity=False).hexdigest()
 
 
 def cached_query(ttl: int = DEFAULT_TTL_SECONDS, key_prefix: str = ""):
@@ -186,8 +186,10 @@ def cached_query(ttl: int = DEFAULT_TTL_SECONDS, key_prefix: str = ""):
             return result
 
         # Add cache control methods
-        wrapper.cache_clear = lambda: _query_cache.invalidate_pattern(func.__name__)
-        wrapper.cache_stats = lambda: _query_cache.stats()
+        wrapper.cache_clear = (  # type: ignore[attr-defined]
+            lambda: _query_cache.invalidate_pattern(func.__name__)
+        )
+        wrapper.cache_stats = lambda: _query_cache.stats()  # type: ignore[attr-defined]  # dynamic attr on wrapper
 
         return wrapper
 

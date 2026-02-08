@@ -7,9 +7,7 @@ Tests the TTLCache class and caching decorator.
 import os
 import sys
 import time
-from unittest.mock import patch
 
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "receiver"))
 

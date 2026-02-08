@@ -2,8 +2,7 @@
 Tests for energy conversion calculations
 """
 
-import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 from receiver.calculations.energy import (
     soc_to_kwh,
     kwh_to_soc,

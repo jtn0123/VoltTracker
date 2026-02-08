@@ -10,7 +10,7 @@ Provides endpoints for:
 import logging
 from flask import Blueprint, jsonify, request
 from database import get_db
-from models import Trip, TelemetryRaw, FuelEvent
+from models import Trip, TelemetryRaw
 from sqlalchemy import and_
 from utils import utc_now
 
@@ -313,7 +313,7 @@ def bulk_export_trips():
         return Response(
             output.getvalue(),
             mimetype="text/csv",
-            headers={"Content-Disposition": f"attachment; filename=trips_bulk_export.csv"}
+            headers={"Content-Disposition": "attachment; filename=trips_bulk_export.csv"}
         ), 200
 
     except Exception as e:

@@ -10,12 +10,11 @@ Provides enhanced statistics with:
 
 import logging
 import statistics as stats_module
-from datetime import timedelta
 from flask import Blueprint, jsonify, request
 from database import get_db
-from models import Trip, TelemetryRaw, ChargingSession
-from sqlalchemy import func, and_
-from utils.time_utils import utc_now, parse_date_shortcut, days_ago
+from models import Trip
+from sqlalchemy import and_
+from utils.time_utils import parse_date_shortcut
 from utils.cache_utils import cache_result
 
 logger = logging.getLogger(__name__)

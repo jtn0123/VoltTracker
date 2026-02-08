@@ -3,8 +3,7 @@ Tests for audit logging functionality.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
-from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 
 class TestAuditAction:
@@ -145,7 +144,6 @@ class TestAuditLoggerLogChange:
     def test_log_change_handles_exception(self, app, caplog):
         """Test that log_change doesn't raise exceptions."""
         from utils.audit_log import AuditLogger, AuditAction
-        import logging
 
         with app.test_request_context("/test"):
             # Use a mock that raises an exception
