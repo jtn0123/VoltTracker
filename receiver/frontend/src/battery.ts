@@ -3,7 +3,8 @@
  * Battery health, cell voltages, and SOC analysis
  */
 
-import { fetchJson, formatDateTime, state } from '@/core';
+import { formatDateTime, state } from '@/core';
+import { api } from '@/api';
 import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from '@/charts';
 import type { BatteryHealthResponse, BatteryCellsResponse, CellReading, SocAnalysis } from '@/types/api';
 
@@ -12,7 +13,9 @@ import type { BatteryHealthResponse, BatteryCellsResponse, CellReading, SocAnaly
  */
 export async function loadBatteryHealth(): Promise<void> {
   try {
-    const data = await fetchJson<BatteryHealthResponse>('/api/battery/health');
+    const result = await api<BatteryHealthResponse>('/api/battery/health');
+    if (result.error) return;
+    const data = result.data!;
 
     const section = document.getElementById('battery-health-section');
     if (!section) return;
@@ -69,7 +72,9 @@ export async function loadBatteryHealth(): Promise<void> {
  */
 export async function loadBatteryCells(): Promise<void> {
   try {
-    const data = await fetchJson<BatteryCellsResponse>('/api/battery/cells/latest');
+    const result = await api<BatteryCellsResponse>('/api/battery/cells/latest');
+    if (result.error) return;
+    const data = result.data!;
 
     const section = document.getElementById('battery-cells-section');
     if (!section) return;
@@ -248,7 +253,9 @@ export function checkWeakCells(reading: CellReading): void {
  */
 export async function loadSocAnalysis(): Promise<void> {
   try {
-    const data = await fetchJson<SocAnalysis>('/api/soc/analysis');
+    const result = await api<SocAnalysis>('/api/soc/analysis');
+    if (result.error) return;
+    const data = result.data!;
 
     const socFloor = document.getElementById('soc-floor');
     if (socFloor) {

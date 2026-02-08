@@ -72,11 +72,12 @@ def app():
     # Create all tables in the test database
     Base.metadata.create_all(engine)
 
-    # Clear database weather cache
+    # Clear all tables to ensure test isolation
+    # (drop_all at teardown may not be visible to cached scoped_session connections)
     try:
-        from models import WeatherCache
         session = Session()
-        session.query(WeatherCache).delete()
+        for table in reversed(Base.metadata.sorted_tables):
+            session.execute(table.delete())
         session.commit()
         session.close()
     except Exception:

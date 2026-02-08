@@ -3,7 +3,7 @@
  * Charging summary, history, session management, and detail modals
  */
 
-import { state, fetchJson, formatDate, formatDateTime, formatTime } from '@/core';
+import { state, formatDate, formatDateTime, formatTime } from '@/core';
 import { api } from '@/api';
 import { loadChartJs, createGradient, getChartDefaults, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from '@/charts';
 import type { ChargingSummary, ChargingSession, ChargingCurveResponse } from '@/types/api';
@@ -340,10 +340,13 @@ export async function openChargingDetailModal(sessionId: number): Promise<void> 
   if (closeBtn) setTimeout(() => closeBtn.focus(), 100);
 
   try {
-    const [session, curveData] = await Promise.all([
-      fetchJson<ChargingSession>(`/api/charging/${sessionId}`),
-      fetchJson<ChargingCurveResponse>(`/api/charging/${sessionId}/curve`),
+    const [sessionResult, curveResult] = await Promise.all([
+      api<ChargingSession>(`/api/charging/${sessionId}`),
+      api<ChargingCurveResponse>(`/api/charging/${sessionId}/curve`),
     ]);
+    if (sessionResult.error || curveResult.error) return;
+    const session = sessionResult.data!;
+    const curveData = curveResult.data!;
 
     renderChargingDetailSummary(session);
     renderChargingCurveChart(curveData);

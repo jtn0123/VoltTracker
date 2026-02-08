@@ -3,7 +3,8 @@
  * Trip loading, display, modal, and deletion
  */
 
-import { DEBUG, state, fetchJson, formatDate, formatDateTime, formatTime, formatDuration } from '@/core';
+import { DEBUG, state, formatDate, formatDateTime, formatTime, formatDuration } from '@/core';
+import { api } from '@/api';
 import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from '@/charts';
 import { renderTripMap } from '@/map';
 import { loadSummary, loadMpgTrend } from '@/summary';
@@ -20,10 +21,12 @@ export async function loadTrips(): Promise<void> {
     if (state.dateFilter.start) url += `&start_date=${state.dateFilter.start}`;
     if (state.dateFilter.end) url += `&end_date=${state.dateFilter.end}`;
 
-    const response = await fetchJson<{ trips?: TripSummary[] } | TripSummary[]>(url, {
+    const result = await api<{ trips?: TripSummary[] } | TripSummary[]>(url, {
       useCache: true,
       maxAge: 300000,
     });
+    if (result.error) return;
+    const response = result.data!;
     const trips: TripSummary[] = Array.isArray(response) ? response : response.trips || [];
 
     const tableBody = document.getElementById('trips-table-body');
@@ -132,7 +135,9 @@ export async function openTripModal(tripId: number): Promise<void> {
   if (closeBtn) setTimeout(() => closeBtn.focus(), 100);
 
   try {
-    const data = await fetchJson<TripDetail>(`/api/trips/${tripId}`);
+    const result = await api<TripDetail>(`/api/trips/${tripId}`);
+    if (result.error) return;
+    const data = result.data!;
     const trip = data.trip;
     const telemetry = data.telemetry;
 

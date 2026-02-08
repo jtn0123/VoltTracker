@@ -3,9 +3,10 @@
  * WebSocket connection, real-time updates, and power flow
  */
 
-import { DEBUG, state, store, fetchJson, formatDateTime, getElapsedTime } from '@/core';
+import { DEBUG, state, store, formatDateTime, getElapsedTime } from '@/core';
+import { api } from '@/api';
 import type { LiveTelemetryResponse, TelemetryPoint, WsTelemetryData, WsToastData } from '@/types/api';
-import { LiveTelemetryResponseSchema, validateResponse } from '@/types/schemas';
+import { LiveTelemetryResponseSchema } from '@/types/schemas';
 import { ConnectionStatus, PowerFlowState } from '@/types/enums';
 
 /**
@@ -142,8 +143,11 @@ export function updateConnectionStatus(status: ConnectionStatus): void {
  */
 export async function loadLiveTelemetry(): Promise<void> {
   try {
-    const raw = await fetchJson<LiveTelemetryResponse>('/api/telemetry/latest');
-    const data = validateResponse(LiveTelemetryResponseSchema, raw, '/api/telemetry/latest');
+    const result = await api<LiveTelemetryResponse>('/api/telemetry/latest', {
+      schema: LiveTelemetryResponseSchema,
+    });
+    if (result.error) return;
+    const data = result.data!;
 
     const liveSection = document.getElementById('live-trip-section');
     const liveContent = document.getElementById('live-trip-content');
@@ -233,7 +237,9 @@ export async function loadStatus(): Promise<void> {
   if (!statusDot || !lastSync) return;
 
   try {
-    const data = await fetchJson<{ status: string; last_sync: string | null }>('/api/status');
+    const result = await api<{ status: string; last_sync: string | null }>('/api/status', { silent: true });
+    if (result.error) throw new Error(result.error);
+    const data = result.data!;
 
     state.statusErrorCount = 0;
 
