@@ -9,6 +9,9 @@ class ToastManager {
         this.maxVisible = 3;
         this.queue = [];
         this.container = null;
+        /** @type {Map<string, number>} message+type → timestamp for dedup */
+        this._recentMessages = new Map();
+        this._dedupWindowMs = 5000; // suppress duplicates within 5 seconds
         this.init();
     }
 
@@ -38,13 +41,28 @@ class ToastManager {
      * @returns {string} Toast ID for programmatic dismissal
      */
     showToast(message, type = 'info', duration = 3000, actions = []) {
+        // Deduplicate: suppress identical message+type within the time window
+        const dedupKey = `${type}:${message}`;
+        const now = Date.now();
+        const lastSeen = this._recentMessages.get(dedupKey);
+        if (lastSeen && (now - lastSeen) < this._dedupWindowMs) {
+            return null; // suppress duplicate
+        }
+        this._recentMessages.set(dedupKey, now);
+        // Prune old entries periodically
+        if (this._recentMessages.size > 50) {
+            for (const [key, ts] of this._recentMessages) {
+                if (now - ts > this._dedupWindowMs) this._recentMessages.delete(key);
+            }
+        }
+
         const toast = {
             id: this.generateId(),
             message,
             type,
             duration,
             actions,
-            timestamp: Date.now()
+            timestamp: now
         };
 
         // If at max capacity, queue it

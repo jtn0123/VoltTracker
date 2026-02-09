@@ -6,8 +6,13 @@ Provides helper functions to emit toast notifications to connected clients
 from typing import Optional, List, Dict, Any
 from flask_socketio import emit
 import logging
+import time
 
 logger = logging.getLogger(__name__)
+
+# Server-side dedup: track recent toasts to avoid spamming clients
+_recent_toasts: Dict[str, float] = {}
+_DEDUP_WINDOW = 5.0  # seconds
 
 
 class ToastType:
@@ -42,6 +47,21 @@ def emit_toast(
         >>> emit_toast('New trip detected', ToastType.INFO, duration=3000)
     """
     try:
+        # Server-side dedup: skip if same message+type was emitted recently
+        dedup_key = f"{toast_type}:{message}"
+        now = time.monotonic()
+        last_sent = _recent_toasts.get(dedup_key)
+        if last_sent is not None and (now - last_sent) < _DEDUP_WINDOW:
+            logger.debug(f"Toast suppressed (dedup): {toast_type} - {message}")
+            return
+        _recent_toasts[dedup_key] = now
+        # Prune old entries
+        if len(_recent_toasts) > 100:
+            cutoff = now - _DEDUP_WINDOW
+            for k in list(_recent_toasts):
+                if _recent_toasts[k] < cutoff:
+                    del _recent_toasts[k]
+
         payload = {
             'message': message,
             'type': toast_type,

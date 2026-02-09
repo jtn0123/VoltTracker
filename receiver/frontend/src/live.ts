@@ -53,6 +53,7 @@ export function initWebSocket(): void {
     });
 
     state.socket.on('toast', (data: WsToastData) => {
+      // Dedup is handled by the ToastManager; just forward
       showToast(data.message, data.type, data.duration, data.actions);
     });
 

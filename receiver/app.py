@@ -19,6 +19,21 @@ from routes import register_blueprints
 from services.scheduler import init_scheduler, shutdown_scheduler
 from werkzeug.security import check_password_hash
 
+import json
+import os as _os
+
+# Read version from package.json
+def _read_version():
+    """Read version from frontend package.json or fall back to unknown."""
+    try:
+        pkg_path = _os.path.join(_os.path.dirname(__file__), 'frontend', 'package.json')
+        with open(pkg_path) as f:
+            return json.load(f).get('version', 'unknown')
+    except Exception:
+        return 'unknown'
+
+APP_VERSION = _read_version()
+
 
 # Configure logging with rotation
 def setup_logging():
@@ -342,7 +357,7 @@ def health_check():
     Returns 200 if the application is alive (can handle requests).
     Does not check external dependencies like database.
     """
-    return {"status": "healthy", "service": "volttracker"}, 200
+    return {"status": "healthy", "service": "volttracker", "version": APP_VERSION}, 200
 
 
 @app.route("/clear-cache", methods=["GET"])

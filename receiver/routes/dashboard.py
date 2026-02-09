@@ -21,7 +21,8 @@ def dashboard():
     # For blueprint, we need to check if auth is required
     # Pass WebSocket auth token so the frontend can authenticate its Socket.IO connection
     ws_token = Config.WEBSOCKET_TOKEN or Config.DASHBOARD_PASSWORD or ""
-    return render_template("index.html", ws_token=ws_token)
+    from app import APP_VERSION
+    return render_template("index.html", ws_token=ws_token, app_version=APP_VERSION)
 
 
 @dashboard_bp.route("/map")
