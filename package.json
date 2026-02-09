@@ -14,7 +14,10 @@
     "optimize-images": "node scripts/optimize-images.js",
     "check-size": "node scripts/check-bundle-size.js",
     "build:check": "npm run build && npm run check-size",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:e2e": "cd e2e && npx playwright test",
+    "test:e2e:headed": "cd e2e && npx playwright test --headed",
+    "test:e2e:ui": "cd e2e && npx playwright test --ui"
   },
   "type": "module",
   "repository": {
