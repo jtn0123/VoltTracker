@@ -3,6 +3,71 @@
  * Lazy loading, store subscriptions, and app initialization
  */
 
+// ── Global Error Boundary ────────────────────────────────────────────────────
+// Catches unhandled errors and promise rejections, reports to backend,
+// and shows a fallback UI instead of a blank screen.
+function reportErrorToBackend(payload: Record<string, unknown>): void {
+  try {
+    navigator.sendBeacon(
+      '/api/errors/report',
+      new Blob([JSON.stringify(payload)], { type: 'application/json' }),
+    );
+  } catch {
+    // sendBeacon not available or failed; swallow silently
+  }
+}
+
+window.onerror = (message, source, lineno, colno, error) => {
+  console.error('[VoltTracker] Uncaught error:', message, source, lineno);
+  reportErrorToBackend({
+    message: String(message),
+    source,
+    lineno,
+    colno,
+    stack: error?.stack ?? '',
+    url: window.location.href,
+    userAgent: navigator.userAgent,
+  });
+  showFallbackUI(String(message));
+  return false; // Let the default handler run too
+};
+
+window.onunhandledrejection = (event: PromiseRejectionEvent) => {
+  const reason = event.reason;
+  const message = reason instanceof Error ? reason.message : String(reason);
+  console.error('[VoltTracker] Unhandled rejection:', message);
+  reportErrorToBackend({
+    message: `Unhandled Promise: ${message}`,
+    stack: reason instanceof Error ? reason.stack ?? '' : '',
+    url: window.location.href,
+    userAgent: navigator.userAgent,
+  });
+};
+
+function showFallbackUI(errorMsg: string): void {
+  // Only show fallback if the page appears broken (no main content rendered)
+  const dashboard = document.getElementById('dashboard-content') || document.querySelector('main');
+  if (dashboard && dashboard.children.length > 0) return; // Content exists, don't clobber it
+
+  const fallback = document.getElementById('error-fallback');
+  if (fallback) {
+    fallback.style.display = 'block';
+    const detail = fallback.querySelector('.error-detail');
+    if (detail) detail.textContent = errorMsg;
+    return;
+  }
+
+  // Create a minimal fallback if the template doesn't have one
+  document.body.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;font-family:system-ui,sans-serif;padding:2rem;text-align:center">
+      <h1 style="margin:0 0 .5rem">Something went wrong</h1>
+      <p style="color:#666;max-width:500px">${errorMsg.replace(/</g, '&lt;')}</p>
+      <button onclick="location.reload()" style="margin-top:1rem;padding:.5rem 1.5rem;border-radius:6px;border:none;background:#007bff;color:#fff;cursor:pointer">
+        Reload
+      </button>
+    </div>`;
+}
+
 // CSS modules — Vite bundles these into the output
 import './styles/base.css';
 import './styles/layout.css';
@@ -230,6 +295,7 @@ function setupSectionObservers(): void {
 
 // ── Initialize dashboard ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  try {
   initTheme();
   initDatePicker();
   initWebSocket();
@@ -322,4 +388,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Auto-refresh trips every 60 seconds
   state.tripsRefreshInterval = setInterval(loadTrips, 60000);
+  } catch (initError) {
+    console.error('[VoltTracker] Initialization failed:', initError);
+    reportErrorToBackend({
+      message: `Init failed: ${initError instanceof Error ? initError.message : String(initError)}`,
+      stack: initError instanceof Error ? initError.stack ?? '' : '',
+      url: window.location.href,
+      userAgent: navigator.userAgent,
+    });
+    showFallbackUI(initError instanceof Error ? initError.message : String(initError));
+  }
 });

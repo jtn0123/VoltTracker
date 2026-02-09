@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 engine = get_engine(Config.DATABASE_URL)
 SessionLocal = scoped_session(sessionmaker(bind=engine))
 
-# Add slow query logging (queries >500ms)
-SLOW_QUERY_THRESHOLD_MS = 500
+# Add slow query logging (queries >100ms to catch regressions as data grows)
+SLOW_QUERY_THRESHOLD_MS = 100
 
 
 @event.listens_for(Engine, "before_cursor_execute")

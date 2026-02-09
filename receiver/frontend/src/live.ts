@@ -34,18 +34,34 @@ export function initWebSocket(): void {
       reconnectionAttempts: 10,
     });
 
+    let reconnectAttempt = 0;
+
     state.socket.on('connect', () => {
-      if (DEBUG) console.log('WebSocket connected');
+      console.log('[WS] Connected (attempts=%d)', reconnectAttempt);
+      reconnectAttempt = 0;
       state.useWebSocket = true;
       updateConnectionStatus(ConnectionStatus.Connected);
     });
 
-    state.socket.on('disconnect', () => {
-      if (DEBUG) console.log('WebSocket disconnected');
+    state.socket.on('disconnect', (reason: string) => {
+      console.log('[WS] Disconnected: %s', reason);
       updateConnectionStatus(ConnectionStatus.Disconnected);
       if (!state.liveRefreshInterval) {
         state.liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);
       }
+    });
+
+    ((state.socket as any).io as any).on('reconnect_attempt', (attempt: number) => {
+      reconnectAttempt = attempt;
+      console.log('[WS] Reconnect attempt #%d (backoff up to %dms)', attempt, Math.min(2000 * Math.pow(2, attempt - 1), 30000));
+    });
+
+    ((state.socket as any).io as any).on('reconnect', (attempt: number) => {
+      console.log('[WS] Reconnected after %d attempt(s)', attempt);
+    });
+
+    ((state.socket as any).io as any).on('reconnect_failed', () => {
+      console.warn('[WS] Reconnection failed after max attempts — staying on polling');
     });
 
     state.socket.on('telemetry', (data: WsTelemetryData) => {
@@ -57,8 +73,8 @@ export function initWebSocket(): void {
       showToast(data.message, data.type, data.duration, data.actions);
     });
 
-    state.socket.on('connect_error', () => {
-      if (DEBUG) console.log('WebSocket connection error, falling back to polling');
+    state.socket.on('connect_error', (err: Error) => {
+      console.warn('[WS] Connection error: %s (attempt #%d), falling back to polling', err.message, reconnectAttempt);
       state.useWebSocket = false;
       if (!state.liveRefreshInterval) {
         state.liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);

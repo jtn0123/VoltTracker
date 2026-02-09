@@ -1,8 +1,10 @@
 # Bugs Found During Testing and Debugging
 
+> **Last reviewed:** 2026-02-09 — comprehensive debug/perf/testing pass
+
 ## Critical Bugs
 
-### 1. Bulk Update Endpoint References Non-Existent Fields ⚠️
+### 1. ✅ FIXED — Bulk Update Endpoint References Non-Existent Fields
 **File:** `receiver/routes/bulk_operations.py:193`
 **Severity:** HIGH - Runtime error
 
@@ -29,7 +31,7 @@ invalid_fields = [f for f in updates.keys() if f not in allowed_fields]
 
 ---
 
-### 2. Deprecated `datetime.utcnow()` Usage 🕐
+### 2. ✅ FIXED — Deprecated `datetime.utcnow()` Usage
 **Files:** Multiple (8 files)
 **Severity:** MEDIUM - Deprecated API, timezone bugs
 
@@ -66,7 +68,7 @@ Multiple files use `datetime.utcnow()` which is:
 
 ---
 
-### 3. Logic Bug in API Key Expiration Check
+### 3. ✅ FIXED — Logic Bug in API Key Expiration Check
 **File:** `receiver/utils/auth_utils.py:224`
 **Severity:** LOW - Confusing logic
 
@@ -88,7 +90,7 @@ Redundant conditional expression in `is_expired` calculation:
 
 ---
 
-### 4. SQLAlchemy Loader Options Bug in query_utils.py 🐛
+### 4. ✅ FIXED — SQLAlchemy Loader Options Bug in query_utils.py
 **File:** `receiver/utils/query_utils.py:41`
 **Severity:** HIGH - Runtime error
 
@@ -123,7 +125,7 @@ return query.options(
 
 ---
 
-### 5. SQLAlchemy Batch Load Bug in query_utils.py 🐛
+### 5. ✅ FIXED — SQLAlchemy Batch Load Bug in query_utils.py
 **File:** `receiver/utils/query_utils.py:304`
 **Severity:** HIGH - Runtime error
 
@@ -155,7 +157,7 @@ except AttributeError:
 
 ---
 
-### 6. Test Timestamp Bug
+### 6. ✅ FIXED — Test Timestamp Bug
 **File:** `tests/test_maintenance_service.py:169`
 **Severity:** LOW - Test bug (already fixed)
 

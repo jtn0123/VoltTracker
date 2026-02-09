@@ -338,8 +338,8 @@ class TestSlowQueryLogging:
         """Slow query threshold is configurable."""
         from database import SLOW_QUERY_THRESHOLD_MS
 
-        # Default should be 500ms
-        assert SLOW_QUERY_THRESHOLD_MS == 500
+        # Default threshold lowered to 100ms to catch regressions early
+        assert SLOW_QUERY_THRESHOLD_MS == 100
 
 
 class TestAnalyticsConfiguration:

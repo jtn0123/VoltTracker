@@ -238,7 +238,8 @@ limiter._enabled = Config.RATE_LIMIT_ENABLED  # type: ignore[attr-defined]
 
 @app.before_request
 def inject_request_id():
-    """Inject unique request ID for distributed tracing."""
+    """Inject unique request ID and start timer for distributed tracing."""
+    import time
     import uuid
 
     from flask import g, request
@@ -246,6 +247,7 @@ def inject_request_id():
     # Check if client provided X-Request-ID header, otherwise generate new one
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     g.request_id = request_id
+    g.request_start_time = time.monotonic()
 
 
 @app.errorhandler(413)
@@ -282,6 +284,17 @@ def add_security_headers(response):
     # Add request ID to response headers for tracing
     if hasattr(g, "request_id"):
         response.headers["X-Request-ID"] = g.request_id
+
+    # Add response time header and log slow requests
+    if hasattr(g, "request_start_time"):
+        import time
+        duration_ms = (time.monotonic() - g.request_start_time) * 1000
+        response.headers["X-Response-Time"] = f"{duration_ms:.1f}ms"
+        if duration_ms > 500 and not request.path.startswith("/static/"):
+            logger.warning(
+                "Slow request: %s %s took %.1fms (status %d)",
+                request.method, request.path, duration_ms, response.status_code,
+            )
 
     return response
 
@@ -350,6 +363,49 @@ register_blueprints(app)
 # Apply rate limiting exemption to torque upload endpoint
 # (done after blueprint registration)
 limiter.exempt(telemetry_bp)
+
+# Initialize structured error tracking (404/500/unhandled exception handlers)
+from utils.error_tracking import init_error_handlers  # noqa: E402
+init_error_handlers(app)
+
+
+# ============================================================================
+# Frontend Error Reporting Endpoint
+# ============================================================================
+
+@app.route("/api/errors/report", methods=["POST"])
+def report_frontend_error():
+    """
+    Receive error reports from the frontend.
+
+    Expects JSON with: message, source, lineno, colno, stack, userAgent, url
+    """
+    from flask import request as req
+    from utils.error_tracking import track_error
+
+    data = req.get_json(silent=True) or {}
+    message = data.get("message", "Unknown frontend error")
+
+    # Create a synthetic exception for tracking
+    fe_error = RuntimeError(f"[Frontend] {message}")
+    track_error(
+        fe_error,
+        endpoint="/api/errors/report",
+        method="POST",
+        status_code=0,  # Not an HTTP error
+        request_context={
+            "source": data.get("source"),
+            "lineno": data.get("lineno"),
+            "colno": data.get("colno"),
+            "stack": data.get("stack", "")[:2000],
+            "page_url": data.get("url"),
+            "user_agent": data.get("userAgent", "")[:200],
+            "origin": "frontend",
+        },
+    )
+
+    logger.warning("Frontend error reported: %s (source=%s)", message, data.get("source"))
+    return {"status": "ok"}, 200
 
 
 # ============================================================================
