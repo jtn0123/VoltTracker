@@ -286,12 +286,14 @@ class TestFuelEndpoints:
     """Tests for fuel-related endpoints."""
 
     def test_fuel_history_returns_list(self, client):
-        """Test fuel history endpoint returns list."""
+        """Test fuel history endpoint returns paginated response."""
         response = client.get("/api/fuel/history")
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
+        assert "events" in data
+        assert "pagination" in data
+        assert isinstance(data["events"], list)
 
     def test_add_fuel_event(self, client):
         """Test adding a fuel event."""
@@ -429,8 +431,9 @@ class TestApiEdgeCases:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
-        assert len(data) == 0
+        assert "events" in data
+        assert isinstance(data["events"], list)
+        assert len(data["events"]) == 0
 
     def test_status_with_no_telemetry(self, client):
         """Test status when no telemetry has been received."""
@@ -783,12 +786,14 @@ class TestChargingEndpoints:
     """Tests for charging session endpoints."""
 
     def test_charging_history_returns_list(self, client):
-        """Test charging history endpoint returns list."""
+        """Test charging history endpoint returns paginated response."""
         response = client.get("/api/charging/history")
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
+        assert "sessions" in data
+        assert "pagination" in data
+        assert isinstance(data["sessions"], list)
 
     def test_add_charging_session(self, client):
         """Test adding a charging session."""
@@ -1190,7 +1195,7 @@ class TestExportWithData:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data[0]["location_name"] == 'Home, "Main" Garage'
+        assert data["sessions"][0]["location_name"] == 'Home, "Main" Garage'
 
 
 class TestChargingSummaryDetails:
@@ -1307,7 +1312,7 @@ class TestChargingFiltersAndCost:
         assert response.status_code == 200
         data = json.loads(response.data)
         # Should include all sessions
-        assert len(data) == 2
+        assert len(data["sessions"]) == 2
 
     def test_charging_summary_includes_cost_fields(self, client, db_session):
         """Test charging summary includes cost-related fields."""
@@ -1364,11 +1369,12 @@ class TestChargingFiltersAndCost:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert len(data) == 3
+        sessions = data["sessions"]
+        assert len(sessions) == 3
         # Most recent should be first
-        assert data[0]["kwh_added"] == 12.0
-        assert data[1]["kwh_added"] == 8.0
-        assert data[2]["kwh_added"] == 6.0
+        assert sessions[0]["kwh_added"] == 12.0
+        assert sessions[1]["kwh_added"] == 8.0
+        assert sessions[2]["kwh_added"] == 6.0
 
 
 class TestTripPatchRestrictions:

@@ -90,8 +90,10 @@ class TestChargingHistory:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
-        assert len(data) == 0
+        assert "sessions" in data
+        assert "pagination" in data
+        assert isinstance(data["sessions"], list)
+        assert len(data["sessions"]) == 0
 
     def test_get_charging_history_with_data(self, client, charging_sessions):
         """Test charging history returns sessions in order."""
@@ -99,12 +101,14 @@ class TestChargingHistory:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
-        assert len(data) == 3
+        sessions = data["sessions"]
+        assert isinstance(sessions, list)
+        assert len(sessions) == 3
+        assert data["pagination"]["total"] == 3
 
         # Verify ordering (most recent first)
-        for i, session in enumerate(data[:-1]):
-            next_session = data[i + 1]
+        for i, session in enumerate(sessions[:-1]):
+            next_session = sessions[i + 1]
             assert session["start_time"] >= next_session["start_time"]
 
     def test_get_charging_history_returns_all_fields(self, client, charging_sessions):
@@ -113,9 +117,9 @@ class TestChargingHistory:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert len(data) > 0
+        assert len(data["sessions"]) > 0
 
-        session = data[0]
+        session = data["sessions"][0]
         expected_fields = [
             "id",
             "start_time",

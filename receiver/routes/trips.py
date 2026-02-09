@@ -14,6 +14,7 @@ from flask import Blueprint, jsonify, request
 from models import FuelEvent, SocTransition, TelemetryRaw, Trip
 from sqlalchemy import desc, func
 from utils import analyze_soc_floor
+from utils.query_cache import invalidate_cache_pattern as invalidate_query_cache
 from utils.time_utils import utc_now, parse_query_date_range, parse_date_shortcut
 
 logger = logging.getLogger(__name__)
@@ -325,6 +326,8 @@ def delete_trip(trip_id: int):
         db.delete(trip)
         db.commit()
 
+        invalidate_query_cache("trip")
+        invalidate_query_cache("stats")
         logger.info(f"Deleted trip {trip_id}")
         return jsonify({"message": f"Trip {trip_id} deleted successfully"})
     except Exception as e:
@@ -411,6 +414,8 @@ def update_trip(trip_id):
     try:
         db.commit()
 
+        invalidate_query_cache("trip")
+        invalidate_query_cache("stats")
         logger.info(f"Updated trip {trip_id}: {data}")
         return jsonify(trip.to_dict())
     except Exception as e:

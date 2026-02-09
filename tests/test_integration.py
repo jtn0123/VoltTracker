@@ -128,8 +128,8 @@ class TestFuelEventFlow:
         response = client.get("/api/fuel/history")
         data = json.loads(response.data)
 
-        assert len(data) >= 1
-        assert data[0]["gallons_added"] == 8.0
+        assert len(data["events"]) >= 1
+        assert data["events"][0]["gallons_added"] == 8.0
 
 
 class TestEfficiencySummaryFlow:

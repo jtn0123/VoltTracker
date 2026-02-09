@@ -9,6 +9,7 @@ import functools
 import hashlib
 import json
 import logging
+import threading
 import time
 from collections import OrderedDict
 from typing import Any, Callable, Optional
@@ -39,10 +40,13 @@ class TTLCache:
         self.default_ttl = default_ttl
         self._cache: OrderedDict[str, Any] = OrderedDict()
         self._timestamps: dict[str, float] = {}
+        self._lock = threading.Lock()
 
     def get(self, key: str) -> Optional[Any]:
         """
         Get value from cache if not expired.
+
+        Thread-safe via internal lock.
 
         Args:
             key: Cache key
@@ -50,64 +54,73 @@ class TTLCache:
         Returns:
             Cached value or None if expired/missing
         """
-        if key not in self._cache:
-            return None
+        with self._lock:
+            if key not in self._cache:
+                return None
 
-        # Check if expired
-        timestamp = self._timestamps.get(key, 0)
-        if time.time() - timestamp > self.default_ttl:
-            # Expired, remove
-            del self._cache[key]
-            del self._timestamps[key]
-            return None
+            # Check if expired
+            timestamp = self._timestamps.get(key, 0)
+            if time.time() - timestamp > self.default_ttl:
+                # Expired, remove
+                del self._cache[key]
+                del self._timestamps[key]
+                return None
 
-        # Move to end (mark as recently used)
-        self._cache.move_to_end(key)
-        return self._cache[key]
+            # Move to end (mark as recently used)
+            self._cache.move_to_end(key)
+            return self._cache[key]
 
     def set(self, key: str, value: Any, ttl: Optional[int] = None):
         """
         Set value in cache.
+
+        Thread-safe via internal lock.
 
         Args:
             key: Cache key
             value: Value to cache
             ttl: Optional TTL override in seconds
         """
-        # Evict oldest if at capacity
-        if len(self._cache) >= self.max_size and key not in self._cache:
-            oldest_key = next(iter(self._cache))
-            del self._cache[oldest_key]
-            del self._timestamps[oldest_key]
+        with self._lock:
+            # Evict oldest if at capacity
+            if len(self._cache) >= self.max_size and key not in self._cache:
+                oldest_key = next(iter(self._cache))
+                del self._cache[oldest_key]
+                del self._timestamps[oldest_key]
 
-        self._cache[key] = value
-        self._cache.move_to_end(key)
-        self._timestamps[key] = time.time()
+            self._cache[key] = value
+            self._cache.move_to_end(key)
+            self._timestamps[key] = time.time()
 
     def clear(self):
         """Clear all cached entries."""
-        self._cache.clear()
-        self._timestamps.clear()
+        with self._lock:
+            self._cache.clear()
+            self._timestamps.clear()
 
     def invalidate_pattern(self, pattern: str):
         """
         Invalidate all keys matching pattern.
 
+        Thread-safe via internal lock.
+
         Args:
             pattern: String pattern to match (simple substring matching)
         """
-        keys_to_delete = [key for key in self._cache.keys() if pattern in key]
-        for key in keys_to_delete:
-            del self._cache[key]
-            del self._timestamps[key]
+        with self._lock:
+            keys_to_delete = [key for key in self._cache.keys() if pattern in key]
+            for key in keys_to_delete:
+                del self._cache[key]
+                del self._timestamps[key]
 
     def stats(self):
         """Get cache statistics."""
-        return {
-            "size": len(self._cache),
-            "max_size": self.max_size,
-            "default_ttl": self.default_ttl,
-        }
+        with self._lock:
+            return {
+                "size": len(self._cache),
+                "max_size": self.max_size,
+                "default_ttl": self.default_ttl,
+            }
 
 
 # Global cache instance

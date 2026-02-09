@@ -22,6 +22,7 @@ from werkzeug.security import check_password_hash
 import json
 import os as _os
 
+
 # Read version from package.json
 def _read_version():
     """Read version from frontend package.json or fall back to unknown."""
@@ -32,10 +33,12 @@ def _read_version():
     except Exception:
         return 'unknown'
 
+
 APP_VERSION = _read_version()
 
 
 # Configure logging with rotation
+
 def setup_logging():
     """
     Configure logging with rotating file handler and console output.
@@ -259,7 +262,13 @@ def request_entity_too_large(error):
 @app.after_request
 def add_security_headers(response):
     """Add security headers and request ID to all responses."""
-    from flask import g
+    from flask import g, request
+
+    # Static asset caching headers (cache-busted via hashed filenames)
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
 
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"

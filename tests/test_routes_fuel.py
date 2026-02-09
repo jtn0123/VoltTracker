@@ -59,8 +59,10 @@ class TestFuelHistory:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
-        assert len(data) == 0
+        assert "events" in data
+        assert "pagination" in data
+        assert isinstance(data["events"], list)
+        assert len(data["events"]) == 0
 
     def test_get_fuel_history_with_data(self, client, fuel_events):
         """Test fuel history returns events in order."""
@@ -68,12 +70,14 @@ class TestFuelHistory:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert isinstance(data, list)
-        assert len(data) == 3
+        events = data["events"]
+        assert isinstance(events, list)
+        assert len(events) == 3
+        assert data["pagination"]["total"] == 3
 
         # Verify ordering (most recent first)
-        for i, event in enumerate(data[:-1]):
-            next_event = data[i + 1]
+        for i, event in enumerate(events[:-1]):
+            next_event = events[i + 1]
             assert event["timestamp"] >= next_event["timestamp"]
 
     def test_get_fuel_history_returns_all_fields(self, client, fuel_events):
@@ -82,9 +86,9 @@ class TestFuelHistory:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert len(data) > 0
+        assert len(data["events"]) > 0
 
-        event = data[0]
+        event = data["events"][0]
         expected_fields = [
             "id",
             "timestamp",

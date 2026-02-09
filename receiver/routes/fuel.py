@@ -7,6 +7,7 @@ Handles fuel event CRUD operations and fuel history.
 import logging
 from datetime import datetime
 
+from config import Config
 from database import get_db
 from flask import Blueprint, jsonify, request
 from models import FuelEvent
@@ -52,12 +53,39 @@ def validate_fuel_event_data(data):
 
 @fuel_bp.route("/fuel/history", methods=["GET"])
 def get_fuel_history():
-    """Get fuel event history for tank-by-tank analysis."""
+    """
+    Get fuel event history with pagination.
+
+    Query params:
+        page: Page number (default 1)
+        per_page: Items per page (default 50, max 100)
+    """
     db = get_db()
 
-    events = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp)).limit(50).all()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
 
-    return jsonify([e.to_dict() for e in events])
+    try:
+        per_page = min(Config.API_MAX_PER_PAGE, max(1, int(request.args.get("per_page", Config.API_DEFAULT_PER_PAGE))))
+    except (ValueError, TypeError):
+        per_page = Config.API_DEFAULT_PER_PAGE
+
+    query = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp))
+    total_count = query.count()
+    offset = (page - 1) * per_page
+    events = query.offset(offset).limit(per_page).all()
+
+    return jsonify({
+        "events": [e.to_dict() for e in events],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total_count,
+            "pages": (total_count + per_page - 1) // per_page if per_page > 0 else 0,
+        },
+    })
 
 
 @fuel_bp.route("/fuel/add", methods=["POST"])

@@ -201,6 +201,10 @@ def torque_upload(token=None):
                 event.emit(level="error", force=True)
                 return "OK!"  # Return OK to prevent Torque retries
 
+        # Invalidate cached query results when new telemetry arrives
+        from utils.query_cache import invalidate_cache_pattern as invalidate_query_cache
+        invalidate_query_cache("telemetry")
+
         # Emit real-time update to WebSocket clients if socketio is available
         socketio = current_app.extensions.get("socketio")
         if socketio:

@@ -247,10 +247,12 @@ class TestChargingSchemas:
         assert resp.status_code == 200
         data = resp.get_json()
 
-        assert isinstance(data, list)
-        assert len(data) >= 1
+        assert "sessions" in data
+        assert "pagination" in data
+        assert isinstance(data["sessions"], list)
+        assert len(data["sessions"]) >= 1
 
-        session = data[0]
+        session = data["sessions"][0]
         _assert_keys_subset(session, CHARGING_SESSION_KEYS, "ChargingSession")
         assert isinstance(session["id"], int)
         _assert_nullable_string(session["start_time"], "start_time")

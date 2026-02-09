@@ -565,7 +565,7 @@ def import_csv():
         # Backup original CSV file
         try:
             CSV_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             safe_filename = "".join(c for c in file.filename if c.isalnum() or c in "._-")
             backup_path = CSV_BACKUP_DIR / f"{timestamp}_{import_code}_{safe_filename}"
             backup_path.write_text(csv_content, encoding="utf-8")

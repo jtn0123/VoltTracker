@@ -22,12 +22,39 @@ charging_bp = Blueprint("charging", __name__)
 
 @charging_bp.route("/charging/history", methods=["GET"])
 def get_charging_history():
-    """Get charging session history."""
+    """
+    Get charging session history with pagination.
+
+    Query params:
+        page: Page number (default 1)
+        per_page: Items per page (default 50, max 100)
+    """
     db = get_db()
 
-    sessions = db.query(ChargingSession).order_by(desc(ChargingSession.start_time)).limit(50).all()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
 
-    return jsonify([s.to_dict() for s in sessions])
+    try:
+        per_page = min(Config.API_MAX_PER_PAGE, max(1, int(request.args.get("per_page", Config.API_DEFAULT_PER_PAGE))))
+    except (ValueError, TypeError):
+        per_page = Config.API_DEFAULT_PER_PAGE
+
+    query = db.query(ChargingSession).order_by(desc(ChargingSession.start_time))
+    total_count = query.count()
+    offset = (page - 1) * per_page
+    sessions = query.offset(offset).limit(per_page).all()
+
+    return jsonify({
+        "sessions": [s.to_dict() for s in sessions],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total_count,
+            "pages": (total_count + per_page - 1) // per_page if per_page > 0 else 0,
+        },
+    })
 
 
 @charging_bp.route("/charging/add", methods=["POST"])
@@ -336,13 +363,14 @@ def get_charging_summary():
             l2_count += 1
 
     # Calculate monthly stats (last 30 days)
-    # Use naive datetime for comparison since database stores naive datetimes
     month_ago = utc_now() - timedelta(days=30)
+    # Normalize comparison: strip tz from both sides if needed
+    month_ago_naive = month_ago.replace(tzinfo=None)
     monthly_sessions = [
         s for s in sessions
         if s.start_time and (
             s.start_time.replace(tzinfo=None) if s.start_time.tzinfo else s.start_time
-        ) >= month_ago
+        ) >= month_ago_naive
     ]
     monthly_kwh = sum(s.kwh_added or 0 for s in monthly_sessions)
     monthly_cost = monthly_kwh * electricity_rate

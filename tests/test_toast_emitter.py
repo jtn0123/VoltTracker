@@ -202,11 +202,13 @@ class TestToastEmitter:
 
     def test_emit_toast_exception_handling(self, mock_emit):
         """Test that emit_toast handles exceptions gracefully"""
+        from utils.toast_emitter import _recent_toasts
+        _recent_toasts.clear()
         mock_emit.side_effect = Exception('Socket error')
 
         # Should not raise exception
         try:
-            emit_toast('Test message', ToastType.INFO)
+            emit_toast('Test exception message', ToastType.INFO)
         except Exception:
             pytest.fail("emit_toast should not raise exceptions")
 
