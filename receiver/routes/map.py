@@ -177,15 +177,31 @@ def get_trips_map_data():
     # Build response
     trips_data = []
 
-    for trip in trips:
-        # Get GPS points for this trip
-        telemetry = db.query(TelemetryRaw).filter(
-            TelemetryRaw.session_id == trip.session_id,
-            TelemetryRaw.latitude.isnot(None),
-            TelemetryRaw.longitude.isnot(None)
-        ).order_by(TelemetryRaw.timestamp).all()
+    # Batch-fetch all telemetry for all trips in a single query (fixes N+1)
+    session_ids = [trip.session_id for trip in trips]
+    all_telemetry = []
+    if session_ids:
+        all_telemetry = (
+            db.query(TelemetryRaw)
+            .filter(
+                TelemetryRaw.session_id.in_(session_ids),
+                TelemetryRaw.latitude.isnot(None),
+                TelemetryRaw.longitude.isnot(None),
+            )
+            .order_by(TelemetryRaw.session_id, TelemetryRaw.timestamp)
+            .all()
+        )
 
-        if not telemetry or len(telemetry) < 2:
+    # Group telemetry by session_id
+    from collections import defaultdict
+    telemetry_by_session: dict = defaultdict(list)
+    for t in all_telemetry:
+        telemetry_by_session[t.session_id].append(t)
+
+    for trip in trips:
+        telemetry = telemetry_by_session.get(trip.session_id, [])
+
+        if len(telemetry) < 2:
             continue  # Skip trips without GPS data
 
         # Build points list with efficiency/speed data

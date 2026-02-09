@@ -237,6 +237,44 @@ limiter._enabled = Config.RATE_LIMIT_ENABLED  # type: ignore[attr-defined]
 
 
 @app.before_request
+def require_auth_globally():
+    """Require authentication for all routes except public endpoints.
+
+    Public (unauthenticated) endpoints:
+    - /health, /healthz, /ready, /readiness — health checks
+    - /api/telemetry/upload/* — Torque Pro uploads (uses API token, not Basic Auth)
+    - /api/errors/report — frontend error reporting
+    - /static/* — static assets
+    - /clear-cache — cache-clearing utility page
+    """
+    from flask import request as req
+
+    # Skip auth if no password is configured (development mode)
+    if not Config.DASHBOARD_PASSWORD:
+        return None
+
+    path = req.path
+
+    # Public paths that don't require Basic Auth
+    public_prefixes = ("/health", "/readiness", "/ready", "/static/", "/clear-cache")
+    public_exact = {"/health", "/healthz", "/ready", "/readiness", "/clear-cache"}
+
+    if path in public_exact or any(path.startswith(p) for p in public_prefixes):
+        return None
+
+    # Torque upload uses its own API token auth, not Basic Auth
+    if path.startswith("/api/telemetry/upload") or path.startswith("/torque/upload"):
+        return None
+
+    # Frontend error reporting doesn't need auth
+    if path == "/api/errors/report":
+        return None
+
+    # Everything else requires Basic Auth
+    return auth.login_required(lambda: None)()
+
+
+@app.before_request
 def inject_request_id():
     """Inject unique request ID and start timer for distributed tracing."""
     import time
@@ -304,23 +342,13 @@ init_db(app)
 
 from routes.battery import battery_bp  # noqa: E402
 from routes.charging import charging_bp  # noqa: E402
-from routes.dashboard import dashboard_bp  # noqa: E402
 
 # Configure blueprint hooks before registration
 from routes.telemetry import telemetry_bp  # noqa: E402
 from routes.trips import trips_bp  # noqa: E402
 
 
-@dashboard_bp.before_request
-def require_auth():
-    """Require authentication for dashboard if configured."""
-    from flask import request
-
-    # Only apply to the main dashboard route, not API endpoints
-    if request.endpoint == "dashboard.dashboard":
-        auth_result = auth.login_required(lambda: None)()
-        if auth_result is not None:
-            return auth_result
+# Note: Dashboard auth is now handled globally by require_auth_globally()
 
 
 @trips_bp.after_request

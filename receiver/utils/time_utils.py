@@ -380,3 +380,23 @@ def hours_ago(hours: int) -> datetime:
         >>> two_hours_ago = hours_ago(2)
     """
     return utc_now() - timedelta(hours=hours)
+
+
+def parse_date(date_str: str) -> Optional[datetime]:
+    """Parse ISO date string to datetime.
+
+    A lightweight parser for query parameter dates. Handles ISO format
+    with optional 'Z' suffix.
+
+    Args:
+        date_str: ISO format date string (e.g., '2024-01-15' or '2024-01-15T10:30:00Z')
+
+    Returns:
+        Parsed datetime or None if parsing fails or input is empty.
+    """
+    if not date_str:
+        return None
+    try:
+        return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None

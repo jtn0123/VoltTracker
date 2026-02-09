@@ -213,13 +213,13 @@ class TestAPIAuthentication:
             assert response.status_code == 200, f"Failed for {endpoint}"
 
     def test_protected_dashboard_separate_from_api(self, app, client, monkeypatch):
-        """Dashboard auth doesn't affect API endpoints."""
+        """Both dashboard and API require auth when password is set."""
         monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "testpass")
         monkeypatch.setattr("config.Config.DASHBOARD_USER", "testuser")
 
-        # API should still work
+        # API requires auth
         response = client.get("/api/status")
-        assert response.status_code == 200
+        assert response.status_code == 401
 
         # Dashboard requires auth
         response = client.get("/")

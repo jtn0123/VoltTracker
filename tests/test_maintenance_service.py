@@ -282,6 +282,9 @@ class TestGetMaintenanceSummary:
 
     def test_no_maintenance_records(self, app, db_session):
         """Works with no maintenance records."""
+        # Clear any leaked maintenance records from other tests
+        db_session.query(MaintenanceRecord).delete()
+        db_session.commit()
         summary = get_maintenance_summary(db_session)
 
         assert len(summary["maintenance_items"]) == 8

@@ -74,24 +74,29 @@ def calculate_engine_hours(db: Session, since_date: Optional[datetime] = None) -
 
     Cached for 10 minutes to avoid expensive recomputation.
     """
-    # Limit to configurable max points to prevent memory issues
-    # Default 50,000 covers ~13 hours of engine runtime at 1 point/second
-    query = db.query(TelemetryRaw).filter(TelemetryRaw.engine_rpm > 400)
+    # Fetch only timestamps (not full ORM objects) to minimize memory usage.
+    # This fetches lightweight tuples instead of full TelemetryRaw instances.
+    query = db.query(TelemetryRaw.timestamp).filter(TelemetryRaw.engine_rpm > 400)
 
     if since_date:
         query = query.filter(TelemetryRaw.timestamp >= since_date)
 
-    telemetry = query.order_by(TelemetryRaw.timestamp).limit(Config.MAX_ENGINE_TELEMETRY_POINTS).all()
+    timestamps = [
+        row[0]
+        for row in query.order_by(TelemetryRaw.timestamp)
+        .limit(Config.MAX_ENGINE_TELEMETRY_POINTS)
+        .all()
+    ]
 
-    if len(telemetry) < 2:
+    if len(timestamps) < 2:
         return 0.0
 
     total_hours = 0.0
-    for i in range(1, len(telemetry)):
-        duration_seconds = (telemetry[i].timestamp - telemetry[i - 1].timestamp).total_seconds()
+    for i in range(1, len(timestamps)):
+        duration_seconds = (timestamps[i] - timestamps[i - 1]).total_seconds()
 
-        # Only count if engine was running and duration is reasonable
-        if telemetry[i].engine_rpm > 400 and duration_seconds < 600:  # < 10 min
+        # Only count if duration is reasonable (< 10 min gap)
+        if duration_seconds < 600:
             total_hours += duration_seconds / 3600.0
 
     return total_hours

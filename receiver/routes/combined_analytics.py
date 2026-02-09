@@ -6,7 +6,7 @@ elevation, and other factors.
 """
 
 import logging
-from datetime import datetime
+from utils.time_utils import parse_date as _parse_date
 
 from database import get_db
 from flask import Blueprint, jsonify, request
@@ -15,16 +15,6 @@ from services import combined_analytics_service
 logger = logging.getLogger(__name__)
 
 combined_analytics_bp = Blueprint("combined_analytics", __name__)
-
-
-def _parse_date(date_str: str) -> datetime | None:
-    """Parse ISO date string to datetime."""
-    if not date_str:
-        return None
-    try:
-        return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-    except (ValueError, AttributeError):
-        return None
 
 
 @combined_analytics_bp.route("/api/analytics/efficiency/multi-factor", methods=["GET"])

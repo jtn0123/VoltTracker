@@ -10,6 +10,7 @@ from config import Config
 from exceptions import ChargingSessionError
 from models import ChargingSession, TelemetryRaw
 from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.orm.attributes import flag_modified
 from utils.timezone import utc_now
 
 logger = logging.getLogger(__name__)
@@ -144,7 +145,9 @@ def update_charging_session(session: ChargingSession, telemetry: TelemetryRaw) -
 
     if len(session.charging_curve) < Config.MAX_CHARGING_CURVE_POINTS:
         session.charging_curve.append(curve_point)
+        flag_modified(session, 'charging_curve')
     elif len(session.charging_curve) == Config.MAX_CHARGING_CURVE_POINTS:
         # Log once when we hit the limit
         logger.debug(f"Charging curve reached max size ({Config.MAX_CHARGING_CURVE_POINTS} points)")
         session.charging_curve.append(curve_point)  # Allow one more to indicate truncation
+        flag_modified(session, 'charging_curve')

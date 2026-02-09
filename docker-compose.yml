@@ -42,7 +42,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-volt}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-volt_tracker}
       REDIS_URL: redis://redis:6379/0
       FLASK_ENV: ${FLASK_ENV:-production}
-      SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
       ELECTRICITY_COST: ${ELECTRICITY_COST:-0.12}
       GAS_COST: ${GAS_COST:-3.50}
       # Security
@@ -73,7 +73,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-volt}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-volt_tracker}
       REDIS_URL: redis://redis:6379/0
       FLASK_ENV: ${FLASK_ENV:-production}
-      SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
     depends_on:
       db:
         condition: service_healthy

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Elevation change categories (meters per mile)
 # Flat: <10m gain per mile, Moderate: 10-30m, Hilly: 30-60m, Steep: >60m
-BASELINE_KWH_PER_MILE = 0.32
+from calculations.constants import BASELINE_KWH_PER_MILE
 
 
 def _get_base_trip_filter():
@@ -153,7 +153,7 @@ def get_efficiency_by_gradient(
             Trip.kwh_per_mile,
             Trip.elevation_gain_m,
             Trip.electric_miles,
-            (Trip.elevation_gain_m / Trip.electric_miles).label("gradient_m_per_mile"),
+            (Trip.elevation_gain_m / func.nullif(Trip.electric_miles, 0)).label("gradient_m_per_mile"),
         )
         .filter(and_(*filters))
         .all()

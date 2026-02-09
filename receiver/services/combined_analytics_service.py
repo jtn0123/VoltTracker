@@ -19,7 +19,7 @@ from utils.timezone import utc_now
 logger = logging.getLogger(__name__)
 
 # Baseline efficiency for comparison
-BASELINE_KWH_PER_MILE = 0.32
+from calculations.constants import BASELINE_KWH_PER_MILE
 
 
 def get_multi_factor_analysis(

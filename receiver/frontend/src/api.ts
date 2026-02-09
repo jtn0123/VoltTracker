@@ -50,8 +50,9 @@ export async function api<T>(url: string, options: ApiOptions = {}): Promise<Api
       const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
 
       if (status === 401) {
-        if (!silent) showToast('Session expired. Redirecting to login...', 'warning', 3000);
-        setTimeout(() => { window.location.href = '/login'; }, 1500);
+        if (!silent) showToast('Authentication required. Please log in.', 'warning', 3000);
+        // App uses HTTP Basic Auth — reload to re-prompt browser auth dialog
+        setTimeout(() => { window.location.reload(); }, 1500);
         return { error: 'Unauthorized' };
       }
 

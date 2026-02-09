@@ -280,7 +280,42 @@ def get_charging_summary():
     """Get charging statistics summary with cost analysis."""
     db = get_db()
 
-    sessions = db.query(ChargingSession).filter(ChargingSession.is_complete.is_(True)).all()
+    # Use SQL aggregation for charging session stats instead of loading all sessions
+    charging_stats = (
+        db.query(
+            func.count(ChargingSession.id).label("total_sessions"),
+            func.coalesce(func.sum(ChargingSession.kwh_added), 0).label("total_kwh"),
+            func.coalesce(func.sum(ChargingSession.cost), 0).label("explicit_cost"),
+        )
+        .filter(ChargingSession.is_complete.is_(True))
+        .first()
+    )
+
+    # Aggregation by charge type
+    type_stats = (
+        db.query(
+            func.coalesce(ChargingSession.charge_type, "Unknown").label("charge_type"),
+            func.count(ChargingSession.id).label("count"),
+            func.coalesce(func.sum(ChargingSession.kwh_added), 0).label("kwh"),
+        )
+        .filter(ChargingSession.is_complete.is_(True))
+        .group_by(func.coalesce(ChargingSession.charge_type, "Unknown"))
+        .all()
+    )
+
+    # Monthly stats (last 30 days)
+    month_ago = utc_now() - timedelta(days=30)
+    monthly_stats = (
+        db.query(
+            func.count(ChargingSession.id).label("count"),
+            func.coalesce(func.sum(ChargingSession.kwh_added), 0).label("kwh"),
+        )
+        .filter(
+            ChargingSession.is_complete.is_(True),
+            ChargingSession.start_time >= month_ago,
+        )
+        .first()
+    )
 
     # Get trip data using SQL aggregation (much faster than loading all trips)
     trip_stats = (
@@ -308,7 +343,11 @@ def get_charging_summary():
     electricity_rate = Config.ELECTRICITY_COST_PER_KWH
     gas_rate = Config.GAS_COST_PER_GALLON
 
-    if not sessions:
+    total_sessions = int(charging_stats.total_sessions)
+    total_kwh = float(charging_stats.total_kwh)
+    explicit_cost = float(charging_stats.explicit_cost)
+
+    if not total_sessions:
         return jsonify(
             {
                 "total_sessions": 0,
@@ -328,9 +367,6 @@ def get_charging_summary():
             }
         )
 
-    total_kwh = sum(s.kwh_added or 0 for s in sessions)
-    # Sum explicit costs
-    explicit_cost = sum(s.cost or 0 for s in sessions if s.cost)
     # Estimate cost for sessions without explicit cost
     estimated_cost = total_kwh * electricity_rate
     # Use explicit if available, otherwise estimated
@@ -346,43 +382,31 @@ def get_charging_summary():
     if total_gas_miles > 0 and total_fuel_used > 0:
         cost_per_mile_gas = round((total_fuel_used * gas_rate) / total_gas_miles, 3)
 
-    # Group by charge type and count L1/L2
+    # Build charge type breakdown from SQL aggregation
     by_type = {}
     l1_count = 0
     l2_count = 0
-    for s in sessions:
-        ctype = s.charge_type or "Unknown"
-        if ctype not in by_type:
-            by_type[ctype] = {"count": 0, "kwh": 0}
-        by_type[ctype]["count"] += 1
-        by_type[ctype]["kwh"] += s.kwh_added or 0
-
+    for row in type_stats:
+        ctype = row.charge_type
+        by_type[ctype] = {"count": int(row.count), "kwh": float(row.kwh)}
         if ctype == "L1":
-            l1_count += 1
+            l1_count = int(row.count)
         elif ctype == "L2":
-            l2_count += 1
+            l2_count = int(row.count)
 
-    # Calculate monthly stats (last 30 days)
-    month_ago = utc_now() - timedelta(days=30)
-    # Normalize comparison: strip tz from both sides if needed
-    month_ago_naive = month_ago.replace(tzinfo=None)
-    monthly_sessions = [
-        s for s in sessions
-        if s.start_time and (
-            s.start_time.replace(tzinfo=None) if s.start_time.tzinfo else s.start_time
-        ) >= month_ago_naive
-    ]
-    monthly_kwh = sum(s.kwh_added or 0 for s in monthly_sessions)
+    # Monthly stats from SQL aggregation
+    monthly_kwh = float(monthly_stats.kwh)
     monthly_cost = monthly_kwh * electricity_rate
+    monthly_session_count = int(monthly_stats.count)
 
     return jsonify(
         {
-            "total_sessions": len(sessions),
+            "total_sessions": total_sessions,
             "total_kwh": round(total_kwh, 2),
             "total_cost": round(total_cost, 2) if total_cost else None,
             "estimated_cost": round(estimated_cost, 2),
             "has_explicit_costs": explicit_cost > 0,
-            "avg_kwh_per_session": round(total_kwh / len(sessions), 2) if sessions else None,
+            "avg_kwh_per_session": round(total_kwh / total_sessions, 2),
             "by_charge_type": by_type,
             "total_electric_miles": round(total_electric_miles, 1) if total_electric_miles else None,
             "total_gas_miles": round(total_gas_miles, 1) if total_gas_miles else None,
@@ -395,6 +419,6 @@ def get_charging_summary():
             "gas_rate": gas_rate,
             "monthly_kwh": round(monthly_kwh, 2),
             "monthly_cost": round(monthly_cost, 2),
-            "monthly_sessions": len(monthly_sessions),
+            "monthly_sessions": monthly_session_count,
         }
     )
