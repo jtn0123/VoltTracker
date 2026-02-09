@@ -128,16 +128,18 @@
 .export-btn {
   padding: 0.5rem 1rem;
   background-color: var(--accent);
-  color: var(--text-primary);
-  border: 1px solid var(--accent-light);
-  border-radius: 6px;
+  color: #fff;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 0.875rem;
-  transition: all 0.2s;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
 .export-btn:hover {
   background-color: var(--accent-light);
+  border-color: var(--accent-light);
 }
 
 .export-menu {

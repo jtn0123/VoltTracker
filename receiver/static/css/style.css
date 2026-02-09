@@ -362,9 +362,9 @@
 
 :root {
     /* Base Colors */
-    --bg-primary: #1a1a2e;
-    --bg-secondary: #16213e;
-    --bg-card: #0f3460;
+    --bg-primary: #0f1117;
+    --bg-secondary: #161922;
+    --bg-card: #1c1f2e;
     --accent: #0f4c75;
     --accent-light: #3282b8;
     --text-primary: #ffffff;
@@ -953,7 +953,7 @@ body {
 }
 
 .trips-table tbody tr:hover {
-    background-color: rgba(50, 130, 184, 0.1);
+    background-color: rgba(99, 102, 241, 0.06);
 }
 
 .trips-table tbody tr.clickable {
@@ -1352,7 +1352,7 @@ body {
     --bg-card: #ffffff;
     --accent: #0f4c75;
     --accent-light: #3282b8;
-    --text-primary: #1a1a2e;
+    --text-primary: #111827;
     --text-secondary: #4a4a4a;
     --text-muted: #6c757d;
     --success: #28a745;
@@ -1544,7 +1544,7 @@ body {
 }
 
 .import-status.loading {
-    background-color: rgba(50, 130, 184, 0.2);
+    background-color: rgba(99, 102, 241, 0.06);
     color: var(--accent-light);
     border: 1px solid var(--accent-light);
 }
@@ -2082,7 +2082,7 @@ body {
 }
 
 .trips-table tr.clickable:hover {
-    background-color: rgba(50, 130, 184, 0.1);
+    background-color: rgba(99, 102, 241, 0.06);
 }
 
 .trip-card.clickable {
@@ -2091,7 +2091,7 @@ body {
 }
 
 .trip-card.clickable:hover {
-    background-color: rgba(50, 130, 184, 0.1);
+    background-color: rgba(99, 102, 241, 0.06);
 }
 
 /* ============================================
@@ -2321,7 +2321,7 @@ body {
 }
 
 .charging-table tbody tr:hover {
-    background-color: rgba(50, 130, 184, 0.1);
+    background-color: rgba(99, 102, 241, 0.06);
 }
 
 .charging-table tbody tr.clickable {
@@ -2529,7 +2529,7 @@ body {
 }
 
 .charge-type-badge.dcfc {
-    background-color: rgba(50, 130, 184, 0.2);
+    background-color: rgba(99, 102, 241, 0.06);
     color: #3282b8;
 }
 
@@ -3021,7 +3021,7 @@ body {
 
 .cell:hover {
     transform: scale(1.2);
-    box-shadow: 0 0 6px rgba(50, 130, 184, 0.5);
+    box-shadow: 0 0 6px rgba(99, 102, 241, 0.5);
     z-index: 1;
 }
 

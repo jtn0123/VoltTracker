@@ -264,7 +264,7 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
   const socContext = socCtx.getContext('2d');
   if (!speedContext || !socContext) return;
 
-  const speedGradient = createGradient(speedContext, 'rgba(50, 130, 184, 0.4)', 'rgba(50, 130, 184, 0.02)');
+  const speedGradient = createGradient(speedContext, 'rgba(99, 102, 241, 0.4)', 'rgba(99, 102, 241, 0.02)');
   const socGradient = createGradient(socContext, 'rgba(40, 167, 69, 0.4)', 'rgba(40, 167, 69, 0.02)');
 
   if (state.tripSpeedChart) state.tripSpeedChart.destroy();

@@ -213,7 +213,7 @@
 }
 
 .charge-type-badge.dcfc {
-  background-color: rgba(50, 130, 184, 0.2);
+  background-color: var(--accent-subtle);
   color: #3282b8;
 }
 

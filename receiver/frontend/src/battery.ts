@@ -328,7 +328,7 @@ export async function renderSocHistogram(histogram: Record<string, number>): Pro
   const context = ctx.getContext('2d');
   if (!context) return;
 
-  const barGradient = createGradient(context, 'rgba(50, 130, 184, 0.9)', 'rgba(50, 130, 184, 0.5)');
+  const barGradient = createGradient(context, 'rgba(99, 102, 241, 0.9)', 'rgba(99, 102, 241, 0.5)');
 
   state.socChart = new Chart(ctx, {
     type: 'bar',
@@ -339,7 +339,7 @@ export async function renderSocHistogram(histogram: Record<string, number>): Pro
           label: 'Transitions',
           data: values,
           backgroundColor: barGradient,
-          borderColor: 'rgba(50, 130, 184, 0.8)',
+          borderColor: 'rgba(99, 102, 241, 0.8)',
           borderWidth: 1,
           borderRadius: 6,
           hoverBackgroundColor: '#3282b8',

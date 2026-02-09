@@ -4,7 +4,7 @@
    Live Trip Section
    ============================================ */
 #live-trip-section {
-  background: linear-gradient(135deg, #1a5f2a 0%, #2d8a3e 100%);
+  background: linear-gradient(135deg, #065f46 0%, #059669 100%);
   color: white;
   margin-bottom: 1.5rem;
   border: none;
@@ -87,7 +87,7 @@
    Power Flow Section
    ============================================ */
 #power-flow-section {
-  background: linear-gradient(135deg, #1a3a5c 0%, #0d2840 100%);
+  background: linear-gradient(135deg, #1e293b 0%, #1c1f2e 100%);
   color: white;
   margin-bottom: 1.5rem;
   border: none;
@@ -154,7 +154,7 @@
 
 .power-bar {
   height: 100%;
-  background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+  background: linear-gradient(90deg, #34d399 0%, #10b981 100%);
   border-radius: 6px;
   width: 50%;
   transition: width 0.3s ease;
@@ -165,11 +165,11 @@
 }
 
 .power-bar.regenerating {
-  background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+  background: linear-gradient(90deg, #34d399 0%, #10b981 100%);
 }
 
 .power-bar.charging {
-  background: linear-gradient(90deg, #3498db 0%, #2980b9 100%);
+  background: linear-gradient(90deg, #6366f1 0%, #4f46e5 100%);
 }
 
 .power-stats {

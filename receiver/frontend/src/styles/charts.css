@@ -48,22 +48,26 @@
 
 .timeframe-btn {
   padding: 0.5rem 1rem;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--border-color);
   background: transparent;
-  color: var(--text-primary);
-  border-radius: 6px;
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 0.875rem;
-  transition: all 0.2s;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
 .timeframe-btn:hover {
-  background-color: var(--accent);
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-color-strong);
 }
 
 .timeframe-btn.active {
   background-color: var(--accent);
-  border-color: var(--accent-light);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .chart-container {

@@ -8,10 +8,12 @@
   left: 0;
   right: 0;
   height: 64px;
-  background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+  background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   z-index: var(--z-fixed);
   padding-bottom: env(safe-area-inset-bottom, 0);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .bottom-nav-item {

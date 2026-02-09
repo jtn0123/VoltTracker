@@ -108,13 +108,21 @@ type ChartConfig = Record<string, unknown>;
 /**
  * Enhanced tooltip configuration
  */
+/**
+ * Get current theme CSS variable value
+ */
+function getThemeVar(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 export function getEnhancedTooltip(additionalCallbacks: ChartConfig = {}): ChartConfig {
   const defaults = getChartDefaults();
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
   return {
-    backgroundColor: 'rgba(15, 52, 96, 0.95)',
-    titleColor: '#ffffff',
-    bodyColor: '#e0e0e0',
-    borderColor: 'rgba(50, 130, 184, 0.5)',
+    backgroundColor: isDark ? 'rgba(22, 25, 34, 0.95)' : 'rgba(255, 255, 255, 0.97)',
+    titleColor: isDark ? '#f0f0f3' : '#111827',
+    bodyColor: isDark ? '#a1a1aa' : '#4b5563',
+    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
     borderWidth: 1,
     cornerRadius: 8,
     padding: 12,
@@ -135,7 +143,7 @@ export function getEnhancedLegend(display = true): ChartConfig {
     display,
     position: 'top',
     labels: {
-      color: '#b8b8b8',
+      color: getThemeVar('--text-secondary') || '#a1a1aa',
       font: { size: defaults.font.size },
       padding: 16,
       usePointStyle: true,
@@ -151,11 +159,11 @@ export function getEnhancedAxis(options: ChartConfig = {}): ChartConfig {
   const defaults = getChartDefaults();
   return {
     grid: {
-      color: 'rgba(255, 255, 255, 0.08)',
+      color: getThemeVar('--chart-grid') || 'rgba(255, 255, 255, 0.05)',
       ...((options.grid as ChartConfig) || {}),
     },
     ticks: {
-      color: '#b8b8b8',
+      color: getThemeVar('--chart-tick') || '#71717a',
       font: { size: defaults.tickFont.size },
       padding: 8,
       ...((options.ticks as ChartConfig) || {}),

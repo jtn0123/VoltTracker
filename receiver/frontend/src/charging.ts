@@ -470,7 +470,7 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
   if (!context) return;
 
   const powerGradient = createGradient(context, 'rgba(39, 174, 96, 0.4)', 'rgba(39, 174, 96, 0.02)');
-  const socGradient = createGradient(context, 'rgba(50, 130, 184, 0.3)', 'rgba(50, 130, 184, 0.02)');
+  const socGradient = createGradient(context, 'rgba(99, 102, 241, 0.3)', 'rgba(99, 102, 241, 0.02)');
   const defaults = getChartDefaults();
 
   state.chargingCurveChart = new Chart(ctx, {

@@ -138,7 +138,7 @@ export async function loadMpgTrend(days: number): Promise<void> {
     const context = ctx.getContext('2d');
     if (!context) return;
 
-    const gradient = createGradient(context, 'rgba(50, 130, 184, 0.4)', 'rgba(50, 130, 184, 0.02)');
+    const gradient = createGradient(context, 'rgba(99, 102, 241, 0.4)', 'rgba(99, 102, 241, 0.02)');
 
     state.mpgChart = new Chart(ctx, {
       type: 'line',
