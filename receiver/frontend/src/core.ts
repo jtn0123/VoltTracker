@@ -208,12 +208,17 @@ export function formatChartDate(date: Date): string {
  * Format date and time for display
  */
 export function formatDateTime(date: Date): string {
-  return date.toLocaleDateString('en-US', {
+  const now = new Date();
+  const options: Intl.DateTimeFormatOptions = {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  });
+  };
+  if (date.getFullYear() !== now.getFullYear()) {
+    options.year = '2-digit';
+  }
+  return date.toLocaleDateString('en-US', options);
 }
 
 /**

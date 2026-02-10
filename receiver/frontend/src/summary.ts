@@ -110,7 +110,10 @@ export async function loadMpgTrend(days: number): Promise<void> {
       btn.classList.toggle('active', parseInt(btnEl.dataset.days || '0') === days);
     });
 
-    const result = await api<MpgTrendPoint[]>(`/api/mpg/trend?days=${days}`, { schema: z.array(MpgTrendPointSchema) });
+    let mpgUrl = `/api/mpg/trend?days=${days}`;
+    if (state.dateFilter.start) mpgUrl += `&start_date=${state.dateFilter.start}`;
+    if (state.dateFilter.end) mpgUrl += `&end_date=${state.dateFilter.end}`;
+    const result = await api<MpgTrendPoint[]>(mpgUrl, { schema: z.array(MpgTrendPointSchema) });
     if (result.error || !result.data) return;
     const data = result.data;
 

@@ -69,7 +69,7 @@ def get_battery_health():
 
     # Calculate trend if we have enough historical data
     yearly_trend = None
-    if readings and len(readings) >= 10:
+    if readings and len(readings) >= 2:
         # Get readings from ~1 year ago and compare
         one_year_ago = utc_now() - timedelta(days=365)
         old_readings = [r for r in readings if r.timestamp and r.timestamp < one_year_ago]

@@ -123,7 +123,8 @@ def get_quick_stats(timeframe):
         "30d": "last_30_days",
         "90d": "last_90_days",
         "this_month": "this_month",
-        "last_month": "last_month"
+        "last_month": "last_month",
+        "this_year": "this_year"
     }
 
     shortcut = timeframe_map.get(timeframe, "last_30_days")
@@ -159,10 +160,15 @@ def get_quick_stats(timeframe):
 
     # Add trend comparison if requested
     if include_trend:
-        # Calculate previous period (same duration, shifted back)
-        period_duration = end_date - start_date
-        prev_start = start_date - period_duration
-        prev_end = start_date
+        if timeframe == "this_year":
+            # For this_year, compare same date range in previous year
+            prev_start = start_date.replace(year=start_date.year - 1)
+            prev_end = end_date.replace(year=end_date.year - 1)
+        else:
+            # Calculate previous period (same duration, shifted back)
+            period_duration = end_date - start_date
+            prev_start = start_date - period_duration
+            prev_end = start_date
 
         previous_trips = db.query(Trip).filter(
             and_(

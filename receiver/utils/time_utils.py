@@ -219,20 +219,20 @@ DATE_SHORTCUTS = {
         utc_now()
     ),
     "this_week": lambda: (
-        utc_now() - timedelta(days=utc_now().weekday()),
-        utc_now()
+        (utc_now() - timedelta(days=utc_now().weekday())).replace(hour=0, minute=0, second=0, microsecond=0),
+        utc_now().replace(microsecond=0)
     ),
     "this_month": lambda: (
-        utc_now().replace(day=1, hour=0, minute=0, second=0),
-        utc_now()
+        utc_now().replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+        utc_now().replace(microsecond=0)
     ),
     "this_year": lambda: (
-        utc_now().replace(month=1, day=1, hour=0, minute=0, second=0),
-        utc_now()
+        utc_now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
+        utc_now().replace(microsecond=0)
     ),
     "last_month": lambda: (
-        (utc_now().replace(day=1) - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0),
-        (utc_now().replace(day=1) - timedelta(days=1)).replace(hour=23, minute=59, second=59)
+        (utc_now().replace(day=1) - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+        (utc_now().replace(day=1) - timedelta(days=1)).replace(hour=23, minute=59, second=59, microsecond=999999)
     ),
 }
 

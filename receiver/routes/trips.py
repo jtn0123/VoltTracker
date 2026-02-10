@@ -589,18 +589,32 @@ def get_mpg_trend():
         days = int(request.args.get("days", 30))
     except (ValueError, TypeError):
         days = 30
-    days = min(days, 365)
-    start_date = utc_now() - timedelta(days=days)
+    # Support explicit start_date/end_date params (from date picker)
+    start_date_param = request.args.get("start_date")
+    end_date_param = request.args.get("end_date")
+
+    filters = [
+        Trip.gas_mode_entered.is_(True),
+        Trip.gas_mpg.isnot(None),
+        Trip.deleted_at.is_(None),
+        Trip.is_closed.is_(True),
+    ]
+
+    if start_date_param:
+        from datetime import datetime as dt
+        filters.append(Trip.start_time >= dt.fromisoformat(start_date_param))
+        if end_date_param:
+            end_dt = dt.fromisoformat(
+                end_date_param + "T23:59:59" if "T" not in end_date_param else end_date_param
+            )
+            filters.append(Trip.start_time <= end_dt)
+    elif days > 0:
+        filters.append(Trip.start_time >= utc_now() - timedelta(days=days))
+    # days <= 0 means "all time" — no date filter
 
     trips = (
         db.query(Trip)
-        .filter(
-            Trip.start_time >= start_date,
-            Trip.gas_mode_entered.is_(True),
-            Trip.gas_mpg.isnot(None),
-            Trip.deleted_at.is_(None),
-            Trip.is_closed.is_(True),
-        )
+        .filter(*filters)
         .order_by(Trip.start_time)
         .all()
     )
