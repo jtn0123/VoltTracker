@@ -268,6 +268,36 @@ def check_charging_sessions():
         SessionLocal.remove()
 
 
+def close_stale_charging_sessions():
+    """Close charging sessions that have had no update in 4 hours."""
+    db = get_scheduler_db()
+    try:
+        cutoff_time = utc_now() - timedelta(hours=4)
+
+        stale_sessions = (
+            db.query(ChargingSession)
+            .filter(
+                ChargingSession.is_complete.is_(False),
+                ChargingSession.start_time < cutoff_time,
+            )
+            .all()
+        )
+
+        for session in stale_sessions:
+            logger.info(f"Closing stale charging session {session.id}")
+            _finalize_charging_session(db, session, reason="stale (no update in 4h)")
+
+    except (IntegrityError, OperationalError) as e:
+        error = DatabaseError(f"Failed to close stale charging sessions: {e}")
+        logger.error(str(error), exc_info=True)
+        db.rollback()
+    except Exception as e:
+        logger.exception(f"Unexpected error closing stale charging sessions: {e}")
+        db.rollback()
+    finally:
+        SessionLocal.remove()
+
+
 def init_scheduler():
     """
     Initialize and start the background scheduler.
@@ -280,6 +310,7 @@ def init_scheduler():
     scheduler.add_job(close_stale_trips, "interval", minutes=1)
     scheduler.add_job(check_refuel_events, "interval", minutes=5)
     scheduler.add_job(check_charging_sessions, "interval", minutes=2)
+    scheduler.add_job(close_stale_charging_sessions, "interval", minutes=15)
     scheduler.start()
     logger.info("Background scheduler initialized")
     return scheduler

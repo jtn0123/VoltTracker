@@ -389,6 +389,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Auto-refresh trips every 60 seconds
   state.tripsRefreshInterval = setInterval(loadTrips, 60000);
+
+  // Pause/resume refresh when tab is hidden/visible
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (state.tripsRefreshInterval) { clearInterval(state.tripsRefreshInterval); state.tripsRefreshInterval = null; }
+    } else {
+      if (!state.tripsRefreshInterval) { state.tripsRefreshInterval = setInterval(loadTrips, 60000); }
+      loadTrips();
+    }
+  });
   } catch (initError) {
     console.error('[VoltTracker] Initialization failed:', initError);
     reportErrorToBackend({

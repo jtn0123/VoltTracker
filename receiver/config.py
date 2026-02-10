@@ -3,6 +3,20 @@ import socket
 from datetime import datetime, timezone
 
 
+def _safe_int(val, default):
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(val, default):
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
 class Config:
     """Application configuration from environment variables."""
 
@@ -19,8 +33,8 @@ class Config:
 
     # Redis Configuration (for caching and async job queue)
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    REDIS_CACHE_DB = int(os.environ.get("REDIS_CACHE_DB", 0))  # DB 0 for cache
-    REDIS_QUEUE_DB = int(os.environ.get("REDIS_QUEUE_DB", 1))  # DB 1 for job queue
+    REDIS_CACHE_DB = _safe_int(os.environ.get("REDIS_CACHE_DB", 0), 0)  # DB 0 for cache
+    REDIS_QUEUE_DB = _safe_int(os.environ.get("REDIS_QUEUE_DB", 1), 1)  # DB 1 for job queue
 
     # Flask
     FLASK_ENV = os.environ.get("FLASK_ENV", "production")
@@ -41,10 +55,10 @@ class Config:
     # Wide Events Logging - Tail Sampling Configuration
     # Always log: errors, slow requests, critical business events
     # Sample rate for fast successful requests (0.0-1.0)
-    LOGGING_SAMPLE_RATE_TELEMETRY = float(os.environ.get("LOG_SAMPLE_TELEMETRY", 0.05))  # 5%
-    LOGGING_SAMPLE_RATE_TRIP = float(os.environ.get("LOG_SAMPLE_TRIP", 1.0))  # 100% (critical)
-    LOGGING_SAMPLE_RATE_ROUTE = float(os.environ.get("LOG_SAMPLE_ROUTE", 0.10))  # 10%
-    LOGGING_SLOW_THRESHOLD_MS = float(os.environ.get("LOG_SLOW_THRESHOLD_MS", 1000))  # 1s
+    LOGGING_SAMPLE_RATE_TELEMETRY = _safe_float(os.environ.get("LOG_SAMPLE_TELEMETRY", 0.05), 0.05)  # 5%
+    LOGGING_SAMPLE_RATE_TRIP = _safe_float(os.environ.get("LOG_SAMPLE_TRIP", 1.0), 1.0)  # 100% (critical)
+    LOGGING_SAMPLE_RATE_ROUTE = _safe_float(os.environ.get("LOG_SAMPLE_ROUTE", 0.10), 0.10)  # 10%
+    LOGGING_SLOW_THRESHOLD_MS = _safe_float(os.environ.get("LOG_SLOW_THRESHOLD_MS", 1000), 1000)  # 1s
 
     # Feature Flags (for A/B testing and gradual rollouts)
     FEATURE_ENHANCED_ROUTE_DETECTION = os.environ.get("FEATURE_ROUTE_DETECTION", "false").lower() == "true"
@@ -53,7 +67,7 @@ class Config:
     FEATURE_ELEVATION_TRACKING = os.environ.get("FEATURE_ELEVATION", "true").lower() == "true"
 
     # Elevation API Configuration
-    ELEVATION_SAMPLE_RATE = int(os.environ.get("ELEVATION_SAMPLE_RATE", 25))  # Sample 1 in N GPS points
+    ELEVATION_SAMPLE_RATE = _safe_int(os.environ.get("ELEVATION_SAMPLE_RATE", 25), 25)  # Sample 1 in N GPS points
 
     # Volt-specific constants
     TANK_CAPACITY_GALLONS = 9.3122  # Gen 2 Volt tank capacity
@@ -65,8 +79,8 @@ class Config:
     TRIP_TIMEOUT_SECONDS = 120  # 2 minutes of no data = trip closed
 
     # Cost tracking
-    ELECTRICITY_COST_PER_KWH = float(os.environ.get("ELECTRICITY_COST", 0.12))  # $/kWh
-    GAS_COST_PER_GALLON = float(os.environ.get("GAS_COST", 3.50))  # $/gallon
+    ELECTRICITY_COST_PER_KWH = _safe_float(os.environ.get("ELECTRICITY_COST", 0.12), 0.12)  # $/kWh
+    GAS_COST_PER_GALLON = _safe_float(os.environ.get("GAS_COST", 3.50), 3.50)  # $/gallon
 
     # Fuel sensor smoothing
     FUEL_SMOOTHING_WINDOW = 10  # Number of readings for median filter

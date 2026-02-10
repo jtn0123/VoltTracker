@@ -238,7 +238,7 @@ def fetch_trip_weather(trip: Trip, points: list, db_session=None) -> None:
 
             # Average precipitation (sum it up - it's cumulative)
             precips = [w.get("precipitation_in", 0) for w in weather_samples if w.get("precipitation_in") is not None]
-            trip.weather_precipitation_in = round(sum(precips) / len(precips), 2) if precips else None
+            trip.weather_precipitation_in = round(sum(precips), 2) if precips else None
 
             # Average wind speed
             winds = [w.get("wind_speed_mph") for w in weather_samples if w.get("wind_speed_mph") is not None]

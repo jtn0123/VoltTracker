@@ -37,14 +37,18 @@ export function initWebSocket(): void {
     let reconnectAttempt = 0;
 
     state.socket.on('connect', () => {
-      console.log('[WS] Connected (attempts=%d)', reconnectAttempt);
+      if (DEBUG) console.log('[WS] Connected (attempts=%d)', reconnectAttempt);
       reconnectAttempt = 0;
+      if (state.liveRefreshInterval) {
+        clearInterval(state.liveRefreshInterval);
+        state.liveRefreshInterval = null;
+      }
       state.useWebSocket = true;
       updateConnectionStatus(ConnectionStatus.Connected);
     });
 
     state.socket.on('disconnect', (reason: string) => {
-      console.log('[WS] Disconnected: %s', reason);
+      if (DEBUG) console.log('[WS] Disconnected: %s', reason);
       updateConnectionStatus(ConnectionStatus.Disconnected);
       if (!state.liveRefreshInterval) {
         state.liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);
@@ -53,11 +57,11 @@ export function initWebSocket(): void {
 
     ((state.socket as any).io as any).on('reconnect_attempt', (attempt: number) => {
       reconnectAttempt = attempt;
-      console.log('[WS] Reconnect attempt #%d (backoff up to %dms)', attempt, Math.min(2000 * Math.pow(2, attempt - 1), 30000));
+      if (DEBUG) console.log('[WS] Reconnect attempt #%d (backoff up to %dms)', attempt, Math.min(2000 * Math.pow(2, attempt - 1), 30000));
     });
 
     ((state.socket as any).io as any).on('reconnect', (attempt: number) => {
-      console.log('[WS] Reconnected after %d attempt(s)', attempt);
+      if (DEBUG) console.log('[WS] Reconnected after %d attempt(s)', attempt);
     });
 
     ((state.socket as any).io as any).on('reconnect_failed', () => {

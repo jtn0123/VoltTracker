@@ -563,7 +563,11 @@ def get_soc_analysis():
         analysis["trend"] = {
             "early_avg": round(statistics.mean(first_10), 1),
             "recent_avg": round(statistics.mean(last_10), 1),
-            "direction": "increasing" if statistics.mean(last_10) > statistics.mean(first_10) else "decreasing",
+            "direction": (
+                "increasing" if statistics.mean(last_10) > statistics.mean(first_10)
+                else ("stable" if statistics.mean(last_10) == statistics.mean(first_10)
+                      else "decreasing")
+            ),
         }
     else:
         analysis["trend"] = None
@@ -589,7 +593,13 @@ def get_mpg_trend():
 
     trips = (
         db.query(Trip)
-        .filter(Trip.start_time >= start_date, Trip.gas_mode_entered.is_(True), Trip.gas_mpg.isnot(None))
+        .filter(
+            Trip.start_time >= start_date,
+            Trip.gas_mode_entered.is_(True),
+            Trip.gas_mpg.isnot(None),
+            Trip.deleted_at.is_(None),
+            Trip.is_closed.is_(True),
+        )
         .order_by(Trip.start_time)
         .all()
     )
@@ -636,7 +646,7 @@ def compare_trips():
             return jsonify({"error": "Maximum 10 trips can be compared at once"}), 400
 
         # Fetch trips
-        trips = db.query(Trip).filter(Trip.id.in_(trip_ids), Trip.is_closed.is_(True)).all()
+        trips = db.query(Trip).filter(Trip.id.in_(trip_ids), Trip.is_closed.is_(True), Trip.deleted_at.is_(None)).all()
 
         if not trips:
             return jsonify({"error": "No trips found with provided IDs"}), 404

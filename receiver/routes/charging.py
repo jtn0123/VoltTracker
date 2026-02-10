@@ -92,6 +92,14 @@ def add_charging_session():
             logger.warning(f"Invalid end_time format '{data['end_time']}': {e}")
             return jsonify({"error": f"Invalid end_time format: {data['end_time']}. Use ISO 8601 format."}), 400
 
+    # Validate numeric ranges
+    for soc_field in ("start_soc", "end_soc"):
+        if data.get(soc_field) is not None and not (0 <= float(data[soc_field]) <= 100):
+            return jsonify({"error": f"{soc_field} must be between 0 and 100"}), 400
+    for non_neg_field in ("kwh_added", "cost"):
+        if data.get(non_neg_field) is not None and float(data[non_neg_field]) < 0:
+            return jsonify({"error": f"{non_neg_field} must be >= 0"}), 400
+
     session = ChargingSession(
         start_time=start_time,
         end_time=end_time,
@@ -325,7 +333,7 @@ def get_charging_summary():
             func.coalesce(func.sum(Trip.gas_miles), 0).label("gas_miles"),
             func.coalesce(func.sum(Trip.fuel_used_gallons), 0).label("fuel_used"),
         )
-        .filter(Trip.is_closed.is_(True))
+        .filter(Trip.is_closed.is_(True), Trip.deleted_at.is_(None))
         .first()
     )
 

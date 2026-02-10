@@ -67,6 +67,10 @@
 
 .trips-table td {
   font-size: 0.9375rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
 }
 
 /* Desktop table enhancements */

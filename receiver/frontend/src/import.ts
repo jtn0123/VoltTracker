@@ -3,7 +3,7 @@
  * CSV import handling, status display, and result modals
  */
 
-import { state } from '@/core';
+import { DEBUG, state } from '@/core';
 import { loadTrips } from '@/trips';
 import { loadSummary, loadMpgTrend } from '@/summary';
 // Lazy import — battery is a dynamically loaded chunk
@@ -44,17 +44,17 @@ export async function handleImport(event: Event): Promise<void> {
     formData.append('file', file);
 
     try {
-      console.log(`[Import] Starting import for: ${file.name}`);
+      if (DEBUG) console.log(`[Import] Starting import for: ${file.name}`);
       const response = await fetch('/api/import/csv', {
         method: 'POST',
         body: formData,
       });
-      console.log(`[Import] Response status: ${response.status} ${response.statusText}`);
+      if (DEBUG) console.log(`[Import] Response status: ${response.status} ${response.statusText}`);
 
       let data: ImportResult;
       try {
         data = await response.json();
-        console.log(`[Import] Response data:`, data);
+        if (DEBUG) console.log(`[Import] Response data:`, data);
       } catch (parseError) {
         console.error(`[Import] JSON parse error for ${file.name}:`, parseError);
         state.lastImportResults.push({
@@ -80,7 +80,7 @@ export async function handleImport(event: Event): Promise<void> {
         totalSkipped += data.stats?.skipped_rows || 0;
         totalDuplicates += duplicateRows;
       } else if (status === ImportStatus.Duplicate) {
-        console.log(`[Import] Duplicate file: ${file.name} (${data.original_import_code})`);
+        if (DEBUG) console.log(`[Import] Duplicate file: ${file.name} (${data.original_import_code})`);
       } else {
         failedFiles.push(file.name);
       }

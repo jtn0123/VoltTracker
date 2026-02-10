@@ -161,6 +161,15 @@ def torque_upload(token=None):
             if trip.start_odometer is None and data["odometer_miles"] is not None:
                 trip.start_odometer = data["odometer_miles"]
 
+        # Deduplicate: skip if we already have this session_id + timestamp
+        existing = db.query(TelemetryRaw.id).filter(
+            TelemetryRaw.session_id == data["session_id"],
+            TelemetryRaw.timestamp == data["timestamp"],
+        ).first()
+        if existing:
+            db.commit()
+            return "OK!"
+
         # Store telemetry with performance timing
         with event.timer("db_telemetry_insert"):
             telemetry = TelemetryRaw(
@@ -345,10 +354,14 @@ def _calculate_trip_stats(first: TelemetryRaw | None, latest: TelemetryRaw | Non
             fuel_gallons_used = fuel_percent_to_gallons(fuel_percent_used)
             stats["fuel_used_gallons"] = fuel_gallons_used
 
-            # Estimate gas miles (rough: if fuel used, assume some portion was gas driving)
-            if stats["miles_driven"] and stats["miles_driven"] > 0:
-                # Calculate gas MPG from fuel consumption
-                stats["gas_mpg"] = stats["miles_driven"] / fuel_gallons_used
+            # Calculate gas MPG using gas miles only (not total miles)
+            gas_miles = None
+            if trip and trip.gas_miles:
+                gas_miles = float(trip.gas_miles)
+            elif stats["miles_driven"] and stats.get("electric_miles"):
+                gas_miles = stats["miles_driven"] - stats["electric_miles"]
+            if gas_miles and gas_miles > 0:
+                stats["gas_mpg"] = gas_miles / fuel_gallons_used
 
     return stats
 

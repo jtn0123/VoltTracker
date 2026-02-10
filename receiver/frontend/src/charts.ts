@@ -11,11 +11,15 @@ import { DEBUG, state } from '@/core';
 export async function loadChartJs(): Promise<void> {
   if (state.chartJsLoaded) return;
   if (state.chartJsLoading)
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      let retries = 0;
       const checkLoaded = setInterval(() => {
         if (state.chartJsLoaded) {
           clearInterval(checkLoaded);
           resolve();
+        } else if (++retries >= 100) {
+          clearInterval(checkLoaded);
+          reject(new Error('Chart.js loading timed out'));
         }
       }, 50);
     });

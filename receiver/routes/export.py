@@ -581,8 +581,8 @@ def import_csv():
         except Exception as e:
             logger.warning(f"Failed to backup CSV: {e}")  # Don't fail import if backup fails
 
-        # Get existing timestamps from last 60 days for duplicate detection
-        cutoff = datetime.now(timezone.utc) - timedelta(days=60)
+        # Get existing timestamps from last 365 days for duplicate detection
+        cutoff = datetime.now(timezone.utc) - timedelta(days=365)
         existing_timestamps = set(
             t[0] for t in db.query(TelemetryRaw.timestamp)
             .filter(TelemetryRaw.timestamp >= cutoff)
