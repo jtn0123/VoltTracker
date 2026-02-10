@@ -5,7 +5,7 @@
 
 import { DEBUG, state, formatDate, formatDateTime, formatTime, formatDuration } from '@/core';
 import { api } from '@/api';
-import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from '@/charts';
+import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis, getChartColor, getCSSVar } from '@/charts';
 import { renderTripMap } from '@/map';
 import { loadSummary, loadMpgTrend } from '@/summary';
 // Lazy import — battery is a dynamically loaded chunk
@@ -17,7 +17,7 @@ import type { TripSummary, TripDetail, TelemetryPoint } from '@/types/api';
  */
 export async function loadTrips(): Promise<void> {
   try {
-    let url = '/api/trips?limit=20';
+    let url = '/api/trips?per_page=20';
     if (state.dateFilter.start) url += `&start_date=${state.dateFilter.start}`;
     if (state.dateFilter.end) url += `&end_date=${state.dateFilter.end}`;
 
@@ -225,23 +225,16 @@ export async function deleteTrip(tripId: number): Promise<void> {
     return;
 
   try {
-    const response = await fetch(`/api/trips/${tripId}`, { method: 'DELETE' });
+    const result = await api<{ success: boolean }>(`/api/trips/${tripId}`, { method: 'DELETE' });
 
-    if (response.ok) {
+    if (!result.error) {
       showSuccess('Trip deleted successfully');
       loadTrips();
       loadSummary();
       loadMpgTrend(state.currentTimeframe);
       loadSocAnalysis();
     } else {
-      let errorMsg = 'Unknown error';
-      try {
-        const data = await response.json();
-        errorMsg = data.error || errorMsg;
-      } catch {
-        errorMsg = `HTTP ${response.status}`;
-      }
-      showError(`Failed to delete trip: ${errorMsg}`);
+      showError(`Failed to delete trip: ${result.error}`);
     }
   } catch (error) {
     if (DEBUG) console.error('Failed to delete trip:', error);
@@ -268,8 +261,10 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
   const socContext = socCtx.getContext('2d');
   if (!speedContext || !socContext) return;
 
-  const speedGradient = createGradient(speedContext, 'rgba(99, 102, 241, 0.4)', 'rgba(99, 102, 241, 0.02)');
-  const socGradient = createGradient(socContext, 'rgba(40, 167, 69, 0.4)', 'rgba(40, 167, 69, 0.02)');
+  const speedColor = getChartColor(1);
+  const socColor = getCSSVar('--success', '#22c55e');
+  const speedGradient = createGradient(speedContext, `${speedColor}66`, `${speedColor}05`);
+  const socGradient = createGradient(socContext, `${socColor}66`, `${socColor}05`);
 
   if (state.tripSpeedChart) state.tripSpeedChart.destroy();
   state.tripSpeedChart = new Chart(speedCtx, {
@@ -280,7 +275,7 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
         {
           label: 'Speed (MPH)',
           data: speeds,
-          borderColor: '#3282b8',
+          borderColor: speedColor,
           backgroundColor: speedGradient,
           borderWidth: 2,
           fill: true,
@@ -300,7 +295,7 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
       },
       scales: {
         x: { display: false },
-        y: getEnhancedAxis({ title: { text: 'MPH', color: '#3282b8' } }),
+        y: getEnhancedAxis({ title: { text: 'MPH', color: speedColor } }),
       },
     },
   });
@@ -314,7 +309,7 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
         {
           label: 'Battery SOC (%)',
           data: socs,
-          borderColor: '#28a745',
+          borderColor: socColor,
           backgroundColor: socGradient,
           borderWidth: 2,
           fill: true,
@@ -334,7 +329,7 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
       },
       scales: {
         x: { display: false },
-        y: getEnhancedAxis({ min: 0, max: 100, title: { text: 'SOC %', color: '#28a745' } }),
+        y: getEnhancedAxis({ min: 0, max: 100, title: { text: 'SOC %', color: socColor } }),
       },
     },
   });

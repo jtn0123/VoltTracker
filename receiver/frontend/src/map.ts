@@ -4,6 +4,7 @@
  */
 
 import { DEBUG, state } from '@/core';
+import { getCSSVar } from '@/charts';
 import type { TelemetryPoint } from '@/types/api';
 
 /**
@@ -99,7 +100,7 @@ export async function renderTripMap(telemetry: TelemetryPoint[]): Promise<void> 
     state.tripMap.fitBounds(bounds, { padding: [20, 20] });
   } else {
     const latlngs: [number, number][] = gpsPoints.map((p) => [p.latitude!, p.longitude!]);
-    const polyline = L.polyline(latlngs, { color: '#3282b8', weight: 4 }).addTo(state.tripMap);
+    const polyline = L.polyline(latlngs, { color: getCSSVar('--accent', '#6366f1'), weight: 4 }).addTo(state.tripMap);
     state.tripMap.fitBounds(polyline.getBounds(), { padding: [20, 20] });
   }
 
@@ -112,7 +113,7 @@ export async function renderTripMap(telemetry: TelemetryPoint[]): Promise<void> 
   L.marker(startPoint, {
     icon: L.divIcon({
       className: 'map-marker-start',
-      html: '<div style="background:#28a745;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>',
+      html: `<div style="background:${getCSSVar('--success', '#22c55e')};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
     }),
   })
     .addTo(state.tripMap)
@@ -121,7 +122,7 @@ export async function renderTripMap(telemetry: TelemetryPoint[]): Promise<void> 
   L.marker(endPoint, {
     icon: L.divIcon({
       className: 'map-marker-end',
-      html: '<div style="background:#dc3545;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>',
+      html: `<div style="background:${getCSSVar('--danger', '#ef4444')};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
     }),
   })
     .addTo(state.tripMap)
@@ -173,12 +174,12 @@ export function getPointColor(point: TelemetryPoint): string {
   const powerKw = point.hv_battery_power_kw;
 
   if (powerKw !== undefined && powerKw !== null && powerKw < -0.5) {
-    return '#3498db';
+    return getCSSVar('--info', '#3b82f6');
   }
   if (engineRpm !== undefined && engineRpm !== null && engineRpm > 500) {
-    return '#e67e22';
+    return getCSSVar('--warning', '#f59e0b');
   }
-  return '#27ae60';
+  return getCSSVar('--electric', '#34d399');
 }
 
 /**

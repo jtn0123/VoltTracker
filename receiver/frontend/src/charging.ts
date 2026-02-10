@@ -5,7 +5,7 @@
 
 import { state, formatDate, formatDateTime, formatTime } from '@/core';
 import { api } from '@/api';
-import { loadChartJs, createGradient, getChartDefaults, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from '@/charts';
+import { loadChartJs, createGradient, getChartDefaults, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis, getChartColor, getCSSVar } from '@/charts';
 import type { ChargingSummary, ChargingSession, ChargingCurveResponse } from '@/types/api';
 
 /**
@@ -42,7 +42,7 @@ export async function loadChargingSummary(): Promise<void> {
       if (data.monthly_cost) {
         const costLabel = data.has_explicit_costs ? '' : '~';
         chargingCost.textContent = `${costLabel}$${data.monthly_cost.toFixed(2)}/month`;
-      } else if (data.total_cost) {
+      } else if (data.total_cost != null) {
         chargingCost.textContent = `$${data.total_cost.toFixed(2)} total`;
       } else if (data.electricity_rate) {
         chargingCost.textContent = `$${data.electricity_rate}/kWh rate`;
@@ -123,9 +123,9 @@ export function formatChargingDuration(startTime: string, endTime: string): stri
  */
 export async function loadChargingHistory(): Promise<void> {
   try {
-    const result = await api<ChargingSession[]>('/api/charging/history?limit=20');
+    const result = await api<{ sessions: ChargingSession[]; pagination?: unknown } | ChargingSession[]>('/api/charging/history?per_page=20');
     if (result.error || !result.data) return;
-    const sessions = result.data;
+    const sessions: ChargingSession[] = Array.isArray(result.data) ? result.data : result.data.sessions || [];
 
     const tableBody = document.getElementById('charging-table-body');
     const cardsContainer = document.getElementById('charging-cards');
@@ -284,23 +284,22 @@ export async function submitChargingSession(event: Event): Promise<void> {
   }
 
   try {
-    const response = await fetch('/api/charging/add', {
+    const result = await api<{ id: number }>('/api/charging/add', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cleanData),
     });
 
-    if (response.ok) {
+    if (!result.error) {
       closeChargingModal();
       loadChargingSummary();
       loadChargingHistory();
     } else {
-      const data = await response.json();
-      alert(`Failed to add charging session: ${data.error || 'Unknown error'}`);
+      showError(`Failed to add charging session: ${result.error}`);
     }
   } catch (error) {
     console.error('Failed to submit charging session:', error);
-    alert('Failed to add charging session. Please try again.');
+    showError('Failed to add charging session. Please try again.');
   }
 }
 
@@ -311,18 +310,17 @@ export async function deleteChargingSession(sessionId: number): Promise<void> {
   if (!confirm('Are you sure you want to delete this charging session?')) return;
 
   try {
-    const response = await fetch(`/api/charging/${sessionId}`, { method: 'DELETE' });
+    const result = await api<{ success: boolean }>(`/api/charging/${sessionId}`, { method: 'DELETE' });
 
-    if (response.ok) {
+    if (!result.error) {
       loadChargingSummary();
       loadChargingHistory();
     } else {
-      const data = await response.json();
-      alert(`Failed to delete charging session: ${data.error || 'Unknown error'}`);
+      showError(`Failed to delete charging session: ${result.error}`);
     }
   } catch (error) {
     console.error('Failed to delete charging session:', error);
-    alert('Failed to delete charging session. Please try again.');
+    showError('Failed to delete charging session. Please try again.');
   }
 }
 
@@ -473,8 +471,10 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
   const context = ctx.getContext('2d');
   if (!context) return;
 
-  const powerGradient = createGradient(context, 'rgba(39, 174, 96, 0.4)', 'rgba(39, 174, 96, 0.02)');
-  const socGradient = createGradient(context, 'rgba(99, 102, 241, 0.3)', 'rgba(99, 102, 241, 0.02)');
+  const chartColor2 = getChartColor(2);
+  const chartColor1 = getChartColor(1);
+  const powerGradient = createGradient(context, `${chartColor2}66`, `${chartColor2}05`);
+  const socGradient = createGradient(context, `${chartColor1}4d`, `${chartColor1}05`);
   const defaults = getChartDefaults();
 
   state.chargingCurveChart = new Chart(ctx, {
@@ -485,7 +485,7 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
         {
           label: 'Power (kW)',
           data: powerData,
-          borderColor: '#27ae60',
+          borderColor: chartColor2,
           backgroundColor: powerGradient,
           borderWidth: 2.5,
           fill: true,
@@ -497,7 +497,7 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
         {
           label: 'SOC (%)',
           data: socData,
-          borderColor: '#3282b8',
+          borderColor: chartColor1,
           backgroundColor: socGradient,
           borderWidth: 2.5,
           fill: true,
@@ -530,18 +530,18 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
           type: 'linear',
           display: true,
           position: 'left',
-          title: { display: true, text: 'Power (kW)', color: '#27ae60', font: defaults.titleFont },
+          title: { display: true, text: 'Power (kW)', color: chartColor2, font: defaults.titleFont },
           grid: { color: 'rgba(255, 255, 255, 0.08)' },
-          ticks: { color: '#27ae60', font: { size: defaults.tickFont.size }, padding: 8 },
+          ticks: { color: chartColor2, font: { size: defaults.tickFont.size }, padding: 8 },
           min: 0,
         },
         y1: {
           type: 'linear',
           display: true,
           position: 'right',
-          title: { display: true, text: 'SOC (%)', color: '#3282b8', font: defaults.titleFont },
+          title: { display: true, text: 'SOC (%)', color: chartColor1, font: defaults.titleFont },
           grid: { drawOnChartArea: false },
-          ticks: { color: '#3282b8', font: { size: defaults.tickFont.size }, padding: 8 },
+          ticks: { color: chartColor1, font: { size: defaults.tickFont.size }, padding: 8 },
           min: 0,
           max: 100,
         },

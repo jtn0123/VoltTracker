@@ -5,7 +5,7 @@
 
 import { state, formatChartDate } from '@/core';
 import { api } from '@/api';
-import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from '@/charts';
+import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis, getChartColor } from '@/charts';
 import type { EfficiencySummary, MpgTrendPoint } from '@/types/api';
 import { EfficiencySummarySchema, MpgTrendPointSchema } from '@/types/schemas';
 import { z } from 'zod';
@@ -141,7 +141,8 @@ export async function loadMpgTrend(days: number): Promise<void> {
     const context = ctx.getContext('2d');
     if (!context) return;
 
-    const gradient = createGradient(context, 'rgba(99, 102, 241, 0.4)', 'rgba(99, 102, 241, 0.02)');
+    const mpgColor = getChartColor(1);
+    const gradient = createGradient(context, `${mpgColor}66`, `${mpgColor}05`);
 
     state.mpgChart = new Chart(ctx, {
       type: 'line',
@@ -151,14 +152,14 @@ export async function loadMpgTrend(days: number): Promise<void> {
           {
             label: 'MPG',
             data: data.map((d) => d.mpg),
-            borderColor: '#3282b8',
+            borderColor: mpgColor,
             backgroundColor: gradient,
             borderWidth: 2.5,
             fill: true,
             tension: 0.4,
             pointRadius: 5,
             pointHoverRadius: 7,
-            pointBackgroundColor: '#3282b8',
+            pointBackgroundColor: mpgColor,
             pointBorderColor: '#fff',
             pointBorderWidth: 2,
           },
@@ -188,7 +189,7 @@ export async function loadMpgTrend(days: number): Promise<void> {
           y: getEnhancedAxis({
             suggestedMin: 20,
             suggestedMax: 50,
-            title: { text: 'MPG', color: '#3282b8' },
+            title: { text: 'MPG', color: mpgColor },
           }),
         },
       },

@@ -5,7 +5,7 @@
 
 import { formatDateTime, state } from '@/core';
 import { api } from '@/api';
-import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis } from '@/charts';
+import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis, getChartColor, getCSSVar } from '@/charts';
 import type { BatteryHealthResponse, BatteryCellsResponse, CellReading, SocAnalysis } from '@/types/api';
 
 /**
@@ -21,7 +21,9 @@ export async function loadBatteryHealth(): Promise<void> {
     if (!section) return;
 
     if (!data.has_data) {
-      section.style.display = 'none';
+      section.style.display = 'block';
+      const content = section.querySelector('.battery-health-content, .section-content');
+      if (content) content.innerHTML = '<div class="empty-state"><p>No battery health data available yet.</p></div>';
       return;
     }
 
@@ -80,7 +82,9 @@ export async function loadBatteryCells(): Promise<void> {
     if (!section) return;
 
     if (!data.reading) {
-      section.style.display = 'none';
+      section.style.display = 'block';
+      const content = section.querySelector('.battery-cells-content, .section-content');
+      if (content) content.innerHTML = '<div class="empty-state"><p>No cell voltage data available yet.</p></div>';
       return;
     }
 
@@ -175,12 +179,23 @@ export function renderCellHeatmap(reading: CellReading): void {
  * Generate heatmap color based on normalized value (0-1)
  */
 export function getHeatmapColor(value: number): string {
+  // Use CSS variable-derived colors: danger -> warning -> success -> chart-5 -> chart-6
+  const dangerHex = getCSSVar('--danger', '#ef4444');
+  const warningHex = getCSSVar('--warning', '#f59e0b');
+  const successHex = getCSSVar('--success', '#22c55e');
+  const c5Hex = getChartColor(5);
+  const c6Hex = getChartColor(6);
+  const parseHex = (h: string) => {
+    h = h.replace('#', '');
+    return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+  };
+  const d = parseHex(dangerHex), w = parseHex(warningHex), s = parseHex(successHex), b5 = parseHex(c5Hex), b6 = parseHex(c6Hex);
   const colors = [
-    { pos: 0, r: 231, g: 76, b: 60 },
-    { pos: 0.25, r: 243, g: 156, b: 18 },
-    { pos: 0.5, r: 39, g: 174, b: 96 },
-    { pos: 0.75, r: 50, g: 130, b: 184 },
-    { pos: 1, r: 155, g: 89, b: 182 },
+    { pos: 0, ...d },
+    { pos: 0.25, ...w },
+    { pos: 0.5, ...s },
+    { pos: 0.75, ...b5 },
+    { pos: 1, ...b6 },
   ];
 
   let lower = colors[0];
@@ -266,7 +281,7 @@ export async function loadSocAnalysis(): Promise<void> {
       } else {
         socFloor.textContent = '--';
         const socCount = document.getElementById('soc-count');
-        if (socCount) socCount.textContent = 'No gas transitions yet';
+        if (socCount) socCount.textContent = 'No gas transition data available';
       }
     }
 
@@ -342,7 +357,7 @@ export async function renderSocHistogram(histogram: Record<string, number>): Pro
           borderColor: 'rgba(99, 102, 241, 0.8)',
           borderWidth: 1,
           borderRadius: 6,
-          hoverBackgroundColor: '#3282b8',
+          hoverBackgroundColor: getChartColor(5),
         },
       ],
     },

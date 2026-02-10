@@ -57,11 +57,19 @@ def export_trips():
     # Apply filters
     start_date = request.args.get("start_date")
     if start_date:
-        query = query.filter(Trip.start_time >= start_date)
+        try:
+            start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            query = query.filter(Trip.start_time >= start_dt)
+        except ValueError:
+            return jsonify({"error": "Invalid start_date format. Use ISO 8601 format."}), 400
 
     end_date = request.args.get("end_date")
     if end_date:
-        query = query.filter(Trip.start_time <= end_date)
+        try:
+            end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+            query = query.filter(Trip.start_time <= end_dt)
+        except ValueError:
+            return jsonify({"error": "Invalid end_date format. Use ISO 8601 format."}), 400
 
     gas_only = request.args.get("gas_only", "").lower() == "true"
     if gas_only:

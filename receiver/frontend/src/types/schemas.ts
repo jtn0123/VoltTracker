@@ -28,6 +28,12 @@ export const TelemetryPointSchema = z.object({
   motor_temp_2_f: z.number().nullable(),
   motor_temp_3_f: z.number().nullable(),
   motor_temp_4_f: z.number().nullable(),
+  motor_temp_max_f: z.number().nullable().optional(),
+  engine_running: z.union([z.boolean(), z.number()]).nullable().optional(),
+  engine_oil_temp_f: z.number().nullable().optional(),
+  battery_temp_f: z.number().nullable().optional(),
+  battery_capacity_kwh: z.number().nullable().optional(),
+  charger_power_kw: z.number().nullable().optional(),
   soc: z.number().optional(),
   fuel_percent: z.number().optional(),
 });
@@ -57,6 +63,11 @@ export const TripStatsSchema = z.object({
 export const TripDetailSchema = z.object({
   trip: TripSummarySchema,
   telemetry: z.array(TelemetryPointSchema),
+  telemetry_pagination: z.object({
+    page: z.number(),
+    per_page: z.number(),
+    total: z.number(),
+  }).optional(),
 });
 
 // ── Live Telemetry ─────────────────────────────────────────
@@ -66,6 +77,9 @@ export const LiveTelemetryResponseSchema = z.object({
   data: TelemetryPointSchema.nullable(),
   start_time: z.string().nullable(),
   trip_stats: TripStatsSchema.nullable(),
+  session_id: z.string().nullable().optional(),
+  start_soc: z.number().nullable().optional(),
+  point_count: z.number().optional(),
 });
 
 // ── Efficiency ─────────────────────────────────────────────
@@ -81,6 +95,7 @@ export const EfficiencySummarySchema = z.object({
   total_electric_miles: z.number().nullable(),
   total_kwh_used: z.number().nullable(),
   ev_ratio: z.number().nullable(),
+  recent_30d_mpg: z.number().nullable().optional(),
 });
 
 // ── MPG Trend ──────────────────────────────────────────────
@@ -123,6 +138,14 @@ export const ChargingSummarySchema = z.object({
   l2_sessions: z.number(),
   cost_per_mile_electric: z.number().nullable(),
   cost_per_mile_gas: z.number().nullable(),
+  estimated_cost: z.number().nullable().optional(),
+  by_charge_type: z.record(z.string(), z.unknown()).nullable().optional(),
+  gas_rate: z.number().nullable().optional(),
+  monthly_kwh: z.number().nullable().optional(),
+  monthly_sessions: z.number().nullable().optional(),
+  total_electric_miles: z.number().nullable().optional(),
+  total_gas_miles: z.number().nullable().optional(),
+  ev_ratio: z.number().nullable().optional(),
 });
 
 export const ChargingCurvePointSchema = z.object({
@@ -215,6 +238,8 @@ export const ImportResultSchema = z.object({
 export const StatusResponseSchema = z.object({
   status: z.string(),
   last_sync: z.string().nullable(),
+  active_trip: z.unknown().nullable().optional(),
+  database: z.unknown().nullable().optional(),
 });
 
 // ── Validation Helper ──────────────────────────────────────

@@ -207,8 +207,9 @@ export function showImportResultModal(data: ImportResult): void {
 
   modal.dataset.reportable = data.reportable || generateReportable(data);
 
-  modal.style.display = 'flex';
+  modal.classList.add('show');
   modal.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
 }
 
 /**
@@ -239,8 +240,9 @@ export function generateReportable(data: ImportResult): string {
 export function closeImportResultModal(): void {
   const modal = document.getElementById('import-result-modal');
   if (modal) {
-    modal.style.display = 'none';
+    modal.classList.remove('show');
     modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
   }
 }
 

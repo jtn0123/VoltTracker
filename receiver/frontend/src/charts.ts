@@ -102,6 +102,21 @@ export function getChartDefaults(): ChartFontDefaults {
   };
 }
 
+/**
+ * Read a CSS variable value from :root, with a fallback.
+ */
+export function getCSSVar(name: string, fallback = ''): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
+/**
+ * Get chart palette color by index (1-based), reading from CSS --chart-N variables.
+ */
+export function getChartColor(index: number): string {
+  const fallbacks = ['#6366f1', '#34d399', '#f59e0b', '#ec4899', '#3b82f6', '#a78bfa'];
+  return getCSSVar(`--chart-${index}`, fallbacks[(index - 1) % fallbacks.length]);
+}
+
 // Using Record<string, unknown> for Chart.js config objects since they're complex and loaded dynamically
 type ChartConfig = Record<string, unknown>;
 
