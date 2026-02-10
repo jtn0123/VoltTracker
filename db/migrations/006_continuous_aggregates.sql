@@ -11,11 +11,11 @@ SELECT
     session_id,
     AVG(speed_mph) AS avg_speed_mph,
     MAX(speed_mph) AS max_speed_mph,
-    AVG(soc) AS avg_soc,
-    MIN(soc) AS min_soc,
-    MAX(soc) AS max_soc,
+    AVG(state_of_charge) AS avg_soc,
+    MIN(state_of_charge) AS min_soc,
+    MAX(state_of_charge) AS max_soc,
     AVG(hv_battery_power_kw) AS avg_power_kw,
-    AVG(fuel_percent) AS avg_fuel_percent,
+    AVG(fuel_level_percent) AS avg_fuel_percent,
     COUNT(*) AS sample_count
 FROM telemetry_raw
 GROUP BY bucket, session_id
@@ -37,9 +37,9 @@ SELECT
     session_id,
     AVG(speed_mph) AS avg_speed_mph,
     MAX(speed_mph) AS max_speed_mph,
-    AVG(soc) AS avg_soc,
-    MIN(soc) AS min_soc,
-    MAX(soc) AS max_soc,
+    AVG(state_of_charge) AS avg_soc,
+    MIN(state_of_charge) AS min_soc,
+    MAX(state_of_charge) AS max_soc,
     SUM(CASE WHEN hv_battery_power_kw > 0 THEN hv_battery_power_kw ELSE 0 END) AS total_discharge_kw,
     SUM(CASE WHEN hv_battery_power_kw < 0 THEN ABS(hv_battery_power_kw) ELSE 0 END) AS total_regen_kw,
     COUNT(*) AS sample_count

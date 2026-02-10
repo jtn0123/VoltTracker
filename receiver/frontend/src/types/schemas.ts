@@ -24,10 +24,6 @@ export const TelemetryPointSchema = z.object({
   motor_b_rpm: z.number().nullable(),
   generator_rpm: z.number().nullable(),
   charger_status: z.number().nullable(),
-  motor_temp_1_f: z.number().nullable(),
-  motor_temp_2_f: z.number().nullable(),
-  motor_temp_3_f: z.number().nullable(),
-  motor_temp_4_f: z.number().nullable(),
   motor_temp_max_f: z.number().nullable().optional(),
   engine_running: z.union([z.boolean(), z.number()]).nullable().optional(),
   engine_oil_temp_f: z.number().nullable().optional(),
@@ -64,9 +60,10 @@ export const TripDetailSchema = z.object({
   trip: TripSummarySchema,
   telemetry: z.array(TelemetryPointSchema),
   telemetry_pagination: z.object({
-    page: z.number(),
-    per_page: z.number(),
+    offset: z.number(),
+    limit: z.number(),
     total: z.number(),
+    has_more: z.boolean(),
   }).optional(),
 });
 

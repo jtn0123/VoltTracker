@@ -40,7 +40,7 @@ DCFC_POWER_THRESHOLD_KW = 20.0  # Above this = DC Fast Charging
 
 # Cost Constants
 ELECTRICITY_COST_PER_KWH = Config.ELECTRICITY_COST_PER_KWH  # Default electricity rate
-GAS_COST_PER_GALLON = 3.50  # Default gas price (can be overridden)
+GAS_COST_PER_GALLON = getattr(Config, 'GAS_COST_PER_GALLON', 3.50)  # From config, fallback to $3.50
 
 # Statistical Constants
 DEFAULT_CONFIDENCE_LEVEL = 0.95  # 95% confidence interval

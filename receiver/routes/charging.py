@@ -93,12 +93,15 @@ def add_charging_session():
             return jsonify({"error": f"Invalid end_time format: {data['end_time']}. Use ISO 8601 format."}), 400
 
     # Validate numeric ranges
-    for soc_field in ("start_soc", "end_soc"):
-        if data.get(soc_field) is not None and not (0 <= float(data[soc_field]) <= 100):
-            return jsonify({"error": f"{soc_field} must be between 0 and 100"}), 400
-    for non_neg_field in ("kwh_added", "cost"):
-        if data.get(non_neg_field) is not None and float(data[non_neg_field]) < 0:
-            return jsonify({"error": f"{non_neg_field} must be >= 0"}), 400
+    try:
+        for soc_field in ("start_soc", "end_soc"):
+            if data.get(soc_field) is not None and not (0 <= float(data[soc_field]) <= 100):
+                return jsonify({"error": f"{soc_field} must be between 0 and 100"}), 400
+        for non_neg_field in ("kwh_added", "cost"):
+            if data.get(non_neg_field) is not None and float(data[non_neg_field]) < 0:
+                return jsonify({"error": f"{non_neg_field} must be >= 0"}), 400
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": f"Invalid numeric value: {e}"}), 400
 
     session = ChargingSession(
         start_time=start_time,
@@ -257,6 +260,17 @@ def update_charging_session(session_id):
         "notes",
         "is_complete",
     ]
+
+    # Validate numeric ranges
+    try:
+        for soc_field in ("start_soc", "end_soc"):
+            if data.get(soc_field) is not None and not (0 <= float(data[soc_field]) <= 100):
+                return jsonify({"error": f"{soc_field} must be between 0 and 100"}), 400
+        for non_neg_field in ("kwh_added", "cost"):
+            if data.get(non_neg_field) is not None and float(data[non_neg_field]) < 0:
+                return jsonify({"error": f"{non_neg_field} must be >= 0"}), 400
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": f"Invalid numeric value: {e}"}), 400
 
     for field in allowed_fields:
         if field in data:

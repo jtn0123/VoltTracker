@@ -60,6 +60,12 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     volumes:
       - ./logs:/app/logs
       - ./torque-config:/app/torque-config:ro
@@ -68,6 +74,7 @@ services:
   worker:
     build: ./receiver
     container_name: volt-tracker-worker
+    # Note: --url uses DB 1 for job queue; REDIS_URL (DB 0) is used by app code for caching
     command: rq worker high default low --url redis://redis:6379/1 --verbose
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-volt}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-volt_tracker}

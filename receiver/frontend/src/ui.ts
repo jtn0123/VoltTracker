@@ -129,17 +129,11 @@ export function initBottomNav(): void {
     });
   });
 
-  let ticking = false;
-  window.addEventListener('scroll', () => {
-    if (!ticking) {
-      window.requestAnimationFrame(() => {
-        updateActiveNavOnScroll(sections);
-        ticking = false;
-      });
-      ticking = true;
-    }
-  });
+  // Scroll handler registration is deferred to initScrollHandlers()
+  _pendingNavSections = sections;
 }
+
+let _pendingNavSections: NavSection[] | null = null;
 
 /**
  * Update active nav item based on scroll position
@@ -172,52 +166,63 @@ export function setActiveNavItem(sectionName: string): void {
 }
 
 /**
- * Add scroll shadow to header
+ * Add scroll shadow to header (sets up via shared scroll handler)
  */
 export function initHeaderScroll(): void {
-  const header = document.querySelector('.header');
-  if (!header) return;
-
-  let ticking = false;
-  window.addEventListener('scroll', () => {
-    if (!ticking) {
-      window.requestAnimationFrame(() => {
-        if (window.scrollY > 10) {
-          header.classList.add('scrolled');
-        } else {
-          header.classList.remove('scrolled');
-        }
-        ticking = false;
-      });
-      ticking = true;
-    }
-  });
+  // Handled by initScrollHandlers()
 }
 
 /**
- * Initialize back to top button
+ * Initialize back to top button (sets up via shared scroll handler)
  */
 export function initBackToTop(): void {
   const backToTop = document.getElementById('back-to-top');
   if (!backToTop) return;
 
+  backToTop.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+}
+
+/**
+ * Unified scroll handler — combines nav scroll spy, header shadow, and back-to-top
+ * into a single requestAnimationFrame-gated listener to avoid layout thrashing.
+ */
+export function initScrollHandlers(): void {
+  const header = document.querySelector('.header');
+  const backToTop = document.getElementById('back-to-top');
+
   let ticking = false;
   window.addEventListener('scroll', () => {
     if (!ticking) {
       window.requestAnimationFrame(() => {
-        if (window.scrollY > 400) {
-          backToTop.classList.add('visible');
-        } else {
-          backToTop.classList.remove('visible');
+        // Nav scroll spy
+        if (_pendingNavSections) {
+          updateActiveNavOnScroll(_pendingNavSections);
         }
+
+        // Header shadow
+        if (header) {
+          if (window.scrollY > 10) {
+            header.classList.add('scrolled');
+          } else {
+            header.classList.remove('scrolled');
+          }
+        }
+
+        // Back to top visibility
+        if (backToTop) {
+          if (window.scrollY > 400) {
+            backToTop.classList.add('visible');
+          } else {
+            backToTop.classList.remove('visible');
+          }
+        }
+
         ticking = false;
       });
       ticking = true;
     }
-  });
-
-  backToTop.addEventListener('click', () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 }
 

@@ -400,16 +400,11 @@ export function updatePowerFlow(telemetry: TelemetryPoint, section: HTMLElement 
   const motorTempsRow = document.getElementById('motor-temps-row');
   const motorTemps = document.getElementById('motor-temps');
   if (motorTempsRow && motorTemps) {
-    const temps = [
-      telemetry.motor_temp_1_f,
-      telemetry.motor_temp_2_f,
-      telemetry.motor_temp_3_f,
-      telemetry.motor_temp_4_f,
-    ].filter((t): t is number => t !== null && t !== undefined);
+    const maxTemp = telemetry.motor_temp_max_f;
 
-    if (temps.length > 0) {
+    if (maxTemp !== null && maxTemp !== undefined) {
       motorTempsRow.style.display = 'flex';
-      motorTemps.textContent = temps.map((t) => `${Math.round(t)}°F`).join(' / ');
+      motorTemps.textContent = `${Math.round(maxTemp)}°F`;
     } else {
       motorTempsRow.style.display = 'none';
     }

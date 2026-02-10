@@ -589,6 +589,7 @@ def get_mpg_trend():
         days = int(request.args.get("days", 30))
     except (ValueError, TypeError):
         days = 30
+    days = min(days, 365)
     start_date = utc_now() - timedelta(days=days)
 
     trips = (

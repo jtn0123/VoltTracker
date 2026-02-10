@@ -70,6 +70,8 @@ CREATE TABLE telemetry_raw (
     dte_electric_miles FLOAT,
     dte_gas_miles FLOAT,
 
+    elevation_meters FLOAT,
+
     raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (id, timestamp)
@@ -122,7 +124,17 @@ CREATE TABLE trips (
     weather_precipitation_in DECIMAL(5,3),
     weather_wind_mph DECIMAL(5,1),
     weather_conditions VARCHAR(50),
-    weather_impact_factor DECIMAL(4,3)
+    weather_impact_factor DECIMAL(4,3),
+
+    -- Elevation data (from migration 004)
+    extreme_weather BOOLEAN DEFAULT FALSE,
+    elevation_start_m FLOAT,
+    elevation_end_m FLOAT,
+    elevation_gain_m FLOAT,
+    elevation_loss_m FLOAT,
+    elevation_net_change_m FLOAT,
+    elevation_max_m FLOAT,
+    elevation_min_m FLOAT
 );
 
 CREATE INDEX idx_trips_start_time ON trips(start_time);
@@ -154,7 +166,7 @@ CREATE INDEX idx_fuel_events_timestamp ON fuel_events(timestamp);
 -- Records every electric-to-gas transition for SOC floor analysis
 CREATE TABLE soc_transitions (
     id SERIAL PRIMARY KEY,
-    trip_id INTEGER REFERENCES trips(id),
+    trip_id INTEGER REFERENCES trips(id) ON DELETE CASCADE,
     timestamp TIMESTAMPTZ NOT NULL,
     soc_at_transition DECIMAL(5,2),
     ambient_temp_f DECIMAL(5,1),

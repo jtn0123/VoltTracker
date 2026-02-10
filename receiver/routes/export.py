@@ -52,7 +52,7 @@ def export_trips():
     export_format = request.args.get("format", "csv").lower()
     use_streaming = request.args.get("stream", "true" if export_format == "csv" else "false").lower() == "true"
 
-    query = db.query(Trip).filter(Trip.is_closed.is_(True))
+    query = db.query(Trip).filter(Trip.is_closed.is_(True), Trip.deleted_at.is_(None))
 
     # Apply filters
     start_date = request.args.get("start_date")
@@ -249,7 +249,7 @@ def export_all():
         limit = 10000  # Use default on invalid input
 
     # Build queries with optional filters
-    trip_query = db.query(Trip).order_by(desc(Trip.start_time))
+    trip_query = db.query(Trip).filter(Trip.deleted_at.is_(None)).order_by(desc(Trip.start_time))
     fuel_query = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp))
     soc_query = db.query(SocTransition).order_by(SocTransition.timestamp)
     charging_query = db.query(ChargingSession).order_by(desc(ChargingSession.start_time))
@@ -550,6 +550,17 @@ def import_csv():
                 and_(CsvImport.status == "failed", CsvImport.failure_reason == "all_duplicates")
             )
         ).first()
+
+        # Allow re-import if previous attempt was incomplete (failed for reasons other than duplicates)
+        incomplete_import = None
+        if not existing_import:
+            incomplete_import = db.query(CsvImport).filter(
+                CsvImport.file_hash == file_hash,
+                CsvImport.status.notin_(["success", "partial", "duplicate"]),
+            ).first()
+            if incomplete_import:
+                # Update existing record instead of blocking re-import
+                logger.info(f"Re-importing file (previous status: {incomplete_import.status}): {file_hash}")
 
         if existing_import:
             import_event["failure_reason"] = "duplicate_file"

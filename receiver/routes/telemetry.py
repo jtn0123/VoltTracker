@@ -335,10 +335,9 @@ def _calculate_trip_stats(first: TelemetryRaw | None, latest: TelemetryRaw | Non
     stats["in_gas_mode"] = in_gas_mode
 
     # Calculate kWh/mile for electric portion
-    if stats["kwh_used"] and stats["miles_driven"] and stats["miles_driven"] > 0:
-        # For simplicity, use total miles for now
-        # A more accurate version would track when gas mode started
-        stats["kwh_per_mile"] = stats["kwh_used"] / stats["miles_driven"]
+    electric_miles = stats.get("electric_miles") or stats.get("miles_driven")
+    if stats["kwh_used"] and electric_miles and electric_miles > 0:
+        stats["kwh_per_mile"] = stats["kwh_used"] / electric_miles
 
     # Calculate gas usage if fuel data available
     start_fuel = None

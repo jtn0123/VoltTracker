@@ -111,6 +111,8 @@ class TelemetryRaw(Base):
     battery_coolant_temp_f = Column(Float)
 
     # Charging status (expanded)
+    # charger_ac_power_kw: AC-side power from the onboard charger (what the EVSE delivers)
+    # charger_power_kw: DC-side power going into the HV battery (after conversion losses)
     charger_ac_power_kw = Column(Float)
     charger_connected = Column(Boolean)
     charger_status = Column(Float)

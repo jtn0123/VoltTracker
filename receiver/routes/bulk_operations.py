@@ -10,9 +10,10 @@ Provides endpoints for:
 import logging
 from flask import Blueprint, jsonify, request
 from database import get_db
-from models import Trip, TelemetryRaw
+from models import Trip, TelemetryRaw, SocTransition
 from sqlalchemy import and_
 from utils import utc_now
+from extensions import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ bulk_bp = Blueprint("bulk", __name__)
 
 
 @bulk_bp.route("/bulk/trips/delete", methods=["POST"])
+@limiter.limit("10/minute")
 def bulk_delete_trips():
     """
     Bulk delete trips (soft delete).
@@ -73,6 +75,11 @@ def bulk_delete_trips():
                 TelemetryRaw.session_id.in_(session_ids)
             ).delete(synchronize_session=False)
 
+            # Delete soc_transitions
+            db.query(SocTransition).filter(
+                SocTransition.trip_id.in_(trip_ids)
+            ).delete(synchronize_session=False)
+
             # Delete trips
             db.query(Trip).filter(Trip.id.in_(trip_ids)).delete(synchronize_session=False)
 
@@ -105,6 +112,7 @@ def bulk_delete_trips():
 
 
 @bulk_bp.route("/bulk/trips/restore", methods=["POST"])
+@limiter.limit("10/minute")
 def bulk_restore_trips():
     """
     Restore soft-deleted trips.
@@ -159,6 +167,7 @@ def bulk_restore_trips():
 
 
 @bulk_bp.route("/bulk/trips/update", methods=["POST"])
+@limiter.limit("10/minute")
 def bulk_update_trips():
     """
     Bulk update trip properties.

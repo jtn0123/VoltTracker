@@ -6,6 +6,7 @@ calculations package (receiver.calculations). All new code should import
 from `calculations` directly.
 
 This file maintains backward compatibility for existing code.
+Do NOT remove — multiple internal and external imports depend on this path.
 """
 
 import logging

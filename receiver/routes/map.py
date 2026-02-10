@@ -6,6 +6,7 @@ Handles GPS track visualization, route clustering, and map data export.
 
 import logging
 from typing import List, Dict, Any, Optional
+from xml.sax.saxutils import escape as xml_escape
 
 from flask import Blueprint, jsonify, request, Response
 
@@ -271,8 +272,8 @@ def get_trips_map_data():
     })
 
 
-@map_bp.route("/api/trips/<trip_id>/route", methods=["GET"])
-def get_trip_route_detailed(trip_id: str):
+@map_bp.route("/api/trips/<int:trip_id>/route", methods=["GET"])
+def get_trip_route_detailed(trip_id: int):
     """
     Get detailed GPS route for a single trip (no subsampling).
 
@@ -354,8 +355,8 @@ def get_trip_route_detailed(trip_id: str):
     })
 
 
-@map_bp.route("/api/trips/similar/<trip_id>", methods=["GET"])
-def find_similar_trip_routes(trip_id: str):
+@map_bp.route("/api/trips/similar/<int:trip_id>", methods=["GET"])
+def find_similar_trip_routes(trip_id: int):
     """
     Find trips with similar routes based on GPS data.
 
@@ -391,8 +392,8 @@ def find_similar_trip_routes(trip_id: str):
     })
 
 
-@map_bp.route("/api/trips/<trip_id>/gpx", methods=["GET"])
-def export_trip_as_gpx(trip_id: str):
+@map_bp.route("/api/trips/<int:trip_id>/gpx", methods=["GET"])
+def export_trip_as_gpx(trip_id: int):
     """
     Export trip as GPX (GPS Exchange Format) file.
 
@@ -435,8 +436,8 @@ def export_trip_as_gpx(trip_id: str):
     )
 
 
-@map_bp.route("/api/trips/<trip_id>/kml", methods=["GET"])
-def export_trip_as_kml(trip_id: str):
+@map_bp.route("/api/trips/<int:trip_id>/kml", methods=["GET"])
+def export_trip_as_kml(trip_id: int):
     """
     Export trip as KML (Keyhole Markup Language) file.
 
@@ -491,13 +492,15 @@ def generate_gpx(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         GPX XML string
     """
 
+    trip_name_escaped = xml_escape("Volt Trip - " + trip.start_time.strftime("%Y-%m-%d %H:%M"))
+
     # GPX header
     gpx = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<gpx version="1.1" creator="VoltTracker" xmlns="http://www.topografix.com/GPX/1/1">',
         '  <metadata>',
-        f'    <name>Volt Trip - {trip.start_time.strftime("%Y-%m-%d %H:%M")}</name>',
-        f'    <desc>Distance: {trip.distance_miles:.2f} mi'
+        f'    <name>{trip_name_escaped}</name>',
+        f'    <desc>Distance: {(trip.distance_miles or 0):.2f} mi'
     ]
 
     # Add efficiency info
@@ -511,8 +514,9 @@ def generate_gpx(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
     gpx.append('  </metadata>')
 
     # Track segment
+    seg_name_escaped = xml_escape("Trip " + trip.start_time.strftime("%Y-%m-%d %H:%M"))
     gpx.append('  <trk>')
-    gpx.append(f'    <name>Trip {trip.start_time.strftime("%Y-%m-%d %H:%M")}</name>')
+    gpx.append(f'    <name>{seg_name_escaped}</name>')
     gpx.append('    <trkseg>')
 
     # Add track points
@@ -561,12 +565,14 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         KML XML string
     """
 
+    trip_name_escaped = xml_escape("Volt Trip - " + trip.start_time.strftime("%Y-%m-%d %H:%M"))
+
     # KML header
     kml = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<kml xmlns="http://www.opengis.net/kml/2.2">',
         '  <Document>',
-        f'    <name>Volt Trip - {trip.start_time.strftime("%Y-%m-%d %H:%M")}</name>',
+        f'    <name>{trip_name_escaped}</name>',
         '    <description>VoltTracker trip export</description>',
         '',
         '    <!-- Styles -->',
@@ -602,7 +608,8 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         first = telemetry[0]
         kml.append('    <Placemark>')
         kml.append('      <name>Start</name>')
-        kml.append(f'      <description>Trip start: {trip.start_time.strftime("%Y-%m-%d %H:%M")}</description>')
+        desc = xml_escape('Trip start: ' + trip.start_time.strftime('%Y-%m-%d %H:%M'))
+        kml.append(f'      <description>{desc}</description>')
         kml.append('      <styleUrl>#startPoint</styleUrl>')
         kml.append('      <Point>')
         kml.append(f'        <coordinates>{first.longitude},{first.latitude},0</coordinates>')
@@ -616,7 +623,7 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         kml.append('      <name>End</name>')
         end_time = trip.end_time if trip.end_time else last.timestamp
         end_str = end_time.strftime("%Y-%m-%d %H:%M") if end_time else "Unknown"
-        kml.append(f'      <description>Trip end: {end_str}</description>')
+        kml.append(f'      <description>{xml_escape(f"Trip end: {end_str}")}</description>')
         kml.append('      <styleUrl>#endPoint</styleUrl>')
         kml.append('      <Point>')
         kml.append(f'        <coordinates>{last.longitude},{last.latitude},0</coordinates>')
@@ -629,7 +636,7 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
     kml.append('      <name>Trip Route</name>')
 
     # Build description with trip stats
-    desc_parts = [f'Distance: {trip.distance_miles:.2f} mi']
+    desc_parts = [f'Distance: {(trip.distance_miles or 0):.2f} mi']
     if trip.kwh_per_mile:
         desc_parts.append(f'Efficiency: {trip.kwh_per_mile:.3f} kWh/mi')
     if trip.gas_mpg:
@@ -637,7 +644,7 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
     if trip.ambient_temp_avg_f:
         desc_parts.append(f'Avg Temp: {trip.ambient_temp_avg_f:.0f}°F')
 
-    kml.append(f'      <description>{", ".join(desc_parts)}</description>')
+    kml.append(f'      <description>{xml_escape(", ".join(desc_parts))}</description>')
     kml.append('      <styleUrl>#routeStyle</styleUrl>')
     kml.append('      <LineString>')
     kml.append('        <tessellate>1</tessellate>')

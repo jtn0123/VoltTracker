@@ -97,6 +97,7 @@ import {
   initBottomNav,
   initHeaderScroll,
   initBackToTop,
+  initScrollHandlers,
   initServiceWorker,
 } from '@/ui';
 import { initWebSocket, loadLiveTelemetry, loadStatus } from '@/live';
@@ -305,6 +306,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initHeaderScroll();
   initBackToTop();
   initBottomNav();
+  initScrollHandlers();
 
   // Setup CSV import file input
   const fileInput = document.getElementById('csv-file') as HTMLInputElement | null;
@@ -394,9 +396,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       if (state.tripsRefreshInterval) { clearInterval(state.tripsRefreshInterval); state.tripsRefreshInterval = null; }
+      if (state.statusRefreshInterval) { clearInterval(state.statusRefreshInterval); state.statusRefreshInterval = null; }
+      if (state.liveRefreshInterval) { clearInterval(state.liveRefreshInterval); state.liveRefreshInterval = null; }
     } else {
       if (!state.tripsRefreshInterval) { state.tripsRefreshInterval = setInterval(loadTrips, 60000); }
+      if (!state.statusRefreshInterval) { state.statusRefreshInterval = setInterval(loadStatus, 30000); }
+      if (!state.liveRefreshInterval) { state.liveRefreshInterval = setInterval(loadLiveTelemetry, 10000); }
       loadTrips();
+      loadStatus();
+      loadLiveTelemetry();
     }
   });
   } catch (initError) {
