@@ -339,6 +339,10 @@ export async function openChargingDetailModal(sessionId: number): Promise<void> 
   const closeBtn = modal.querySelector('.modal-close') as HTMLElement | null;
   if (closeBtn) setTimeout(() => closeBtn.focus(), 100);
 
+  // Show loading state
+  const detailSummary = document.getElementById('charging-detail-summary');
+  if (detailSummary) detailSummary.innerHTML = '<div class="modal-loading"><div class="spinner"></div><span>Loading charging details…</span></div>';
+
   try {
     const [sessionResult, curveResult] = await Promise.all([
       api<ChargingSession>(`/api/charging/${sessionId}`),

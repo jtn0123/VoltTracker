@@ -19,6 +19,9 @@ export async function loadSummary(): Promise<void> {
     if (result.error || !result.data) return;
     const data = result.data;
 
+    // Remove skeleton loading states from summary cards
+    document.querySelectorAll('#summary-section .skeleton-card, .electric-cards .skeleton-card').forEach((el) => el.classList.remove('skeleton-card'));
+
     const lifetimeMpg = document.getElementById('lifetime-mpg');
     if (lifetimeMpg) {
       if (data.lifetime_gas_mpg) {

@@ -134,6 +134,10 @@ export async function openTripModal(tripId: number): Promise<void> {
   const closeBtn = modal.querySelector('.modal-close') as HTMLElement | null;
   if (closeBtn) setTimeout(() => closeBtn.focus(), 100);
 
+  // Show loading state in modal
+  const summaryEl = document.getElementById('trip-detail-summary');
+  if (summaryEl) summaryEl.innerHTML = '<div class="modal-loading"><div class="spinner"></div><span>Loading trip details…</span></div>';
+
   try {
     const result = await api<TripDetail>(`/api/trips/${tripId}`);
     if (result.error) return;

@@ -84,6 +84,7 @@ import './styles/forms.css';
 import './styles/live.css';
 import './styles/theme.css';
 import './styles/utilities.css';
+import './styles/skeleton.css';
 
 // ── Critical (above-the-fold) imports ────────────────────────────────────────
 import { state, store } from '@/store';

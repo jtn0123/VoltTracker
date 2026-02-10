@@ -35,7 +35,7 @@ describe('api wrapper', () => {
 
     const result = await api('/api/test');
     expect(result.error).toBe('Unauthorized');
-    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Session expired'), 'warning', 3000);
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Authentication required'), 'warning', 3000);
   });
 
   it('handles 500 with error toast', async () => {
