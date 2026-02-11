@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'dark')</script>
+    <title>Settings - VoltTracker</title>
+
+    <!-- Critical CSS -->
+    <style>:root{--bg-primary:#0f1117;--bg-secondary:#161922;--bg-card:#1c1f2e;--accent:#6366f1;--accent-light:#818cf8;--text-primary:#f0f0f3;--text-secondary:#a1a1aa;--border-color:rgba(255,255,255,0.08);--success:#22c55e;--font-base:.875rem;--space-base:1rem;--space-xl:2rem;--radius-md:8px}*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:var(--bg-primary);color:var(--text-primary);line-height:1.6;min-height:100vh}a{color:var(--accent-light);text-decoration:none}</style>
+
+    <link rel="stylesheet" href="/static/js/dist/style.css">
+    <link rel="stylesheet" href="/static/css/toast.css">
+
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#6366f1">
+</head>
+<body>
+    <header class="header" role="banner">
+        <div style="display:flex;align-items:center;gap:1rem">
+            <a href="/" style="color:var(--text-secondary);font-size:1.5rem" aria-label="Back to dashboard">←</a>
+            <h1>Settings</h1>
+        </div>
+        <div class="header-actions">
+            <button class="theme-toggle" onclick="document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');localStorage.setItem('theme',document.documentElement.getAttribute('data-theme'))" title="Toggle theme" aria-label="Toggle dark/light theme">
+                <span class="theme-icon" aria-hidden="true">🌙</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="container" style="max-width:700px">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div role="alert" style="padding:0.75rem 1rem;border-radius:var(--radius-md);margin-bottom:1rem;background:{% if category == 'success' %}rgba(34,197,94,0.15);color:#22c55e{% else %}rgba(239,68,68,0.15);color:#ef4444{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/settings" class="card" style="padding:var(--space-xl)">
+            <h2 style="margin-bottom:1.5rem;font-size:1.25rem">Application Settings</h2>
+
+            {% for key, setting in settings.items() %}
+            <div style="margin-bottom:1.5rem">
+                <label for="setting-{{ key }}" style="display:block;margin-bottom:0.5rem;font-weight:500">
+                    {{ setting.label }}
+                </label>
+                <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem">{{ setting.description }}</p>
+
+                {% if setting.type == 'select' %}
+                <select
+                    id="setting-{{ key }}"
+                    name="{{ key }}"
+                    style="width:100%;padding:0.6rem 0.75rem;border-radius:var(--radius-md);border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-base)"
+                >
+                    {% for option in setting.options %}
+                    <option value="{{ option }}" {% if setting.value == option %}selected{% endif %}>{{ option | capitalize }}</option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <input
+                    id="setting-{{ key }}"
+                    name="{{ key }}"
+                    type="{{ setting.type }}"
+                    value="{{ setting.value }}"
+                    {% if setting.step %}step="{{ setting.step }}"{% endif %}
+                    {% if setting.min is defined %}min="{{ setting.min }}"{% endif %}
+                    style="width:100%;padding:0.6rem 0.75rem;border-radius:var(--radius-md);border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-base)"
+                />
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <div style="display:flex;gap:0.75rem;margin-top:2rem">
+                <button type="submit" style="flex:1;padding:0.75rem;border-radius:var(--radius-md);border:none;background:var(--accent);color:#fff;font-size:var(--font-base);font-weight:600;cursor:pointer">
+                    Save Settings
+                </button>
+                <a href="/" style="flex:1;padding:0.75rem;border-radius:var(--radius-md);border:1px solid var(--border-color);text-align:center;color:var(--text-primary);font-size:var(--font-base)">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </main>
+
+    <script src="/static/js/toast.js"></script>
+</body>
+</html>

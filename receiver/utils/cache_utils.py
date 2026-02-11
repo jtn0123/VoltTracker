@@ -14,7 +14,7 @@ Features:
 import hashlib
 import json
 import logging
-import pickle
+from datetime import datetime, date
 from functools import wraps
 from typing import Optional, Callable, List
 
@@ -22,6 +22,26 @@ logger = logging.getLogger(__name__)
 
 # Global Redis connection (lazy-loaded)
 _redis_cache = None
+
+
+class _DateTimeEncoder(json.JSONEncoder):
+    """JSON encoder that handles datetime and date objects."""
+
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return {"__datetime__": True, "iso": obj.isoformat()}
+        if isinstance(obj, date):
+            return {"__date__": True, "iso": obj.isoformat()}
+        return super().default(obj)
+
+
+def _datetime_decoder(obj):
+    """JSON object hook that restores datetime and date objects."""
+    if "__datetime__" in obj:
+        return datetime.fromisoformat(obj["iso"])
+    if "__date__" in obj:
+        return date.fromisoformat(obj["iso"])
+    return obj
 
 
 def get_redis_cache():
@@ -97,6 +117,8 @@ def cache_result(
     """
     Decorator to cache function results in Redis.
 
+    Uses JSON serialization (safe) instead of pickle (unsafe).
+
     Args:
         prefix: Cache key prefix
         ttl: Time to live in seconds (default: 300 = 5 minutes)
@@ -138,7 +160,8 @@ def cache_result(
                 cached_value = redis.get(cache_key)
                 if cached_value is not None:
                     logger.debug(f"Cache hit: {cache_key}")
-                    return pickle.loads(cached_value)  # nosec B301
+                    # S2: Use JSON instead of pickle for deserialization
+                    return json.loads(cached_value.decode("utf-8"), object_hook=_datetime_decoder)
 
                 logger.debug(f"Cache miss: {cache_key}")
 
@@ -147,7 +170,8 @@ def cache_result(
 
                 # Cache the result
                 try:
-                    serialized = pickle.dumps(result)
+                    # S2: Use JSON instead of pickle for serialization
+                    serialized = json.dumps(result, cls=_DateTimeEncoder).encode("utf-8")
                     redis.setex(cache_key, ttl, serialized)
 
                     # Add to tag sets if provided

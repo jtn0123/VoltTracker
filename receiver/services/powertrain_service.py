@@ -149,17 +149,17 @@ def analyze_trip_powertrain(db: Session, session_id: str) -> Dict:
     transitions = []
     prev_mode = None
     for point in timeline:
-        if point["mode"] != prev_mode and prev_mode is not None:
+        if point["mode"] != prev_mode and prev_mode is not None:  # type: ignore
             transitions.append(
                 {
-                    "timestamp": point["timestamp"],
+                    "timestamp": point["timestamp"],  # type: ignore
                     "from_mode": prev_mode,
-                    "to_mode": point["mode"],
-                    "speed_mph": point["speed_mph"],
-                    "soc": point["soc"],
+                    "to_mode": point["mode"],  # type: ignore
+                    "speed_mph": point["speed_mph"],  # type: ignore
+                    "soc": point["soc"],  # type: ignore
                 }
             )
-        prev_mode = point["mode"]
+        prev_mode = point["mode"]  # type: ignore
 
     return {
         "session_id": session_id,

@@ -186,8 +186,8 @@ def get_maintenance_summary(db: Session) -> Dict:
     latest_services: Dict[str, Any] = {}
     for record in records:
         mtype = record.maintenance_type
-        if mtype not in latest_services or record.service_date > latest_services[mtype].service_date:
-            latest_services[mtype] = record
+        if mtype not in latest_services or record.service_date > latest_services[mtype].service_date:  # type: ignore
+            latest_services[mtype] = record  # type: ignore
 
     # Build summary
     summary = []

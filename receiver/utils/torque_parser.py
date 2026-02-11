@@ -219,134 +219,77 @@ class TorqueParser:
                 if parsed_value is not None:
                     temp_values[field_name] = parsed_value
 
-        # Map parsed values to result
-        if "latitude" in temp_values:
-            result["latitude"] = temp_values["latitude"]
-        if "longitude" in temp_values:
-            result["longitude"] = temp_values["longitude"]
-        if "speed_mph" in temp_values:
-            result["speed_mph"] = temp_values["speed_mph"]
-        if "engine_rpm" in temp_values:
-            result["engine_rpm"] = temp_values["engine_rpm"]
-        if "throttle_position" in temp_values:
-            result["throttle_position"] = temp_values["throttle_position"]
+        # C17: Map parsed PID values to result fields using declarative mappings + loop
+        # Direct copy: PID field name -> result field name (1:1 mapping)
+        DIRECT_FIELDS = [
+            "latitude", "longitude", "speed_mph", "engine_rpm", "throttle_position",
+            "state_of_charge", "battery_voltage", "fuel_level_percent",
+            "hv_battery_power_kw", "hv_battery_current_a", "hv_battery_voltage_v",
+            "hv_discharge_amps", "charger_ac_voltage", "charger_ac_current",
+            "charger_hv_voltage", "charger_hv_current", "last_charge_wh",
+            "motor_a_rpm", "motor_b_rpm", "generator_rpm",
+            "engine_torque_nm", "battery_capacity_kwh",
+            "lifetime_ev_miles", "lifetime_gas_miles", "lifetime_fuel_gal",
+            "lifetime_kwh", "dte_electric_miles", "dte_gas_miles",
+            "charger_status", "charger_power_kw", "charger_power_w",
+            "odometer_miles",
+        ]
+        for field in DIRECT_FIELDS:
+            if field in temp_values:
+                result[field] = temp_values[field]
+
+        # Celsius-to-Fahrenheit conversions: (source_c_key, result_f_key)
+        TEMP_CONVERSIONS = [
+            ("coolant_temp_c", "coolant_temp_f"),
+            ("intake_air_temp_c", "intake_air_temp_f"),
+            ("ambient_temp_c", "ambient_temp_f"),
+            ("battery_temp_c", "battery_temp_f"),
+            ("battery_coolant_temp_c", "battery_coolant_temp_f"),
+            ("engine_oil_temp_c", "engine_oil_temp_f"),
+            ("engine_coolant_temp_c", "coolant_temp_f"),  # Volt-specific overrides generic
+            ("transmission_temp_c", "transmission_temp_f"),
+        ]
+        for src, dst in TEMP_CONVERSIONS:
+            if src in temp_values:
+                result[dst] = cls._celsius_to_fahrenheit(temp_values[src])
+
+        # Special handling: fuel gallons from percent
         if "fuel_level_percent" in temp_values:
             from utils import fuel_percent_to_gallons
-            result["fuel_level_percent"] = temp_values["fuel_level_percent"]
-            # Calculate gallons remaining using configured tank capacity
             result["fuel_remaining_gallons"] = fuel_percent_to_gallons(temp_values["fuel_level_percent"])
-        if "state_of_charge" in temp_values:
-            result["state_of_charge"] = temp_values["state_of_charge"]
-        if "battery_voltage" in temp_values:
-            result["battery_voltage"] = temp_values["battery_voltage"]
 
-        # Convert temperatures from C to F
-        if "coolant_temp_c" in temp_values:
-            result["coolant_temp_f"] = cls._celsius_to_fahrenheit(temp_values["coolant_temp_c"])
-        if "intake_air_temp_c" in temp_values:
-            result["intake_air_temp_f"] = cls._celsius_to_fahrenheit(temp_values["intake_air_temp_c"])
-        if "ambient_temp_c" in temp_values:
-            result["ambient_temp_f"] = cls._celsius_to_fahrenheit(temp_values["ambient_temp_c"])
-
-        # Handle odometer
-        if "odometer_miles" in temp_values:
-            result["odometer_miles"] = temp_values["odometer_miles"]
-        elif "odometer_km" in temp_values:
+        # Odometer km fallback
+        if result["odometer_miles"] is None and "odometer_km" in temp_values:
             result["odometer_miles"] = temp_values["odometer_km"] * 0.621371
 
-        # HV Battery tracking
-        if "hv_battery_power_kw" in temp_values:
-            result["hv_battery_power_kw"] = temp_values["hv_battery_power_kw"]
-        if "hv_battery_current_a" in temp_values:
-            result["hv_battery_current_a"] = temp_values["hv_battery_current_a"]
-        if "hv_battery_voltage_v" in temp_values:
-            result["hv_battery_voltage_v"] = temp_values["hv_battery_voltage_v"]
-        if "hv_discharge_amps" in temp_values:
-            result["hv_discharge_amps"] = temp_values["hv_discharge_amps"]
-        if "battery_temp_c" in temp_values:
-            result["battery_temp_f"] = cls._celsius_to_fahrenheit(temp_values["battery_temp_c"])
-        if "battery_coolant_temp_c" in temp_values:
-            result["battery_coolant_temp_f"] = cls._celsius_to_fahrenheit(temp_values["battery_coolant_temp_c"])
-
-        # Charging status (expanded)
+        # Charger status → charger_connected
         if "charger_status" in temp_values:
-            result["charger_status"] = temp_values["charger_status"]
-            # Derive charger_connected from status (status > 0 means connected)
             result["charger_connected"] = temp_values["charger_status"] > 0
+
+        # Charger power legacy fields
         if "charger_power_kw" in temp_values:
-            result["charger_power_kw"] = temp_values["charger_power_kw"]
-            result["charger_ac_power_kw"] = temp_values["charger_power_kw"]  # Legacy field
-        if "charger_power_w" in temp_values:
-            result["charger_power_w"] = temp_values["charger_power_w"]
-            # Also set kW version if not already set
-            if result["charger_power_kw"] is None:
-                result["charger_power_kw"] = temp_values["charger_power_w"] / 1000
-                result["charger_ac_power_kw"] = temp_values["charger_power_w"] / 1000
-        if "charger_ac_voltage" in temp_values:
-            result["charger_ac_voltage"] = temp_values["charger_ac_voltage"]
-        if "charger_ac_current" in temp_values:
-            result["charger_ac_current"] = temp_values["charger_ac_current"]
-        if "charger_hv_voltage" in temp_values:
-            result["charger_hv_voltage"] = temp_values["charger_hv_voltage"]
-        if "charger_hv_current" in temp_values:
-            result["charger_hv_current"] = temp_values["charger_hv_current"]
-        if "last_charge_wh" in temp_values:
-            result["last_charge_wh"] = temp_values["last_charge_wh"]
+            result["charger_ac_power_kw"] = temp_values["charger_power_kw"]
+        if "charger_power_w" in temp_values and result["charger_power_kw"] is None:
+            result["charger_power_kw"] = temp_values["charger_power_w"] / 1000
+            result["charger_ac_power_kw"] = temp_values["charger_power_w"] / 1000
 
-        # Motor/Generator
-        if "motor_a_rpm" in temp_values:
-            result["motor_a_rpm"] = temp_values["motor_a_rpm"]
-        if "motor_b_rpm" in temp_values:
-            result["motor_b_rpm"] = temp_values["motor_b_rpm"]
-        if "generator_rpm" in temp_values:
-            result["generator_rpm"] = temp_values["generator_rpm"]
-
-        # Motor temperatures - collect all and find max
-        motor_temps = []
-        for key in ["motor_temp_1_c", "motor_temp_2_c", "motor_temp_3_c", "motor_temp_4_c"]:
-            if key in temp_values and temp_values[key] is not None:
-                motor_temps.append(temp_values[key])
+        # Motor temperatures — find max across all sensors
+        motor_temps = [
+            temp_values[k] for k in ["motor_temp_1_c", "motor_temp_2_c", "motor_temp_3_c", "motor_temp_4_c"]
+            if k in temp_values and temp_values[k] is not None
+        ]
         if motor_temps:
             result["motor_temp_max_f"] = cls._celsius_to_fahrenheit(max(motor_temps))
 
-        # Engine details
-        if "engine_oil_temp_c" in temp_values:
-            result["engine_oil_temp_f"] = cls._celsius_to_fahrenheit(temp_values["engine_oil_temp_c"])
-        if "engine_torque_nm" in temp_values:
-            result["engine_torque_nm"] = temp_values["engine_torque_nm"]
+        # Engine running boolean
         if "engine_running" in temp_values:
             result["engine_running"] = temp_values["engine_running"] > 0
-        if "engine_coolant_temp_c" in temp_values:
-            # Use Volt-specific coolant temp if available, overrides generic
-            result["coolant_temp_f"] = cls._celsius_to_fahrenheit(temp_values["engine_coolant_temp_c"])
-        if "transmission_temp_c" in temp_values:
-            result["transmission_temp_f"] = cls._celsius_to_fahrenheit(temp_values["transmission_temp_c"])
 
-        # Battery health
-        if "battery_capacity_kwh" in temp_values:
-            result["battery_capacity_kwh"] = temp_values["battery_capacity_kwh"]
-
-        # Lifetime counters
-        if "lifetime_ev_miles" in temp_values:
-            result["lifetime_ev_miles"] = temp_values["lifetime_ev_miles"]
-        if "lifetime_gas_miles" in temp_values:
-            result["lifetime_gas_miles"] = temp_values["lifetime_gas_miles"]
-        if "lifetime_fuel_gal" in temp_values:
-            result["lifetime_fuel_gal"] = temp_values["lifetime_fuel_gal"]
-        if "lifetime_kwh" in temp_values:
-            result["lifetime_kwh"] = temp_values["lifetime_kwh"]
-        if "dte_electric_miles" in temp_values:
-            result["dte_electric_miles"] = temp_values["dte_electric_miles"]
-        if "dte_gas_miles" in temp_values:
-            result["dte_gas_miles"] = temp_values["dte_gas_miles"]
-
-        # TPMS - Experimental (log when data is received for debugging)
-        if "tpms_pressure_raw" in temp_values:
-            result["tpms_pressure_raw"] = temp_values["tpms_pressure_raw"]
-            logger.info(f"TPMS pressure data received (experimental): {temp_values['tpms_pressure_raw']}")
-        if "tpms_temp_raw" in temp_values:
-            result["tpms_temp_raw"] = temp_values["tpms_temp_raw"]
-            logger.info(f"TPMS temp data received (experimental): {temp_values['tpms_temp_raw']}")
+        # TPMS — experimental (log when data arrives)
+        for tpms_key in ("tpms_pressure_raw", "tpms_temp_raw"):
+            if tpms_key in temp_values:
+                result[tpms_key] = temp_values[tpms_key]
+                logger.info(f"TPMS data received (experimental): {tpms_key}={temp_values[tpms_key]}")
 
         return result
 

@@ -1,3 +1,9 @@
+-- WARNING: This file is for initial TimescaleDB setup only.
+-- The canonical schema is defined in models.py and managed by Alembic.
+-- This file creates tables for the initial setup before Alembic runs.
+-- After first deployment, only Alembic migrations modify the schema.
+-- Keep only TimescaleDB-specific commands (hypertables, compression policies).
+--
 -- Volt Efficiency Tracker Database Schema
 -- PostgreSQL 15 with TimescaleDB
 
@@ -78,6 +84,7 @@ CREATE TABLE telemetry_raw (
 );
 
 CREATE INDEX idx_telemetry_timestamp ON telemetry_raw(timestamp);
+CREATE INDEX IF NOT EXISTS ix_telemetry_timestamp_desc ON telemetry_raw (timestamp DESC);
 CREATE INDEX idx_telemetry_session ON telemetry_raw(session_id);
 CREATE INDEX idx_telemetry_soc ON telemetry_raw(state_of_charge);
 CREATE INDEX idx_telemetry_rpm ON telemetry_raw(engine_rpm);

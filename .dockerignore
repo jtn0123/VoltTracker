@@ -1,0 +1,12 @@
+.git/
+node_modules/
+__pycache__/
+*.pyc
+.env
+logs/
+.pytest_cache/
+e2e/
+.github/
+# Exclude all markdown except README
+*.md
+!README.md

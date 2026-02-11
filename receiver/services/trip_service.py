@@ -259,7 +259,7 @@ def fetch_trip_weather(trip: Trip, points: list, db_session=None) -> None:
                 }
                 trip.weather_conditions = max(
                     condition_counts.keys(),
-                    key=lambda c: (condition_counts[c], severity_order.get(c, 0))
+                    key=lambda c: (condition_counts[c], severity_order.get(c, 0))  # type: ignore
                 )
 
             # Calculate average impact factor

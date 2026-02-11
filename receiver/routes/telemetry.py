@@ -145,7 +145,11 @@ def torque_upload(token=None):
                 logger.debug(str(structured_error))
                 db.rollback()
                 trip = db.query(Trip).filter(Trip.session_id == data["session_id"]).first()
-                # If trip is still None after retry (rare - possibly deleted), skip trip updates
+                # R4: Trip-deletion edge case — If a user deletes a trip via the API
+                # while Torque is still uploading telemetry for that session, the trip
+                # row will be gone after the race-condition retry. In this case we log
+                # the situation and continue storing the telemetry orphan. The telemetry
+                # is still valuable for diagnostics even without a parent trip.
                 if trip is None:
                     event.add_context(trip_missing_after_retry=True)
                     logger.warning(f"Trip not found after race condition retry: {data['session_id']}")
@@ -201,6 +205,35 @@ def torque_upload(token=None):
             except Exception as commit_error:
                 db.rollback()
                 logger.error(f"Failed to commit telemetry: {commit_error}", exc_info=True)
+
+                # R2: File-based fallback — persist failed telemetry to disk so
+                # it can be replayed later when the database recovers.
+                try:
+                    import os as _os
+                    fallback_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "logs")
+                    _os.makedirs(fallback_dir, exist_ok=True)
+                    fallback_path = _os.path.join(fallback_dir, "failed_telemetry.jsonl")
+                    # R15: Rotate fallback file if it exceeds 10MB to prevent unbounded growth
+                    _max_fallback_bytes = 10 * 1024 * 1024
+                    if _os.path.exists(fallback_path) and _os.path.getsize(fallback_path) > _max_fallback_bytes:
+                        _rotated = fallback_path + ".1"
+                        if _os.path.exists(_rotated):
+                            _os.remove(_rotated)
+                        _os.rename(fallback_path, _rotated)
+                    import json as _json
+                    fallback_record = {
+                        "session_id": str(data.get("session_id")),
+                        "timestamp": data.get("timestamp").isoformat() if data.get("timestamp") else None,
+                        "raw_data": data.get("raw_data"),
+                        "error": str(commit_error),
+                        "logged_at": utc_now().isoformat(),
+                    }
+                    with open(fallback_path, "a") as fb:
+                        fb.write(_json.dumps(fallback_record) + "\n")
+                    logger.info("Wrote failed telemetry to fallback file")
+                except Exception as fb_err:
+                    logger.error(f"Failed to write telemetry fallback: {fb_err}")
+
                 event.add_error(StructuredError(
                     ErrorCode.E200_DB_CONNECTION_FAILED,
                     "Failed to commit telemetry",
@@ -211,8 +244,31 @@ def torque_upload(token=None):
                 return "OK!"  # Return OK to prevent Torque retries
 
         # Invalidate cached query results when new telemetry arrives
-        from utils.query_cache import invalidate_cache_pattern as invalidate_query_cache
-        invalidate_query_cache("telemetry")
+        # P11: Debounce cache invalidation — only invalidate if >5s since last invalidation
+        # to avoid hammering Redis with SCAN/DEL on every upload (~1/sec)
+        from utils.cache_utils import get_redis_cache as _get_redis
+        _redis = _get_redis()
+        _should_invalidate = True
+        if _redis:
+            try:
+                _debounce_key = "cache_invalidation_debounce"
+                if _redis.get(_debounce_key):
+                    _should_invalidate = False
+                else:
+                    _redis.setex(_debounce_key, 5, "1")
+            except Exception:
+                pass
+
+        if _should_invalidate:
+            from utils.query_cache import invalidate_cache_pattern as invalidate_query_cache
+            invalidate_query_cache("telemetry")
+
+        # P2: Always invalidate latest telemetry cache (small key, fast)
+        if _redis:
+            try:
+                _redis.delete("latest_telemetry")
+            except Exception:
+                pass
 
         # Emit real-time update to WebSocket clients if socketio is available
         socketio = current_app.extensions.get("socketio")
@@ -367,12 +423,32 @@ def _calculate_trip_stats(first: TelemetryRaw | None, latest: TelemetryRaw | Non
 
 @telemetry_bp.route("/api/telemetry/latest", methods=["GET"])
 def get_latest_telemetry():
-    """Get latest telemetry for real-time dashboard display."""
+    """Get latest telemetry for real-time dashboard display.
+
+    P2: Uses Redis cache with 5s TTL to avoid ORDER BY timestamp DESC LIMIT 1
+    on the full telemetry_raw table every request.
+    Hint: a descending index on (timestamp DESC) would further optimize this query.
+    """
     from sqlalchemy import desc
+    from utils.cache_utils import get_redis_cache
+    import json as _json
 
     db = get_db()
 
+    # P2: Try Redis cache first (5s TTL)
+    # S1: Use json instead of pickle to avoid deserialization attacks
+    redis = get_redis_cache()
+    cache_key = "latest_telemetry"
+    if redis:
+        try:
+            cached = redis.get(cache_key)
+            if cached is not None:
+                return jsonify(_json.loads(cached))
+        except Exception:
+            pass  # Fall through to DB query
+
     # Find the most recent telemetry point to identify the active trip
+    # P2: Consider adding index: CREATE INDEX ix_telemetry_timestamp_desc ON telemetry_raw (timestamp DESC)
     latest_telemetry = db.query(TelemetryRaw).order_by(desc(TelemetryRaw.timestamp)).first()
 
     if not latest_telemetry:
@@ -409,45 +485,52 @@ def get_latest_telemetry():
     # Calculate trip efficiency stats
     trip_stats = _calculate_trip_stats(first_telemetry, latest, active_trip)
 
-    return jsonify(
-        {
-            "active": True,
-            "session_id": str(latest_telemetry.session_id),
-            "start_time": active_trip.start_time.isoformat() if active_trip else None,
-            "start_soc": float(active_trip.start_soc) if active_trip and active_trip.start_soc else None,
-            "data": {
-                "timestamp": latest.timestamp.isoformat(),
-                "soc": float(latest.state_of_charge) if latest.state_of_charge else None,
-                "fuel_percent": float(latest.fuel_level_percent) if latest.fuel_level_percent else None,
-                "speed_mph": float(latest.speed_mph) if latest.speed_mph else None,
-                "engine_rpm": float(latest.engine_rpm) if latest.engine_rpm else None,
-                "latitude": float(latest.latitude) if latest.latitude else None,
-                "longitude": float(latest.longitude) if latest.longitude else None,
-                "odometer": float(latest.odometer_miles) if latest.odometer_miles else None,
-                # Power flow data
-                "hv_battery_power_kw": float(latest.hv_battery_power_kw) if latest.hv_battery_power_kw else None,
-                "hv_battery_voltage_v": float(latest.hv_battery_voltage_v) if latest.hv_battery_voltage_v else None,
-                "hv_battery_current_a": float(latest.hv_battery_current_a) if latest.hv_battery_current_a else None,
-                # Motor/Generator
-                "motor_a_rpm": float(latest.motor_a_rpm) if latest.motor_a_rpm else None,
-                "motor_b_rpm": float(latest.motor_b_rpm) if latest.motor_b_rpm else None,
-                "generator_rpm": float(latest.generator_rpm) if latest.generator_rpm else None,
-                "motor_temp_max_f": float(latest.motor_temp_max_f) if latest.motor_temp_max_f else None,
-                # Engine
-                "engine_running": (
-                    latest.engine_running
-                    if latest.engine_running is not None
-                    else (latest.engine_rpm and latest.engine_rpm > Config.RPM_THRESHOLD)
-                ),
-                "engine_oil_temp_f": float(latest.engine_oil_temp_f) if latest.engine_oil_temp_f else None,
-                # Battery health
-                "battery_capacity_kwh": float(latest.battery_capacity_kwh) if latest.battery_capacity_kwh else None,
-                "battery_temp_f": float(latest.battery_temp_f) if latest.battery_temp_f else None,
-                # Charging
-                "charger_power_kw": float(latest.charger_power_kw) if latest.charger_power_kw else None,
-                "charger_connected": latest.charger_connected,
-            },
-            "trip_stats": trip_stats,
-            "point_count": len(recent),
-        }
-    )
+    result = {
+        "active": True,
+        "session_id": str(latest_telemetry.session_id),
+        "start_time": active_trip.start_time.isoformat() if active_trip else None,
+        "start_soc": float(active_trip.start_soc) if active_trip and active_trip.start_soc else None,
+        "data": {
+            "timestamp": latest.timestamp.isoformat(),
+            "soc": float(latest.state_of_charge) if latest.state_of_charge else None,
+            "fuel_percent": float(latest.fuel_level_percent) if latest.fuel_level_percent else None,
+            "speed_mph": float(latest.speed_mph) if latest.speed_mph else None,
+            "engine_rpm": float(latest.engine_rpm) if latest.engine_rpm else None,
+            "latitude": float(latest.latitude) if latest.latitude else None,
+            "longitude": float(latest.longitude) if latest.longitude else None,
+            "odometer": float(latest.odometer_miles) if latest.odometer_miles else None,
+            # Power flow data
+            "hv_battery_power_kw": float(latest.hv_battery_power_kw) if latest.hv_battery_power_kw else None,
+            "hv_battery_voltage_v": float(latest.hv_battery_voltage_v) if latest.hv_battery_voltage_v else None,
+            "hv_battery_current_a": float(latest.hv_battery_current_a) if latest.hv_battery_current_a else None,
+            # Motor/Generator
+            "motor_a_rpm": float(latest.motor_a_rpm) if latest.motor_a_rpm else None,
+            "motor_b_rpm": float(latest.motor_b_rpm) if latest.motor_b_rpm else None,
+            "generator_rpm": float(latest.generator_rpm) if latest.generator_rpm else None,
+            "motor_temp_max_f": float(latest.motor_temp_max_f) if latest.motor_temp_max_f else None,
+            # Engine
+            "engine_running": (
+                latest.engine_running
+                if latest.engine_running is not None
+                else (latest.engine_rpm and latest.engine_rpm > Config.RPM_THRESHOLD)
+            ),
+            "engine_oil_temp_f": float(latest.engine_oil_temp_f) if latest.engine_oil_temp_f else None,
+            # Battery health
+            "battery_capacity_kwh": float(latest.battery_capacity_kwh) if latest.battery_capacity_kwh else None,
+            "battery_temp_f": float(latest.battery_temp_f) if latest.battery_temp_f else None,
+            # Charging
+            "charger_power_kw": float(latest.charger_power_kw) if latest.charger_power_kw else None,
+            "charger_connected": latest.charger_connected,
+        },
+        "trip_stats": trip_stats,
+        "point_count": len(recent),
+    }
+
+    # P2: Cache result in Redis with 5s TTL
+    if redis:
+        try:
+            redis.setex(cache_key, 5, _json.dumps(result, default=str))
+        except Exception:
+            pass  # Non-critical
+
+    return jsonify(result)

@@ -19,12 +19,8 @@
 
     <!-- Leaflet.js for maps - lazy loaded when needed -->
     <!-- Chart.js - lazy loaded when charts section becomes visible -->
-    <!-- Flatpickr date picker -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
-    <script defer src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <!-- Socket.IO for real-time updates -->
-    <script defer src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- UX25: Flatpickr, Socket.IO, and Chart.js are bundled via npm/Vite (vendor.ts).
+         CDN fallback scripts removed to avoid duplicate loads and version mismatches. -->
     <!-- PWA Support -->
     <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#6366f1">
@@ -38,7 +34,7 @@
     <header class="header" role="banner">
         <h1>Volt Efficiency Tracker <span class="app-version" title="Version {{ app_version | default('unknown') }}">v{{ app_version | default('unknown') }}</span></h1>
         <div class="header-actions">
-            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle dark/light theme" aria-pressed="true">
+            <button class="theme-toggle" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle dark/light theme" aria-pressed="true">
                 <span class="theme-icon" id="theme-icon" aria-hidden="true">🌙</span>
             </button>
             <a href="/map" class="btn-map-view" title="View GPS track map" aria-label="View GPS track map">
@@ -48,7 +44,7 @@
                 Map
             </a>
             <div class="export-dropdown">
-                <button class="export-btn" onclick="toggleExportMenu()" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu" id="export-btn">
+                <button class="export-btn" data-action="toggle-export-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu" id="export-btn">
                     Export ▾
                 </button>
                 <div class="export-menu" id="export-menu" role="menu" aria-labelledby="export-btn">
@@ -72,13 +68,13 @@
         <!-- Live Trip Section (hidden by default, shown when trip is active) -->
         <section id="live-trip-section" class="card card-live" style="display:none;" role="region" aria-label="Live trip data">
             <h2>Live Trip</h2>
-            <div id="live-trip-content">
+            <div id="live-trip-content" aria-live="polite">
                 <!-- Populated by JavaScript -->
             </div>
         </section>
 
         <!-- Power Flow Section (hidden by default, shown when live data has power flow info) -->
-        <section id="power-flow-section" class="card card-power-flow" style="display:none;" role="region" aria-label="Power flow visualization">
+        <section id="power-flow-section" class="card card-power-flow" style="display:none;" role="region" aria-label="Power flow visualization" aria-live="polite">
             <h2>Power Flow</h2>
             <div class="power-flow-container">
                 <!-- Power Flow Diagram -->
@@ -187,7 +183,7 @@
         </section>
 
         <!-- Battery Health Card (hidden until data exists) -->
-        <section id="battery-health-section" class="battery-health-section" style="display:none;" aria-labelledby="battery-health-title">
+        <section id="battery-health-section" class="battery-health-section skeleton-card" style="display:none;" aria-labelledby="battery-health-title">
             <div class="card card-battery-health" role="region" aria-labelledby="battery-health-title">
                 <div class="battery-health-header">
                     <h3 id="battery-health-title">Battery Health</h3>
@@ -269,14 +265,14 @@
         </section>
 
         <!-- MPG Trend Chart -->
-        <section class="chart-section" aria-labelledby="mpg-chart-title">
+        <section class="chart-section skeleton-card" aria-labelledby="mpg-chart-title">
             <div class="chart-header">
                 <h2 class="chart-title" id="mpg-chart-title">Gas MPG Trend</h2>
                 <div class="timeframe-selector" role="group" aria-label="Chart timeframe">
-                    <button class="timeframe-btn" data-days="7" onclick="setTimeframe(7)" aria-pressed="false">7 Days</button>
-                    <button class="timeframe-btn active" data-days="30" onclick="setTimeframe(30)" aria-pressed="true">30 Days</button>
-                    <button class="timeframe-btn" data-days="90" onclick="setTimeframe(90)" aria-pressed="false">90 Days</button>
-                    <button class="timeframe-btn" data-days="0" onclick="setTimeframe(0)" aria-pressed="false">All Time</button>
+                    <button class="timeframe-btn" data-days="7" data-action="set-timeframe" data-timeframe="7" aria-pressed="false">7 Days</button>
+                    <button class="timeframe-btn active" data-days="30" data-action="set-timeframe" data-timeframe="30" aria-pressed="true">30 Days</button>
+                    <button class="timeframe-btn" data-days="90" data-action="set-timeframe" data-timeframe="90" aria-pressed="false">90 Days</button>
+                    <button class="timeframe-btn" data-days="0" data-action="set-timeframe" data-timeframe="0" aria-pressed="false">All Time</button>
                 </div>
             </div>
             <div class="chart-container">
@@ -285,13 +281,13 @@
         </section>
 
         <!-- Recent Trips -->
-        <section id="trips-section" class="trips-section" aria-labelledby="trips-title">
+        <section id="trips-section" class="trips-section skeleton-card" aria-labelledby="trips-title">
             <div class="section-header">
                 <h2 class="section-title" id="trips-title">Recent Trips</h2>
                 <div class="date-filter">
                     <label for="date-range" class="visually-hidden">Filter trips by date range</label>
                     <input type="text" id="date-range" placeholder="Filter by date range" readonly aria-label="Filter by date range">
-                    <button class="btn-clear-filter" id="clear-date-filter" onclick="clearDateFilter()" style="display: none;" aria-label="Clear date filter">Clear</button>
+                    <button class="btn-clear-filter" id="clear-date-filter" data-action="clear-date-filter" style="display: none;" aria-label="Clear date filter">Clear</button>
                 </div>
             </div>
 
@@ -375,7 +371,7 @@
         <section id="charging-section" class="charging-section" aria-labelledby="charging-title">
             <div class="section-header">
                 <h2 class="section-title" id="charging-title">Charging History</h2>
-                <button class="btn-add" onclick="openAddChargingModal()" aria-label="Add new charging session">+ Add Session</button>
+                <button class="btn-add" data-action="open-add-charging" aria-label="Add new charging session">+ Add Session</button>
             </div>
             <div class="charging-stats-row">
                 <div class="charging-stats" role="region" aria-label="Charging session counts">
@@ -463,11 +459,11 @@
 
     <!-- Trip Detail Modal -->
     <div class="modal" id="trip-modal" role="dialog" aria-modal="true" aria-labelledby="trip-modal-title" aria-hidden="true">
-        <div class="modal-backdrop" onclick="closeTripModal()"></div>
+        <div class="modal-backdrop" data-action="close-trip-modal"></div>
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="trip-modal-title">Trip Details</h2>
-                <button class="modal-close" onclick="closeTripModal()" aria-label="Close trip details">&times;</button>
+                <button class="modal-close" data-action="close-trip-modal" aria-label="Close trip details">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="trip-detail-summary" id="trip-detail-summary" role="region" aria-label="Trip statistics">
@@ -504,11 +500,11 @@
 
     <!-- Charging Session Detail Modal -->
     <div class="modal" id="charging-detail-modal" role="dialog" aria-modal="true" aria-labelledby="charging-detail-title" aria-hidden="true">
-        <div class="modal-backdrop" onclick="closeChargingDetailModal()"></div>
+        <div class="modal-backdrop" data-action="close-charging-detail-modal"></div>
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="charging-detail-title">Charging Session Details</h2>
-                <button class="modal-close" onclick="closeChargingDetailModal()" aria-label="Close session details">&times;</button>
+                <button class="modal-close" data-action="close-charging-detail-modal" aria-label="Close session details">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="charging-detail-summary" id="charging-detail-summary" role="region" aria-label="Charging statistics">
@@ -529,14 +525,14 @@
 
     <!-- Add Charging Session Modal -->
     <div class="modal" id="charging-modal" role="dialog" aria-modal="true" aria-labelledby="charging-modal-title" aria-hidden="true">
-        <div class="modal-backdrop" onclick="closeChargingModal()"></div>
+        <div class="modal-backdrop" data-action="close-charging-modal"></div>
         <div class="modal-content modal-form">
             <div class="modal-header">
                 <h2 id="charging-modal-title">Add Charging Session</h2>
-                <button class="modal-close" onclick="closeChargingModal()" aria-label="Close charging form">&times;</button>
+                <button class="modal-close" data-action="close-charging-modal" aria-label="Close charging form">&times;</button>
             </div>
             <div class="modal-body">
-                <form id="charging-form" onsubmit="submitChargingSession(event)" aria-label="Add charging session form">
+                <form id="charging-form" data-action="submit-charging-session" aria-label="Add charging session form">
                     <div class="form-row">
                         <div class="form-group">
                             <label for="charge-start">Start Time</label>
@@ -587,7 +583,7 @@
                         <textarea id="charge-notes" rows="2" placeholder="Optional notes..."></textarea>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn-secondary" onclick="closeChargingModal()">Cancel</button>
+                        <button type="button" class="btn-secondary" data-action="close-charging-modal">Cancel</button>
                         <button type="submit" class="btn-primary">Save Session</button>
                     </div>
                 </form>
@@ -597,17 +593,17 @@
 
     <!-- Import Result Modal -->
     <div class="modal" id="import-result-modal" role="dialog" aria-modal="true" aria-labelledby="import-result-title" aria-hidden="true">
-        <div class="modal-backdrop" onclick="closeImportResultModal()"></div>
+        <div class="modal-backdrop" data-action="close-import-result-modal"></div>
         <div class="modal-content modal-import-result">
             <div class="modal-header">
                 <h2 id="import-result-title">Import Result</h2>
-                <button class="modal-close" onclick="closeImportResultModal()" aria-label="Close import result">&times;</button>
+                <button class="modal-close" data-action="close-import-result-modal" aria-label="Close import result">&times;</button>
             </div>
             <div class="modal-body">
                 <!-- Import Code -->
                 <div class="import-code-display" role="region" aria-label="Import code">
                     <span class="import-code-text" id="import-code-text">IMP-XXXXXXXX-XXXXXX</span>
-                    <button class="btn-copy-code" onclick="copyImportCode()" title="Copy import code" aria-label="Copy import code">
+                    <button class="btn-copy-code" data-action="copy-import-code" title="Copy import code" aria-label="Copy import code">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -656,7 +652,7 @@
                 </details>
 
                 <!-- Copy Report Button -->
-                <button class="btn-copy-report" onclick="copyImportReport()" aria-label="Copy full import report">
+                <button class="btn-copy-report" data-action="copy-import-report" aria-label="Copy full import report">
                     Copy Full Report
                 </button>
             </div>

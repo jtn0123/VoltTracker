@@ -1,8 +1,9 @@
 import uuid as uuid_module
-from typing import Any
+
 
 from config import Config
 from sqlalchemy import (
+    BigInteger,
     JSON,
     Boolean,
     Column,
@@ -19,11 +20,34 @@ from sqlalchemy import (
     create_engine,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker  # type: ignore[attr-defined]
 from utils.timezone import utc_now
 
-Base: Any = declarative_base()
+
+class Base(DeclarativeBase):
+    """Base class for all SQLAlchemy models using the modern DeclarativeBase pattern (C4)."""
+    pass
+
+
+class SerializableMixin:
+    """Mixin that auto-generates to_dict() from column inspection (C2).
+
+    Models can override to_dict() for computed fields or custom serialization.
+    C16: Reviewed — overrides kept where they exclude fields (created_at, raw_data)
+    or add computed values (duration_minutes, soc_gained, degradation_percent).
+    """
+
+    def to_dict(self):
+        """Auto-generate dict from column inspection."""
+        result = {}
+        for col in self.__table__.columns:
+            value = getattr(self, col.name)
+            if hasattr(value, 'isoformat'):
+                value = value.isoformat()
+            elif isinstance(value, uuid_module.UUID):
+                value = str(value)
+            result[col.name] = value
+        return result
 
 
 # Custom UUID type that works with both PostgreSQL and SQLite
@@ -76,16 +100,19 @@ class JSONType(TypeDecorator):
             return dialect.type_descriptor(JSON)
 
 
-class TelemetryRaw(Base):
+class TelemetryRaw(SerializableMixin, Base):
     """Raw telemetry data from Torque Pro."""
 
     __tablename__ = "telemetry_raw"
     __table_args__ = (
         # Composite index for common query pattern: telemetry for a session ordered by time
         Index("ix_telemetry_session_timestamp", "session_id", "timestamp"),
+        # D31: Prevent duplicate telemetry points for the same session+timestamp
+        UniqueConstraint("session_id", "timestamp", name="uq_telemetry_session_timestamp"),
     )
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    # D30: BigInteger PK to handle high-volume telemetry (>2B rows over lifetime)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     session_id = Column(GUID(), nullable=False, index=True)
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     latitude = Column(Float)
@@ -150,6 +177,11 @@ class TelemetryRaw(Base):
     # Elevation (populated by elevation API during trip finalization)
     elevation_meters = Column(Float)
 
+    # WARNING: raw_data stores the full Torque POST payload as JSONB. This can grow
+    # significantly over time (each row ~1-2KB). At high upload rates (~1/sec during
+    # trips), expect ~5-10MB/day. TODO: Implement a data retention policy to archive
+    # or purge raw_data older than N months. Consider moving to a separate table or
+    # using TimescaleDB compression (already enabled) to mitigate storage concerns.
     raw_data = Column(JSONType())
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
@@ -206,7 +238,7 @@ class TelemetryRaw(Base):
         }
 
 
-class Trip(Base):
+class Trip(SerializableMixin, Base):
     """Aggregated trip summaries."""
 
     __tablename__ = "trips"
@@ -312,7 +344,7 @@ class Trip(Base):
         }
 
 
-class FuelEvent(Base):
+class FuelEvent(SerializableMixin, Base):
     """Refueling events for tank-based efficiency calculations."""
 
     __tablename__ = "fuel_events"
@@ -342,7 +374,7 @@ class FuelEvent(Base):
         }
 
 
-class SocTransition(Base):
+class SocTransition(SerializableMixin, Base):
     """Records electric-to-gas transitions for SOC floor analysis."""
 
     __tablename__ = "soc_transitions"
@@ -369,7 +401,7 @@ class SocTransition(Base):
         }
 
 
-class ChargingSession(Base):
+class ChargingSession(SerializableMixin, Base):
     """Tracks charging sessions for energy analysis."""
 
     __tablename__ = "charging_sessions"
@@ -440,7 +472,7 @@ class ChargingSession(Base):
         }
 
 
-class BatteryHealthReading(Base):
+class BatteryHealthReading(SerializableMixin, Base):
     """Tracks battery capacity over time for degradation analysis.
 
     The battery capacity PID (2241A3) reports the current usable capacity.
@@ -486,7 +518,7 @@ class BatteryHealthReading(Base):
         return None
 
 
-class BatteryCellReading(Base):
+class BatteryCellReading(SerializableMixin, Base):
     """Stores individual cell voltage readings from the HV battery pack.
 
     The Gen 2 Volt has 96 cells arranged in 3 sections/modules.
@@ -574,26 +606,12 @@ class BatteryCellReading(Base):
         )
 
 
-class WebVital(Base):
-    """Stores Web Vitals performance metrics from the frontend.
-
-    Tracks Core Web Vitals and other performance metrics to monitor
-    application performance in real-world usage.
-
-    Metrics tracked:
-    - LCP (Largest Contentful Paint): Load performance
-    - FID (First Input Delay): Interactivity (deprecated, use INP)
-    - INP (Interaction to Next Paint): Interactivity
-    - CLS (Cumulative Layout Shift): Visual stability
-    - FCP (First Contentful Paint): Initial render
-    - TTFB (Time to First Byte): Server response time
-    """
+class WebVital(SerializableMixin, Base):
+    """Stores Web Vitals performance metrics from the frontend."""
 
     __tablename__ = "web_vitals"
     __table_args__ = (
-        # Index for querying metrics by name and date
         Index("ix_web_vitals_name_timestamp", "name", "timestamp"),
-        # Index for analyzing by rating
         Index("ix_web_vitals_rating", "rating"),
     )
 
@@ -601,15 +619,15 @@ class WebVital(Base):
     timestamp = Column(DateTime(timezone=True), nullable=False, default=utc_now, index=True)
 
     # Metric details
-    name = Column(String(50), nullable=False)  # LCP, FID, CLS, etc.
-    value = Column(Float, nullable=False)  # Metric value in milliseconds or score
-    rating = Column(String(20))  # 'good', 'needs-improvement', 'poor'
+    name = Column(String(50), nullable=False)
+    value = Column(Float, nullable=False)
+    rating = Column(String(20))
 
     # Context
-    metric_id = Column(String(100))  # Unique ID from web-vitals library
-    navigation_type = Column(String(50))  # 'navigate', 'reload', 'back_forward', etc.
-    url = Column(String(500))  # Page URL where metric was recorded
-    user_agent = Column(Text)  # Browser user agent string
+    metric_id = Column(String(100))
+    navigation_type = Column(String(50))
+    url = Column(String(500))
+    user_agent = Column(Text)
 
     # Metadata
     created_at = Column(DateTime(timezone=True), default=utc_now)
@@ -630,23 +648,7 @@ class WebVital(Base):
 
     @classmethod
     def create_from_frontend(cls, data):
-        """
-        Create a WebVital record from frontend data.
-
-        Args:
-            data (dict): Frontend data containing:
-                - name: Metric name (LCP, FID, etc.)
-                - value: Metric value
-                - rating: Performance rating
-                - id: Metric ID
-                - navigationType: Navigation type
-                - url: Page URL
-                - userAgent: Browser user agent
-                - timestamp: ISO timestamp string
-
-        Returns:
-            WebVital: New WebVital instance (not yet committed)
-        """
+        """Create a WebVital record from frontend data."""
         from datetime import datetime
 
         timestamp = data.get("timestamp")
@@ -673,7 +675,7 @@ class WebVital(Base):
         return f"<WebVital(name={self.name}, value={self.value}, rating={self.rating})>"
 
 
-class MaintenanceRecord(Base):
+class MaintenanceRecord(SerializableMixin, Base):
     """Track maintenance items and predict when service is due."""
 
     __tablename__ = "maintenance_records"
@@ -710,13 +712,13 @@ class MaintenanceRecord(Base):
         }
 
 
-class Route(Base):
+class Route(SerializableMixin, Base):
     """Common routes detected from GPS patterns."""
 
     __tablename__ = "routes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(200))  # User-given or auto-generated
+    name = Column(String(200))
     start_lat = Column(Float, nullable=False)
     start_lon = Column(Float, nullable=False)
     end_lat = Column(Float, nullable=False)
@@ -731,7 +733,7 @@ class Route(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
     # Elevation data
-    elevation_profile = Column(JSONType())  # Cached elevation profile
+    elevation_profile = Column(JSONType())
     avg_elevation_gain_m = Column(Float)
     avg_elevation_loss_m = Column(Float)
 
@@ -754,41 +756,30 @@ class Route(Base):
         }
 
 
-class WeatherCache(Base):
-    """
-    Persistent cache for weather API responses.
-
-    Stores weather data from Open-Meteo API to reduce redundant API calls.
-    Cache key is based on rounded coordinates and hour timestamp.
-    """
+class WeatherCache(SerializableMixin, Base):
+    """Persistent cache for weather API responses."""
 
     __tablename__ = "weather_cache"
     __table_args__ = (
-        # Composite unique constraint on cache key components
         UniqueConstraint("latitude_key", "longitude_key", "timestamp_hour", name="uq_weather_cache_key"),
-        # Index for cache lookups
         Index("ix_weather_cache_lookup", "latitude_key", "longitude_key", "timestamp_hour"),
-        # Index for cleanup queries (find expired entries)
         Index("ix_weather_cache_fetched_at", "fetched_at"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # Cache key components (rounded to reduce cache entries)
-    latitude_key = Column(Float, nullable=False)  # Rounded to 2 decimals (~1km precision)
-    longitude_key = Column(Float, nullable=False)  # Rounded to 2 decimals
-    timestamp_hour = Column(String(16), nullable=False)  # Format: "YYYY-MM-DD-HH"
+    latitude_key = Column(Float, nullable=False)
+    longitude_key = Column(Float, nullable=False)
+    timestamp_hour = Column(String(16), nullable=False)
 
-    # Weather data (denormalized for fast retrieval)
     temperature_f = Column(Float)
     precipitation_in = Column(Float)
     wind_speed_mph = Column(Float)
     weather_code = Column(Integer)
-    conditions = Column(String(50))  # Human-readable: "Clear", "Rain", etc.
+    conditions = Column(String(50))
 
-    # Cache metadata
     fetched_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    api_source = Column(String(20))  # "forecast" or "historical"
+    api_source = Column(String(20))
 
     def to_dict(self):
         """Convert to weather data dict (same format as API response)."""
@@ -805,19 +796,7 @@ class WeatherCache(Base):
 
     @classmethod
     def create_cache_key(cls, latitude: float, longitude: float, timestamp_hour: str):
-        """
-        Create cache key components from coordinates and timestamp.
-
-        Rounds coordinates to 2 decimals (~1km precision) to increase cache hit rate.
-
-        Args:
-            latitude: GPS latitude
-            longitude: GPS longitude
-            timestamp_hour: Hour string in format "YYYY-MM-DD-HH"
-
-        Returns:
-            Tuple of (latitude_key, longitude_key, timestamp_hour)
-        """
+        """Create cache key components from coordinates and timestamp."""
         return (
             round(latitude, 2),
             round(longitude, 2),
@@ -825,57 +804,44 @@ class WeatherCache(Base):
         )
 
 
-class TripDailyStats(Base):
-    """
-    Daily aggregation of trip statistics for fast analytics.
-
-    Instead of querying raw telemetry, use these pre-aggregated stats
-    for dashboards and historical charts.
-    """
+class TripDailyStats(SerializableMixin, Base):
+    """Daily aggregation of trip statistics for fast analytics."""
 
     __tablename__ = "trip_daily_stats"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     date = Column(Date, nullable=False, unique=True)
 
-    # Trip counts
     total_trips = Column(Integer, default=0)
     ev_only_trips = Column(Integer, default=0)
     gas_mode_trips = Column(Integer, default=0)
     extreme_weather_trips = Column(Integer, default=0)
 
-    # Distance aggregations
     total_distance_miles = Column(Float, default=0)
     total_electric_miles = Column(Float, default=0)
     total_gas_miles = Column(Float, default=0)
     avg_trip_distance = Column(Float)
 
-    # Efficiency metrics
     avg_kwh_per_mile = Column(Float)
     best_kwh_per_mile = Column(Float)
     worst_kwh_per_mile = Column(Float)
     avg_mpg = Column(Float)
 
-    # Elevation metrics
     total_elevation_gain_m = Column(Float, default=0)
     avg_elevation_gain_m = Column(Float)
 
-    # Weather metrics
     avg_temp_f = Column(Float)
     min_temp_f = Column(Float)
     max_temp_f = Column(Float)
     avg_wind_mph = Column(Float)
     total_precipitation_in = Column(Float, default=0)
 
-    # Speed metrics
     avg_speed_mph = Column(Float)
     max_speed_mph = Column(Float)
 
-    # Energy metrics
     total_kwh_used = Column(Float, default=0)
     avg_weather_impact_factor = Column(Float)
 
-    # Timestamps
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
@@ -912,41 +878,32 @@ class TripDailyStats(Base):
         }
 
 
-class ChargingHourlyStats(Base):
-    """
-    Hourly aggregation of charging statistics.
-
-    Pre-aggregated charging data for fast analytics and charts.
-    """
+class ChargingHourlyStats(SerializableMixin, Base):
+    """Hourly aggregation of charging statistics."""
 
     __tablename__ = "charging_hourly_stats"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     hour_timestamp = Column(DateTime(timezone=True), nullable=False, unique=True)
 
-    # Session counts
     total_sessions = Column(Integer, default=0)
     l1_sessions = Column(Integer, default=0)
     l2_sessions = Column(Integer, default=0)
     dcfc_sessions = Column(Integer, default=0)
     completed_sessions = Column(Integer, default=0)
 
-    # Energy metrics
     total_kwh_added = Column(Float, default=0)
     avg_kwh_per_session = Column(Float)
     avg_peak_power_kw = Column(Float)
     avg_avg_power_kw = Column(Float)
 
-    # SOC metrics
     avg_start_soc = Column(Float)
     avg_end_soc = Column(Float)
     avg_soc_gained = Column(Float)
 
-    # Duration metrics (in minutes)
     avg_session_duration = Column(Float)
     total_charging_minutes = Column(Float, default=0)
 
-    # Timestamps
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
@@ -971,12 +928,8 @@ class ChargingHourlyStats(Base):
         }
 
 
-class MonthlySummary(Base):
-    """
-    Monthly summary statistics for high-level overview.
-
-    Used for dashboard summary cards and year-over-year comparisons.
-    """
+class MonthlySummary(SerializableMixin, Base):
+    """Monthly summary statistics for high-level overview."""
 
     __tablename__ = "monthly_summary"
     __table_args__ = (UniqueConstraint("year", "month", name="uq_monthly_year_month"),)
@@ -985,38 +938,31 @@ class MonthlySummary(Base):
     year = Column(Integer, nullable=False)
     month = Column(Integer, nullable=False)
 
-    # Trip summary
     total_trips = Column(Integer, default=0)
     total_distance_miles = Column(Float, default=0)
     total_electric_miles = Column(Float, default=0)
     total_gas_miles = Column(Float, default=0)
     electric_percentage = Column(Float)
 
-    # Efficiency summary
     avg_kwh_per_mile = Column(Float)
     avg_mpg = Column(Float)
     total_kwh_used = Column(Float, default=0)
     total_gallons_used = Column(Float, default=0)
 
-    # Charging summary
     total_charging_sessions = Column(Integer, default=0)
     total_kwh_charged = Column(Float, default=0)
     l1_sessions = Column(Integer, default=0)
     l2_sessions = Column(Integer, default=0)
     dcfc_sessions = Column(Integer, default=0)
 
-    # Cost estimates
     estimated_electricity_cost = Column(Float)
     estimated_gas_cost = Column(Float)
 
-    # Environmental impact
     co2_avoided_lbs = Column(Float)
 
-    # Weather summary
     avg_temp_f = Column(Float)
     extreme_weather_trips = Column(Integer, default=0)
 
-    # Timestamps
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
@@ -1053,12 +999,8 @@ class MonthlySummary(Base):
         }
 
 
-class AuditLog(Base):
-    """
-    Audit log for tracking data changes and operations.
-
-    Provides compliance trail and debugging information for critical operations.
-    """
+class AuditLog(SerializableMixin, Base):
+    """Audit log for tracking data changes and operations."""
 
     __tablename__ = "audit_logs"
     __table_args__ = (
@@ -1070,23 +1012,19 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # What was changed
-    entity_type = Column(String(50), nullable=False)  # "trips", "charging_sessions", etc.
-    entity_id = Column(String(50), nullable=False)  # ID of the entity
-    action = Column(String(20), nullable=False)  # "create", "update", "delete", etc.
+    entity_type = Column(String(50), nullable=False)
+    entity_id = Column(String(50), nullable=False)
+    action = Column(String(20), nullable=False)
 
-    # Change details
-    old_data = Column(JSON)  # Previous state (for updates)
-    new_data = Column(JSON)  # New state (for creates/updates)
-    details = Column(Text)  # Additional context
+    old_data = Column(JSON)
+    new_data = Column(JSON)
+    details = Column(Text)
 
-    # Who made the change
-    user_id = Column(String(50))  # User ID if authenticated
-    username = Column(String(100))  # Username if authenticated
-    ip_address = Column(String(50))  # IP address of requester
-    user_agent = Column(Text)  # Browser/app making the request
+    user_id = Column(String(50))
+    username = Column(String(100))
+    ip_address = Column(String(50))
+    user_agent = Column(Text)
 
-    # When
     timestamp = Column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     def to_dict(self):
@@ -1107,46 +1045,60 @@ class AuditLog(Base):
         }
 
     def save(self, db):
-        """Save audit log to database."""
+        """Save audit log to database.
+
+        R14: Does NOT commit — callers manage their own transactions.
+        This avoids premature commits that could break caller's transaction scope.
+        """
         db.add(self)
-        db.commit()
+        db.flush()
 
 
-class CsvImport(Base):
+class Settings(Base):
     """
-    Track every CSV import attempt for audit trail and duplicate detection.
+    Key-value settings store for user-configurable preferences.
 
-    Every import gets a unique import_code (IMP-YYYYMMDD-XXXXXX) that users
-    can reference when reporting issues. File hash prevents exact duplicate imports.
+    Stores application settings like electricity cost, gas price,
+    battery capacity, and distance units.
     """
+
+    __tablename__ = "settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key = Column(String(100), unique=True, nullable=False, index=True)
+    value = Column(Text, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    def __repr__(self):
+        return f"<Settings {self.key}={self.value}>"
+
+
+class CsvImport(SerializableMixin, Base):
+    """Track every CSV import attempt for audit trail and duplicate detection."""
 
     __tablename__ = "csv_imports"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    import_code = Column(String(20), unique=True, nullable=False)  # e.g., "IMP-20260107-A1B2C3"
+    import_code = Column(String(20), unique=True, nullable=False)
     filename = Column(String(255), nullable=False)
-    file_hash = Column(String(64), nullable=False, unique=True)  # SHA-256
+    file_hash = Column(String(64), nullable=False, unique=True)
     file_size_bytes = Column(Integer, nullable=False)
 
-    # Results
-    status = Column(String(20), nullable=False)  # 'success', 'partial', 'failed', 'duplicate'
+    status = Column(String(20), nullable=False)
     failure_reason = Column(String(100))
-    failure_details = Column(JSONType())  # Full error context
+    failure_details = Column(JSONType())
     suggestion = Column(Text)
 
-    # Stats
     total_rows = Column(Integer, default=0)
     parsed_rows = Column(Integer, default=0)
     skipped_rows = Column(Integer, default=0)
     duplicate_rows = Column(Integer, default=0)
 
-    # Column info
     columns_detected = Column(JSONType())
     columns_mapped = Column(JSONType())
     timestamp_range_start = Column(DateTime(timezone=True))
     timestamp_range_end = Column(DateTime(timezone=True))
 
-    # Links
     trip_id = Column(Integer, ForeignKey("trips.id", ondelete="SET NULL"), nullable=True)
     session_id = Column(String(36))
 
@@ -1192,9 +1144,6 @@ class CsvImport(Base):
 def get_engine(database_url):
     """
     Create database engine with proper connection pooling.
-
-    P0 Technical Improvement: Add connection pooling configuration
-    to prevent connection exhaustion and improve performance.
 
     Note: Connection pooling parameters only apply to PostgreSQL.
     SQLite uses StaticPool for in-memory databases to share state across connections.

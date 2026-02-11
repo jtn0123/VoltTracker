@@ -3,6 +3,14 @@ Database session management for VoltTracker.
 
 Provides the database engine and session factory that can be imported
 by blueprints without circular dependencies.
+
+Pool Configuration Notes (P6):
+  - Web context (gunicorn/gevent): pool_size=10, max_overflow=20 is suitable
+    for typical concurrency. Each gevent worker shares the pool.
+  - Worker context (APScheduler/background jobs): Consider lower pool_size (3-5)
+    since workers have fewer concurrent queries. Set via DATABASE_POOL_SIZE env var.
+  - For high-traffic deployments, tune pool_size = num_workers * 2-3 and
+    max_overflow = pool_size * 2. Monitor with pgbouncer or pg_stat_activity.
 """
 
 import logging

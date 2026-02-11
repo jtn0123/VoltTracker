@@ -2,6 +2,34 @@
 
 A self-hosted data logging and analysis system for the 2017 Chevy Volt (Gen 2). Receives OBD-II telemetry from the Torque Pro Android app, stores it in PostgreSQL, and provides a web dashboard for analyzing fuel efficiency during gasoline operation.
 
+## Architecture
+
+```
+                                    ┌─────────────────────┐
+                                    │   Torque Pro App     │
+                                    │   (Android/OBD-II)   │
+                                    └──────────┬──────────┘
+                                               │ POST /api/telemetry/upload
+                                               ▼
+┌──────────┐      ┌──────────┐    ┌─────────────────────────┐
+│  Browser  │─────▶│  Nginx   │───▶│   Flask (Gunicorn)      │
+│ Dashboard │◀─────│ (proxy)  │◀───│   + gevent WebSocket    │
+└──────────┘  WS  └──────────┘    │   + APScheduler         │
+                                    └──────┬──────┬──────────┘
+                                           │      │
+                                  ┌────────▼──┐ ┌─▼──────────┐
+                                  │ PostgreSQL │ │   Redis     │
+                                  │ TimescaleDB│ │  (cache +   │
+                                  │ (data)     │ │   queues)   │
+                                  └────────────┘ └──────┬──────┘
+                                                        │
+                                                 ┌──────▼──────┐
+                                                 │  RQ Worker   │
+                                                 │ (background  │
+                                                 │    jobs)     │
+                                                 └─────────────┘
+```
+
 ## Features
 
 - **Real-time Data Logging**: Receives telemetry from Torque Pro via HTTP POST
@@ -17,6 +45,12 @@ A self-hosted data logging and analysis system for the 2017 Chevy Volt (Gen 2). 
 - Android phone with [Torque Pro](https://play.google.com/store/apps/details?id=org.prowl.torque)
 - OBD-II Bluetooth adapter (OBDLink MX+, Veepeak, etc.)
 - Network connectivity between phone and server
+
+## Database Migrations
+
+**Alembic is the canonical migration system.** The `db/init.sql` file is only for initial
+TimescaleDB setup. All subsequent schema changes are managed via Alembic migrations in
+`receiver/migrations_alembic/`. Legacy SQL migration directories have been removed.
 
 ## Quick Start
 
@@ -300,15 +334,29 @@ Tests are organized by module:
 - `test_calculations.py` - MPG, SOC, and efficiency calculations
 - `test_api.py` - Flask API endpoints
 
-## Future Roadmap
+## Roadmap
 
-- [ ] Individual battery cell voltage tracking
-- [ ] kWh/mile efficiency for electric portions
-- [ ] Charging session logging
-- [ ] Maintenance reminders
-- [ ] CSV export functionality
+### Completed ✅
+- [x] Individual battery cell voltage tracking & heatmap
+- [x] kWh/mile efficiency for electric portions
+- [x] Charging session logging (L1/L2/DCFC with cost tracking)
+- [x] CSV export (trips, fuel events, full backup)
+- [x] CSV import from Torque Pro log files
+- [x] Weather analytics & efficiency correlation
+- [x] Elevation data & gradient analysis
+- [x] Battery health & degradation monitoring
+- [x] Real-time power flow visualization
+- [x] GPS track map with heatmaps & route comparison
+- [x] PWA support with service worker
+- [x] Web Vitals performance monitoring
+
+### Next Steps
+- [ ] Settings page for configurable rates & units
 - [ ] Multiple vehicle support
-- [ ] Mobile app integration
+- [ ] Mobile app / push notifications
+- [ ] Maintenance scheduling & reminders
+- [ ] Trip tagging & categorization
+- [ ] Historical weather backfill for older trips
 
 ## License
 

@@ -19,7 +19,10 @@ def dashboard():
     """Serve the dashboard HTML."""
     # Auth is handled by the @auth.login_required decorator in app.py
     # For blueprint, we need to check if auth is required
-    # Pass WebSocket auth token so the frontend can authenticate its Socket.IO connection
+    # S9: The WebSocket token is intentionally passed into the HTML template.
+    # This is safe because the dashboard page itself is behind HTTP Basic Auth
+    # (require_auth_globally), so only authenticated users can see the token.
+    # The token allows the frontend JS to authenticate its Socket.IO connection.
     ws_token = Config.WEBSOCKET_TOKEN or Config.DASHBOARD_PASSWORD or ""
     from app import APP_VERSION
     return render_template("index.html", ws_token=ws_token, app_version=APP_VERSION)

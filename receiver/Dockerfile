@@ -31,6 +31,16 @@ RUN mkdir -p /app/logs
 # Expose port
 EXPOSE 8080
 
+# R12: Copy migration runner and make executable
+COPY run_migrations.sh /app/run_migrations.sh
+RUN chmod +x /app/run_migrations.sh
+
+ENTRYPOINT ["/app/run_migrations.sh"]
+
 # Run with gunicorn + gevent for WebSocket support
-# Note: Using 1 worker because gevent handles concurrency internally
+# Note: Using 1 worker is intentional for this single-user application.
+# gevent handles concurrency via greenlets internally. Multiple workers
+# would break APScheduler (duplicate jobs) and WebSocket state sharing.
+# If scaling to multiple users, switch to external scheduler (Celery Beat)
+# and sticky sessions or a message broker for WebSocket.
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--worker-class", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", "--workers", "1", "--limit-request-line", "0", "app:app"]

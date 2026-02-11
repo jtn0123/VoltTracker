@@ -26,5 +26,9 @@ export default defineConfig({
         assetFileNames: '[name].[ext]'
       }
     }
+  },
+  // Ensure CDN dependencies are bundled when imported
+  optimizeDeps: {
+    include: ['socket.io-client', 'flatpickr', 'chart.js', 'leaflet']
   }
 })

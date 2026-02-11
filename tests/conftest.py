@@ -33,9 +33,9 @@ import database  # noqa: E402
 database.engine = engine
 database.SessionLocal = Session
 
-# Now import app (which will use our patched database module)
+# Import the module-level app (already created by app.py on import)
+# Using the existing app avoids blueprint re-registration errors
 from app import app as flask_app  # noqa: E402
-from app import init_cache  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -65,9 +65,6 @@ def clear_caches():
 def app():
     """Create application for testing."""
     flask_app.config["TESTING"] = True
-
-    # Reinitialize cache to ensure it uses NullCache
-    init_cache(flask_app)
 
     # Create all tables in the test database
     Base.metadata.create_all(engine)

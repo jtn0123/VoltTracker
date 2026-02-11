@@ -2,32 +2,32 @@
 Volt Efficiency Tracker - Flask Application
 
 Receives telemetry from Torque Pro and provides API for dashboard.
+
+Architecture: Uses app factory pattern via create_app().
+Module-level `app = create_app()` for backward compatibility.
 """
 
 import atexit
+import hmac
 import logging
+import os
 
 from config import Config
-from database import init_app as init_db
 from flask import Flask, jsonify
-from flask_caching import Cache
 from flask_compress import Compress
 from flask_httpauth import HTTPBasicAuth
 from flask_socketio import SocketIO
 from extensions import limiter
-from routes import register_blueprints
-from services.scheduler import init_scheduler, shutdown_scheduler
 from werkzeug.security import check_password_hash
 
 import json
-import os as _os
 
 
 # Read version from package.json
 def _read_version():
     """Read version from frontend package.json or fall back to unknown."""
     try:
-        pkg_path = _os.path.join(_os.path.dirname(__file__), 'frontend', 'package.json')
+        pkg_path = os.path.join(os.path.dirname(__file__), 'frontend', 'package.json')
         with open(pkg_path) as f:
             return json.load(f).get('version', 'unknown')
     except Exception:
@@ -48,7 +48,6 @@ def setup_logging():
     - Keep 5 backup files
     - Console output for Docker compatibility
     """
-    import os
     from logging.handlers import RotatingFileHandler
 
     log_level = getattr(logging, Config.LOG_LEVEL)
@@ -85,567 +84,383 @@ def setup_logging():
 setup_logging()
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-app = Flask(__name__)
-app.config.from_object(Config)
-
-# Set request size limits
-app.config['MAX_CONTENT_LENGTH'] = Config.MAX_CONTENT_LENGTH
-
-# Initialize gzip compression (60-80% smaller API responses)
+# Shared extension instances (initialized once, bound in create_app)
 compress = Compress()
-compress.init_app(app)
-
-# Initialize cache (disabled in testing mode)
-cache = Cache()
-
-
-def init_cache(app):
-    """Initialize cache based on environment."""
-    import os
-
-    if app.config.get("TESTING") or os.environ.get("FLASK_TESTING"):
-        cache.init_app(app, config={"CACHE_TYPE": "NullCache"})
-    else:
-        cache.init_app(app, config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": Config.CACHE_TIMEOUT_SECONDS})
-
-
-init_cache(app)
-
-# Initialize SocketIO for real-time updates
-# Use 'threading' async_mode in testing to avoid gevent dependency
-import os
-_async_mode = "threading" if os.environ.get("FLASK_TESTING") else "gevent"
-socketio = SocketIO(
-    app, cors_allowed_origins=Config.CORS_ALLOWED_ORIGINS, async_mode=_async_mode, logger=False, engineio_logger=False
-)
-
-
-# ============================================================================
-# WebSocket Authentication
-# ============================================================================
-
-@socketio.on('connect')
-def handle_connect(auth):
-    """
-    Handle WebSocket connection with authentication.
-
-    Clients must provide authentication via one of:
-    - auth dict with 'token' field (preferred)
-    - auth dict with 'password' field (uses DASHBOARD_PASSWORD)
-    - query parameter 'token' in connection URL
-
-    If WEBSOCKET_AUTH_ENABLED is False, allows unauthenticated connections.
-    """
-    import flask
-    from flask_socketio import disconnect
-
-    # Skip auth if disabled (development mode)
-    if not Config.WEBSOCKET_AUTH_ENABLED:
-        logger.debug("WebSocket connection established (auth disabled)")
-        return True
-
-    # Check if auth is required
-    if not Config.DASHBOARD_PASSWORD and not Config.WEBSOCKET_TOKEN:
-        logger.debug("WebSocket connection established (no auth configured)")
-        return True
-
-    # Extract authentication credentials
-    provided_token = None
-    provided_password = None
-
-    # 1. Check auth dict (Socket.IO client's auth parameter)
-    if auth:
-        provided_token = auth.get('token')
-        provided_password = auth.get('password')
-
-    # 2. Check query parameters (fallback for simple clients)
-    if not provided_token and not provided_password:
-        if hasattr(flask.request, 'args'):
-            provided_token = flask.request.args.get('token')
-            provided_password = flask.request.args.get('password')
-
-    # Validate credentials
-    is_authenticated = False
-
-    # Prefer dedicated WebSocket token if configured
-    if Config.WEBSOCKET_TOKEN and provided_token:
-        if provided_token == Config.WEBSOCKET_TOKEN:
-            is_authenticated = True
-            logger.info("WebSocket authenticated with token")
-
-    # Fall back to dashboard password
-    elif Config.DASHBOARD_PASSWORD and provided_password:
-        # Support hashed passwords
-        if Config.DASHBOARD_PASSWORD.startswith("pbkdf2:") or Config.DASHBOARD_PASSWORD.startswith("scrypt:"):
-            if check_password_hash(Config.DASHBOARD_PASSWORD, provided_password):
-                is_authenticated = True
-                logger.info("WebSocket authenticated with dashboard password")
-        else:
-            if provided_password == Config.DASHBOARD_PASSWORD:
-                is_authenticated = True
-                logger.info("WebSocket authenticated with dashboard password")
-
-    # Reject unauthorized connections
-    if not is_authenticated:
-        logger.warning(f"Unauthorized WebSocket connection attempt from {flask.request.remote_addr}")
-        disconnect()
-        return False
-
-    logger.info(f"WebSocket connection established from {flask.request.remote_addr}")
-    return True
-
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Handle WebSocket disconnection."""
-    logger.debug("WebSocket client disconnected")
-
-# ============================================================================
-# Security: Authentication & Rate Limiting
-# ============================================================================
-
-
-# Initialize HTTP Basic Auth for dashboard
+# P5: Caching consolidated on Redis via utils/cache_utils.py (SimpleCache removed)
 auth = HTTPBasicAuth()
 
 
-@auth.verify_password
-def verify_password(username, password):
-    """Verify dashboard credentials."""
-    # Skip auth if no password is configured (development mode)
-    if not Config.DASHBOARD_PASSWORD:
-        return username or "dev"
-
-    if username == Config.DASHBOARD_USER:
-        # Compare with hashed password if it looks hashed, otherwise direct compare
-        stored_password = Config.DASHBOARD_PASSWORD
-        if stored_password.startswith("pbkdf2:") or stored_password.startswith("scrypt:"):
-            return username if check_password_hash(stored_password, password) else None
-        else:
-            return username if password == stored_password else None
-    return None
-
-
-# Initialize rate limiter
-limiter.init_app(app)
-if Config.RATE_LIMIT_ENABLED:
-    limiter._default_limits = [  # type: ignore[attr-defined]
-        "200 per day", "50 per hour"
-    ]
-limiter._enabled = Config.RATE_LIMIT_ENABLED  # type: ignore[attr-defined]
-
-
-@app.before_request
-def require_auth_globally():
-    """Require authentication for all routes except public endpoints.
-
-    Public (unauthenticated) endpoints:
-    - /health, /healthz, /ready, /readiness — health checks
-    - /api/telemetry/upload/* — Torque Pro uploads (uses API token, not Basic Auth)
-    - /api/errors/report — frontend error reporting
-    - /static/* — static assets
-    - /clear-cache — cache-clearing utility page
+def create_app(config_class=None):
     """
-    from flask import request as req
+    Application factory for VoltTracker.
 
-    # Skip auth if no password is configured (development mode)
-    if not Config.DASHBOARD_PASSWORD:
-        return None
+    Creates and configures the Flask application, initializes all extensions,
+    registers blueprints, and sets up middleware/hooks.
 
-    path = req.path
+    Args:
+        config_class: Optional config class override (default: Config).
 
-    # Public paths that don't require Basic Auth
-    public_prefixes = ("/health", "/readiness", "/ready", "/static/", "/clear-cache")
-    public_exact = {"/health", "/healthz", "/ready", "/readiness", "/clear-cache"}
-
-    if path in public_exact or any(path.startswith(p) for p in public_prefixes):
-        return None
-
-    # Torque upload uses its own API token auth, not Basic Auth
-    if path.startswith("/api/telemetry/upload") or path.startswith("/torque/upload"):
-        return None
-
-    # Frontend error reporting doesn't need auth
-    if path == "/api/errors/report":
-        return None
-
-    # Everything else requires Basic Auth
-    return auth.login_required(lambda: None)()
-
-
-@app.before_request
-def inject_request_id():
-    """Inject unique request ID and start timer for distributed tracing."""
-    import time
-    import uuid
-
-    from flask import g, request
-
-    # Check if client provided X-Request-ID header, otherwise generate new one
-    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-    g.request_id = request_id
-    g.request_start_time = time.monotonic()
-
-
-@app.errorhandler(413)
-def request_entity_too_large(error):
-    """Handle requests that exceed MAX_CONTENT_LENGTH."""
-    max_size_mb = Config.MAX_CONTENT_LENGTH / (1024 * 1024)
-    return jsonify({
-        "error": "Request entity too large",
-        "message": f"Request body exceeds maximum allowed size of {max_size_mb:.1f} MB",
-        "max_size_bytes": Config.MAX_CONTENT_LENGTH
-    }), 413
-
-
-@app.after_request
-def add_security_headers(response):
-    """Add security headers and request ID to all responses."""
-    from flask import g, request
-
-    # Static asset caching headers (cache-busted via hashed filenames)
-    if request.path.startswith("/static/"):
-        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    elif request.path.startswith("/api/"):
-        response.headers["Cache-Control"] = "no-store"
-
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "SAMEORIGIN"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-    # Add HSTS in production (when not in debug mode)
-    if not app.debug:
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-
-    # Add request ID to response headers for tracing
-    if hasattr(g, "request_id"):
-        response.headers["X-Request-ID"] = g.request_id
-
-    # Add response time header and log slow requests
-    if hasattr(g, "request_start_time"):
-        import time
-        duration_ms = (time.monotonic() - g.request_start_time) * 1000
-        response.headers["X-Response-Time"] = f"{duration_ms:.1f}ms"
-        if duration_ms > 500 and not request.path.startswith("/static/"):
-            logger.warning(
-                "Slow request: %s %s took %.1fms (status %d)",
-                request.method, request.path, duration_ms, response.status_code,
-            )
-
-    return response
-
-
-# Initialize database
-init_db(app)
-
-from routes.battery import battery_bp  # noqa: E402
-from routes.charging import charging_bp  # noqa: E402
-
-# Configure blueprint hooks before registration
-from routes.telemetry import telemetry_bp  # noqa: E402
-from routes.trips import trips_bp  # noqa: E402
-
-
-# Note: Dashboard auth is now handled globally by require_auth_globally()
-
-
-@trips_bp.after_request
-def cache_efficiency(response):
-    """Apply caching to efficiency summary endpoint."""
-    from flask import request
-
-    if request.endpoint == "trips.get_efficiency_summary":
-        response.cache_control.max_age = 30
-    elif request.endpoint == "trips.get_soc_analysis":
-        response.cache_control.max_age = 60
-    return response
-
-
-@battery_bp.after_request
-def cache_battery(response):
-    """Apply caching to battery endpoints (data changes slowly)."""
-    from flask import request
-
-    if request.endpoint == "battery.get_battery_health":
-        response.cache_control.max_age = 300  # 5 minutes
-    elif request.endpoint == "battery.get_cell_voltages":
-        response.cache_control.max_age = 60  # 1 minute
-    return response
-
-
-@charging_bp.after_request
-def cache_charging(response):
-    """Apply caching to charging summary endpoint."""
-    from flask import request
-
-    if request.endpoint == "charging.get_charging_summary":
-        response.cache_control.max_age = 300  # 5 minutes
-    return response
-
-
-# Register all blueprints
-register_blueprints(app)
-
-# Apply rate limiting exemption to torque upload endpoint
-# (done after blueprint registration)
-limiter.exempt(telemetry_bp)
-
-# Initialize structured error tracking (404/500/unhandled exception handlers)
-from utils.error_tracking import init_error_handlers  # noqa: E402
-init_error_handlers(app)
-
-
-# ============================================================================
-# Frontend Error Reporting Endpoint
-# ============================================================================
-
-@app.route("/api/errors/report", methods=["POST"])
-def report_frontend_error():
+    Returns:
+        Configured Flask application instance.
     """
-    Receive error reports from the frontend.
+    _app = Flask(__name__)
+    cfg = config_class or Config
+    _app.config.from_object(cfg)
 
-    Expects JSON with: message, source, lineno, colno, stack, userAgent, url
-    """
-    from flask import request as req
-    from utils.error_tracking import track_error
+    # Set request size limits
+    _app.config['MAX_CONTENT_LENGTH'] = cfg.MAX_CONTENT_LENGTH
 
-    data = req.get_json(silent=True) or {}
-    message = data.get("message", "Unknown frontend error")
+    # Initialize gzip compression (60-80% smaller API responses)
+    compress.init_app(_app)
 
-    # Create a synthetic exception for tracking
-    fe_error = RuntimeError(f"[Frontend] {message}")
-    track_error(
-        fe_error,
-        endpoint="/api/errors/report",
-        method="POST",
-        status_code=0,  # Not an HTTP error
-        request_context={
-            "source": data.get("source"),
-            "lineno": data.get("lineno"),
-            "colno": data.get("colno"),
-            "stack": data.get("stack", "")[:2000],
-            "page_url": data.get("url"),
-            "user_agent": data.get("userAgent", "")[:200],
-            "origin": "frontend",
-        },
+    # Initialize cache (disabled in testing mode)
+
+    # Initialize SocketIO for real-time updates
+    # Use 'threading' async_mode in testing to avoid gevent dependency
+    _async_mode = "threading" if os.environ.get("FLASK_TESTING") else "gevent"
+    socketio = SocketIO(
+        _app, cors_allowed_origins=cfg.CORS_ALLOWED_ORIGINS, async_mode=_async_mode,
+        logger=False, engineio_logger=False
     )
 
-    logger.warning("Frontend error reported: %s (source=%s)", message, data.get("source"))
-    return {"status": "ok"}, 200
+    # Store socketio on app for access
+    _app.extensions["socketio"] = socketio
+
+    # ========================================================================
+    # WebSocket Authentication
+    # ========================================================================
+
+    @socketio.on('connect')
+    def handle_connect(ws_auth):
+        """
+        Handle WebSocket connection with authentication.
+
+        Clients must provide authentication via one of:
+        - auth dict with 'token' field (preferred)
+        - auth dict with 'password' field (uses DASHBOARD_PASSWORD)
+        - query parameter 'token' in connection URL
+
+        If WEBSOCKET_AUTH_ENABLED is False, allows unauthenticated connections.
+
+        NOTE: The WebSocket token is intentionally embedded in the dashboard HTML
+        template (index.html) so the frontend JS can authenticate its Socket.IO
+        connection. This is by design — the dashboard itself is already behind
+        HTTP Basic Auth, so the WS token in the HTML is not an additional exposure.
+        """
+        import flask
+        from flask_socketio import disconnect
+
+        # Skip auth if disabled (development mode)
+        if not cfg.WEBSOCKET_AUTH_ENABLED:
+            logger.debug("WebSocket connection established (auth disabled)")
+            return True
+
+        # Check if auth is required
+        if not cfg.DASHBOARD_PASSWORD and not cfg.WEBSOCKET_TOKEN:
+            logger.debug("WebSocket connection established (no auth configured)")
+            return True
+
+        # Extract authentication credentials
+        provided_token = None
+        provided_password = None
+
+        # 1. Check auth dict (Socket.IO client's auth parameter)
+        if ws_auth:
+            provided_token = ws_auth.get('token')
+            provided_password = ws_auth.get('password')
+
+        # 2. Check query parameters (fallback for simple clients)
+        if not provided_token and not provided_password:
+            if hasattr(flask.request, 'args'):
+                provided_token = flask.request.args.get('token')
+                provided_password = flask.request.args.get('password')
+
+        # Validate credentials
+        is_authenticated = False
+
+        # Prefer dedicated WebSocket token if configured (S5: use hmac.compare_digest)
+        if cfg.WEBSOCKET_TOKEN and provided_token:
+            if hmac.compare_digest(str(provided_token), str(cfg.WEBSOCKET_TOKEN)):
+                is_authenticated = True
+                logger.info("WebSocket authenticated with token")
+
+        # Fall back to dashboard password
+        elif cfg.DASHBOARD_PASSWORD and provided_password:
+            # Support hashed passwords
+            if cfg.DASHBOARD_PASSWORD.startswith("pbkdf2:") or cfg.DASHBOARD_PASSWORD.startswith("scrypt:"):
+                if check_password_hash(cfg.DASHBOARD_PASSWORD, provided_password):
+                    is_authenticated = True
+                    logger.info("WebSocket authenticated with dashboard password")
+            else:
+                # S3: use hmac.compare_digest for plaintext comparison
+                if hmac.compare_digest(str(provided_password), str(cfg.DASHBOARD_PASSWORD)):
+                    is_authenticated = True
+                    logger.info("WebSocket authenticated with dashboard password")
+
+        # Reject unauthorized connections
+        if not is_authenticated:
+            logger.warning(f"Unauthorized WebSocket connection attempt from {flask.request.remote_addr}")
+            disconnect()
+            return False
+
+        logger.info(f"WebSocket connection established from {flask.request.remote_addr}")
+        return True
+
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        """Handle WebSocket disconnection."""
+        logger.debug("WebSocket client disconnected")
+
+    # ========================================================================
+    # Security: Authentication & Rate Limiting
+    # ========================================================================
+
+    @auth.verify_password
+    def verify_password(username, password):
+        """Verify dashboard credentials."""
+        # Skip auth if no password is configured (development mode)
+        if not cfg.DASHBOARD_PASSWORD:
+            return username or "dev"
+
+        if username == cfg.DASHBOARD_USER:
+            # Compare with hashed password if it looks hashed, otherwise direct compare
+            stored_password = cfg.DASHBOARD_PASSWORD
+            if stored_password.startswith("pbkdf2:") or stored_password.startswith("scrypt:"):
+                return username if check_password_hash(stored_password, password) else None
+            else:
+                # S3: use hmac.compare_digest for plaintext password comparison
+                return username if hmac.compare_digest(str(password), str(stored_password)) else None
+        return None
+
+    # Initialize rate limiter
+    limiter.init_app(_app)
+    if cfg.RATE_LIMIT_ENABLED:
+        limiter._default_limits = [  # type: ignore[attr-defined]
+            "200 per day", "50 per hour"
+        ]
+    limiter._enabled = cfg.RATE_LIMIT_ENABLED  # type: ignore[attr-defined]
+
+    @_app.before_request
+    def require_auth_globally():
+        """Require authentication for all routes except public endpoints.
+
+        Public (unauthenticated) endpoints:
+        - /health, /healthz, /ready, /readiness — health checks
+        - /api/telemetry/upload/* — Torque Pro uploads (uses API token, not Basic Auth)
+        - /api/errors/report — frontend error reporting
+        - /static/* — static assets
+        - /clear-cache — cache-clearing utility page
+        """
+        from flask import request as req
+
+        # Skip auth if no password is configured (development mode)
+        if not cfg.DASHBOARD_PASSWORD:
+            return None
+
+        path = req.path
+
+        # Public paths that don't require Basic Auth
+        public_prefixes = ("/health", "/readiness", "/ready", "/static/", "/clear-cache")
+        public_exact = {"/health", "/healthz", "/ready", "/readiness", "/clear-cache"}
+
+        if path in public_exact or any(path.startswith(p) for p in public_prefixes):
+            return None
+
+        # Torque upload uses its own API token auth, not Basic Auth
+        if path.startswith("/api/telemetry/upload") or path.startswith("/torque/upload"):
+            return None
+
+        # Frontend error reporting doesn't need auth
+        if path == "/api/errors/report":
+            return None
+
+        # Everything else requires Basic Auth
+        return auth.login_required(lambda: None)()
+
+    @_app.before_request
+    def inject_request_id():
+        """Inject unique request ID and start timer for distributed tracing."""
+        import time
+        import uuid
+
+        from flask import g, request
+
+        # Check if client provided X-Request-ID header, otherwise generate new one
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        g.request_id = request_id
+        g.request_start_time = time.monotonic()
+
+    @_app.errorhandler(413)
+    def request_entity_too_large(error):
+        """Handle requests that exceed MAX_CONTENT_LENGTH."""
+        max_size_mb = cfg.MAX_CONTENT_LENGTH / (1024 * 1024)
+        return jsonify({
+            "error": "Request entity too large",
+            "message": f"Request body exceeds maximum allowed size of {max_size_mb:.1f} MB",
+            "max_size_bytes": cfg.MAX_CONTENT_LENGTH
+        }), 413
+
+    @_app.after_request
+    def add_security_headers(response):
+        """Add security headers and request ID to all responses."""
+        from flask import g, request
+
+        # Static asset caching headers (cache-busted via hashed filenames)
+        if request.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif request.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        # S8: Removed X-XSS-Protection (deprecated; CSP replaces it)
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+
+        # S1: Content-Security-Policy
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' cdn.jsdelivr.net cdn.socket.io unpkg.com; "
+            "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net unpkg.com; "
+            "img-src 'self' data: *.tile.openstreetmap.org unpkg.com; "
+            "connect-src 'self' ws: wss:; "
+            "font-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+
+        # Add HSTS in production (when not in debug mode)
+        if not _app.debug:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+        # Add request ID to response headers for tracing
+        if hasattr(g, "request_id"):
+            response.headers["X-Request-ID"] = g.request_id
+
+        # Add response time header and log slow requests
+        if hasattr(g, "request_start_time"):
+            import time
+            duration_ms = (time.monotonic() - g.request_start_time) * 1000
+            response.headers["X-Response-Time"] = f"{duration_ms:.1f}ms"
+            if duration_ms > 500 and not request.path.startswith("/static/"):
+                logger.warning(
+                    "Slow request: %s %s took %.1fms (status %d)",
+                    request.method, request.path, duration_ms, response.status_code,
+                )
+
+        return response
+
+    # Initialize database
+    from database import init_app as init_db
+    init_db(_app)
+
+    from routes.battery import battery_bp  # noqa: E402
+    from routes.charging import charging_bp  # noqa: E402
+    from routes.telemetry import telemetry_bp  # noqa: E402
+    from routes.trips import trips_bp  # noqa: E402
+    from routes import register_blueprints  # noqa: E402
+
+    @trips_bp.after_request
+    def cache_efficiency(response):
+        """Apply caching to efficiency summary endpoint."""
+        from flask import request
+
+        if request.endpoint == "trips.get_efficiency_summary":
+            response.cache_control.max_age = 30
+        elif request.endpoint == "trips.get_soc_analysis":
+            response.cache_control.max_age = 60
+        return response
+
+    @battery_bp.after_request
+    def cache_battery(response):
+        """Apply caching to battery endpoints (data changes slowly)."""
+        from flask import request
+
+        if request.endpoint == "battery.get_battery_health":
+            response.cache_control.max_age = 300  # 5 minutes
+        elif request.endpoint == "battery.get_cell_voltages":
+            response.cache_control.max_age = 60  # 1 minute
+        return response
+
+    @charging_bp.after_request
+    def cache_charging(response):
+        """Apply caching to charging summary endpoint."""
+        from flask import request
+
+        if request.endpoint == "charging.get_charging_summary":
+            response.cache_control.max_age = 300  # 5 minutes
+        return response
+
+    # Register all blueprints
+    register_blueprints(_app)
+
+    # Apply rate limiting exemption to torque upload endpoint
+    limiter.exempt(telemetry_bp)
+
+    # Initialize structured error tracking (404/500/unhandled exception handlers)
+    from utils.error_tracking import init_error_handlers  # noqa: E402
+    init_error_handlers(_app)
+
+    # ========================================================================
+    # Frontend Error Reporting Endpoint
+    # ========================================================================
+
+    @_app.route("/api/errors/report", methods=["POST"])
+    def report_frontend_error():
+        """
+        Receive error reports from the frontend.
+
+        Expects JSON with: message, source, lineno, colno, stack, userAgent, url
+        """
+        from flask import request as req
+        from utils.error_tracking import track_error
+
+        data = req.get_json(silent=True)
+
+        # S6: Basic validation — require JSON body with an 'error' or 'message' field
+        if not data or (not data.get("error") and not data.get("message")):
+            return {"error": "JSON body with 'error' or 'message' field required"}, 400
+
+        message = data.get("message") or data.get("error", "Unknown frontend error")
+
+        fe_error = RuntimeError(f"[Frontend] {message}")
+        track_error(
+            fe_error,
+            endpoint="/api/errors/report",
+            method="POST",
+            status_code=0,
+            request_context={
+                "source": data.get("source"),
+                "lineno": data.get("lineno"),
+                "colno": data.get("colno"),
+                "stack": data.get("stack", "")[:2000],
+                "page_url": data.get("url"),
+                "user_agent": data.get("userAgent", "")[:200],
+                "origin": "frontend",
+            },
+        )
+
+        logger.warning("Frontend error reported: %s (source=%s)", message, data.get("source"))
+        return {"status": "ok"}, 200
+
+    # ========================================================================
+
+    # C5: Health check, clear-cache, cache stats/invalidate, and readiness
+    # endpoints have been moved to routes/system.py (system_bp).
+
+    # R3: Initialize background scheduler inside factory with proper guarding
+    if not os.environ.get("FLASK_TESTING") and not _app.config.get("TESTING"):
+        # Guard against double-init when using Flask reloader
+        if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not _app.debug:
+            from services.scheduler import init_scheduler, shutdown_scheduler
+            init_scheduler()
+            atexit.register(shutdown_scheduler)
+
+    return _app
 
 
-# ============================================================================
-# Health Check Endpoints (Kubernetes/Docker)
-# ============================================================================
-
-
-@app.route("/health", methods=["GET"])
-@app.route("/healthz", methods=["GET"])  # Alternative naming
-def health_check():
-    """
-    Liveness probe - basic check that app is running.
-
-    Returns 200 if the application is alive (can handle requests).
-    Does not check external dependencies like database.
-    """
-    return {"status": "healthy", "service": "volttracker", "version": APP_VERSION}, 200
-
-
-@app.route("/clear-cache", methods=["GET"])
-def clear_cache_page():
-    """
-    Utility page to clear service worker and browser caches.
-
-    This page serves inline JavaScript that bypasses any cached JS,
-    allowing users to recover from broken service worker states.
-    """
-    from flask import Response
-
-    html = """<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clear Cache - VoltTracker</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-               padding: 20px; max-width: 600px; margin: 0 auto; }
-        .status { padding: 15px; border-radius: 8px; margin: 10px 0; }
-        .success { background: #d4edda; color: #155724; }
-        .error { background: #f8d7da; color: #721c24; }
-        .info { background: #cce5ff; color: #004085; }
-        button { padding: 15px 30px; font-size: 18px; cursor: pointer;
-                 background: #007bff; color: white; border: none; border-radius: 8px; }
-        button:disabled { background: #6c757d; cursor: not-allowed; }
-        h1 { color: #333; }
-    </style>
-</head>
-<body>
-    <h1>VoltTracker Cache Clear</h1>
-    <p>This will unregister all service workers and clear browser caches for this site.</p>
-    <button id="clearBtn" onclick="clearAll()">Clear Cache & Reload</button>
-    <div id="log"></div>
-
-    <script>
-        function log(msg, type) {
-            const div = document.createElement('div');
-            div.className = 'status ' + type;
-            div.textContent = msg;
-            document.getElementById('log').appendChild(div);
-        }
-
-        async function clearAll() {
-            const btn = document.getElementById('clearBtn');
-            btn.disabled = true;
-            btn.textContent = 'Clearing...';
-
-            try {
-                // 1. Unregister all service workers
-                if ('serviceWorker' in navigator) {
-                    const registrations = await navigator.serviceWorker.getRegistrations();
-                    for (const reg of registrations) {
-                        await reg.unregister();
-                        log('Unregistered service worker: ' + reg.scope, 'success');
-                    }
-                    if (registrations.length === 0) {
-                        log('No service workers found', 'info');
-                    }
-                } else {
-                    log('Service workers not supported', 'info');
-                }
-
-                // 2. Clear all caches
-                if ('caches' in window) {
-                    const cacheNames = await caches.keys();
-                    for (const name of cacheNames) {
-                        await caches.delete(name);
-                        log('Deleted cache: ' + name, 'success');
-                    }
-                    if (cacheNames.length === 0) {
-                        log('No caches found', 'info');
-                    }
-                }
-
-                log('Cache cleared! Redirecting in 2 seconds...', 'success');
-                setTimeout(() => {
-                    window.location.href = '/';
-                }, 2000);
-
-            } catch (err) {
-                log('Error: ' + err.message, 'error');
-                btn.disabled = false;
-                btn.textContent = 'Try Again';
-            }
-        }
-    </script>
-</body>
-</html>"""
-    return Response(html, mimetype='text/html')
-
-
-@app.route("/cache/stats", methods=["GET"])
-def cache_stats():
-    """
-    Get Redis cache statistics.
-
-    Returns cache hit rate, memory usage, and performance metrics.
-    Useful for monitoring cache effectiveness.
-    """
-    from utils.cache_utils import get_cache_stats
-
-    stats = get_cache_stats()
-    return jsonify(stats), 200
-
-
-@app.route("/cache/invalidate", methods=["POST"])
-def cache_invalidate():
-    """
-    Invalidate cache entries by pattern or tag.
-
-    Request body (JSON):
-        pattern: Redis key pattern to invalidate (e.g., "trip:*")
-        tag: Tag to invalidate (e.g., "trips")
-
-    Either pattern or tag must be provided.
-    """
-    from flask import request
-    from utils.cache_utils import invalidate_cache_pattern, invalidate_cache_by_tag
-
-    data = request.get_json() or {}
-    pattern = data.get("pattern")
-    tag = data.get("tag")
-
-    if not pattern and not tag:
-        return jsonify({"error": "Either 'pattern' or 'tag' must be provided"}), 400
-
-    deleted = 0
-    if pattern:
-        deleted += invalidate_cache_pattern(pattern)
-    if tag:
-        deleted += invalidate_cache_by_tag(tag)
-
-    return jsonify({"deleted": deleted, "message": f"Invalidated {deleted} cache entries"}), 200
-
-
-@app.route("/ready", methods=["GET"])
-@app.route("/readiness", methods=["GET"])  # Alternative naming
-def readiness_check():
-    """
-    Readiness probe - check if app is ready to serve traffic.
-
-    Tests:
-    - Database connectivity
-    - Scheduler status (if running)
-
-    Returns 200 if ready, 503 if not ready.
-    """
-    from database import SessionLocal
-    from sqlalchemy import text
-
-    checks = {"database": False, "scheduler": False}
-    errors = []
-
-    # Check database connectivity
-    try:
-        db = SessionLocal()
-        # Simple query to verify connection
-        db.execute(text("SELECT 1"))
-        db.close()
-        checks["database"] = True
-    except Exception as e:
-        errors.append(f"Database: {str(e)[:100]}")
-
-    # Check scheduler status (if not in testing mode)
-    if not os.environ.get("FLASK_TESTING"):
-        from services.scheduler import scheduler as sched
-
-        if sched and sched.running:
-            checks["scheduler"] = True
-        else:
-            errors.append("Scheduler: not running")
-    else:
-        checks["scheduler"] = True  # Skip check in testing
-
-    # All checks must pass
-    all_healthy = all(checks.values())
-
-    response = {"status": "ready" if all_healthy else "not_ready", "checks": checks}
-
-    if errors:
-        response["errors"] = errors
-
-    return response, 200 if all_healthy else 503
-
-
-# Initialize background scheduler
-import os  # noqa: E402
-
-if not os.environ.get("FLASK_TESTING"):
-    scheduler = init_scheduler()
-    atexit.register(shutdown_scheduler)
-
+# Module-level app for backward compatibility (gunicorn, scripts, etc.)
+app = create_app()
+socketio = app.extensions["socketio"]
 
 # ============================================================================
 # Main

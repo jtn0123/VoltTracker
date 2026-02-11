@@ -6,7 +6,6 @@
     <title>GPS Track Map - VoltTracker</title>
 
     <!-- Preconnect -->
-    <link rel="preconnect" href="https://unpkg.com" crossorigin>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 
     <!-- Critical CSS -->
@@ -17,11 +16,11 @@
     <link rel="stylesheet" href="/static/css/toast.css">
     <link rel="stylesheet" href="/static/css/map_view.css">
 
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Leaflet MarkerCluster CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <!-- Leaflet CSS (jsdelivr for reliability) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet MarkerCluster CSS (lazy-loaded with JS below) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <!-- Leaflet.heat has no separate CSS file -->
 
     <!-- PWA Support -->
@@ -182,7 +181,7 @@
                 </button>
             </div>
 
-            <div id="trip-list-container" class="trip-list-container">
+            <div id="trip-list-container" class="trip-list-container" aria-live="polite">
                 <div class="loading-spinner">Loading trips...</div>
             </div>
         </div>
@@ -245,9 +244,33 @@
 
     <!-- Scripts -->
     <script src="/static/js/toast.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <!-- Leaflet core (jsdelivr for reliability) -->
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet plugins lazy-loaded after map init -->
+    <script>
+      // Lazy-load Leaflet plugins after core is ready
+      function loadLeafletPlugins() {
+        var plugins = [
+          'https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js',
+          'https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js'
+        ];
+        return Promise.all(plugins.map(function(src) {
+          return new Promise(function(resolve, reject) {
+            var s = document.createElement('script');
+            s.src = src;
+            s.onload = resolve;
+            s.onerror = function() { console.warn('Failed to load plugin: ' + src); resolve(); };
+            document.head.appendChild(s);
+          });
+        }));
+      }
+      // Load plugins immediately (they depend on L being available)
+      if (typeof L !== 'undefined') {
+        loadLeafletPlugins();
+      } else {
+        window.addEventListener('load', loadLeafletPlugins);
+      }
+    </script>
     <script src="/static/js/map_view.js"></script>
 </body>
 </html>

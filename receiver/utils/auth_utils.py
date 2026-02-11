@@ -92,6 +92,11 @@ class APIKeyManager:
     """
     Manage multiple API keys with rotation support.
 
+    **Note: This manager is ephemeral (in-memory only).** All keys are lost
+    when the process restarts. It is suitable for runtime key management
+    within a single process lifetime. For persistent key storage, use the
+    ``API_KEYS`` environment variable or an external secrets manager.
+
     Features:
     - Store multiple active keys
     - Track key creation dates
@@ -267,3 +272,32 @@ def get_api_key_manager() -> APIKeyManager:
     if _global_key_manager is None:
         _global_key_manager = APIKeyManager()
     return _global_key_manager
+
+
+def require_auth():
+    """Explicit auth check for sensitive endpoints.
+
+    Returns None if authenticated, or a (response, status_code) tuple if not.
+    S4: Use this in addition to global middleware for defense-in-depth.
+    """
+    from flask import request, jsonify
+    from config import Config
+
+    # No password configured = dev mode, allow through
+    if not Config.DASHBOARD_PASSWORD:
+        return None
+
+    auth = request.authorization
+    if not auth or not auth.username or not auth.password:
+        return jsonify({"error": "Authentication required"}), 401
+
+    import hmac
+    stored = Config.DASHBOARD_PASSWORD
+    if stored.startswith("pbkdf2:") or stored.startswith("scrypt:"):
+        if not check_password_hash(stored, auth.password):
+            return jsonify({"error": "Invalid credentials"}), 401
+    else:
+        if not hmac.compare_digest(str(auth.password), str(stored)):
+            return jsonify({"error": "Invalid credentials"}), 401
+
+    return None

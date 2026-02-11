@@ -153,9 +153,11 @@ class Config:
     MAX_CSV_ROWS = int(os.environ.get("MAX_CSV_ROWS", 100000))  # Max rows in CSV import
 
     # CORS - WebSocket allowed origins
-    # Default allows local development and common private network ranges
-    # Set CORS_ALLOWED_ORIGINS env var to comma-separated list for custom origins
-    _default_cors = "http://localhost:*,http://127.0.0.1:*,http://192.168.*:*,http://10.*:*"
+    # S6: Default to localhost only. Set CORS_ALLOWED_ORIGINS env var to a
+    # comma-separated list for additional origins (e.g. your LAN IP).
+    # Previously defaulted to wildcard private ranges (192.168.*, 10.*) which
+    # is overly permissive.
+    _default_cors = "http://localhost:8080"
     CORS_ALLOWED_ORIGINS = os.environ.get("CORS_ALLOWED_ORIGINS", _default_cors).split(",")
 
     # Validation Thresholds (Volt typical: 25-50 MPG, allow 15-60 for margin)

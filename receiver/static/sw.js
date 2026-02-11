@@ -15,7 +15,8 @@ const STATIC_ASSETS = [
     '/static/css/critical.css',
     '/static/js/dist/main.js',
     '/static/js/toast.js',
-    '/static/manifest.json'
+    '/static/manifest.json',
+    '/static/offline.html'
 ];
 
 // External CDN resources to cache
@@ -203,11 +204,11 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // HTML navigation: Network-first with offline fallback
+    // HTML navigation: Network-first with offline fallback (UX27)
     if (event.request.mode === 'navigate') {
         event.respondWith(
             networkFirst(event.request, STATIC_CACHE).catch(() => {
-                return caches.match('/');
+                return caches.match('/static/offline.html') || caches.match('/');
             })
         );
         return;

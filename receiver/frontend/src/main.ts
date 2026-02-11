@@ -57,16 +57,26 @@ function showFallbackUI(errorMsg: string): void {
     return;
   }
 
-  // Create a minimal fallback if the template doesn't have one
-  document.body.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;font-family:system-ui,sans-serif;padding:2rem;text-align:center">
-      <h1 style="margin:0 0 .5rem">Something went wrong</h1>
-      <p style="color:#666;max-width:500px">${errorMsg.replace(/</g, '&lt;')}</p>
-      <button onclick="location.reload()" style="margin-top:1rem;padding:.5rem 1.5rem;border-radius:6px;border:none;background:#007bff;color:#fff;cursor:pointer">
-        Reload
-      </button>
-    </div>`;
+  // Create an error banner at the top of the page instead of replacing the DOM
+  const banner = document.createElement('div');
+  banner.id = 'error-fallback';
+  banner.setAttribute('role', 'alert');
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#dc2626;color:#fff;padding:1rem 2rem;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:space-between;gap:1rem;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
+  banner.innerHTML = `
+    <div style="flex:1">
+      <strong>Something went wrong</strong>
+      <span class="error-detail" style="margin-left:0.5rem;opacity:0.9">${errorMsg.replace(/</g, '&lt;')}</span>
+    </div>
+    <button onclick="location.reload()" style="padding:.4rem 1rem;border-radius:6px;border:1px solid rgba(255,255,255,0.3);background:transparent;color:#fff;cursor:pointer;white-space:nowrap">
+      Reload
+    </button>
+    <button onclick="this.parentElement.remove()" style="padding:.4rem .6rem;border:none;background:transparent;color:#fff;cursor:pointer;font-size:1.2rem" aria-label="Dismiss">&times;</button>
+  `;
+  document.body.prepend(banner);
 }
+
+// ── Vendor dependencies (bundled via npm, replaces CDN) ──────────────────────
+import './vendor';
 
 // CSS modules — Vite bundles these into the output
 import './styles/base.css';
@@ -256,6 +266,30 @@ document.addEventListener('keydown', (event) => {
 });
 
 // ── Lazy section loading with IntersectionObserver ───────────────────────────
+/**
+ * Show a skeleton/spinner overlay inside a section while its module loads.
+ */
+function showSectionSkeleton(section: HTMLElement): HTMLElement {
+  const skeleton = document.createElement('div');
+  skeleton.className = 'section-skeleton-overlay';
+  skeleton.setAttribute('role', 'status');
+  skeleton.setAttribute('aria-label', 'Loading section');
+  skeleton.innerHTML = `
+    <div class="section-skeleton-content">
+      <div class="spinner" aria-hidden="true"></div>
+      <span class="section-skeleton-text">Loading...</span>
+    </div>
+  `;
+  section.style.position = 'relative';
+  section.appendChild(skeleton);
+  return skeleton;
+}
+
+function removeSectionSkeleton(skeleton: HTMLElement): void {
+  skeleton.classList.add('section-skeleton-fade-out');
+  setTimeout(() => skeleton.remove(), 300);
+}
+
 function setupSectionObservers(): void {
   const sectionMap: Record<string, () => Promise<void>> = {
     'battery-section': async () => {
@@ -281,7 +315,13 @@ function setupSectionObservers(): void {
         const id = entry.target.id;
         if (entry.isIntersecting && !loaded.has(id) && sectionMap[id]) {
           loaded.add(id);
-          sectionMap[id]().catch((err) => console.error(`Lazy load ${id} failed:`, err));
+          const skeleton = showSectionSkeleton(entry.target as HTMLElement);
+          sectionMap[id]()
+            .then(() => removeSectionSkeleton(skeleton))
+            .catch((err) => {
+              console.error(`Lazy load ${id} failed:`, err);
+              removeSectionSkeleton(skeleton);
+            });
           observer.unobserve(entry.target);
         }
       }

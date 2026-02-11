@@ -100,10 +100,8 @@ class AuditLogger:
 
             if db is None:
                 db = get_db()
-                audit_log.save(db)
-            else:
-                db.add(audit_log)
-                db.commit()
+            audit_log.save(db)
+            db.commit()
 
             logger.info(
                 f"Audit: {action.value} {entity_type}/{entity_id} by {user_info['ip_address']} "

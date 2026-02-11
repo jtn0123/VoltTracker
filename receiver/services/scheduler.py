@@ -3,6 +3,11 @@ Background scheduler service for VoltTracker.
 
 Handles periodic background tasks for trip finalization, refuel detection,
 and charging session management.
+
+R13: APScheduler limitation — This in-process scheduler runs inside the single
+Gunicorn worker. It is NOT high-availability: if the worker restarts, jobs are
+lost until the next interval fires. For multi-worker or HA deployments, switch
+to an external scheduler like Celery Beat + Redis broker.
 """
 
 import logging
@@ -311,6 +316,11 @@ def init_scheduler():
     scheduler.add_job(check_refuel_events, "interval", minutes=5)
     scheduler.add_job(check_charging_sessions, "interval", minutes=2)
     scheduler.add_job(close_stale_charging_sessions, "interval", minutes=15)
+
+    # D32: Daily aggregation job — populates TripDailyStats, ChargingHourlyStats, MonthlySummary
+    from services.aggregation_service import run_all_aggregations
+    scheduler.add_job(run_all_aggregations, "cron", hour=0, minute=5)
+
     scheduler.start()
     logger.info("Background scheduler initialized")
     return scheduler

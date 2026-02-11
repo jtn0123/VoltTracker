@@ -11,12 +11,15 @@ from routes.charging import charging_bp
 from routes.combined_analytics import combined_analytics_bp
 from routes.dashboard import dashboard_bp
 from routes.elevation_analytics import elevation_analytics_bp
-from routes.export import export_bp
+from routes.export_routes import export_bp
 from routes.fuel import fuel_bp
+from routes.import_routes import import_bp
 from routes.map import map_bp
 from routes.statistics import statistics_bp
+from routes.system import system_bp
 from routes.telemetry import telemetry_bp
 from routes.trips import trips_bp
+from routes.settings import settings_bp
 from routes.weather_analytics import weather_analytics_bp
 
 __all__ = [
@@ -27,6 +30,7 @@ __all__ = [
     "battery_bp",
     "telemetry_bp",
     "export_bp",
+    "import_bp",
     "bulk_bp",
     "map_bp",
     "analytics_bp",
@@ -34,6 +38,8 @@ __all__ = [
     "weather_analytics_bp",
     "elevation_analytics_bp",
     "combined_analytics_bp",
+    "system_bp",
+    "settings_bp",
 ]
 
 
@@ -46,10 +52,13 @@ def register_blueprints(app):
     app.register_blueprint(charging_bp, url_prefix="/api")
     app.register_blueprint(battery_bp, url_prefix="/api")
     app.register_blueprint(export_bp, url_prefix="/api")
+    app.register_blueprint(import_bp, url_prefix="/api")
     app.register_blueprint(bulk_bp, url_prefix="/api")
-    app.register_blueprint(map_bp)  # Map endpoints include /api prefix in route definitions
+    app.register_blueprint(map_bp)
     app.register_blueprint(statistics_bp, url_prefix="/api")
     app.register_blueprint(analytics_bp)
     app.register_blueprint(weather_analytics_bp)
     app.register_blueprint(elevation_analytics_bp)
     app.register_blueprint(combined_analytics_bp)
+    app.register_blueprint(system_bp)
+    app.register_blueprint(settings_bp)

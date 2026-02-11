@@ -11,14 +11,27 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Determine image tags
+        id: tags
+        run: |
+          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          TAGS="ghcr.io/jtn0123/volttracker:latest,ghcr.io/jtn0123/volttracker:sha-${SHA_SHORT}"
+          if [ -f VERSION ]; then
+            VERSION=$(cat VERSION | tr -d '[:space:]')
+            TAGS="${TAGS},ghcr.io/jtn0123/volttracker:${VERSION}"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: docker/build-push-action@v5
         with:
           context: ./receiver
           file: receiver/Dockerfile
           push: true
-          tags: ghcr.io/jtn0123/volttracker:latest
+          tags: ${{ steps.tags.outputs.tags }}
