@@ -6,7 +6,7 @@ Tests Redis caching decorators, cache invalidation, and cache management.
 
 import os
 import sys
-import pickle
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -165,7 +165,7 @@ class TestCacheResultDecorator:
     def test_cache_result_cache_hit(self):
         """Decorator returns cached value on cache hit."""
         mock_redis = MagicMock()
-        mock_redis.get.return_value = pickle.dumps(42)
+        mock_redis.get.return_value = json.dumps(42).encode("utf-8")
 
         with patch("utils.cache_utils.get_redis_cache", return_value=mock_redis):
             call_count = 0
@@ -200,7 +200,7 @@ class TestCacheResultDecorator:
             mock_redis.setex.assert_called_once()
             call_args = mock_redis.setex.call_args
             assert call_args[0][1] == 60  # TTL
-            assert pickle.loads(call_args[0][2]) == 42  # Cached value
+            assert json.loads(call_args[0][2].decode("utf-8")) == 42  # Cached value
 
     def test_cache_result_with_tags(self):
         """Decorator adds cache keys to tag sets."""
@@ -270,7 +270,7 @@ class TestCacheResultDecorator:
         mock_redis.get.return_value = None
 
         with patch("utils.cache_utils.get_redis_cache", return_value=mock_redis):
-            with patch("pickle.dumps", side_effect=Exception("Cannot pickle")):
+            with patch("json.dumps", side_effect=Exception("Cannot serialize")):
                 @cache_result("test", ttl=60)
                 def test_func(x):
                     return x * 2

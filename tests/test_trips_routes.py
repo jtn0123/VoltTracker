@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for trips routes.
 
@@ -587,17 +588,21 @@ class TestTripComparison:
         data = response.get_json()
 
         # Check distance stats
-        assert data["statistics"]["distance"]["min"] == 20.0
-        assert data["statistics"]["distance"]["max"] == 30.0
-        assert data["statistics"]["distance"]["total"] == 50.0
+        assert data["statistics"]["distance"]["min"] == pytest.approx(20.0)
+
+        assert data["statistics"]["distance"]["max"] == pytest.approx(30.0)
+
+        assert data["statistics"]["distance"]["total"] == pytest.approx(50.0)
 
         # Check efficiency stats
-        assert data["statistics"]["efficiency"]["best"] == 0.30
-        assert data["statistics"]["efficiency"]["worst"] == 0.35
+        assert data["statistics"]["efficiency"]["best"] == pytest.approx(0.30)
+
+        assert data["statistics"]["efficiency"]["worst"] == pytest.approx(0.35)
 
         # Check weather stats
-        assert data["statistics"]["weather"]["coldest"] == 60.0
-        assert data["statistics"]["weather"]["warmest"] == 75.0
+        assert data["statistics"]["weather"]["coldest"] == pytest.approx(60.0)
+
+        assert data["statistics"]["weather"]["warmest"] == pytest.approx(75.0)
 
         # Check mode stats
         assert data["statistics"]["modes"]["ev_only"] == 1

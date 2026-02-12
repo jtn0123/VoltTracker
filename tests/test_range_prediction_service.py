@@ -137,7 +137,7 @@ class TestPredictRangeSimple:
         )
 
         assert result is not None
-        assert result["factors"]["temperature_factor"] == 1.0
+        assert result["factors"]["temperature_factor"] == pytest.approx(1.0)
 
     def test_highway_speed_penalty(self, app, db_session):
         """Highway speed (> 65 mph) applies 25% penalty."""
@@ -221,7 +221,7 @@ class TestPredictRangeSimple:
         )
 
         assert result is not None
-        assert result["factors"]["speed_factor"] == 1.0
+        assert result["factors"]["speed_factor"] == pytest.approx(1.0)
 
     def test_battery_health_adjustment(self, app, db_session):
         """Battery health affects range linearly."""
@@ -255,7 +255,8 @@ class TestPredictRangeSimple:
         assert result_90 is not None
         assert result_100 is not None
         assert result_90["factors"]["health_factor"] == pytest.approx(0.90, abs=0.01)
-        assert result_100["factors"]["health_factor"] == 1.0
+        assert result_100["factors"]["health_factor"] == pytest.approx(1.0)
+
         # 90% health should give ~90% of range
         assert result_90["predicted_range_miles"] < result_100["predicted_range_miles"]
 
@@ -307,9 +308,10 @@ class TestPredictRangeSimple:
         )
 
         assert result is not None
-        assert result["factors"]["temperature_factor"] == 1.0
+        assert result["factors"]["temperature_factor"] == pytest.approx(1.0)
+
         assert result["factors"]["speed_factor"] == pytest.approx(1.10, abs=0.01)
-        assert result["factors"]["health_factor"] == 1.0
+        assert result["factors"]["health_factor"] == pytest.approx(1.0)
 
     def test_no_historical_data_uses_default(self, app, db_session):
         """No historical data uses default efficiency (5.0 mi/kWh)."""
@@ -546,7 +548,7 @@ class TestRangePredictionValidation:
 
         assert result is not None
         # Should be clamped to 1.0
-        assert result["factors"]["health_factor"] == 1.0
+        assert result["factors"]["health_factor"] == pytest.approx(1.0)
 
 
 class TestHistoricalEfficiencyEdgeCases:
@@ -664,10 +666,13 @@ class TestGetCurrentConditions:
         result = get_current_conditions(db_session)
 
         # Should have defaults
-        assert result["battery_health_pct"] == 100.0
-        assert result["battery_capacity_kwh"] == 16.5
-        assert result["avg_speed_mph"] == 30.0
-        assert result["temperature_f"] == 70.0
+        assert result["battery_health_pct"] == pytest.approx(100.0)
+
+        assert result["battery_capacity_kwh"] == pytest.approx(16.5)
+
+        assert result["avg_speed_mph"] == pytest.approx(30.0)
+
+        assert result["temperature_f"] == pytest.approx(70.0)
 
     def test_speed_calculation_with_zero_duration_trips(self, app, db_session):
         """Handles trips where duration calculation might be zero."""

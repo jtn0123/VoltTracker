@@ -89,7 +89,7 @@ class TestGetDegradationHistory:
 
         assert len(history) == 1
         _, capacity = history[0]
-        assert capacity == 17.8  # Uses normalized
+        assert capacity == pytest.approx(17.8)  # Uses normalized
 
     def test_falls_back_to_capacity_kwh(self, app, db_session):
         """Falls back to capacity_kwh if normalized is None."""
@@ -108,7 +108,7 @@ class TestGetDegradationHistory:
 
         assert len(history) == 1
         _, capacity = history[0]
-        assert capacity == 17.5  # Falls back
+        assert capacity == pytest.approx(17.5)  # Falls back
 
     def test_excludes_null_capacity(self, app, db_session):
         """Excludes readings with null capacity."""

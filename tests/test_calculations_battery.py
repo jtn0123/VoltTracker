@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for battery-related calculations
 """
@@ -17,24 +18,24 @@ class TestCapacityConversions:
     """Test battery capacity conversions"""
 
     def test_capacity_kwh_to_percent_full(self):
-        assert capacity_kwh_to_percent(18.4, 18.4) == 100.0
+        assert capacity_kwh_to_percent(18.4, 18.4) == pytest.approx(100.0)
 
     def test_capacity_kwh_to_percent_degraded(self):
-        assert capacity_kwh_to_percent(16.56, 18.4) == 90.0
+        assert capacity_kwh_to_percent(16.56, 18.4) == pytest.approx(90.0)
 
     def test_capacity_kwh_to_percent_floor(self):
         """70% capacity (severe degradation)"""
-        assert capacity_kwh_to_percent(12.88, 18.4) == 70.0
+        assert capacity_kwh_to_percent(12.88, 18.4) == pytest.approx(70.0)
 
     def test_capacity_kwh_to_percent_zero_nominal(self):
         """Should handle zero nominal capacity"""
-        assert capacity_kwh_to_percent(10.0, 0.0) == 0.0
+        assert capacity_kwh_to_percent(10.0, 0.0) == pytest.approx(0.0)
 
     def test_capacity_percent_to_kwh_full(self):
-        assert capacity_percent_to_kwh(100.0, 18.4) == 18.4
+        assert capacity_percent_to_kwh(100.0, 18.4) == pytest.approx(18.4)
 
     def test_capacity_percent_to_kwh_degraded(self):
-        assert capacity_percent_to_kwh(90.0, 18.4) == 16.56
+        assert capacity_percent_to_kwh(90.0, 18.4) == pytest.approx(16.56)
 
     def test_capacity_roundtrip(self):
         """Converting kWh -> % -> kWh should preserve value"""
@@ -51,19 +52,19 @@ class TestDegradationRate:
         """0.00001 kWh/mile loss = ~0.54% per 10k miles (typical for Volt)"""
         slope = -0.00001  # Losing 0.00001 kWh per mile (0.1 kWh per 10k miles)
         rate = calculate_degradation_rate_per_10k_miles(slope, 18.4)
-        assert rate == 0.54
+        assert rate == pytest.approx(0.54)
 
     def test_calculate_degradation_rate_fast(self):
         """Faster degradation: 0.00002 kWh/mile = ~1.09% per 10k miles"""
         slope = -0.00002  # Losing 0.00002 kWh per mile
         rate = calculate_degradation_rate_per_10k_miles(slope, 18.4)
-        assert rate == 1.09
+        assert rate == pytest.approx(1.09)
 
     def test_calculate_degradation_rate_slow(self):
         """Slower degradation: 0.000005 kWh/mile = ~0.27% per 10k miles"""
         slope = -0.000005  # Losing 0.000005 kWh per mile
         rate = calculate_degradation_rate_per_10k_miles(slope, 18.4)
-        assert rate == 0.27
+        assert rate == pytest.approx(0.27)
 
     def test_is_degradation_rate_normal_typical(self):
         """0.5% per 10k is normal"""
@@ -91,20 +92,21 @@ class TestCapacityClamping:
 
     def test_clamp_within_range(self):
         """Value within range should be unchanged"""
-        assert clamp_battery_capacity(15.0) == 15.0
+        assert clamp_battery_capacity(15.0) == pytest.approx(15.0)
 
     def test_clamp_above_max(self):
         """Value above max should be clamped to max"""
-        assert clamp_battery_capacity(20.0) == 18.4
+        assert clamp_battery_capacity(20.0) == pytest.approx(18.4)
 
     def test_clamp_below_min(self):
         """Value below min should be clamped to min"""
-        assert clamp_battery_capacity(10.0) == 12.88
+        assert clamp_battery_capacity(10.0) == pytest.approx(12.88)
 
     def test_clamp_at_boundaries(self):
         """Boundary values should be preserved"""
-        assert clamp_battery_capacity(18.4) == 18.4
-        assert clamp_battery_capacity(12.88) == 12.88
+        assert clamp_battery_capacity(18.4) == pytest.approx(18.4)
+
+        assert clamp_battery_capacity(12.88) == pytest.approx(12.88)
 
 
 class TestCapacityPrediction:
@@ -115,19 +117,19 @@ class TestCapacityPrediction:
         # Slope: -0.0001 kWh/mile, Intercept: 18.5 kWh
         # At 50k miles: -0.0001 * 50000 + 18.5 = 13.5 kWh
         result = predict_capacity_at_mileage(50000, -0.0001, 18.5)
-        assert result == 13.5
+        assert result == pytest.approx(13.5)
 
     def test_predict_capacity_clamped_to_min(self):
         """Prediction below min should be clamped"""
         # Predict very low capacity (would be < 12.88)
         result = predict_capacity_at_mileage(100000, -0.0002, 18.0)
-        assert result == 12.88
+        assert result == pytest.approx(12.88)
 
     def test_predict_capacity_clamped_to_max(self):
         """Prediction above max should be clamped"""
         # Predict unrealistically high capacity
         result = predict_capacity_at_mileage(0, 0.0001, 20.0)
-        assert result == 18.4
+        assert result == pytest.approx(18.4)
 
 
 class TestSOCBuffer:
@@ -135,16 +137,16 @@ class TestSOCBuffer:
 
     def test_soc_buffer_positive(self):
         """Transition at 18.5% with 15% threshold = 3.5% buffer"""
-        assert calculate_soc_buffer(18.5, 15.0) == 3.5
+        assert calculate_soc_buffer(18.5, 15.0) == pytest.approx(3.5)
 
     def test_soc_buffer_negative(self):
         """Transition at 12% with 15% threshold = -3.0% buffer"""
-        assert calculate_soc_buffer(12.0, 15.0) == -3.0
+        assert calculate_soc_buffer(12.0, 15.0) == pytest.approx(-3.0)
 
     def test_soc_buffer_at_threshold(self):
         """Transition exactly at threshold = 0 buffer"""
-        assert calculate_soc_buffer(15.0, 15.0) == 0.0
+        assert calculate_soc_buffer(15.0, 15.0) == pytest.approx(0.0)
 
     def test_soc_buffer_cold_weather(self):
         """Cold weather might cause early transition (negative buffer)"""
-        assert calculate_soc_buffer(10.0, 15.0) == -5.0
+        assert calculate_soc_buffer(10.0, 15.0) == pytest.approx(-5.0)

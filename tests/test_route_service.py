@@ -32,7 +32,7 @@ class TestHaversineDistance:
 
         distance = haversine_distance(lat, lon, lat, lon)
 
-        assert distance == 0.0
+        assert distance == pytest.approx(0.0)
 
     def test_known_distance_sf_to_la(self):
         """Known distance: SF to LA is ~347 miles."""
@@ -267,10 +267,13 @@ class TestGetTripEndpoints:
 
         assert result is not None
         start_lat, start_lon, end_lat, end_lon = result
-        assert start_lat == 37.7749
-        assert start_lon == -122.4194
-        assert end_lat == 37.8044
-        assert end_lon == -122.2712
+        assert start_lat == pytest.approx(37.7749)
+
+        assert start_lon == pytest.approx(-122.4194)
+
+        assert end_lat == pytest.approx(37.8044)
+
+        assert end_lon == pytest.approx(-122.2712)
 
     def test_returns_none_for_nonexistent_trip(self, app, db_session):
         """Returns None for trip that doesn't exist."""

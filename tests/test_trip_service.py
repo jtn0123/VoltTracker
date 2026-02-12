@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for trip service module.
 
@@ -60,7 +61,7 @@ class TestCalculateTripBasics:
         calculate_trip_basics(trip, telemetry)
 
         assert trip.end_time == telemetry[-1].timestamp
-        assert trip.end_odometer == 50025.0
+        assert trip.end_odometer == pytest.approx(50025.0)
 
     def test_calculates_distance_miles(self, app, db_session):
         """Distance should be calculated from odometer difference."""
@@ -88,7 +89,7 @@ class TestCalculateTripBasics:
 
         calculate_trip_basics(trip, telemetry)
 
-        assert trip.distance_miles == 25.0
+        assert trip.distance_miles == pytest.approx(25.0)
 
     def test_handles_empty_telemetry_list(self, app, db_session):
         """Empty telemetry list should not crash - returns early."""
@@ -143,7 +144,7 @@ class TestCalculateTripBasics:
 
         calculate_trip_basics(trip, telemetry)
 
-        assert trip.ambient_temp_avg_f == 70.0
+        assert trip.ambient_temp_avg_f == pytest.approx(70.0)
 
 
 class TestProcessGasMode:
@@ -238,7 +239,7 @@ class TestProcessGasMode:
         process_gas_mode(db_session, trip, telemetry, points)
 
         assert trip.gas_mode_entered is None or trip.gas_mode_entered is False
-        assert trip.electric_miles == 20.0
+        assert trip.electric_miles == pytest.approx(20.0)
 
 
 class TestCalculateElectricEfficiency:
@@ -321,7 +322,8 @@ class TestFetchTripWeather:
 
         fetch_trip_weather(trip, points)
 
-        assert trip.weather_temp_f == 72.0
+        assert trip.weather_temp_f == pytest.approx(72.0)
+
         assert trip.weather_conditions == "Clear"
 
     def test_handles_no_gps_points(self, app, db_session):

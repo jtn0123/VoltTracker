@@ -53,7 +53,8 @@ class TestDetectAndFinalizeChargingSession:
             assert session.end_time == now.replace(tzinfo=None)
         else:
             assert session.end_time == now
-        assert session.end_soc == 80.0
+        assert session.end_soc == pytest.approx(80.0)
+
         assert session.is_complete is True
 
     def test_sets_end_time_to_now_without_telemetry(self, app, db_session):
@@ -111,7 +112,7 @@ class TestDetectAndFinalizeChargingSession:
         detect_and_finalize_charging_session(db_session, session, None)
 
         assert session.cost is not None
-        assert session.cost_per_kwh == 0.15
+        assert session.cost_per_kwh == pytest.approx(0.15)
 
     def test_handles_none_active_session(self, app, db_session):
         """Should handle None session gracefully."""
@@ -177,9 +178,12 @@ class TestStartChargingSession:
         session = start_charging_session(db_session, telemetry)
 
         assert session.start_time == now
-        assert session.start_soc == 25.0
-        assert session.latitude == 37.7749
-        assert session.longitude == -122.4194
+        assert session.start_soc == pytest.approx(25.0)
+
+        assert session.latitude == pytest.approx(37.7749)
+
+        assert session.longitude == pytest.approx(-122.4194)
+
         assert session.is_complete is False
 
     def test_detects_l1_charging(self, app, db_session):
@@ -269,7 +273,7 @@ class TestUpdateChargingSession:
 
         update_charging_session(session, telemetry)
 
-        assert session.end_soc == 60.0
+        assert session.end_soc == pytest.approx(60.0)
 
     def test_updates_end_soc_when_zero(self, app, db_session):
         """End SOC should be updated even when it's 0."""
@@ -294,7 +298,7 @@ class TestUpdateChargingSession:
         update_charging_session(session, telemetry)
 
         # With the fix, 0.0 should be recorded (not skipped due to truthiness)
-        assert session.end_soc == 0.0
+        assert session.end_soc == pytest.approx(0.0)
 
     def test_updates_peak_power_when_higher(self, app, db_session):
         """Peak power should be updated when current power is higher."""
@@ -318,7 +322,7 @@ class TestUpdateChargingSession:
 
         update_charging_session(session, telemetry)
 
-        assert session.peak_power_kw == 7.2
+        assert session.peak_power_kw == pytest.approx(7.2)
 
     def test_keeps_peak_power_when_lower(self, app, db_session):
         """Peak power should not change when current power is lower."""
@@ -342,7 +346,7 @@ class TestUpdateChargingSession:
 
         update_charging_session(session, telemetry)
 
-        assert session.peak_power_kw == 7.2
+        assert session.peak_power_kw == pytest.approx(7.2)
 
     def test_appends_to_charging_curve(self, app, db_session):
         """Charging curve should be appended with new data points."""
@@ -367,8 +371,9 @@ class TestUpdateChargingSession:
         update_charging_session(session, telemetry)
 
         assert len(session.charging_curve) == 1
-        assert session.charging_curve[0]["power_kw"] == 6.6
-        assert session.charging_curve[0]["soc"] == 60.0
+        assert session.charging_curve[0]["power_kw"] == pytest.approx(6.6)
+
+        assert session.charging_curve[0]["soc"] == pytest.approx(60.0)
 
     def test_initializes_charging_curve_if_none(self, app, db_session):
         """Charging curve should be initialized if None."""

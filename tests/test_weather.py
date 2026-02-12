@@ -7,7 +7,7 @@ All tests mock HTTP requests to avoid actual API calls.
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,7 +34,7 @@ class TestGetWeatherForLocation:
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "hourly": {
-                "time": [datetime.utcnow().strftime("%Y-%m-%dT%H:00")],
+                "time": [datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00")],
                 "temperature_2m": [65.0],
                 "precipitation": [0.0],
                 "wind_speed_10m": [10.0],
@@ -57,7 +57,7 @@ class TestGetWeatherForLocation:
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "hourly": {
-                "time": [datetime.utcnow().strftime("%Y-%m-%dT%H:00")],
+                "time": [datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00")],
                 "temperature_2m": [70.0],
                 "precipitation": [0.0],
                 "wind_speed_10m": [5.0],
@@ -76,7 +76,7 @@ class TestGetWeatherForLocation:
     def test_get_weather_with_old_timestamp_uses_historical_api(self, mock_get):
         """Timestamps more than 5 days ago use historical API."""
         mock_response = MagicMock()
-        old_date = datetime.utcnow() - timedelta(days=10)
+        old_date = datetime.now(timezone.utc) - timedelta(days=10)
         mock_response.json.return_value = {
             "hourly": {
                 "time": [old_date.strftime("%Y-%m-%dT%H:00")],
@@ -98,7 +98,7 @@ class TestGetWeatherForLocation:
     def test_get_weather_threshold_exactly_5_days_uses_forecast(self, mock_get):
         """Timestamp exactly 5 days ago uses forecast API."""
         mock_response = MagicMock()
-        five_days_ago = datetime.utcnow() - timedelta(days=5)
+        five_days_ago = datetime.now(timezone.utc) - timedelta(days=5)
         mock_response.json.return_value = {
             "hourly": {
                 "time": [five_days_ago.strftime("%Y-%m-%dT%H:00")],
@@ -120,7 +120,7 @@ class TestGetWeatherForLocation:
     def test_get_weather_threshold_6_days_ago_uses_historical(self, mock_get):
         """Timestamp 6 days ago uses historical API."""
         mock_response = MagicMock()
-        six_days_ago = datetime.utcnow() - timedelta(days=6)
+        six_days_ago = datetime.now(timezone.utc) - timedelta(days=6)
         mock_response.json.return_value = {
             "hourly": {
                 "time": [six_days_ago.strftime("%Y-%m-%dT%H:00")],
@@ -186,12 +186,12 @@ class TestParseWeatherResponse:
     def test_parse_returns_none_for_missing_hourly(self):
         """Missing hourly data returns None."""
         data = {"latitude": 37.7749, "longitude": -122.4194}
-        result = _parse_weather_response(data, datetime.utcnow())
+        result = _parse_weather_response(data, datetime.now(timezone.utc))
         assert result is None
 
     def test_parse_extracts_temperature_correctly(self):
         """Temperature is correctly extracted from response."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         data = {
             "hourly": {
                 "time": [now.strftime("%Y-%m-%dT%H:00")],
@@ -202,11 +202,11 @@ class TestParseWeatherResponse:
             }
         }
         result = _parse_weather_response(data, now)
-        assert result["temperature_f"] == 72.5
+        assert result["temperature_f"] == pytest.approx(72.5)
 
     def test_parse_finds_exact_hour_match(self):
         """Parser finds exact hour match in time array."""
-        now = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
         target_str = now.strftime("%Y-%m-%dT%H:00")
 
         data = {
@@ -223,7 +223,7 @@ class TestParseWeatherResponse:
             }
         }
         result = _parse_weather_response(data, now)
-        assert result["temperature_f"] == 65.0
+        assert result["temperature_f"] == pytest.approx(65.0)
 
     def test_parse_uses_fallback_index_when_no_match(self):
         """Parser uses hour as index when exact match not found."""
@@ -239,19 +239,19 @@ class TestParseWeatherResponse:
         }
         result = _parse_weather_response(data, now)
         # Should use index 10 (the hour)
-        assert result["temperature_f"] == 60.0  # 50.0 + 10
+        assert result["temperature_f"] == pytest.approx(60.0)  # 50.0 + 10
 
     def test_parse_handles_empty_time_array(self):
         """Empty time array returns None."""
         data = {
             "hourly": {"time": [], "temperature_2m": [], "precipitation": [], "wind_speed_10m": [], "weather_code": []}
         }
-        result = _parse_weather_response(data, datetime.utcnow())
+        result = _parse_weather_response(data, datetime.now(timezone.utc))
         assert result is None
 
     def test_parse_sets_is_raining_flag(self):
         """is_raining flag is set correctly based on precipitation."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         data = {
             "hourly": {
                 "time": [now.strftime("%Y-%m-%dT%H:00")],
@@ -266,7 +266,7 @@ class TestParseWeatherResponse:
 
     def test_parse_sets_is_raining_false_when_no_precipitation(self):
         """is_raining is False when precipitation is 0."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         data = {
             "hourly": {
                 "time": [now.strftime("%Y-%m-%dT%H:00")],
@@ -315,62 +315,62 @@ class TestGetWeatherImpactFactor:
     def test_ideal_temp_returns_1_0(self):
         """Ideal temperature (65-75°F) returns factor of 1.0."""
         weather = {"temperature_f": 70.0, "is_raining": False, "wind_speed_mph": 5.0}
-        assert get_weather_impact_factor(weather) == 1.0
+        assert get_weather_impact_factor(weather) == pytest.approx(1.0)
 
     def test_freezing_temp_adds_0_20(self):
         """Freezing temperature (<32°F) adds 0.20 penalty."""
         weather = {"temperature_f": 25.0, "is_raining": False, "wind_speed_mph": 5.0}
-        assert get_weather_impact_factor(weather) == 1.20
+        assert get_weather_impact_factor(weather) == pytest.approx(1.20)
 
     def test_cold_temp_45_to_32_adds_0_10(self):
         """Cold temperature (32-45°F) adds 0.10 penalty."""
         weather = {"temperature_f": 40.0, "is_raining": False, "wind_speed_mph": 5.0}
-        assert get_weather_impact_factor(weather) == 1.10
+        assert get_weather_impact_factor(weather) == pytest.approx(1.10)
 
     def test_cool_temp_55_to_45_adds_0_05(self):
         """Cool temperature (45-55°F) adds 0.05 penalty."""
         weather = {"temperature_f": 50.0, "is_raining": False, "wind_speed_mph": 5.0}
-        assert get_weather_impact_factor(weather) == 1.05
+        assert get_weather_impact_factor(weather) == pytest.approx(1.05)
 
     def test_hot_temp_over_95_adds_0_10(self):
         """Hot temperature (>95°F) adds 0.10 penalty."""
         weather = {"temperature_f": 100.0, "is_raining": False, "wind_speed_mph": 5.0}
-        assert get_weather_impact_factor(weather) == 1.10
+        assert get_weather_impact_factor(weather) == pytest.approx(1.10)
 
     def test_warm_temp_85_to_95_adds_0_05(self):
         """Warm temperature (85-95°F) adds 0.05 penalty."""
         weather = {"temperature_f": 90.0, "is_raining": False, "wind_speed_mph": 5.0}
-        assert get_weather_impact_factor(weather) == 1.05
+        assert get_weather_impact_factor(weather) == pytest.approx(1.05)
 
     def test_heavy_rain_adds_0_10(self):
         """Heavy rain (>0.25 in) adds 0.10 penalty."""
         weather = {"temperature_f": 70.0, "is_raining": True, "precipitation_in": 0.5, "wind_speed_mph": 5.0}
-        assert get_weather_impact_factor(weather) == 1.10
+        assert get_weather_impact_factor(weather) == pytest.approx(1.10)
 
     def test_light_rain_adds_0_05(self):
         """Light rain (<=0.25 in) adds 0.05 penalty."""
         weather = {"temperature_f": 70.0, "is_raining": True, "precipitation_in": 0.1, "wind_speed_mph": 5.0}
-        assert get_weather_impact_factor(weather) == 1.05
+        assert get_weather_impact_factor(weather) == pytest.approx(1.05)
 
     def test_no_rain_adds_nothing(self):
         """No rain adds no penalty."""
         weather = {"temperature_f": 70.0, "is_raining": False, "wind_speed_mph": 5.0}
-        assert get_weather_impact_factor(weather) == 1.0
+        assert get_weather_impact_factor(weather) == pytest.approx(1.0)
 
     def test_strong_wind_over_25_adds_0_10(self):
         """Strong wind (>25 mph) adds 0.10 penalty."""
         weather = {"temperature_f": 70.0, "is_raining": False, "wind_speed_mph": 30.0}
-        assert get_weather_impact_factor(weather) == 1.10
+        assert get_weather_impact_factor(weather) == pytest.approx(1.10)
 
     def test_moderate_wind_15_to_25_adds_0_05(self):
         """Moderate wind (15-25 mph) adds 0.05 penalty."""
         weather = {"temperature_f": 70.0, "is_raining": False, "wind_speed_mph": 20.0}
-        assert get_weather_impact_factor(weather) == 1.05
+        assert get_weather_impact_factor(weather) == pytest.approx(1.05)
 
     def test_light_wind_adds_nothing(self):
         """Light wind (<15 mph) adds no penalty."""
         weather = {"temperature_f": 70.0, "is_raining": False, "wind_speed_mph": 10.0}
-        assert get_weather_impact_factor(weather) == 1.0
+        assert get_weather_impact_factor(weather) == pytest.approx(1.0)
 
     def test_combined_bad_weather_stacks_factors(self):
         """Multiple bad conditions stack their penalties."""
@@ -385,11 +385,11 @@ class TestGetWeatherImpactFactor:
 
     def test_empty_weather_dict_returns_1_0(self):
         """Empty weather dict returns factor of 1.0."""
-        assert get_weather_impact_factor({}) == 1.0
+        assert get_weather_impact_factor({}) == pytest.approx(1.0)
 
     def test_none_weather_returns_1_0(self):
         """None weather returns factor of 1.0."""
-        assert get_weather_impact_factor(None) == 1.0
+        assert get_weather_impact_factor(None) == pytest.approx(1.0)
 
     def test_missing_temperature_only_checks_other_factors(self):
         """Missing temperature still checks rain and wind."""
@@ -423,7 +423,7 @@ class TestWeatherExceptionHandling:
             mock_response = MagicMock()
             mock_response.json.return_value = {
                 "hourly": {
-                    "time": [datetime.utcnow().strftime("%Y-%m-%dT%H:00")],
+                    "time": [datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00")],
                     "temperature_2m": [65.0],
                     "precipitation": [0.0],
                     "wind_speed_10m": [10.0],

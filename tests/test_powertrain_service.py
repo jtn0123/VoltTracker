@@ -187,8 +187,9 @@ class TestAnalyzeTripPowertrain:
 
         assert result is not None
         assert result["total_samples"] == 10
-        assert result["mode_percentages"][PowertrainMode.EV_MODE] == 100.0
-        assert result["mode_percentages"][PowertrainMode.HOLD_MODE] == 0.0
+        assert result["mode_percentages"][PowertrainMode.EV_MODE] == pytest.approx(100.0)
+
+        assert result["mode_percentages"][PowertrainMode.HOLD_MODE] == pytest.approx(0.0)
 
     def test_analyzes_mixed_mode_trip(self, app, db_session):
         """Mixed mode trip shows mode distribution."""

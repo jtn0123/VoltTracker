@@ -130,7 +130,8 @@ class TestAddFuelEvent:
 
         assert response.status_code == 201
         result = json.loads(response.data)
-        assert result["gallons_added"] == 7.5
+        assert result["gallons_added"] == pytest.approx(7.5)
+
         assert result["odometer_miles"] == 50500
 
     def test_add_fuel_event_no_data(self, client):
@@ -334,7 +335,8 @@ class TestUpdateFuelEvent:
 
         assert response.status_code == 200
         result = json.loads(response.data)
-        assert result["gallons_added"] == 9.5
+        assert result["gallons_added"] == pytest.approx(9.5)
+
         assert result["notes"] == "Updated notes"
 
     def test_update_fuel_event_not_found(self, client):

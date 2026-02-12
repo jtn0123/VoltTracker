@@ -32,10 +32,13 @@ class TestColumnMapping:
         records, stats = TorqueCSVImporter.parse_csv(csv_content)
 
         assert len(records) == 1
-        assert records[0]["latitude"] == 37.7749
-        assert records[0]["longitude"] == -122.4194
-        assert records[0]["engine_rpm"] == 1500.0
-        assert records[0]["fuel_level_percent"] == 75.0
+        assert records[0]["latitude"] == pytest.approx(37.7749)
+
+        assert records[0]["longitude"] == pytest.approx(-122.4194)
+
+        assert records[0]["engine_rpm"] == pytest.approx(1500.0)
+
+        assert records[0]["fuel_level_percent"] == pytest.approx(75.0)
 
     def test_volt_specific_soc_columns(self):
         """Volt-specific SOC column variations are recognized."""
@@ -65,9 +68,11 @@ class TestColumnMapping:
         records, stats = TorqueCSVImporter.parse_csv(csv_content)
 
         assert len(records) == 1
-        assert records[0]["latitude"] == 37.7749
-        assert records[0]["longitude"] == -122.4194
-        assert records[0]["engine_rpm"] == 1500.0
+        assert records[0]["latitude"] == pytest.approx(37.7749)
+
+        assert records[0]["longitude"] == pytest.approx(-122.4194)
+
+        assert records[0]["engine_rpm"] == pytest.approx(1500.0)
 
     def test_speed_column_variations(self):
         """Different speed column formats are recognized."""
@@ -94,9 +99,11 @@ class TestColumnMapping:
         records, stats = TorqueCSVImporter.parse_csv(csv_content)
 
         assert len(records) == 1
-        assert records[0]["ambient_temp_f"] == 68.0
-        assert records[0]["coolant_temp_f"] == 195.0
-        assert records[0]["intake_air_temp_f"] == 85.0
+        assert records[0]["ambient_temp_f"] == pytest.approx(68.0)
+
+        assert records[0]["coolant_temp_f"] == pytest.approx(195.0)
+
+        assert records[0]["intake_air_temp_f"] == pytest.approx(85.0)
 
     def test_hv_battery_columns(self):
         """High voltage battery columns are parsed."""
@@ -106,10 +113,13 @@ class TestColumnMapping:
         records, stats = TorqueCSVImporter.parse_csv(csv_content)
 
         assert len(records) == 1
-        assert records[0]["hv_battery_power_kw"] == 25.5
-        assert records[0]["hv_discharge_amps"] == 80.0
-        assert records[0]["hv_battery_voltage_v"] == 360.0
-        assert records[0]["battery_temp_f"] == 75.0
+        assert records[0]["hv_battery_power_kw"] == pytest.approx(25.5)
+
+        assert records[0]["hv_discharge_amps"] == pytest.approx(80.0)
+
+        assert records[0]["hv_battery_voltage_v"] == pytest.approx(360.0)
+
+        assert records[0]["battery_temp_f"] == pytest.approx(75.0)
 
     def test_unmapped_columns_ignored(self):
         """Columns without mapping are ignored gracefully."""
@@ -327,7 +337,8 @@ class TestUnitConversions:
         records, stats = TorqueCSVImporter.parse_csv(csv_content)
 
         assert len(records) == 1
-        assert records[0]["fuel_level_percent"] == 50.0
+        assert records[0]["fuel_level_percent"] == pytest.approx(50.0)
+
         assert records[0]["fuel_remaining_gallons"] == pytest.approx(4.65, abs=0.01)
 
 
@@ -450,7 +461,8 @@ class TestDuplicateDetection:
 
         # Only middle record should remain
         assert len(records) == 1
-        assert records[0]["latitude"] == 37.7750
+        assert records[0]["latitude"] == pytest.approx(37.7750)
+
         assert stats["duplicates_removed"] == 2
 
     def test_timezone_normalized_for_comparison(self):
@@ -536,7 +548,7 @@ invalid-timestamp,90.0
         records, stats = TorqueCSVImporter.parse_csv(csv_content)
 
         assert len(records) == 1
-        assert records[0]["latitude"] == 37.7749
+        assert records[0]["latitude"] == pytest.approx(37.7749)
 
     def test_raw_data_preserved(self):
         """Original CSV values preserved in raw_data."""
@@ -618,7 +630,7 @@ class TestEdgeCases:
         records, stats = TorqueCSVImporter.parse_csv(csv_content)
 
         assert len(records) == 1
-        assert records[0]["latitude"] == 37.7749
+        assert records[0]["latitude"] == pytest.approx(37.7749)
 
     def test_malformed_number_skipped(self):
         """Non-numeric values for numeric fields are skipped."""
@@ -642,7 +654,7 @@ class TestEdgeCases:
         assert len(records) == 1
         record = records[0]
         # Fields not in CSV should exist with None values
-        assert record["latitude"] == 37.7749  # This one is present
+        assert record["latitude"] == pytest.approx(37.7749)  # This one is present
         assert record["longitude"] is None
         assert record["engine_rpm"] is None
         assert record["state_of_charge"] is None

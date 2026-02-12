@@ -193,7 +193,7 @@ def get_maintenance_summary(db: Session) -> Dict:
     summary = []
 
     for mtype, interval_config in MAINTENANCE_INTERVALS.items():
-        last_service = latest_services.get(mtype)
+        last_service = latest_services.get(mtype)  # type: ignore[call-overload]
 
         if last_service:
             # Calculate next due based on last service

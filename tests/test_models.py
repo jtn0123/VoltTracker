@@ -54,13 +54,18 @@ class TestTelemetryRawModel:
         result = telemetry.to_dict()
 
         assert result["session_id"] == str(session_id)
-        assert result["latitude"] == 37.7749
-        assert result["longitude"] == -122.4194
-        assert result["speed_mph"] == 45.5
+        assert result["latitude"] == pytest.approx(37.7749)
+
+        assert result["longitude"] == pytest.approx(-122.4194)
+
+        assert result["speed_mph"] == pytest.approx(45.5)
+
         assert result["engine_rpm"] == 0
-        assert result["state_of_charge"] == 85.0
-        assert result["fuel_level_percent"] == 75.5
-        assert result["odometer_miles"] == 50123.4
+        assert result["state_of_charge"] == pytest.approx(85.0)
+
+        assert result["fuel_level_percent"] == pytest.approx(75.5)
+
+        assert result["odometer_miles"] == pytest.approx(50123.4)
 
     def test_to_dict_null_fields(self, db_session):
         """Test to_dict handles None values correctly."""
@@ -137,11 +142,16 @@ class TestTripModel:
         result = trip.to_dict()
 
         assert result["session_id"] == str(session_id)
-        assert result["distance_miles"] == 50.0
-        assert result["electric_miles"] == 25.0
-        assert result["gas_miles"] == 25.0
-        assert result["gas_mpg"] == 41.7
-        assert result["soc_at_gas_transition"] == 18.0
+        assert result["distance_miles"] == pytest.approx(50.0)
+
+        assert result["electric_miles"] == pytest.approx(25.0)
+
+        assert result["gas_miles"] == pytest.approx(25.0)
+
+        assert result["gas_mpg"] == pytest.approx(41.7)
+
+        assert result["soc_at_gas_transition"] == pytest.approx(18.0)
+
         assert result["gas_mode_entered"] is True
         assert result["is_closed"] is True
 
@@ -166,7 +176,8 @@ class TestTripModel:
 
         result = trip.to_dict()
 
-        assert result["electric_miles"] == 30.0
+        assert result["electric_miles"] == pytest.approx(30.0)
+
         assert result["gas_miles"] is None
         assert result["gas_mpg"] is None
         assert result["gas_mode_entered"] is False
@@ -216,12 +227,18 @@ class TestFuelEventModel:
 
         result = fuel_event.to_dict()
 
-        assert result["odometer_miles"] == 51000.0
-        assert result["gallons_added"] == 7.5
-        assert result["fuel_level_before"] == 25.0
-        assert result["fuel_level_after"] == 85.0
-        assert result["price_per_gallon"] == 3.49
-        assert result["total_cost"] == 26.18
+        assert result["odometer_miles"] == pytest.approx(51000.0)
+
+        assert result["gallons_added"] == pytest.approx(7.5)
+
+        assert result["fuel_level_before"] == pytest.approx(25.0)
+
+        assert result["fuel_level_after"] == pytest.approx(85.0)
+
+        assert result["price_per_gallon"] == pytest.approx(3.49)
+
+        assert result["total_cost"] == pytest.approx(26.18)
+
         assert result["notes"] == "Filled at Shell station"
 
     def test_to_dict_minimal_fields(self, db_session):
@@ -237,7 +254,8 @@ class TestFuelEventModel:
 
         result = fuel_event.to_dict()
 
-        assert result["gallons_added"] == 8.0
+        assert result["gallons_added"] == pytest.approx(8.0)
+
         assert result["price_per_gallon"] is None
         assert result["total_cost"] is None
         assert result["notes"] is None
@@ -272,9 +290,11 @@ class TestSocTransitionModel:
         result = soc_transition.to_dict()
 
         assert result["trip_id"] == trip.id
-        assert result["soc_at_transition"] == 17.5
-        assert result["ambient_temp_f"] == 72.0
-        assert result["odometer_miles"] == 50025.0
+        assert result["soc_at_transition"] == pytest.approx(17.5)
+
+        assert result["ambient_temp_f"] == pytest.approx(72.0)
+
+        assert result["odometer_miles"] == pytest.approx(50025.0)
 
     def test_trip_relationship(self, db_session):
         """Test that SocTransition links to Trip correctly."""
@@ -437,10 +457,14 @@ class TestChargingSessionModel:
 
         result = session.to_dict()
 
-        assert result["start_soc"] == 30.0
-        assert result["end_soc"] == 80.0
-        assert result["kwh_added"] == 9.2
-        assert result["peak_power_kw"] == 6.6
+        assert result["start_soc"] == pytest.approx(30.0)
+
+        assert result["end_soc"] == pytest.approx(80.0)
+
+        assert result["kwh_added"] == pytest.approx(9.2)
+
+        assert result["peak_power_kw"] == pytest.approx(6.6)
+
         assert result["charge_type"] == "L2"
         assert result["location_name"] == "Home Garage"
         assert result["is_complete"] is True
@@ -476,7 +500,7 @@ class TestChargingSessionModel:
 
         result = session.to_dict()
 
-        assert result["duration_minutes"] == 150.0
+        assert result["duration_minutes"] == pytest.approx(150.0)
 
     def test_soc_gained_calculation(self, db_session):
         """soc_gained calculated from start_soc and end_soc."""
@@ -491,7 +515,7 @@ class TestChargingSessionModel:
 
         result = session.to_dict()
 
-        assert result["soc_gained"] == 60.0
+        assert result["soc_gained"] == pytest.approx(60.0)
 
     def test_charging_curve_json_serialization(self, db_session):
         """charging_curve JSON field stores/retrieves correctly."""
@@ -546,11 +570,15 @@ class TestBatteryHealthReadingModel:
 
         result = reading.to_dict()
 
-        assert result["capacity_kwh"] == 17.5
-        assert result["normalized_capacity_kwh"] == 17.8
-        assert result["soc_at_reading"] == 80.0
-        assert result["ambient_temp_f"] == 72.0
-        assert result["odometer_miles"] == 55000.0
+        assert result["capacity_kwh"] == pytest.approx(17.5)
+
+        assert result["normalized_capacity_kwh"] == pytest.approx(17.8)
+
+        assert result["soc_at_reading"] == pytest.approx(80.0)
+
+        assert result["ambient_temp_f"] == pytest.approx(72.0)
+
+        assert result["odometer_miles"] == pytest.approx(55000.0)
 
     def test_degradation_percent_property(self, db_session):
         """degradation_percent calculates correctly from 18.4 kWh baseline."""
@@ -623,9 +651,11 @@ class TestBatteryCellReadingModel:
             cell_voltages=cell_voltages,
         )
 
-        assert reading.module1_avg == 3.7
-        assert reading.module2_avg == 3.7
-        assert reading.module3_avg == 3.7
+        assert reading.module1_avg == pytest.approx(3.7)
+
+        assert reading.module2_avg == pytest.approx(3.7)
+
+        assert reading.module3_avg == pytest.approx(3.7)
 
     def test_from_cell_voltages_handles_empty_list(self, db_session):
         """Empty cell voltage list returns None."""
@@ -646,8 +676,9 @@ class TestBatteryCellReadingModel:
         )
 
         assert reading is not None
-        assert reading.min_voltage == 3.7
-        assert reading.max_voltage == 3.8
+        assert reading.min_voltage == pytest.approx(3.7)
+
+        assert reading.max_voltage == pytest.approx(3.8)
 
     def test_to_dict_all_fields(self, db_session):
         """All fields serialize correctly."""
@@ -667,8 +698,10 @@ class TestBatteryCellReadingModel:
 
         assert result["cell_voltages"] is not None
         assert len(result["cell_voltages"]) == 96
-        assert result["ambient_temp_f"] == 72.0
-        assert result["state_of_charge"] == 80.0
+        assert result["ambient_temp_f"] == pytest.approx(72.0)
+
+        assert result["state_of_charge"] == pytest.approx(80.0)
+
         assert result["is_charging"] is True
         assert result["voltage_delta"] is not None
 
@@ -687,7 +720,7 @@ class TestModelValidation:
         db_session.commit()
 
         fetched = db_session.query(Trip).filter_by(id=trip.id).first()
-        assert fetched.distance_miles == -5.0
+        assert fetched.distance_miles == pytest.approx(-5.0)
 
     def test_soc_over_100(self, db_session):
         """SOC values over 100 can be stored (sensor quirks)."""
@@ -700,7 +733,7 @@ class TestModelValidation:
         db_session.commit()
 
         fetched = db_session.query(TelemetryRaw).filter_by(id=telemetry.id).first()
-        assert fetched.state_of_charge == 102.5
+        assert fetched.state_of_charge == pytest.approx(102.5)
 
     def test_telemetry_requires_session_id(self, db_session):
         """TelemetryRaw without session_id should fail."""
@@ -806,9 +839,12 @@ class TestMaintenanceRecordModel:
         result = record.to_dict()
 
         assert result["maintenance_type"] == "oil_change"
-        assert result["odometer_miles"] == 55000.0
-        assert result["engine_hours"] == 25.5
-        assert result["cost"] == 65.00
+        assert result["odometer_miles"] == pytest.approx(55000.0)
+
+        assert result["engine_hours"] == pytest.approx(25.5)
+
+        assert result["cost"] == pytest.approx(65.00)
+
         assert result["location"] == "Chevy Dealer"
         assert result["notes"] == "Synthetic oil change"
         assert result["service_date"] is not None
@@ -923,7 +959,7 @@ class TestMaintenanceRecordModel:
         db_session.commit()
 
         fetched = db_session.query(MaintenanceRecord).filter_by(id=record.id).first()
-        assert fetched.odometer_miles == -100.0
+        assert fetched.odometer_miles == pytest.approx(-100.0)
 
     def test_negative_cost_stored(self, db_session):
         """Negative cost can be stored."""
@@ -940,7 +976,7 @@ class TestMaintenanceRecordModel:
         db_session.commit()
 
         fetched = db_session.query(MaintenanceRecord).filter_by(id=record.id).first()
-        assert fetched.cost == -50.0
+        assert fetched.cost == pytest.approx(-50.0)
 
 
 class TestRouteModel:
@@ -969,13 +1005,19 @@ class TestRouteModel:
         result = route.to_dict()
 
         assert result["name"] == "Work Commute"
-        assert result["start"]["lat"] == 37.7749
-        assert result["start"]["lon"] == -122.4194
-        assert result["end"]["lat"] == 37.8044
-        assert result["end"]["lon"] == -122.2712
+        assert result["start"]["lat"] == pytest.approx(37.7749)
+
+        assert result["start"]["lon"] == pytest.approx(-122.4194)
+
+        assert result["end"]["lat"] == pytest.approx(37.8044)
+
+        assert result["end"]["lon"] == pytest.approx(-122.2712)
+
         assert result["trip_count"] == 25
-        assert result["avg_distance_miles"] == 250.0
-        assert result["avg_efficiency"] == 0.2
+        assert result["avg_distance_miles"] == pytest.approx(250.0)
+
+        assert result["avg_efficiency"] == pytest.approx(0.2)
+
         assert result["last_traveled"] is not None
 
     def test_to_dict_required_fields_only(self, db_session):
@@ -993,7 +1035,8 @@ class TestRouteModel:
 
         result = route.to_dict()
 
-        assert result["start"]["lat"] == 37.7749
+        assert result["start"]["lat"] == pytest.approx(37.7749)
+
         assert result["name"] is None
         assert result["trip_count"] == 1  # Default value is 1, not None
 
@@ -1063,8 +1106,9 @@ class TestRouteModel:
 
         fetched = db_session.query(Route).filter_by(id=route.id).first()
 
-        assert fetched.start_lat == -33.8688
-        assert fetched.end_lat == -37.8136
+        assert fetched.start_lat == pytest.approx(-33.8688)
+
+        assert fetched.end_lat == pytest.approx(-37.8136)
 
     def test_trip_count_defaults_to_one(self, db_session):
         """trip_count defaults to 1."""
@@ -1130,7 +1174,7 @@ class TestRouteModel:
         db_session.commit()
 
         fetched = db_session.query(Route).filter_by(id=route.id).first()
-        assert fetched.avg_efficiency_kwh_per_mile == -0.1
+        assert fetched.avg_efficiency_kwh_per_mile == pytest.approx(-0.1)
 
     def test_last_traveled_formatting(self, db_session):
         """last_traveled formatted as ISO string."""

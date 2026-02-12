@@ -238,7 +238,7 @@ class TestTransactionIsolation:
             other_trip = other_session.query(Trip).filter(Trip.id == trip_id).first()
 
             # Should see old value (10.0), not dirty value (20.0)
-            assert other_trip.distance_miles == 10.0, "Should not see dirty read"
+            assert other_trip.distance_miles == pytest.approx(10.0), "Should not see dirty read"
 
         finally:
             other_session.close()

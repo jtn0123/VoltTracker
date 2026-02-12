@@ -40,7 +40,7 @@ class TestCalculateTripBasics:
 
         calculate_trip_basics(trip, [t1, t2])
         assert trip.end_time == t2.timestamp
-        assert trip.end_odometer == 50025.0
+        assert trip.end_odometer == pytest.approx(50025.0)
 
     def test_calculates_distance(self):
         """Should calculate distance_miles from odometer difference."""

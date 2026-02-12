@@ -155,10 +155,13 @@ class TestWeatherAPIError:
     def test_with_location(self):
         """Test error with location context."""
         error = WeatherAPIError("Request timeout", latitude=37.7749, longitude=-122.4194)
-        assert error.latitude == 37.7749
-        assert error.longitude == -122.4194
-        assert error.details["latitude"] == 37.7749
-        assert error.details["longitude"] == -122.4194
+        assert error.latitude == pytest.approx(37.7749)
+
+        assert error.longitude == pytest.approx(-122.4194)
+
+        assert error.details["latitude"] == pytest.approx(37.7749)
+
+        assert error.details["longitude"] == pytest.approx(-122.4194)
 
     def test_with_status_code(self):
         """Test error with HTTP status code."""

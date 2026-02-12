@@ -55,7 +55,7 @@ class TestWideEvent:
         event.add_business_metric("miles_driven", 25.5)
 
         assert event.context["business_metrics"]["data_points"] == 42
-        assert event.context["business_metrics"]["miles_driven"] == 25.5
+        assert event.context["business_metrics"]["miles_driven"] == pytest.approx(25.5)
 
     def test_add_technical_metric(self):
         """Adds technical metrics under technical_metrics key."""

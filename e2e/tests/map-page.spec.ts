@@ -8,7 +8,7 @@ test.describe('Map Page Load', () => {
 
   test('map container is present', async ({ page }) => {
     await page.goto('/map');
-    const mapContainer = page.locator('#map, .map-container, [data-map]');
+    const mapContainer = page.locator('#map, #map-container, .map-container, [data-map]');
     await expect(mapContainer.first()).toBeVisible();
   });
 });

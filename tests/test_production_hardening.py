@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "receiver"))
 
 from collections import OrderedDict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 class TestHealthCheckEndpoints:
@@ -140,7 +140,7 @@ class TestWeatherCacheLRU:
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "hourly": {
-                "time": [datetime.utcnow().strftime("%Y-%m-%dT%H:00")],
+                "time": [datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00")],
                 "temperature_2m": [65.0],
                 "precipitation": [0.0],
                 "wind_speed_10m": [10.0],
@@ -162,7 +162,7 @@ class TestWeatherCacheLRU:
 
         # Cache key should be at the end
         cache_keys = list(_weather_cache.keys())
-        expected_key = (37.77, -122.42, datetime.utcnow().strftime("%Y-%m-%d-%H"))
+        expected_key = (37.77, -122.42, datetime.now(timezone.utc).strftime("%Y-%m-%d-%H"))
         assert cache_keys[-1] == expected_key
 
     @patch("utils.weather.requests.get")
@@ -178,7 +178,7 @@ class TestWeatherCacheLRU:
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "hourly": {
-                "time": [datetime.utcnow().strftime("%Y-%m-%dT%H:00")],
+                "time": [datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00")],
                 "temperature_2m": [65.0],
                 "precipitation": [0.0],
                 "wind_speed_10m": [10.0],
@@ -189,7 +189,7 @@ class TestWeatherCacheLRU:
         mock_get.return_value = mock_response
 
         # Add expired entry manually
-        cache_key = (37.77, -122.42, datetime.utcnow().strftime("%Y-%m-%d-%H"))
+        cache_key = (37.77, -122.42, datetime.now(timezone.utc).strftime("%Y-%m-%d-%H"))
         expired_time = time.time() - Config.WEATHER_CACHE_TIMEOUT_SECONDS - 100
         _weather_cache[cache_key] = ({"temp": 70}, expired_time)
 

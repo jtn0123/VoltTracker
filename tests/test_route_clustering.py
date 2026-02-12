@@ -20,7 +20,7 @@ class TestHaversineDistance:
     def test_same_location(self):
         """Distance between same point should be 0"""
         distance = haversine_distance(41.5, -81.7, 41.5, -81.7)
-        assert distance == 0.0
+        assert distance == pytest.approx(0.0)
 
     def test_known_distance(self):
         """Test with known distance (Cleveland to Akron ~30 miles)"""
@@ -54,7 +54,7 @@ class TestCalculateRouteSimilarity:
         """Identical routes should have 100% similarity"""
         route = [(41.5, -81.7), (41.6, -81.8), (41.7, -81.9)]
         similarity = calculate_route_similarity(route, route)
-        assert similarity == 100.0
+        assert similarity == pytest.approx(100.0)
 
     def test_very_similar_routes(self):
         """Nearly identical routes should have high similarity"""
@@ -75,7 +75,7 @@ class TestCalculateRouteSimilarity:
         route1 = [(41.5, -81.7)]
         route2 = []
         similarity = calculate_route_similarity(route1, route2)
-        assert similarity == 0.0
+        assert similarity == pytest.approx(0.0)
 
     def test_different_lengths(self):
         """Routes with different point counts should still compare"""
@@ -93,7 +93,7 @@ class TestStartEndSimilarity:
         start = (41.5, -81.7)
         end = (41.6, -81.8)
         similarity = calculate_start_end_similarity(start, end, start, end)
-        assert similarity == 100.0
+        assert similarity == pytest.approx(100.0)
 
     def test_close_start_end(self):
         """Close start/end points should have high similarity"""
@@ -121,12 +121,17 @@ class TestCalculateRouteBounds:
         """Single point should have bounds at that point"""
         points = [(41.5, -81.7)]
         bounds = calculate_route_bounds(points)
-        assert bounds['north'] == 41.5
-        assert bounds['south'] == 41.5
-        assert bounds['east'] == -81.7
-        assert bounds['west'] == -81.7
-        assert bounds['center_lat'] == 41.5
-        assert bounds['center_lon'] == -81.7
+        assert bounds['north'] == pytest.approx(41.5)
+
+        assert bounds['south'] == pytest.approx(41.5)
+
+        assert bounds['east'] == pytest.approx(-81.7)
+
+        assert bounds['west'] == pytest.approx(-81.7)
+
+        assert bounds['center_lat'] == pytest.approx(41.5)
+
+        assert bounds['center_lon'] == pytest.approx(-81.7)
 
     def test_multiple_points(self):
         """Multiple points should calculate correct bounds"""
@@ -136,10 +141,14 @@ class TestCalculateRouteBounds:
             (41.4, -81.6)
         ]
         bounds = calculate_route_bounds(points)
-        assert bounds['north'] == 41.6
-        assert bounds['south'] == 41.4
-        assert bounds['east'] == -81.6
-        assert bounds['west'] == -81.8
+        assert bounds['north'] == pytest.approx(41.6)
+
+        assert bounds['south'] == pytest.approx(41.4)
+
+        assert bounds['east'] == pytest.approx(-81.6)
+
+        assert bounds['west'] == pytest.approx(-81.8)
+
         assert bounds['center_lat'] == pytest.approx(41.5, rel=0.01)
         assert bounds['center_lon'] == pytest.approx(-81.7, rel=0.01)
 
@@ -279,7 +288,7 @@ class TestEdgeCases:
         route1 = [(41.5, -81.7)]
         route2 = [(41.5, -81.7)]
         similarity = calculate_route_similarity(route1, route2, sample_size=1)
-        assert similarity == 100.0
+        assert similarity == pytest.approx(100.0)
 
     def test_bounds_with_single_coordinate(self):
         """Bounds calculation for point at 0,0"""

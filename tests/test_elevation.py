@@ -25,8 +25,8 @@ class TestElevationUtility:
         coords = [(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0), (5.0, 5.0)]
         result = sample_coordinates(coords, max_samples=3)
         assert len(result) == 3
-        assert result[0] == (1.0, 1.0)  # First point
-        assert result[-1] == (5.0, 5.0)  # Last point
+        assert result[0] == pytest.approx((1.0, 1.0))  # First point
+        assert result[-1] == pytest.approx((5.0, 5.0))  # Last point
 
     def test_sample_coordinates_fewer_than_max(self):
         """Test sampling when fewer points than max."""
@@ -59,13 +59,16 @@ class TestElevationUtility:
         elevations = [100.0, 150.0, 120.0, 180.0, 160.0]
         profile = calculate_elevation_profile(elevations)
 
-        assert profile["max_elevation_m"] == 180.0
-        assert profile["min_elevation_m"] == 100.0
-        assert profile["net_change_m"] == 60.0  # 160 - 100
+        assert profile["max_elevation_m"] == pytest.approx(180.0)
+
+        assert profile["min_elevation_m"] == pytest.approx(100.0)
+
+        assert profile["net_change_m"] == pytest.approx(60.0)  # 160 - 100
         # Gain: 50 (100->150) + 60 (120->180) = 110
-        assert profile["total_gain_m"] == 110.0
+        assert profile["total_gain_m"] == pytest.approx(110.0)
+
         # Loss: 30 (150->120) + 20 (180->160) = 50
-        assert profile["total_loss_m"] == 50.0
+        assert profile["total_loss_m"] == pytest.approx(50.0)
 
     def test_calculate_elevation_profile_empty(self):
         """Test profile with empty list."""
@@ -76,8 +79,10 @@ class TestElevationUtility:
     def test_calculate_elevation_profile_single_point(self):
         """Test profile with single point."""
         profile = calculate_elevation_profile([100.0])
-        assert profile["max_elevation_m"] == 100.0
-        assert profile["min_elevation_m"] == 100.0
+        assert profile["max_elevation_m"] == pytest.approx(100.0)
+
+        assert profile["min_elevation_m"] == pytest.approx(100.0)
+
         assert profile["total_gain_m"] is None
         assert profile["total_loss_m"] is None
 
@@ -85,16 +90,18 @@ class TestElevationUtility:
         """Test profile handles None values in list."""
         elevations = [100.0, None, 150.0, None, 200.0]
         profile = calculate_elevation_profile(elevations)
-        assert profile["max_elevation_m"] == 200.0
-        assert profile["min_elevation_m"] == 100.0
+        assert profile["max_elevation_m"] == pytest.approx(200.0)
+
+        assert profile["min_elevation_m"] == pytest.approx(100.0)
 
     def test_calculate_elevation_profile_downhill(self):
         """Test profile for downhill trip."""
         elevations = [200.0, 150.0, 100.0]
         profile = calculate_elevation_profile(elevations)
-        assert profile["net_change_m"] == -100.0
+        assert profile["net_change_m"] == pytest.approx(-100.0)
+
         assert profile["total_gain_m"] == 0
-        assert profile["total_loss_m"] == 100.0
+        assert profile["total_loss_m"] == pytest.approx(100.0)
 
     def test_estimate_elevation_impact_factor_uphill(self):
         """Test impact factor for uphill trip."""
@@ -114,7 +121,7 @@ class TestElevationUtility:
     def test_estimate_elevation_impact_factor_zero_distance(self):
         """Test impact factor with zero distance."""
         factor = estimate_elevation_impact_factor(50.0, 10.0, 0)
-        assert factor == 1.0
+        assert factor == pytest.approx(1.0)
 
     @patch("utils.elevation.requests.get")
     def test_get_elevation_for_point_success(self, mock_get):
@@ -125,7 +132,8 @@ class TestElevationUtility:
         mock_get.return_value = mock_response
 
         result = get_elevation_for_point(37.7749, -122.4194)
-        assert result == 125.5
+        assert result == pytest.approx(125.5)
+
         mock_get.assert_called_once()
 
     @patch("utils.elevation.requests.get")
@@ -150,7 +158,7 @@ class TestElevationUtility:
         coords = [(37.0, -122.0), (37.1, -122.1), (37.2, -122.2)]
         result = get_elevation_for_points(coords)
 
-        assert result == [100.0, 150.0, 200.0]
+        assert result == pytest.approx([100.0, 150.0, 200.0])
 
     @patch("utils.elevation.requests.get")
     def test_get_elevation_for_points_empty(self, mock_get):
@@ -228,7 +236,7 @@ class TestElevationUtility:
         result = get_elevation_for_points(coords)
 
         # Should wrap single value in list
-        assert result == [150.0]
+        assert result == pytest.approx([150.0])
 
     @patch("utils.elevation.requests.get")
     def test_get_elevation_for_points_unexpected_format(self, mock_get):
@@ -411,7 +419,7 @@ class TestElevationAnalyticsService:
         assert len(result) >= 1
         route_data = result[0]
         assert route_data["name"] == "Test Hill Route"
-        assert route_data["avg_elevation_gain_m"] == 75.0
+        assert route_data["avg_elevation_gain_m"] == pytest.approx(75.0)
 
     def test_get_route_elevation_comparison_empty(self, db_session):
         """Test route comparison with no routes."""
@@ -499,8 +507,9 @@ class TestElevationAnalyticsRoutes:
         data = response.get_json()
         assert data["trip_id"] == trip.id
         assert "elevation" in data
-        assert data["elevation"]["start_m"] == 100.0
-        assert data["elevation"]["gain_m"] == 60.0
+        assert data["elevation"]["start_m"] == pytest.approx(100.0)
+
+        assert data["elevation"]["gain_m"] == pytest.approx(60.0)
 
     def test_efficiency_correlation_with_date_params(self, client, db_session):
         """Test elevation endpoint with date parameters."""

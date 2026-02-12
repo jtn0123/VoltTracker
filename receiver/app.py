@@ -206,6 +206,9 @@ def create_app(config_class=None):
         logger.info(f"WebSocket connection established from {flask.request.remote_addr}")
         return True
 
+    # Expose for testing
+    _app.handle_connect = handle_connect
+
     @socketio.on('disconnect')
     def handle_disconnect():
         """Handle WebSocket disconnection."""

@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for Flask API endpoints.
 """
@@ -308,7 +309,7 @@ class TestFuelEndpoints:
 
         assert response.status_code == 201
         data = json.loads(response.data)
-        assert data["gallons_added"] == 7.5
+        assert data["gallons_added"] == pytest.approx(7.5)
 
     def test_add_fuel_event_no_data(self, client):
         """Test adding fuel event with no data."""
@@ -595,7 +596,7 @@ class TestTripManagement:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["gas_mpg"] == 42.5
+        assert data["gas_mpg"] == pytest.approx(42.5)
 
     def test_update_trip_not_found(self, client):
         """Test updating non-existent trip."""
@@ -674,7 +675,8 @@ class TestFuelEventManagement:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["price_per_gallon"] == 3.75
+        assert data["price_per_gallon"] == pytest.approx(3.75)
+
         assert data["notes"] == "Updated price"
 
     def test_update_fuel_event_not_found(self, client):
@@ -810,7 +812,8 @@ class TestChargingEndpoints:
 
         assert response.status_code == 201
         data = json.loads(response.data)
-        assert data["kwh_added"] == 12.0
+        assert data["kwh_added"] == pytest.approx(12.0)
+
         assert data["charge_type"] == "L2"
         assert data["is_complete"] is True
 
@@ -846,7 +849,7 @@ class TestChargingEndpoints:
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data["id"] == session.id
-        assert data["kwh_added"] == 8.0
+        assert data["kwh_added"] == pytest.approx(8.0)
 
     def test_get_charging_session_not_found(self, client):
         """Test 404 for non-existent charging session."""
@@ -896,7 +899,8 @@ class TestChargingEndpoints:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["kwh_added"] == 12.5
+        assert data["kwh_added"] == pytest.approx(12.5)
+
         assert data["notes"] == "Updated"
 
     def test_charging_summary_empty(self, client):
@@ -930,7 +934,8 @@ class TestChargingEndpoints:
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data["total_sessions"] == 2
-        assert data["total_kwh"] == 21.0
+        assert data["total_kwh"] == pytest.approx(21.0)
+
         assert "L2" in data["by_charge_type"]
 
 
@@ -1001,7 +1006,7 @@ class TestApiValidation:
 
         assert response.status_code == 201
         data = json.loads(response.data)
-        assert data["gallons_added"] == 7.5
+        assert data["gallons_added"] == pytest.approx(7.5)
 
 
 class TestPaginationEdgeCases:
@@ -1173,7 +1178,7 @@ class TestExportWithData:
         data = json.loads(response.data)
         assert "charging_sessions" in data
         assert len(data["charging_sessions"]) == 1
-        assert data["charging_sessions"][0]["kwh_added"] == 10.0
+        assert data["charging_sessions"][0]["kwh_added"] == pytest.approx(10.0)
 
     def test_export_csv_with_special_characters(self, client, db_session):
         """Test CSV export handles special characters."""
@@ -1279,8 +1284,9 @@ class TestChargingSummaryDetails:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["total_electric_miles"] == 70.0
-        assert data["ev_ratio"] == 70.0  # 70/100 = 70%
+        assert data["total_electric_miles"] == pytest.approx(70.0)
+
+        assert data["ev_ratio"] == pytest.approx(70.0)  # 70/100 = 70%
 
 
 class TestChargingFiltersAndCost:
@@ -1336,7 +1342,7 @@ class TestChargingFiltersAndCost:
         data = json.loads(response.data)
         # Should include kwh-related fields
         assert "total_kwh" in data
-        assert data["total_kwh"] == 15.0
+        assert data["total_kwh"] == pytest.approx(15.0)
 
     def test_charging_history_sorted_by_date(self, client, db_session):
         """Test charging history is returned sorted by date descending."""
@@ -1372,9 +1378,11 @@ class TestChargingFiltersAndCost:
         sessions = data["sessions"]
         assert len(sessions) == 3
         # Most recent should be first
-        assert sessions[0]["kwh_added"] == 12.0
-        assert sessions[1]["kwh_added"] == 8.0
-        assert sessions[2]["kwh_added"] == 6.0
+        assert sessions[0]["kwh_added"] == pytest.approx(12.0)
+
+        assert sessions[1]["kwh_added"] == pytest.approx(8.0)
+
+        assert sessions[2]["kwh_added"] == pytest.approx(6.0)
 
 
 class TestTripPatchRestrictions:
@@ -1414,7 +1422,8 @@ class TestTripPatchRestrictions:
         assert response.status_code == 200
         data = json.loads(response.data)
         # gas_mpg should be updated
-        assert data["gas_mpg"] == 42.0
+        assert data["gas_mpg"] == pytest.approx(42.0)
+
         # session_id should NOT be changed
         assert data["session_id"] == str(original_session_id)
         # id should NOT be changed
@@ -1442,7 +1451,7 @@ class TestTripPatchRestrictions:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["gas_mpg"] == 38.5
+        assert data["gas_mpg"] == pytest.approx(38.5)
 
     def test_trip_patch_updates_multiple_fields(self, client, db_session):
         """Test updating multiple allowed fields at once."""
@@ -1475,9 +1484,11 @@ class TestTripPatchRestrictions:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["gas_mpg"] == 45.0
-        assert data["electric_miles"] == 10.0
-        assert data["gas_miles"] == 15.0
+        assert data["gas_mpg"] == pytest.approx(45.0)
+
+        assert data["electric_miles"] == pytest.approx(10.0)
+
+        assert data["gas_miles"] == pytest.approx(15.0)
 
 
 class TestTripSortingAndFiltering:
@@ -1508,9 +1519,10 @@ class TestTripSortingAndFiltering:
         trips = data["trips"]
         assert len(trips) == 4
         # Most recent (1 day ago) should be first
-        assert trips[0]["distance_miles"] == 10.0
+        assert trips[0]["distance_miles"] == pytest.approx(10.0)
+
         # Oldest (10 days ago) should be last
-        assert trips[-1]["distance_miles"] == 100.0
+        assert trips[-1]["distance_miles"] == pytest.approx(100.0)
 
     def test_trips_filter_electric_only(self, client, db_session):
         """Test filtering for electric-only trips."""
@@ -1585,7 +1597,7 @@ class TestTripSortingAndFiltering:
         trips = data["trips"]
         # Should only include trips with gas_mode_entered=True
         assert len(trips) == 1
-        assert trips[0]["gas_miles"] == 20.0
+        assert trips[0]["gas_miles"] == pytest.approx(20.0)
 
 
 class TestTelemetryLatestEndpointExtended:
@@ -1681,8 +1693,9 @@ class TestEfficiencyWithData:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["total_miles_tracked"] == 50.0
-        assert data["lifetime_gas_mpg"] == 40.0  # 20 miles / 0.5 gallons
+        assert data["total_miles_tracked"] == pytest.approx(50.0)
+
+        assert data["lifetime_gas_mpg"] == pytest.approx(40.0)  # 20 miles / 0.5 gallons
 
     def test_efficiency_calculates_ev_percentage(self, client, db_session):
         """Test efficiency summary includes EV percentage."""

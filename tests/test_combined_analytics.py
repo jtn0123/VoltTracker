@@ -254,7 +254,7 @@ class TestCombinedAnalyticsService:
 
         # Optimal
         factor = combined_analytics_service._get_temperature_factor(70.0)
-        assert factor == 1.0
+        assert factor == pytest.approx(1.0)
 
         # Hot
         factor = combined_analytics_service._get_temperature_factor(100.0)
@@ -268,7 +268,7 @@ class TestCombinedAnalyticsService:
 
         # Flat
         factor = combined_analytics_service._get_elevation_factor(0.0)
-        assert factor == 1.0
+        assert factor == pytest.approx(1.0)
 
         # Steep uphill
         factor = combined_analytics_service._get_elevation_factor(100.0)

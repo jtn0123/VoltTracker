@@ -201,10 +201,14 @@ class TestTorqueParser:
             "time": "1609459200000",
         }
         result = TorqueParser.parse(data)
-        assert result["hv_battery_power_kw"] == 15.5
-        assert result["hv_battery_current_a"] == 45.2
-        assert result["hv_battery_voltage_v"] == 350.5
-        assert result["hv_discharge_amps"] == 50.0
+        assert result["hv_battery_power_kw"] == pytest.approx(15.5)
+
+        assert result["hv_battery_current_a"] == pytest.approx(45.2)
+
+        assert result["hv_battery_voltage_v"] == pytest.approx(350.5)
+
+        assert result["hv_discharge_amps"] == pytest.approx(50.0)
+
         assert result["battery_temp_f"] == pytest.approx(77.0, abs=0.1)
         assert result["battery_coolant_temp_f"] == pytest.approx(71.6, abs=0.1)
 
@@ -224,8 +228,10 @@ class TestTorqueParser:
         result = TorqueParser.parse(data)
         assert result["charger_status"] == 1
         assert result["charger_connected"] is True
-        assert result["charger_power_kw"] == 3.3
-        assert result["charger_ac_power_kw"] == 3.3
+        assert result["charger_power_kw"] == pytest.approx(3.3)
+
+        assert result["charger_ac_power_kw"] == pytest.approx(3.3)
+
         assert result["charger_ac_voltage"] == 240
         assert result["charger_ac_current"] == 15
         assert result["charger_hv_voltage"] == 360
@@ -241,8 +247,9 @@ class TestTorqueParser:
         }
         result = TorqueParser.parse(data)
         assert result["charger_power_w"] == 3300
-        assert result["charger_power_kw"] == 3.3
-        assert result["charger_ac_power_kw"] == 3.3
+        assert result["charger_power_kw"] == pytest.approx(3.3)
+
+        assert result["charger_ac_power_kw"] == pytest.approx(3.3)
 
     def test_parse_motor_generator_rpms(self):
         """Test parsing motor and generator RPMs."""
@@ -298,7 +305,7 @@ class TestTorqueParser:
             "time": "1609459200000",
         }
         result = TorqueParser.parse(data)
-        assert result["battery_capacity_kwh"] == 18.4
+        assert result["battery_capacity_kwh"] == pytest.approx(18.4)
 
     def test_parse_lifetime_counters(self):
         """Test parsing lifetime counter PIDs."""
@@ -313,7 +320,8 @@ class TestTorqueParser:
         result = TorqueParser.parse(data)
         assert result["lifetime_ev_miles"] == 25000
         assert result["lifetime_gas_miles"] == 15000
-        assert result["lifetime_fuel_gal"] == 450.5
+        assert result["lifetime_fuel_gal"] == pytest.approx(450.5)
+
         assert result["lifetime_kwh"] == 5500
 
     def test_parse_dte_fields(self):

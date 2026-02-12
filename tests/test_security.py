@@ -38,12 +38,12 @@ class TestHmacComparison:
         """S3: verify_password should use timing-safe comparison for plaintext."""
         import base64
         # Correct credentials
-        creds = base64.b64encode(b"test_user:test_password").decode()
+        creds = base64.b64encode(b"test_user:test_password").decode()  # nosonar
         response = client.get("/api/status", headers={"Authorization": f"Basic {creds}"})
         assert response.status_code == 200
 
         # Wrong credentials
-        creds_bad = base64.b64encode(b"test_user:wrong_password").decode()
+        creds_bad = base64.b64encode(b"test_user:wrong_password").decode()  # nosonar
         response = client.get("/api/status", headers={"Authorization": f"Basic {creds_bad}"})
         assert response.status_code == 401
 

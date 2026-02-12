@@ -161,8 +161,10 @@ class TestAddChargingSession:
 
         assert response.status_code == 201
         result = json.loads(response.data)
-        assert result["start_soc"] == 25.0
-        assert result["end_soc"] == 90.0
+        assert result["start_soc"] == pytest.approx(25.0)
+
+        assert result["end_soc"] == pytest.approx(90.0)
+
         assert result["is_complete"] is True
 
     def test_add_charging_session_no_data(self, client):
@@ -398,8 +400,10 @@ class TestUpdateChargingSession:
 
         assert response.status_code == 200
         result = json.loads(response.data)
-        assert result["end_soc"] == 98.0
-        assert result["kwh_added"] == 14.2
+        assert result["end_soc"] == pytest.approx(98.0)
+
+        assert result["kwh_added"] == pytest.approx(14.2)
+
         assert result["notes"] == "Updated session"
 
     def test_update_charging_session_not_found(self, client):

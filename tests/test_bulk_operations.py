@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for bulk operations endpoints.
 
@@ -353,10 +354,13 @@ class TestBulkTripStats:
         assert response.status_code == 200
         data = response.get_json()
         assert data["trip_count"] == 2
-        assert data["total_distance_miles"] == 50.0
-        assert data["electric_miles"] == 45.0
-        assert data["gas_miles"] == 5.0
-        assert data["ev_percent"] == 90.0
+        assert data["total_distance_miles"] == pytest.approx(50.0)
+
+        assert data["electric_miles"] == pytest.approx(45.0)
+
+        assert data["gas_miles"] == pytest.approx(5.0)
+
+        assert data["ev_percent"] == pytest.approx(90.0)
 
     def test_bulk_stats_gas_stats(self, client, db_session):
         """Calculate gas mode statistics."""

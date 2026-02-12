@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for context enrichment utilities.
 
@@ -51,7 +52,8 @@ class TestGetVehicleStatistics:
         stats = get_vehicle_statistics(db_session)
 
         assert stats["total_trips"] == 0
-        assert stats["total_miles"] == 0.0
+        assert stats["total_miles"] == pytest.approx(0.0)
+
         assert stats["account_age_days"] == 0
         assert stats["usage_tier"] == "new"
         assert stats["avg_kwh_per_mile"] is None
@@ -79,11 +81,12 @@ class TestGetVehicleStatistics:
         stats = get_vehicle_statistics(db_session)
 
         assert stats["total_trips"] == 5
-        assert stats["total_miles"] == 125.0  # 5 * 25
+        assert stats["total_miles"] == pytest.approx(125.0)  # 5 * 25
         assert stats["account_age_days"] >= 10
         assert stats["usage_tier"] == "light"
-        assert stats["avg_kwh_per_mile"] == 0.25
-        assert stats["avg_gas_mpg"] == 40.0
+        assert stats["avg_kwh_per_mile"] == pytest.approx(0.25)
+
+        assert stats["avg_gas_mpg"] == pytest.approx(40.0)
 
     def test_excludes_open_trips(self, app, db_session):
         """Open trips are excluded from statistics."""
@@ -111,7 +114,7 @@ class TestGetVehicleStatistics:
         stats = get_vehicle_statistics(db_session)
 
         assert stats["total_trips"] == 1
-        assert stats["total_miles"] == 30.0
+        assert stats["total_miles"] == pytest.approx(30.0)
 
 
 class TestGetBatteryHealthMetrics:
@@ -145,7 +148,8 @@ class TestGetBatteryHealthMetrics:
         assert "recent_avg_electric_miles" in metrics
         assert metrics["recent_avg_electric_miles"] > 0
         assert "recent_avg_efficiency_kwh_per_mile" in metrics
-        assert metrics["recent_avg_efficiency_kwh_per_mile"] == 0.25
+        assert metrics["recent_avg_efficiency_kwh_per_mile"] == pytest.approx(0.25)
+
         assert metrics["sample_size_trips"] == 10
 
     def test_handles_missing_soc_data(self, app, db_session):
@@ -219,8 +223,9 @@ class TestGetCurrentTripContext:
         assert context["trip_id"] == trip.id
         assert context["is_closed"] is False
         assert context["trip_duration_seconds"] >= 1800  # ~30 minutes
-        assert context["start_soc"] == 85.0
-        assert context["start_odometer"] == 50000.0
+        assert context["start_soc"] == pytest.approx(85.0)
+
+        assert context["start_odometer"] == pytest.approx(50000.0)
 
     def test_handles_closed_trip(self, app, db_session):
         """Returns context for closed trip."""

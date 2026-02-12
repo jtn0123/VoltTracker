@@ -325,7 +325,7 @@ def charging_telemetry(db_session):
 @pytest.fixture
 def app_with_auth(app, monkeypatch):
     """App configured with authentication enabled."""
-    monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "test_password")
+    monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "test_password")  # nosonar
     monkeypatch.setattr("config.Config.DASHBOARD_USER", "test_user")
     return app
 

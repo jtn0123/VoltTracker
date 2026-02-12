@@ -13,6 +13,11 @@ export default defineConfig({
     globals: true,
     include: ['src/__tests__/**/*.test.ts'],
     setupFiles: ['src/__tests__/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['lcov', 'text'],
+      reportsDirectory: './coverage',
+    },
   },
   build: {
     outDir: '../static/js/dist',

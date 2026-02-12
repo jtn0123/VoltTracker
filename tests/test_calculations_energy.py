@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for energy conversion calculations
 """
@@ -17,23 +18,23 @@ class TestSOCConversions:
     """Test State of Charge conversions"""
 
     def test_soc_to_kwh_half_charge(self):
-        assert soc_to_kwh(50.0, 18.4) == 9.2
+        assert soc_to_kwh(50.0, 18.4) == pytest.approx(9.2)
 
     def test_soc_to_kwh_full_charge(self):
-        assert soc_to_kwh(100.0, 18.4) == 18.4
+        assert soc_to_kwh(100.0, 18.4) == pytest.approx(18.4)
 
     def test_soc_to_kwh_empty(self):
-        assert soc_to_kwh(0.0, 18.4) == 0.0
+        assert soc_to_kwh(0.0, 18.4) == pytest.approx(0.0)
 
     def test_kwh_to_soc_half_charge(self):
-        assert kwh_to_soc(9.2, 18.4) == 50.0
+        assert kwh_to_soc(9.2, 18.4) == pytest.approx(50.0)
 
     def test_kwh_to_soc_full_charge(self):
-        assert kwh_to_soc(18.4, 18.4) == 100.0
+        assert kwh_to_soc(18.4, 18.4) == pytest.approx(100.0)
 
     def test_kwh_to_soc_zero_capacity(self):
         """Should handle zero capacity without crashing"""
-        assert kwh_to_soc(10.0, 0.0) == 0.0
+        assert kwh_to_soc(10.0, 0.0) == pytest.approx(0.0)
 
     def test_soc_kwh_roundtrip(self):
         """Converting SOC -> kWh -> SOC should preserve value"""
@@ -47,23 +48,23 @@ class TestFuelConversions:
     """Test fuel level conversions"""
 
     def test_fuel_percent_to_gallons_half_tank(self):
-        assert fuel_percent_to_gallons(50.0, 9.0) == 4.5
+        assert fuel_percent_to_gallons(50.0, 9.0) == pytest.approx(4.5)
 
     def test_fuel_percent_to_gallons_full_tank(self):
-        assert fuel_percent_to_gallons(100.0, 9.0) == 9.0
+        assert fuel_percent_to_gallons(100.0, 9.0) == pytest.approx(9.0)
 
     def test_fuel_percent_to_gallons_empty(self):
-        assert fuel_percent_to_gallons(0.0, 9.0) == 0.0
+        assert fuel_percent_to_gallons(0.0, 9.0) == pytest.approx(0.0)
 
     def test_gallons_to_fuel_percent_half_tank(self):
-        assert gallons_to_fuel_percent(4.5, 9.0) == 50.0
+        assert gallons_to_fuel_percent(4.5, 9.0) == pytest.approx(50.0)
 
     def test_gallons_to_fuel_percent_full_tank(self):
-        assert gallons_to_fuel_percent(9.0, 9.0) == 100.0
+        assert gallons_to_fuel_percent(9.0, 9.0) == pytest.approx(100.0)
 
     def test_gallons_to_fuel_percent_zero_capacity(self):
         """Should handle zero capacity without crashing"""
-        assert gallons_to_fuel_percent(5.0, 0.0) == 0.0
+        assert gallons_to_fuel_percent(5.0, 0.0) == pytest.approx(0.0)
 
     def test_fuel_roundtrip(self):
         """Converting percent -> gallons -> percent should preserve value"""
@@ -82,7 +83,7 @@ class TestPowerIntegration:
         t2 = datetime(2024, 1, 1, 13, 0, 0)
         readings = [(t1, 10.0), (t2, 10.0)]
         result = integrate_power_over_time(readings)
-        assert result == 10.0
+        assert result == pytest.approx(10.0)
 
     def test_varying_power(self):
         """Varying power should use trapezoidal integration"""
@@ -93,7 +94,7 @@ class TestPowerIntegration:
         readings = [(t1, 10.0), (t2, 15.0), (t3, 20.0)]
         # (10+15)/2 * 0.5 + (15+20)/2 * 0.5 = 6.25 + 8.75 = 15.0
         result = integrate_power_over_time(readings)
-        assert result == 15.0
+        assert result == pytest.approx(15.0)
 
     def test_insufficient_readings(self):
         """Should return None with < 2 readings"""
@@ -123,7 +124,7 @@ class TestPowerIntegration:
         # First interval: (10 + (-5))/2 * 0.5 = 1.25 (positive, counted)
         # Second interval: (-5 + 10)/2 * 0.5 = 1.25 (positive, counted)
         result = integrate_power_over_time(readings)
-        assert result == 2.5
+        assert result == pytest.approx(2.5)
 
     def test_iso_string_timestamps(self):
         """Should handle ISO string timestamps"""
@@ -132,7 +133,7 @@ class TestPowerIntegration:
             ("2024-01-01T13:00:00Z", 10.0),
         ]
         result = integrate_power_over_time(readings)
-        assert result == 10.0
+        assert result == pytest.approx(10.0)
 
 
 class TestSOCChangeEnergy:
@@ -141,7 +142,7 @@ class TestSOCChangeEnergy:
     def test_soc_decrease_normal(self):
         """80% -> 50% = 30% * 18.4 = 5.52 kWh"""
         result = calculate_energy_from_soc_change(80.0, 50.0, 18.4)
-        assert result == 5.52
+        assert result == pytest.approx(5.52)
 
     def test_soc_increase_returns_none(self):
         """SOC increase (charging) should return None"""
@@ -161,4 +162,4 @@ class TestSOCChangeEnergy:
     def test_full_discharge(self):
         """100% -> 0% = 100% of capacity"""
         result = calculate_energy_from_soc_change(100.0, 0.0, 18.4)
-        assert result == 18.4
+        assert result == pytest.approx(18.4)

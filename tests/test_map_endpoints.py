@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for GPS map visualization endpoints
 """
@@ -55,9 +56,12 @@ class TestMapDataEndpoint:
         assert len(data['trips']) == 1
 
         trip_data = data['trips'][0]
-        assert trip_data['distance_miles'] == 15.5
-        assert trip_data['kwh_per_mile'] == 0.25
-        assert trip_data['gas_mpg'] == 85.0
+        assert trip_data['distance_miles'] == pytest.approx(15.5)
+
+        assert trip_data['kwh_per_mile'] == pytest.approx(0.25)
+
+        assert trip_data['gas_mpg'] == pytest.approx(85.0)
+
         assert len(trip_data['points']) > 0
         assert 'bounds' in trip_data
         assert 'north' in trip_data['bounds']
@@ -155,7 +159,7 @@ class TestMapDataEndpoint:
 
         # Should only return efficient trip
         assert data['total_trips'] == 1
-        assert data['trips'][0]['kwh_per_mile'] == 0.20
+        assert data['trips'][0]['kwh_per_mile'] == pytest.approx(0.20)
 
     def test_map_data_point_subsampling(self, client, db_session):
         """Should subsample GPS points when too many"""
@@ -280,7 +284,8 @@ class TestDetailedRouteEndpoint:
 
         assert 'trip' in data
         assert 'route' in data
-        assert data['trip']['distance_miles'] == 12.5
+        assert data['trip']['distance_miles'] == pytest.approx(12.5)
+
         assert len(data['route']['points']) == 5
         assert 'bounds' in data['route']
 
@@ -315,7 +320,7 @@ class TestDetailedRouteEndpoint:
         point = data['route']['points'][0]
         assert 'speed_mph' in point
         assert 'soc' in point
-        assert point['speed_mph'] == 45.0
+        assert point['speed_mph'] == pytest.approx(45.0)
 
 
 class TestGPXExport:

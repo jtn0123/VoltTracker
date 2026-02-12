@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for trip weather sampling and averaging.
 
@@ -67,7 +68,8 @@ class TestWeatherTripSampling:
 
         # Verify: Should call weather API twice (start + end)
         assert mock_get_weather.call_count == 2
-        assert trip.weather_temp_f == 70.0
+        assert trip.weather_temp_f == pytest.approx(70.0)
+
         assert trip.weather_conditions == "Clear"
 
     @patch("services.trip_service.get_weather_for_location")
@@ -107,7 +109,7 @@ class TestWeatherTripSampling:
 
         # Verify: Should call weather API 5 times (0, 15, 30, 45, 60 minutes)
         assert mock_get_weather.call_count == 5
-        assert trip.weather_temp_f == 70.0
+        assert trip.weather_temp_f == pytest.approx(70.0)
 
     @patch("services.trip_service.get_weather_for_location")
     @patch("services.trip_service.get_weather_impact_factor")
@@ -145,7 +147,7 @@ class TestWeatherTripSampling:
         fetch_trip_weather(trip, points)
 
         # Verify: Should average 65, 70, 75 = 70.0
-        assert trip.weather_temp_f == 70.0
+        assert trip.weather_temp_f == pytest.approx(70.0)
 
     @patch("services.trip_service.get_weather_for_location")
     @patch("services.trip_service.get_weather_impact_factor")
@@ -183,7 +185,7 @@ class TestWeatherTripSampling:
         fetch_trip_weather(trip, points)
 
         # Verify: Should average 5, 10, 15 = 10.0
-        assert trip.weather_wind_mph == 10.0
+        assert trip.weather_wind_mph == pytest.approx(10.0)
 
     @patch("services.trip_service.get_weather_for_location")
     @patch("services.trip_service.get_weather_impact_factor")
@@ -300,7 +302,7 @@ class TestWeatherTripSampling:
         fetch_trip_weather(trip, points)
 
         # Verify: Should average 1.0, 1.1, 1.2 = 1.1
-        assert trip.weather_impact_factor == 1.1
+        assert trip.weather_impact_factor == pytest.approx(1.1)
 
     @patch("services.trip_service.get_weather_for_location")
     def test_handles_no_gps_points_gracefully(self, mock_get_weather):

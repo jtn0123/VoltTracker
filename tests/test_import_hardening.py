@@ -10,7 +10,7 @@ Tests the comprehensive import system hardening:
 
 import io
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from receiver.models import CsvImport, TelemetryRaw
 from receiver.utils.import_utils import (
@@ -36,7 +36,7 @@ class TestImportCodeGeneration:
     def test_generate_import_code_has_current_date(self):
         """Test that import code contains current date."""
         code = generate_import_code()
-        today = datetime.utcnow().strftime("%Y%m%d")
+        today = datetime.now(timezone.utc).strftime("%Y%m%d")
 
         assert today in code, f"Code '{code}' should contain today's date '{today}'"
 

@@ -1,3 +1,4 @@
+import pytest
 """
 Property-based and edge case tests for calculation modules.
 
@@ -49,11 +50,11 @@ class TestSocKwhRoundTrip:
 
     def test_zero_capacity(self):
         """Zero battery capacity returns 0 SOC."""
-        assert kwh_to_soc(5.0, 0) == 0.0
+        assert kwh_to_soc(5.0, 0) == pytest.approx(0.0)
 
     def test_zero_soc(self):
         """0% SOC gives 0 kWh."""
-        assert soc_to_kwh(0.0) == 0.0
+        assert soc_to_kwh(0.0) == pytest.approx(0.0)
 
     def test_negative_soc(self):
         """Negative SOC gives negative kWh (no validation in pure math)."""
@@ -72,7 +73,7 @@ class TestFuelConversions:
         assert abs(recovered - pct) < 1e-10
 
     def test_zero_tank(self):
-        assert gallons_to_fuel_percent(5.0, 0) == 0.0
+        assert gallons_to_fuel_percent(5.0, 0) == pytest.approx(0.0)
 
 
 class TestPowerIntegration:
@@ -91,7 +92,7 @@ class TestPowerIntegration:
         t1 = datetime(2024, 1, 1, 12, 0, 0)
         t2 = datetime(2024, 1, 1, 13, 0, 0)
         result = integrate_power_over_time([(t1, 10.0), (t2, 10.0)])
-        assert result == 10.0
+        assert result == pytest.approx(10.0)
 
     def test_negative_power_ignored(self):
         """Negative power (charging) is not counted."""
@@ -166,7 +167,7 @@ class TestKwhPerMile:
     def test_without_validation(self):
         """Without validation, extreme values still return a number."""
         result = calculate_kwh_per_mile(100.0, 1.0, validate=False)
-        assert result == 100.0
+        assert result == pytest.approx(100.0)
 
     @given(
         kwh=st.floats(min_value=0.1, max_value=50, allow_nan=False),
@@ -229,17 +230,17 @@ class TestMpge:
     def test_known_value(self):
         """0.337 kWh/mi = 100 MPGe."""
         result = calculate_mpge(0.337)
-        assert result == 100.0
+        assert result == pytest.approx(100.0)
 
 
 class TestRangeFromEfficiency:
     """Edge cases for calculate_range_from_efficiency."""
 
     def test_zero_efficiency(self):
-        assert calculate_range_from_efficiency(0.0, 15.0) == 0.0
+        assert calculate_range_from_efficiency(0.0, 15.0) == pytest.approx(0.0)
 
     def test_negative_efficiency(self):
-        assert calculate_range_from_efficiency(-0.3, 15.0) == 0.0
+        assert calculate_range_from_efficiency(-0.3, 15.0) == pytest.approx(0.0)
 
     @given(
         eff=st.floats(min_value=0.01, max_value=2.0, allow_nan=False),
@@ -255,13 +256,13 @@ class TestEfficiencyImpact:
     """Edge cases for calculate_efficiency_impact_percent."""
 
     def test_none_actual(self):
-        assert calculate_efficiency_impact_percent(None) == 0.0
+        assert calculate_efficiency_impact_percent(None) == pytest.approx(0.0)
 
     def test_zero_baseline(self):
-        assert calculate_efficiency_impact_percent(0.3, 0.0) == 0.0
+        assert calculate_efficiency_impact_percent(0.3, 0.0) == pytest.approx(0.0)
 
     def test_same_as_baseline(self):
-        assert calculate_efficiency_impact_percent(0.32, 0.32) == 0.0
+        assert calculate_efficiency_impact_percent(0.32, 0.32) == pytest.approx(0.0)
 
 
 class TestCombinedEfficiency:
@@ -272,7 +273,7 @@ class TestCombinedEfficiency:
 
     def test_electric_only(self):
         result = calculate_combined_efficiency(20.0, 5.0, 0, 0)
-        assert result == 0.25
+        assert result == pytest.approx(0.25)
 
     def test_gas_only(self):
         result = calculate_combined_efficiency(0, 0, 20.0, 0.5)

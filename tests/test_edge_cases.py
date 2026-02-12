@@ -125,7 +125,7 @@ class TestCalculationsEdgeCases:
 
         result = calculate_kwh_per_mile(kwh_used=0.0, electric_miles=10.0)
         # Zero consumption is valid
-        assert result == 0.0 or result is None
+        assert result == pytest.approx(0.0) or result is None
 
     def test_calculate_kwh_per_mile_nan_input(self):
         """NaN input handling."""
@@ -157,7 +157,7 @@ class TestCalculationsEdgeCases:
 
         result = smooth_fuel_level([101.0, 102.0, 103.0])
         # Should return median even if invalid
-        assert result == 102.0
+        assert result == pytest.approx(102.0)
 
     def test_smooth_fuel_level_all_negative(self):
         """All fuel readings negative."""
@@ -165,7 +165,7 @@ class TestCalculationsEdgeCases:
 
         result = smooth_fuel_level([-5.0, -10.0, -3.0])
         # Should return median even if invalid
-        assert result == -5.0
+        assert result == pytest.approx(-5.0)
 
     def test_smooth_fuel_level_mixed_invalid(self):
         """Mix of valid and invalid readings."""
@@ -180,14 +180,14 @@ class TestCalculationsEdgeCases:
         from utils.calculations import smooth_fuel_level
 
         result = smooth_fuel_level([75.0])
-        assert result == 75.0
+        assert result == pytest.approx(75.0)
 
     def test_smooth_fuel_level_empty_list(self):
         """Empty fuel readings list."""
         from utils.calculations import smooth_fuel_level
 
         result = smooth_fuel_level([])
-        assert result == 0.0  # Returns 0.0 for empty list
+        assert result == pytest.approx(0.0)  # Returns 0.0 for empty list
 
     def test_detect_refuel_exactly_at_threshold(self):
         """Fuel increase exactly at threshold."""

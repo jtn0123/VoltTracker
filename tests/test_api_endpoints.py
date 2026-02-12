@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for extended API endpoint coverage.
 
@@ -174,7 +175,7 @@ class TestBatteryHealthEndpoint:
     def test_health_with_dedicated_readings(self, client, db_session):
         """Uses BatteryHealthReading when available."""
         reading = BatteryHealthReading(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             capacity_kwh=17.5,
             normalized_capacity_kwh=17.2,
             soc_at_reading=100.0,
@@ -191,7 +192,7 @@ class TestBatteryHealthEndpoint:
     def test_health_calculates_percentage(self, client, db_session):
         """Battery health percentage is calculated from capacity."""
         reading = BatteryHealthReading(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             capacity_kwh=16.56,  # 90% of 18.4 kWh
             normalized_capacity_kwh=16.56,
             soc_at_reading=100.0,
@@ -211,8 +212,8 @@ class TestExportEndpoints:
         # Create a trip to export
         trip = Trip(
             session_id=uuid.uuid4(),
-            start_time=datetime.utcnow() - timedelta(hours=1),
-            end_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=1),
+            end_time=datetime.now(timezone.utc),
             start_odometer=50000.0,
             end_odometer=50025.0,
             distance_miles=25.0,
@@ -229,8 +230,8 @@ class TestExportEndpoints:
         """CSV export has expected column headers."""
         trip = Trip(
             session_id=uuid.uuid4(),
-            start_time=datetime.utcnow() - timedelta(hours=1),
-            end_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=1),
+            end_time=datetime.now(timezone.utc),
             start_odometer=50000.0,
             distance_miles=25.0,
             is_closed=True,
@@ -247,7 +248,7 @@ class TestExportEndpoints:
         """Trips export as JSON when format=json specified."""
         trip = Trip(
             session_id=uuid.uuid4(),
-            start_time=datetime.utcnow() - timedelta(hours=1),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=1),
             distance_miles=25.0,
             is_closed=True,
         )
@@ -261,7 +262,7 @@ class TestExportEndpoints:
     def test_export_fuel_returns_csv(self, client, db_session):
         """Fuel export returns CSV by default."""
         fuel_event = FuelEvent(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             fuel_level_before=50.0,
             fuel_level_after=90.0,
             gallons_added=3.5,
@@ -278,7 +279,7 @@ class TestExportEndpoints:
         """All data export returns JSON."""
         trip = Trip(
             session_id=uuid.uuid4(),
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
             is_closed=True,
         )
         db_session.add(trip)
@@ -294,8 +295,8 @@ class TestExportEndpoints:
         """Export all includes summary statistics."""
         trip = Trip(
             session_id=uuid.uuid4(),
-            start_time=datetime.utcnow() - timedelta(hours=2),
-            end_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=2),
+            end_time=datetime.now(timezone.utc),
             distance_miles=30.0,
             is_closed=True,
         )
@@ -316,7 +317,7 @@ class TestExportEndpoints:
 
     def test_export_with_date_filter(self, client, db_session):
         """Export respects date range filter."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Trip in range
         trip1 = Trip(
@@ -345,7 +346,7 @@ class TestExportEndpoints:
         # Create EV-only trip
         ev_trip = Trip(
             session_id=uuid.uuid4(),
-            start_time=datetime.utcnow() - timedelta(hours=2),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=2),
             distance_miles=20.0,
             gas_mode_entered=False,
             is_closed=True,
@@ -353,7 +354,7 @@ class TestExportEndpoints:
         # Create gas trip
         gas_trip = Trip(
             session_id=uuid.uuid4(),
-            start_time=datetime.utcnow() - timedelta(hours=1),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=1),
             distance_miles=30.0,
             gas_mode_entered=True,
             is_closed=True,
@@ -379,15 +380,15 @@ class TestExportEndpoints:
         """Export all works with valid date filters."""
         trip = Trip(
             session_id=uuid.uuid4(),
-            start_time=datetime.utcnow() - timedelta(days=1),
+            start_time=datetime.now(timezone.utc) - timedelta(days=1),
             distance_miles=25.0,
             is_closed=True,
         )
         db_session.add(trip)
         db_session.commit()
 
-        start_date = (datetime.utcnow() - timedelta(days=7)).isoformat()
-        end_date = datetime.utcnow().isoformat()
+        start_date = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
+        end_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
         response = client.get(f"/api/export/all?start_date={start_date}&end_date={end_date}")
         assert response.status_code == 200
 
@@ -397,7 +398,7 @@ class TestExportTripFilters:
 
     def test_export_trips_with_end_date_filter(self, client, db_session):
         """Export trips respects end_date filter."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Trip in range
         trip1 = Trip(
@@ -604,8 +605,8 @@ class TestChargingHistoryEndpoint:
     def test_charging_history_returns_list(self, client, db_session):
         """Charging history returns list of sessions."""
         session = ChargingSession(
-            start_time=datetime.utcnow() - timedelta(hours=2),
-            end_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=2),
+            end_time=datetime.now(timezone.utc),
             start_soc=30.0,
             end_soc=90.0,
             kwh_added=11.0,
@@ -623,8 +624,8 @@ class TestChargingHistoryEndpoint:
     def test_charging_summary_returns_stats(self, client, db_session):
         """Charging summary returns aggregate statistics."""
         session1 = ChargingSession(
-            start_time=datetime.utcnow() - timedelta(days=1),
-            end_time=datetime.utcnow() - timedelta(days=1) + timedelta(hours=3),
+            start_time=datetime.now(timezone.utc) - timedelta(days=1),
+            end_time=datetime.now(timezone.utc) - timedelta(days=1) + timedelta(hours=3),
             start_soc=20.0,
             end_soc=100.0,
             kwh_added=14.72,
@@ -632,8 +633,8 @@ class TestChargingHistoryEndpoint:
             is_complete=True,
         )
         session2 = ChargingSession(
-            start_time=datetime.utcnow() - timedelta(hours=2),
-            end_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=2),
+            end_time=datetime.now(timezone.utc),
             start_soc=50.0,
             end_soc=80.0,
             kwh_added=5.52,
@@ -736,7 +737,8 @@ class TestTelemetryTripStatsEdgeCases:
         data = response.get_json()
         assert data["active"] is True
         trip_stats = data["trip_stats"]
-        assert trip_stats["miles_driven"] == 30.0
+        assert trip_stats["miles_driven"] == pytest.approx(30.0)
+
         assert trip_stats["kwh_used"] is not None
         assert trip_stats["kwh_per_mile"] is not None
 

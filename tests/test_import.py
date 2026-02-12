@@ -1,3 +1,4 @@
+import pytest
 """Tests for CSV import functionality."""
 
 import io
@@ -22,11 +23,13 @@ class TestTorqueCSVImporter:
         assert len(records) == 2
 
         # Check first record
-        assert records[0]["latitude"] == 37.7749
-        assert records[0]["longitude"] == -122.4194
+        assert records[0]["latitude"] == pytest.approx(37.7749)
+
+        assert records[0]["longitude"] == pytest.approx(-122.4194)
+
         assert abs(records[0]["speed_mph"] - 34.67) < 0.1  # 15.5 m/s to mph
         assert records[0]["engine_rpm"] == 1200
-        assert records[0]["fuel_level_percent"] == 75.5
+        assert records[0]["fuel_level_percent"] == pytest.approx(75.5)
 
     def test_parse_volt_specific_columns(self):
         """Test parsing Volt-specific columns like SOC."""
@@ -37,9 +40,11 @@ class TestTorqueCSVImporter:
         records, stats = TorqueCSVImporter.parse_csv(csv_content)
 
         assert len(records) == 2
-        assert records[0]["state_of_charge"] == 65.5
-        assert records[0]["hv_battery_power_kw"] == 12.3
-        assert records[1]["hv_battery_power_kw"] == -5.5
+        assert records[0]["state_of_charge"] == pytest.approx(65.5)
+
+        assert records[0]["hv_battery_power_kw"] == pytest.approx(12.3)
+
+        assert records[1]["hv_battery_power_kw"] == pytest.approx(-5.5)
 
     def test_parse_alternative_timestamp_formats(self):
         """Test various timestamp formats."""
@@ -122,7 +127,7 @@ January 15, 2024 10:30:45,37.7750
 
         assert len(records) == 1
         assert records[0]["timestamp"] is not None
-        assert records[0]["latitude"] == 37.7749
+        assert records[0]["latitude"] == pytest.approx(37.7749)
 
     def test_parse_speed_conversions(self):
         """Test speed unit conversions."""
@@ -143,7 +148,8 @@ January 15, 2024 10:30:45,37.7750
         records, stats = TorqueCSVImporter.parse_csv(csv_content)
 
         assert stats["parsed_rows"] == 2
-        assert records[0]["latitude"] == 37.7749
+        assert records[0]["latitude"] == pytest.approx(37.7749)
+
         assert records[0]["longitude"] is None
         assert records[0]["engine_rpm"] is None
 
@@ -187,8 +193,9 @@ invalid_time,37.7750
         records, stats = TorqueCSVImporter.parse_csv(csv_content)
 
         assert len(records) == 1
-        assert records[0]["latitude"] == 37.7749
-        assert records[0]["fuel_level_percent"] == 75.0
+        assert records[0]["latitude"] == pytest.approx(37.7749)
+
+        assert records[0]["fuel_level_percent"] == pytest.approx(75.0)
 
     def test_parse_generates_session_id(self):
         """Test that a session ID is generated for the import."""
@@ -220,8 +227,9 @@ invalid_time,37.7750
 """
         records, _ = TorqueCSVImporter.parse_csv(csv_content)
 
-        assert records[0]["ambient_temp_f"] == 72.5
-        assert records[0]["coolant_temp_f"] == 195.0
+        assert records[0]["ambient_temp_f"] == pytest.approx(72.5)
+
+        assert records[0]["coolant_temp_f"] == pytest.approx(195.0)
 
     def test_parse_empty_csv(self):
         """Test handling of empty CSV."""

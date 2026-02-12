@@ -402,7 +402,7 @@ class TestUpdateTrip:
 
         assert response.status_code == 200
         data = json.loads(response.data)
-        assert data["gas_mpg"] == 45.0
+        assert data["gas_mpg"] == pytest.approx(45.0)
 
     def test_update_trip_not_found(self, client):
         """Test updating non-existent trip returns 404."""

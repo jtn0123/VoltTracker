@@ -3,7 +3,7 @@ Tests for job queue infrastructure.
 """
 
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 class TestGetRedisConnection:
@@ -336,10 +336,10 @@ class TestCleanupOldJobs:
 
         # Create mock jobs - one old, one recent
         old_job = MagicMock()
-        old_job.ended_at = datetime.utcnow() - timedelta(days=10)
+        old_job.ended_at = datetime.now(timezone.utc) - timedelta(days=10)
 
         recent_job = MagicMock()
-        recent_job.ended_at = datetime.utcnow() - timedelta(days=2)
+        recent_job.ended_at = datetime.now(timezone.utc) - timedelta(days=2)
 
         mock_queue = MagicMock()
         mock_queue.finished_job_registry.get_job_ids.return_value = ["old-job", "recent-job"]

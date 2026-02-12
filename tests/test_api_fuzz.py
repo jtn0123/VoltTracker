@@ -137,4 +137,5 @@ def test_error_report_fuzz(client, data):
             data=data,
             content_type="text/plain",
         )
-    assert resp.status_code == 200
+    # S6: endpoint now validates JSON body — 400 for missing/invalid, 200 for valid
+    assert resp.status_code in (200, 400)

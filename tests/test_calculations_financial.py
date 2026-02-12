@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for financial calculations
 """
@@ -18,11 +19,11 @@ class TestChargingCost:
 
     def test_calculate_charging_cost_typical(self):
         """10 kWh at $0.12/kWh = $1.20"""
-        assert calculate_charging_cost(10.0, 0.12) == 1.2
+        assert calculate_charging_cost(10.0, 0.12) == pytest.approx(1.2)
 
     def test_calculate_charging_cost_expensive_rate(self):
         """15.5 kWh at $0.15/kWh = $2.325 (~$2.32)"""
-        assert calculate_charging_cost(15.5, 0.15) == 2.32
+        assert calculate_charging_cost(15.5, 0.15) == pytest.approx(2.32)
 
     def test_calculate_charging_cost_none_kwh(self):
         assert calculate_charging_cost(None, 0.12) is None
@@ -43,11 +44,11 @@ class TestFuelCost:
 
     def test_calculate_fuel_cost_typical(self):
         """10 gallons at $3.50 = $35.00"""
-        assert calculate_fuel_cost(10.0, 3.50) == 35.0
+        assert calculate_fuel_cost(10.0, 3.50) == pytest.approx(35.0)
 
     def test_calculate_fuel_cost_partial(self):
         """5.5 gallons at $4.00 = $22.00"""
-        assert calculate_fuel_cost(5.5, 4.00) == 22.0
+        assert calculate_fuel_cost(5.5, 4.00) == pytest.approx(22.0)
 
     def test_calculate_fuel_cost_none_gallons(self):
         assert calculate_fuel_cost(None, 3.50) is None
@@ -65,12 +66,12 @@ class TestCostPerMile:
     def test_calculate_electric_cost_per_mile(self):
         """40 mi using 10 kWh at $0.12 = $0.03/mi"""
         result = calculate_electric_cost_per_mile(40.0, 10.0, 0.12)
-        assert result == 0.03
+        assert result == pytest.approx(0.03)
 
     def test_calculate_electric_cost_per_mile_expensive(self):
         """50 mi using 15 kWh at $0.15 = $0.045/mi"""
         result = calculate_electric_cost_per_mile(50.0, 15.0, 0.15)
-        assert result == 0.045
+        assert result == pytest.approx(0.045)
 
     def test_calculate_electric_cost_per_mile_zero_miles(self):
         assert calculate_electric_cost_per_mile(0.0, 10.0, 0.12) is None
@@ -78,12 +79,12 @@ class TestCostPerMile:
     def test_calculate_gas_cost_per_mile(self):
         """100 mi using 2.5 gal at $3.50 = $0.0875/mi"""
         result = calculate_gas_cost_per_mile(100.0, 2.5, 3.50)
-        assert result == 0.087
+        assert result == pytest.approx(0.087)
 
     def test_calculate_gas_cost_per_mile_expensive(self):
         """40 mi using 1 gal at $4.00 = $0.10/mi"""
         result = calculate_gas_cost_per_mile(40.0, 1.0, 4.00)
-        assert result == 0.1
+        assert result == pytest.approx(0.1)
 
 
 class TestTripCost:
@@ -99,11 +100,15 @@ class TestTripCost:
             electricity_rate=0.12,
             gas_price=3.50
         )
-        assert result['electric_cost'] == 1.08
-        assert result['gas_cost'] == 1.75
-        assert result['total_cost'] == 2.83
-        assert result['cost_per_mile'] == 0.057
-        assert result['total_miles'] == 50.0
+        assert result['electric_cost'] == pytest.approx(1.08)
+
+        assert result['gas_cost'] == pytest.approx(1.75)
+
+        assert result['total_cost'] == pytest.approx(2.83)
+
+        assert result['cost_per_mile'] == pytest.approx(0.057)
+
+        assert result['total_miles'] == pytest.approx(50.0)
 
     def test_calculate_trip_cost_electric_only(self):
         """All electric trip"""
@@ -115,10 +120,13 @@ class TestTripCost:
             electricity_rate=0.12,
             gas_price=3.50
         )
-        assert result['electric_cost'] == 1.2
-        assert result['gas_cost'] == 0.0
-        assert result['total_cost'] == 1.2
-        assert result['total_miles'] == 40.0
+        assert result['electric_cost'] == pytest.approx(1.2)
+
+        assert result['gas_cost'] == pytest.approx(0.0)
+
+        assert result['total_cost'] == pytest.approx(1.2)
+
+        assert result['total_miles'] == pytest.approx(40.0)
 
     def test_calculate_trip_cost_gas_only(self):
         """All gas trip"""
@@ -130,10 +138,13 @@ class TestTripCost:
             electricity_rate=0.12,
             gas_price=3.50
         )
-        assert result['electric_cost'] == 0.0
-        assert result['gas_cost'] == 8.75
-        assert result['total_cost'] == 8.75
-        assert result['total_miles'] == 100.0
+        assert result['electric_cost'] == pytest.approx(0.0)
+
+        assert result['gas_cost'] == pytest.approx(8.75)
+
+        assert result['total_cost'] == pytest.approx(8.75)
+
+        assert result['total_miles'] == pytest.approx(100.0)
 
     def test_calculate_trip_cost_no_miles(self):
         """No miles driven should have None cost_per_mile"""
@@ -143,7 +154,8 @@ class TestTripCost:
             gas_miles=0,
             gas_gallons=0
         )
-        assert result['total_cost'] == 0.0
+        assert result['total_cost'] == pytest.approx(0.0)
+
         assert result['cost_per_mile'] is None
 
 
@@ -162,10 +174,13 @@ class TestCostSavings:
         # Electric: 10 * 0.12 = $1.20
         # Gas: 40 / 30 * 3.50 = $4.67
         # Savings: $3.47
-        assert result['electric_cost'] == 1.2
-        assert result['gas_only_cost'] == 4.67
-        assert result['savings'] == 3.47
-        assert result['savings_percent'] == 74.3
+        assert result['electric_cost'] == pytest.approx(1.2)
+
+        assert result['gas_only_cost'] == pytest.approx(4.67)
+
+        assert result['savings'] == pytest.approx(3.47)
+
+        assert result['savings_percent'] == pytest.approx(74.3)
 
     def test_calculate_cost_savings_efficient_gas_vehicle(self):
         """Compare against efficient gas vehicle (40 MPG)"""
@@ -177,8 +192,9 @@ class TestCostSavings:
             gas_vehicle_mpg=40.0
         )
         # Gas: 40 / 40 * 3.50 = $3.50
-        assert result['gas_only_cost'] == 3.5
-        assert result['savings'] == 2.3
+        assert result['gas_only_cost'] == pytest.approx(3.5)
+
+        assert result['savings'] == pytest.approx(2.3)
 
     def test_calculate_cost_savings_expensive_electricity(self):
         """High electricity rates reduce savings"""
@@ -191,8 +207,9 @@ class TestCostSavings:
         )
         # Electric: 10 * 0.30 = $3.00
         # Savings reduced to $1.67
-        assert result['electric_cost'] == 3.0
-        assert result['savings'] == 1.67
+        assert result['electric_cost'] == pytest.approx(3.0)
+
+        assert result['savings'] == pytest.approx(1.67)
 
 
 class TestPaybackPeriod:
@@ -208,7 +225,7 @@ class TestPaybackPeriod:
         )
         # Annual savings: 12000 * (0.12 - 0.03) = $1080
         # Payback: 5000 / 1080 = 4.6 years
-        assert result == 4.6
+        assert result == pytest.approx(4.6)
 
     def test_calculate_payback_period_high_mileage(self):
         """High mileage = faster payback"""
@@ -220,7 +237,7 @@ class TestPaybackPeriod:
         )
         # Annual savings: 20000 * 0.09 = $1800
         # Payback: 5000 / 1800 = 2.8 years
-        assert result == 2.8
+        assert result == pytest.approx(2.8)
 
     def test_calculate_payback_period_no_savings(self):
         """No savings = never pays back"""

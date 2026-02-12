@@ -14,7 +14,8 @@ test.describe('Settings / Config', () => {
 
   test('navigation elements are present', async ({ page }) => {
     await page.goto('/');
-    const nav = page.locator('nav, .nav, [role="navigation"]');
+    // Desktop uses header with role="banner"; mobile uses bottom-nav
+    const nav = page.locator('nav, .nav, [role="navigation"], header[role="banner"]');
     await expect(nav.first()).toBeVisible();
   });
 });

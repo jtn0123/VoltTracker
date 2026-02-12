@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for statistical calculations
 """
@@ -48,15 +49,19 @@ class TestTrendCalculation:
     def test_calculate_trend_increase(self):
         """5% increase"""
         result = calculate_trend_vs_previous(105.0, 100.0)
-        assert result['change_value'] == 5.0
-        assert result['change_percent'] == 5.0
+        assert result['change_value'] == pytest.approx(5.0)
+
+        assert result['change_percent'] == pytest.approx(5.0)
+
         assert result['direction'] == 'up'
 
     def test_calculate_trend_decrease(self):
         """10% decrease"""
         result = calculate_trend_vs_previous(90.0, 100.0)
-        assert result['change_value'] == -10.0
-        assert result['change_percent'] == -10.0
+        assert result['change_value'] == pytest.approx(-10.0)
+
+        assert result['change_percent'] == pytest.approx(-10.0)
+
         assert result['direction'] == 'down'
 
     def test_calculate_trend_stable(self):
@@ -81,15 +86,15 @@ class TestPercentChange:
 
     def test_calculate_percent_change_increase(self):
         """10% increase"""
-        assert calculate_percent_change(110, 100) == 10.0
+        assert calculate_percent_change(110, 100) == pytest.approx(10.0)
 
     def test_calculate_percent_change_decrease(self):
         """10% decrease"""
-        assert calculate_percent_change(90, 100) == -10.0
+        assert calculate_percent_change(90, 100) == pytest.approx(-10.0)
 
     def test_calculate_percent_change_double(self):
         """100% increase (doubled)"""
-        assert calculate_percent_change(200, 100) == 100.0
+        assert calculate_percent_change(200, 100) == pytest.approx(100.0)
 
     def test_calculate_percent_change_zero_old(self):
         """Division by zero should return None"""
@@ -104,7 +109,7 @@ class TestMovingAverage:
         values = [1, 2, 3, 4, 5]
         result = calculate_moving_average(values, 3)
         # [1,2,3] = 2.0, [2,3,4] = 3.0, [3,4,5] = 4.0
-        assert result == [2.0, 3.0, 4.0]
+        assert result == pytest.approx([2.0, 3.0, 4.0])
 
     def test_calculate_moving_average_insufficient_data(self):
         """Not enough values for window"""
@@ -115,14 +120,14 @@ class TestMovingAverage:
         """Values exactly match window size"""
         values = [1, 2, 3]
         result = calculate_moving_average(values, 3)
-        assert result == [2.0]
+        assert result == pytest.approx([2.0])
 
     def test_calculate_moving_average_smooth_noise(self):
         """Should smooth out noise"""
         values = [10, 100, 10, 10, 10]  # 100 is spike
         result = calculate_moving_average(values, 3)
         # [10,100,10] = 40, [100,10,10] = 40, [10,10,10] = 10
-        assert result == [40.0, 40.0, 10.0]
+        assert result == pytest.approx([40.0, 40.0, 10.0])
 
 
 class TestOutlierDetection:
@@ -170,14 +175,14 @@ class TestCorrelation:
         x = [1, 2, 3, 4]
         y = [2, 4, 6, 8]
         result = calculate_correlation_simple(x, y)
-        assert result == 1.0
+        assert result == pytest.approx(1.0)
 
     def test_calculate_correlation_perfect_negative(self):
         """Perfect negative correlation = -1.0"""
         x = [1, 2, 3, 4]
         y = [4, 3, 2, 1]
         result = calculate_correlation_simple(x, y)
-        assert result == -1.0
+        assert result == pytest.approx(-1.0)
 
     def test_calculate_correlation_no_correlation(self):
         """No correlation = ~0.0"""
@@ -210,15 +215,15 @@ class TestZScore:
 
     def test_calculate_z_score_above_mean(self):
         """110 with mean=100, std=10 -> z=1.0"""
-        assert calculate_z_score(110, 100, 10) == 1.0
+        assert calculate_z_score(110, 100, 10) == pytest.approx(1.0)
 
     def test_calculate_z_score_below_mean(self):
         """85 with mean=100, std=10 -> z=-1.5"""
-        assert calculate_z_score(85, 100, 10) == -1.5
+        assert calculate_z_score(85, 100, 10) == pytest.approx(-1.5)
 
     def test_calculate_z_score_at_mean(self):
         """Value = mean -> z=0"""
-        assert calculate_z_score(100, 100, 10) == 0.0
+        assert calculate_z_score(100, 100, 10) == pytest.approx(0.0)
 
     def test_calculate_z_score_zero_std(self):
         """Zero std should return None"""
@@ -227,4 +232,4 @@ class TestZScore:
     def test_calculate_z_score_far_outlier(self):
         """Value 3+ std away"""
         result = calculate_z_score(130, 100, 10)
-        assert result == 3.0
+        assert result == pytest.approx(3.0)

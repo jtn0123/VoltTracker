@@ -4,7 +4,7 @@ Tests for calculation utilities.
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -30,32 +30,32 @@ class TestSmoothFuelLevel:
     def test_smooth_single_reading(self):
         """Test with single reading returns that reading."""
         result = smooth_fuel_level([75.0])
-        assert result == 75.0
+        assert result == pytest.approx(75.0)
 
     def test_smooth_empty_list(self):
         """Test with empty list returns 0."""
         result = smooth_fuel_level([])
-        assert result == 0.0
+        assert result == pytest.approx(0.0)
 
     def test_smooth_returns_median(self):
         """Test that smoothing returns median of values."""
         readings = [70.0, 72.0, 71.0, 73.0, 69.0]
         result = smooth_fuel_level(readings, window_size=5)
-        assert result == 71.0  # Median of sorted [69, 70, 71, 72, 73]
+        assert result == pytest.approx(71.0)  # Median of sorted [69, 70, 71, 72, 73]
 
     def test_smooth_window_size(self):
         """Test that window size limits readings used."""
         readings = [50.0, 60.0, 70.0, 80.0, 90.0]
         # Only last 3 readings: [70, 80, 90], median = 80
         result = smooth_fuel_level(readings, window_size=3)
-        assert result == 80.0
+        assert result == pytest.approx(80.0)
 
     def test_smooth_handles_noise(self):
         """Test that smoothing handles noisy readings."""
         # One outlier shouldn't affect result much
         readings = [75.0, 75.0, 95.0, 75.0, 75.0]  # 95 is noise
         result = smooth_fuel_level(readings, window_size=5)
-        assert result == 75.0
+        assert result == pytest.approx(75.0)
 
 
 class TestDetectGasModeEntry:
@@ -230,7 +230,7 @@ class TestCalculateAverageTemp:
     def test_average_temp(self, sample_telemetry_points):
         """Test average temperature calculation."""
         result = calculate_average_temp(sample_telemetry_points)
-        assert result == 70.0
+        assert result == pytest.approx(70.0)
 
     def test_average_temp_with_nulls(self):
         """Test average temp ignores None values."""
@@ -240,7 +240,7 @@ class TestCalculateAverageTemp:
             {"ambient_temp_f": 80.0},
         ]
         result = calculate_average_temp(points)
-        assert result == 75.0
+        assert result == pytest.approx(75.0)
 
     def test_average_temp_all_nulls(self):
         """Test returns None when all temps are None."""
@@ -472,14 +472,14 @@ class TestSmoothFuelEdgeCases:
         """Test with all identical readings."""
         readings = [50.0, 50.0, 50.0, 50.0, 50.0]
         result = smooth_fuel_level(readings, window_size=5)
-        assert result == 50.0
+        assert result == pytest.approx(50.0)
 
     def test_window_larger_than_data(self):
         """Test when window size exceeds available data."""
         readings = [70.0, 72.0]
         result = smooth_fuel_level(readings, window_size=10)
         # Should use all available data
-        assert result == 71.0  # Median of [70, 72]
+        assert result == pytest.approx(71.0)  # Median of [70, 72]
 
     def test_negative_values(self):
         """Test handling of negative values (invalid sensor data)."""
@@ -533,13 +533,13 @@ class TestTemperatureEdgeCases:
             {"ambient_temp_f": 120.0},  # Very hot
         ]
         result = calculate_average_temp(points)
-        assert result == 40.0  # Average of -40 and 120
+        assert result == pytest.approx(40.0)  # Average of -40 and 120
 
     def test_single_reading(self):
         """Test with single temperature reading."""
         points = [{"ambient_temp_f": 72.0}]
         result = calculate_average_temp(points)
-        assert result == 72.0
+        assert result == pytest.approx(72.0)
 
     def test_missing_temp_key(self):
         """Test with points missing temperature key."""
@@ -549,7 +549,7 @@ class TestTemperatureEdgeCases:
         ]
         result = calculate_average_temp(points)
         # Should only average the one valid reading
-        assert result == 70.0
+        assert result == pytest.approx(70.0)
 
 
 class TestCalculateElectricKwh:
@@ -557,18 +557,18 @@ class TestCalculateElectricKwh:
 
     def test_kwh_from_power_readings(self):
         """Calculate kWh from HV battery power data."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         points = [
             {"timestamp": now, "hv_battery_power_kw": 10.0},
             {"timestamp": now + timedelta(hours=1), "hv_battery_power_kw": 10.0},
         ]
         result = calculate_electric_kwh(points)
         # 1 hour at 10kW = 10 kWh
-        assert result == 10.0
+        assert result == pytest.approx(10.0)
 
     def test_kwh_ignores_negative_power_readings(self):
         """Negative power (regen) is not counted as consumption."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         points = [
             {"timestamp": now, "hv_battery_power_kw": -5.0},  # Regen
             {"timestamp": now + timedelta(hours=1), "hv_battery_power_kw": -5.0},
@@ -579,25 +579,25 @@ class TestCalculateElectricKwh:
 
     def test_kwh_handles_string_timestamps(self):
         """ISO format string timestamps are parsed correctly."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         points = [
             {"timestamp": now.isoformat(), "hv_battery_power_kw": 15.0},
             {"timestamp": (now + timedelta(hours=0.5)).isoformat(), "hv_battery_power_kw": 15.0},
         ]
         result = calculate_electric_kwh(points)
         # 0.5 hours at 15kW = 7.5 kWh
-        assert result == 7.5
+        assert result == pytest.approx(7.5)
 
     def test_kwh_calculates_time_delta_correctly(self):
         """Time intervals are correctly calculated."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         points = [
             {"timestamp": now, "hv_battery_power_kw": 20.0},
             {"timestamp": now + timedelta(minutes=15), "hv_battery_power_kw": 20.0},
         ]
         result = calculate_electric_kwh(points)
         # 0.25 hours at 20kW = 5 kWh
-        assert result == 5.0
+        assert result == pytest.approx(5.0)
 
     def test_kwh_from_soc_when_no_power_data(self):
         """Calculate kWh from SOC change when power data unavailable."""
@@ -641,7 +641,7 @@ class TestCalculateElectricKwh:
 
     def test_kwh_prefers_power_method_over_soc(self):
         """When power data available, use it instead of SOC."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         points = [
             {"timestamp": now, "hv_battery_power_kw": 10.0, "state_of_charge": 80.0},
             {"timestamp": now + timedelta(hours=1), "hv_battery_power_kw": 10.0, "state_of_charge": 70.0},
@@ -649,7 +649,7 @@ class TestCalculateElectricKwh:
         result = calculate_electric_kwh(points)
         # Should use power method: 1 hour at 10kW = 10 kWh
         # SOC method would give: 10% of 18.4 = 1.84 kWh
-        assert result == 10.0
+        assert result == pytest.approx(10.0)
 
 
 class TestCalculateKwhPerMile:
@@ -670,7 +670,7 @@ class TestCalculateKwhPerMile:
         """Exactly 0.5 miles should return a value."""
         result = calculate_kwh_per_mile(kwh_used=0.2, electric_miles=0.5)
         assert result is not None
-        assert result == 0.4
+        assert result == pytest.approx(0.4)
 
     def test_kwh_per_mile_returns_none_for_none_kwh(self):
         """None kWh returns None."""
@@ -686,7 +686,7 @@ class TestCalculateKwhPerMile:
         """Result is rounded to 3 decimal places."""
         result = calculate_kwh_per_mile(kwh_used=1.0, electric_miles=3.0)
         # 1.0 / 3.0 = 0.333333...
-        assert result == 0.333
+        assert result == pytest.approx(0.333)
 
 
 class TestDetectChargingSession:
@@ -751,7 +751,8 @@ class TestDetectChargingSession:
             {"charger_connected": True, "charger_ac_power_kw": 6.5, "state_of_charge": 60.0},
         ]
         result = detect_charging_session(points)
-        assert result["peak_power_kw"] == 7.0
+        assert result["peak_power_kw"] == pytest.approx(7.0)
+
         assert result["avg_power_kw"] == pytest.approx(6.5, rel=0.01)
 
     def test_tracks_soc_range(self):
@@ -762,8 +763,9 @@ class TestDetectChargingSession:
             {"charger_connected": True, "charger_ac_power_kw": 6.6, "state_of_charge": 70.0},
         ]
         result = detect_charging_session(points)
-        assert result["start_soc"] == 30.0
-        assert result["current_soc"] == 70.0
+        assert result["start_soc"] == pytest.approx(30.0)
+
+        assert result["current_soc"] == pytest.approx(70.0)
 
     def test_handles_empty_telemetry(self):
         """Empty telemetry list returns None."""

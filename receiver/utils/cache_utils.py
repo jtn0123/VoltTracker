@@ -99,7 +99,7 @@ def generate_cache_key(prefix: str, *args, **kwargs) -> str:
     if kwargs:
         # Sort kwargs for stable hashing
         sorted_kwargs = sorted(kwargs.items())
-        key_parts.append(json.dumps(sorted_kwargs, sort_keys=True))
+        key_parts.append(json.dumps(sorted_kwargs, sort_keys=True, cls=_DateTimeEncoder, default=str))
 
     # Hash the combined parts for consistent key length
     key_string = ":".join(key_parts)

@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for background scheduler tasks.
 
@@ -39,7 +40,7 @@ class TestCloseStaleTrips:
         # Imports moved to top of file
 
         session_id = uuid.uuid4()
-        recent_time = datetime.utcnow() - timedelta(seconds=30)
+        recent_time = datetime.now(timezone.utc) - timedelta(seconds=30)
 
         trip = Trip(
             session_id=session_id,
@@ -68,7 +69,7 @@ class TestCloseStaleTrips:
         # Imports moved to top of file
 
         session_id = uuid.uuid4()
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
 
         trip = Trip(
             session_id=session_id,
@@ -92,7 +93,7 @@ class TestCloseStaleTrips:
         # Imports moved to top of file
 
         session_id = uuid.uuid4()
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
 
         trip = Trip(
             session_id=session_id,
@@ -124,7 +125,7 @@ class TestCloseStaleTrips:
 
         session_id = uuid.uuid4()
         # Make all telemetry timestamps in the past (beyond timeout)
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
+        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
 
         trip = Trip(
             session_id=session_id,
@@ -154,8 +155,9 @@ class TestCloseStaleTrips:
         close_stale_trips()
 
         updated_trip = Session().query(Trip).filter(Trip.id == trip_id).first()
-        assert updated_trip.distance_miles == 25.0
-        assert updated_trip.end_odometer == 50025.0
+        assert updated_trip.distance_miles == pytest.approx(25.0)
+
+        assert updated_trip.end_odometer == pytest.approx(50025.0)
 
     def test_finalize_trip_detects_gas_mode_entry(self, app, db_session):
         """Trip that entered gas mode has gas_mode_entered=True."""
@@ -163,7 +165,7 @@ class TestCloseStaleTrips:
 
         session_id = uuid.uuid4()
         # All timestamps in the past (beyond timeout)
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
+        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
 
         trip = Trip(
             session_id=session_id,
@@ -219,7 +221,7 @@ class TestCloseStaleTrips:
 
         session_id = uuid.uuid4()
         # All timestamps in the past (beyond timeout)
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
+        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
 
         trip = Trip(
             session_id=session_id,
@@ -275,7 +277,7 @@ class TestCloseStaleTrips:
 
         session_id = uuid.uuid4()
         # All timestamps in the past (beyond timeout)
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
+        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 120)
 
         trip = Trip(
             session_id=session_id,
@@ -344,8 +346,9 @@ class TestCheckRefuelEvents:
 
         fuel_events = db_session.query(FuelEvent).all()
         assert len(fuel_events) == 1
-        assert fuel_events[0].fuel_level_before == 25.0
-        assert fuel_events[0].fuel_level_after == 85.0
+        assert fuel_events[0].fuel_level_before == pytest.approx(25.0)
+
+        assert fuel_events[0].fuel_level_after == pytest.approx(85.0)
 
     def test_no_duplicate_fuel_events(self, app, db_session):
         """Same refuel event not recorded twice (idempotent)."""
@@ -511,7 +514,7 @@ class TestCheckChargingSessions:
         # Imports moved to top of file
 
         session_id = uuid.uuid4()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Add charging telemetry
         telemetry = TelemetryRaw(
@@ -539,7 +542,7 @@ class TestCheckChargingSessions:
 
         # Create an active session
         session = ChargingSession(
-            start_time=datetime.utcnow() - timedelta(hours=2),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=2),
             start_soc=30.0,
             is_complete=False,
         )
@@ -560,7 +563,7 @@ class TestCheckChargingSessions:
         session_id = uuid.uuid4()
         telemetry = TelemetryRaw(
             session_id=session_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             charger_connected=False,
         )
         db_session.add(telemetry)
@@ -575,7 +578,7 @@ class TestCheckChargingSessions:
 
         # Create an active session with SOC data
         session = ChargingSession(
-            start_time=datetime.utcnow() - timedelta(hours=2),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=2),
             start_soc=30.0,
             end_soc=80.0,  # Gained 50%
             is_complete=False,
@@ -598,7 +601,7 @@ class TestCheckChargingSessions:
         # Imports moved to top of file
 
         telem_session_id = uuid.uuid4()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Create active session
         session = ChargingSession(
@@ -638,7 +641,7 @@ class TestSchedulerExceptionHandling:
         mock_finalize.side_effect = IntegrityError("test error", None, None)
 
         session_id = uuid.uuid4()
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
 
         trip = Trip(
             session_id=session_id,
@@ -666,7 +669,7 @@ class TestSchedulerExceptionHandling:
         mock_finalize.side_effect = RuntimeError("unexpected error")
 
         session_id = uuid.uuid4()
-        old_time = datetime.utcnow() - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
+        old_time = datetime.now(timezone.utc) - timedelta(seconds=Config.TRIP_TIMEOUT_SECONDS + 60)
 
         trip = Trip(
             session_id=session_id,
@@ -760,7 +763,7 @@ class TestSchedulerExceptionHandling:
         session_id = uuid.uuid4()
         telemetry = TelemetryRaw(
             session_id=session_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             charger_connected=True,
             charger_power_kw=3.3,
             state_of_charge=50.0,
@@ -791,7 +794,7 @@ class TestSchedulerExceptionHandling:
         session_id = uuid.uuid4()
         telemetry = TelemetryRaw(
             session_id=session_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             charger_connected=True,
             charger_power_kw=3.3,
             state_of_charge=50.0,
@@ -849,7 +852,7 @@ class TestChargingSessionEdgeCases:
         """Charging session correctly calculates kWh from SOC gain."""
         # Create session with 50% SOC gain (50% of 18.4 kWh = 9.2 kWh)
         session = ChargingSession(
-            start_time=datetime.utcnow() - timedelta(hours=2),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=2),
             start_soc=30.0,
             end_soc=80.0,  # 50% gain
             is_complete=False,
@@ -873,7 +876,7 @@ class TestChargingSessionEdgeCases:
         """Charging session with no SOC gain doesn't calculate kWh."""
         # Session with negative SOC change (shouldn't happen but handle it)
         session = ChargingSession(
-            start_time=datetime.utcnow() - timedelta(hours=2),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=2),
             start_soc=80.0,
             end_soc=75.0,  # Negative gain
             is_complete=False,
@@ -892,7 +895,7 @@ class TestChargingSessionEdgeCases:
     def test_charging_session_closes_with_missing_soc_data(self, app, db_session):
         """Charging session closes even if SOC data is missing."""
         session = ChargingSession(
-            start_time=datetime.utcnow() - timedelta(hours=2),
+            start_time=datetime.now(timezone.utc) - timedelta(hours=2),
             start_soc=None,
             end_soc=None,
             is_complete=False,
@@ -915,7 +918,7 @@ class TestChargingSessionCreation:
     def test_creates_new_charging_session_when_charger_detected(self, app, db_session):
         """Creates a new charging session when charger detected and no active session exists."""
         session_id = uuid.uuid4()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Add telemetry with AC power (needed by detect_charging_session)
         for i in range(3):
@@ -944,7 +947,7 @@ class TestChargingSessionCreation:
     def test_updates_active_session_with_new_soc(self, app, db_session):
         """Updates existing active session with latest SOC data."""
         session_id = uuid.uuid4()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Create an active charging session
         session = ChargingSession(
@@ -982,7 +985,7 @@ class TestChargingSessionCreation:
         from sqlalchemy.exc import IntegrityError
 
         session_id = uuid.uuid4()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Add charging telemetry
         for i in range(3):

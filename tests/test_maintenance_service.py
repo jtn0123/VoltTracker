@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for maintenance service module.
 
@@ -144,7 +145,7 @@ class TestCalculateEngineHours:
         # Use a future date so no existing data matches
         future = datetime.now(timezone.utc) + timedelta(days=365)
         hours = calculate_engine_hours(db_session, since_date=future)
-        assert hours == 0.0
+        assert hours == pytest.approx(0.0)
 
     def test_handles_null_engine_rpm(self, app, db_session):
         """Null engine_rpm is handled gracefully."""
@@ -164,7 +165,7 @@ class TestCalculateEngineHours:
         hours = calculate_engine_hours(db_session, since_date=since)
 
         # Should return 0 since no valid engine RPM
-        assert hours == 0.0
+        assert hours == pytest.approx(0.0)
 
     def test_boundary_engine_rpm_threshold(self, app, db_session):
         """Test 400 RPM threshold boundary."""
@@ -176,16 +177,16 @@ class TestCalculateEngineHours:
         for i in range(5):
             telemetry = TelemetryRaw(
                 session_id=session_id,
-                timestamp=now - timedelta(minutes=25 + i * 5),
+                timestamp=now - timedelta(minutes=50 - i * 5),
                 engine_rpm=400.0,
             )
             db_session.add(telemetry)
 
-        # Just above 400 RPM - should count
-        for i in range(5, 10):
+        # Just above 400 RPM - should count (use non-overlapping timestamps)
+        for i in range(5):
             telemetry = TelemetryRaw(
                 session_id=session_id,
-                timestamp=now - timedelta(minutes=(10 - i) * 5),
+                timestamp=now - timedelta(minutes=20 - i * 5),
                 engine_rpm=401.0,
             )
             db_session.add(telemetry)

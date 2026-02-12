@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for WebSocket/SocketIO functionality.
 
@@ -29,7 +30,7 @@ class TestEmitTelemetryUpdate:
         mock_socketio.emit.assert_called_once()
         call_args = mock_socketio.emit.call_args
         assert call_args[0][0] == "telemetry"
-        assert call_args[0][1]["speed"] == 65.5
+        assert call_args[0][1]["speed"] == pytest.approx(65.5)
 
     def test_emit_telemetry_update_extracts_soc(self, app):
         """state_of_charge correctly extracted."""
@@ -40,7 +41,7 @@ class TestEmitTelemetryUpdate:
         mock_socketio = MagicMock()
         emit_telemetry_update(mock_socketio, data)
         call_args = mock_socketio.emit.call_args
-        assert call_args[0][1]["soc"] == 75.5
+        assert call_args[0][1]["soc"] == pytest.approx(75.5)
 
     def test_emit_telemetry_update_handles_missing_keys(self, app):
         """Missing keys in data dict return None, not error."""
@@ -85,14 +86,20 @@ class TestEmitTelemetryUpdate:
         call_args = mock_socketio.emit.call_args
         emitted = call_args[0][1]
 
-        assert emitted["speed"] == 55.0
+        assert emitted["speed"] == pytest.approx(55.0)
+
         assert emitted["rpm"] == 1200
-        assert emitted["soc"] == 18.0
-        assert emitted["fuel_percent"] == 75.0
-        assert emitted["hv_power"] == -5.5
-        assert emitted["latitude"] == 37.7749
-        assert emitted["longitude"] == -122.4194
-        assert emitted["odometer"] == 50123.4
+        assert emitted["soc"] == pytest.approx(18.0)
+
+        assert emitted["fuel_percent"] == pytest.approx(75.0)
+
+        assert emitted["hv_power"] == pytest.approx(-5.5)
+
+        assert emitted["latitude"] == pytest.approx(37.7749)
+
+        assert emitted["longitude"] == pytest.approx(-122.4194)
+
+        assert emitted["odometer"] == pytest.approx(50123.4)
 
     def test_emit_handles_null_values(self, app):
         """NULL telemetry fields don't break emission."""

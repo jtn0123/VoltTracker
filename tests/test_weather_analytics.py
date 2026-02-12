@@ -183,7 +183,7 @@ class TestCalculateEfficiencyImpact:
     def test_baseline_efficiency_returns_zero(self):
         """Baseline efficiency returns 0% impact."""
         result = calculate_efficiency_impact_percent(BASELINE_KWH_PER_MILE)
-        assert result == 0.0
+        assert result == pytest.approx(0.0)
 
     def test_worse_efficiency_returns_positive(self):
         """Worse efficiency (higher kWh/mile) returns positive impact."""
@@ -200,7 +200,7 @@ class TestCalculateEfficiencyImpact:
     def test_none_returns_zero(self):
         """None efficiency returns 0% impact."""
         result = calculate_efficiency_impact_percent(None)
-        assert result == 0.0
+        assert result == pytest.approx(0.0)
 
 
 class TestGetEfficiencyByTemperatureBands:

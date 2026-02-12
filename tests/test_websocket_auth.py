@@ -21,7 +21,7 @@ class TestWebSocketAuthEnabled:
         monkeypatch.setattr("config.Config.WEBSOCKET_TOKEN", "valid-secret-token")
         monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", None)
 
-        from app import handle_connect
+        handle_connect = app.handle_connect
 
         with app.test_request_context():
             with patch("flask_socketio.disconnect") as mock_disconnect:
@@ -35,7 +35,7 @@ class TestWebSocketAuthEnabled:
         monkeypatch.setattr("config.Config.WEBSOCKET_TOKEN", "valid-secret-token")
         monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", None)
 
-        from app import handle_connect
+        handle_connect = app.handle_connect
 
         with app.test_request_context():
             with patch("flask_socketio.disconnect") as mock_disconnect:
@@ -49,7 +49,7 @@ class TestWebSocketAuthEnabled:
         monkeypatch.setattr("config.Config.WEBSOCKET_TOKEN", "valid-secret-token")
         monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", None)
 
-        from app import handle_connect
+        handle_connect = app.handle_connect
 
         with app.test_request_context():
             result = handle_connect({"token": "valid-secret-token"})
@@ -59,25 +59,25 @@ class TestWebSocketAuthEnabled:
         """Connection with correct dashboard password is accepted."""
         monkeypatch.setattr("config.Config.WEBSOCKET_AUTH_ENABLED", True)
         monkeypatch.setattr("config.Config.WEBSOCKET_TOKEN", None)
-        monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "my-password")
+        monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "my-password")  # nosonar
 
-        from app import handle_connect
+        handle_connect = app.handle_connect
 
         with app.test_request_context():
-            result = handle_connect({"password": "my-password"})
+            result = handle_connect({"password": "my-password"})  # nosonar
             assert result is not False
 
     def test_reject_wrong_password(self, app, monkeypatch):
         """Connection with wrong password is rejected."""
         monkeypatch.setattr("config.Config.WEBSOCKET_AUTH_ENABLED", True)
         monkeypatch.setattr("config.Config.WEBSOCKET_TOKEN", None)
-        monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "my-password")
+        monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "my-password")  # nosonar
 
-        from app import handle_connect
+        handle_connect = app.handle_connect
 
         with app.test_request_context():
             with patch("flask_socketio.disconnect") as mock_disconnect:
-                result = handle_connect({"password": "wrong-password"})
+                result = handle_connect({"password": "wrong-password"})  # nosonar
                 assert result is False
                 mock_disconnect.assert_called_once()
 
@@ -87,7 +87,7 @@ class TestWebSocketAuthEnabled:
         monkeypatch.setattr("config.Config.WEBSOCKET_TOKEN", "secret")
         monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", None)
 
-        from app import handle_connect
+        handle_connect = app.handle_connect
 
         with app.test_request_context():
             with patch("flask_socketio.disconnect") as mock_disconnect:
@@ -103,7 +103,7 @@ class TestWebSocketAuthDisabled:
         """Unauthenticated connection allowed when auth disabled."""
         monkeypatch.setattr("config.Config.WEBSOCKET_AUTH_ENABLED", False)
 
-        from app import handle_connect
+        handle_connect = app.handle_connect
 
         with app.test_request_context():
             result = handle_connect(None)
@@ -115,7 +115,7 @@ class TestWebSocketAuthDisabled:
         monkeypatch.setattr("config.Config.WEBSOCKET_TOKEN", None)
         monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", None)
 
-        from app import handle_connect
+        handle_connect = app.handle_connect
 
         with app.test_request_context():
             result = handle_connect(None)
@@ -129,9 +129,9 @@ class TestWebSocketTokenPrecedence:
         """When both token and password configured, valid token is sufficient."""
         monkeypatch.setattr("config.Config.WEBSOCKET_AUTH_ENABLED", True)
         monkeypatch.setattr("config.Config.WEBSOCKET_TOKEN", "ws-token")
-        monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "dash-pass")
+        monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "dash-pass")  # nosonar
 
-        from app import handle_connect
+        handle_connect = app.handle_connect
 
         with app.test_request_context():
             result = handle_connect({"token": "ws-token"})
@@ -141,10 +141,10 @@ class TestWebSocketTokenPrecedence:
         """Password works when token configured but not provided in auth."""
         monkeypatch.setattr("config.Config.WEBSOCKET_AUTH_ENABLED", True)
         monkeypatch.setattr("config.Config.WEBSOCKET_TOKEN", None)
-        monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "dash-pass")
+        monkeypatch.setattr("config.Config.DASHBOARD_PASSWORD", "dash-pass")  # nosonar
 
-        from app import handle_connect
+        handle_connect = app.handle_connect
 
         with app.test_request_context():
-            result = handle_connect({"password": "dash-pass"})
+            result = handle_connect({"password": "dash-pass"})  # nosonar
             assert result is not False

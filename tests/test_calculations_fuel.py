@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for fuel-related calculations
 """
@@ -18,12 +19,12 @@ class TestFuelConsumption:
     def test_calculate_fuel_consumed_normal(self):
         """80% -> 60% in 9 gal tank = 1.8 gal"""
         result = calculate_fuel_consumed_gallons(80.0, 60.0, 9.0)
-        assert result == 1.8
+        assert result == pytest.approx(1.8)
 
     def test_calculate_fuel_consumed_large_drop(self):
         """100% -> 50% = 4.5 gal"""
         result = calculate_fuel_consumed_gallons(100.0, 50.0, 9.0)
-        assert result == 4.5
+        assert result == pytest.approx(4.5)
 
     def test_calculate_fuel_consumed_refuel_detected(self):
         """Fuel increase should return None (refuel)"""
@@ -49,12 +50,12 @@ class TestGasMPG:
     def test_calculate_gas_mpg_typical(self):
         """40 miles, 80% -> 70% fuel = ~44.4 MPG"""
         result = calculate_gas_mpg(1000, 1040, 80.0, 70.0, 9.0)
-        assert result == 44.4
+        assert result == pytest.approx(44.4)
 
     def test_calculate_gas_mpg_efficient(self):
         """50 miles, 90% -> 80% fuel = 55.6 MPG (50mi / 0.9gal)"""
         result = calculate_gas_mpg(1000, 1050, 90.0, 80.0, 9.0)
-        assert result == 55.6
+        assert result == pytest.approx(55.6)
 
     def test_calculate_gas_mpg_too_short(self):
         """Trip < 1 mile should return None"""
@@ -121,7 +122,7 @@ class TestFuelLevelSmoothing:
     def test_smooth_fuel_level_median(self):
         """Should return median of readings"""
         readings = [50.0, 52.0, 48.0, 51.0, 49.0]
-        assert smooth_fuel_level(readings) == 50.0
+        assert smooth_fuel_level(readings) == pytest.approx(50.0)
 
     def test_smooth_fuel_level_removes_outlier(self):
         """Median filter should remove outliers"""
@@ -131,18 +132,18 @@ class TestFuelLevelSmoothing:
 
     def test_smooth_fuel_level_single_reading(self):
         """Single reading should return that value"""
-        assert smooth_fuel_level([50.0]) == 50.0
+        assert smooth_fuel_level([50.0]) == pytest.approx(50.0)
 
     def test_smooth_fuel_level_empty(self):
         """Empty list should return 0"""
-        assert smooth_fuel_level([]) == 0.0
+        assert smooth_fuel_level([]) == pytest.approx(0.0)
 
     def test_smooth_fuel_level_window_size(self):
         """Should use only last N readings"""
         readings = [10.0, 20.0, 30.0, 40.0, 50.0, 51.0, 49.0]
         # With window=3, should only use [50.0, 51.0, 49.0] -> median = 50.0
         result = smooth_fuel_level(readings, window_size=3)
-        assert result == 50.0
+        assert result == pytest.approx(50.0)
 
 
 class TestFuelCost:
@@ -150,15 +151,15 @@ class TestFuelCost:
 
     def test_calculate_fuel_cost_normal(self):
         """10 gallons at $3.50 = $35.00"""
-        assert calculate_fuel_cost(10.0, 3.50) == 35.0
+        assert calculate_fuel_cost(10.0, 3.50) == pytest.approx(35.0)
 
     def test_calculate_fuel_cost_partial(self):
         """5.5 gallons at $4.00 = $22.00"""
-        assert calculate_fuel_cost(5.5, 4.00) == 22.0
+        assert calculate_fuel_cost(5.5, 4.00) == pytest.approx(22.0)
 
     def test_calculate_fuel_cost_expensive(self):
         """2 gallons at $5.00 = $10.00"""
-        assert calculate_fuel_cost(2.0, 5.00) == 10.0
+        assert calculate_fuel_cost(2.0, 5.00) == pytest.approx(10.0)
 
 
 class TestFuelRange:
@@ -166,16 +167,16 @@ class TestFuelRange:
 
     def test_estimate_fuel_range_half_tank(self):
         """50% fuel at 40 MPG = 180 miles"""
-        assert estimate_fuel_range(50.0, 40.0, 9.0) == 180.0
+        assert estimate_fuel_range(50.0, 40.0, 9.0) == pytest.approx(180.0)
 
     def test_estimate_fuel_range_full_tank(self):
         """100% fuel at 35 MPG = 315 miles"""
-        assert estimate_fuel_range(100.0, 35.0, 9.0) == 315.0
+        assert estimate_fuel_range(100.0, 35.0, 9.0) == pytest.approx(315.0)
 
     def test_estimate_fuel_range_low_fuel(self):
         """10% fuel at 40 MPG = 36 miles"""
-        assert estimate_fuel_range(10.0, 40.0, 9.0) == 36.0
+        assert estimate_fuel_range(10.0, 40.0, 9.0) == pytest.approx(36.0)
 
     def test_estimate_fuel_range_empty(self):
         """0% fuel = 0 miles"""
-        assert estimate_fuel_range(0.0, 40.0, 9.0) == 0.0
+        assert estimate_fuel_range(0.0, 40.0, 9.0) == pytest.approx(0.0)

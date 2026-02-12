@@ -1,3 +1,4 @@
+import pytest
 """Tests for battery cell voltage tracking functionality."""
 
 from datetime import datetime, timezone
@@ -14,10 +15,13 @@ class TestBatteryCellReadingModel:
         reading = BatteryCellReading.from_cell_voltages(timestamp=datetime.now(timezone.utc), cell_voltages=voltages)
 
         assert reading is not None
-        assert reading.min_voltage == 3.8
-        assert reading.max_voltage == 3.8
-        assert reading.avg_voltage == 3.8
-        assert reading.voltage_delta == 0.0
+        assert reading.min_voltage == pytest.approx(3.8)
+
+        assert reading.max_voltage == pytest.approx(3.8)
+
+        assert reading.avg_voltage == pytest.approx(3.8)
+
+        assert reading.voltage_delta == pytest.approx(0.0)
 
     def test_from_cell_voltages_with_variation(self):
         """Test voltage delta calculation with cell variation."""
@@ -25,9 +29,12 @@ class TestBatteryCellReadingModel:
         reading = BatteryCellReading.from_cell_voltages(timestamp=datetime.now(timezone.utc), cell_voltages=voltages)
 
         assert reading is not None
-        assert reading.min_voltage == 3.7
-        assert reading.max_voltage == 3.9
-        assert reading.voltage_delta == 0.2
+        assert reading.min_voltage == pytest.approx(3.7)
+
+        assert reading.max_voltage == pytest.approx(3.9)
+
+        assert reading.voltage_delta == pytest.approx(0.2)
+
         assert abs(reading.avg_voltage - 3.8) < 0.01
 
     def test_from_cell_voltages_module_averages(self):
@@ -37,9 +44,11 @@ class TestBatteryCellReadingModel:
         reading = BatteryCellReading.from_cell_voltages(timestamp=datetime.now(timezone.utc), cell_voltages=voltages)
 
         assert reading is not None
-        assert reading.module1_avg == 3.7
-        assert reading.module2_avg == 3.8
-        assert reading.module3_avg == 3.9
+        assert reading.module1_avg == pytest.approx(3.7)
+
+        assert reading.module2_avg == pytest.approx(3.8)
+
+        assert reading.module3_avg == pytest.approx(3.9)
 
     def test_from_cell_voltages_with_context(self):
         """Test reading with environmental context."""
@@ -53,8 +62,10 @@ class TestBatteryCellReadingModel:
         )
 
         assert reading is not None
-        assert reading.ambient_temp_f == 72.5
-        assert reading.state_of_charge == 80.0
+        assert reading.ambient_temp_f == pytest.approx(72.5)
+
+        assert reading.state_of_charge == pytest.approx(80.0)
+
         assert reading.is_charging is True
 
     def test_from_cell_voltages_empty_list(self):
@@ -73,8 +84,9 @@ class TestBatteryCellReadingModel:
         reading = BatteryCellReading.from_cell_voltages(timestamp=datetime.now(timezone.utc), cell_voltages=voltages)
 
         assert reading is not None
-        assert reading.min_voltage == 3.8
-        assert reading.max_voltage == 3.8
+        assert reading.min_voltage == pytest.approx(3.8)
+
+        assert reading.max_voltage == pytest.approx(3.8)
 
     def test_to_dict(self):
         """Test to_dict serialization."""
@@ -89,7 +101,7 @@ class TestBatteryCellReadingModel:
         assert "min_voltage" in d
         assert "max_voltage" in d
         assert "voltage_delta" in d
-        assert d["state_of_charge"] == 75.0
+        assert d["state_of_charge"] == pytest.approx(75.0)
 
 
 class TestBatteryCellEndpoints:
@@ -113,8 +125,9 @@ class TestBatteryCellEndpoints:
         assert response.status_code == 201
         data = response.get_json()
         assert "reading" in data
-        assert data["reading"]["avg_voltage"] == 3.8
-        assert data["reading"]["voltage_delta"] == 0.0
+        assert data["reading"]["avg_voltage"] == pytest.approx(3.8)
+
+        assert data["reading"]["voltage_delta"] == pytest.approx(0.0)
 
     def test_add_cell_reading_no_voltages(self, client, db_session):
         """Test adding reading without voltages fails."""
@@ -138,7 +151,7 @@ class TestBatteryCellEndpoints:
         assert response.status_code == 200
         data = response.get_json()
         assert data["reading"] is not None
-        assert data["reading"]["avg_voltage"] == 3.8
+        assert data["reading"]["avg_voltage"] == pytest.approx(3.8)
 
     def test_get_latest_cell_reading_empty(self, client, db_session):
         """Test getting latest reading when none exist."""
@@ -189,9 +202,11 @@ class TestBatteryCellEndpoints:
         data = response.get_json()
 
         assert "module_balance" in data["analysis"]
-        assert data["analysis"]["module_balance"]["module1_avg"] == 3.7
-        assert data["analysis"]["module_balance"]["module2_avg"] == 3.8
-        assert data["analysis"]["module_balance"]["module3_avg"] == 3.9
+        assert data["analysis"]["module_balance"]["module1_avg"] == pytest.approx(3.7)
+
+        assert data["analysis"]["module_balance"]["module2_avg"] == pytest.approx(3.8)
+
+        assert data["analysis"]["module_balance"]["module3_avg"] == pytest.approx(3.9)
 
     def test_add_cell_reading_with_timestamp(self, client, db_session):
         """Test adding reading with custom timestamp."""

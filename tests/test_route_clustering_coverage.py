@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for route clustering utilities - coverage supplement.
 Imports via utils.route_clustering to match coverage measurement path.
@@ -26,7 +27,7 @@ class TestHaversineDistance:
     """Tests for haversine_distance function."""
 
     def test_same_point(self):
-        assert haversine_distance(40.0, -74.0, 40.0, -74.0) == 0.0
+        assert haversine_distance(40.0, -74.0, 40.0, -74.0) == pytest.approx(0.0)
 
     def test_known_distance_nyc_to_la(self):
         # NYC to LA is ~2451 miles
@@ -51,10 +52,10 @@ class TestCalculateRouteSimilarity:
         assert score >= 95
 
     def test_empty_route1(self):
-        assert calculate_route_similarity([], [(37.0, -122.0)]) == 0.0
+        assert calculate_route_similarity([], [(37.0, -122.0)]) == pytest.approx(0.0)
 
     def test_empty_route2(self):
-        assert calculate_route_similarity([(37.0, -122.0)], []) == 0.0
+        assert calculate_route_similarity([(37.0, -122.0)], []) == pytest.approx(0.0)
 
     def test_similar_routes(self):
         route1 = [(37.0 + i * 0.01, -122.0 + i * 0.01) for i in range(25)]
@@ -130,18 +131,25 @@ class TestCalculateRouteBounds:
 
     def test_single_point(self):
         result = calculate_route_bounds([(37.0, -122.0)])
-        assert result['north'] == 37.0
-        assert result['south'] == 37.0
-        assert result['east'] == -122.0
-        assert result['west'] == -122.0
+        assert result['north'] == pytest.approx(37.0)
+
+        assert result['south'] == pytest.approx(37.0)
+
+        assert result['east'] == pytest.approx(-122.0)
+
+        assert result['west'] == pytest.approx(-122.0)
 
     def test_multiple_points(self):
         points = [(36.0, -123.0), (38.0, -121.0), (37.0, -122.0)]
         result = calculate_route_bounds(points)
-        assert result['north'] == 38.0
-        assert result['south'] == 36.0
-        assert result['east'] == -121.0
-        assert result['west'] == -123.0
+        assert result['north'] == pytest.approx(38.0)
+
+        assert result['south'] == pytest.approx(36.0)
+
+        assert result['east'] == pytest.approx(-121.0)
+
+        assert result['west'] == pytest.approx(-123.0)
+
         assert abs(result['center_lat'] - 37.0) < 0.01
 
 
@@ -170,7 +178,7 @@ class TestGetTripGpsPoints:
 
         points = get_trip_gps_points(db_session, trip)
         assert len(points) == 5
-        assert points[0] == (37.0, -122.0)
+        assert points[0] == pytest.approx((37.0, -122.0))
 
     def test_trip_with_no_gps(self, app, db_session):
         """Trip with no GPS telemetry returns empty list."""

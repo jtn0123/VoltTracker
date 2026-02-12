@@ -20,11 +20,11 @@ class TestKWhPerMile:
 
     def test_calculate_kwh_per_mile_typical(self):
         """5 kWh over 20 miles = 0.25 kWh/mi"""
-        assert calculate_kwh_per_mile(5.0, 20.0) == 0.25
+        assert calculate_kwh_per_mile(5.0, 20.0) == pytest.approx(0.25)
 
     def test_calculate_kwh_per_mile_less_efficient(self):
         """8 kWh over 20 miles = 0.4 kWh/mi"""
-        assert calculate_kwh_per_mile(8.0, 20.0) == 0.4
+        assert calculate_kwh_per_mile(8.0, 20.0) == pytest.approx(0.4)
 
     def test_calculate_kwh_per_mile_none_values(self):
         assert calculate_kwh_per_mile(None, 20.0) is None
@@ -49,7 +49,7 @@ class TestKWhPerMile:
     def test_calculate_kwh_per_mile_no_validation(self):
         """Should allow outliers if validation disabled"""
         result = calculate_kwh_per_mile(50.0, 20.0, validate=False)
-        assert result == 2.5
+        assert result == pytest.approx(2.5)
 
 
 class TestMPG:
@@ -57,11 +57,11 @@ class TestMPG:
 
     def test_calculate_mpg_typical(self):
         """100 miles on 2.5 gallons = 40 MPG"""
-        assert calculate_mpg(100.0, 2.5) == 40.0
+        assert calculate_mpg(100.0, 2.5) == pytest.approx(40.0)
 
     def test_calculate_mpg_efficient(self):
         """100 miles on 2 gallons = 50 MPG"""
-        assert calculate_mpg(100.0, 2.0) == 50.0
+        assert calculate_mpg(100.0, 2.0) == pytest.approx(50.0)
 
     def test_calculate_mpg_none_values(self):
         assert calculate_mpg(None, 2.5) is None
@@ -84,7 +84,7 @@ class TestMPG:
     def test_calculate_mpg_no_validation(self):
         """Should allow outliers if validation disabled"""
         result = calculate_mpg(100.0, 1.0, validate=False)
-        assert result == 100.0
+        assert result == pytest.approx(100.0)
 
 
 class TestEfficiencyImpact:
@@ -92,22 +92,22 @@ class TestEfficiencyImpact:
 
     def test_efficiency_impact_same_as_baseline(self):
         """Same as baseline = 0% impact"""
-        assert calculate_efficiency_impact_percent(0.32, 0.32) == 0.0
+        assert calculate_efficiency_impact_percent(0.32, 0.32) == pytest.approx(0.0)
 
     def test_efficiency_impact_worse_than_baseline(self):
         """0.40 vs 0.32 baseline = 25% worse"""
-        assert calculate_efficiency_impact_percent(0.40, 0.32) == 25.0
+        assert calculate_efficiency_impact_percent(0.40, 0.32) == pytest.approx(25.0)
 
     def test_efficiency_impact_better_than_baseline(self):
         """0.25 vs 0.32 baseline = -21.9% (improvement)"""
-        assert calculate_efficiency_impact_percent(0.25, 0.32) == -21.9
+        assert calculate_efficiency_impact_percent(0.25, 0.32) == pytest.approx(-21.9)
 
     def test_efficiency_impact_none_value(self):
-        assert calculate_efficiency_impact_percent(None, 0.32) == 0.0
+        assert calculate_efficiency_impact_percent(None, 0.32) == pytest.approx(0.0)
 
     def test_efficiency_impact_zero_baseline(self):
         """Should handle zero baseline"""
-        assert calculate_efficiency_impact_percent(0.30, 0.0) == 0.0
+        assert calculate_efficiency_impact_percent(0.30, 0.0) == pytest.approx(0.0)
 
 
 class TestRangeCalculation:
@@ -115,19 +115,19 @@ class TestRangeCalculation:
 
     def test_calculate_range_typical(self):
         """0.30 kWh/mi with 15 kWh = 50 miles"""
-        assert calculate_range_from_efficiency(0.30, 15.0) == 50.0
+        assert calculate_range_from_efficiency(0.30, 15.0) == pytest.approx(50.0)
 
     def test_calculate_range_efficient(self):
         """0.25 kWh/mi with 15 kWh = 60 miles"""
-        assert calculate_range_from_efficiency(0.25, 15.0) == 60.0
+        assert calculate_range_from_efficiency(0.25, 15.0) == pytest.approx(60.0)
 
     def test_calculate_range_zero_efficiency(self):
         """Zero efficiency should return 0"""
-        assert calculate_range_from_efficiency(0.0, 15.0) == 0.0
+        assert calculate_range_from_efficiency(0.0, 15.0) == pytest.approx(0.0)
 
     def test_calculate_range_negative_efficiency(self):
         """Negative efficiency should return 0"""
-        assert calculate_range_from_efficiency(-0.3, 15.0) == 0.0
+        assert calculate_range_from_efficiency(-0.3, 15.0) == pytest.approx(0.0)
 
 
 class TestMilesPerKWh:
@@ -135,11 +135,11 @@ class TestMilesPerKWh:
 
     def test_calculate_miles_per_kwh_typical(self):
         """0.25 kWh/mi = 4.0 mi/kWh"""
-        assert calculate_miles_per_kwh(0.25) == 4.0
+        assert calculate_miles_per_kwh(0.25) == pytest.approx(4.0)
 
     def test_calculate_miles_per_kwh_less_efficient(self):
         """0.33 kWh/mi = 3.03 mi/kWh"""
-        assert calculate_miles_per_kwh(0.33) == 3.03
+        assert calculate_miles_per_kwh(0.33) == pytest.approx(3.03)
 
     def test_calculate_miles_per_kwh_none(self):
         assert calculate_miles_per_kwh(None) is None
@@ -153,11 +153,11 @@ class TestMPGe:
 
     def test_calculate_mpge_volt_typical(self):
         """Volt at 0.337 kWh/mi = 100 MPGe"""
-        assert calculate_mpge(0.337) == 100.0
+        assert calculate_mpge(0.337) == pytest.approx(100.0)
 
     def test_calculate_mpge_efficient(self):
         """0.25 kWh/mi = 134.8 MPGe"""
-        assert calculate_mpge(0.25) == 134.8
+        assert calculate_mpge(0.25) == pytest.approx(134.8)
 
     def test_calculate_mpge_none(self):
         assert calculate_mpge(None) is None
@@ -167,7 +167,7 @@ class TestMPGe:
 
     def test_calculate_mpge_custom_conversion(self):
         """Test with custom kWh per gallon equivalent"""
-        assert calculate_mpge(0.5, kwh_per_gallon_equivalent=50.0) == 100.0
+        assert calculate_mpge(0.5, kwh_per_gallon_equivalent=50.0) == pytest.approx(100.0)
 
 
 class TestEfficiencyValidation:
@@ -208,7 +208,7 @@ class TestCombinedEfficiency:
     def test_calculate_combined_efficiency_electric_only(self):
         """All electric should match regular efficiency"""
         result = calculate_combined_efficiency(40, 10.0, 0, 0, 33.7)
-        assert result == 0.25
+        assert result == pytest.approx(0.25)
 
     def test_calculate_combined_efficiency_gas_only(self):
         """All gas should convert to kWh-equivalent"""

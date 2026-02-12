@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for statistics routes and helper functions.
 
@@ -65,7 +66,8 @@ class TestTrendCalculation:
         result = calculate_trend_vs_previous(120, 100)
 
         assert result["change_value"] == 20
-        assert result["change_percent"] == 20.0
+        assert result["change_percent"] == pytest.approx(20.0)
+
         assert result["direction"] == "up"
 
     def test_calculate_trend_decreasing(self):
@@ -75,7 +77,8 @@ class TestTrendCalculation:
         result = calculate_trend_vs_previous(80, 100)
 
         assert result["change_value"] == -20
-        assert result["change_percent"] == -20.0
+        assert result["change_percent"] == pytest.approx(-20.0)
+
         assert result["direction"] == "down"
 
     def test_calculate_trend_stable(self):
@@ -151,11 +154,16 @@ class TestPeriodStats:
         result = calculate_period_stats(trips)
 
         assert result["trip_count"] == 2
-        assert result["total_distance"] == 50.0
-        assert result["electric_miles"] == 45.0
-        assert result["gas_miles"] == 5.0
-        assert result["ev_percent"] == 90.0
-        assert result["avg_mpg"] == 40.0
+        assert result["total_distance"] == pytest.approx(50.0)
+
+        assert result["electric_miles"] == pytest.approx(45.0)
+
+        assert result["gas_miles"] == pytest.approx(5.0)
+
+        assert result["ev_percent"] == pytest.approx(90.0)
+
+        assert result["avg_mpg"] == pytest.approx(40.0)
+
         assert result["avg_kwh_per_mile"] is not None
 
     def test_calculate_period_stats_metric_units(self, db_session):

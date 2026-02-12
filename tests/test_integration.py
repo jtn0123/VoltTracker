@@ -1,3 +1,4 @@
+import pytest
 """
 Integration tests for end-to-end data flow.
 """
@@ -37,7 +38,7 @@ class TestTelemetryToTripFlow:
         # Check trip was created
         trip = db_session.query(Trip).filter_by(session_id=uuid.UUID(session_id)).first()
         assert trip is not None
-        assert trip.start_soc == 85.0
+        assert trip.start_soc == pytest.approx(85.0)
 
     def test_multiple_uploads_same_session(self, client, db_session):
         """Test multiple uploads to same session use same trip."""
@@ -129,7 +130,7 @@ class TestFuelEventFlow:
         data = json.loads(response.data)
 
         assert len(data["events"]) >= 1
-        assert data["events"][0]["gallons_added"] == 8.0
+        assert data["events"][0]["gallons_added"] == pytest.approx(8.0)
 
 
 class TestEfficiencySummaryFlow:
@@ -170,7 +171,8 @@ class TestEfficiencySummaryFlow:
         response = client.get("/api/efficiency/summary")
         data = json.loads(response.data)
 
-        assert data["total_miles_tracked"] == 30.0
+        assert data["total_miles_tracked"] == pytest.approx(30.0)
+
         # Allow for rounding differences in MPG calculation
         assert 42.0 <= data["lifetime_gas_mpg"] <= 43.0
 

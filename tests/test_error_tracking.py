@@ -54,18 +54,18 @@ class TestErrorTracking:
         assert data["status"] == "ok"
 
     def test_frontend_error_report_empty_body(self, client):
-        """Endpoint should handle empty/missing JSON gracefully."""
+        """Endpoint rejects empty/missing JSON body (S6 validation)."""
         resp = client.post("/api/errors/report", content_type="application/json")
-        assert resp.status_code == 200
+        assert resp.status_code == 400
 
     def test_frontend_error_report_invalid_json(self, client):
-        """Endpoint should handle non-JSON body gracefully."""
+        """Endpoint rejects non-JSON body (S6 validation)."""
         resp = client.post(
             "/api/errors/report",
             data="not json",
             content_type="text/plain",
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 400
 
 
 class TestResponseTimeHeader:
