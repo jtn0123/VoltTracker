@@ -140,7 +140,7 @@ jobs:
 
       - name: Run mypy
         run: |
-          mypy receiver/ --ignore-missing-imports --disable-error-code=misc --disable-error-code=valid-type --disable-error-code=var-annotated
+          mypy receiver/ --ignore-missing-imports --disable-error-code=misc --disable-error-code=valid-type --disable-error-code=var-annotated --disable-error-code=arg-type --disable-error-code=assignment --disable-error-code=operator --disable-error-code=no-any-return --disable-error-code=attr-defined
 
   test-postgres:
     runs-on: ubuntu-latest

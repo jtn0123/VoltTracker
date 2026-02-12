@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock DOM
 beforeEach(() => {
   document.body.innerHTML = `
-    <tbody id="trips-table-body"></tbody>
+    <table><tbody id="trips-table-body"></tbody></table>
     <div id="trip-cards"></div>
     <div id="trip-modal" style="display:none"></div>
     <div id="modal-overlay" style="display:none"></div>

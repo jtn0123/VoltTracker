@@ -13,7 +13,9 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "receiver"))
 
 # Set environment variables BEFORE importing app to use SQLite for tests
-os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+# Respect DATABASE_URL from environment if already set (e.g., test-postgres CI job)
+if "DATABASE_URL" not in os.environ:
+    os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["FLASK_TESTING"] = "true"
 os.environ["FLASK_ENV"] = "development"  # Avoid SECRET_KEY requirement
 

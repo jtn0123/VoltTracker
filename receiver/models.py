@@ -112,7 +112,8 @@ class TelemetryRaw(SerializableMixin, Base):
     )
 
     # D30: BigInteger PK to handle high-volume telemetry (>2B rows over lifetime)
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    # Use Integer variant on SQLite so autoincrement works (SQLite only auto-increments INTEGER PKs)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)  # type: ignore[arg-type]
     session_id = Column(GUID(), nullable=False, index=True)
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     latitude = Column(Float)

@@ -10,6 +10,7 @@ env:
   POSTGRES_USER: volt
   POSTGRES_PASSWORD: testpass123
   POSTGRES_DB: volt_tracker
+  REDIS_PASSWORD: testpass123
   DASHBOARD_USER: admin
   DASHBOARD_PASSWORD: testpass
   WEBSOCKET_AUTH_ENABLED: 'false'
@@ -35,6 +36,7 @@ jobs:
           WEBSOCKET_AUTH_ENABLED=false
           RATE_LIMIT_ENABLED=false
           SECRET_KEY=${{ env.SECRET_KEY }}
+          REDIS_PASSWORD=${{ env.REDIS_PASSWORD }}
           FLASK_ENV=development
           EOF
 
