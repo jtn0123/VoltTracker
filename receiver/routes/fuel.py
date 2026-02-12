@@ -17,6 +17,8 @@ from utils import utc_now
 
 logger = logging.getLogger(__name__)
 
+_ERR_DATABASE = "Database error"
+
 fuel_bp = Blueprint("fuel", __name__)
 
 
@@ -138,7 +140,7 @@ def add_fuel_event():
     except OperationalError as e:
         db.rollback()
         logger.error(f"Database error adding fuel event: {e}")
-        return jsonify({"error": "Database error"}), 500
+        return jsonify({"error": _ERR_DATABASE}), 500
 
     return jsonify(fuel_event.to_dict()), 201
 
@@ -158,7 +160,7 @@ def delete_fuel_event(fuel_id):
     except OperationalError as e:
         db.rollback()
         logger.error(f"Database error deleting fuel event {fuel_id}: {e}")
-        return jsonify({"error": "Database error"}), 500
+        return jsonify({"error": _ERR_DATABASE}), 500
 
     logger.info(f"Deleted fuel event {fuel_id}")
     return jsonify({"message": f"Fuel event {fuel_id} deleted successfully"})
@@ -206,7 +208,7 @@ def update_fuel_event(fuel_id):
     except OperationalError as e:
         db.rollback()
         logger.error(f"Database error updating fuel event {fuel_id}: {e}")
-        return jsonify({"error": "Database error"}), 500
+        return jsonify({"error": _ERR_DATABASE}), 500
 
     logger.info(f"Updated fuel event {fuel_id}: {data}")
     return jsonify(event.to_dict())

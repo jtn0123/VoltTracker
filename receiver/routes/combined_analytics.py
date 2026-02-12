@@ -14,6 +14,8 @@ from services import combined_analytics_service
 
 logger = logging.getLogger(__name__)
 
+_ERR_INTERNAL = "Internal server error"
+
 combined_analytics_bp = Blueprint("combined_analytics", __name__)
 
 
@@ -44,7 +46,7 @@ def get_multi_factor_analysis():
 
     except Exception as e:
         logger.error(f"Error getting multi-factor analysis: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @combined_analytics_bp.route("/api/analytics/efficiency/predictions", methods=["GET"])
@@ -84,7 +86,7 @@ def get_efficiency_predictions():
         return jsonify({"error": f"Invalid parameter: {e}"}), 400
     except Exception as e:
         logger.error(f"Error getting predictions: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @combined_analytics_bp.route("/api/analytics/efficiency/time-series", methods=["GET"])
@@ -120,7 +122,7 @@ def get_efficiency_time_series():
 
     except Exception as e:
         logger.error(f"Error getting time series: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @combined_analytics_bp.route("/api/analytics/efficiency/optimal-conditions", methods=["GET"])
@@ -138,4 +140,4 @@ def get_optimal_conditions():
 
     except Exception as e:
         logger.error(f"Error getting optimal conditions: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500

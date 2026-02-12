@@ -14,6 +14,8 @@ from services import weather_analytics_service
 
 logger = logging.getLogger(__name__)
 
+_ERR_INTERNAL = "Internal server error"
+
 weather_analytics_bp = Blueprint("weather_analytics", __name__)
 
 
@@ -41,7 +43,7 @@ def get_efficiency_correlation():
 
     except Exception as e:
         logger.error(f"Error getting weather correlation: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @weather_analytics_bp.route("/api/analytics/weather/temperature-bands", methods=["GET"])
@@ -77,7 +79,7 @@ def get_temperature_bands():
 
     except Exception as e:
         logger.error(f"Error getting temperature band analysis: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @weather_analytics_bp.route("/api/analytics/weather/precipitation-impact", methods=["GET"])
@@ -110,7 +112,7 @@ def get_precipitation_impact():
 
     except Exception as e:
         logger.error(f"Error getting precipitation impact: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @weather_analytics_bp.route("/api/analytics/weather/wind-impact", methods=["GET"])
@@ -141,7 +143,7 @@ def get_wind_impact():
 
     except Exception as e:
         logger.error(f"Error getting wind impact: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @weather_analytics_bp.route("/api/analytics/weather/seasonal-trends", methods=["GET"])
@@ -167,7 +169,7 @@ def get_seasonal_trends():
 
     except Exception as e:
         logger.error(f"Error getting seasonal trends: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @weather_analytics_bp.route("/api/analytics/weather/best-conditions", methods=["GET"])
@@ -187,4 +189,4 @@ def get_best_conditions():
 
     except Exception as e:
         logger.error(f"Error getting best conditions: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500

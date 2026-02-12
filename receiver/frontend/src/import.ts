@@ -20,7 +20,7 @@ export async function handleImport(event: Event): Promise<void> {
   const fileInput = document.getElementById('csv-file') as HTMLInputElement | null;
   const importBtn = document.getElementById('import-btn') as HTMLButtonElement | null;
 
-  if (!fileInput || !fileInput.files?.length) {
+  if (!fileInput?.files?.length) {
     showImportStatus('Please select CSV files', 'error');
     return;
   }

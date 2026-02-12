@@ -15,6 +15,15 @@ from utils.import_utils import format_reportable
 logger = logging.getLogger(__name__)
 
 
+def _stat_or_event(stats, import_event, stat_key, event_key=None, default=0):
+    """Get a value from stats dict, falling back to import_event."""
+    if stats:
+        return stats.get(stat_key, default)
+    if import_event:
+        return import_event.get(event_key or stat_key, default)
+    return default
+
+
 def check_duplicate_file(db, file_hash):
     """Check if a file with this hash was already imported.
 
@@ -76,30 +85,12 @@ def record_import(db, import_code, status, failure_reason=None, suggestion=None,
                 if import_event and import_event.get("first_error") else None
             ),
             suggestion=suggestion,
-            total_rows=(
-                stats.get("total_rows", 0) if stats
-                else (import_event.get("total_rows", 0) if import_event else 0)
-            ),
-            parsed_rows=(
-                stats.get("parsed_rows", 0) if stats
-                else (import_event.get("parsed_rows", 0) if import_event else 0)
-            ),
-            skipped_rows=(
-                stats.get("skipped_rows", 0) if stats
-                else (import_event.get("skipped_rows", 0) if import_event else 0)
-            ),
-            duplicate_rows=(
-                stats.get("duplicates_removed", 0) if stats
-                else (import_event.get("duplicate_rows", 0) if import_event else 0)
-            ),
-            columns_detected=(
-                stats.get("columns_detected") if stats
-                else (import_event.get("columns_detected") if import_event else None)
-            ),
-            columns_mapped=(
-                stats.get("columns_mapped") if stats
-                else (import_event.get("columns_mapped") if import_event else None)
-            ),
+            total_rows=_stat_or_event(stats, import_event, "total_rows"),
+            parsed_rows=_stat_or_event(stats, import_event, "parsed_rows"),
+            skipped_rows=_stat_or_event(stats, import_event, "skipped_rows"),
+            duplicate_rows=_stat_or_event(stats, import_event, "duplicates_removed", "duplicate_rows"),
+            columns_detected=_stat_or_event(stats, import_event, "columns_detected", default=None),
+            columns_mapped=_stat_or_event(stats, import_event, "columns_mapped", default=None),
             timestamp_range_start=stats.get("timestamp_range_start") if stats else None,
             timestamp_range_end=stats.get("timestamp_range_end") if stats else None,
             trip_id=trip_id,

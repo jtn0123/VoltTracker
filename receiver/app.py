@@ -20,6 +20,8 @@ from flask_socketio import SocketIO
 from extensions import limiter
 from werkzeug.security import check_password_hash
 
+_STATIC_PREFIX = "/static/"
+
 import json
 
 
@@ -263,7 +265,7 @@ def create_app(config_class=None):
         path = req.path
 
         # Public paths that don't require Basic Auth
-        public_prefixes = ("/health", "/readiness", "/ready", "/static/", "/clear-cache")
+        public_prefixes = ("/health", "/readiness", "/ready", _STATIC_PREFIX, "/clear-cache")
         public_exact = {"/health", "/healthz", "/ready", "/readiness", "/clear-cache"}
 
         if path in public_exact or any(path.startswith(p) for p in public_prefixes):
@@ -309,7 +311,7 @@ def create_app(config_class=None):
         from flask import g, request
 
         # Static asset caching headers (cache-busted via hashed filenames)
-        if request.path.startswith("/static/"):
+        if request.path.startswith(_STATIC_PREFIX):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         elif request.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
@@ -344,7 +346,7 @@ def create_app(config_class=None):
             import time
             duration_ms = (time.monotonic() - g.request_start_time) * 1000
             response.headers["X-Response-Time"] = f"{duration_ms:.1f}ms"
-            if duration_ms > 500 and not request.path.startswith("/static/"):
+            if duration_ms > 500 and not request.path.startswith(_STATIC_PREFIX):
                 logger.warning(
                     "Slow request: %s %s took %.1fms (status %d)",
                     request.method, request.path, duration_ms, response.status_code,

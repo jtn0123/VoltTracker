@@ -151,7 +151,7 @@ store.subscribe('connectionStatus', (status) => {
 
 // 2. Theme changes → update charts
 store.subscribe('theme', (newTheme) => {
-  document.documentElement.setAttribute('data-theme', newTheme);
+  document.documentElement.dataset.theme = newTheme;
   localStorage.setItem('theme', newTheme);
   // Re-render charts if they exist (theme colors changed)
   if (state.mpgChart) state.mpgChart.update();
@@ -255,7 +255,7 @@ document.addEventListener('keydown', (event) => {
 
     const menu = document.getElementById('export-menu');
     const btn = document.getElementById('export-btn');
-    if (menu && menu.classList.contains('show')) {
+    if (menu?.classList.contains('show')) {
       menu.classList.remove('show');
       if (btn) {
         btn.setAttribute('aria-expanded', 'false');
@@ -339,6 +339,11 @@ function setupSectionObservers(): void {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
   initTheme();
+
+  // Attach click handlers programmatically (more reliable than inline onclick in modules)
+  document.querySelector('.theme-toggle')?.addEventListener('click', () => toggleTheme());
+  document.getElementById('export-btn')?.addEventListener('click', () => toggleExportMenu());
+
   initDatePicker();
   initWebSocket();
   initServiceWorker();

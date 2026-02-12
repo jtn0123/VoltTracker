@@ -14,7 +14,7 @@ from flask import Blueprint, jsonify, request
 from models import BatteryCellReading, BatteryHealthReading, TelemetryRaw
 from sqlalchemy import desc, func
 from sqlalchemy.exc import IntegrityError, OperationalError
-from utils import utc_now
+from utils import normalize_datetime, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +71,8 @@ def get_battery_health():
     yearly_trend = None
     if readings and len(readings) >= 2:
         # Get readings from ~1 year ago and compare
-        one_year_ago = utc_now() - timedelta(days=365)
-        old_readings = [r for r in readings if r.timestamp and r.timestamp < one_year_ago]
+        one_year_ago = utc_now().replace(tzinfo=None) - timedelta(days=365)
+        old_readings = [r for r in readings if r.timestamp and normalize_datetime(r.timestamp) < one_year_ago]
         recent_readings = readings[:10]  # Most recent 10
 
         if old_readings and recent_readings:

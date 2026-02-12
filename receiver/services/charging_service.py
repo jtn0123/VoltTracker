@@ -108,7 +108,7 @@ def start_charging_session(db, telemetry: TelemetryRaw) -> ChargingSession:
 
     # Safely format SOC (may be None)
     soc_str = f"{session.start_soc:.0f}" if session.start_soc is not None else "?"
-    logger.info(f"Started new charging session: {session.charge_type} at " f"{power:.1f} kW, SOC {soc_str}%")
+    logger.info(f"Started new charging session: {session.charge_type} at {power:.1f} kW, SOC {soc_str}%")
 
     return session
 

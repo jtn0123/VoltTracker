@@ -31,6 +31,8 @@ def _get_stddev_func(column):
 
 logger = logging.getLogger(__name__)
 
+_IDEAL_TEMP_RANGE = "55-75°F"
+
 # Use analytics constants from Config (configurable via environment)
 TEMP_BANDS = Config.ANALYTICS_TEMP_BANDS
 WIND_BANDS = Config.ANALYTICS_WIND_BANDS
@@ -110,7 +112,7 @@ def get_efficiency_by_temperature_bands(
         "freezing": "<32°F",
         "cold": "32-45°F",
         "cool": "45-55°F",
-        "ideal": "55-75°F",
+        "ideal": _IDEAL_TEMP_RANGE,
         "warm": "75-85°F",
         "hot": "85-95°F",
         "very_hot": ">95°F",
@@ -140,7 +142,7 @@ def get_efficiency_by_temperature_bands(
     return {
         "temperature_bands": bands_list,
         "baseline_kwh_per_mile": BASELINE_KWH_PER_MILE,
-        "baseline_temp_range": "55-75°F",
+        "baseline_temp_range": _IDEAL_TEMP_RANGE,
         "total_trips_analyzed": sum(b["sample_count"] for b in bands_list),
     }
 
@@ -435,7 +437,7 @@ def get_best_driving_conditions(db: Session) -> Dict[str, Any]:
                 "min_f": round(min(temps), 1) if temps else None,
                 "max_f": round(max(temps), 1) if temps else None,
                 "avg_f": round(sum(temps) / len(temps), 1) if temps else None,
-                "recommendation": "55-75°F" if temps else None,
+                "recommendation": _IDEAL_TEMP_RANGE if temps else None,
             },
             "wind": {
                 "max_mph": round(max(winds), 1) if winds else None,

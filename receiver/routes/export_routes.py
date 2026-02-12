@@ -20,6 +20,9 @@ from extensions import limiter
 
 logger = logging.getLogger(__name__)
 
+_UTC_SUFFIX = "+00:00"
+_CSV_MIMETYPE = "text/csv"
+
 export_bp = Blueprint("export", __name__)
 
 
@@ -46,7 +49,7 @@ def export_trips():
     if start_date:
         try:
             from datetime import datetime
-            start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            start_dt = datetime.fromisoformat(start_date.replace("Z", _UTC_SUFFIX))
             query = query.filter(Trip.start_time >= start_dt)
         except ValueError:
             return jsonify({"error": "Invalid start_date format. Use ISO 8601 format."}), 400
@@ -55,7 +58,7 @@ def export_trips():
     if end_date:
         try:
             from datetime import datetime
-            end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+            end_dt = datetime.fromisoformat(end_date.replace("Z", _UTC_SUFFIX))
             query = query.filter(Trip.start_time <= end_dt)
         except ValueError:
             return jsonify({"error": "Invalid end_date format. Use ISO 8601 format."}), 400
@@ -116,7 +119,7 @@ def export_trips():
 
         return Response(
             generate_csv(),
-            mimetype="text/csv",
+            mimetype=_CSV_MIMETYPE,
             headers={"Content-Disposition": "attachment; filename=trips.csv"}
         )
 
@@ -146,7 +149,7 @@ def export_trips():
     output.seek(0)
     return Response(
         output.getvalue(),
-        mimetype="text/csv",
+        mimetype=_CSV_MIMETYPE,
         headers={"Content-Disposition": "attachment; filename=trips.csv"}
     )
 
@@ -183,7 +186,7 @@ def export_fuel():
 
     output.seek(0)
     return Response(
-        output.getvalue(), mimetype="text/csv",
+        output.getvalue(), mimetype=_CSV_MIMETYPE,
         headers={"Content-Disposition": "attachment; filename=fuel_events.csv"}
     )
 
@@ -218,7 +221,7 @@ def export_all():
 
     if start_date:
         try:
-            start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            start_dt = datetime.fromisoformat(start_date.replace("Z", _UTC_SUFFIX))
             trip_query = trip_query.filter(Trip.start_time >= start_dt)
             fuel_query = fuel_query.filter(FuelEvent.timestamp >= start_dt)
             soc_query = soc_query.filter(SocTransition.timestamp >= start_dt)
@@ -228,7 +231,7 @@ def export_all():
 
     if end_date:
         try:
-            end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+            end_dt = datetime.fromisoformat(end_date.replace("Z", _UTC_SUFFIX))
             trip_query = trip_query.filter(Trip.start_time <= end_dt)
             fuel_query = fuel_query.filter(FuelEvent.timestamp <= end_dt)
             soc_query = soc_query.filter(SocTransition.timestamp <= end_dt)
@@ -323,7 +326,7 @@ Engine Running,EngRun,221930,A,0,1,,7E0
 Ambient Air Temp,AmbTemp,22004F,(A-40),-40,100,C,7E4
 """
         return Response(
-            csv_content, mimetype="text/csv",
+            csv_content, mimetype=_CSV_MIMETYPE,
             headers={"Content-Disposition": "attachment; filename=volt_pids.csv"}
         )
 
@@ -331,7 +334,7 @@ Ambient Air Temp,AmbTemp,22004F,(A-40),-40,100,C,7E4
         csv_content = f.read()
 
     return Response(
-        csv_content, mimetype="text/csv",
+        csv_content, mimetype=_CSV_MIMETYPE,
         headers={"Content-Disposition": "attachment; filename=volt_pids_complete.csv"}
     )
 

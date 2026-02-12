@@ -7,7 +7,7 @@ Handles trip CRUD operations, efficiency statistics, and analysis.
 import logging
 import statistics
 from datetime import timedelta
-from typing import Tuple, Union
+
 
 from config import Config
 from database import get_db
@@ -18,13 +18,25 @@ from utils import analyze_soc_floor
 from utils.query_cache import invalidate_cache_pattern as invalidate_query_cache
 from utils.time_utils import utc_now, parse_query_date_range, parse_date_shortcut
 
+_ERR_TRIP_NOT_FOUND = "Trip not found"
+
+
+def _trend_direction(recent: float, early: float) -> str:
+    """Return trend direction string."""
+    if recent > early:
+        return "increasing"
+    if recent == early:
+        return "stable"
+    return "decreasing"
+
+
 logger = logging.getLogger(__name__)
 
 trips_bp = Blueprint("trips", __name__)
 
 
 @trips_bp.route("/trips", methods=["GET"])
-def get_trips() -> Union[Response, Tuple[Response, int]]:
+def get_trips() -> Response | tuple[Response, int]:
     """
     Get trip list with summary statistics and advanced filtering.
 
@@ -243,7 +255,7 @@ def get_trips() -> Union[Response, Tuple[Response, int]]:
 
 
 @trips_bp.route("/trips/<int:trip_id>", methods=["GET"])
-def get_trip_detail(trip_id: int) -> Union[Response, Tuple[Response, int]]:
+def get_trip_detail(trip_id: int) -> Response | tuple[Response, int]:
     """Get detailed trip data including telemetry points.
 
     Query params:
@@ -254,7 +266,7 @@ def get_trip_detail(trip_id: int) -> Union[Response, Tuple[Response, int]]:
 
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
-        return jsonify({"error": "Trip not found"}), 404
+        return jsonify({"error": _ERR_TRIP_NOT_FOUND}), 404
 
     # Pagination for telemetry to avoid huge responses
     try:
@@ -296,7 +308,7 @@ def get_trip_detail(trip_id: int) -> Union[Response, Tuple[Response, int]]:
 
 
 @trips_bp.route("/trips/<int:trip_id>", methods=["DELETE"])
-def delete_trip(trip_id: int) -> Union[Response, Tuple[Response, int]]:
+def delete_trip(trip_id: int) -> Response | tuple[Response, int]:
     """Delete a trip and its associated data.
 
     Imported trips (from CSV) are soft-deleted and can be restored.
@@ -306,7 +318,7 @@ def delete_trip(trip_id: int) -> Union[Response, Tuple[Response, int]]:
 
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
-        return jsonify({"error": "Trip not found"}), 404
+        return jsonify({"error": _ERR_TRIP_NOT_FOUND}), 404
 
     # Soft delete for imported trips (protect CSV imports)
     if trip.is_imported:
@@ -344,7 +356,7 @@ def restore_trip(trip_id: int):
 
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
-        return jsonify({"error": "Trip not found"}), 404
+        return jsonify({"error": _ERR_TRIP_NOT_FOUND}), 404
 
     if not trip.deleted_at:
         return jsonify({"error": "Trip is not deleted"}), 400
@@ -376,7 +388,7 @@ def update_trip(trip_id):
 
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
-        return jsonify({"error": "Trip not found"}), 404
+        return jsonify({"error": _ERR_TRIP_NOT_FOUND}), 404
 
     data = request.get_json()
     if not data:
@@ -426,7 +438,7 @@ def update_trip(trip_id):
 
 
 @trips_bp.route("/efficiency/summary", methods=["GET"])
-def get_efficiency_summary() -> Union[Response, Tuple[Response, int]]:
+def get_efficiency_summary() -> Response | tuple[Response, int]:
     """
     Get efficiency statistics.
 
@@ -536,7 +548,7 @@ def get_efficiency_summary() -> Union[Response, Tuple[Response, int]]:
 
 
 @trips_bp.route("/soc/analysis", methods=["GET"])
-def get_soc_analysis() -> Union[Response, Tuple[Response, int]]:
+def get_soc_analysis() -> Response | tuple[Response, int]:
     """
     Get SOC floor analysis.
 
@@ -564,11 +576,7 @@ def get_soc_analysis() -> Union[Response, Tuple[Response, int]]:
         analysis["trend"] = {
             "early_avg": round(statistics.mean(first_10), 1),
             "recent_avg": round(statistics.mean(last_10), 1),
-            "direction": (
-                "increasing" if statistics.mean(last_10) > statistics.mean(first_10)
-                else ("stable" if statistics.mean(last_10) == statistics.mean(first_10)
-                      else "decreasing")
-            ),
+            "direction": _trend_direction(statistics.mean(last_10), statistics.mean(first_10)),
         }
     else:
         analysis["trend"] = None

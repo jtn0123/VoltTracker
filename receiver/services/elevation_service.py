@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_and_update_elevations(
-    db_session: Session,
+    db_session: Session,  # noqa: S1172 - part of public API
     telemetry_points: List[TelemetryRaw],
     max_samples: int = 50,
 ) -> int:

@@ -186,10 +186,7 @@ class TestTemperatureConversions:
         # VoltTracker accepts -60F to 150F (reasonable for ambient)
         is_valid = -60 <= temp_f <= 150
 
-        if is_valid:
-            # Should be accepted
-            assert True
-        else:
+        if not is_valid:
             # Should be rejected (outside reasonable range)
             assert temp_f < -60 or temp_f > 150
 

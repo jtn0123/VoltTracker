@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 import structlog
+
+_ERR_UNKNOWN = "Unknown error"
 from config import Config
 
 if TYPE_CHECKING:
@@ -321,7 +323,7 @@ def log_telemetry_upload(
     if success:
         event.mark_success()
     else:
-        event.mark_failure(kwargs.get("error", "Unknown error"))
+        event.mark_failure(kwargs.get("error", _ERR_UNKNOWN))
 
     event.emit(force=True)
 
@@ -340,7 +342,7 @@ def log_trip_event(
     if success:
         event.mark_success()
     else:
-        event.mark_failure(kwargs.get("error", "Unknown error"))
+        event.mark_failure(kwargs.get("error", _ERR_UNKNOWN))
 
     event.emit(force=True)
 
@@ -360,6 +362,6 @@ def log_charging_event(
     if success:
         event.mark_success()
     else:
-        event.mark_failure(kwargs.get("error", "Unknown error"))
+        event.mark_failure(kwargs.get("error", _ERR_UNKNOWN))
 
     event.emit(force=True)

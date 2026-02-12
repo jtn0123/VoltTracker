@@ -17,6 +17,8 @@ from utils.timezone import normalize_datetime, utc_now
 logger = logging.getLogger(__name__)
 
 # Volt Gen 2 maintenance intervals
+_DESC_REPLACE_5Y = "Replace every 5 years"
+
 MAINTENANCE_INTERVALS: Dict[str, Dict[str, Any]] = {
     "oil_change": {
         "name": "Engine Oil Change",
@@ -37,17 +39,17 @@ MAINTENANCE_INTERVALS: Dict[str, Dict[str, Any]] = {
     "brake_fluid": {
         "name": "Brake Fluid",
         "interval_months": 60,
-        "description": "Replace every 5 years",
+        "description": _DESC_REPLACE_5Y,
     },
     "coolant_engine": {
         "name": "Engine Coolant",
         "interval_months": 60,
-        "description": "Replace every 5 years",
+        "description": _DESC_REPLACE_5Y,
     },
     "coolant_battery": {
         "name": "Battery Coolant",
         "interval_months": 60,
-        "description": "Replace every 5 years",
+        "description": _DESC_REPLACE_5Y,
     },
     "transmission_fluid": {
         "name": "Transmission Fluid",
@@ -116,7 +118,7 @@ def calculate_next_due(
     last_service_date: datetime,
     last_service_miles: float,
     current_miles: float,
-    engine_hours: float,
+    engine_hours: float,  # noqa: S1172 - reserved for future use
 ) -> Dict:
     """
     Calculate when maintenance is next due.
@@ -164,7 +166,12 @@ def calculate_next_due(
         miles_remaining is not None and miles_remaining < 500
     )
 
-    result["status"] = "overdue" if overdue else "upcoming" if is_upcoming else "ok"
+    if overdue:
+        result["status"] = "overdue"
+    elif is_upcoming:
+        result["status"] = "upcoming"
+    else:
+        result["status"] = "ok"
 
     return result
 

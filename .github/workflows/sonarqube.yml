@@ -40,6 +40,13 @@ jobs:
         run: npm run test:coverage
         working-directory: receiver/frontend
 
+      # E2E coverage (requires Docker services — run locally for now)
+      # To collect E2E coverage locally:
+      #   INSTRUMENT_COVERAGE=true npm run build --prefix receiver/frontend
+      #   docker compose up -d  # start backend
+      #   cd e2e && npm run test:coverage
+      # The lcov output at e2e/coverage/lcov.info is picked up by SonarQube automatically.
+
       - uses: sonarsource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

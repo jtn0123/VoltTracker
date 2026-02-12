@@ -166,7 +166,7 @@ def check_refuel_events():
                     )
                     db.add(fuel_event)
                     logger.info(
-                        f"Refuel detected: {fuel_event.gallons_added:.2f} gal " f"at {fuel_event.odometer_miles:.1f} mi"
+                        f"Refuel detected: {fuel_event.gallons_added:.2f} gal at {fuel_event.odometer_miles:.1f} mi"
                     )
 
         db.commit()

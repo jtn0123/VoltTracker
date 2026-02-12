@@ -128,7 +128,7 @@ def emit_error(message: str, duration: int = 0, room: Optional[str] = None) -> N
     emit_toast(message, ToastType.ERROR, duration, room=room)
 
 
-def emit_trip_detected(trip_distance: float = None, trip_id: str = None) -> None:
+def emit_trip_detected(trip_distance: float = None, **_kwargs) -> None:
     """
     Emit a toast when a new trip is detected.
 

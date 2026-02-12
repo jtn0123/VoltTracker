@@ -17,6 +17,12 @@ from utils.route_clustering import find_similar_trips
 
 logger = logging.getLogger(__name__)
 
+_ERR_TRIP_NOT_FOUND = 'Trip not found'
+_ERR_NO_GPS_DATA = 'No GPS data for this trip'
+_KML_STYLE_END = '    </Style>'
+_KML_PLACEMARK_START = '    <Placemark>'
+_KML_PLACEMARK_END = '    </Placemark>'
+
 map_bp = Blueprint("map", __name__)
 
 
@@ -53,7 +59,7 @@ def subsample_gps_points(points: List[Dict[str, Any]], max_points: int = 100) ->
     return sampled
 
 
-def calculate_efficiency_color(kwh_per_mile: Optional[float], speed_mph: Optional[float]) -> str:
+def calculate_efficiency_color(kwh_per_mile: Optional[float], _speed_mph: Optional[float] = None) -> str:
     """
     Calculate color code for route segment based on efficiency.
 
@@ -288,7 +294,7 @@ def get_trip_route_detailed(trip_id: int):
     # Get trip
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
-        return jsonify({'error': 'Trip not found'}), 404
+        return jsonify({'error': _ERR_TRIP_NOT_FOUND}), 404
 
     include_telemetry = request.args.get("include_telemetry", "").lower() == "true"
 
@@ -302,7 +308,7 @@ def get_trip_route_detailed(trip_id: int):
     telemetry = query.all()
 
     if not telemetry:
-        return jsonify({'error': 'No GPS data for this trip'}), 404
+        return jsonify({'error': _ERR_NO_GPS_DATA}), 404
 
     # Build detailed points
     points = []
@@ -372,7 +378,7 @@ def find_similar_trip_routes(trip_id: int):
     # Get reference trip
     reference_trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not reference_trip:
-        return jsonify({'error': 'Trip not found'}), 404
+        return jsonify({'error': _ERR_TRIP_NOT_FOUND}), 404
 
     max_results = request.args.get("max_results", default=10, type=int)
     min_similarity = request.args.get("min_similarity", default=70, type=float)
@@ -407,7 +413,7 @@ def export_trip_as_gpx(trip_id: int):
     # Get trip
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
-        return jsonify({'error': 'Trip not found'}), 404
+        return jsonify({'error': _ERR_TRIP_NOT_FOUND}), 404
 
     # Get telemetry with GPS data
     telemetry = db.query(TelemetryRaw).filter(
@@ -417,7 +423,7 @@ def export_trip_as_gpx(trip_id: int):
     ).order_by(TelemetryRaw.timestamp).all()
 
     if not telemetry:
-        return jsonify({'error': 'No GPS data for this trip'}), 404
+        return jsonify({'error': _ERR_NO_GPS_DATA}), 404
 
     # Generate GPX XML
     gpx_content = generate_gpx(trip, telemetry)
@@ -451,7 +457,7 @@ def export_trip_as_kml(trip_id: int):
     # Get trip
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
-        return jsonify({'error': 'Trip not found'}), 404
+        return jsonify({'error': _ERR_TRIP_NOT_FOUND}), 404
 
     # Get telemetry with GPS data
     telemetry = db.query(TelemetryRaw).filter(
@@ -461,7 +467,7 @@ def export_trip_as_kml(trip_id: int):
     ).order_by(TelemetryRaw.timestamp).all()
 
     if not telemetry:
-        return jsonify({'error': 'No GPS data for this trip'}), 404
+        return jsonify({'error': _ERR_NO_GPS_DATA}), 404
 
     # Generate KML XML
     kml_content = generate_kml(trip, telemetry)
@@ -581,7 +587,7 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         '        <color>ff00d4aa</color>',  # Electric green in ABGR
         '        <width>4</width>',
         '      </LineStyle>',
-        '    </Style>',
+        _KML_STYLE_END,
         '    <Style id="startPoint">',
         '      <IconStyle>',
         '        <color>ff00ff00</color>',  # Green
@@ -590,7 +596,7 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         '          <href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href>',
         '        </Icon>',
         '      </IconStyle>',
-        '    </Style>',
+        _KML_STYLE_END,
         '    <Style id="endPoint">',
         '      <IconStyle>',
         '        <color>ff0000ff</color>',  # Red
@@ -599,14 +605,14 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         '          <href>http://maps.google.com/mapfiles/kml/paddle/red-circle.png</href>',
         '        </Icon>',
         '      </IconStyle>',
-        '    </Style>',
+        _KML_STYLE_END,
         ''
     ]
 
     # Start placemark
     if telemetry:
         first = telemetry[0]
-        kml.append('    <Placemark>')
+        kml.append(_KML_PLACEMARK_START)
         kml.append('      <name>Start</name>')
         desc = xml_escape('Trip start: ' + trip.start_time.strftime('%Y-%m-%d %H:%M'))
         kml.append(f'      <description>{desc}</description>')
@@ -614,12 +620,12 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         kml.append('      <Point>')
         kml.append(f'        <coordinates>{first.longitude},{first.latitude},0</coordinates>')
         kml.append('      </Point>')
-        kml.append('    </Placemark>')
+        kml.append(_KML_PLACEMARK_END)
         kml.append('')
 
         # End placemark
         last = telemetry[-1]
-        kml.append('    <Placemark>')
+        kml.append(_KML_PLACEMARK_START)
         kml.append('      <name>End</name>')
         end_time = trip.end_time if trip.end_time else last.timestamp
         end_str = end_time.strftime("%Y-%m-%d %H:%M") if end_time else "Unknown"
@@ -628,11 +634,11 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         kml.append('      <Point>')
         kml.append(f'        <coordinates>{last.longitude},{last.latitude},0</coordinates>')
         kml.append('      </Point>')
-        kml.append('    </Placemark>')
+        kml.append(_KML_PLACEMARK_END)
         kml.append('')
 
     # Route line
-    kml.append('    <Placemark>')
+    kml.append(_KML_PLACEMARK_START)
     kml.append('      <name>Trip Route</name>')
 
     # Build description with trip stats
@@ -657,7 +663,7 @@ def generate_kml(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
 
     kml.append('        </coordinates>')
     kml.append('      </LineString>')
-    kml.append('    </Placemark>')
+    kml.append(_KML_PLACEMARK_END)
 
     kml.append('  </Document>')
     kml.append('</kml>')

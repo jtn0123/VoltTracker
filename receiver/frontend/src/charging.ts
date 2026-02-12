@@ -247,7 +247,7 @@ export function openAddChargingModal(): void {
  */
 export function closeChargingModal(): void {
   const modal = document.getElementById('charging-modal');
-  if (!modal || !modal.classList.contains('show')) return;
+  if (!modal?.classList.contains('show')) return;
 
   modal.classList.remove('show');
   modal.setAttribute('aria-hidden', 'true');
@@ -363,7 +363,7 @@ export async function openChargingDetailModal(sessionId: number): Promise<void> 
  */
 export function closeChargingDetailModal(): void {
   const modal = document.getElementById('charging-detail-modal');
-  if (!modal || !modal.classList.contains('show')) return;
+  if (!modal?.classList.contains('show')) return;
 
   modal.classList.remove('show');
   modal.setAttribute('aria-hidden', 'true');

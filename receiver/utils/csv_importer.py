@@ -131,9 +131,8 @@ class TorqueCSVImporter:
 
         for field, (min_val, max_val) in VALIDATION_RANGES.items():
             value = record.get(field)
-            if value is not None:
-                if value < min_val or value > max_val:
-                    warnings.append(f"{field}={value} outside range [{min_val}, {max_val}]")
+            if value is not None and (value < min_val or value > max_val):
+                warnings.append(f"{field}={value} outside range [{min_val}, {max_val}]")
 
         # A record is valid if it has a timestamp (we just warn about out-of-range values)
         is_valid = record.get("timestamp") is not None

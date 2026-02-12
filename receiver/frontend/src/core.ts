@@ -56,10 +56,10 @@ interface CacheEntry {
  * IndexedDB API Cache for client-side caching
  */
 export class APICache {
-  private dbName = 'volttracker-cache';
-  private storeName = 'api-responses';
+  private readonly dbName = 'volttracker-cache';
+  private readonly storeName = 'api-responses';
   private db: IDBDatabase | null = null;
-  private initPromise: Promise<void>;
+  private readonly initPromise: Promise<void>;
 
   constructor() {
     this.initPromise = this.init();
@@ -68,7 +68,7 @@ export class APICache {
   private async init(): Promise<void> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, 1);
-      request.onerror = () => reject(request.error);
+      request.onerror = () => reject(new Error(String(request.error)));
       request.onsuccess = () => {
         this.db = request.result;
         if (DEBUG) console.log('[Cache] IndexedDB initialized');

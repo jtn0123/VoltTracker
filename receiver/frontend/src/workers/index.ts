@@ -48,7 +48,7 @@ export function runWorkerTask<T = unknown>(type: WorkerTaskType, payload: unknow
     return import('./calculations.worker').then(() => {
       // Can't easily run worker code on main thread without refactoring,
       // so just reject gracefully — callers handle this
-      return Promise.reject(new Error('Workers not supported'));
+      throw new Error('Workers not supported');
     });
   }
 

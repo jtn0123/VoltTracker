@@ -210,7 +210,7 @@ def fetch_trip_weather(trip: Trip, points: list, db_session=None) -> None:
             # Find closest GPS point to this sample time
             closest_point = min(
                 gps_points,
-                key=lambda p: abs((datetime.fromisoformat(p["timestamp"]) - sample_time).total_seconds())
+                key=lambda p, st=sample_time: abs((datetime.fromisoformat(p["timestamp"]) - st).total_seconds())
             )
 
             sample_location = closest_point  # Track for error reporting

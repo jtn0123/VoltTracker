@@ -20,6 +20,8 @@ from services import (
 
 logger = logging.getLogger(__name__)
 
+_ERR_INTERNAL = "Internal server error"
+
 analytics_bp = Blueprint("analytics", __name__)
 
 
@@ -84,7 +86,7 @@ def record_vitals():
 
     except Exception as e:
         logger.error(f"Error recording web vital: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 # Feature 5: Powertrain Mode Analysis
@@ -108,7 +110,7 @@ def get_powertrain_analysis(trip_id):
 
     except Exception as e:
         logger.error(f"Error analyzing powertrain: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @analytics_bp.route("/api/analytics/powertrain/summary/<int:trip_id>", methods=["GET"])
@@ -125,7 +127,7 @@ def get_powertrain_summary(trip_id):
 
     except Exception as e:
         logger.error(f"Error getting powertrain summary: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 # Feature 6: Range Prediction
@@ -164,7 +166,7 @@ def predict_range():
 
     except Exception as e:
         logger.error(f"Error predicting range: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 # Feature 7: Maintenance Tracker
@@ -178,7 +180,7 @@ def get_maintenance_summary():
 
     except Exception as e:
         logger.error(f"Error getting maintenance summary: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @analytics_bp.route("/api/analytics/maintenance/engine-hours", methods=["GET"])
@@ -192,7 +194,7 @@ def get_engine_hours():
 
     except Exception as e:
         logger.error(f"Error calculating engine hours: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 # Feature 8: Route Analysis
@@ -216,7 +218,7 @@ def get_routes():
 
     except Exception as e:
         logger.error(f"Error getting routes: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 # Feature 9: Battery Degradation Forecasting
@@ -230,4 +232,4 @@ def get_battery_degradation_forecast():
 
     except Exception as e:
         logger.error(f"Error forecasting battery degradation: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500

@@ -14,6 +14,8 @@ from services import elevation_analytics_service
 
 logger = logging.getLogger(__name__)
 
+_ERR_INTERNAL = "Internal server error"
+
 elevation_analytics_bp = Blueprint("elevation_analytics", __name__)
 
 
@@ -48,7 +50,7 @@ def get_efficiency_by_elevation():
 
     except Exception as e:
         logger.error(f"Error getting elevation correlation: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @elevation_analytics_bp.route("/api/analytics/elevation/gradient", methods=["GET"])
@@ -82,7 +84,7 @@ def get_efficiency_by_gradient():
 
     except Exception as e:
         logger.error(f"Error getting gradient analysis: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @elevation_analytics_bp.route("/api/analytics/elevation/summary", methods=["GET"])
@@ -100,7 +102,7 @@ def get_elevation_summary():
 
     except Exception as e:
         logger.error(f"Error getting elevation summary: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @elevation_analytics_bp.route("/api/analytics/elevation/route-comparison", methods=["GET"])
@@ -120,7 +122,7 @@ def get_route_comparison():
 
     except Exception as e:
         logger.error(f"Error getting route comparison: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500
 
 
 @elevation_analytics_bp.route("/api/analytics/elevation/trip/<int:trip_id>", methods=["GET"])
@@ -161,4 +163,4 @@ def get_trip_elevation(trip_id):
 
     except Exception as e:
         logger.error(f"Error getting trip elevation: {e}", exc_info=True)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": _ERR_INTERNAL}), 500

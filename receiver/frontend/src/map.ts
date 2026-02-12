@@ -149,7 +149,7 @@ export function createColorCodedSegments(points: TelemetryPoint[]): RouteSegment
     const latlng: [number, number] = [point.latitude!, point.longitude!];
 
     if (!currentSegment || currentSegment.color !== color) {
-      if (currentSegment && currentSegment.points.length > 0) {
+      if (currentSegment?.points.length) {
         currentSegment.points.push(latlng);
       }
       currentSegment = {
@@ -264,7 +264,7 @@ export function createEfficiencySegments(points: TelemetryPoint[]): RouteSegment
     const prevLatlng: [number, number] = [prev.latitude, prev.longitude];
 
     if (!currentSegment || currentSegment.color !== color) {
-      if (currentSegment && currentSegment.points.length > 0) {
+      if (currentSegment?.points.length) {
         currentSegment.points.push(prevLatlng);
       }
       currentSegment = { color, efficiency, isGasMode, points: [prevLatlng] };

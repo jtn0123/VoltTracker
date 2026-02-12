@@ -192,7 +192,7 @@ export async function openTripModal(tripId: number): Promise<void> {
  */
 export function closeTripModal(): void {
   const modal = document.getElementById('trip-modal');
-  if (!modal || !modal.classList.contains('show')) return;
+  if (!modal?.classList.contains('show')) return;
 
   modal.classList.remove('show');
   modal.setAttribute('aria-hidden', 'true');
@@ -341,7 +341,7 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
 export function setTimeframe(days: number): void {
   const buttons = document.querySelectorAll('.timeframe-btn');
   buttons.forEach((btn) => {
-    const btnDays = parseInt(btn.getAttribute('data-days') || '0');
+    const btnDays = parseInt((btn as HTMLElement).dataset.days || '0');
     const isActive = btnDays === days;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');

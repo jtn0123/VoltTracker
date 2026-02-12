@@ -3,7 +3,7 @@
  * Theme, date picker, navigation, and general UI initialization
  */
 
-import { DEBUG, state } from '@/core';
+import { DEBUG, state, store } from '@/core';
 import { loadTrips } from '@/trips';
 import { Theme } from '@/types/enums';
 
@@ -30,6 +30,9 @@ export function toggleTheme(): void {
   document.documentElement.setAttribute('data-theme', newTheme);
   localStorage.setItem('theme', newTheme);
   updateThemeIcon(newTheme);
+
+  // Update the reactive store so subscribers (e.g. chart re-renders) stay in sync
+  store.setState({ theme: newTheme });
 
   const themeBtn = document.querySelector('.theme-toggle');
   if (themeBtn) {

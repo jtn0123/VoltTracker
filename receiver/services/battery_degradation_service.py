@@ -20,6 +20,15 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
+def _degradation_comparison(is_normal: bool, rate: float) -> str:
+    """Return human-readable degradation comparison."""
+    if is_normal:
+        return "Normal (2-3% per 50k)"
+    if rate > 0.8:
+        return "Faster than typical"
+    return "Slower than typical"
+
+
 def get_degradation_history(db: Session) -> List[Tuple[float, float]]:
     """
     Get historical battery capacity data.
@@ -174,11 +183,7 @@ def forecast_degradation(db: Session) -> Dict:
             "percent_per_10k_miles": round(degradation_per_10k, 2),
             "percent_per_50k_miles": round(degradation_per_10k * 5, 1),
             "is_normal": is_normal,
-            "comparison": "Normal (2-3% per 50k)"
-            if is_normal
-            else "Faster than typical"
-            if degradation_per_10k > 0.8
-            else "Slower than typical",
+            "comparison": _degradation_comparison(is_normal, degradation_per_10k),
         },
         "forecasts": forecasts,
         "data_points": len(history),

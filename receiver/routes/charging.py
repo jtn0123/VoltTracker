@@ -17,6 +17,8 @@ from utils import utc_now
 
 logger = logging.getLogger(__name__)
 
+_ERR_SESSION_NOT_FOUND = "Charging session not found"
+
 charging_bp = Blueprint("charging", __name__)
 
 
@@ -143,7 +145,7 @@ def get_charging_session(session_id):
 
     session = db.query(ChargingSession).filter(ChargingSession.id == session_id).first()
     if not session:
-        return jsonify({"error": "Charging session not found"}), 404
+        return jsonify({"error": _ERR_SESSION_NOT_FOUND}), 404
 
     return jsonify(session.to_dict())
 
@@ -162,7 +164,7 @@ def get_charging_curve(session_id):
 
     session = db.query(ChargingSession).filter(ChargingSession.id == session_id).first()
     if not session:
-        return jsonify({"error": "Charging session not found"}), 404
+        return jsonify({"error": _ERR_SESSION_NOT_FOUND}), 404
 
     # Check if we have stored curve data
     if session.charging_curve and len(session.charging_curve) > 0:
@@ -220,7 +222,7 @@ def delete_charging_session(session_id):
 
     session = db.query(ChargingSession).filter(ChargingSession.id == session_id).first()
     if not session:
-        return jsonify({"error": "Charging session not found"}), 404
+        return jsonify({"error": _ERR_SESSION_NOT_FOUND}), 404
 
     try:
         db.delete(session)
@@ -241,7 +243,7 @@ def update_charging_session(session_id):
 
     session = db.query(ChargingSession).filter(ChargingSession.id == session_id).first()
     if not session:
-        return jsonify({"error": "Charging session not found"}), 404
+        return jsonify({"error": _ERR_SESSION_NOT_FOUND}), 404
 
     data = request.get_json()
     if not data:

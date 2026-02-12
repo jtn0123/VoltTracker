@@ -136,7 +136,7 @@ function getThemeVar(name: string): string {
 
 export function getEnhancedTooltip(additionalCallbacks: ChartConfig = {}): ChartConfig {
   const defaults = getChartDefaults();
-  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const isDark = document.documentElement.dataset.theme !== 'light';
   return {
     backgroundColor: isDark ? 'rgba(22, 25, 34, 0.95)' : 'rgba(255, 255, 255, 0.97)',
     titleColor: isDark ? '#f0f0f3' : '#111827',

@@ -8,10 +8,12 @@
     "test:chromium": "playwright test --project=chromium",
     "test:mobile": "playwright test --project=mobile-chrome",
     "report": "playwright show-report",
-    "seed": "ts-node seed/seed-data.ts"
+    "seed": "ts-node seed/seed-data.ts",
+    "test:coverage": "playwright test && nyc report --reporter=lcov --temp-dir=coverage -t coverage --report-dir=coverage"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
+    "nyc": "^17.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.0"
   }

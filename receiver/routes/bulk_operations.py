@@ -17,6 +17,9 @@ from extensions import limiter
 
 logger = logging.getLogger(__name__)
 
+_ERR_TRIP_IDS_REQUIRED = "trip_ids required"
+_ERR_TRIP_IDS_NONEMPTY = "trip_ids must be a non-empty list"
+
 bulk_bp = Blueprint("bulk", __name__)
 
 
@@ -37,13 +40,13 @@ def bulk_delete_trips():
     data = request.get_json()
 
     if not data or "trip_ids" not in data:
-        return jsonify({"error": "trip_ids required"}), 400
+        return jsonify({"error": _ERR_TRIP_IDS_REQUIRED}), 400
 
     trip_ids = data.get("trip_ids", [])
     permanent = data.get("permanent", False)
 
     if not isinstance(trip_ids, list) or len(trip_ids) == 0:
-        return jsonify({"error": "trip_ids must be a non-empty list"}), 400
+        return jsonify({"error": _ERR_TRIP_IDS_NONEMPTY}), 400
 
     if len(trip_ids) > 1000:
         return jsonify({"error": "Maximum 1000 trips per batch"}), 400
@@ -127,12 +130,12 @@ def bulk_restore_trips():
     data = request.get_json()
 
     if not data or "trip_ids" not in data:
-        return jsonify({"error": "trip_ids required"}), 400
+        return jsonify({"error": _ERR_TRIP_IDS_REQUIRED}), 400
 
     trip_ids = data.get("trip_ids", [])
 
     if not isinstance(trip_ids, list) or len(trip_ids) == 0:
-        return jsonify({"error": "trip_ids must be a non-empty list"}), 400
+        return jsonify({"error": _ERR_TRIP_IDS_NONEMPTY}), 400
 
     try:
         # Fetch deleted trips
@@ -193,7 +196,7 @@ def bulk_update_trips():
     updates = data.get("updates", {})
 
     if not isinstance(trip_ids, list) or len(trip_ids) == 0:
-        return jsonify({"error": "trip_ids must be a non-empty list"}), 400
+        return jsonify({"error": _ERR_TRIP_IDS_NONEMPTY}), 400
 
     if len(trip_ids) > 1000:
         return jsonify({"error": "Maximum 1000 trips per batch"}), 400
@@ -264,13 +267,13 @@ def bulk_export_trips():
     data = request.get_json()
 
     if not data or "trip_ids" not in data:
-        return jsonify({"error": "trip_ids required"}), 400
+        return jsonify({"error": _ERR_TRIP_IDS_REQUIRED}), 400
 
     trip_ids = data.get("trip_ids", [])
     export_format = data.get("format", "csv").lower()
 
     if not isinstance(trip_ids, list) or len(trip_ids) == 0:
-        return jsonify({"error": "trip_ids must be a non-empty list"}), 400
+        return jsonify({"error": _ERR_TRIP_IDS_NONEMPTY}), 400
 
     if len(trip_ids) > 10000:
         return jsonify({"error": "Maximum 10000 trips per export"}), 400
@@ -347,12 +350,12 @@ def bulk_trip_stats():
     data = request.get_json()
 
     if not data or "trip_ids" not in data:
-        return jsonify({"error": "trip_ids required"}), 400
+        return jsonify({"error": _ERR_TRIP_IDS_REQUIRED}), 400
 
     trip_ids = data.get("trip_ids", [])
 
     if not isinstance(trip_ids, list) or len(trip_ids) == 0:
-        return jsonify({"error": "trip_ids must be a non-empty list"}), 400
+        return jsonify({"error": _ERR_TRIP_IDS_NONEMPTY}), 400
 
     try:
         # Fetch selected trips

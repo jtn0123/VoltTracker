@@ -48,9 +48,9 @@ type EventCallback = (...args: unknown[]) => void;
  *   store.emit('telemetry:update', data);
  */
 export class AppStore {
-  private _state: AppState;
-  private _subscribers: Map<StateKey, Set<StateCallback<any>>> = new Map();
-  private _events: Map<string, Set<EventCallback>> = new Map();
+  private readonly _state: AppState;
+  private readonly _subscribers: Map<StateKey, Set<StateCallback<any>>> = new Map();
+  private readonly _events: Map<string, Set<EventCallback>> = new Map();
 
   constructor(initial: AppState) {
     this._state = initial;

@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, extract, func
+from sqlalchemy import String, and_, cast, extract, func, literal
 from sqlalchemy.orm import Session
 
 from models import Trip
@@ -185,12 +185,12 @@ def get_efficiency_time_series(
         # Use year and month for monthly grouping
         year_part = extract("year", Trip.start_time)
         month_part = extract("month", Trip.start_time)
-        date_key = func.concat(year_part, "-", month_part)
+        date_key = cast(year_part, String) + literal("-") + cast(month_part, String)
     else:  # week (default)
         # Use year and week for weekly grouping
         year_part = extract("year", Trip.start_time)
         week_part = extract("week", Trip.start_time)
-        date_key = func.concat(year_part, "-W", week_part)
+        date_key = cast(year_part, String) + literal("-W") + cast(week_part, String)
 
     results = (
         db.query(

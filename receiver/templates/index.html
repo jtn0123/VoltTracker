@@ -34,7 +34,7 @@
     <header class="header" role="banner">
         <h1>Volt Efficiency Tracker <span class="app-version" title="Version {{ app_version | default('unknown') }}">v{{ app_version | default('unknown') }}</span></h1>
         <div class="header-actions">
-            <button class="theme-toggle" data-action="toggle-theme" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle dark/light theme" aria-pressed="true">
+            <button class="theme-toggle" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle dark/light theme" aria-pressed="true">
                 <span class="theme-icon" id="theme-icon" aria-hidden="true">🌙</span>
             </button>
             <a href="/map" class="btn-map-view" title="View GPS track map" aria-label="View GPS track map">
@@ -44,7 +44,7 @@
                 Map
             </a>
             <div class="export-dropdown">
-                <button class="export-btn" data-action="toggle-export-menu" onclick="toggleExportMenu()" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu" id="export-btn">
+                <button class="export-btn" data-action="toggle-export-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu" id="export-btn">
                     Export ▾
                 </button>
                 <div class="export-menu" id="export-menu" role="menu" aria-labelledby="export-btn">
