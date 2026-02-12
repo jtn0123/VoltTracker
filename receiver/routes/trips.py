@@ -21,6 +21,73 @@ from utils.time_utils import utc_now, parse_query_date_range, parse_date_shortcu
 _ERR_TRIP_NOT_FOUND = "Trip not found"
 
 
+def _apply_numeric_filter(query, param_name: str, column, op: str = ">="):
+    """Apply a numeric filter from request args. Returns (query, error_response) or (query, None)."""
+    value = request.args.get(param_name)
+    if not value:
+        return query, None
+    try:
+        num = float(value)
+    except (ValueError, TypeError):
+        logger.warning("Invalid %s parameter: %s", param_name, value)
+        return query, (jsonify({"error": f"Invalid {param_name} value: {value}. Must be a number."}), 400)
+    if op == ">=":
+        return query.filter(column >= num), None
+    return query.filter(column <= num), None
+
+
+def _apply_date_filters(query):
+    """Apply date filters from request args."""
+    date_range_shortcut = request.args.get("date_range")
+    if date_range_shortcut:
+        date_range = parse_date_shortcut(date_range_shortcut)
+        if date_range:
+            start_dt, end_dt = date_range
+            query = query.filter(Trip.start_time >= start_dt, Trip.start_time <= end_dt)
+        return query
+
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    if start_date or end_date:
+        start_dt, end_dt = parse_query_date_range(request.args, default_days=365)
+        if start_date:
+            query = query.filter(Trip.start_time >= start_dt)
+        if end_date:
+            query = query.filter(Trip.start_time <= end_dt)
+    return query
+
+
+def _apply_mode_filters(query):
+    """Apply gas/EV/weather mode filters from request args."""
+    if request.args.get("gas_only", "").lower() == "true":
+        query = query.filter(Trip.gas_mode_entered.is_(True))
+    if request.args.get("ev_only", "").lower() == "true":
+        query = query.filter(Trip.gas_mode_entered.is_(False))
+    if request.args.get("extreme_weather", "").lower() == "true":
+        query = query.filter(Trip.extreme_weather.is_(True))
+    return query
+
+
+def _apply_all_numeric_filters(query):
+    """Apply all numeric range filters. Returns (query, error_response)."""
+    filters = [
+        ("min_temp", Trip.weather_temp_f, ">="),
+        ("max_temp", Trip.weather_temp_f, "<="),
+        ("min_efficiency", Trip.kwh_per_mile, ">="),
+        ("max_efficiency", Trip.kwh_per_mile, "<="),
+        ("min_mpg", Trip.gas_mpg, ">="),
+        ("min_distance", Trip.distance_miles, ">="),
+        ("max_distance", Trip.distance_miles, "<="),
+        ("min_elevation", Trip.elevation_gain_m, ">="),
+        ("max_elevation", Trip.elevation_gain_m, "<="),
+    ]
+    for param_name, column, op in filters:
+        query, err = _apply_numeric_filter(query, param_name, column, op)
+        if err:
+            return query, err
+    return query, None
+
+
 def _trend_direction(recent: float, early: float) -> str:
     """Return trend direction string."""
     if recent > early:
@@ -84,116 +151,14 @@ def get_trips() -> Response | tuple[Response, int]:
     # Filter for closed trips that aren't soft-deleted
     query = db.query(Trip).filter(Trip.is_closed.is_(True), Trip.deleted_at.is_(None))
 
-    # Date filters - support both explicit dates and shortcuts
-    date_range_shortcut = request.args.get("date_range")
-    if date_range_shortcut:
-        # Use shortcut (e.g., "last_7_days", "last_30_days")
-        date_range = parse_date_shortcut(date_range_shortcut)
-        if date_range:
-            start_date_dt, end_date_dt = date_range
-            query = query.filter(Trip.start_time >= start_date_dt, Trip.start_time <= end_date_dt)
-    else:
-        # Use explicit start/end dates if provided
-        start_date = request.args.get("start_date")
-        end_date = request.args.get("end_date")
-        if start_date or end_date:
-            start_date_dt, end_date_dt = parse_query_date_range(request.args, default_days=365)
-            if start_date:
-                query = query.filter(Trip.start_time >= start_date_dt)
-            if end_date:
-                query = query.filter(Trip.start_time <= end_date_dt)
+    # Apply filters
+    query = _apply_date_filters(query)
+    query = _apply_mode_filters(query)
+    query, err = _apply_all_numeric_filters(query)
+    if err:
+        return err
 
-    # Mode filters
-    gas_only = request.args.get("gas_only", "").lower() == "true"
-    if gas_only:
-        query = query.filter(Trip.gas_mode_entered.is_(True))
-
-    ev_only = request.args.get("ev_only", "").lower() == "true"
-    if ev_only:
-        query = query.filter(Trip.gas_mode_entered.is_(False))
-
-    # Weather filters
-    extreme_weather = request.args.get("extreme_weather", "").lower() == "true"
-    if extreme_weather:
-        query = query.filter(Trip.extreme_weather.is_(True))
-
-    min_temp = request.args.get("min_temp")
-    if min_temp:
-        try:
-            query = query.filter(Trip.weather_temp_f >= float(min_temp))
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid min_temp parameter: {min_temp}")
-            return jsonify({"error": f"Invalid min_temp value: {min_temp}. Must be a number."}), 400
-
-    max_temp = request.args.get("max_temp")
-    if max_temp:
-        try:
-            query = query.filter(Trip.weather_temp_f <= float(max_temp))
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid max_temp parameter: {max_temp}")
-            return jsonify({"error": f"Invalid max_temp value: {max_temp}. Must be a number."}), 400
-
-    # Efficiency filters
-    min_efficiency = request.args.get("min_efficiency")
-    if min_efficiency:
-        try:
-            query = query.filter(Trip.kwh_per_mile >= float(min_efficiency))
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid min_efficiency parameter: {min_efficiency}")
-            return jsonify({"error": f"Invalid min_efficiency value: {min_efficiency}. Must be a number."}), 400
-
-    max_efficiency = request.args.get("max_efficiency")
-    if max_efficiency:
-        try:
-            query = query.filter(Trip.kwh_per_mile <= float(max_efficiency))
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid max_efficiency parameter: {max_efficiency}")
-            return jsonify({"error": f"Invalid max_efficiency value: {max_efficiency}. Must be a number."}), 400
-
-    min_mpg = request.args.get("min_mpg")
-    if min_mpg:
-        try:
-            query = query.filter(Trip.gas_mpg >= float(min_mpg))
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid min_mpg parameter: {min_mpg}")
-            return jsonify({"error": f"Invalid min_mpg value: {min_mpg}. Must be a number."}), 400
-
-    # Distance filters
-    min_distance = request.args.get("min_distance")
-    if min_distance:
-        try:
-            query = query.filter(Trip.distance_miles >= float(min_distance))
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid min_distance parameter: {min_distance}")
-            return jsonify({"error": f"Invalid min_distance value: {min_distance}. Must be a number."}), 400
-
-    max_distance = request.args.get("max_distance")
-    if max_distance:
-        try:
-            query = query.filter(Trip.distance_miles <= float(max_distance))
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid max_distance parameter: {max_distance}")
-            return jsonify({"error": f"Invalid max_distance value: {max_distance}. Must be a number."}), 400
-
-    # Elevation filters
-    min_elevation = request.args.get("min_elevation")
-    if min_elevation:
-        try:
-            query = query.filter(Trip.elevation_gain_m >= float(min_elevation))
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid min_elevation parameter: {min_elevation}")
-            return jsonify({"error": f"Invalid min_elevation value: {min_elevation}. Must be a number."}), 400
-
-    max_elevation = request.args.get("max_elevation")
-    if max_elevation:
-        try:
-            query = query.filter(Trip.elevation_gain_m <= float(max_elevation))
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid max_elevation parameter: {max_elevation}")
-            return jsonify({"error": f"Invalid max_elevation value: {max_elevation}. Must be a number."}), 400
-
-    # Filter out trips with 0 or very small distance (likely GPS errors or no movement)
-    # Unless explicitly requested with include_zero=true
+    # Filter out trips with 0 or very small distance unless explicitly requested
     include_zero = request.args.get("include_zero", "").lower() == "true"
     if not include_zero:
         query = query.filter((Trip.distance_miles.isnot(None)) & (Trip.distance_miles > Config.MIN_TRIP_MILES))
@@ -373,6 +338,34 @@ def restore_trip(trip_id: int):
         return jsonify({"error": "Failed to restore trip"}), 500
 
 
+_TRIP_ALLOWED_FIELDS = ["gas_mpg", "gas_miles", "electric_miles", "fuel_used_gallons"]
+_TRIP_VALIDATION_RULES = {
+    "gas_mpg": {"min": 0, "max": 100, "type": (int, float)},
+    "gas_miles": {"min": 0, "max": 10000, "type": (int, float)},
+    "electric_miles": {"min": 0, "max": 10000, "type": (int, float)},
+    "fuel_used_gallons": {"min": 0, "max": 50, "type": (int, float)},
+}
+
+
+def _validate_and_apply_trip_fields(trip, data):
+    """Validate and apply allowed fields to a trip. Returns an error response or None."""
+    for field in _TRIP_ALLOWED_FIELDS:
+        if field not in data:
+            continue
+        value = data[field]
+        if value is None:
+            setattr(trip, field, None)
+            continue
+        rules = _TRIP_VALIDATION_RULES.get(field)
+        if rules:
+            if not isinstance(value, rules["type"]):
+                return jsonify({"error": f"{field} must be a number"}), 400
+            if value < rules["min"] or value > rules["max"]:
+                return jsonify({"error": f'{field} must be between {rules["min"]} and {rules["max"]}'}), 400
+        setattr(trip, field, value)
+    return None
+
+
 @trips_bp.route("/trips/<int:trip_id>", methods=["PATCH"])
 def update_trip(trip_id):
     """
@@ -394,35 +387,9 @@ def update_trip(trip_id):
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    # Only allow specific fields to be updated
-    allowed_fields = ["gas_mpg", "gas_miles", "electric_miles", "fuel_used_gallons"]
-
-    # Validation rules for numeric fields (must be non-negative if provided)
-    validation_rules = {
-        "gas_mpg": {"min": 0, "max": 100, "type": (int, float)},
-        "gas_miles": {"min": 0, "max": 10000, "type": (int, float)},
-        "electric_miles": {"min": 0, "max": 10000, "type": (int, float)},
-        "fuel_used_gallons": {"min": 0, "max": 50, "type": (int, float)},
-    }
-
-    for field in allowed_fields:
-        if field in data:
-            value = data[field]
-            # Allow null values to clear the field
-            if value is None:
-                setattr(trip, field, None)
-                continue
-
-            rules = validation_rules.get(field)
-            if rules:
-                # Type check
-                if not isinstance(value, rules["type"]):
-                    return jsonify({"error": f"{field} must be a number"}), 400
-                # Range check
-                if value < rules["min"] or value > rules["max"]:
-                    return jsonify({"error": f'{field} must be between {rules["min"]} and {rules["max"]}'}), 400
-
-            setattr(trip, field, value)
+    err = _validate_and_apply_trip_fields(trip, data)
+    if err:
+        return err
 
     try:
         db.commit()

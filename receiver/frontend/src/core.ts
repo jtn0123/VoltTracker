@@ -9,7 +9,7 @@ export { state, store } from '@/store';
 export type { AppState } from '@/store';
 
 // Debug mode
-export const DEBUG = new URLSearchParams(window.location.search).has('debug');
+export const DEBUG = new URLSearchParams(globalThis.location.search).has('debug');
 
 /**
  * HTML Escaping Helper
@@ -25,7 +25,7 @@ export function escapeHtml(str: unknown): string {
  * Sanitize a number for safe HTML insertion
  */
 export function sanitizeNumber(value: unknown, decimals = 1): string {
-  if (value === null || value === undefined || isNaN(value as number)) {
+  if (value === null || value === undefined || Number.isNaN(value as number)) {
     return '--';
   }
   return Number(value).toFixed(decimals);
@@ -38,7 +38,7 @@ export function sanitizeDate(dateValue: unknown): string {
   if (!dateValue) return '--';
   try {
     const date = new Date(dateValue as string);
-    if (isNaN(date.getTime())) return '--';
+    if (Number.isNaN(date.getTime())) return '--';
     return escapeHtml(formatDateTime(date));
   } catch {
     return '--';
@@ -59,10 +59,13 @@ export class APICache {
   private readonly dbName = 'volttracker-cache';
   private readonly storeName = 'api-responses';
   private db: IDBDatabase | null = null;
-  private readonly initPromise: Promise<void>;
+  private initPromise: Promise<void> | null = null;
 
-  constructor() {
-    this.initPromise = this.init();
+  private ensureInit(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = this.init();
+    }
+    return this.initPromise;
   }
 
   private async init(): Promise<void> {
@@ -84,8 +87,8 @@ export class APICache {
     });
   }
 
-  async get(url: string, maxAge = 300000): Promise<unknown | null> {
-    await this.initPromise;
+  async get(url: string, maxAge = 300000): Promise<unknown> {
+    await this.ensureInit();
     return new Promise((resolve) => {
       const tx = this.db!.transaction([this.storeName], 'readonly');
       const store = tx.objectStore(this.storeName);
@@ -106,7 +109,7 @@ export class APICache {
   }
 
   async set(url: string, data: unknown, maxAge = 300000): Promise<void> {
-    await this.initPromise;
+    await this.ensureInit();
     const tx = this.db!.transaction([this.storeName], 'readwrite');
     const store = tx.objectStore(this.storeName);
     store.put({ url, data, timestamp: Date.now(), maxAge } as CacheEntry);
@@ -114,7 +117,7 @@ export class APICache {
   }
 
   async clear(): Promise<void> {
-    await this.initPromise;
+    await this.ensureInit();
     const tx = this.db!.transaction([this.storeName], 'readwrite');
     const store = tx.objectStore(this.storeName);
     store.clear();

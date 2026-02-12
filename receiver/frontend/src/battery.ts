@@ -187,7 +187,7 @@ export function getHeatmapColor(value: number): string {
   const c6Hex = getChartColor(6);
   const parseHex = (h: string) => {
     h = h.replace('#', '');
-    return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+    return { r: Number.parseInt(h.slice(0, 2), 16), g: Number.parseInt(h.slice(2, 4), 16), b: Number.parseInt(h.slice(4, 6), 16) };
   };
   const d = parseHex(dangerHex), w = parseHex(warningHex), s = parseHex(successHex), b5 = parseHex(c5Hex), b6 = parseHex(c6Hex);
   const colors = [
@@ -333,7 +333,7 @@ export async function renderSocHistogram(histogram: Record<string, number>): Pro
   const ctx = document.getElementById('soc-histogram-chart') as HTMLCanvasElement | null;
   if (!ctx) return;
 
-  const labels = Object.keys(histogram).sort((a, b) => parseInt(a) - parseInt(b));
+  const labels = Object.keys(histogram).sort((a, b) => Number.parseInt(a) - Number.parseInt(b));
   const values = labels.map((k) => histogram[k]);
 
   if (!window.Chart) await loadChartJs();

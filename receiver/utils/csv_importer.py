@@ -270,7 +270,7 @@ class TorqueCSVImporter:
                 record = cls._parse_row(row, column_mapping, session_id)
                 if record and record.get("timestamp"):
                     # Validate the record
-                    is_valid, warnings = cls._validate_record(record)
+                    _is_valid, warnings = cls._validate_record(record)
                     if warnings:
                         stats["validation_warnings"] += len(warnings)
                         if len(stats["warnings"]) < 10:  # Limit warning messages

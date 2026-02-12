@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import path from 'path'
+import path from 'node:path'
 import istanbul from 'vite-plugin-istanbul'
 
 export default defineConfig({

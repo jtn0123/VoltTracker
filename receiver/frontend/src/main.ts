@@ -65,7 +65,7 @@ function showFallbackUI(errorMsg: string): void {
   banner.innerHTML = `
     <div style="flex:1">
       <strong>Something went wrong</strong>
-      <span class="error-detail" style="margin-left:0.5rem;opacity:0.9">${errorMsg.replace(/</g, '&lt;')}</span>
+      <span class="error-detail" style="margin-left:0.5rem;opacity:0.9">${errorMsg.split('<').join('&lt;')}</span>
     </div>
     <button onclick="location.reload()" style="padding:.4rem 1rem;border-radius:6px;border:1px solid rgba(255,255,255,0.3);background:transparent;color:#fff;cursor:pointer;white-space:nowrap">
       Reload
@@ -126,13 +126,16 @@ let chargingMod: Awaited<ReturnType<typeof loadChargingModule>> | null = null;
 let importMod: Awaited<ReturnType<typeof loadImportModule>> | null = null;
 
 async function getBattery() {
-  return (batteryMod ??= await loadBatteryModule());
+  batteryMod ??= await loadBatteryModule();
+  return batteryMod;
 }
 async function getCharging() {
-  return (chargingMod ??= await loadChargingModule());
+  chargingMod ??= await loadChargingModule();
+  return chargingMod;
 }
 async function getImport() {
-  return (importMod ??= await loadImportModule());
+  importMod ??= await loadImportModule();
+  return importMod;
 }
 
 // ── Store subscriptions (reactive state → UI) ───────────────────────────────
@@ -180,7 +183,6 @@ store.on('telemetry:update', () => {
       const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
       window.location.replace(newUrl);
     });
-    return;
   }
 })();
 
@@ -335,25 +337,8 @@ function setupSectionObservers(): void {
   }
 }
 
-// ── Initialize dashboard ─────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-  initTheme();
-
-  // Attach click handlers programmatically (more reliable than inline onclick in modules)
-  document.querySelector('.theme-toggle')?.addEventListener('click', () => toggleTheme());
-  document.getElementById('export-btn')?.addEventListener('click', () => toggleExportMenu());
-
-  initDatePicker();
-  initWebSocket();
-  initServiceWorker();
-  setupChartLazyLoading();
-  initHeaderScroll();
-  initBackToTop();
-  initBottomNav();
-  initScrollHandlers();
-
-  // Setup CSV import file input
+// ── CSV Import Setup ─────────────────────────────────────────────────────────
+function setupCsvImport(): void {
   const fileInput = document.getElementById('csv-file') as HTMLInputElement | null;
   const fileNameDisplay = document.getElementById('file-name');
   const importBtn = document.getElementById('import-btn') as HTMLButtonElement | null;
@@ -390,6 +375,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   }
+}
+
+// ── Initialize dashboard ─────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+  initTheme();
+
+  // Attach click handlers programmatically (more reliable than inline onclick in modules)
+  document.querySelector('.theme-toggle')?.addEventListener('click', () => toggleTheme());
+  document.getElementById('export-btn')?.addEventListener('click', () => toggleExportMenu());
+
+  initDatePicker();
+  initWebSocket();
+  initServiceWorker();
+  setupChartLazyLoading();
+  initHeaderScroll();
+  initBackToTop();
+  initBottomNav();
+  initScrollHandlers();
+  setupCsvImport();
 
   // Load critical data in parallel
   const results = await Promise.allSettled([loadStatus(), loadSummary(), loadTrips(), loadLiveTelemetry()]);

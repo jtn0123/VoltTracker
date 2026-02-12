@@ -134,7 +134,7 @@ class TelemetryRaw(SerializableMixin, Base):
     odometer_miles = Column(Float)
 
     # HV Battery tracking for kWh calculations
-    hv_battery_power_kw = Column(Float)  # Positive = discharging, negative = charging
+    hv_battery_power_kw = Column(Float)
     hv_battery_current_a = Column(Float)
     hv_battery_voltage_v = Column(Float)
     hv_discharge_amps = Column(Float)

@@ -91,7 +91,7 @@ def get_multi_factor_analysis(
 
 
 def get_efficiency_predictions(
-    db: Session,
+    _db: Session,
     temperature_f: Optional[float] = None,
     elevation_change_m: Optional[float] = None,
     is_raining: bool = False,

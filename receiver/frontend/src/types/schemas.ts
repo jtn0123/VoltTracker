@@ -5,7 +5,7 @@
 
 import { z } from 'zod';
 
-const DEBUG = new URLSearchParams(window.location.search).has('debug');
+const DEBUG = new URLSearchParams(globalThis.location.search).has('debug');
 
 // ── Telemetry ──────────────────────────────────────────────
 

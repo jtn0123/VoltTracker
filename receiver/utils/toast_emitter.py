@@ -144,7 +144,7 @@ def emit_trip_detected(trip_distance: float = None, **_kwargs) -> None:
 
 
 def emit_trip_finalized(
-    trip_id: str,
+    _trip_id: str,
     distance: float,
     mpg: Optional[float] = None,
     electric_miles: Optional[float] = None

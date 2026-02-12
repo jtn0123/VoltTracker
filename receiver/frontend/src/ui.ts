@@ -12,7 +12,7 @@ import { Theme } from '@/types/enums';
  */
 export function initTheme(): void {
   const savedTheme = (localStorage.getItem('theme') as Theme) || Theme.Dark;
-  document.documentElement.setAttribute('data-theme', savedTheme);
+  document.documentElement.dataset.theme = savedTheme;
   updateThemeIcon(savedTheme);
 
   const themeBtn = document.querySelector('.theme-toggle');
@@ -25,9 +25,9 @@ export function initTheme(): void {
  * Toggle between light and dark theme
  */
 export function toggleTheme(): void {
-  const currentTheme = document.documentElement.getAttribute('data-theme');
+  const currentTheme = document.documentElement.dataset.theme;
   const newTheme = currentTheme === Theme.Dark ? Theme.Light : Theme.Dark;
-  document.documentElement.setAttribute('data-theme', newTheme);
+  document.documentElement.dataset.theme = newTheme;
   localStorage.setItem('theme', newTheme);
   updateThemeIcon(newTheme);
 
@@ -124,9 +124,9 @@ export function initBottomNav(): void {
       if (section) {
         const headerOffset = 80;
         const elementPosition = section.getBoundingClientRect().top;
-        const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+        const offsetPosition = elementPosition + globalThis.pageYOffset - headerOffset;
 
-        window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+        globalThis.scrollTo({ top: offsetPosition, behavior: 'smooth' });
         setActiveNavItem((item as HTMLElement).dataset.section || '');
       }
     });
@@ -142,7 +142,7 @@ let _pendingNavSections: NavSection[] | null = null;
  * Update active nav item based on scroll position
  */
 export function updateActiveNavOnScroll(sections: NavSection[]): void {
-  const scrollPosition = window.scrollY + 100;
+  const scrollPosition = globalThis.scrollY + 100;
 
   for (let i = sections.length - 1; i >= 0; i--) {
     const section = document.getElementById(sections[i].id);
@@ -183,7 +183,7 @@ export function initBackToTop(): void {
   if (!backToTop) return;
 
   backToTop.addEventListener('click', () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    globalThis.scrollTo({ top: 0, behavior: 'smooth' });
   });
 }
 
@@ -196,9 +196,9 @@ export function initScrollHandlers(): void {
   const backToTop = document.getElementById('back-to-top');
 
   let ticking = false;
-  window.addEventListener('scroll', () => {
+  globalThis.addEventListener('scroll', () => {
     if (!ticking) {
-      window.requestAnimationFrame(() => {
+      globalThis.requestAnimationFrame(() => {
         // Nav scroll spy
         if (_pendingNavSections) {
           updateActiveNavOnScroll(_pendingNavSections);
@@ -206,7 +206,7 @@ export function initScrollHandlers(): void {
 
         // Header shadow
         if (header) {
-          if (window.scrollY > 10) {
+          if (globalThis.scrollY > 10) {
             header.classList.add('scrolled');
           } else {
             header.classList.remove('scrolled');
@@ -215,7 +215,7 @@ export function initScrollHandlers(): void {
 
         // Back to top visibility
         if (backToTop) {
-          if (window.scrollY > 400) {
+          if (globalThis.scrollY > 400) {
             backToTop.classList.add('visible');
           } else {
             backToTop.classList.remove('visible');

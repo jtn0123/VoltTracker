@@ -61,7 +61,7 @@ export async function renderTripMap(telemetry: TelemetryPoint[]): Promise<void> 
     return;
   }
 
-  if (!window.L) {
+  if (!globalThis.L) {
     mapEl.innerHTML = '<div class="loading-indicator" style="padding:2rem;text-align:center;">Loading map...</div>';
     await loadLeaflet();
   }
@@ -143,8 +143,7 @@ export function createColorCodedSegments(points: TelemetryPoint[]): RouteSegment
   const segments: RouteSegment[] = [];
   let currentSegment: RouteSegment | null = null;
 
-  for (let i = 0; i < points.length; i++) {
-    const point = points[i];
+  for (const point of points) {
     const color = getPointColor(point);
     const latlng: [number, number] = [point.latitude!, point.longitude!];
 
@@ -186,7 +185,7 @@ export function getPointColor(point: TelemetryPoint): string {
  * Get color based on instantaneous efficiency
  */
 export function getEfficiencyColor(efficiency: number | null, isGasMode: boolean): string {
-  if (efficiency === null || efficiency === undefined || !isFinite(efficiency)) {
+  if (efficiency === null || efficiency === undefined || !Number.isFinite(efficiency)) {
     return '#888888';
   }
 
@@ -197,9 +196,9 @@ export function getEfficiencyColor(efficiency: number | null, isGasMode: boolean
     if (efficiency < 40) return '#2ecc71';
     return '#27ae60';
   } else {
-    if (efficiency < 2.0) return '#e74c3c';
+    if (efficiency < 2) return '#e74c3c';
     if (efficiency < 2.5) return '#e67e22';
-    if (efficiency < 3.0) return '#f1c40f';
+    if (efficiency < 3) return '#f1c40f';
     if (efficiency < 3.5) return '#2ecc71';
     return '#27ae60';
   }

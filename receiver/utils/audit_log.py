@@ -172,7 +172,7 @@ class AuditLogger:
         )
 
 
-def audit_endpoint(entity_type: str):
+def audit_endpoint(_entity_type: str):
     """
     Decorator to automatically log API endpoint calls.
 

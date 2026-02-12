@@ -60,7 +60,7 @@ function aggregate(p: AggregatePayload): { timestamp: number; value: number }[] 
   const buckets = new Map<number, number[]>();
   for (const d of p.data) {
     const v = (d as any)[p.field];
-    if (v == null || isNaN(v)) continue;
+    if (v == null || Number.isNaN(v)) continue;
     const key = Math.floor(new Date(d.timestamp).getTime() / p.bucketMs) * p.bucketMs;
     if (!buckets.has(key)) buckets.set(key, []);
     buckets.get(key)!.push(v);
@@ -94,7 +94,7 @@ function movingAverage(p: AveragePayload): { timestamp: string; value: number }[
   const values: { timestamp: string; value: number }[] = [];
   for (const d of p.data) {
     const v = (d as any)[p.field];
-    if (v != null && !isNaN(v)) values.push({ timestamp: d.timestamp, value: v });
+    if (v != null && !Number.isNaN(v)) values.push({ timestamp: d.timestamp, value: v });
   }
   const result: { timestamp: string; value: number }[] = [];
   for (let i = 0; i < values.length; i++) {
@@ -116,7 +116,7 @@ function linearTrend(p: TrendPayload): {
   const t0 = p.data.length > 0 ? new Date(p.data[0].timestamp).getTime() : 0;
   for (const d of p.data) {
     const v = (d as any)[p.field];
-    if (v != null && !isNaN(v))
+    if (v != null && !Number.isNaN(v))
       pts.push({ x: (new Date(d.timestamp).getTime() - t0) / 86400000, y: v, ts: d.timestamp });
   }
   if (pts.length < 2) return { slope: 0, intercept: 0, r2: 0, trendLine: [] };
@@ -141,7 +141,7 @@ function linearTrend(p: TrendPayload): {
 function downsample(p: DownsamplePayload): DataPoint[] {
   const values: DataPoint[] = p.data.filter((d) => {
     const v = (d as any)[p.field];
-    return v != null && !isNaN(v);
+    return v != null && !Number.isNaN(v);
   });
   if (values.length <= p.targetPoints) return values;
 
@@ -190,7 +190,7 @@ function downsample(p: DownsamplePayload): DataPoint[] {
 
 // ── Message handler ──────────────────────────────────────────────────────────
 
-self.onmessage = (e: MessageEvent<WorkerRequest>) => {
+globalThis.onmessage = (e: MessageEvent<WorkerRequest>) => {
   const { id, type, payload } = e.data;
   try {
     let result: unknown;
@@ -210,8 +210,8 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
       default:
         throw new Error(`Unknown task type: ${type}`);
     }
-    self.postMessage({ id, type, result } as WorkerResponse);
+    globalThis.postMessage({ id, type, result } as WorkerResponse);
   } catch (err) {
-    self.postMessage({ id, type, error: (err as Error).message } as WorkerResponse);
+    globalThis.postMessage({ id, type, error: (err as Error).message } as WorkerResponse);
   }
 };

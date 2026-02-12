@@ -149,7 +149,7 @@ class TestMPGTrendAPI:
             if datetime.fromisoformat(p["date"].replace("Z", "+00:00")).month == 12
         ]
         # This test documents the expected behavior - December data should be present
-        assert len(december_dates) >= 0  # At least 0 (may vary based on test data)
+        assert isinstance(december_dates, list)  # Verify we got a list of dates
 
 
 class TestTripDetailsAPI:

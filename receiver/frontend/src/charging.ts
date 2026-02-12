@@ -5,7 +5,7 @@
 
 import { state, formatDate, formatDateTime, formatTime } from '@/core';
 import { api } from '@/api';
-import { loadChartJs, createGradient, getChartDefaults, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis, getChartColor, getCSSVar } from '@/charts';
+import { loadChartJs, createGradient, getChartDefaults, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis, getChartColor } from '@/charts';
 import type { ChargingSummary, ChargingSession, ChargingCurveResponse } from '@/types/api';
 
 /**
@@ -268,11 +268,11 @@ export async function submitChargingSession(event: Event): Promise<void> {
   const formData: Record<string, string | number | null> = {
     start_time: getValue('charge-start'),
     end_time: getValue('charge-end') || null,
-    start_soc: parseFloat(getValue('charge-start-soc')) || null,
-    end_soc: parseFloat(getValue('charge-end-soc')) || null,
-    kwh_added: parseFloat(getValue('charge-kwh')) || null,
+    start_soc: Number.parseFloat(getValue('charge-start-soc')) || null,
+    end_soc: Number.parseFloat(getValue('charge-end-soc')) || null,
+    kwh_added: Number.parseFloat(getValue('charge-kwh')) || null,
     charge_type: getValue('charge-type') || null,
-    cost: parseFloat(getValue('charge-cost')) || null,
+    cost: Number.parseFloat(getValue('charge-cost')) || null,
     location_name: getValue('charge-location') || null,
     notes: getValue('charge-notes') || null,
   };
@@ -290,12 +290,12 @@ export async function submitChargingSession(event: Event): Promise<void> {
       body: JSON.stringify(cleanData),
     });
 
-    if (!result.error) {
+    if (result.error) {
+      showError(`Failed to add charging session: ${result.error}`);
+    } else {
       closeChargingModal();
       loadChargingSummary();
       loadChargingHistory();
-    } else {
-      showError(`Failed to add charging session: ${result.error}`);
     }
   } catch (error) {
     console.error('Failed to submit charging session:', error);
@@ -312,11 +312,11 @@ export async function deleteChargingSession(sessionId: number): Promise<void> {
   try {
     const result = await api<{ success: boolean }>(`/api/charging/${sessionId}`, { method: 'DELETE' });
 
-    if (!result.error) {
+    if (result.error) {
+      showError(`Failed to delete charging session: ${result.error}`);
+    } else {
       loadChargingSummary();
       loadChargingHistory();
-    } else {
-      showError(`Failed to delete charging session: ${result.error}`);
     }
   } catch (error) {
     console.error('Failed to delete charging session:', error);
@@ -334,7 +334,7 @@ export async function openChargingDetailModal(sessionId: number): Promise<void> 
   modal.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
 
-  const closeBtn = modal.querySelector('.modal-close') as HTMLElement | null;
+  const closeBtn = modal.querySelector<HTMLElement>('.modal-close');
   if (closeBtn) setTimeout(() => closeBtn.focus(), 100);
 
   // Show loading state

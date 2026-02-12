@@ -12,6 +12,28 @@ import { loadSummary, loadMpgTrend } from '@/summary';
 const loadSocAnalysis = async () => (await import('@/battery')).loadSocAnalysis();
 import type { TripSummary, TripDetail, TelemetryPoint } from '@/types/api';
 
+/** Get mode badge HTML for a trip row */
+function getModeBadge(trip: TripSummary): string {
+  if (!trip.distance_miles) {
+    return '<span class="badge badge-unknown">No Data</span>';
+  }
+  if (trip.gas_mode_entered) {
+    return `<span class="badge badge-gas">${trip.gas_miles != null ? trip.gas_miles.toFixed(1) : '0'} mi</span>`;
+  }
+  return '<span class="badge badge-electric">Electric</span>';
+}
+
+/** Get compact mode badge for trip card */
+function getCardModeBadge(trip: TripSummary): string {
+  if (!trip.distance_miles) {
+    return '<span class="badge badge-unknown">No Data</span>';
+  }
+  if (trip.gas_mode_entered) {
+    return '<span class="badge badge-gas">Gas</span>';
+  }
+  return '<span class="badge badge-electric">Electric</span>';
+}
+
 /**
  * Load recent trips
  */
@@ -59,15 +81,7 @@ export async function loadTrips(): Promise<void> {
         <td>${formatDateTime(new Date(trip.start_time))}</td>
         <td>${trip.distance_miles != null ? trip.distance_miles.toFixed(1) : '--'} mi</td>
         <td>${trip.electric_miles !== null && trip.electric_miles !== undefined ? trip.electric_miles.toFixed(1) : '--'} mi</td>
-        <td>
-          ${
-            !trip.distance_miles
-              ? '<span class="badge badge-unknown">No Data</span>'
-              : trip.gas_mode_entered
-                ? `<span class="badge badge-gas">${trip.gas_miles != null ? trip.gas_miles.toFixed(1) : '0'} mi</span>`
-                : '<span class="badge badge-electric">Electric</span>'
-          }
-        </td>
+        <td>${getModeBadge(trip)}</td>
         <td>${trip.gas_mpg ? trip.gas_mpg + ' MPG' : '--'}</td>
         <td>${trip.soc_at_gas_transition != null ? trip.soc_at_gas_transition.toFixed(1) + '%' : '--'}</td>
         <td>
@@ -84,13 +98,7 @@ export async function loadTrips(): Promise<void> {
       <div class="trip-card clickable" onclick="openTripModal(${trip.id})">
         <div class="trip-card-header">
           <span class="trip-card-date">${formatDate(new Date(trip.start_time))}</span>
-          ${
-            !trip.distance_miles
-              ? '<span class="badge badge-unknown">No Data</span>'
-              : trip.gas_mode_entered
-                ? '<span class="badge badge-gas">Gas</span>'
-                : '<span class="badge badge-electric">Electric</span>'
-          }
+          ${getCardModeBadge(trip)}
         </div>
         <div class="trip-card-stats">
           <div class="trip-card-stat">
@@ -341,7 +349,7 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
 export function setTimeframe(days: number): void {
   const buttons = document.querySelectorAll('.timeframe-btn');
   buttons.forEach((btn) => {
-    const btnDays = parseInt((btn as HTMLElement).dataset.days || '0');
+    const btnDays = Number.parseInt((btn as HTMLElement).dataset.days || '0');
     const isActive = btnDays === days;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');

@@ -132,81 +132,58 @@ def create_app(config_class=None):
     # WebSocket Authentication
     # ========================================================================
 
+    def _extract_ws_credentials(ws_auth):
+        """Extract token and password from WebSocket auth dict or query params."""
+        import flask
+        token = None
+        password = None
+        if ws_auth:
+            token = ws_auth.get('token')
+            password = ws_auth.get('password')
+        if not token and not password and hasattr(flask.request, 'args'):
+            token = flask.request.args.get('token')
+            password = flask.request.args.get('password')
+        return token, password
+
+    def _validate_ws_credentials(token, password):
+        """Validate WebSocket credentials against configured secrets."""
+        if cfg.WEBSOCKET_TOKEN and token:
+            if hmac.compare_digest(str(token), str(cfg.WEBSOCKET_TOKEN)):
+                logger.info("WebSocket authenticated with token")
+                return True
+            return False
+        if cfg.DASHBOARD_PASSWORD and password:
+            stored = cfg.DASHBOARD_PASSWORD
+            if stored.startswith("pbkdf2:") or stored.startswith("scrypt:"):
+                if check_password_hash(stored, password):
+                    logger.info("WebSocket authenticated with dashboard password")
+                    return True
+            elif hmac.compare_digest(str(password), str(stored)):
+                logger.info("WebSocket authenticated with dashboard password")
+                return True
+        return False
+
     @socketio.on('connect')
     def handle_connect(ws_auth):
-        """
-        Handle WebSocket connection with authentication.
-
-        Clients must provide authentication via one of:
-        - auth dict with 'token' field (preferred)
-        - auth dict with 'password' field (uses DASHBOARD_PASSWORD)
-        - query parameter 'token' in connection URL
-
-        If WEBSOCKET_AUTH_ENABLED is False, allows unauthenticated connections.
-
-        NOTE: The WebSocket token is intentionally embedded in the dashboard HTML
-        template (index.html) so the frontend JS can authenticate its Socket.IO
-        connection. This is by design — the dashboard itself is already behind
-        HTTP Basic Auth, so the WS token in the HTML is not an additional exposure.
-        """
+        """Handle WebSocket connection with authentication."""
         import flask
         from flask_socketio import disconnect
 
-        # Skip auth if disabled (development mode)
         if not cfg.WEBSOCKET_AUTH_ENABLED:
             logger.debug("WebSocket connection established (auth disabled)")
             return True
-
-        # Check if auth is required
         if not cfg.DASHBOARD_PASSWORD and not cfg.WEBSOCKET_TOKEN:
             logger.debug("WebSocket connection established (no auth configured)")
             return True
 
-        # Extract authentication credentials
-        provided_token = None
-        provided_password = None
+        token, password = _extract_ws_credentials(ws_auth)
+        if _validate_ws_credentials(token, password):
+            logger.info("WebSocket connection established from %s", flask.request.remote_addr)
+            return True
 
-        # 1. Check auth dict (Socket.IO client's auth parameter)
-        if ws_auth:
-            provided_token = ws_auth.get('token')
-            provided_password = ws_auth.get('password')
-
-        # 2. Check query parameters (fallback for simple clients)
-        if not provided_token and not provided_password:
-            if hasattr(flask.request, 'args'):
-                provided_token = flask.request.args.get('token')
-                provided_password = flask.request.args.get('password')
-
-        # Validate credentials
-        is_authenticated = False
-
-        # Prefer dedicated WebSocket token if configured (S5: use hmac.compare_digest)
-        if cfg.WEBSOCKET_TOKEN and provided_token:
-            if hmac.compare_digest(str(provided_token), str(cfg.WEBSOCKET_TOKEN)):
-                is_authenticated = True
-                logger.info("WebSocket authenticated with token")
-
-        # Fall back to dashboard password
-        elif cfg.DASHBOARD_PASSWORD and provided_password:
-            # Support hashed passwords
-            if cfg.DASHBOARD_PASSWORD.startswith("pbkdf2:") or cfg.DASHBOARD_PASSWORD.startswith("scrypt:"):
-                if check_password_hash(cfg.DASHBOARD_PASSWORD, provided_password):
-                    is_authenticated = True
-                    logger.info("WebSocket authenticated with dashboard password")
-            else:
-                # S3: use hmac.compare_digest for plaintext comparison
-                if hmac.compare_digest(str(provided_password), str(cfg.DASHBOARD_PASSWORD)):
-                    is_authenticated = True
-                    logger.info("WebSocket authenticated with dashboard password")
-
-        # Reject unauthorized connections
-        if not is_authenticated:
-            logger.warning(f"Unauthorized WebSocket connection attempt from {flask.request.remote_addr}")
-            disconnect()
-            return False
-
-        logger.info(f"WebSocket connection established from {flask.request.remote_addr}")
-        return True
+        logger.warning("Unauthorized WebSocket connection attempt from %s", flask.request.remote_addr)
+        disconnect()
+        return False
 
     # Expose for testing
     _app.handle_connect = handle_connect
@@ -245,41 +222,27 @@ def create_app(config_class=None):
         ]
     limiter._enabled = cfg.RATE_LIMIT_ENABLED  # type: ignore[attr-defined]
 
+    _PUBLIC_PREFIXES = ("/health", "/readiness", "/ready", _STATIC_PREFIX, "/clear-cache")
+    _PUBLIC_EXACT = frozenset({"/health", "/healthz", "/ready", "/readiness", "/clear-cache"})
+
+    def _is_public_path(path):
+        """Check if a request path is public (no auth required)."""
+        if path in _PUBLIC_EXACT:
+            return True
+        if any(path.startswith(p) for p in _PUBLIC_PREFIXES):
+            return True
+        if path.startswith("/api/telemetry/upload") or path.startswith("/torque/upload"):
+            return True
+        return path == "/api/errors/report"
+
     @_app.before_request
     def require_auth_globally():
-        """Require authentication for all routes except public endpoints.
-
-        Public (unauthenticated) endpoints:
-        - /health, /healthz, /ready, /readiness — health checks
-        - /api/telemetry/upload/* — Torque Pro uploads (uses API token, not Basic Auth)
-        - /api/errors/report — frontend error reporting
-        - /static/* — static assets
-        - /clear-cache — cache-clearing utility page
-        """
+        """Require authentication for all routes except public endpoints."""
         from flask import request as req
-
-        # Skip auth if no password is configured (development mode)
         if not cfg.DASHBOARD_PASSWORD:
             return None
-
-        path = req.path
-
-        # Public paths that don't require Basic Auth
-        public_prefixes = ("/health", "/readiness", "/ready", _STATIC_PREFIX, "/clear-cache")
-        public_exact = {"/health", "/healthz", "/ready", "/readiness", "/clear-cache"}
-
-        if path in public_exact or any(path.startswith(p) for p in public_prefixes):
+        if _is_public_path(req.path):
             return None
-
-        # Torque upload uses its own API token auth, not Basic Auth
-        if path.startswith("/api/telemetry/upload") or path.startswith("/torque/upload"):
-            return None
-
-        # Frontend error reporting doesn't need auth
-        if path == "/api/errors/report":
-            return None
-
-        # Everything else requires Basic Auth
         return auth.login_required(lambda: None)()
 
     @_app.before_request
@@ -305,53 +268,56 @@ def create_app(config_class=None):
             "max_size_bytes": cfg.MAX_CONTENT_LENGTH
         }), 413
 
-    @_app.after_request
-    def add_security_headers(response):
-        """Add security headers and request ID to all responses."""
-        from flask import g, request
+    _CSP_HEADER = (
+        "default-src 'self'; "
+        "script-src 'self' cdn.jsdelivr.net cdn.socket.io unpkg.com; "
+        "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net unpkg.com; "
+        "img-src 'self' data: *.tile.openstreetmap.org unpkg.com; "
+        "connect-src 'self' ws: wss:; "
+        "font-src 'self'; "
+        "frame-ancestors 'none'"
+    )
 
-        # Static asset caching headers (cache-busted via hashed filenames)
-        if request.path.startswith(_STATIC_PREFIX):
+    def _set_cache_headers(response, path):
+        """Set appropriate cache headers based on request path."""
+        if path.startswith(_STATIC_PREFIX):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-        elif request.path.startswith("/api/"):
+        elif path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
 
+    def _set_security_headers(response):
+        """Set common security headers."""
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
-        # S8: Removed X-XSS-Protection (deprecated; CSP replaces it)
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-
-        # S1: Content-Security-Policy
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' cdn.jsdelivr.net cdn.socket.io unpkg.com; "
-            "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net unpkg.com; "
-            "img-src 'self' data: *.tile.openstreetmap.org unpkg.com; "
-            "connect-src 'self' ws: wss:; "
-            "font-src 'self'; "
-            "frame-ancestors 'none'"
-        )
-
-        # Add HSTS in production (when not in debug mode)
+        response.headers["Content-Security-Policy"] = _CSP_HEADER
         if not _app.debug:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
-        # Add request ID to response headers for tracing
+    def _add_tracing_headers(response, path):
+        """Add request ID and response time to headers."""
+        from flask import g, request as _req
         if hasattr(g, "request_id"):
             response.headers["X-Request-ID"] = g.request_id
-
-        # Add response time header and log slow requests
         if hasattr(g, "request_start_time"):
             import time
             duration_ms = (time.monotonic() - g.request_start_time) * 1000
             response.headers["X-Response-Time"] = f"{duration_ms:.1f}ms"
-            if duration_ms > 500 and not request.path.startswith(_STATIC_PREFIX):
+            if duration_ms > 500 and not path.startswith(_STATIC_PREFIX):
                 logger.warning(
                     "Slow request: %s %s took %.1fms (status %d)",
-                    request.method, request.path, duration_ms, response.status_code,
+                    _req.method, path,
+                    duration_ms, response.status_code,
                 )
 
+    @_app.after_request
+    def add_security_headers(response):
+        """Add security headers and request ID to all responses."""
+        from flask import request
+        _set_cache_headers(response, request.path)
+        _set_security_headers(response)
+        _add_tracing_headers(response, request.path)
         return response
 
     # Initialize database

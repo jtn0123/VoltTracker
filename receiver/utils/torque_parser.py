@@ -58,7 +58,7 @@ class TorqueParser:
         "k22005b": "state_of_charge",
         "k5b": "state_of_charge",
         "k42": "battery_voltage",
-        # HV Battery (Volt-specific PIDs) - CORRECTED
+        # HV Battery PIDs
         "k22000b": "hv_battery_power_kw",  # Signed, positive=discharge, negative=charge
         "k22000a": "hv_battery_current_a",  # Signed current
         "k220009": "hv_battery_voltage_v",  # Pack voltage /100

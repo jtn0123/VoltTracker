@@ -10,6 +10,60 @@ import type { EfficiencySummary, MpgTrendPoint } from '@/types/api';
 import { EfficiencySummarySchema, MpgTrendPointSchema } from '@/types/schemas';
 import { z } from 'zod';
 
+/** Helper to set a card's value and subtitle */
+function setCardValue(primaryId: string, value: string | null, unit: string, subtitleId: string | null, subtitle: string, noDataSubtitle: string): void {
+  const el = document.getElementById(primaryId);
+  if (!el) return;
+  if (value) {
+    el.innerHTML = `${value}<span class="card-unit">${unit}</span>`;
+    if (subtitleId) {
+      const sub = document.getElementById(subtitleId);
+      if (sub) sub.textContent = subtitle;
+    }
+  } else {
+    el.textContent = '--';
+    if (subtitleId) {
+      const sub = document.getElementById(subtitleId);
+      if (sub) sub.textContent = noDataSubtitle;
+    }
+  }
+}
+
+function updateSummaryCards(data: EfficiencySummary): void {
+  document.querySelectorAll('#summary-section .skeleton-card, .electric-cards .skeleton-card').forEach((el) => el.classList.remove('skeleton-card'));
+
+  setCardValue('lifetime-mpg', data.lifetime_gas_mpg ? String(data.lifetime_gas_mpg) : null, 'MPG', 'lifetime-miles', `${data.lifetime_gas_miles} gas miles`, 'No gas data yet');
+  setCardValue('tank-mpg', data.current_tank_mpg ? String(data.current_tank_mpg) : null, 'MPG', 'tank-miles', `${data.current_tank_miles} miles this tank`, 'No data since last fill');
+
+  const totalMiles = document.getElementById('total-miles');
+  if (totalMiles) {
+    totalMiles.innerHTML = data.total_miles_tracked
+      ? `${data.total_miles_tracked.toLocaleString()}<span class="card-unit">mi</span>`
+      : '--';
+  }
+
+  const kwhPerMile = document.getElementById('kwh-per-mile');
+  const miPerKwh = document.getElementById('mi-per-kwh');
+  if (kwhPerMile) {
+    if (data.avg_kwh_per_mile) {
+      kwhPerMile.innerHTML = `${data.avg_kwh_per_mile}<span class="card-unit">kWh/mi</span>`;
+      if (miPerKwh) miPerKwh.textContent = data.mi_per_kwh ? `${data.mi_per_kwh} mi/kWh` : 'Lifetime average';
+    } else {
+      kwhPerMile.textContent = '--';
+      if (miPerKwh) miPerKwh.textContent = 'No electric data yet';
+    }
+  }
+
+  setCardValue('total-electric-miles', data.total_electric_miles ? String(data.total_electric_miles.toLocaleString()) : null, 'mi', 'total-kwh-used', data.total_kwh_used ? `${data.total_kwh_used} kWh used` : 'Total EV driving', 'No electric data yet');
+
+  const evRatio = document.getElementById('ev-ratio');
+  if (evRatio) {
+    evRatio.innerHTML = (data.ev_ratio !== undefined && data.ev_ratio !== null)
+      ? `${data.ev_ratio}<span class="card-unit">%</span>`
+      : '--';
+  }
+}
+
 /**
  * Load efficiency summary
  */
@@ -17,82 +71,7 @@ export async function loadSummary(): Promise<void> {
   try {
     const result = await api<EfficiencySummary>('/api/efficiency/summary', { useCache: true, maxAge: 300000, schema: EfficiencySummarySchema });
     if (result.error || !result.data) return;
-    const data = result.data;
-
-    // Remove skeleton loading states from summary cards
-    document.querySelectorAll('#summary-section .skeleton-card, .electric-cards .skeleton-card').forEach((el) => el.classList.remove('skeleton-card'));
-
-    const lifetimeMpg = document.getElementById('lifetime-mpg');
-    if (lifetimeMpg) {
-      if (data.lifetime_gas_mpg) {
-        lifetimeMpg.innerHTML = `${data.lifetime_gas_mpg}<span class="card-unit">MPG</span>`;
-        const lifetimeMiles = document.getElementById('lifetime-miles');
-        if (lifetimeMiles) lifetimeMiles.textContent = `${data.lifetime_gas_miles} gas miles`;
-      } else {
-        lifetimeMpg.textContent = '--';
-        const lifetimeMiles = document.getElementById('lifetime-miles');
-        if (lifetimeMiles) lifetimeMiles.textContent = 'No gas data yet';
-      }
-    }
-
-    const tankMpg = document.getElementById('tank-mpg');
-    if (tankMpg) {
-      if (data.current_tank_mpg) {
-        tankMpg.innerHTML = `${data.current_tank_mpg}<span class="card-unit">MPG</span>`;
-        const tankMiles = document.getElementById('tank-miles');
-        if (tankMiles) tankMiles.textContent = `${data.current_tank_miles} miles this tank`;
-      } else {
-        tankMpg.textContent = '--';
-        const tankMiles = document.getElementById('tank-miles');
-        if (tankMiles) tankMiles.textContent = 'No data since last fill';
-      }
-    }
-
-    const totalMiles = document.getElementById('total-miles');
-    if (totalMiles) {
-      if (data.total_miles_tracked) {
-        totalMiles.innerHTML = `${data.total_miles_tracked.toLocaleString()}<span class="card-unit">mi</span>`;
-      } else {
-        totalMiles.textContent = '--';
-      }
-    }
-
-    const kwhPerMile = document.getElementById('kwh-per-mile');
-    const miPerKwh = document.getElementById('mi-per-kwh');
-    if (kwhPerMile) {
-      if (data.avg_kwh_per_mile) {
-        kwhPerMile.innerHTML = `${data.avg_kwh_per_mile}<span class="card-unit">kWh/mi</span>`;
-        if (miPerKwh) {
-          miPerKwh.textContent = data.mi_per_kwh ? `${data.mi_per_kwh} mi/kWh` : 'Lifetime average';
-        }
-      } else {
-        kwhPerMile.textContent = '--';
-        if (miPerKwh) miPerKwh.textContent = 'No electric data yet';
-      }
-    }
-
-    const electricMiles = document.getElementById('total-electric-miles');
-    const totalKwhUsed = document.getElementById('total-kwh-used');
-    if (electricMiles) {
-      if (data.total_electric_miles) {
-        electricMiles.innerHTML = `${data.total_electric_miles.toLocaleString()}<span class="card-unit">mi</span>`;
-        if (totalKwhUsed) {
-          totalKwhUsed.textContent = data.total_kwh_used ? `${data.total_kwh_used} kWh used` : 'Total EV driving';
-        }
-      } else {
-        electricMiles.textContent = '--';
-        if (totalKwhUsed) totalKwhUsed.textContent = 'No electric data yet';
-      }
-    }
-
-    const evRatio = document.getElementById('ev-ratio');
-    if (evRatio) {
-      if (data.ev_ratio !== undefined && data.ev_ratio !== null) {
-        evRatio.innerHTML = `${data.ev_ratio}<span class="card-unit">%</span>`;
-      } else {
-        evRatio.textContent = '--';
-      }
-    }
+    updateSummaryCards(result.data);
   } catch (error) {
     console.error('Failed to load summary:', error);
   }
@@ -107,7 +86,7 @@ export async function loadMpgTrend(days: number): Promise<void> {
 
     document.querySelectorAll('.timeframe-btn').forEach((btn) => {
       const btnEl = btn as HTMLElement;
-      btn.classList.toggle('active', parseInt(btnEl.dataset.days || '0') === days);
+      btn.classList.toggle('active', Number.parseInt(btnEl.dataset.days || '0') === days);
     });
 
     let mpgUrl = `/api/mpg/trend?days=${days}`;
