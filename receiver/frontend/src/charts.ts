@@ -90,7 +90,7 @@ interface ChartFontDefaults {
  * Desktop-responsive chart defaults
  */
 export function getChartDefaults(): ChartFontDefaults {
-  const isDesktop = window.innerWidth >= 1024;
+  const isDesktop = globalThis.innerWidth >= 1024;
   return {
     font: {
       size: isDesktop ? 13 : 11,

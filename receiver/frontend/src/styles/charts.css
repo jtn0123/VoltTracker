@@ -81,11 +81,6 @@
    Responsive Chart Containers
    ============================================ */
 
-.chart-container {
-  position: relative;
-  width: 100%;
-}
-
 @media (max-width: 480px) {
   .chart-container {
     min-height: 200px;

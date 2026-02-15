@@ -59,12 +59,12 @@
     </header>
 
     <!-- Map Container -->
-    <div id="map-container" role="region" aria-label="GPS track map">
+    <section id="map-container" aria-label="GPS track map">
         <!-- Leaflet map will be rendered here -->
-    </div>
+    </section>
 
     <!-- Filter Sidebar -->
-    <aside class="filter-sidebar" id="filter-sidebar" role="complementary" aria-label="Map filters">
+    <aside class="filter-sidebar" id="filter-sidebar" aria-label="Map filters">
         <div class="sidebar-header">
             <h2>Filters</h2>
             <button class="btn-close" onclick="toggleFilters()" aria-label="Close filters">
@@ -105,21 +105,21 @@
 
             <!-- Efficiency Filter -->
             <div class="filter-group">
-                <label for="efficiency-filter">Efficiency (kWh/mi)</label>
+                <label id="efficiency-filter-label">Efficiency (kWh/mi)</label>
                 <div class="range-inputs">
-                    <input type="number" id="min-efficiency" placeholder="Min" step="0.1" min="0" max="1" onchange="applyFilters()">
+                    <input type="number" id="min-efficiency" aria-label="Minimum efficiency" placeholder="Min" step="0.1" min="0" max="1" onchange="applyFilters()">
                     <span>to</span>
-                    <input type="number" id="max-efficiency" placeholder="Max" step="0.1" min="0" max="1" onchange="applyFilters()">
+                    <input type="number" id="max-efficiency" aria-label="Maximum efficiency" placeholder="Max" step="0.1" min="0" max="1" onchange="applyFilters()">
                 </div>
             </div>
 
             <!-- Distance Filter -->
             <div class="filter-group">
-                <label for="distance-filter">Distance (miles)</label>
+                <label id="distance-filter-label">Distance (miles)</label>
                 <div class="range-inputs">
-                    <input type="number" id="min-distance" placeholder="Min" step="1" min="0" onchange="applyFilters()">
+                    <input type="number" id="min-distance" aria-label="Minimum distance" placeholder="Min" step="1" min="0" onchange="applyFilters()">
                     <span>to</span>
-                    <input type="number" id="max-distance" placeholder="Max" step="1" min="0" onchange="applyFilters()">
+                    <input type="number" id="max-distance" aria-label="Maximum distance" placeholder="Max" step="1" min="0" onchange="applyFilters()">
                 </div>
             </div>
 
@@ -163,7 +163,7 @@
     </aside>
 
     <!-- Trip List Sidebar -->
-    <aside class="trip-list-sidebar" id="trip-list-sidebar" role="complementary" aria-label="Trip list">
+    <aside class="trip-list-sidebar" id="trip-list-sidebar" aria-label="Trip list">
         <div class="sidebar-header">
             <h2>Trips</h2>
             <button class="btn-close" onclick="toggleTripList()" aria-label="Close trip list">
@@ -188,8 +188,8 @@
     </aside>
 
     <!-- Trip Detail Modal -->
-    <div class="modal" id="trip-detail-modal" role="dialog" aria-modal="true" aria-labelledby="trip-detail-title" aria-hidden="true">
-        <div class="modal-backdrop" onclick="closeTripDetail()"></div>
+    <dialog class="modal" id="trip-detail-modal" aria-modal="true" aria-labelledby="trip-detail-title" aria-hidden="true">
+        <div class="modal-backdrop" onclick="closeTripDetail()" onkeydown="if(event.key==='Enter'||event.key===' ')closeTripDetail()"></div>
         <div class="modal-content modal-trip-detail">
             <div class="modal-header">
                 <h2 id="trip-detail-title">Trip Details</h2>
@@ -218,10 +218,10 @@
                 </div>
             </div>
         </div>
-    </div>
+    </dialog>
 
     <!-- Map Controls -->
-    <div class="map-controls" role="group" aria-label="Map controls">
+    <fieldset class="map-controls" aria-label="Map controls">
         <button class="map-control-btn" id="btn-zoom-to-fit" onclick="zoomToFitAll()" title="Zoom to fit all routes" aria-label="Zoom to fit all routes">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M3 3h4v2H5v2H3V3zm0 12H5v2h2v2H3v-4zm14 0h-2v2h-2v2h4v-4zm0-12h-2V3h-2v2h4v4h-2V5z"/>
@@ -232,7 +232,7 @@
                 <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 14a6 6 0 110-12 6 6 0 010 12zm0-4a2 2 0 100-4 2 2 0 000 4z"/>
             </svg>
         </button>
-    </div>
+    </fieldset>
 
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loading-overlay" style="display: none;">

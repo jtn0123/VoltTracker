@@ -46,7 +46,7 @@
 
 .charging-card-badge.l1 {
   background-color: rgba(108, 117, 125, 0.2);
-  color: #adb5bd;
+  color: #c8cfd6;
 }
 
 .charging-card-badge.l2 {
@@ -256,11 +256,11 @@
 }
 
 .cost-item.electric {
-  border-left: 3px solid #00d4aa;
+  border-left: 3px solid #2eeabd;
 }
 
 .cost-item.gas {
-  border-left: 3px solid #ffc107;
+  border-left: 3px solid #ffd247;
 }
 
 .cost-label {
@@ -288,12 +288,12 @@
 }
 
 .cost-savings.positive {
-  color: #00d4aa;
+  color: #2eeabd;
   background-color: rgba(0, 212, 170, 0.1);
 }
 
 .cost-savings.negative {
-  color: #ffc107;
+  color: #ffd247;
   background-color: rgba(255, 193, 7, 0.1);
 }
 
@@ -505,7 +505,7 @@
 
 .savings-callout {
   background-color: rgba(39, 174, 96, 0.15);
-  color: #27ae60;
+  color: #3dd65b;
   padding: 0.75rem 1rem;
   border-radius: 8px;
   text-align: center;

@@ -1,3 +1,4 @@
+/* eslint-disable no-var */
 /**
  * Global type declarations for dynamically loaded libraries and toast.js
  */
@@ -15,7 +16,7 @@ interface ToastAction {
 }
 
 // Socket.IO client (loaded from CDN)
-declare const io: {
+declare var io: {
   (url?: string, opts?: Record<string, unknown>): SocketIOClient;
 };
 
@@ -86,25 +87,26 @@ interface FlatpickrInstance {
   selectedDates: Date[];
 }
 
-// Extend Window for functions exposed to inline HTML handlers
+// Extend globalThis for functions exposed to inline HTML handlers
+declare var openTripModal: (tripId: number) => Promise<void>;
+declare var closeTripModal: () => void;
+declare var deleteTrip: (tripId: number) => Promise<void>;
+declare var setTimeframe: (days: number) => void;
+declare var toggleTheme: () => void;
+declare var clearDateFilter: () => void;
+declare var toggleExportMenu: () => void;
+declare var openAddChargingModal: () => void | Promise<void>;
+declare var closeChargingModal: () => void | Promise<void>;
+declare var submitChargingSession: (event: Event) => Promise<void>;
+declare var deleteChargingSession: (sessionId: number) => Promise<void>;
+declare var openChargingDetailModal: (sessionId: number) => Promise<void>;
+declare var closeChargingDetailModal: () => void | Promise<void>;
+declare var handleImport: (event: Event) => Promise<void>;
+declare var closeImportResultModal: () => void | Promise<void>;
+declare var copyImportCode: () => void | Promise<void>;
+declare var copyImportReport: () => void | Promise<void>;
+// Keep Window interface for Chart.js and Leaflet (loaded dynamically)
 interface Window {
-  openTripModal: (tripId: number) => Promise<void>;
-  closeTripModal: () => void;
-  deleteTrip: (tripId: number) => Promise<void>;
-  setTimeframe: (days: number) => void;
-  toggleTheme: () => void;
-  clearDateFilter: () => void;
-  toggleExportMenu: () => void;
-  openAddChargingModal: () => void | Promise<void>;
-  closeChargingModal: () => void | Promise<void>;
-  submitChargingSession: (event: Event) => Promise<void>;
-  deleteChargingSession: (sessionId: number) => Promise<void>;
-  openChargingDetailModal: (sessionId: number) => Promise<void>;
-  closeChargingDetailModal: () => void | Promise<void>;
-  handleImport: (event: Event) => Promise<void>;
-  closeImportResultModal: () => void | Promise<void>;
-  copyImportCode: () => void | Promise<void>;
-  copyImportReport: () => void | Promise<void>;
   Chart?: typeof Chart;
   L?: typeof L;
 }

@@ -188,43 +188,43 @@ store.on('telemetry:update', () => {
 
 // ── Window function exposure (for inline HTML onclick handlers) ──────────────
 // Critical modules — available immediately
-window.openTripModal = openTripModal;
-window.closeTripModal = closeTripModal;
-window.deleteTrip = deleteTrip;
-window.setTimeframe = setTimeframe;
-window.toggleTheme = toggleTheme;
-window.clearDateFilter = clearDateFilter;
-window.toggleExportMenu = toggleExportMenu;
+globalThis.openTripModal = openTripModal;
+globalThis.closeTripModal = closeTripModal;
+globalThis.deleteTrip = deleteTrip;
+globalThis.setTimeframe = setTimeframe;
+globalThis.toggleTheme = toggleTheme;
+globalThis.clearDateFilter = clearDateFilter;
+globalThis.toggleExportMenu = toggleExportMenu;
 
 // Lazy-loaded modules — thunks that import on first call
-window.openAddChargingModal = async () => {
+globalThis.openAddChargingModal = async () => {
   (await getCharging()).openAddChargingModal();
 };
-window.closeChargingModal = async () => {
+globalThis.closeChargingModal = async () => {
   (await getCharging()).closeChargingModal();
 };
-window.submitChargingSession = async (e: Event) => {
+globalThis.submitChargingSession = async (e: Event) => {
   (await getCharging()).submitChargingSession(e);
 };
-window.deleteChargingSession = async (id: number) => {
+globalThis.deleteChargingSession = async (id: number) => {
   (await getCharging()).deleteChargingSession(id);
 };
-window.openChargingDetailModal = async (id: number) => {
+globalThis.openChargingDetailModal = async (id: number) => {
   (await getCharging()).openChargingDetailModal(id);
 };
-window.closeChargingDetailModal = async () => {
+globalThis.closeChargingDetailModal = async () => {
   (await getCharging()).closeChargingDetailModal();
 };
-window.handleImport = async (e: Event) => {
+globalThis.handleImport = async (e: Event) => {
   (await getImport()).handleImport(e);
 };
-window.closeImportResultModal = async () => {
+globalThis.closeImportResultModal = async () => {
   (await getImport()).closeImportResultModal();
 };
-window.copyImportCode = async () => {
+globalThis.copyImportCode = async () => {
   (await getImport()).copyImportCode();
 };
-window.copyImportReport = async () => {
+globalThis.copyImportReport = async () => {
   (await getImport()).copyImportReport();
 };
 

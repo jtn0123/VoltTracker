@@ -24,6 +24,38 @@ logger = logging.getLogger(__name__)
 telemetry_bp = Blueprint("telemetry", __name__)
 
 
+def _write_telemetry_fallback(data: dict, error: Exception) -> None:
+    """Write failed telemetry to a JSONL fallback file for later replay."""
+    try:
+        import os as _os
+        import json as _json
+
+        fallback_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "logs")
+        _os.makedirs(fallback_dir, exist_ok=True)
+        fallback_path = _os.path.join(fallback_dir, "failed_telemetry.jsonl")
+
+        # Rotate fallback file if it exceeds 10MB
+        _max_fallback_bytes = 10 * 1024 * 1024
+        if _os.path.exists(fallback_path) and _os.path.getsize(fallback_path) > _max_fallback_bytes:
+            _rotated = fallback_path + ".1"
+            if _os.path.exists(_rotated):
+                _os.remove(_rotated)
+            _os.rename(fallback_path, _rotated)
+
+        fallback_record = {
+            "session_id": str(data.get("session_id")),
+            "timestamp": data.get("timestamp").isoformat() if data.get("timestamp") else None,
+            "raw_data": data.get("raw_data"),
+            "error": str(error),
+            "logged_at": utc_now().isoformat(),
+        }
+        with open(fallback_path, "a") as fb:
+            fb.write(_json.dumps(fallback_record) + "\n")
+        logger.info("Wrote failed telemetry to fallback file")
+    except Exception as fb_err:
+        logger.error(f"Failed to write telemetry fallback: {fb_err}")
+
+
 def emit_telemetry_update(socketio, data: dict):
     """Emit real-time telemetry update to all connected clients."""
     socketio.emit(
@@ -206,33 +238,8 @@ def torque_upload(token=None):
                 db.rollback()
                 logger.error(f"Failed to commit telemetry: {commit_error}", exc_info=True)
 
-                # R2: File-based fallback — persist failed telemetry to disk so
-                # it can be replayed later when the database recovers.
-                try:
-                    import os as _os
-                    fallback_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "logs")
-                    _os.makedirs(fallback_dir, exist_ok=True)
-                    fallback_path = _os.path.join(fallback_dir, "failed_telemetry.jsonl")
-                    # R15: Rotate fallback file if it exceeds 10MB to prevent unbounded growth
-                    _max_fallback_bytes = 10 * 1024 * 1024
-                    if _os.path.exists(fallback_path) and _os.path.getsize(fallback_path) > _max_fallback_bytes:
-                        _rotated = fallback_path + ".1"
-                        if _os.path.exists(_rotated):
-                            _os.remove(_rotated)
-                        _os.rename(fallback_path, _rotated)
-                    import json as _json
-                    fallback_record = {
-                        "session_id": str(data.get("session_id")),
-                        "timestamp": data.get("timestamp").isoformat() if data.get("timestamp") else None,
-                        "raw_data": data.get("raw_data"),
-                        "error": str(commit_error),
-                        "logged_at": utc_now().isoformat(),
-                    }
-                    with open(fallback_path, "a") as fb:
-                        fb.write(_json.dumps(fallback_record) + "\n")
-                    logger.info("Wrote failed telemetry to fallback file")
-                except Exception as fb_err:
-                    logger.error(f"Failed to write telemetry fallback: {fb_err}")
+                # R2: File-based fallback — persist failed telemetry to disk
+                _write_telemetry_fallback(data, commit_error)
 
                 event.add_error(StructuredError(
                     ErrorCode.E200_DB_CONNECTION_FAILED,

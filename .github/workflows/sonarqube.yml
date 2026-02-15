@@ -26,7 +26,7 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r receiver/requirements-dev.txt
       - name: Run Python tests with coverage
-        run: pytest tests/ --cov=receiver --cov-report=xml:coverage.xml
+        run: pytest tests/ --cov=receiver --cov-branch --cov-report=xml:coverage.xml
 
       # TypeScript frontend coverage
       - name: Set up Node.js

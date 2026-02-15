@@ -528,7 +528,6 @@ function closeTripDetail() {
  * Find similar trips
  */
 async function findSimilarTrips() {
-    const modal = document.getElementById('trip-detail-modal');
     const gpxLink = document.getElementById('export-gpx-link');
     const tripId = gpxLink.href.split('/').slice(-2)[0]; // Extract trip ID from GPX link
 
@@ -577,10 +576,10 @@ async function findSimilarTrips() {
 function applyFilters() {
     currentFilters.dateRange = document.getElementById('date-range-filter').value;
     currentFilters.mode = document.querySelector('input[name="mode"]:checked').value;
-    currentFilters.minEfficiency = parseFloat(document.getElementById('min-efficiency').value) || null;
-    currentFilters.maxEfficiency = parseFloat(document.getElementById('max-efficiency').value) || null;
-    currentFilters.minDistance = parseFloat(document.getElementById('min-distance').value) || null;
-    currentFilters.maxDistance = parseFloat(document.getElementById('max-distance').value) || null;
+    currentFilters.minEfficiency = Number.parseFloat(document.getElementById('min-efficiency').value) || null;
+    currentFilters.maxEfficiency = Number.parseFloat(document.getElementById('max-efficiency').value) || null;
+    currentFilters.minDistance = Number.parseFloat(document.getElementById('min-distance').value) || null;
+    currentFilters.maxDistance = Number.parseFloat(document.getElementById('max-distance').value) || null;
 
     loadTrips();
 }
@@ -705,7 +704,7 @@ function toggleTripList() {
  */
 function initTheme() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.documentElement.dataset.theme = savedTheme;
     updateThemeIcon(savedTheme);
 }
 
@@ -713,10 +712,10 @@ function initTheme() {
  * Toggle theme
  */
 function toggleTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const currentTheme = document.documentElement.dataset.theme;
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
 
-    document.documentElement.setAttribute('data-theme', newTheme);
+    document.documentElement.dataset.theme = newTheme;
     localStorage.setItem('theme', newTheme);
     updateThemeIcon(newTheme);
 }

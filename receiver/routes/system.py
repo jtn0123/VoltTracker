@@ -84,14 +84,14 @@ def readiness_check():
     except Exception as e:
         errors.append(f"Database: {str(e)[:100]}")
 
-    if not os.environ.get("FLASK_TESTING"):
+    if os.environ.get("FLASK_TESTING"):
+        checks["scheduler"] = True
+    else:
         from services.scheduler import scheduler as sched
         if sched and sched.running:
             checks["scheduler"] = True
         else:
             errors.append("Scheduler: not running")
-    else:
-        checks["scheduler"] = True
 
     all_healthy = all(checks.values())
 

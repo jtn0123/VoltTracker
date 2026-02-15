@@ -151,7 +151,7 @@
 .battery-health-header h3 {
   font-size: 1rem;
   font-weight: 600;
-  color: #00d4aa;
+  color: #2eeabd;
   margin: 0;
   display: flex;
   align-items: center;
@@ -173,27 +173,27 @@
 
 .battery-health-status.excellent {
   background-color: rgba(0, 212, 170, 0.2);
-  color: #00d4aa;
+  color: #2eeabd;
 }
 
 .battery-health-status.good {
   background-color: rgba(40, 167, 69, 0.2);
-  color: #28a745;
+  color: #3dd65b;
 }
 
 .battery-health-status.fair {
   background-color: rgba(255, 193, 7, 0.2);
-  color: #ffc107;
+  color: #ffd247;
 }
 
 .battery-health-status.degraded {
   background-color: rgba(220, 53, 69, 0.2);
-  color: #dc3545;
+  color: #f04858;
 }
 
 .battery-health-status.unknown {
   background-color: rgba(108, 117, 125, 0.2);
-  color: #6c757d;
+  color: #9ca3ab;
 }
 
 .battery-health-visual {
@@ -210,7 +210,7 @@
 
 .battery-health-bar {
   height: 100%;
-  background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+  background: linear-gradient(90deg, #2eeabd 0%, #00b894 100%);
   border-radius: 8px;
   width: 0%;
   transition:
@@ -219,15 +219,15 @@
 }
 
 .battery-health-bar.good {
-  background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+  background: linear-gradient(90deg, #2eeabd 0%, #00b894 100%);
 }
 
 .battery-health-bar.fair {
-  background: linear-gradient(90deg, #ffc107 0%, #e6a700 100%);
+  background: linear-gradient(90deg, #ffd247 0%, #e6a700 100%);
 }
 
 .battery-health-bar.degraded {
-  background: linear-gradient(90deg, #dc3545 0%, #c82333 100%);
+  background: linear-gradient(90deg, #f04858 0%, #c82333 100%);
 }
 
 .battery-health-stats {
@@ -241,13 +241,13 @@
 }
 
 .battery-health-value {
-  color: #00d4aa;
+  color: #2eeabd;
 }
 
 .battery-health-original {
   font-size: 1rem;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .battery-health-percent {
@@ -262,11 +262,11 @@
 }
 
 .battery-health-trend.positive {
-  color: #00d4aa;
+  color: #2eeabd;
 }
 
 .battery-health-trend.negative {
-  color: #dc3545;
+  color: #f04858;
 }
 
 /* Battery health responsive */
@@ -311,17 +311,17 @@
 }
 
 .voltage-delta.good {
-  color: #27ae60;
+  color: #3dd65b;
   background-color: rgba(39, 174, 96, 0.15);
 }
 
 .voltage-delta.warning {
-  color: #f39c12;
+  color: #ffb833;
   background-color: rgba(243, 156, 18, 0.15);
 }
 
 .voltage-delta.danger {
-  color: #e74c3c;
+  color: #f25c4e;
   background-color: rgba(231, 76, 60, 0.15);
 }
 
@@ -356,7 +356,7 @@
 
 .module-value {
   height: 100%;
-  background: linear-gradient(90deg, #3282b8 0%, #27ae60 100%);
+  background: linear-gradient(90deg, #5ba8e0 0%, #3dd65b 100%);
   border-radius: 4px;
   transition: width 0.3s ease;
 }
@@ -425,7 +425,7 @@
 .legend-gradient {
   width: 100px;
   height: 8px;
-  background: linear-gradient(90deg, #e74c3c 0%, #f39c12 25%, #27ae60 50%, #3282b8 75%, #9b59b6 100%);
+  background: linear-gradient(90deg, #f25c4e 0%, #ffb833 25%, #3dd65b 50%, #5ba8e0 75%, #9b59b6 100%);
   border-radius: 4px;
 }
 
@@ -446,7 +446,7 @@
 
 .weak-cells-warning .warning-text {
   font-size: 0.875rem;
-  color: #f39c12;
+  color: #ffb833;
 }
 
 .battery-cells-footer {

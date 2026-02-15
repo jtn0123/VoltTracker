@@ -78,7 +78,7 @@ describe('Charts Module', () => {
   it('setupChartLazyLoading creates IntersectionObserver when sections exist', async () => {
     const observerSpy = vi.fn();
     globalThis.IntersectionObserver = class {
-      constructor(cb: IntersectionObserverCallback) { /* store cb */ }
+      constructor(_cb: IntersectionObserverCallback) { /* store cb */ }
       observe = observerSpy;
       unobserve = vi.fn();
       disconnect = vi.fn();

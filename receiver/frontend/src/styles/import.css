@@ -128,17 +128,17 @@
 }
 
 .import-status-badge.status-success {
-  background: #22c55e;
+  background: #1a9a4a;
   color: white;
 }
 
 .import-status-badge.status-partial {
-  background: #f59e0b;
+  background: #d48806;
   color: white;
 }
 
 .import-status-badge.status-failed {
-  background: #ef4444;
+  background: #c33;
   color: white;
 }
 
@@ -192,7 +192,7 @@
 .import-error-reason {
   font-family: monospace;
   font-size: 0.875rem;
-  color: #ef4444;
+  color: #c33;
   margin-bottom: 8px;
   font-weight: 600;
 }

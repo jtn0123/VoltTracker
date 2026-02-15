@@ -114,31 +114,38 @@ export function handleRealtimeTelemetry(data: WsTelemetryData): void {
   updateLiveValue('live-fuel', data.fuel_percent, 1, '%');
 
   if (data.hv_power !== null && data.hv_power !== undefined) {
-    const powerKw = document.getElementById('power-kw');
-    const powerMode = document.getElementById('power-mode');
-    const powerDirection = document.getElementById('power-direction');
-
-    if (powerKw) powerKw.textContent = Math.abs(data.hv_power).toFixed(1) + ' kW';
-    if (powerMode) {
-      if (data.hv_power > 1) {
-        powerMode.textContent = 'Discharging';
-        powerMode.className = 'power-mode discharging';
-      } else if (data.hv_power < -1) {
-        powerMode.textContent = 'Regen';
-        powerMode.className = 'power-mode regen';
-      } else {
-        powerMode.textContent = 'Idle';
-        powerMode.className = 'power-mode';
-      }
-    }
-    if (powerDirection) {
-      const arrow = powerDirection.querySelector('.arrow-icon');
-      if (arrow) arrow.textContent = data.hv_power < 0 ? '←' : '→';
-    }
+    updateRealtimePowerDisplay(data.hv_power);
   }
 
   updateConnectionStatus(ConnectionStatus.Live);
   store.emit('telemetry:update', data);
+}
+
+/**
+ * Update real-time power display elements (kW, mode label, direction arrow)
+ */
+function updateRealtimePowerDisplay(hvPower: number): void {
+  const powerKw = document.getElementById('power-kw');
+  const powerMode = document.getElementById('power-mode');
+  const powerDirection = document.getElementById('power-direction');
+
+  if (powerKw) powerKw.textContent = Math.abs(hvPower).toFixed(1) + ' kW';
+  if (powerMode) {
+    if (hvPower > 1) {
+      powerMode.textContent = 'Discharging';
+      powerMode.className = 'power-mode discharging';
+    } else if (hvPower < -1) {
+      powerMode.textContent = 'Regen';
+      powerMode.className = 'power-mode regen';
+    } else {
+      powerMode.textContent = 'Idle';
+      powerMode.className = 'power-mode';
+    }
+  }
+  if (powerDirection) {
+    const arrow = powerDirection.querySelector('.arrow-icon');
+    if (arrow) arrow.textContent = hvPower < 0 ? '←' : '→';
+  }
 }
 
 /**
@@ -157,6 +164,57 @@ export function updateLiveValue(elementId: string, value: number | null, decimal
 export function updateConnectionStatus(status: ConnectionStatus): void {
   // Use the reactive store — subscribers in main.ts handle the DOM updates
   store.setState({ connectionStatus: status });
+}
+
+/**
+ * Build HTML for the live trip stats section
+ */
+function buildLiveTripHtml(data: LiveTelemetryResponse): string {
+  const elapsed = getElapsedTime(data.start_time!);
+  const stats = data.trip_stats || {
+    in_gas_mode: false,
+    gas_mpg: null,
+    miles_driven: null,
+    kwh_used: null,
+    kwh_per_mile: null,
+  };
+
+  let modeLabel: string, modeValue: string, modeClass: string;
+  if (stats.in_gas_mode) {
+    modeLabel = 'Gas MPG';
+    modeValue = stats.gas_mpg ? stats.gas_mpg.toFixed(1) : '--';
+    modeClass = 'engine-on';
+  } else {
+    modeLabel = 'Mode';
+    modeValue = 'EV';
+    modeClass = 'engine-off';
+  }
+
+  return `
+    <div class="live-stats">
+      <div class="stat">
+        <span class="label">Miles</span>
+        <span class="value">${stats.miles_driven?.toFixed(1) || '--'}</span>
+      </div>
+      <div class="stat">
+        <span class="label">kWh</span>
+        <span class="value">${stats.kwh_used?.toFixed(2) || '--'}</span>
+      </div>
+      <div class="stat">
+        <span class="label">kWh/mi</span>
+        <span class="value">${stats.kwh_per_mile?.toFixed(2) || '--'}</span>
+      </div>
+      <div class="stat">
+        <span class="label">${modeLabel}</span>
+        <span class="value ${modeClass}">${modeValue}</span>
+      </div>
+    </div>
+    <div class="live-meta">
+      SOC: ${data.data!.soc?.toFixed(0) || '--'}% |
+      Fuel: ${data.data!.fuel_percent?.toFixed(0) || '--'}% |
+      ${elapsed} elapsed
+    </div>
+  `;
 }
 
 /**
@@ -179,51 +237,7 @@ export async function loadLiveTelemetry(): Promise<void> {
     if (data.active && data.data) {
       liveSection.style.display = 'block';
 
-      const elapsed = getElapsedTime(data.start_time!);
-      const stats = data.trip_stats || {
-        in_gas_mode: false,
-        gas_mpg: null,
-        miles_driven: null,
-        kwh_used: null,
-        kwh_per_mile: null,
-      };
-
-      let modeLabel: string, modeValue: string, modeClass: string;
-      if (stats.in_gas_mode) {
-        modeLabel = 'Gas MPG';
-        modeValue = stats.gas_mpg ? stats.gas_mpg.toFixed(1) : '--';
-        modeClass = 'engine-on';
-      } else {
-        modeLabel = 'Mode';
-        modeValue = 'EV';
-        modeClass = 'engine-off';
-      }
-
-      liveContent.innerHTML = `
-        <div class="live-stats">
-          <div class="stat">
-            <span class="label">Miles</span>
-            <span class="value">${stats.miles_driven?.toFixed(1) || '--'}</span>
-          </div>
-          <div class="stat">
-            <span class="label">kWh</span>
-            <span class="value">${stats.kwh_used?.toFixed(2) || '--'}</span>
-          </div>
-          <div class="stat">
-            <span class="label">kWh/mi</span>
-            <span class="value">${stats.kwh_per_mile?.toFixed(2) || '--'}</span>
-          </div>
-          <div class="stat">
-            <span class="label">${modeLabel}</span>
-            <span class="value ${modeClass}">${modeValue}</span>
-          </div>
-        </div>
-        <div class="live-meta">
-          SOC: ${data.data.soc?.toFixed(0) || '--'}% |
-          Fuel: ${data.data.fuel_percent?.toFixed(0) || '--'}% |
-          ${elapsed} elapsed
-        </div>
-      `;
+      liveContent.innerHTML = buildLiveTripHtml(data);
 
       updatePowerFlow(data.data, powerFlowSection);
 
@@ -371,23 +385,16 @@ export function updatePowerFlow(telemetry: TelemetryPoint, section: HTMLElement 
     }
   }
 
-  const motorARpm = document.getElementById('motor-a-rpm');
-  if (motorARpm) {
-    motorARpm.textContent =
-      telemetry.motor_a_rpm !== null ? `${Math.round(telemetry.motor_a_rpm).toLocaleString()} RPM` : '-- RPM';
-  }
+  updatePowertrainDisplay(telemetry);
+}
 
-  const motorBRpm = document.getElementById('motor-b-rpm');
-  if (motorBRpm) {
-    motorBRpm.textContent =
-      telemetry.motor_b_rpm !== null ? `${Math.round(telemetry.motor_b_rpm).toLocaleString()} RPM` : '-- RPM';
-  }
-
-  const generatorRpm = document.getElementById('generator-rpm');
-  if (generatorRpm) {
-    generatorRpm.textContent =
-      telemetry.generator_rpm !== null ? `${Math.round(telemetry.generator_rpm).toLocaleString()} RPM` : '-- RPM';
-  }
+/**
+ * Update powertrain RPM, engine status, and motor temperature display elements
+ */
+function updatePowertrainDisplay(telemetry: TelemetryPoint): void {
+  updateRpmElement('motor-a-rpm', telemetry.motor_a_rpm);
+  updateRpmElement('motor-b-rpm', telemetry.motor_b_rpm);
+  updateRpmElement('generator-rpm', telemetry.generator_rpm);
 
   const engineStatus = document.getElementById('engine-status');
   if (engineStatus) {
@@ -401,12 +408,21 @@ export function updatePowerFlow(telemetry: TelemetryPoint, section: HTMLElement 
   const motorTemps = document.getElementById('motor-temps');
   if (motorTempsRow && motorTemps) {
     const maxTemp = telemetry.motor_temp_max_f;
-
     if (maxTemp !== null && maxTemp !== undefined) {
       motorTempsRow.style.display = 'flex';
       motorTemps.textContent = `${Math.round(maxTemp)}°F`;
     } else {
       motorTempsRow.style.display = 'none';
     }
+  }
+}
+
+/**
+ * Update an RPM display element by id
+ */
+function updateRpmElement(elementId: string, rpm: number | null): void {
+  const el = document.getElementById(elementId);
+  if (el) {
+    el.textContent = rpm !== null ? `${Math.round(rpm).toLocaleString()} RPM` : '-- RPM';
   }
 }

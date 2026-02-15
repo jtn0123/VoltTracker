@@ -52,9 +52,10 @@ def setup_logging():
     """
     from logging.handlers import RotatingFileHandler
 
+    from utils.log_formatter import get_log_formatter
+
     log_level = getattr(logging, Config.LOG_LEVEL)
-    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    formatter = logging.Formatter(log_format)
+    formatter = get_log_formatter()
 
     # Get root logger
     root_logger = logging.getLogger()
@@ -214,6 +215,13 @@ def create_app(config_class=None):
                 return username if hmac.compare_digest(str(password), str(stored_password)) else None
         return None
 
+    # Initialize CSRF protection (API/telemetry routes exempted below after import)
+    from flask_wtf.csrf import CSRFProtect
+    if os.environ.get("FLASK_TESTING"):
+        _app.config["WTF_CSRF_ENABLED"] = False
+    csrf = CSRFProtect(_app)
+    _app.extensions["csrf"] = csrf
+
     # Initialize rate limiter
     limiter.init_app(_app)
     if cfg.RATE_LIMIT_ENABLED:
@@ -366,6 +374,9 @@ def create_app(config_class=None):
 
     # Apply rate limiting exemption to torque upload endpoint
     limiter.exempt(telemetry_bp)
+
+    # Exempt telemetry and API blueprints from CSRF (they use token auth)
+    csrf.exempt(telemetry_bp)
 
     # Initialize structured error tracking (404/500/unhandled exception handlers)
     from utils.error_tracking import init_error_handlers  # noqa: E402

@@ -86,39 +86,8 @@ def calculate_efficiency_color(kwh_per_mile: Optional[float], _speed_mph: Option
         return '#ef4444'  # Red
 
 
-@map_bp.route("/api/trips/map", methods=["GET"])
-def get_trips_map_data():
-    """
-    Get aggregated GPS data for all trips to display on map.
-
-    Query params:
-        start_date: Filter trips after this date (ISO format)
-        end_date: Filter trips before this date (ISO format)
-        date_range: Date shortcut (today, yesterday, last_7_days, etc.)
-        min_efficiency: Minimum kWh/mile
-        max_efficiency: Maximum kWh/mile
-        min_mpg: Minimum gas MPG
-        min_distance: Minimum distance in miles
-        max_distance: Maximum distance in miles
-        gas_only: If true, only gas-mode trips
-        ev_only: If true, only EV trips
-        max_points_per_trip: Maximum GPS points per trip (default 100)
-
-    Returns:
-        JSON with trips list containing:
-        - trip_id, start_time, distance, efficiency metrics
-        - points: List of [lat, lon, efficiency, speed] for route
-        - bounds: {north, south, east, west} for quick filtering
-    """
-    db = get_db()
-
-    # Base query for closed, non-deleted trips
-    query = db.query(Trip).filter(
-        Trip.is_closed.is_(True),
-        Trip.deleted_at.is_(None)
-    )
-
-    # Date filters
+def _apply_map_date_filters(query):
+    """Apply date range filters from request args to a trip query."""
     date_range_shortcut = request.args.get("date_range")
     if date_range_shortcut:
         date_range = parse_date_shortcut(date_range_shortcut)
@@ -137,8 +106,11 @@ def get_trips_map_data():
                 query = query.filter(Trip.start_time >= start_date_dt)
             if end_date:
                 query = query.filter(Trip.start_time <= end_date_dt)
+    return query, request.args.get("date_range")
 
-    # Efficiency filters
+
+def _apply_map_metric_filters(query):
+    """Apply efficiency, distance, and mode filters from request args."""
     min_efficiency = request.args.get("min_efficiency", type=float)
     if min_efficiency:
         query = query.filter(Trip.kwh_per_mile >= min_efficiency)
@@ -151,7 +123,6 @@ def get_trips_map_data():
     if min_mpg:
         query = query.filter(Trip.gas_mpg >= min_mpg)
 
-    # Distance filters
     min_distance = request.args.get("min_distance", type=float)
     if min_distance:
         query = query.filter(Trip.distance_miles >= min_distance)
@@ -160,7 +131,6 @@ def get_trips_map_data():
     if max_distance:
         query = query.filter(Trip.distance_miles <= max_distance)
 
-    # Mode filters
     gas_only = request.args.get("gas_only", "").lower() == "true"
     if gas_only:
         query = query.filter(Trip.gas_mode_entered.is_(True))
@@ -169,112 +139,136 @@ def get_trips_map_data():
     if ev_only:
         query = query.filter(Trip.gas_mode_entered.is_(False))
 
-    # Limit to recent trips to avoid overwhelming the map (default 100 trips)
-    max_trips = request.args.get("max_trips", default=100, type=int)
-    if max_trips > 500:
-        max_trips = 500  # Hard limit
+    return query, {
+        'min_efficiency': min_efficiency,
+        'max_efficiency': max_efficiency,
+        'min_mpg': min_mpg,
+        'min_distance': min_distance,
+        'max_distance': max_distance,
+        'gas_only': gas_only,
+        'ev_only': ev_only,
+    }
 
-    max_points_per_trip = request.args.get("max_points_per_trip", default=100, type=int)
-    if max_points_per_trip > 500:
-        max_points_per_trip = 500
 
-    # Get trips ordered by start time (most recent first)
-    trips = query.order_by(Trip.start_time.desc()).limit(max_trips).all()
-
-    # Build response
-    trips_data = []
-
-    # Batch-fetch all telemetry for all trips in a single query (fixes N+1)
-    session_ids = [trip.session_id for trip in trips]
-    all_telemetry = []
-    if session_ids:
-        all_telemetry = (
-            db.query(TelemetryRaw)
-            .filter(
-                TelemetryRaw.session_id.in_(session_ids),
-                TelemetryRaw.latitude.isnot(None),
-                TelemetryRaw.longitude.isnot(None),
-            )
-            .order_by(TelemetryRaw.session_id, TelemetryRaw.timestamp)
-            .all()
-        )
-
-    # Group telemetry by session_id
+def _fetch_telemetry_by_session(db, session_ids: list) -> dict:
+    """Batch-fetch GPS telemetry for multiple sessions, grouped by session_id."""
     from collections import defaultdict
+
+    if not session_ids:
+        return {}
+
+    all_telemetry = (
+        db.query(TelemetryRaw)
+        .filter(
+            TelemetryRaw.session_id.in_(session_ids),
+            TelemetryRaw.latitude.isnot(None),
+            TelemetryRaw.longitude.isnot(None),
+        )
+        .order_by(TelemetryRaw.session_id, TelemetryRaw.timestamp)
+        .all()
+    )
+
     telemetry_by_session: dict = defaultdict(list)
     for t in all_telemetry:
         telemetry_by_session[t.session_id].append(t)
+    return telemetry_by_session
 
+
+def _build_trip_points(telemetry: list) -> List[Dict[str, Any]]:
+    """Build GPS point dicts with instantaneous efficiency from telemetry records."""
+    points = []
+    for t in telemetry:
+        efficiency = None
+        if t.hv_battery_power_kw and t.speed_mph and t.speed_mph > 5:
+            efficiency = abs(t.hv_battery_power_kw) / t.speed_mph if t.hv_battery_power_kw > 0 else None
+
+        points.append({
+            'lat': float(t.latitude),
+            'lon': float(t.longitude),
+            'speed': float(t.speed_mph) if t.speed_mph else 0,
+            'efficiency': round(efficiency, 3) if efficiency else None,
+            'timestamp': t.timestamp.isoformat() if t.timestamp else None
+        })
+    return points
+
+
+def _calculate_bounds(points: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calculate geographic bounding box from GPS points."""
+    lats = [p['lat'] for p in points]
+    lons = [p['lon'] for p in points]
+    return {
+        'north': max(lats),
+        'south': min(lats),
+        'east': max(lons),
+        'west': min(lons),
+        'center': {
+            'lat': sum(lats) / len(lats),
+            'lon': sum(lons) / len(lons)
+        }
+    }
+
+
+def _serialize_trip_for_map(trip: 'Trip', points: list, bounds: dict, raw_count: int) -> Dict[str, Any]:
+    """Serialize a trip and its GPS data for the map response."""
+    return {
+        'id': trip.id,
+        'session_id': trip.session_id,
+        'start_time': trip.start_time.isoformat(),
+        'end_time': trip.end_time.isoformat() if trip.end_time else None,
+        'distance_miles': round(trip.distance_miles, 2) if trip.distance_miles else 0,
+        'kwh_per_mile': round(trip.kwh_per_mile, 3) if trip.kwh_per_mile else None,
+        'gas_mpg': round(trip.gas_mpg, 1) if trip.gas_mpg else None,
+        'electric_miles': round(trip.electric_miles, 2) if trip.electric_miles else 0,
+        'gas_miles': round(trip.gas_miles, 2) if trip.gas_miles else 0,
+        'avg_temp_f': round(trip.ambient_temp_avg_f, 1) if trip.ambient_temp_avg_f else None,
+        'points': points,
+        'bounds': bounds,
+        'point_count': raw_count,
+    }
+
+
+@map_bp.route("/api/trips/map", methods=["GET"])
+def get_trips_map_data():
+    """
+    Get aggregated GPS data for all trips to display on map.
+
+    Query params:
+        start_date, end_date, date_range, min/max_efficiency, min_mpg,
+        min/max_distance, gas_only, ev_only, max_trips, max_points_per_trip
+
+    Returns:
+        JSON with trips list containing GPS points, bounds, and efficiency metrics.
+    """
+    db = get_db()
+
+    query = db.query(Trip).filter(Trip.is_closed.is_(True), Trip.deleted_at.is_(None))
+
+    query, date_range_shortcut = _apply_map_date_filters(query)
+    query, filter_info = _apply_map_metric_filters(query)
+
+    max_trips = min(request.args.get("max_trips", default=100, type=int), 500)
+    max_points_per_trip = min(request.args.get("max_points_per_trip", default=100, type=int), 500)
+
+    trips = query.order_by(Trip.start_time.desc()).limit(max_trips).all()
+
+    telemetry_by_session = _fetch_telemetry_by_session(db, [trip.session_id for trip in trips])
+
+    trips_data = []
     for trip in trips:
         telemetry = telemetry_by_session.get(trip.session_id, [])
-
         if len(telemetry) < 2:
-            continue  # Skip trips without GPS data
+            continue
 
-        # Build points list with efficiency/speed data
-        points = []
-        for t in telemetry:
-            # Calculate instantaneous efficiency if data available
-            efficiency = None
-            if t.hv_battery_power_kw and t.speed_mph and t.speed_mph > 5:
-                # kW to kWh (power * time), distance = speed * time
-                # Simplified: kWh/mile ≈ kW / mph
-                efficiency = abs(t.hv_battery_power_kw) / t.speed_mph if t.hv_battery_power_kw > 0 else None
-
-            points.append({
-                'lat': float(t.latitude),
-                'lon': float(t.longitude),
-                'speed': float(t.speed_mph) if t.speed_mph else 0,
-                'efficiency': round(efficiency, 3) if efficiency else None,
-                'timestamp': t.timestamp.isoformat() if t.timestamp else None
-            })
-
-        # Subsample points to reduce data size
+        points = _build_trip_points(telemetry)
         points = subsample_gps_points(points, max_points_per_trip)
+        bounds = _calculate_bounds(points)
+        trips_data.append(_serialize_trip_for_map(trip, points, bounds, len(telemetry)))
 
-        # Calculate route bounds
-        lats = [p['lat'] for p in points]
-        lons = [p['lon'] for p in points]
-        bounds = {
-            'north': max(lats),
-            'south': min(lats),
-            'east': max(lons),
-            'west': min(lons),
-            'center': {
-                'lat': sum(lats) / len(lats),
-                'lon': sum(lons) / len(lons)
-            }
-        }
-
-        trips_data.append({
-            'id': trip.id,
-            'session_id': trip.session_id,
-            'start_time': trip.start_time.isoformat(),
-            'end_time': trip.end_time.isoformat() if trip.end_time else None,
-            'distance_miles': round(trip.distance_miles, 2) if trip.distance_miles else 0,
-            'kwh_per_mile': round(trip.kwh_per_mile, 3) if trip.kwh_per_mile else None,
-            'gas_mpg': round(trip.gas_mpg, 1) if trip.gas_mpg else None,
-            'electric_miles': round(trip.electric_miles, 2) if trip.electric_miles else 0,
-            'gas_miles': round(trip.gas_miles, 2) if trip.gas_miles else 0,
-            'avg_temp_f': round(trip.ambient_temp_avg_f, 1) if trip.ambient_temp_avg_f else None,
-            'points': points,
-            'bounds': bounds,
-            'point_count': len(telemetry)  # Original point count before subsampling
-        })
-
+    filter_info['date_range'] = date_range_shortcut or 'custom'
     return jsonify({
         'trips': trips_data,
         'total_trips': len(trips_data),
-        'filters_applied': {
-            'date_range': date_range_shortcut or 'custom',
-            'min_efficiency': min_efficiency,
-            'max_efficiency': max_efficiency,
-            'min_mpg': min_mpg,
-            'min_distance': min_distance,
-            'max_distance': max_distance,
-            'gas_only': gas_only,
-            'ev_only': ev_only
-        }
+        'filters_applied': filter_info,
     })
 
 

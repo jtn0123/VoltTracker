@@ -153,22 +153,22 @@
 
 .power-bar {
     height: 100%;
-    background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+    background: linear-gradient(90deg, #2eeabd 0%, #00b894 100%);
     border-radius: 6px;
     width: 50%;
     transition: width 0.3s ease;
 }
 
 .power-bar.discharging {
-    background: linear-gradient(90deg, #ff6b6b 0%, #ee5a5a 100%);
+    background: linear-gradient(90deg, #ff8a8a 0%, #ee5a5a 100%);
 }
 
 .power-bar.regenerating {
-    background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+    background: linear-gradient(90deg, #2eeabd 0%, #00b894 100%);
 }
 
 .power-bar.charging {
-    background: linear-gradient(90deg, #3498db 0%, #2980b9 100%);
+    background: linear-gradient(90deg, #5bb8f5 0%, #2980b9 100%);
 }
 
 .power-stats {
@@ -189,12 +189,12 @@
 }
 
 .power-arrow.active .arrow-icon {
-    color: #00d4aa;
+    color: #2eeabd;
 }
 
 .power-arrow.reverse .arrow-icon {
     transform: scaleX(-1);
-    color: #3498db;
+    color: #5bb8f5;
 }
 
 .power-value {
@@ -214,22 +214,22 @@
 
 .power-mode.discharging {
     background-color: rgba(255, 107, 107, 0.3);
-    color: #ff6b6b;
+    color: #ff8a8a;
 }
 
 .power-mode.regenerating {
     background-color: rgba(0, 212, 170, 0.3);
-    color: #00d4aa;
+    color: #2eeabd;
 }
 
 .power-mode.charging {
     background-color: rgba(52, 152, 219, 0.3);
-    color: #3498db;
+    color: #5bb8f5;
 }
 
 .power-mode.idle {
     background-color: rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(255, 255, 255, 0.85);
 }
 
 /* Powertrain Stats */
@@ -275,11 +275,11 @@
 }
 
 .powertrain-value.engine-on {
-    color: #ff6b6b;
+    color: #ff8a8a;
 }
 
 .powertrain-value.engine-off {
-    color: #00d4aa;
+    color: #2eeabd;
 }
 
 /* Power Flow responsive */
@@ -366,20 +366,20 @@
     --bg-secondary: #161922;
     --bg-card: #1c1f2e;
     --accent: #0f4c75;
-    --accent-light: #3282b8;
+    --accent-light: #5ba8e0;
     --text-primary: #ffffff;
     --text-secondary: #b8b8b8;
-    --text-muted: #6c757d;
-    --success: #28a745;
-    --warning: #ffc107;
-    --danger: #dc3545;
+    --text-muted: #9ca3ab;
+    --success: #3dd65b;
+    --warning: #ffd247;
+    --danger: #f04858;
     --border-color: #2d3748;
 
     /* Accent Colors - Electric vs Gas */
-    --electric: #00d4aa;
+    --electric: #2eeabd;
     --electric-dark: #00b894;
     --electric-glow: rgba(0, 212, 170, 0.2);
-    --gas: #ffc107;
+    --gas: #ffd247;
     --gas-dark: #e6a700;
     --gas-glow: rgba(255, 193, 7, 0.2);
 
@@ -1222,7 +1222,7 @@ body {
 
 .charging-card-badge.l1 {
     background-color: rgba(108, 117, 125, 0.2);
-    color: #adb5bd;
+    color: #c8cfd6;
 }
 
 .charging-card-badge.l2 {
@@ -1351,13 +1351,13 @@ body {
     --bg-secondary: #ffffff;
     --bg-card: #ffffff;
     --accent: #0f4c75;
-    --accent-light: #3282b8;
+    --accent-light: #5ba8e0;
     --text-primary: #111827;
     --text-secondary: #4a4a4a;
-    --text-muted: #6c757d;
-    --success: #28a745;
+    --text-muted: #9ca3ab;
+    --success: #3dd65b;
     --warning: #e6a700;
-    --danger: #dc3545;
+    --danger: #f04858;
     --border-color: #dee2e6;
 }
 
@@ -1605,17 +1605,17 @@ body {
 }
 
 .import-status-badge.status-success {
-    background: #22c55e;
+    background: #1a9a4a;
     color: white;
 }
 
 .import-status-badge.status-partial {
-    background: #f59e0b;
+    background: #d48806;
     color: white;
 }
 
 .import-status-badge.status-failed {
-    background: #ef4444;
+    background: #c33;
     color: white;
 }
 
@@ -1669,7 +1669,7 @@ body {
 .import-error-reason {
     font-family: monospace;
     font-size: 0.875rem;
-    color: #ef4444;
+    color: #c33;
     margin-bottom: 8px;
     font-weight: 600;
 }
@@ -1805,7 +1805,7 @@ body {
 .battery-health-header h3 {
     font-size: 1rem;
     font-weight: 600;
-    color: #00d4aa;
+    color: #2eeabd;
     margin: 0;
     display: flex;
     align-items: center;
@@ -1827,27 +1827,27 @@ body {
 
 .battery-health-status.excellent {
     background-color: rgba(0, 212, 170, 0.2);
-    color: #00d4aa;
+    color: #2eeabd;
 }
 
 .battery-health-status.good {
     background-color: rgba(40, 167, 69, 0.2);
-    color: #28a745;
+    color: #3dd65b;
 }
 
 .battery-health-status.fair {
     background-color: rgba(255, 193, 7, 0.2);
-    color: #ffc107;
+    color: #ffd247;
 }
 
 .battery-health-status.degraded {
     background-color: rgba(220, 53, 69, 0.2);
-    color: #dc3545;
+    color: #f04858;
 }
 
 .battery-health-status.unknown {
     background-color: rgba(108, 117, 125, 0.2);
-    color: #6c757d;
+    color: #9ca3ab;
 }
 
 .battery-health-visual {
@@ -1864,22 +1864,22 @@ body {
 
 .battery-health-bar {
     height: 100%;
-    background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+    background: linear-gradient(90deg, #2eeabd 0%, #00b894 100%);
     border-radius: 8px;
     width: 0%;
     transition: width 0.5s ease, background 0.5s ease;
 }
 
 .battery-health-bar.good {
-    background: linear-gradient(90deg, #00d4aa 0%, #00b894 100%);
+    background: linear-gradient(90deg, #2eeabd 0%, #00b894 100%);
 }
 
 .battery-health-bar.fair {
-    background: linear-gradient(90deg, #ffc107 0%, #e6a700 100%);
+    background: linear-gradient(90deg, #ffd247 0%, #e6a700 100%);
 }
 
 .battery-health-bar.degraded {
-    background: linear-gradient(90deg, #dc3545 0%, #c82333 100%);
+    background: linear-gradient(90deg, #f04858 0%, #c82333 100%);
 }
 
 .battery-health-stats {
@@ -1893,13 +1893,13 @@ body {
 }
 
 .battery-health-value {
-    color: #00d4aa;
+    color: #2eeabd;
 }
 
 .battery-health-original {
     font-size: 1rem;
     font-weight: 400;
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(255, 255, 255, 0.85);
 }
 
 .battery-health-percent {
@@ -1914,11 +1914,11 @@ body {
 }
 
 .battery-health-trend.positive {
-    color: #00d4aa;
+    color: #2eeabd;
 }
 
 .battery-health-trend.negative {
-    color: #dc3545;
+    color: #f04858;
 }
 
 /* Battery health responsive */
@@ -2145,11 +2145,11 @@ body {
 
 .card-electric {
     background: linear-gradient(135deg, var(--bg-card) 0%, #0a2d4d 100%);
-    border-left: 3px solid #00d4aa;
+    border-left: 3px solid #2eeabd;
 }
 
 .card-electric .card-label {
-    color: #00d4aa;
+    color: #2eeabd;
 }
 
 /* ============================================
@@ -2241,11 +2241,11 @@ body {
 }
 
 .cost-item.electric {
-    border-left: 3px solid #00d4aa;
+    border-left: 3px solid #2eeabd;
 }
 
 .cost-item.gas {
-    border-left: 3px solid #ffc107;
+    border-left: 3px solid #ffd247;
 }
 
 .cost-label {
@@ -2273,12 +2273,12 @@ body {
 }
 
 .cost-savings.positive {
-    color: #00d4aa;
+    color: #2eeabd;
     background-color: rgba(0, 212, 170, 0.1);
 }
 
 .cost-savings.negative {
-    color: #ffc107;
+    color: #ffd247;
     background-color: rgba(255, 193, 7, 0.1);
 }
 
@@ -2385,27 +2385,11 @@ body {
 }
 
 /* Timeframe button enhancements */
-.timeframe-btn {
-    transition: all 0.2s ease-out;
-}
-
-.timeframe-btn:hover {
-    transform: translateY(-1px);
-}
-
 .timeframe-btn:active {
     transform: translateY(0) scale(0.98);
 }
 
 /* Export button polish */
-.export-btn {
-    transition: all 0.2s ease-out;
-}
-
-.export-btn:hover {
-    transform: translateY(-1px);
-}
-
 .export-btn:active {
     transform: translateY(0) scale(0.98);
 }
@@ -2481,10 +2465,6 @@ body {
     transition: all 0.2s;
 }
 
-.btn-primary:hover {
-    background-color: #2a72a8;
-}
-
 .btn-primary:disabled,
 .btn-secondary:disabled {
     opacity: 0.5;
@@ -2520,17 +2500,17 @@ body {
 
 .charge-type-badge.l1 {
     background-color: rgba(255, 193, 7, 0.2);
-    color: #ffc107;
+    color: #ffd247;
 }
 
 .charge-type-badge.l2 {
     background-color: rgba(0, 212, 170, 0.2);
-    color: #00d4aa;
+    color: #2eeabd;
 }
 
 .charge-type-badge.dcfc {
     background-color: rgba(99, 102, 241, 0.06);
-    color: #3282b8;
+    color: #5ba8e0;
 }
 
 /* Mobile responsive for forms */
@@ -2629,20 +2609,6 @@ body {
    Status Indicators with Icons (Not just colors)
    ============================================ */
 
-.status-indicator {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background-color: var(--success);
-    position: relative;
-}
-
 /* Add icon overlay for status */
 .status-dot::after {
     content: '✓';
@@ -2652,10 +2618,6 @@ body {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-}
-
-.status-dot.offline {
-    background-color: var(--danger);
 }
 
 .status-dot.offline::after {
@@ -2691,25 +2653,7 @@ body {
    ============================================ */
 
 /* Ensure minimum 4.5:1 contrast ratio for normal text */
-:root {
-    /* Adjusted colors for better contrast */
-    --text-secondary-contrast: #c4c4c4;  /* Lighter for better contrast */
-}
-
 /* Use higher contrast colors for important text */
-.card-value {
-    color: var(--text-primary);
-    font-weight: 600;
-}
-
-.card-label {
-    color: var(--text-secondary-contrast, var(--text-secondary));
-}
-
-.stat-label {
-    color: var(--text-secondary-contrast, var(--text-secondary));
-}
-
 /* High contrast mode support */
 @media (prefers-contrast: high) {
     :root {
@@ -2790,11 +2734,6 @@ body {
 /* ============================================
    Responsive Chart Containers
    ============================================ */
-
-.chart-container {
-    position: relative;
-    width: 100%;
-}
 
 @media (max-width: 480px) {
     .chart-container {
@@ -2904,7 +2843,7 @@ body {
 
 .savings-callout {
     background-color: rgba(39, 174, 96, 0.15);
-    color: #27ae60;
+    color: #3dd65b;
     padding: 0.75rem 1rem;
     border-radius: 8px;
     text-align: center;
@@ -2940,17 +2879,17 @@ body {
 }
 
 .voltage-delta.good {
-    color: #27ae60;
+    color: #3dd65b;
     background-color: rgba(39, 174, 96, 0.15);
 }
 
 .voltage-delta.warning {
-    color: #f39c12;
+    color: #ffb833;
     background-color: rgba(243, 156, 18, 0.15);
 }
 
 .voltage-delta.danger {
-    color: #e74c3c;
+    color: #f25c4e;
     background-color: rgba(231, 76, 60, 0.15);
 }
 
@@ -2985,7 +2924,7 @@ body {
 
 .module-value {
     height: 100%;
-    background: linear-gradient(90deg, #3282b8 0%, #27ae60 100%);
+    background: linear-gradient(90deg, #5ba8e0 0%, #3dd65b 100%);
     border-radius: 4px;
     transition: width 0.3s ease;
 }
@@ -3047,7 +2986,7 @@ body {
 .legend-gradient {
     width: 100px;
     height: 8px;
-    background: linear-gradient(90deg, #e74c3c 0%, #f39c12 25%, #27ae60 50%, #3282b8 75%, #9b59b6 100%);
+    background: linear-gradient(90deg, #f25c4e 0%, #ffb833 25%, #3dd65b 50%, #5ba8e0 75%, #9b59b6 100%);
     border-radius: 4px;
 }
 
@@ -3068,7 +3007,7 @@ body {
 
 .weak-cells-warning .warning-text {
     font-size: 0.875rem;
-    color: #f39c12;
+    color: #ffb833;
 }
 
 .battery-cells-footer {

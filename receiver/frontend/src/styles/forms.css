@@ -204,17 +204,17 @@
 
 .charge-type-badge.l1 {
   background-color: rgba(255, 193, 7, 0.2);
-  color: #ffc107;
+  color: #ffd247;
 }
 
 .charge-type-badge.l2 {
   background-color: rgba(0, 212, 170, 0.2);
-  color: #00d4aa;
+  color: #2eeabd;
 }
 
 .charge-type-badge.dcfc {
   background-color: var(--accent-subtle);
-  color: #3282b8;
+  color: #5ba8e0;
 }
 
 /* Mobile responsive for forms */

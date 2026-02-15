@@ -161,7 +161,7 @@
 }
 
 .power-bar.discharging {
-  background: linear-gradient(90deg, #ff6b6b 0%, #ee5a5a 100%);
+  background: linear-gradient(90deg, #ff8a8a 0%, #ee5a5a 100%);
 }
 
 .power-bar.regenerating {
@@ -190,12 +190,12 @@
 }
 
 .power-arrow.active .arrow-icon {
-  color: #00d4aa;
+  color: #2eeabd;
 }
 
 .power-arrow.reverse .arrow-icon {
   transform: scaleX(-1);
-  color: #3498db;
+  color: #5bb8f5;
 }
 
 .power-value {
@@ -215,22 +215,22 @@
 
 .power-mode.discharging {
   background-color: rgba(255, 107, 107, 0.3);
-  color: #ff6b6b;
+  color: #ff8a8a;
 }
 
 .power-mode.regenerating {
   background-color: rgba(0, 212, 170, 0.3);
-  color: #00d4aa;
+  color: #2eeabd;
 }
 
 .power-mode.charging {
   background-color: rgba(52, 152, 219, 0.3);
-  color: #3498db;
+  color: #5bb8f5;
 }
 
 .power-mode.idle {
   background-color: rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* Powertrain Stats */
@@ -276,11 +276,11 @@
 }
 
 .powertrain-value.engine-on {
-  color: #ff6b6b;
+  color: #ff8a8a;
 }
 
 .powertrain-value.engine-off {
-  color: #00d4aa;
+  color: #2eeabd;
 }
 
 /* Power Flow responsive */

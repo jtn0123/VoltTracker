@@ -40,6 +40,7 @@
         {% endwith %}
 
         <form method="POST" action="/settings" class="card" style="padding:var(--space-xl)">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <h2 style="margin-bottom:1.5rem;font-size:1.25rem">Application Settings</h2>
 
             {% for key, setting in settings.items() %}
