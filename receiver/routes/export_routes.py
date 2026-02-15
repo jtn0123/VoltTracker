@@ -26,132 +26,112 @@ _CSV_MIMETYPE = "text/csv"
 export_bp = Blueprint("export", __name__)
 
 
-@export_bp.route("/export/trips", methods=["GET"])
-def export_trips():
-    """
-    Export trips as CSV or JSON with streaming support for large datasets.
+_TRIP_CSV_HEADERS = [
+    "id", "session_id", "start_time", "end_time",
+    "distance_miles", "electric_miles", "gas_miles",
+    "start_soc", "soc_at_gas_transition", "gas_mpg",
+    "fuel_used_gallons", "ambient_temp_avg_f",
+]
 
-    Query params:
-        format: 'csv' (default) or 'json'
-        start_date: Filter trips after this date
-        end_date: Filter trips before this date
-        gas_only: If true, only export trips with gas usage
-        stream: If 'true', use streaming mode (default for CSV)
-    """
-    db = get_db()
-    export_format = request.args.get("format", "csv").lower()
-    use_streaming = request.args.get("stream", "true" if export_format == "csv" else "false").lower() == "true"
 
+def _trip_csv_row(trip):
+    """Convert a trip to a CSV row list."""
+    return [
+        trip.id, str(trip.session_id),
+        trip.start_time.isoformat() if trip.start_time else "",
+        trip.end_time.isoformat() if trip.end_time else "",
+        trip.distance_miles or "", trip.electric_miles or "", trip.gas_miles or "",
+        trip.start_soc or "", trip.soc_at_gas_transition or "",
+        trip.gas_mpg or "", trip.fuel_used_gallons or "",
+        trip.ambient_temp_avg_f or "",
+    ]
+
+
+def _parse_date_filter(param_name):
+    """Parse a date query param, returning (datetime, None) or (None, error_response)."""
+    from datetime import datetime as dt
+    value = request.args.get(param_name)
+    if not value:
+        return None, None
+    try:
+        return dt.fromisoformat(value.replace("Z", _UTC_SUFFIX)), None
+    except ValueError:
+        return None, (jsonify({"error": f"Invalid {param_name} format. Use ISO 8601 format."}), 400)
+
+
+def _build_trip_export_query(db):
+    """Build filtered trip query from request args. Returns (query, error_response)."""
     query = db.query(Trip).filter(Trip.is_closed.is_(True), Trip.deleted_at.is_(None))
 
-    # Apply filters
-    start_date = request.args.get("start_date")
-    if start_date:
-        try:
-            from datetime import datetime
-            start_dt = datetime.fromisoformat(start_date.replace("Z", _UTC_SUFFIX))
-            query = query.filter(Trip.start_time >= start_dt)
-        except ValueError:
-            return jsonify({"error": "Invalid start_date format. Use ISO 8601 format."}), 400
+    start_dt, err = _parse_date_filter("start_date")
+    if err:
+        return None, err
+    if start_dt:
+        query = query.filter(Trip.start_time >= start_dt)
 
-    end_date = request.args.get("end_date")
-    if end_date:
-        try:
-            from datetime import datetime
-            end_dt = datetime.fromisoformat(end_date.replace("Z", _UTC_SUFFIX))
-            query = query.filter(Trip.start_time <= end_dt)
-        except ValueError:
-            return jsonify({"error": "Invalid end_date format. Use ISO 8601 format."}), 400
+    end_dt, err = _parse_date_filter("end_date")
+    if err:
+        return None, err
+    if end_dt:
+        query = query.filter(Trip.start_time <= end_dt)
 
-    gas_only = request.args.get("gas_only", "").lower() == "true"
-    if gas_only:
+    if request.args.get("gas_only", "").lower() == "true":
         query = query.filter(Trip.gas_mode_entered.is_(True))
 
-    query = query.order_by(desc(Trip.start_time))
+    return query.order_by(desc(Trip.start_time)), None
 
-    # JSON export
-    if export_format == "json":
-        if use_streaming:
-            def generate_json():
-                for trip in query.yield_per(100):
-                    yield json.dumps(trip.to_dict()) + "\n"
 
-            return Response(
-                generate_json(),
-                mimetype="application/x-ndjson",
-                headers={"Content-Disposition": "attachment; filename=trips.ndjson"}
-            )
-        else:
-            trips = query.all()
-            return jsonify([t.to_dict() for t in trips])
-
-    # CSV export with streaming
-    if use_streaming:
-        def generate_csv():
-            header_buffer = io.StringIO()
-            header_writer = csv.writer(header_buffer)
-            header_writer.writerow([
-                "id", "session_id", "start_time", "end_time",
-                "distance_miles", "electric_miles", "gas_miles",
-                "start_soc", "soc_at_gas_transition", "gas_mpg",
-                "fuel_used_gallons", "ambient_temp_avg_f",
-            ])
-            yield header_buffer.getvalue()
-
+def _export_trips_json(query, streaming):
+    """Export trips as JSON (streaming NDJSON or regular)."""
+    if streaming:
+        def generate():
             for trip in query.yield_per(100):
-                row_buffer = io.StringIO()
-                row_writer = csv.writer(row_buffer)
-                row_writer.writerow([
-                    trip.id,
-                    str(trip.session_id),
-                    trip.start_time.isoformat() if trip.start_time else "",
-                    trip.end_time.isoformat() if trip.end_time else "",
-                    trip.distance_miles or "",
-                    trip.electric_miles or "",
-                    trip.gas_miles or "",
-                    trip.start_soc or "",
-                    trip.soc_at_gas_transition or "",
-                    trip.gas_mpg or "",
-                    trip.fuel_used_gallons or "",
-                    trip.ambient_temp_avg_f or "",
-                ])
-                yield row_buffer.getvalue()
+                yield json.dumps(trip.to_dict()) + "\n"
+        return Response(generate(), mimetype="application/x-ndjson",
+                        headers={"Content-Disposition": "attachment; filename=trips.ndjson"})
+    return jsonify([t.to_dict() for t in query.all()])
 
-        return Response(
-            generate_csv(),
-            mimetype=_CSV_MIMETYPE,
-            headers={"Content-Disposition": "attachment; filename=trips.csv"}
-        )
 
-    # Non-streaming CSV (legacy)
-    trips = query.all()
+def _export_trips_csv(query, streaming):
+    """Export trips as CSV (streaming or buffered)."""
+    if streaming:
+        def generate():
+            buf = io.StringIO()
+            csv.writer(buf).writerow(_TRIP_CSV_HEADERS)
+            yield buf.getvalue()
+            for trip in query.yield_per(100):
+                buf = io.StringIO()
+                csv.writer(buf).writerow(_trip_csv_row(trip))
+                yield buf.getvalue()
+        return Response(generate(), mimetype=_CSV_MIMETYPE,
+                        headers={"Content-Disposition": "attachment; filename=trips.csv"})
+
     output = io.StringIO()
     writer = csv.writer(output)
-
-    writer.writerow([
-        "id", "session_id", "start_time", "end_time",
-        "distance_miles", "electric_miles", "gas_miles",
-        "start_soc", "soc_at_gas_transition", "gas_mpg",
-        "fuel_used_gallons", "ambient_temp_avg_f",
-    ])
-
-    for t in trips:
-        writer.writerow([
-            t.id, str(t.session_id),
-            t.start_time.isoformat() if t.start_time else "",
-            t.end_time.isoformat() if t.end_time else "",
-            t.distance_miles or "", t.electric_miles or "", t.gas_miles or "",
-            t.start_soc or "", t.soc_at_gas_transition or "",
-            t.gas_mpg or "", t.fuel_used_gallons or "",
-            t.ambient_temp_avg_f or "",
-        ])
-
+    writer.writerow(_TRIP_CSV_HEADERS)
+    for t in query.all():
+        writer.writerow(_trip_csv_row(t))
     output.seek(0)
-    return Response(
-        output.getvalue(),
-        mimetype=_CSV_MIMETYPE,
-        headers={"Content-Disposition": "attachment; filename=trips.csv"}
-    )
+    return Response(output.getvalue(), mimetype=_CSV_MIMETYPE,
+                    headers={"Content-Disposition": "attachment; filename=trips.csv"})
+
+
+@export_bp.route("/export/trips", methods=["GET"])
+def export_trips():
+    """Export trips as CSV or JSON with streaming support for large datasets."""
+    db = get_db()
+    export_format = request.args.get("format", "csv").lower()
+    use_streaming = request.args.get(
+        "stream", "true" if export_format == "csv" else "false"
+    ).lower() == "true"
+
+    query, err = _build_trip_export_query(db)
+    if err:
+        return err
+
+    if export_format == "json":
+        return _export_trips_json(query, use_streaming)
+    return _export_trips_csv(query, use_streaming)
 
 
 @export_bp.route("/export/fuel", methods=["GET"])
@@ -191,110 +171,83 @@ def export_fuel():
     )
 
 
+def _apply_date_filters(queries_and_columns, start_dt, end_dt):
+    """Apply date range filters to a list of (query, timestamp_column) tuples."""
+    result = []
+    for query, col in queries_and_columns:
+        if start_dt:
+            query = query.filter(col >= start_dt)
+        if end_dt:
+            query = query.filter(col <= end_dt)
+        result.append(query)
+    return result
+
+
+def _stream_json_array(query, limit_val):
+    """Yield JSON items from a query as a streaming array. Returns (generator, count_ref)."""
+    count = [0]
+
+    def gen():
+        for i, item in enumerate(query.limit(limit_val).yield_per(100)):
+            if i > 0:
+                yield ','
+            yield json.dumps(item.to_dict(), default=str)
+            count[0] += 1
+    return gen, count
+
+
 @export_bp.route("/export/all", methods=["GET"])
 @limiter.limit("10 per hour")
 def export_all():
-    """
-    Export data as streaming JSON for backup (P4: streaming via generator).
-
-    Query parameters:
-        start_date: Start date (ISO format, optional)
-        end_date: End date (ISO format, optional)
-        limit: Max records per table (default 10000, optional)
-    """
-    from datetime import datetime
-
+    """Export data as streaming JSON for backup."""
     db = get_db()
 
     start_date = request.args.get("start_date")
     end_date = request.args.get("end_date")
     try:
-        limit = min(int(request.args.get("limit", 10000)), 50000)
+        limit_val = min(int(request.args.get("limit", 10000)), 50000)
     except (ValueError, TypeError):
-        limit = 10000
+        limit_val = 10000
 
-    # Build queries with optional filters
-    trip_query = db.query(Trip).filter(Trip.deleted_at.is_(None)).order_by(desc(Trip.start_time))
-    fuel_query = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp))
-    soc_query = db.query(SocTransition).order_by(SocTransition.timestamp)
-    charging_query = db.query(ChargingSession).order_by(desc(ChargingSession.start_time))
+    start_dt, err = _parse_date_filter("start_date")
+    if err:
+        return err
+    end_dt, err = _parse_date_filter("end_date")
+    if err:
+        return err
 
-    if start_date:
-        try:
-            start_dt = datetime.fromisoformat(start_date.replace("Z", _UTC_SUFFIX))
-            trip_query = trip_query.filter(Trip.start_time >= start_dt)
-            fuel_query = fuel_query.filter(FuelEvent.timestamp >= start_dt)
-            soc_query = soc_query.filter(SocTransition.timestamp >= start_dt)
-            charging_query = charging_query.filter(ChargingSession.start_time >= start_dt)
-        except ValueError:
-            return jsonify({"error": "Invalid start_date format. Use ISO 8601 format."}), 400
+    trip_q = db.query(Trip).filter(Trip.deleted_at.is_(None)).order_by(desc(Trip.start_time))
+    fuel_q = db.query(FuelEvent).order_by(desc(FuelEvent.timestamp))
+    soc_q = db.query(SocTransition).order_by(SocTransition.timestamp)
+    charge_q = db.query(ChargingSession).order_by(desc(ChargingSession.start_time))
 
-    if end_date:
-        try:
-            end_dt = datetime.fromisoformat(end_date.replace("Z", _UTC_SUFFIX))
-            trip_query = trip_query.filter(Trip.start_time <= end_dt)
-            fuel_query = fuel_query.filter(FuelEvent.timestamp <= end_dt)
-            soc_query = soc_query.filter(SocTransition.timestamp <= end_dt)
-            charging_query = charging_query.filter(ChargingSession.start_time <= end_dt)
-        except ValueError:
-            return jsonify({"error": "Invalid end_date format. Use ISO 8601 format."}), 400
+    trip_q, fuel_q, soc_q, charge_q = _apply_date_filters([
+        (trip_q, Trip.start_time), (fuel_q, FuelEvent.timestamp),
+        (soc_q, SocTransition.timestamp), (charge_q, ChargingSession.start_time),
+    ], start_dt, end_dt)
 
     def generate_export():
-        """Stream JSON output using a generator (P4) to avoid building full list in memory."""
         yield '{"exported_at":"' + utc_now().isoformat() + '",'
-        yield '"filters":' + json.dumps({"start_date": start_date, "end_date": end_date, "limit": limit}) + ','
+        yield '"filters":' + json.dumps({"start_date": start_date, "end_date": end_date, "limit": limit_val}) + ','
 
-        # Stream trips
-        yield '"trips":['
-        trip_count = 0
-        for i, trip in enumerate(trip_query.limit(limit).yield_per(100)):
-            if i > 0:
-                yield ','
-            yield json.dumps(trip.to_dict(), default=str)
-            trip_count += 1
-        yield '],'
+        tables = [
+            ("trips", trip_q), ("fuel_events", fuel_q),
+            ("soc_transitions", soc_q), ("charging_sessions", charge_q),
+        ]
+        counts = {}
+        for name, query in tables:
+            yield f'"{name}":['
+            gen, count_ref = _stream_json_array(query, limit_val)
+            yield from gen()
+            counts[name] = count_ref[0]
+            yield '],'
 
-        # Stream fuel events
-        yield '"fuel_events":['
-        fuel_count = 0
-        for i, evt in enumerate(fuel_query.limit(limit).yield_per(100)):
-            if i > 0:
-                yield ','
-            yield json.dumps(evt.to_dict(), default=str)
-            fuel_count += 1
-        yield '],'
-
-        # Stream SOC transitions
-        yield '"soc_transitions":['
-        soc_count = 0
-        for i, soc in enumerate(soc_query.limit(limit).yield_per(100)):
-            if i > 0:
-                yield ','
-            yield json.dumps(soc.to_dict(), default=str)
-            soc_count += 1
-        yield '],'
-
-        # Stream charging sessions
-        yield '"charging_sessions":['
-        charge_count = 0
-        for i, cs in enumerate(charging_query.limit(limit).yield_per(100)):
-            if i > 0:
-                yield ','
-            yield json.dumps(cs.to_dict(), default=str)
-            charge_count += 1
-        yield '],'
-
-        # Summary
         yield '"summary":' + json.dumps({
-            "total_trips": trip_count,
-            "total_fuel_events": fuel_count,
-            "total_soc_transitions": soc_count,
-            "total_charging_sessions": charge_count,
+            f"total_{k}": v for k, v in counts.items()
         }) + '}'
 
     return Response(
-        generate_export(),
-        mimetype="application/json",
+        generate_export(), mimetype="application/json",
         headers={"Content-Disposition": "attachment; filename=volttracker_backup.json"}
     )
 

@@ -58,7 +58,7 @@ def emit_toast(
         # Prune old entries
         if len(_recent_toasts) > 100:
             cutoff = now - _DEDUP_WINDOW
-            for k in list(_recent_toasts):
+            for k in _recent_toasts.copy():
                 if _recent_toasts[k] < cutoff:
                     del _recent_toasts[k]
 
