@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ci]
 
     strategy:
       matrix:
@@ -53,7 +53,7 @@ jobs:
           verbose: true
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ci]
 
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +78,7 @@ jobs:
         run: cd receiver/frontend && npm run type-check
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ci]
 
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +98,7 @@ jobs:
           flake8 receiver/ tests/ --max-line-length=120 --ignore=W503,W504,E402
 
   security:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ci]
 
     steps:
       - uses: actions/checkout@v4
@@ -122,7 +122,7 @@ jobs:
           pip-audit -r receiver/requirements.txt
 
   type-check:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ci]
 
     steps:
       - uses: actions/checkout@v4
