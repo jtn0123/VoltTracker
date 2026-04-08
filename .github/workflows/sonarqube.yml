@@ -47,7 +47,7 @@ jobs:
       #   cd e2e && npm run test:coverage
       # The lcov output at e2e/coverage/lcov.info is picked up by SonarQube automatically.
 
-      - uses: sonarsource/sonarqube-scan-action@v5
+      - uses: sonarsource/sonarqube-scan-action@v7
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
