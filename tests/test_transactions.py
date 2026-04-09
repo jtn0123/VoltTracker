@@ -8,26 +8,45 @@ Tests transaction behavior:
 - Nested transactions
 - Savepoints
 
-NOTE: These tests are skipped because they require a PostgreSQL-specific
-fixture setup. The in-memory SQLite database used for other tests has
-limitations with transaction isolation and concurrent connection handling.
-These tests should be run against a real PostgreSQL database.
+NOTE: These tests require PostgreSQL — they exercise READ COMMITTED isolation,
+cross-session visibility, and constraint-enforcement semantics that SQLite
+doesn't model the same way. The suite is automatically skipped on SQLite and
+runs on the `test-postgres` CI job. To run locally, set
+DATABASE_URL=postgresql://... before invoking pytest.
 """
 
-import pytest
-from datetime import datetime, timezone
+import os
 import uuid
+from datetime import datetime, timezone
 
-# Skip all tests in this module - they require PostgreSQL for proper transaction testing
-pytestmark = pytest.mark.skip(
-    reason="Transaction tests require PostgreSQL - SQLite has different transaction semantics"
+import pytest
+
+# Only run these tests when DATABASE_URL points at PostgreSQL.
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("DATABASE_URL", "").startswith("postgresql"),
+    reason="Requires PostgreSQL (set DATABASE_URL=postgresql://...)",
 )
+
+
+def _make_independent_session():
+    """Create a session bound to a brand-new connection.
+
+    The conftest-provided scoped_session is thread-local, so calling
+    SessionLocal() from the same thread would return the exact same
+    Session (and therefore the same open transaction). Cross-session
+    isolation tests need a session on a genuinely separate connection.
+    """
+    from sqlalchemy.orm import sessionmaker
+
+    import database
+
+    return sessionmaker(bind=database.engine)()
 
 
 class TestTransactionRollback:
     """Test that transactions rollback properly on errors."""
 
-    def test_trip_creation_rollback_on_error(self, db_session):
+    def test_trip_creation_rollback_on_error(self, app, db_session):
         """Test that trip creation rolls back if subsequent operations fail."""
         from models import Trip, TelemetryRaw
 
@@ -64,7 +83,7 @@ class TestTransactionRollback:
         trip = db_session.query(Trip).filter(Trip.session_id == session_id).first()
         assert trip is None, "Trip should not exist after rollback"
 
-    def test_csv_import_rollback_on_validation_error(self, db_session):
+    def test_csv_import_rollback_on_validation_error(self, app, db_session):
         """Test that CSV import rolls back if validation fails mid-import."""
         from models import CsvImport, TelemetryRaw
 
@@ -119,7 +138,7 @@ class TestTransactionRollback:
         ).first()
         assert csv_import is None, "CSV import should not exist after rollback"
 
-    def test_trip_finalization_partial_rollback(self, db_session):
+    def test_trip_finalization_partial_rollback(self, app, db_session):
         """Test that trip finalization rolls back if weather API fails."""
         from models import Trip
 
@@ -160,14 +179,13 @@ class TestTransactionRollback:
 class TestTransactionIsolation:
     """Test transaction isolation levels."""
 
-    def test_read_committed_isolation(self, db_session):
+    def test_read_committed_isolation(self, app, db_session):
         """
         Test READ COMMITTED isolation (default in PostgreSQL).
 
         One transaction shouldn't see uncommitted changes from another.
         """
         from models import Trip
-        from database import SessionLocal
 
         session_id = uuid.uuid4()
 
@@ -180,8 +198,8 @@ class TestTransactionIsolation:
         db_session.add(trip)
         db_session.flush()  # Write but don't commit
 
-        # Try to read from second session
-        other_session = SessionLocal()
+        # Try to read from a genuinely separate connection
+        other_session = _make_independent_session()
         try:
             other_trip = other_session.query(Trip).filter(
                 Trip.session_id == session_id
@@ -197,7 +215,7 @@ class TestTransactionIsolation:
         db_session.commit()
 
         # Read from second session again
-        other_session = SessionLocal()
+        other_session = _make_independent_session()
         try:
             other_trip = other_session.query(Trip).filter(
                 Trip.session_id == session_id
@@ -209,10 +227,9 @@ class TestTransactionIsolation:
         finally:
             other_session.close()
 
-    def test_dirty_read_prevention(self, db_session):
+    def test_dirty_read_prevention(self, app, db_session):
         """Test that dirty reads are prevented."""
         from models import Trip
-        from database import SessionLocal
 
         session_id = uuid.uuid4()
 
@@ -232,8 +249,8 @@ class TestTransactionIsolation:
         trip.distance_miles = 20.0
         db_session.flush()
 
-        # Read from other session
-        other_session = SessionLocal()
+        # Read from an independent connection
+        other_session = _make_independent_session()
         try:
             other_trip = other_session.query(Trip).filter(Trip.id == trip_id).first()
 
@@ -250,7 +267,7 @@ class TestTransactionIsolation:
 class TestSavepoints:
     """Test savepoint functionality for partial rollbacks."""
 
-    def test_savepoint_rollback(self, db_session):
+    def test_savepoint_rollback(self, app, db_session):
         """Test rolling back to a savepoint."""
         from models import Trip
 
@@ -305,7 +322,7 @@ class TestSavepoints:
 class TestTransactionCommitBehavior:
     """Test various commit scenarios."""
 
-    def test_explicit_commit_required(self, db_session):
+    def test_explicit_commit_required(self, app, db_session):
         """Test that changes aren't visible without commit."""
         from models import Trip
 
@@ -335,7 +352,7 @@ class TestTransactionCommitBehavior:
         ).first()
         assert rolled_back_trip is None, "Should not exist after rollback"
 
-    def test_autoflush_behavior(self, db_session):
+    def test_autoflush_behavior(self, app, db_session):
         """Test SQLAlchemy autoflush behavior."""
         from models import Trip
 
@@ -366,7 +383,7 @@ class TestTransactionCommitBehavior:
         ).count()
         assert count == 0, "Should be rolled back"
 
-    def test_commit_multiple_models(self, db_session):
+    def test_commit_multiple_models(self, app, db_session):
         """Test committing changes across multiple models."""
         from models import Trip, TelemetryRaw, FuelEvent
 
@@ -409,7 +426,7 @@ class TestTransactionCommitBehavior:
 class TestConstraintViolations:
     """Test that constraint violations trigger proper rollbacks."""
 
-    def test_unique_constraint_violation(self, db_session):
+    def test_unique_constraint_violation(self, app, db_session):
         """Test that unique constraint violations are handled."""
         from models import Trip
         from sqlalchemy.exc import IntegrityError
@@ -447,7 +464,7 @@ class TestConstraintViolations:
         trips = db_session.query(Trip).filter(Trip.session_id == session_id).all()
         assert len(trips) >= 1, "Original trip should exist"
 
-    def test_foreign_key_constraint(self, db_session):
+    def test_foreign_key_constraint(self, app, db_session):
         """Test that foreign key constraints are enforced."""
         from models import TelemetryRaw
         from sqlalchemy.exc import IntegrityError
@@ -472,26 +489,6 @@ class TestConstraintViolations:
             db_session.rollback()
             # FK constraint violated, rolled back
             pass
-
-
-# ============================================================================
-# Fixtures
-# ============================================================================
-
-@pytest.fixture
-def db_session():
-    """Provide a clean database session for each test."""
-    from database import SessionLocal
-
-    session = SessionLocal()
-    yield session
-
-    # Cleanup
-    try:
-        session.rollback()
-        session.close()
-    except Exception:
-        pass
 
 
 if __name__ == "__main__":
