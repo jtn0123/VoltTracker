@@ -17,4 +17,4 @@ requests==2.33.1
 structlog==24.1.0
 redis==5.0.1
 rq==2.7.0
-hiredis==3.1.0
+hiredis==3.3.1
