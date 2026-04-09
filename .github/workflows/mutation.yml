@@ -6,7 +6,7 @@ on:
 
 jobs:
   mutmut:
-    runs-on: [self-hosted, ci]
+    runs-on: ubuntu-latest
     continue-on-error: true
 
     steps:

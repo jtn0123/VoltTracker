@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    runs-on: [self-hosted, ci]
+    runs-on: ubuntu-latest
 
     strategy:
       matrix:
@@ -52,8 +52,19 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
+      # Publish coverage.xml from the 3.12 matrix entry as an artifact so the
+      # downstream sonarcloud job can pick it up without re-running the test
+      # suite. Mirrors the InkyPi pattern (coverage-3.12 → SonarCloud Scan).
+      - name: Upload coverage artifact for SonarCloud
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-3.12
+          path: coverage.xml
+          retention-days: 1
+
   frontend:
-    runs-on: [self-hosted, ci]
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +89,7 @@ jobs:
         run: cd receiver/frontend && npm run type-check
 
   lint:
-    runs-on: [self-hosted, ci]
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +109,7 @@ jobs:
           flake8 receiver/ tests/ --max-line-length=120 --ignore=W503,W504,E402
 
   security:
-    runs-on: [self-hosted, ci]
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -122,7 +133,7 @@ jobs:
           pip-audit -r receiver/requirements.txt
 
   type-check:
-    runs-on: [self-hosted, ci]
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -181,3 +192,54 @@ jobs:
           DATABASE_URL: "postgresql://volt:testpass@localhost:5432/volt_tracker_test"
           FLASK_TESTING: "true"
           FLASK_ENV: "development"
+
+  sonarcloud:
+    name: SonarCloud Scan
+    needs: [test, frontend]
+    if: always() && (github.event_name == 'push' || github.event.pull_request.head.repo.fork == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required for git blame in SonarCloud
+
+      # Reuse coverage produced by the test job's 3.12 matrix entry instead
+      # of re-running pytest here. Mirrors the InkyPi pattern.
+      - name: Download Python coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-3.12
+        continue-on-error: true
+
+      # Frontend coverage is fast (~1s of vitest) so generating it inline
+      # here is simpler than plumbing a separate artifact through the
+      # frontend job.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: receiver/frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: receiver/frontend
+      - name: Run frontend tests with coverage
+        run: npm run test:coverage
+        working-directory: receiver/frontend
+
+      # E2E coverage (requires Docker services — run locally for now)
+      # To collect E2E coverage locally:
+      #   INSTRUMENT_COVERAGE=true npm run build --prefix receiver/frontend
+      #   docker compose up -d  # start backend
+      #   cd e2e && npm run test:coverage
+      # The lcov output at e2e/coverage/lcov.info is picked up by SonarCloud automatically.
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

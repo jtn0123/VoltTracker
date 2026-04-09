@@ -1,7 +1,12 @@
-FROM node:20.18-slim AS frontend-builder
+FROM node:20.19-slim AS frontend-builder
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+# --ignore-scripts hardens the build by suppressing arbitrary postinstall
+# scripts from transitive dependencies (sonar:S6505). Verified locally:
+# vite/vitest/eslint/typescript don't need any install scripts, and the
+# rolldown native binaries ship as precompiled binaries via npm
+# optionalDependencies, not via postinstall.
+RUN npm ci --ignore-scripts
 COPY frontend/ .
 RUN npm run build
 
