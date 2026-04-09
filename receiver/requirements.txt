@@ -13,7 +13,7 @@ gevent==25.4.1
 gevent-websocket==0.10.1
 python-dotenv==1.0.0
 python-dateutil==2.8.2
-requests==2.33.0
+requests==2.33.1
 structlog==24.1.0
 redis==5.0.1
 rq==2.7.0
