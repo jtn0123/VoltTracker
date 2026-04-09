@@ -1,14 +1,20 @@
 """
 Tests for weather background jobs.
 
-Note: These jobs use local imports inside functions, which makes testing
-more complex. We use sys.modules manipulation to properly mock dependencies.
+Imports are now plain module-level — the module fetches weather via
+``utils.weather.get_weather_for_location`` and elevation via
+``services.elevation_service.fetch_and_update_elevations``, both of which
+exist in the codebase. We patch the *names re-exported into
+jobs.weather_jobs* with ``mock.patch`` instead of the previous
+``sys.modules`` + ``importlib.reload`` workaround that was masking
+JTN-453's ImportError.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from datetime import datetime, timezone
 import uuid
-import sys
+
+import jobs.weather_jobs as weather_jobs
 
 
 class TestFetchWeatherForTrip:
@@ -31,17 +37,11 @@ class TestFetchWeatherForTrip:
         db_session.commit()
         trip_id = trip.id
 
-        # Mock the weather service module before importing
-        mock_weather_service = MagicMock()
-        mock_weather_service.fetch_and_store_weather = MagicMock(return_value=[{"temp": 72}])
-
-        with patch.dict(sys.modules, {"services.weather_service": mock_weather_service}):
-            # Re-import to get fresh module with mocked dependencies
-            import importlib
-            import jobs.weather_jobs as weather_jobs
-
-            importlib.reload(weather_jobs)
-
+        with patch.object(
+            weather_jobs,
+            "_fetch_weather_for_trip_data",
+            return_value=[{"temperature_f": 72}],
+        ):
             result = weather_jobs.fetch_weather_for_trip(trip_id, db_session)
 
         assert result["status"] == "success"
@@ -50,15 +50,7 @@ class TestFetchWeatherForTrip:
 
     def test_fetch_weather_for_trip_not_found(self, app, db_session):
         """Test weather fetch for non-existent trip."""
-        mock_weather_service = MagicMock()
-
-        with patch.dict(sys.modules, {"services.weather_service": mock_weather_service}):
-            import importlib
-            import jobs.weather_jobs as weather_jobs
-
-            importlib.reload(weather_jobs)
-
-            result = weather_jobs.fetch_weather_for_trip(99999, db_session)
+        result = weather_jobs.fetch_weather_for_trip(99999, db_session)
 
         assert result["status"] == "failed"
         assert result["reason"] == "trip_not_found"
@@ -78,15 +70,11 @@ class TestFetchWeatherForTrip:
         db_session.commit()
         trip_id = trip.id
 
-        mock_weather_service = MagicMock()
-        mock_weather_service.fetch_and_store_weather = MagicMock(side_effect=Exception("Weather API error"))
-
-        with patch.dict(sys.modules, {"services.weather_service": mock_weather_service}):
-            import importlib
-            import jobs.weather_jobs as weather_jobs
-
-            importlib.reload(weather_jobs)
-
+        with patch.object(
+            weather_jobs,
+            "_fetch_weather_for_trip_data",
+            side_effect=Exception("Weather API error"),
+        ):
             result = weather_jobs.fetch_weather_for_trip(trip_id, db_session)
 
         assert result["status"] == "failed"
@@ -107,19 +95,105 @@ class TestFetchWeatherForTrip:
         db_session.commit()
         trip_id = trip.id
 
-        mock_weather_service = MagicMock()
-        mock_weather_service.fetch_and_store_weather = MagicMock(return_value=None)
-
-        with patch.dict(sys.modules, {"services.weather_service": mock_weather_service}):
-            import importlib
-            import jobs.weather_jobs as weather_jobs
-
-            importlib.reload(weather_jobs)
-
+        with patch.object(weather_jobs, "_fetch_weather_for_trip_data", return_value=None):
             result = weather_jobs.fetch_weather_for_trip(trip_id, db_session)
 
         assert result["status"] == "success"
         assert result["weather_points"] == 0
+
+
+class TestFetchWeatherForTripDataHelper:
+    """Tests for the inline _fetch_weather_for_trip_data helper.
+
+    Covers the path that the previous tests skipped entirely by mocking the
+    helper out — verifies the helper actually queries telemetry and persists
+    weather columns onto the trip.
+    """
+
+    def test_helper_returns_empty_when_no_gps(self, app, db_session):
+        from models import Trip
+
+        trip = Trip(
+            session_id=uuid.uuid4(),
+            start_time=datetime.now(timezone.utc),
+            start_odometer=50000.0,
+            start_soc=80.0,
+        )
+        db_session.add(trip)
+        db_session.commit()
+
+        with patch("jobs.weather_jobs.get_weather_for_location") as mock_get:
+            result = weather_jobs._fetch_weather_for_trip_data(db_session, trip)
+
+        assert result == []
+        mock_get.assert_not_called()
+
+    def test_helper_persists_weather_columns(self, app, db_session):
+        from models import Trip, TelemetryRaw
+
+        session_id = uuid.uuid4()
+        trip = Trip(
+            session_id=session_id,
+            start_time=datetime.now(timezone.utc),
+            start_odometer=50000.0,
+            start_soc=80.0,
+        )
+        db_session.add(trip)
+        db_session.flush()
+
+        db_session.add(
+            TelemetryRaw(
+                session_id=session_id,
+                timestamp=datetime.now(timezone.utc),
+                latitude=37.7749,
+                longitude=-122.4194,
+                speed_mph=45.0,
+            )
+        )
+        db_session.commit()
+
+        sample = {
+            "temperature_f": 68.0,
+            "precipitation_in": 0.0,
+            "wind_speed_mph": 5.0,
+            "conditions": "Clear",
+        }
+        with patch("jobs.weather_jobs.get_weather_for_location", return_value=sample):
+            result = weather_jobs._fetch_weather_for_trip_data(db_session, trip)
+
+        assert result == [sample]
+        assert trip.weather_temp_f == 68.0
+        assert trip.weather_precipitation_in == 0.0
+        assert trip.weather_wind_mph == 5.0
+        assert trip.weather_conditions == "Clear"
+
+    def test_helper_returns_empty_when_api_returns_none(self, app, db_session):
+        from models import Trip, TelemetryRaw
+
+        session_id = uuid.uuid4()
+        trip = Trip(
+            session_id=session_id,
+            start_time=datetime.now(timezone.utc),
+            start_odometer=50000.0,
+            start_soc=80.0,
+        )
+        db_session.add(trip)
+        db_session.flush()
+        db_session.add(
+            TelemetryRaw(
+                session_id=session_id,
+                timestamp=datetime.now(timezone.utc),
+                latitude=37.7749,
+                longitude=-122.4194,
+            )
+        )
+        db_session.commit()
+
+        with patch("jobs.weather_jobs.get_weather_for_location", return_value=None):
+            result = weather_jobs._fetch_weather_for_trip_data(db_session, trip)
+
+        assert result == []
+        assert trip.weather_temp_f is None
 
 
 class TestBatchFetchWeather:
@@ -142,15 +216,11 @@ class TestBatchFetchWeather:
             trips.append(trip)
         db_session.commit()
 
-        mock_weather_service = MagicMock()
-        mock_weather_service.fetch_and_store_weather = MagicMock(return_value=[{"temp": 72}])
-
-        with patch.dict(sys.modules, {"services.weather_service": mock_weather_service}):
-            import importlib
-            import jobs.weather_jobs as weather_jobs
-
-            importlib.reload(weather_jobs)
-
+        with patch.object(
+            weather_jobs,
+            "_fetch_weather_for_trip_data",
+            return_value=[{"temperature_f": 72}],
+        ):
             result = weather_jobs.batch_fetch_weather([t.id for t in trips])
 
         assert result["success"] == 3
@@ -174,15 +244,11 @@ class TestBatchFetchWeather:
             trips.append(trip)
         db_session.commit()
 
-        mock_weather_service = MagicMock()
-        mock_weather_service.fetch_and_store_weather = MagicMock(return_value=[{"temp": 72}])
-
-        with patch.dict(sys.modules, {"services.weather_service": mock_weather_service}):
-            import importlib
-            import jobs.weather_jobs as weather_jobs
-
-            importlib.reload(weather_jobs)
-
+        with patch.object(
+            weather_jobs,
+            "_fetch_weather_for_trip_data",
+            return_value=[{"temperature_f": 72}],
+        ):
             # Include a non-existent trip ID
             result = weather_jobs.batch_fetch_weather([trips[0].id, 99999, trips[1].id])
 
@@ -191,15 +257,7 @@ class TestBatchFetchWeather:
 
     def test_batch_fetch_weather_empty_list(self, app, db_session):
         """Test batch fetch with empty trip list."""
-        mock_weather_service = MagicMock()
-
-        with patch.dict(sys.modules, {"services.weather_service": mock_weather_service}):
-            import importlib
-            import jobs.weather_jobs as weather_jobs
-
-            importlib.reload(weather_jobs)
-
-            result = weather_jobs.batch_fetch_weather([])
+        result = weather_jobs.batch_fetch_weather([])
 
         assert result["success"] == 0
         assert result["failed"] == 0
@@ -211,20 +269,7 @@ class TestFetchElevationForTrip:
 
     def test_fetch_elevation_for_trip_not_found(self, app, db_session):
         """Test elevation fetch for non-existent trip."""
-        mock_weather_service = MagicMock()
-        mock_elevation_service = MagicMock()
-        mock_elevation_service.fetch_and_update_elevations = MagicMock(return_value=0)
-
-        with patch.dict(
-            sys.modules,
-            {"services.weather_service": mock_weather_service, "services.elevation_service": mock_elevation_service},
-        ):
-            import importlib
-            import jobs.weather_jobs as weather_jobs
-
-            importlib.reload(weather_jobs)
-
-            result = weather_jobs.fetch_elevation_for_trip(99999, db_session)
+        result = weather_jobs.fetch_elevation_for_trip(99999, db_session)
 
         assert result["status"] == "failed"
         assert result["reason"] == "trip_not_found"
@@ -245,20 +290,7 @@ class TestFetchElevationForTrip:
         db_session.commit()
         trip_id = trip.id
 
-        mock_weather_service = MagicMock()
-        mock_elevation_service = MagicMock()
-        mock_elevation_service.fetch_and_update_elevations = MagicMock(return_value=0)
-
-        with patch.dict(
-            sys.modules,
-            {"services.weather_service": mock_weather_service, "services.elevation_service": mock_elevation_service},
-        ):
-            import importlib
-            import jobs.weather_jobs as weather_jobs
-
-            importlib.reload(weather_jobs)
-
-            result = weather_jobs.fetch_elevation_for_trip(trip_id, db_session)
+        result = weather_jobs.fetch_elevation_for_trip(trip_id, db_session)
 
         assert result["status"] == "skipped"
         assert result["reason"] == "no_gps_data"
@@ -292,19 +324,7 @@ class TestFetchElevationForTrip:
         db_session.commit()
         trip_id = trip.id
 
-        mock_weather_service = MagicMock()
-        mock_elevation_service = MagicMock()
-        mock_elevation_service.fetch_and_update_elevations = MagicMock(return_value=5)
-
-        with patch.dict(
-            sys.modules,
-            {"services.weather_service": mock_weather_service, "services.elevation_service": mock_elevation_service},
-        ):
-            import importlib
-            import jobs.weather_jobs as weather_jobs
-
-            importlib.reload(weather_jobs)
-
+        with patch.object(weather_jobs, "fetch_and_update_elevations", return_value=5):
             result = weather_jobs.fetch_elevation_for_trip(trip_id, db_session)
 
         assert result["status"] == "success"
@@ -317,19 +337,7 @@ class TestBatchFetchWeatherAndElevation:
 
     def test_batch_fetch_empty_list(self, app, db_session):
         """Test batch fetch with empty list."""
-        mock_weather_service = MagicMock()
-        mock_elevation_service = MagicMock()
-
-        with patch.dict(
-            sys.modules,
-            {"services.weather_service": mock_weather_service, "services.elevation_service": mock_elevation_service},
-        ):
-            import importlib
-            import jobs.weather_jobs as weather_jobs
-
-            importlib.reload(weather_jobs)
-
-            result = weather_jobs.batch_fetch_weather_and_elevation([])
+        result = weather_jobs.batch_fetch_weather_and_elevation([])
 
         assert result["weather_success"] == 0
         assert result["weather_failed"] == 0

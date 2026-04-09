@@ -1,14 +1,71 @@
 """
-Background jobs for weather data fetching.
+Background jobs for weather and elevation data fetching.
 
 These jobs run asynchronously to avoid blocking trip finalization.
+
+Both helpers are defined inline rather than delegating to a separate
+``services.weather_service`` module — that module never existed in this
+codebase, and the function-local import was a latent ImportError that only
+the test mocks were hiding (see JTN-453). Weather and elevation are now
+fetched directly from the existing ``utils.weather`` and
+``services.elevation_service`` modules.
 """
 
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from sqlalchemy.orm import Session
 
+from models import TelemetryRaw, Trip
+from services.elevation_service import fetch_and_update_elevations
+from utils.weather import get_weather_for_location
+
 logger = logging.getLogger(__name__)
+
+
+def _fetch_weather_for_trip_data(db_session: Session, trip: Trip) -> Optional[List[Dict[str, Any]]]:
+    """
+    Fetch weather for a trip using its first GPS-bearing telemetry point.
+
+    Persists temperature / precipitation / wind / conditions onto the trip
+    row when a sample is returned, so the data flows through to the analytics
+    services that read ``Trip.weather_*`` columns.
+
+    Returns a list of weather sample dicts (currently length 0 or 1) so the
+    caller can report a "weather_points" count, mirroring how
+    ``services.trip_service._collect_weather_samples`` works for the
+    synchronous trip-finalization path.
+    """
+    first_point = (
+        db_session.query(TelemetryRaw)
+        .filter(
+            TelemetryRaw.session_id == trip.session_id,
+            TelemetryRaw.latitude.isnot(None),
+            TelemetryRaw.longitude.isnot(None),
+        )
+        .order_by(TelemetryRaw.timestamp)
+        .first()
+    )
+
+    if first_point is None:
+        return []
+
+    sample = get_weather_for_location(
+        first_point.latitude,
+        first_point.longitude,
+        trip.start_time,
+        db_session=db_session,
+    )
+
+    if not sample:
+        return []
+
+    trip.weather_temp_f = sample.get("temperature_f")
+    trip.weather_precipitation_in = sample.get("precipitation_in")
+    trip.weather_wind_mph = sample.get("wind_speed_mph")
+    trip.weather_conditions = sample.get("conditions")
+
+    return [sample]
 
 
 def fetch_weather_for_trip(trip_id: int, db_session: Optional[Session] = None) -> Dict[str, Any]:
@@ -26,8 +83,6 @@ def fetch_weather_for_trip(trip_id: int, db_session: Optional[Session] = None) -
     request to return quickly while weather data is fetched asynchronously.
     """
     from database import SessionLocal
-    from models import Trip
-    from services.weather_service import fetch_and_store_weather
 
     if db_session is None:
         db_session = SessionLocal()
@@ -41,8 +96,7 @@ def fetch_weather_for_trip(trip_id: int, db_session: Optional[Session] = None) -
             logger.warning(f"Trip {trip_id} not found for weather fetch")
             return {"status": "failed", "reason": "trip_not_found"}
 
-        # Fetch weather using existing service
-        weather_data = fetch_and_store_weather(db_session, trip)
+        weather_data = _fetch_weather_for_trip_data(db_session, trip)
 
         db_session.commit()
 
@@ -115,8 +169,6 @@ def fetch_elevation_for_trip(trip_id: int, db_session: Optional[Session] = None)
         Dict with result status and metadata
     """
     from database import SessionLocal
-    from models import Trip, TelemetryRaw
-    from services.elevation_service import fetch_and_update_elevations
 
     if db_session is None:
         db_session = SessionLocal()
