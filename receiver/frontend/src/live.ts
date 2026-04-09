@@ -55,16 +55,16 @@ export function initWebSocket(): void {
       }
     });
 
-    ((state.socket as any).io as any).on('reconnect_attempt', (attempt: number) => {
+    (state.socket as any).io.on('reconnect_attempt', (attempt: number) => {
       reconnectAttempt = attempt;
       if (DEBUG) console.log('[WS] Reconnect attempt #%d (backoff up to %dms)', attempt, Math.min(2000 * Math.pow(2, attempt - 1), 30000));
     });
 
-    ((state.socket as any).io as any).on('reconnect', (attempt: number) => {
+    (state.socket as any).io.on('reconnect', (attempt: number) => {
       if (DEBUG) console.log('[WS] Reconnected after %d attempt(s)', attempt);
     });
 
-    ((state.socket as any).io as any).on('reconnect_failed', () => {
+    (state.socket as any).io.on('reconnect_failed', () => {
       console.warn('[WS] Reconnection failed after max attempts — staying on polling');
     });
 

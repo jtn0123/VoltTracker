@@ -8,6 +8,40 @@ import { api } from '@/api';
 import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis, getChartColor, getCSSVar } from '@/charts';
 import type { BatteryHealthResponse, BatteryCellsResponse, CellReading, SocAnalysis } from '@/types/api';
 
+/** Set text content of an element by ID if it exists. */
+function setText(id: string, text: string): void {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+/** Set innerHTML of an element by ID if it exists. */
+function setHtml(id: string, html: string): void {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
+/** Get health bar CSS class based on percent. */
+function healthBarClass(percent: number): string {
+  if (percent >= 80) return 'battery-health-bar good';
+  if (percent >= 70) return 'battery-health-bar fair';
+  return 'battery-health-bar degraded';
+}
+
+/** Update the battery health trend display. */
+function updateHealthTrend(yearlyTrend: number | null | undefined): void {
+  const trendEl = document.getElementById('battery-health-trend');
+  if (!trendEl) return;
+  if (yearlyTrend !== null && yearlyTrend !== undefined) {
+    const sign = yearlyTrend >= 0 ? '+' : '';
+    const direction = yearlyTrend >= 0 ? 'positive' : 'negative';
+    trendEl.textContent = `${sign}${yearlyTrend}% this year`;
+    trendEl.className = `battery-health-trend ${direction}`;
+  } else {
+    trendEl.textContent = 'Trend data not yet available';
+    trendEl.className = 'battery-health-trend';
+  }
+}
+
 /**
  * Load battery health data
  */
@@ -29,14 +63,12 @@ export async function loadBatteryHealth(): Promise<void> {
 
     section.style.display = 'block';
 
-    const capacityEl = document.getElementById('battery-health-capacity');
-    if (capacityEl && data.current_capacity_kwh) capacityEl.textContent = data.current_capacity_kwh.toFixed(1);
-
-    const originalEl = document.getElementById('battery-health-original');
-    if (originalEl && data.original_capacity_kwh) originalEl.textContent = data.original_capacity_kwh.toFixed(1);
-
-    const percentEl = document.getElementById('battery-health-percent');
-    if (percentEl && data.health_percent) percentEl.textContent = `${data.health_percent}% capacity`;
+    // != null guards against undefined/null without dropping legitimate 0
+    // values (capacity = 0 kWh during catastrophic failure, health = 0%
+    // is rare but valid). Truthy checks would silently render '--'.
+    if (data.current_capacity_kwh != null) setText('battery-health-capacity', data.current_capacity_kwh.toFixed(1));
+    if (data.original_capacity_kwh != null) setText('battery-health-original', data.original_capacity_kwh.toFixed(1));
+    if (data.health_percent != null) setText('battery-health-percent', `${data.health_percent}% capacity`);
 
     const statusEl = document.getElementById('battery-health-status');
     if (statusEl && data.health_status) {
@@ -47,23 +79,10 @@ export async function loadBatteryHealth(): Promise<void> {
     const barEl = document.getElementById('battery-health-bar');
     if (barEl && data.health_percent) {
       barEl.style.width = `${data.health_percent}%`;
-      if (data.health_percent >= 80) barEl.className = 'battery-health-bar good';
-      else if (data.health_percent >= 70) barEl.className = 'battery-health-bar fair';
-      else barEl.className = 'battery-health-bar degraded';
+      barEl.className = healthBarClass(data.health_percent);
     }
 
-    const trendEl = document.getElementById('battery-health-trend');
-    if (trendEl) {
-      if (data.yearly_trend_percent !== null && data.yearly_trend_percent !== undefined) {
-        const sign = data.yearly_trend_percent >= 0 ? '+' : '';
-        const direction = data.yearly_trend_percent >= 0 ? 'positive' : 'negative';
-        trendEl.textContent = `${sign}${data.yearly_trend_percent}% this year`;
-        trendEl.className = `battery-health-trend ${direction}`;
-      } else {
-        trendEl.textContent = 'Trend data not yet available';
-        trendEl.className = 'battery-health-trend';
-      }
-    }
+    updateHealthTrend(data.yearly_trend_percent);
   } catch (error) {
     console.error('Failed to load battery health:', error);
   }
@@ -263,6 +282,27 @@ export function checkWeakCells(reading: CellReading): void {
   }
 }
 
+/** Update SOC temperature correlation display. */
+function updateSocCorrelation(correlation: SocAnalysis['temperature_correlation']): void {
+  if (correlation) {
+    setText('soc-cold', `${correlation.cold_avg_soc}% (${correlation.cold_count} trips)`);
+    setText('soc-warm', `${correlation.warm_avg_soc}% (${correlation.warm_count} trips)`);
+  } else {
+    setText('soc-cold', '--');
+    setText('soc-warm', '--');
+  }
+}
+
+/** Update SOC trend display. */
+function updateSocTrend(trend: SocAnalysis['trend']): void {
+  if (trend) {
+    const dir = trend.direction === 'increasing' ? 'Increasing' : 'Decreasing';
+    setText('soc-trend', `${dir} (${trend.early_avg}% -> ${trend.recent_avg}%)`);
+  } else {
+    setText('soc-trend', 'Not enough data');
+  }
+}
+
 /**
  * Load SOC analysis
  */
@@ -272,51 +312,22 @@ export async function loadSocAnalysis(): Promise<void> {
     if (result.error) return;
     const data = result.data!;
 
-    const socFloor = document.getElementById('soc-floor');
-    if (socFloor) {
-      if (data.average_soc) {
-        socFloor.innerHTML = `${data.average_soc}<span class="card-unit">%</span>`;
-        const socCount = document.getElementById('soc-count');
-        if (socCount) socCount.textContent = `${data.count} transitions recorded`;
-      } else {
-        socFloor.textContent = '--';
-        const socCount = document.getElementById('soc-count');
-        if (socCount) socCount.textContent = 'No gas transition data available';
-      }
-    }
-
-    const setEl = (id: string, val: string) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = val;
-    };
-
-    setEl('soc-min', data.min_soc != null ? `${data.min_soc}%` : '--');
-    setEl('soc-max', data.max_soc != null ? `${data.max_soc}%` : '--');
-    setEl('soc-avg', data.average_soc != null ? `${data.average_soc}%` : '--');
-
-    if (data.temperature_correlation) {
-      setEl(
-        'soc-cold',
-        `${data.temperature_correlation.cold_avg_soc}% (${data.temperature_correlation.cold_count} trips)`,
-      );
-      setEl(
-        'soc-warm',
-        `${data.temperature_correlation.warm_avg_soc}% (${data.temperature_correlation.warm_count} trips)`,
-      );
+    // != null preserves a literal 0% average reading (a degenerate but
+    // possible state) instead of falling through to "No data available".
+    if (data.average_soc != null) {
+      setHtml('soc-floor', `${data.average_soc}<span class="card-unit">%</span>`);
+      setText('soc-count', `${data.count} transitions recorded`);
     } else {
-      setEl('soc-cold', '--');
-      setEl('soc-warm', '--');
+      setText('soc-floor', '--');
+      setText('soc-count', 'No gas transition data available');
     }
 
-    if (data.trend) {
-      setEl(
-        'soc-trend',
-        `${data.trend.direction === 'increasing' ? 'Increasing' : 'Decreasing'} ` +
-          `(${data.trend.early_avg}% -> ${data.trend.recent_avg}%)`,
-      );
-    } else {
-      setEl('soc-trend', 'Not enough data');
-    }
+    setText('soc-min', data.min_soc != null ? `${data.min_soc}%` : '--');
+    setText('soc-max', data.max_soc != null ? `${data.max_soc}%` : '--');
+    setText('soc-avg', data.average_soc != null ? `${data.average_soc}%` : '--');
+
+    updateSocCorrelation(data.temperature_correlation);
+    updateSocTrend(data.trend);
 
     if (data.histogram && Object.keys(data.histogram).length > 0) {
       renderSocHistogram(data.histogram);
@@ -336,7 +347,7 @@ export async function renderSocHistogram(histogram: Record<string, number>): Pro
   const labels = Object.keys(histogram).sort((a, b) => Number.parseInt(a) - Number.parseInt(b));
   const values = labels.map((k) => histogram[k]);
 
-  if (!window.Chart) await loadChartJs();
+  if (!(globalThis as Record<string, unknown>).Chart) await loadChartJs();
 
   if (state.socChart) state.socChart.destroy();
 

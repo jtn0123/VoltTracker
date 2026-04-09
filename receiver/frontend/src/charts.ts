@@ -179,13 +179,13 @@ export function getEnhancedAxis(options: ChartConfig = {}): ChartConfig {
   return {
     grid: {
       color: getThemeVar('--chart-grid') || 'rgba(255, 255, 255, 0.05)',
-      ...((options.grid as ChartConfig) ?? {}),
+      ...((options.grid ?? {}) as ChartConfig),
     },
     ticks: {
       color: getThemeVar('--chart-tick') || '#71717a',
       font: { size: defaults.tickFont.size },
       padding: 8,
-      ...((options.ticks as ChartConfig) ?? {}),
+      ...((options.ticks ?? {}) as ChartConfig),
     },
     title: options.title
       ? {

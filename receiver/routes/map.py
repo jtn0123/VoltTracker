@@ -279,16 +279,25 @@ def _build_trip_points(telemetry: list) -> List[Dict[str, Any]]:
     """Build GPS point dicts with instantaneous efficiency from telemetry records."""
     points = []
     for t in telemetry:
+        # Efficiency only meaningful when speed > 5 mph (excludes stopped /
+        # crawling traffic noise) AND we have a non-null power reading.
+        # Use `is not None` for power so a coasting moment with hv_power == 0
+        # doesn't get treated as missing data.
         efficiency = None
-        if t.hv_battery_power_kw and t.speed_mph and t.speed_mph > 5:
-            efficiency = abs(t.hv_battery_power_kw) / t.speed_mph if t.hv_battery_power_kw > 0 else None
+        if (
+            t.hv_battery_power_kw is not None
+            and t.speed_mph is not None
+            and t.speed_mph > 5
+            and t.hv_battery_power_kw > 0
+        ):
+            efficiency = abs(t.hv_battery_power_kw) / t.speed_mph
 
         points.append({
             'lat': float(t.latitude),
             'lon': float(t.longitude),
-            'speed': float(t.speed_mph) if t.speed_mph else 0,
-            'efficiency': round(efficiency, 3) if efficiency else None,
-            'timestamp': t.timestamp.isoformat() if t.timestamp else None
+            'speed': float(t.speed_mph) if t.speed_mph is not None else 0,
+            'efficiency': round(efficiency, 3) if efficiency is not None else None,
+            'timestamp': t.timestamp.isoformat() if t.timestamp else None,
         })
     return points
 
@@ -391,6 +400,29 @@ def get_trips_map_data():
     })
 
 
+def _build_detailed_point(t, *, include_telemetry: bool) -> Dict[str, Any]:
+    """Build a detailed GPS point dict from a telemetry record."""
+    point = {
+        'lat': float(t.latitude),
+        'lon': float(t.longitude),
+        'timestamp': t.timestamp.isoformat() if t.timestamp else None
+    }
+    if include_telemetry:
+        # `is not None` rather than truthy checks: SOC=0%, hv_power=0kW
+        # (idling charged), speed_mph=0 (stopped at light), engine_rpm=0
+        # (electric mode), and ambient_temp=0°F are all *valid* readings
+        # that we want to render. Truthy checks would silently drop them
+        # and pretend the field was missing.
+        point.update({
+            'speed_mph': float(t.speed_mph) if t.speed_mph is not None else 0,
+            'soc': float(t.state_of_charge) if t.state_of_charge is not None else None,
+            'hv_power': float(t.hv_battery_power_kw) if t.hv_battery_power_kw is not None else None,
+            'engine_rpm': int(t.engine_rpm) if t.engine_rpm is not None else 0,
+            'ambient_temp': float(t.ambient_temp_f) if t.ambient_temp_f is not None else None,
+        })
+    return point
+
+
 @map_bp.route("/api/trips/<int:trip_id>/route", methods=["GET"])
 def get_trip_route_detailed(trip_id: int):
     """
@@ -424,38 +456,8 @@ def get_trip_route_detailed(trip_id: int):
         return jsonify({'error': _ERR_NO_GPS_DATA}), 404
 
     # Build detailed points
-    points = []
-    for t in telemetry:
-        point = {
-            'lat': float(t.latitude),
-            'lon': float(t.longitude),
-            'timestamp': t.timestamp.isoformat() if t.timestamp else None
-        }
-
-        if include_telemetry:
-            point.update({
-                'speed_mph': float(t.speed_mph) if t.speed_mph else 0,
-                'soc': float(t.state_of_charge) if t.state_of_charge else None,
-                'hv_power': float(t.hv_battery_power_kw) if t.hv_battery_power_kw else None,
-                'engine_rpm': int(t.engine_rpm) if t.engine_rpm else 0,
-                'ambient_temp': float(t.ambient_temp_f) if t.ambient_temp_f else None
-            })
-
-        points.append(point)
-
-    # Calculate bounds
-    lats = [p['lat'] for p in points]
-    lons = [p['lon'] for p in points]
-    bounds = {
-        'north': max(lats),
-        'south': min(lats),
-        'east': max(lons),
-        'west': min(lons),
-        'center': {
-            'lat': sum(lats) / len(lats),
-            'lon': sum(lons) / len(lons)
-        }
-    }
+    points = [_build_detailed_point(t, include_telemetry=include_telemetry) for t in telemetry]
+    bounds = _calculate_bounds(points)
 
     return jsonify({
         'trip': {
@@ -599,6 +601,27 @@ def export_trip_as_kml(trip_id: int):
     )
 
 
+def _build_gpx_trackpoint(t) -> List[str]:
+    """Build GPX XML lines for a single trackpoint."""
+    lines = [f'      <trkpt lat="{t.latitude}" lon="{t.longitude}">']
+    if t.elevation_meters is not None:
+        lines.append(f'        <ele>{t.elevation_meters:.1f}</ele>')
+    if t.timestamp:
+        lines.append(f'        <time>{t.timestamp.isoformat()}Z</time>')
+    lines.append('        <extensions>')
+    if t.speed_mph is not None:
+        lines.append(f'          <speed>{t.speed_mph * 0.44704:.2f}</speed>')
+    if t.state_of_charge is not None:
+        lines.append(f'          <soc>{t.state_of_charge:.1f}</soc>')
+    if t.hv_battery_power_kw is not None:
+        lines.append(f'          <power>{t.hv_battery_power_kw:.2f}</power>')
+    if t.ambient_temp_f is not None:
+        lines.append(f'          <temp>{t.ambient_temp_f:.1f}</temp>')
+    lines.append('        </extensions>')
+    lines.append('      </trkpt>')
+    return lines
+
+
 def generate_gpx(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
     """
     Generate GPX XML content for a trip.
@@ -640,30 +663,7 @@ def generate_gpx(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
 
     # Add track points
     for t in telemetry:
-        gpx.append(f'      <trkpt lat="{t.latitude}" lon="{t.longitude}">')
-
-        # Add elevation if available (already in meters)
-        if t.elevation_meters:
-            elevation_m = t.elevation_meters
-            gpx.append(f'        <ele>{elevation_m:.1f}</ele>')
-
-        # Add timestamp
-        if t.timestamp:
-            gpx.append(f'        <time>{t.timestamp.isoformat()}Z</time>')
-
-        # Add extensions with Volt-specific data
-        gpx.append('        <extensions>')
-        if t.speed_mph:
-            gpx.append(f'          <speed>{t.speed_mph * 0.44704:.2f}</speed>')  # Convert to m/s
-        if t.state_of_charge is not None:
-            gpx.append(f'          <soc>{t.state_of_charge:.1f}</soc>')
-        if t.hv_battery_power_kw is not None:
-            gpx.append(f'          <power>{t.hv_battery_power_kw:.2f}</power>')
-        if t.ambient_temp_f is not None:
-            gpx.append(f'          <temp>{t.ambient_temp_f:.1f}</temp>')
-        gpx.append('        </extensions>')
-
-        gpx.append('      </trkpt>')
+        gpx.extend(_build_gpx_trackpoint(t))
 
     gpx.append('    </trkseg>')
     gpx.append('  </trk>')

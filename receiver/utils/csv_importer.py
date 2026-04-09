@@ -191,6 +191,34 @@ class TorqueCSVImporter:
         return unique_records, duplicate_count
 
     @classmethod
+    def _build_column_mapping(cls, fieldnames, stats):
+        """Map CSV column names to internal field names and update stats."""
+        column_mapping = {}
+        if not fieldnames:
+            return column_mapping
+        stats["columns_detected"] = list(fieldnames)
+        for col in fieldnames:
+            col_lower = col.lower().strip()
+            if col_lower in cls.COLUMN_MAP:
+                column_mapping[col] = cls.COLUMN_MAP[col_lower]
+        stats["columns_mapped"] = list(column_mapping.values())
+        stats["columns_found"] = stats["columns_mapped"]
+        stats["timestamp_column_found"] = (
+            "timestamp" in stats["columns_mapped"]
+            or "device_time" in stats["columns_mapped"]
+        )
+        return column_mapping
+
+    @staticmethod
+    def _determine_failure_reason(stats):
+        """Determine why no records were parsed."""
+        if stats["total_rows"] == 0:
+            return "empty_file"
+        if not stats["timestamp_column_found"]:
+            return "no_timestamp_column"
+        return "all_timestamps_unparseable"
+
+    @classmethod
     def parse_csv(
         cls, csv_content: str, existing_timestamps: Optional[Set[datetime]] = None
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
@@ -232,20 +260,7 @@ class TorqueCSVImporter:
 
         reader = csv.DictReader(io.StringIO(csv_content), dialect=dialect)
 
-        # Map columns to our field names
-        column_mapping = {}
-        if reader.fieldnames:
-            stats["columns_detected"] = list(reader.fieldnames)  # All CSV columns
-            for col in reader.fieldnames:
-                col_lower = col.lower().strip()
-                if col_lower in cls.COLUMN_MAP:
-                    column_mapping[col] = cls.COLUMN_MAP[col_lower]
-            stats["columns_mapped"] = list(column_mapping.values())
-            stats["columns_found"] = stats["columns_mapped"]  # Legacy alias
-            stats["timestamp_column_found"] = (
-                "timestamp" in stats["columns_mapped"]
-                or "device_time" in stats["columns_mapped"]
-            )
+        column_mapping = cls._build_column_mapping(reader.fieldnames, stats)
 
         # Generate a session ID for this import
         session_id = uuid.uuid4()
@@ -270,12 +285,7 @@ class TorqueCSVImporter:
 
         # Determine failure reason if no records were parsed
         if stats["parsed_rows"] == 0:
-            if stats["total_rows"] == 0:
-                stats["failure_reason"] = "empty_file"
-            elif not stats["timestamp_column_found"]:
-                stats["failure_reason"] = "no_timestamp_column"
-            else:
-                stats["failure_reason"] = "all_timestamps_unparseable"
+            stats["failure_reason"] = cls._determine_failure_reason(stats)
 
         # Add truncation note if there were more errors than shown
         if stats["total_errors"] > 50:

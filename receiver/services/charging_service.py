@@ -85,6 +85,7 @@ def start_charging_session(db, telemetry: TelemetryRaw) -> ChargingSession:
         The newly created ChargingSession
     """
     session = ChargingSession(
+        session_id=telemetry.session_id,
         start_time=telemetry.timestamp,
         start_soc=telemetry.state_of_charge,
         latitude=telemetry.latitude,

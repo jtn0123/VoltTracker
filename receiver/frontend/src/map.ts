@@ -147,7 +147,7 @@ export function createColorCodedSegments(points: TelemetryPoint[]): RouteSegment
     const color = getPointColor(point);
     const latlng: [number, number] = [point.latitude!, point.longitude!];
 
-    if (!currentSegment || currentSegment.color !== color) {
+    if (currentSegment == null || currentSegment.color !== color) {
       if (currentSegment?.points.length) {
         currentSegment.points.push(latlng);
       }
@@ -184,24 +184,20 @@ export function getPointColor(point: TelemetryPoint): string {
 /**
  * Get color based on instantaneous efficiency
  */
-export function getEfficiencyColor(efficiency: number | null, isGasMode: boolean): string {
-  if (efficiency === null || efficiency === undefined || !Number.isFinite(efficiency)) {
-    return '#888888';
+/** Map a value to a color using threshold breakpoints. */
+function thresholdColor(value: number, thresholds: [number, string][], defaultColor: string): string {
+  for (const [limit, color] of thresholds) {
+    if (value < limit) return color;
   }
+  return defaultColor;
+}
 
-  if (isGasMode) {
-    if (efficiency < 25) return '#e74c3c';
-    if (efficiency < 30) return '#e67e22';
-    if (efficiency < 35) return '#f1c40f';
-    if (efficiency < 40) return '#2ecc71';
-    return '#27ae60';
-  } else {
-    if (efficiency < 2) return '#e74c3c';
-    if (efficiency < 2.5) return '#e67e22';
-    if (efficiency < 3) return '#f1c40f';
-    if (efficiency < 3.5) return '#2ecc71';
-    return '#27ae60';
-  }
+const GAS_THRESHOLDS: [number, string][] = [[25, '#e74c3c'], [30, '#e67e22'], [35, '#f1c40f'], [40, '#2ecc71']];
+const EV_THRESHOLDS: [number, string][] = [[2, '#e74c3c'], [2.5, '#e67e22'], [3, '#f1c40f'], [3.5, '#2ecc71']];
+
+export function getEfficiencyColor(efficiency: number | null, isGasMode: boolean): string {
+  if (efficiency === null || efficiency === undefined || !Number.isFinite(efficiency)) return '#888888';
+  return thresholdColor(efficiency, isGasMode ? GAS_THRESHOLDS : EV_THRESHOLDS, '#27ae60');
 }
 
 /**
@@ -215,6 +211,29 @@ export function haversineDistance(lat1: number, lon1: number, lat2: number, lon2
     Math.sin(dLat / 2) ** 2 +
     Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Check if a value is a valid number (not null/undefined). */
+function isNum(v: number | null | undefined): v is number {
+  return v !== undefined && v !== null;
+}
+
+/** Calculate segment efficiency for gas mode. */
+function calcGasEfficiency(prev: TelemetryPoint, _curr: TelemetryPoint, distance: number): number | null {
+  const prevFuel = prev.fuel_level_percent;
+  const currFuel = _curr.fuel_level_percent;
+  if (!isNum(prevFuel) || !isNum(currFuel) || prevFuel <= currFuel) return null;
+  const fuelUsed = ((prevFuel - currFuel) / 100) * 9.31;
+  return fuelUsed > 0.001 ? distance / fuelUsed : null;
+}
+
+/** Calculate segment efficiency for EV mode. */
+function calcEvEfficiency(prev: TelemetryPoint, curr: TelemetryPoint, distance: number): number | null {
+  const prevSoc = prev.state_of_charge;
+  const currSoc = curr.state_of_charge;
+  if (!isNum(prevSoc) || !isNum(currSoc) || prevSoc <= currSoc) return null;
+  const kwUsed = ((prevSoc - currSoc) / 100) * 18.4;
+  return kwUsed > 0.001 ? distance / kwUsed : null;
 }
 
 /**
@@ -233,39 +252,17 @@ export function createEfficiencySegments(points: TelemetryPoint[]): RouteSegment
     const distance = haversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
     if (distance < 0.001) continue;
 
-    const isGasMode = curr.engine_rpm !== undefined && curr.engine_rpm !== null && curr.engine_rpm > 500;
-    let efficiency: number | null = null;
-
-    if (isGasMode) {
-      const prevFuel = prev.fuel_level_percent;
-      const currFuel = curr.fuel_level_percent;
-      if (
-        prevFuel !== undefined &&
-        prevFuel !== null &&
-        currFuel !== undefined &&
-        currFuel !== null &&
-        prevFuel > currFuel
-      ) {
-        const fuelUsed = ((prevFuel - currFuel) / 100) * 9.31;
-        if (fuelUsed > 0.001) efficiency = distance / fuelUsed;
-      }
-    } else {
-      const prevSoc = prev.state_of_charge;
-      const currSoc = curr.state_of_charge;
-      if (prevSoc !== undefined && prevSoc !== null && currSoc !== undefined && currSoc !== null && prevSoc > currSoc) {
-        const kwUsed = ((prevSoc - currSoc) / 100) * 18.4;
-        if (kwUsed > 0.001) efficiency = distance / kwUsed;
-      }
-    }
+    const isGasMode = isNum(curr.engine_rpm) && curr.engine_rpm > 500;
+    const efficiency = isGasMode
+      ? calcGasEfficiency(prev, curr, distance)
+      : calcEvEfficiency(prev, curr, distance);
 
     const color = getEfficiencyColor(efficiency, isGasMode);
     const latlng: [number, number] = [curr.latitude, curr.longitude];
     const prevLatlng: [number, number] = [prev.latitude, prev.longitude];
 
-    if (!currentSegment || currentSegment.color !== color) {
-      if (currentSegment?.points.length) {
-        currentSegment.points.push(prevLatlng);
-      }
+    if (currentSegment == null || currentSegment.color !== color) {
+      if (currentSegment?.points.length) currentSegment.points.push(prevLatlng);
       currentSegment = { color, efficiency, isGasMode, points: [prevLatlng] };
       segments.push(currentSegment);
     }
@@ -330,7 +327,7 @@ export function addMapViewToggle(map: L.LeafletMap, gpsPoints: TelemetryPoint[],
 
     L.DomEvent.disableClickPropagation(div);
 
-    const checkbox = div.querySelector('#map-efficiency-toggle') as HTMLInputElement | null;
+    const checkbox = div.querySelector<HTMLInputElement>('#map-efficiency-toggle');
     if (checkbox) checkbox.addEventListener('change', function() {
       localStorage.setItem('mapEfficiencyView', String(this.checked));
       renderTripMap(gpsPoints);

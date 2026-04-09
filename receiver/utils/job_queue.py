@@ -15,6 +15,7 @@ import logging
 from typing import Any, Callable, Dict, Optional
 from redis import Redis
 from rq import Queue, Retry
+from rq.exceptions import NoSuchJobError
 from rq.job import Job
 from config import Config
 
@@ -236,6 +237,31 @@ def start_worker_info() -> str:
 # Cleanup utilities
 # ============================================================================
 
+def _is_job_expired(ended_at, cutoff, cutoff_naive) -> bool:
+    """Check if a job's end time is older than the cutoff."""
+    if ended_at is None:
+        return False
+    if ended_at.tzinfo is None:
+        return ended_at < cutoff_naive
+    return ended_at < cutoff
+
+
+def _clean_finished_jobs_in_queue(queue, cutoff, cutoff_naive) -> int:
+    """Clean expired finished jobs from a single queue. Returns count cleaned."""
+    cleaned = 0
+    for job_id in queue.finished_job_registry.get_job_ids():
+        try:
+            job = Job.fetch(job_id, connection=get_redis_connection())
+            if _is_job_expired(job.ended_at, cutoff, cutoff_naive):
+                job.delete()
+                cleaned += 1
+        except NoSuchJobError:
+            logger.debug("Job %s already removed", job_id)
+        except Exception as e:
+            logger.warning("Failed to clean job %s: %s", job_id, e)
+    return cleaned
+
+
 def cleanup_old_jobs(days: int = 7) -> int:
     """
     Clean up completed jobs older than specified days.
@@ -249,29 +275,12 @@ def cleanup_old_jobs(days: int = 7) -> int:
     from datetime import datetime, timedelta, timezone
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    # Also keep a naive version for comparison with naive datetimes
     cutoff_naive = cutoff.replace(tzinfo=None)
-    cleaned = 0
 
-    for queue_name in ["default", "high", "low"]:
-        queue = get_job_queue(queue_name)
-
-        # Clean finished jobs
-        for job_id in queue.finished_job_registry.get_job_ids():
-            try:
-                job = Job.fetch(job_id, connection=get_redis_connection())
-                if job.ended_at:
-                    # Handle both timezone-aware and naive datetimes
-                    ended_at = job.ended_at
-                    if ended_at.tzinfo is None:
-                        is_old = ended_at < cutoff_naive
-                    else:
-                        is_old = ended_at < cutoff
-                    if is_old:
-                        job.delete()
-                        cleaned += 1
-            except Exception as e:
-                logger.warning(f"Failed to clean job {job_id}: {e}")
+    cleaned = sum(
+        _clean_finished_jobs_in_queue(get_job_queue(name), cutoff, cutoff_naive)
+        for name in ["default", "high", "low"]
+    )
 
     logger.info(f"Cleaned up {cleaned} old jobs")
     return cleaned

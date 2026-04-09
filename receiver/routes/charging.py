@@ -19,6 +19,74 @@ logger = logging.getLogger(__name__)
 
 _ERR_SESSION_NOT_FOUND = "Charging session not found"
 
+
+def _get_charging_power(telemetry_point):
+    """Extract charging power from a telemetry point."""
+    power = telemetry_point.charger_ac_power_kw
+    if power is None and telemetry_point.hv_battery_power_kw is not None:
+        power = abs(telemetry_point.hv_battery_power_kw) if telemetry_point.hv_battery_power_kw < 0 else None
+    return power
+
+
+def _reconstruct_charging_curve(db, session):
+    """Reconstruct charging curve from telemetry data.
+
+    Scopes the telemetry query to ``session.session_id`` when present so a
+    multi-vehicle deployment can never interleave readings from a different
+    vehicle into one charging curve. ``session_id`` is nullable on
+    ``ChargingSession`` for backwards compatibility with rows created before
+    the column was added; in that case the query falls back to the legacy
+    time-window-only filter.
+    """
+    if not session.start_time or not session.end_time:
+        return None
+
+    from models import TelemetryRaw
+    filters = [
+        TelemetryRaw.timestamp >= session.start_time,
+        TelemetryRaw.timestamp <= session.end_time,
+        TelemetryRaw.charger_connected.is_(True),
+    ]
+    if session.session_id is not None:
+        filters.append(TelemetryRaw.session_id == session.session_id)
+
+    telemetry = (
+        db.query(TelemetryRaw)
+        .filter(*filters)
+        .order_by(TelemetryRaw.timestamp)
+        .all()
+    )
+
+    if not telemetry:
+        return None
+
+    curve_data = []
+    for t in telemetry:
+        power = _get_charging_power(t)
+        if power is not None:
+            curve_data.append({
+                "timestamp": t.timestamp.isoformat() if t.timestamp else None,
+                "power_kw": round(power, 2),
+                "soc": t.state_of_charge,
+            })
+
+    return curve_data or None
+
+
+def _validate_charging_numeric_fields(data):
+    """Validate numeric fields for charging session. Returns error response or None."""
+    try:
+        for soc_field in ("start_soc", "end_soc"):
+            if data.get(soc_field) is not None and not (0 <= float(data[soc_field]) <= 100):
+                return jsonify({"error": f"{soc_field} must be between 0 and 100"}), 400
+        for non_neg_field in ("kwh_added", "cost"):
+            if data.get(non_neg_field) is not None and float(data[non_neg_field]) < 0:
+                return jsonify({"error": f"{non_neg_field} must be >= 0"}), 400
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": f"Invalid numeric value: {e}"}), 400
+    return None
+
+
 charging_bp = Blueprint("charging", __name__)
 
 
@@ -94,16 +162,9 @@ def add_charging_session():
             logger.warning(f"Invalid end_time format '{data['end_time']}': {e}")
             return jsonify({"error": f"Invalid end_time format: {data['end_time']}. Use ISO 8601 format."}), 400
 
-    # Validate numeric ranges
-    try:
-        for soc_field in ("start_soc", "end_soc"):
-            if data.get(soc_field) is not None and not (0 <= float(data[soc_field]) <= 100):
-                return jsonify({"error": f"{soc_field} must be between 0 and 100"}), 400
-        for non_neg_field in ("kwh_added", "cost"):
-            if data.get(non_neg_field) is not None and float(data[non_neg_field]) < 0:
-                return jsonify({"error": f"{non_neg_field} must be >= 0"}), 400
-    except (ValueError, TypeError) as e:
-        return jsonify({"error": f"Invalid numeric value: {e}"}), 400
+    validation_error = _validate_charging_numeric_fields(data)
+    if validation_error:
+        return validation_error
 
     session = ChargingSession(
         start_time=start_time,
@@ -158,8 +219,6 @@ def get_charging_curve(session_id):
     Returns time-series power and SOC data for the charging session.
     If charging_curve is not stored, attempts to reconstruct from telemetry.
     """
-    from models import TelemetryRaw
-
     db = get_db()
 
     session = db.query(ChargingSession).filter(ChargingSession.id == session_id).first()
@@ -171,38 +230,9 @@ def get_charging_curve(session_id):
         return jsonify({"session_id": session_id, "curve": session.charging_curve, "source": "stored"})
 
     # Try to reconstruct from telemetry data
-    if session.start_time and session.end_time:
-        telemetry = (
-            db.query(TelemetryRaw)
-            .filter(
-                TelemetryRaw.timestamp >= session.start_time,
-                TelemetryRaw.timestamp <= session.end_time,
-                TelemetryRaw.charger_connected.is_(True),
-            )
-            .order_by(TelemetryRaw.timestamp)
-            .all()
-        )
-
-        if telemetry:
-            curve_data = []
-            for t in telemetry:
-                # Use charger AC power or HV battery power (negative during charging)
-                power = t.charger_ac_power_kw
-                if power is None and t.hv_battery_power_kw is not None:
-                    # HV power is negative during charging
-                    power = abs(t.hv_battery_power_kw) if t.hv_battery_power_kw < 0 else None
-
-                if power is not None:
-                    curve_data.append(
-                        {
-                            "timestamp": t.timestamp.isoformat() if t.timestamp else None,
-                            "power_kw": round(power, 2),
-                            "soc": t.state_of_charge,
-                        }
-                    )
-
-            if curve_data:
-                return jsonify({"session_id": session_id, "curve": curve_data, "source": "telemetry"})
+    curve_data = _reconstruct_charging_curve(db, session)
+    if curve_data:
+        return jsonify({"session_id": session_id, "curve": curve_data, "source": "telemetry"})
 
     # No curve data available
     return jsonify(
@@ -263,16 +293,9 @@ def update_charging_session(session_id):
         "is_complete",
     ]
 
-    # Validate numeric ranges
-    try:
-        for soc_field in ("start_soc", "end_soc"):
-            if data.get(soc_field) is not None and not (0 <= float(data[soc_field]) <= 100):
-                return jsonify({"error": f"{soc_field} must be between 0 and 100"}), 400
-        for non_neg_field in ("kwh_added", "cost"):
-            if data.get(non_neg_field) is not None and float(data[non_neg_field]) < 0:
-                return jsonify({"error": f"{non_neg_field} must be >= 0"}), 400
-    except (ValueError, TypeError) as e:
-        return jsonify({"error": f"Invalid numeric value: {e}"}), 400
+    validation_error = _validate_charging_numeric_fields(data)
+    if validation_error:
+        return validation_error
 
     for field in allowed_fields:
         if field in data:

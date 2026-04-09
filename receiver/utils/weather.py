@@ -169,6 +169,112 @@ def _request_with_retry(url: str, params: Dict[str, Any], timeout: int) -> Optio
     return None
 
 
+def _check_db_cache(db_session, lat_key, lon_key, timestamp_hour, latitude, longitude):
+    """Check database cache for weather data. Returns cached data or None."""
+    try:
+        from models import WeatherCache
+
+        db_cache = db_session.query(WeatherCache).filter(
+            WeatherCache.latitude_key == lat_key,
+            WeatherCache.longitude_key == lon_key,
+            WeatherCache.timestamp_hour == timestamp_hour
+        ).first()
+
+        if not db_cache:
+            return None
+
+        cache_age = utc_now() - db_cache.fetched_at
+        if cache_age.total_seconds() >= Config.WEATHER_CACHE_TIMEOUT_SECONDS:
+            db_session.delete(db_cache)
+            db_session.commit()
+            logger.debug(f"DB cache expired for ({latitude:.2f}, {longitude:.2f}), deleted")
+            return None
+
+        logger.debug(
+            f"DB cache hit for ({latitude:.2f}, {longitude:.2f}) "
+            f"at {timestamp_hour} (age: {cache_age.total_seconds():.0f}s)"
+        )
+        # Populate in-memory cache
+        cache_key = (lat_key, lon_key, timestamp_hour)
+        _weather_cache[cache_key] = (db_cache.to_dict(), time.time())
+        if len(_weather_cache) > MAX_WEATHER_CACHE_SIZE:
+            _weather_cache.popitem(last=False)
+        return db_cache.to_dict()
+    except Exception as e:
+        logger.warning(f"Error checking database cache: {e}")
+        return None
+
+
+def _check_memory_cache(cache_key, latitude, longitude, timestamp_hour):
+    """Check in-memory cache for weather data. Returns cached data or None."""
+    current_time = time.time()
+    if cache_key not in _weather_cache:
+        return None
+    cached_data, cache_timestamp = _weather_cache[cache_key]
+    age_seconds = current_time - cache_timestamp
+    if age_seconds >= Config.WEATHER_CACHE_TIMEOUT_SECONDS:
+        del _weather_cache[cache_key]
+        logger.debug(f"Memory cache expired for ({latitude:.2f}, {longitude:.2f})")
+        return None
+    _weather_cache.move_to_end(cache_key)
+    logger.debug(
+        f"Memory cache hit for ({latitude:.2f}, {longitude:.2f}) "
+        f"at {timestamp_hour} (age: {age_seconds:.0f}s)"
+    )
+    return cached_data
+
+
+def _store_in_caches(cache_key, data, db_session, lat_key, lon_key, timestamp_hour, api_source, latitude, longitude):
+    """Store weather data in both memory and DB caches."""
+    current_time = time.time()
+    if len(_weather_cache) >= MAX_WEATHER_CACHE_SIZE:
+        _weather_cache.popitem(last=False)
+    _weather_cache[cache_key] = (data, current_time)
+    _weather_cache.move_to_end(cache_key)
+
+    if db_session and timestamp_hour:
+        try:
+            from models import WeatherCache
+            existing = db_session.query(WeatherCache).filter(
+                WeatherCache.latitude_key == lat_key,
+                WeatherCache.longitude_key == lon_key,
+                WeatherCache.timestamp_hour == timestamp_hour
+            ).one_or_none()
+            if existing:
+                existing.temperature_f = data.get("temperature_f")
+                existing.precipitation_in = data.get("precipitation_in")
+                existing.wind_speed_mph = data.get("wind_speed_mph")
+                existing.weather_code = data.get("weather_code")
+                existing.conditions = data.get("conditions")
+                existing.api_source = api_source
+                existing.fetched_at = utc_now()
+            else:
+                db_cache = WeatherCache(
+                    latitude_key=lat_key,
+                    longitude_key=lon_key,
+                    timestamp_hour=timestamp_hour,
+                    temperature_f=data.get("temperature_f"),
+                    precipitation_in=data.get("precipitation_in"),
+                    wind_speed_mph=data.get("wind_speed_mph"),
+                    weather_code=data.get("weather_code"),
+                    conditions=data.get("conditions"),
+                    api_source=api_source,
+                    fetched_at=utc_now()
+                )
+                db_session.add(db_cache)
+            db_session.commit()
+            logger.debug(f"Stored in DB cache for ({latitude:.2f}, {longitude:.2f}) at {timestamp_hour}")
+        except Exception as e:
+            logger.warning(f"Failed to store in database cache: {e}")
+            db_session.rollback()
+
+    logger.debug(
+        f"Weather cached for ({latitude:.2f}, {longitude:.2f}) "
+        f"at {timestamp_hour} "
+        f"(memory: {len(_weather_cache)}/{MAX_WEATHER_CACHE_SIZE})"
+    )
+
+
 def get_weather_for_location(
     latitude: float, longitude: float,
     timestamp: Optional[datetime] = None,
@@ -210,59 +316,17 @@ def get_weather_for_location(
 
     # Check database cache first (persistent across restarts)
     if db_session and timestamp_hour:
-        try:
-            from models import WeatherCache
-
-            db_cache = db_session.query(WeatherCache).filter(
-                WeatherCache.latitude_key == lat_key,
-                WeatherCache.longitude_key == lon_key,
-                WeatherCache.timestamp_hour == timestamp_hour
-            ).first()
-
-            if db_cache:
-                # Check if cache is still fresh
-                cache_age = utc_now() - db_cache.fetched_at
-                if cache_age.total_seconds() < Config.WEATHER_CACHE_TIMEOUT_SECONDS:
-                    logger.debug(
-                        f"DB cache hit for ({latitude:.2f}, {longitude:.2f}) "
-                        f"at {timestamp_hour} (age: {cache_age.total_seconds():.0f}s)"
-                    )
-                    # Populate in-memory cache for faster subsequent lookups
-                    cache_key = (lat_key, lon_key, timestamp_hour)
-                    _weather_cache[cache_key] = (db_cache.to_dict(), time.time())
-                    if len(_weather_cache) > MAX_WEATHER_CACHE_SIZE:
-                        _weather_cache.popitem(last=False)
-                    result: dict[str, Any] = db_cache.to_dict()
-                    return result
-                else:
-                    # Expired - delete it
-                    db_session.delete(db_cache)
-                    db_session.commit()
-                    logger.debug(f"DB cache expired for ({latitude:.2f}, {longitude:.2f}), deleted")
-        except Exception as e:
-            logger.warning(f"Error checking database cache: {e}")
-            # Continue to in-memory cache if DB cache fails
+        db_result = _check_db_cache(
+            db_session, lat_key, lon_key, timestamp_hour, latitude, longitude
+        )
+        if db_result is not None:
+            return db_result
 
     # Check in-memory cache with LRU behavior
     cache_key = (lat_key, lon_key, timestamp_hour)
-    current_time = time.time()
-    if cache_key in _weather_cache:
-        cached_data, cache_timestamp = _weather_cache[cache_key]
-        age_seconds = current_time - cache_timestamp
-
-        if age_seconds < Config.WEATHER_CACHE_TIMEOUT_SECONDS:
-            # Move to end (LRU: mark as recently used)
-            _weather_cache.move_to_end(cache_key)
-            logger.debug(
-                f"Memory cache hit for ({latitude:.2f}, {longitude:.2f}) "
-                f"at {timestamp_hour} (age: {age_seconds:.0f}s)"
-            )
-            cached_result: dict[str, Any] = cached_data
-            return cached_result
-        else:
-            # Expired entry - remove it
-            del _weather_cache[cache_key]
-            logger.debug(f"Memory cache expired for ({latitude:.2f}, {longitude:.2f})")
+    mem_result = _check_memory_cache(cache_key, latitude, longitude, timestamp_hour)
+    if mem_result is not None:
+        return mem_result
 
     # Cache miss or expired - fetch from API
     # Determine if we need historical or forecast API
@@ -281,42 +345,9 @@ def get_weather_for_location(
 
         # Cache successful result in both caches
         if data is not None:
-            # Store in in-memory cache with LRU eviction
-            if len(_weather_cache) >= MAX_WEATHER_CACHE_SIZE:
-                _weather_cache.popitem(last=False)  # Remove oldest (FIFO)
-
-            _weather_cache[cache_key] = (data, current_time)
-            _weather_cache.move_to_end(cache_key)  # Ensure it's at the end
-
-            # Store in database cache for persistence
-            if db_session and timestamp_hour:
-                try:
-                    from models import WeatherCache
-
-                    db_cache = WeatherCache(
-                        latitude_key=lat_key,
-                        longitude_key=lon_key,
-                        timestamp_hour=timestamp_hour,
-                        temperature_f=data.get("temperature_f"),
-                        precipitation_in=data.get("precipitation_in"),
-                        wind_speed_mph=data.get("wind_speed_mph"),
-                        weather_code=data.get("weather_code"),
-                        conditions=data.get("conditions"),
-                        api_source=api_source,
-                        fetched_at=utc_now()
-                    )
-                    db_session.add(db_cache)
-                    db_session.commit()
-                    logger.debug(f"Stored in DB cache for ({latitude:.2f}, {longitude:.2f}) at {timestamp_hour}")
-                except Exception as e:
-                    logger.warning(f"Failed to store in database cache: {e}")
-                    db_session.rollback()
-                    # Continue - in-memory cache still works
-
-            logger.debug(
-                f"Weather cached for ({latitude:.2f}, {longitude:.2f}) "
-                f"at {timestamp_hour} "
-                f"(memory: {len(_weather_cache)}/{MAX_WEATHER_CACHE_SIZE})"
+            _store_in_caches(
+                cache_key, data, db_session, lat_key, lon_key,
+                timestamp_hour, api_source, latitude, longitude
             )
 
         return data
@@ -457,6 +488,42 @@ def _weather_code_to_description(code: Optional[int]) -> str:
     return weather_codes.get(code, f"Code {code}")
 
 
+def _temperature_impact(temp_f):
+    """Calculate efficiency impact from temperature."""
+    if temp_f is None:
+        return 0.0
+    if temp_f < 32:
+        return 0.20
+    if temp_f < 45:
+        return 0.10
+    if temp_f < 55:
+        return 0.05
+    if temp_f > 95:
+        return 0.10
+    if temp_f > 85:
+        return 0.05
+    return 0.0
+
+
+def _precipitation_impact(weather):
+    """Calculate efficiency impact from precipitation."""
+    if not weather.get("is_raining"):
+        return 0.0
+    precip = weather.get("precipitation_in", 0)
+    return 0.10 if precip > 0.25 else 0.05
+
+
+def _wind_impact(wind_mph):
+    """Calculate efficiency impact from wind speed."""
+    if wind_mph is None:
+        return 0.0
+    if wind_mph > 25:
+        return 0.10
+    if wind_mph > 15:
+        return 0.05
+    return 0.0
+
+
 def get_weather_impact_factor(weather: Dict[str, Any]) -> float:
     """
     Calculate an impact factor for weather conditions on efficiency.
@@ -469,36 +536,9 @@ def get_weather_impact_factor(weather: Dict[str, Any]) -> float:
     if not weather:
         return 1.0
 
-    factor = 1.0
-
-    # Temperature impact (ideal: 65-75°F)
-    temp = weather.get("temperature_f")
-    if temp is not None:
-        if temp < 32:
-            factor += 0.20  # Cold weather significantly impacts EV efficiency
-        elif temp < 45:
-            factor += 0.10
-        elif temp < 55:
-            factor += 0.05
-        elif temp > 95:
-            factor += 0.10  # Hot weather (A/C usage)
-        elif temp > 85:
-            factor += 0.05
-
-    # Rain/precipitation impact
-    if weather.get("is_raining"):
-        precip = weather.get("precipitation_in", 0)
-        if precip > 0.25:
-            factor += 0.10  # Heavy rain
-        else:
-            factor += 0.05  # Light rain
-
-    # Wind impact
-    wind = weather.get("wind_speed_mph")
-    if wind is not None:
-        if wind > 25:
-            factor += 0.10  # Strong wind
-        elif wind > 15:
-            factor += 0.05
-
-    return factor
+    return (
+        1.0
+        + _temperature_impact(weather.get("temperature_f"))
+        + _precipitation_impact(weather)
+        + _wind_impact(weather.get("wind_speed_mph"))
+    )

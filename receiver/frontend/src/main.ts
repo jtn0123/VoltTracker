@@ -17,7 +17,7 @@ function reportErrorToBackend(payload: Record<string, unknown>): void {
   }
 }
 
-window.onerror = (message, source, lineno, colno, error) => {
+globalThis.onerror = (message, source, lineno, colno, error) => {
   console.error('[VoltTracker] Uncaught error:', message, source, lineno);
   reportErrorToBackend({
     message: String(message),
@@ -28,13 +28,13 @@ window.onerror = (message, source, lineno, colno, error) => {
     url: window.location.href,
     userAgent: navigator.userAgent,
   });
-  showFallbackUI(String(message));
+  showFallbackUI(typeof message === 'string' ? message : String(message));
   return false; // Let the default handler run too
 };
 
-window.onunhandledrejection = (event: PromiseRejectionEvent) => {
+globalThis.onunhandledrejection = (event: PromiseRejectionEvent) => {
   const reason = event.reason;
-  const message = reason instanceof Error ? reason.message : String(reason);
+  const message: string = reason instanceof Error ? reason.message : String(reason);
   console.error('[VoltTracker] Unhandled rejection:', message);
   reportErrorToBackend({
     message: `Unhandled Promise: ${message}`,
@@ -174,14 +174,14 @@ store.on('telemetry:update', () => {
 
 // ── Service Worker Recovery ──────────────────────────────────────────────────
 (function () {
-  const params = new URLSearchParams(window.location.search);
+  const params = new URLSearchParams(globalThis.location.search);
   if (params.get('clear-sw') === '1' && 'serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then((registrations) => {
       registrations.forEach((reg) => reg.unregister());
       console.log('[SW Recovery] Unregistered all service workers');
       params.delete('clear-sw');
-      const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-      window.location.replace(newUrl);
+      const newUrl = globalThis.location.pathname + (params.toString() ? '?' + params.toString() : '');
+      globalThis.location.replace(newUrl);
     });
   }
 })();
@@ -229,7 +229,7 @@ globalThis.copyImportReport = async () => {
 };
 
 // ── Cleanup ──────────────────────────────────────────────────────────────────
-window.addEventListener('beforeunload', () => {
+globalThis.addEventListener('beforeunload', () => {
   if (state.liveRefreshInterval) clearInterval(state.liveRefreshInterval);
   if (state.statusRefreshInterval) clearInterval(state.statusRefreshInterval);
   if (state.tripsRefreshInterval) clearInterval(state.tripsRefreshInterval);

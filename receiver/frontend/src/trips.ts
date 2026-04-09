@@ -139,7 +139,7 @@ export async function openTripModal(tripId: number): Promise<void> {
   modal.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
 
-  const closeBtn = modal.querySelector('.modal-close') as HTMLElement | null;
+  const closeBtn = modal.querySelector<HTMLElement>('.modal-close');
   if (closeBtn) setTimeout(() => closeBtn.focus(), 100);
 
   // Show loading state in modal
@@ -259,7 +259,7 @@ export async function renderTripCharts(telemetry: TelemetryPoint[]): Promise<voi
 
   if (!speedCtx || !socCtx || telemetry.length === 0) return;
 
-  if (!window.Chart) await loadChartJs();
+  if (!(globalThis as Record<string, unknown>).Chart) await loadChartJs();
 
   const labels = telemetry.map((t) => formatTime(new Date(t.timestamp)));
   const speeds = telemetry.map((t) => t.speed_mph);

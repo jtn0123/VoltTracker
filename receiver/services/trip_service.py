@@ -277,7 +277,7 @@ def _apply_weather_averages(trip, weather_samples):
     )
 
 
-def _log_weather_error(trip_id, sample_location, error_msg):
+def _log_weather_error(_trip_id, sample_location, error_msg):
     """Log a weather API error with location context."""
     error = WeatherAPIError(
         error_msg,

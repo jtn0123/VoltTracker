@@ -182,6 +182,35 @@ def calculate_route_bounds(points: List[Tuple[float, float]]) -> Dict[str, float
     }
 
 
+def _compare_candidate_trip(db, candidate, ref_points, ref_start, ref_end, min_similarity) -> Dict[str, Any] | None:
+    """Compare a candidate trip against reference. Returns match dict or None."""
+    candidate_points = get_trip_gps_points(db, candidate)
+    if len(candidate_points) < 2:
+        return None
+
+    cand_start = candidate_points[0]
+    cand_end = candidate_points[-1]
+
+    start_end_sim = calculate_start_end_similarity(ref_start, ref_end, cand_start, cand_end)
+    if start_end_sim < 30:
+        return None
+
+    route_similarity = calculate_route_similarity(ref_points, candidate_points)
+    if route_similarity < min_similarity:
+        return None
+
+    return {
+        'trip_id': candidate.id,
+        'start_time': candidate.start_time.isoformat(),
+        'distance_miles': round(candidate.distance_miles, 2) if candidate.distance_miles else 0,
+        'kwh_per_mile': round(candidate.kwh_per_mile, 3) if candidate.kwh_per_mile else None,
+        'gas_mpg': round(candidate.gas_mpg, 1) if candidate.gas_mpg else None,
+        'similarity_score': round(route_similarity, 1),
+        'start_point': {'lat': cand_start[0], 'lon': cand_start[1]},
+        'end_point': {'lat': cand_end[0], 'lon': cand_end[1]},
+    }
+
+
 def find_similar_trips(
     db: Session,
     reference_trip: Trip,
@@ -223,38 +252,11 @@ def find_similar_trips(
     similar_trips = []
 
     for candidate in candidate_trips:
-        # Get candidate GPS points
-        candidate_points = get_trip_gps_points(db, candidate)
-
-        if len(candidate_points) < 2:
-            continue
-
-        # Fast pre-filter: Check start/end point similarity
-        cand_start = candidate_points[0]
-        cand_end = candidate_points[-1]
-
-        start_end_similarity = calculate_start_end_similarity(
-            ref_start, ref_end, cand_start, cand_end
+        match = _compare_candidate_trip(
+            db, candidate, ref_points, ref_start, ref_end, min_similarity
         )
-
-        # Skip if start/end points are too different
-        if start_end_similarity < 30:
-            continue
-
-        # Full route comparison for promising candidates
-        route_similarity = calculate_route_similarity(ref_points, candidate_points)
-
-        if route_similarity >= min_similarity:
-            similar_trips.append({
-                'trip_id': candidate.id,
-                'start_time': candidate.start_time.isoformat(),
-                'distance_miles': round(candidate.distance_miles, 2) if candidate.distance_miles else 0,
-                'kwh_per_mile': round(candidate.kwh_per_mile, 3) if candidate.kwh_per_mile else None,
-                'gas_mpg': round(candidate.gas_mpg, 1) if candidate.gas_mpg else None,
-                'similarity_score': round(route_similarity, 1),
-                'start_point': {'lat': cand_start[0], 'lon': cand_start[1]},
-                'end_point': {'lat': cand_end[0], 'lon': cand_end[1]}
-            })
+        if match is not None:
+            similar_trips.append(match)
 
     # Sort by similarity (highest first) and limit results
     similar_trips.sort(

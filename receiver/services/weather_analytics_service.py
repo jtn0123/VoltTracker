@@ -31,6 +31,29 @@ def _get_stddev_func(column):
 
 logger = logging.getLogger(__name__)
 
+
+def _round_or_none(value, decimals, default=None):
+    """Round a value if not None, else return default."""
+    return round(value, decimals) if value is not None else default
+
+
+def _format_band_row(row, label_map=None, extra_fields=None):
+    """Format a query result row into a band/condition dict."""
+    avg_eff = _round_or_none(row.avg_efficiency, 4)
+    result = {
+        "avg_kwh_per_mile": avg_eff,
+        "sample_count": row.sample_count,
+        "efficiency_impact_percent": calculate_efficiency_impact_percent(avg_eff) if avg_eff else None,
+    }
+    if label_map and hasattr(row, 'band'):
+        result["range"] = label_map.get(row.band, row.band)
+    if extra_fields:
+        for attr, decimals in extra_fields.items():
+            val = getattr(row, attr, None)
+            result[attr] = _round_or_none(val, decimals)
+    return result
+
+
 _IDEAL_TEMP_RANGE = "55-75°F"
 
 # Use analytics constants from Config (configurable via environment)
@@ -120,17 +143,12 @@ def get_efficiency_by_temperature_bands(
 
     bands_data = {}
     for row in results:
-        avg_eff = round(row.avg_efficiency, 4) if row.avg_efficiency else None
-        bands_data[row.band] = {
-            "range": band_labels.get(row.band, row.band),
-            "avg_kwh_per_mile": avg_eff,
-            "sample_count": row.sample_count,
-            "best_efficiency": round(row.best_efficiency, 4) if row.best_efficiency else None,
-            "worst_efficiency": round(row.worst_efficiency, 4) if row.worst_efficiency else None,
-            "avg_temp_f": round(row.avg_temp, 1) if row.avg_temp else None,
-            "total_miles": round(row.total_miles, 1) if row.total_miles else None,
-            "efficiency_impact_percent": calculate_efficiency_impact_percent(avg_eff) if avg_eff else None,
-        }
+        entry = _format_band_row(row, band_labels, {
+            "best_efficiency": 4, "worst_efficiency": 4,
+            "avg_temp": 1, "total_miles": 1,
+        })
+        entry["avg_temp_f"] = entry.pop("avg_temp", None)
+        bands_data[row.band] = entry
 
     # Build ordered list
     bands_list = []
@@ -304,6 +322,39 @@ def get_efficiency_by_wind(
     }
 
 
+_MONTH_TO_SEASON = {12: "winter", 1: "winter", 2: "winter",
+                    3: "spring", 4: "spring", 5: "spring",
+                    6: "summer", 7: "summer", 8: "summer",
+                    9: "fall", 10: "fall", 11: "fall"}
+
+
+def _calculate_seasonal_averages(monthly_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Group monthly efficiency data into seasonal averages."""
+    seasons: Dict[str, List[Any]] = {"winter": [], "spring": [], "summer": [], "fall": []}
+    for data in monthly_data:
+        if not (data.get("month") and "-" in data["month"]):
+            continue
+        try:
+            month_num = int(data["month"].split("-")[1])
+        except (ValueError, IndexError):
+            continue
+        season = _MONTH_TO_SEASON.get(month_num)
+        if season:
+            seasons[season].append(data["avg_kwh_per_mile"])
+
+    result = {}
+    for season, values in seasons.items():
+        valid_values = [v for v in values if v is not None]
+        if valid_values:
+            avg = sum(valid_values) / len(valid_values)
+            result[season] = {
+                "avg_kwh_per_mile": round(avg, 4),
+                "sample_months": len(valid_values),
+                "efficiency_impact_percent": calculate_efficiency_impact_percent(avg),
+            }
+    return result
+
+
 def get_seasonal_trends(
     db: Session,
     months_back: int = 24,
@@ -360,33 +411,7 @@ def get_seasonal_trends(
             }
         )
 
-    # Calculate seasonal averages
-    seasons: Dict[str, List[Any]] = {"winter": [], "spring": [], "summer": [], "fall": []}
-    for data in monthly_data:
-        if data["month"] and "-" in data["month"]:
-            try:
-                month_num = int(data["month"].split("-")[1])
-            except (ValueError, IndexError):
-                continue  # Skip invalid month format
-            if month_num in [12, 1, 2]:
-                seasons["winter"].append(data["avg_kwh_per_mile"])
-            elif month_num in [3, 4, 5]:
-                seasons["spring"].append(data["avg_kwh_per_mile"])
-            elif month_num in [6, 7, 8]:
-                seasons["summer"].append(data["avg_kwh_per_mile"])
-            else:
-                seasons["fall"].append(data["avg_kwh_per_mile"])
-
-    seasonal_averages = {}
-    for season, values in seasons.items():
-        valid_values = [v for v in values if v is not None]
-        if valid_values:
-            avg = sum(valid_values) / len(valid_values)
-            seasonal_averages[season] = {
-                "avg_kwh_per_mile": round(avg, 4),
-                "sample_months": len(valid_values),
-                "efficiency_impact_percent": calculate_efficiency_impact_percent(avg),
-            }
+    seasonal_averages = _calculate_seasonal_averages(monthly_data)
 
     return {
         "monthly_trends": monthly_data,

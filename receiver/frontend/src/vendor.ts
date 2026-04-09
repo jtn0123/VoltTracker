@@ -8,11 +8,11 @@
 
 // Socket.IO client
 import { io as socketIO } from 'socket.io-client';
-(window as any).io = socketIO;
+(globalThis as Record<string, unknown>).io = socketIO;
 
 // Flatpickr date picker
 import flatpickrLib from 'flatpickr';
-(window as any).flatpickr = flatpickrLib;
+(globalThis as Record<string, unknown>).flatpickr = flatpickrLib;
 
 // Import flatpickr CSS (bundled by Vite)
 import 'flatpickr/dist/flatpickr.min.css';

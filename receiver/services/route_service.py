@@ -113,6 +113,42 @@ def find_matching_route(
     return best_match  # type: ignore[no-any-return]  # SQLAlchemy query result typed as Any
 
 
+def _update_existing_route(route, trip):
+    """Update an existing route's rolling statistics with a new trip."""
+    route.trip_count += 1
+    n = route.trip_count
+    route.avg_distance_miles = ((route.avg_distance_miles or 0) * (n - 1) + trip.distance_miles) / n
+
+    if trip.kwh_per_mile:
+        route.avg_efficiency_kwh_per_mile = (
+            (route.avg_efficiency_kwh_per_mile or 0) * (n - 1) + trip.kwh_per_mile
+        ) / n
+        if not route.best_efficiency or trip.kwh_per_mile < route.best_efficiency:
+            route.best_efficiency = trip.kwh_per_mile
+        if not route.worst_efficiency or trip.kwh_per_mile > route.worst_efficiency:
+            route.worst_efficiency = trip.kwh_per_mile
+
+    duration = (trip.end_time - trip.start_time).total_seconds() / 60
+    route.avg_duration_minutes = ((route.avg_duration_minutes or 0) * (n - 1) + duration) / n
+    route.last_traveled = trip.start_time
+
+
+def _create_new_route(start_lat, start_lon, end_lat, end_lon, trip, route_num):
+    """Create a new Route model from a trip's endpoints."""
+    return Route(
+        name=f"Route {route_num}",
+        start_lat=start_lat, start_lon=start_lon,
+        end_lat=end_lat, end_lon=end_lon,
+        trip_count=1,
+        avg_distance_miles=trip.distance_miles,
+        avg_efficiency_kwh_per_mile=trip.kwh_per_mile,
+        avg_duration_minutes=(trip.end_time - trip.start_time).total_seconds() / 60,
+        best_efficiency=trip.kwh_per_mile,
+        worst_efficiency=trip.kwh_per_mile,
+        last_traveled=trip.start_time,
+    )
+
+
 def detect_routes(db: Session, min_trips: int = 3) -> List[Dict]:
     """
     Detect common routes from trip history.
@@ -135,56 +171,16 @@ def detect_routes(db: Session, min_trips: int = 3) -> List[Dict]:
             continue
 
         start_lat, start_lon, end_lat, end_lon = endpoints
-
-        # Check if matches existing route
         existing_route = find_matching_route(db, start_lat, start_lon, end_lat, end_lon)
 
         if existing_route:
-            # Update existing route statistics
-            existing_route.trip_count += 1
-
-            # Update averages
-            n = existing_route.trip_count
-            existing_route.avg_distance_miles = (
-                (existing_route.avg_distance_miles or 0) * (n - 1) + trip.distance_miles
-            ) / n
-
-            if trip.kwh_per_mile:
-                existing_route.avg_efficiency_kwh_per_mile = (
-                    (existing_route.avg_efficiency_kwh_per_mile or 0) * (n - 1) + trip.kwh_per_mile
-                ) / n
-
-                # Track best/worst
-                if not existing_route.best_efficiency or trip.kwh_per_mile < existing_route.best_efficiency:
-                    existing_route.best_efficiency = trip.kwh_per_mile
-
-                if not existing_route.worst_efficiency or trip.kwh_per_mile > existing_route.worst_efficiency:
-                    existing_route.worst_efficiency = trip.kwh_per_mile
-
-            duration = (trip.end_time - trip.start_time).total_seconds() / 60
-            existing_route.avg_duration_minutes = ((existing_route.avg_duration_minutes or 0) * (n - 1) + duration) / n
-            existing_route.last_traveled = trip.start_time
-
+            _update_existing_route(existing_route, trip)
             db.commit()
         else:
-            # Create new route
-            new_route = Route(
-                name=f"Route {len(routes_data) + 1}",  # Auto-name
-                start_lat=start_lat,
-                start_lon=start_lon,
-                end_lat=end_lat,
-                end_lon=end_lon,
-                trip_count=1,
-                avg_distance_miles=trip.distance_miles,
-                avg_efficiency_kwh_per_mile=trip.kwh_per_mile,
-                avg_duration_minutes=(trip.end_time - trip.start_time).total_seconds() / 60,
-                best_efficiency=trip.kwh_per_mile,
-                worst_efficiency=trip.kwh_per_mile,
-                last_traveled=trip.start_time,
-            )
+            new_route = _create_new_route(start_lat, start_lon, end_lat, end_lon,
+                                          trip, len(routes_data) + 1)
             db.add(new_route)
             db.commit()
-
             routes_data.append(new_route.to_dict())
 
     # Get all routes that meet minimum trip threshold

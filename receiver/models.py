@@ -415,6 +415,13 @@ class ChargingSession(SerializableMixin, Base):
     )
 
     id = Column(Integer, primary_key=True)
+    # Vehicle/Torque session UUID this charging session belongs to. Nullable
+    # because pre-existing rows from before this column was added won't have
+    # it set; new rows are populated from the triggering telemetry point.
+    # Used to scope telemetry queries (e.g. _reconstruct_charging_curve) so
+    # multi-vehicle deployments don't interleave readings from different
+    # vehicles into one curve.
+    session_id = Column(GUID(), nullable=True, index=True)
     start_time = Column(DateTime(timezone=True), nullable=False, index=True)
     end_time = Column(DateTime(timezone=True))
     start_soc = Column(Float)
@@ -450,6 +457,7 @@ class ChargingSession(SerializableMixin, Base):
     def to_dict(self):
         return {
             "id": self.id,
+            "session_id": str(self.session_id) if self.session_id else None,
             "start_time": self.start_time.isoformat() if self.start_time else None,
             "end_time": self.end_time.isoformat() if self.end_time else None,
             "start_soc": self.start_soc,
@@ -849,36 +857,39 @@ class TripDailyStats(SerializableMixin, Base):
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
+    @staticmethod
+    def _r(value: float | None, decimals: int, default: float | None = None) -> float | None:
+        """Round a value if not None, else return default."""
+        return round(value, decimals) if value is not None else default
+
     def to_dict(self):
         """Convert to dictionary."""
+        r = self._r
         return {
             "date": self.date.isoformat() if self.date else None,
             "total_trips": self.total_trips,
             "ev_only_trips": self.ev_only_trips,
             "gas_mode_trips": self.gas_mode_trips,
             "extreme_weather_trips": self.extreme_weather_trips,
-            "total_distance_miles": round(self.total_distance_miles, 1) if self.total_distance_miles else 0,
-            "total_electric_miles": round(self.total_electric_miles, 1) if self.total_electric_miles else 0,
-            "total_gas_miles": round(self.total_gas_miles, 1) if self.total_gas_miles else 0,
-            "avg_trip_distance": round(self.avg_trip_distance, 1) if self.avg_trip_distance else None,
-            "avg_kwh_per_mile": round(self.avg_kwh_per_mile, 3) if self.avg_kwh_per_mile else None,
-            "best_kwh_per_mile": round(self.best_kwh_per_mile, 3) if self.best_kwh_per_mile else None,
-            "worst_kwh_per_mile": round(self.worst_kwh_per_mile, 3) if self.worst_kwh_per_mile else None,
-            "avg_mpg": round(self.avg_mpg, 1) if self.avg_mpg else None,
-            "total_elevation_gain_m": round(self.total_elevation_gain_m, 0) if self.total_elevation_gain_m else 0,
-            "avg_elevation_gain_m": round(self.avg_elevation_gain_m, 0) if self.avg_elevation_gain_m else None,
-            "avg_temp_f": round(self.avg_temp_f, 1) if self.avg_temp_f else None,
-            "min_temp_f": round(self.min_temp_f, 1) if self.min_temp_f else None,
-            "max_temp_f": round(self.max_temp_f, 1) if self.max_temp_f else None,
-            "avg_wind_mph": round(self.avg_wind_mph, 1) if self.avg_wind_mph else None,
-            "total_precipitation_in": round(self.total_precipitation_in, 2) if self.total_precipitation_in else 0,
-            "avg_speed_mph": round(self.avg_speed_mph, 1) if self.avg_speed_mph else None,
-            "max_speed_mph": round(self.max_speed_mph, 1) if self.max_speed_mph else None,
-            "total_kwh_used": round(self.total_kwh_used, 2) if self.total_kwh_used else 0,
-            "avg_weather_impact_factor": (
-                round(self.avg_weather_impact_factor, 2)
-                if self.avg_weather_impact_factor else None
-            ),
+            "total_distance_miles": r(self.total_distance_miles, 1, 0),
+            "total_electric_miles": r(self.total_electric_miles, 1, 0),
+            "total_gas_miles": r(self.total_gas_miles, 1, 0),
+            "avg_trip_distance": r(self.avg_trip_distance, 1),
+            "avg_kwh_per_mile": r(self.avg_kwh_per_mile, 3),
+            "best_kwh_per_mile": r(self.best_kwh_per_mile, 3),
+            "worst_kwh_per_mile": r(self.worst_kwh_per_mile, 3),
+            "avg_mpg": r(self.avg_mpg, 1),
+            "total_elevation_gain_m": r(self.total_elevation_gain_m, 0, 0),
+            "avg_elevation_gain_m": r(self.avg_elevation_gain_m, 0),
+            "avg_temp_f": r(self.avg_temp_f, 1),
+            "min_temp_f": r(self.min_temp_f, 1),
+            "max_temp_f": r(self.max_temp_f, 1),
+            "avg_wind_mph": r(self.avg_wind_mph, 1),
+            "total_precipitation_in": r(self.total_precipitation_in, 2, 0),
+            "avg_speed_mph": r(self.avg_speed_mph, 1),
+            "max_speed_mph": r(self.max_speed_mph, 1),
+            "total_kwh_used": r(self.total_kwh_used, 2, 0),
+            "avg_weather_impact_factor": r(self.avg_weather_impact_factor, 2),
         }
 
 

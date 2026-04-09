@@ -18,6 +18,46 @@ from utils import normalize_datetime, utc_now
 
 logger = logging.getLogger(__name__)
 
+
+def _determine_health_status(health_percent):
+    """Determine battery health status from percentage."""
+    if health_percent is None:
+        return "unknown"
+    if health_percent >= 90:
+        return "excellent"
+    if health_percent >= 80:
+        return "good"
+    if health_percent >= 70:
+        return "fair"
+    return "degraded"
+
+
+def _calculate_capacity_from_readings(readings, telemetry_capacity):
+    """Determine current capacity from readings or telemetry."""
+    if readings:
+        latest = readings[0]
+        return latest.normalized_capacity_kwh or latest.capacity_kwh, len(readings)
+    if telemetry_capacity and telemetry_capacity.count and telemetry_capacity.count > 0:
+        return float(telemetry_capacity.avg_capacity), telemetry_capacity.count
+    return None, 0
+
+
+def _calculate_yearly_trend(readings):
+    """Calculate yearly battery health trend from readings."""
+    if not readings or len(readings) < 2:
+        return None
+    one_year_ago = utc_now().replace(tzinfo=None) - timedelta(days=365)
+    old_readings = [r for r in readings if r.timestamp and normalize_datetime(r.timestamp) < one_year_ago]
+    recent_readings = readings[:10]
+    if not old_readings or not recent_readings:
+        return None
+    old_avg = sum(r.normalized_capacity_kwh or r.capacity_kwh or 0 for r in old_readings) / len(old_readings)
+    recent_avg = sum(r.normalized_capacity_kwh or r.capacity_kwh or 0 for r in recent_readings) / len(recent_readings)
+    if old_avg <= 0:
+        return None
+    return round(((recent_avg - old_avg) / old_avg) * 100, 2)
+
+
 battery_bp = Blueprint("battery", __name__)
 
 
@@ -49,53 +89,16 @@ def get_battery_health():
         .first()
     )
 
-    current_capacity = None
-    capacity_readings_count = 0
+    current_capacity, capacity_readings_count = _calculate_capacity_from_readings(readings, telemetry_capacity)
     health_percent = None
 
-    # Prefer dedicated health readings, fall back to telemetry
-    if readings:
-        # Use most recent normalized reading
-        latest_reading = readings[0]
-        current_capacity = latest_reading.normalized_capacity_kwh or latest_reading.capacity_kwh
-        capacity_readings_count = len(readings)
-    elif telemetry_capacity and telemetry_capacity.count and telemetry_capacity.count > 0:
-        # Use average from telemetry
-        current_capacity = float(telemetry_capacity.avg_capacity)
-        capacity_readings_count = telemetry_capacity.count
-
-    if current_capacity:
+    if current_capacity is not None:
         health_percent = round((current_capacity / original_capacity) * 100, 1)
 
-    # Calculate trend if we have enough historical data
-    yearly_trend = None
-    if readings and len(readings) >= 2:
-        # Get readings from ~1 year ago and compare
-        one_year_ago = utc_now().replace(tzinfo=None) - timedelta(days=365)
-        old_readings = [r for r in readings if r.timestamp and normalize_datetime(r.timestamp) < one_year_ago]
-        recent_readings = readings[:10]  # Most recent 10
-
-        if old_readings and recent_readings:
-            old_avg = sum(r.normalized_capacity_kwh or r.capacity_kwh or 0 for r in old_readings) / len(old_readings)
-            recent_avg = sum(r.normalized_capacity_kwh or r.capacity_kwh or 0 for r in recent_readings) / len(
-                recent_readings
-            )
-
-            if old_avg > 0:
-                yearly_change = ((recent_avg - old_avg) / old_avg) * 100
-                yearly_trend = round(yearly_change, 2)
+    yearly_trend = _calculate_yearly_trend(readings)
 
     # Determine health status
-    health_status = "unknown"
-    if health_percent:
-        if health_percent >= 90:
-            health_status = "excellent"
-        elif health_percent >= 80:
-            health_status = "good"
-        elif health_percent >= 70:
-            health_status = "fair"
-        else:
-            health_status = "degraded"
+    health_status = _determine_health_status(health_percent)
 
     return jsonify(
         {

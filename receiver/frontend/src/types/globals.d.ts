@@ -110,3 +110,9 @@ interface Window {
   Chart?: typeof Chart;
   L?: typeof L;
 }
+
+// Extend globalThis for dynamically loaded libraries
+declare namespace globalThis {
+  var Chart: typeof Chart | undefined;
+  var L: typeof L | undefined;
+}

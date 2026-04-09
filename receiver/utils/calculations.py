@@ -34,6 +34,17 @@ from calculations.constants import (  # noqa: F401
 logger = logging.getLogger(__name__)
 
 
+def _is_sustained_rpm(telemetry_points: List[dict], start_idx: int, rpm_threshold: float) -> bool:
+    """Check if engine RPM stays elevated for the next 2 points after start_idx."""
+    if start_idx + 1 >= len(telemetry_points):
+        return False
+    for j in range(start_idx + 1, min(start_idx + 3, len(telemetry_points))):
+        next_rpm = telemetry_points[j].get("engine_rpm", 0) or 0
+        if next_rpm < rpm_threshold / 2:
+            return False
+    return True
+
+
 def detect_gas_mode_entry(
     telemetry_points: List[dict], soc_threshold: float = SOC_GAS_THRESHOLD, rpm_threshold: float = RPM_THRESHOLD
 ) -> Optional[dict]:
@@ -60,18 +71,11 @@ def detect_gas_mode_entry(
         rpm = point.get("engine_rpm", 0) or 0
         soc = point.get("state_of_charge", 100) or 100
 
-        # Check if engine is running and SOC is depleted
-        if rpm > rpm_threshold and soc < soc_threshold:
-            # Verify it's sustained - check next 2 points if available
-            sustained = True
-            for j in range(i + 1, min(i + 3, len(telemetry_points))):
-                next_rpm = telemetry_points[j].get("engine_rpm", 0) or 0
-                if next_rpm < rpm_threshold / 2:
-                    sustained = False
-                    break
+        if rpm <= rpm_threshold or soc >= soc_threshold:
+            continue
 
-            if sustained:
-                return point
+        if _is_sustained_rpm(telemetry_points, i, rpm_threshold):
+            return point
 
     return None
 

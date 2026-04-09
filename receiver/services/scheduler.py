@@ -181,6 +181,51 @@ def check_refuel_events():
         SessionLocal.remove()
 
 
+def _get_or_create_charging_session(db, recent, session_info):
+    """Get existing active charging session or create a new one."""
+    # Try with row lock to prevent race conditions
+    active_session = (
+        db.query(ChargingSession)
+        .filter(ChargingSession.is_complete.is_(False))
+        .with_for_update(skip_locked=True)
+        .order_by(desc(ChargingSession.start_time))
+        .first()
+    )
+    if active_session:
+        return active_session
+
+    # Double-check without lock (another process may have just created one)
+    existing = db.query(ChargingSession).filter(ChargingSession.is_complete.is_(False)).first()
+    if existing:
+        return existing
+
+    # Create new session
+    first_point = recent[-1]  # Oldest in the set
+    new_session = ChargingSession(
+        start_time=first_point.timestamp,
+        start_soc=session_info.get("start_soc"),
+        latitude=first_point.latitude,
+        longitude=first_point.longitude,
+        charge_type=session_info.get("charge_type", "L1"),
+    )
+    db.add(new_session)
+    logger.info(f"Charging session started: {session_info.get('charge_type')}")
+    return new_session
+
+
+def _handle_active_charging(db, recent, session_info):
+    """Handle an active charging session: get/create session and update data."""
+    active_session = _get_or_create_charging_session(db, recent, session_info)
+    active_session.end_soc = session_info.get("current_soc")
+    active_session.peak_power_kw = session_info.get("peak_power_kw")
+    active_session.avg_power_kw = session_info.get("avg_power_kw")
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        logger.warning(f"Duplicate charging session detected (start_time constraint): {e}")
+
+
 def check_charging_sessions():
     """Detect and track charging sessions from telemetry data."""
     db = get_scheduler_db()
@@ -208,51 +253,7 @@ def check_charging_sessions():
         session_info = detect_charging_session(points)
 
         if session_info and session_info.get("is_charging"):
-            # Check for existing active charging session with row lock
-            # Use with_for_update() to prevent race conditions where multiple
-            # scheduler instances could create duplicate sessions
-            active_session = (
-                db.query(ChargingSession)
-                .filter(ChargingSession.is_complete.is_(False))
-                .with_for_update(skip_locked=True)
-                .order_by(desc(ChargingSession.start_time))
-                .first()
-            )
-
-            if not active_session:
-                # Double-check for existing session without lock (in case another
-                # process just created one)
-                existing = db.query(ChargingSession).filter(ChargingSession.is_complete.is_(False)).first()
-                if existing:
-                    active_session = existing
-                else:
-                    # Create new charging session
-                    first_point = recent[-1]  # Oldest in the set
-                    active_session = ChargingSession(
-                        start_time=first_point.timestamp,
-                        start_soc=session_info.get("start_soc"),
-                        latitude=first_point.latitude,
-                        longitude=first_point.longitude,
-                        charge_type=session_info.get("charge_type", "L1"),
-                    )
-                    db.add(active_session)
-                    logger.info(f"Charging session started: {session_info.get('charge_type')}")
-
-            # Update with latest data
-            active_session.end_soc = session_info.get("current_soc")
-            active_session.peak_power_kw = session_info.get("peak_power_kw")
-            active_session.avg_power_kw = session_info.get("avg_power_kw")
-
-            try:
-                db.commit()
-            except IntegrityError as e:
-                # Unique constraint violation - duplicate charging session
-                # This can happen in rare race conditions, just log and continue
-                db.rollback()
-                logger.warning(f"Duplicate charging session detected (start_time constraint): {e}")
-                # Re-query the existing session to continue tracking
-                active_session = db.query(ChargingSession).filter(ChargingSession.is_complete.is_(False)).first()
-
+            _handle_active_charging(db, recent, session_info)
         else:
             # Check if we need to close an active session
             active_session = db.query(ChargingSession).filter(ChargingSession.is_complete.is_(False)).first()

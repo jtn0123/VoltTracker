@@ -16,8 +16,9 @@ export const DEBUG = new URLSearchParams(globalThis.location.search).has('debug'
  */
 export function escapeHtml(str: unknown): string {
   if (str === null || str === undefined) return '';
+  const text = typeof str === 'string' ? str : String(str);
   const div = document.createElement('div');
-  div.textContent = String(str);
+  div.textContent = text;
   return div.innerHTML;
 }
 
@@ -62,9 +63,7 @@ export class APICache {
   private initPromise: Promise<void> | null = null;
 
   private ensureInit(): Promise<void> {
-    if (!this.initPromise) {
-      this.initPromise = this.init();
-    }
+    this.initPromise ??= this.init();
     return this.initPromise;
   }
 

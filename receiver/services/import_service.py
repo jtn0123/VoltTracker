@@ -106,6 +106,29 @@ def record_import(db, import_code, status, failure_reason=None, suggestion=None,
         logger.warning(f"Failed to record import {import_code}: {e}")
 
 
+def _format_timestamp(ts):
+    """Format a timestamp value for JSON output."""
+    return ts.isoformat() if hasattr(ts, 'isoformat') else str(ts)
+
+
+def _build_stats_dict(stats):
+    """Build the stats sub-dict for import responses."""
+    result = {
+        "total_rows": stats.get("total_rows", 0),
+        "parsed_rows": stats.get("parsed_rows", 0),
+        "skipped_rows": stats.get("skipped_rows", 0),
+        "duplicate_rows": stats.get("duplicates_removed", 0),
+        "columns_detected": stats.get("columns_detected", []),
+        "columns_mapped": stats.get("columns_mapped", []),
+    }
+    if stats.get("timestamp_range_start") and stats.get("timestamp_range_end"):
+        result["timestamp_range"] = {
+            "start": _format_timestamp(stats["timestamp_range_start"]),
+            "end": _format_timestamp(stats["timestamp_range_end"]),
+        }
+    return result
+
+
 def build_import_response(status, message, import_code, failure_reason=None,
                           suggestion=None, stats=None, trip_id=None, http_status=200,
                           first_error=None):
@@ -131,27 +154,7 @@ def build_import_response(status, message, import_code, failure_reason=None,
     if suggestion:
         response["suggestion"] = suggestion
     if stats:
-        response["stats"] = {
-            "total_rows": stats.get("total_rows", 0),
-            "parsed_rows": stats.get("parsed_rows", 0),
-            "skipped_rows": stats.get("skipped_rows", 0),
-            "duplicate_rows": stats.get("duplicates_removed", 0),
-            "columns_detected": stats.get("columns_detected", []),
-            "columns_mapped": stats.get("columns_mapped", []),
-        }
-        if stats.get("timestamp_range_start") and stats.get("timestamp_range_end"):
-            response["stats"]["timestamp_range"] = {
-                "start": (
-                    stats["timestamp_range_start"].isoformat()
-                    if hasattr(stats["timestamp_range_start"], 'isoformat')
-                    else str(stats["timestamp_range_start"])
-                ),
-                "end": (
-                    stats["timestamp_range_end"].isoformat()
-                    if hasattr(stats["timestamp_range_end"], 'isoformat')
-                    else str(stats["timestamp_range_end"])
-                ),
-            }
+        response["stats"] = _build_stats_dict(stats)
     if trip_id:
         response["trip_id"] = trip_id
 

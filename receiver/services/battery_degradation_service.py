@@ -106,6 +106,25 @@ def simple_linear_regression(data: List[Tuple[float, float]]) -> Tuple[float, fl
     return (slope, intercept)
 
 
+def _get_current_battery_status(db, latest_reading):
+    """Get current mileage and capacity percent from latest reading."""
+    if not latest_reading:
+        return 0, 100.0
+
+    # Capacity percent from normalized or raw kWh
+    capacity_kwh = latest_reading.normalized_capacity_kwh or latest_reading.capacity_kwh
+    capacity_pct = capacity_kwh_to_percent(capacity_kwh) if capacity_kwh else 100.0
+
+    # Mileage from reading or latest trip
+    if latest_reading.odometer_miles:
+        miles = latest_reading.odometer_miles
+    else:
+        latest_trip = db.query(Trip).filter(Trip.end_odometer.isnot(None)).order_by(Trip.start_time.desc()).first()
+        miles = latest_trip.end_odometer if latest_trip else 0
+
+    return miles, capacity_pct
+
+
 def forecast_degradation(db: Session) -> Dict:
     """
     Forecast battery degradation at key mileage milestones.
@@ -126,24 +145,7 @@ def forecast_degradation(db: Session) -> Dict:
     # Get current status
     latest_reading = db.query(BatteryHealthReading).order_by(BatteryHealthReading.timestamp.desc()).first()
 
-    current_miles = 0
-    current_capacity_pct: float = 100
-
-    if latest_reading:
-        # Calculate capacity percent from normalized kWh
-        if latest_reading.normalized_capacity_kwh:
-            current_capacity_pct = capacity_kwh_to_percent(latest_reading.normalized_capacity_kwh)
-        elif latest_reading.capacity_kwh:
-            # Fallback to raw capacity if normalized not available
-            current_capacity_pct = capacity_kwh_to_percent(latest_reading.capacity_kwh)
-
-        # Get current mileage from reading or latest trip
-        if latest_reading.odometer_miles:
-            current_miles = latest_reading.odometer_miles
-        else:
-            latest_trip = db.query(Trip).filter(Trip.end_odometer.isnot(None)).order_by(Trip.start_time.desc()).first()
-            if latest_trip:
-                current_miles = latest_trip.end_odometer
+    current_miles, current_capacity_pct = _get_current_battery_status(db, latest_reading)
 
     # Forecast at milestones
     milestones = [50000, 75000, 100000, 125000, 150000, 200000]

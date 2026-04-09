@@ -608,6 +608,96 @@ def get_mpg_trend():
     )
 
 
+def _trip_to_comparison_dict(trip):
+    """Extract comparison metrics from a trip."""
+    return {
+        "id": trip.id,
+        "start_time": trip.start_time.isoformat() if trip.start_time else None,
+        "distance_miles": trip.distance_miles,
+        "electric_miles": trip.electric_miles,
+        "gas_miles": trip.gas_miles,
+        "kwh_per_mile": trip.kwh_per_mile,
+        "gas_mpg": trip.gas_mpg,
+        "weather_temp_f": trip.weather_temp_f,
+        "weather_conditions": trip.weather_conditions,
+        "extreme_weather": trip.extreme_weather,
+        "elevation_gain_m": trip.elevation_gain_m,
+        "gas_mode_entered": trip.gas_mode_entered,
+        "weather_impact_factor": trip.weather_impact_factor,
+    }
+
+
+def _safe_stats(values, decimals):
+    """Calculate min/max/avg/total for a list of values, rounding to decimals."""
+    if not values:
+        return {"min": None, "max": None, "avg": None, "total": None}
+    return {
+        "min": round(min(values), decimals),
+        "max": round(max(values), decimals),
+        "avg": round(statistics.mean(values), decimals),
+        "total": round(sum(values), decimals),
+    }
+
+
+def _calculate_comparison_statistics(trips):
+    """Calculate aggregate statistics for trip comparison."""
+    distances = [t.distance_miles for t in trips if t.distance_miles is not None]
+    efficiencies = [t.kwh_per_mile for t in trips if t.kwh_per_mile is not None]
+    temps = [t.weather_temp_f for t in trips if t.weather_temp_f is not None]
+    elevations = [t.elevation_gain_m for t in trips if t.elevation_gain_m is not None]
+
+    dist_stats = _safe_stats(distances, 1)
+    eff_stats = _safe_stats(efficiencies, 3)
+    elev_stats = _safe_stats(elevations, 0)
+
+    return {
+        "distance": dist_stats,
+        "efficiency": {
+            "best": eff_stats["min"],
+            "worst": eff_stats["max"],
+            "avg": eff_stats["avg"],
+            "variance": round(statistics.variance(efficiencies), 3) if len(efficiencies) > 1 else None,
+        },
+        "weather": {
+            "coldest": round(min(temps), 1) if temps else None,
+            "warmest": round(max(temps), 1) if temps else None,
+            "avg_temp": round(statistics.mean(temps), 1) if temps else None,
+            "extreme_weather_count": sum(1 for t in trips if t.extreme_weather),
+        },
+        "elevation": {
+            "min_gain": elev_stats["min"],
+            "max_gain": elev_stats["max"],
+            "avg_gain": elev_stats["avg"],
+            "total_gain": elev_stats["total"],
+        },
+        "modes": {
+            "ev_only": sum(1 for t in trips if not t.gas_mode_entered),
+            "gas_used": sum(1 for t in trips if t.gas_mode_entered),
+        },
+    }
+
+
+def _generate_comparison_insights(trips):
+    """Generate insights from trip comparison."""
+    insights = []
+    efficiencies = [t.kwh_per_mile for t in trips if t.kwh_per_mile is not None]
+    temps = [t.weather_temp_f for t in trips if t.weather_temp_f is not None]
+
+    if len(efficiencies) > 1 and statistics.variance(efficiencies) > 0.01:
+        insights.append("High efficiency variance detected - consider analyzing conditions causing differences")
+
+    if len(temps) > 1:
+        temp_range = max(temps) - min(temps)
+        if temp_range > 30:
+            insights.append(f"Wide temperature range ({temp_range:.0f}\u00b0F) - expect efficiency variations")
+
+    extreme_count = sum(1 for t in trips if t.extreme_weather)
+    if extreme_count > 0:
+        insights.append(f"{extreme_count}/{len(trips)} trips had extreme weather conditions")
+
+    return insights
+
+
 @trips_bp.route("/trips/compare", methods=["POST"])
 def compare_trips():
     """
@@ -636,93 +726,17 @@ def compare_trips():
         if len(trip_ids) > 10:
             return jsonify({"error": "Maximum 10 trips can be compared at once"}), 400
 
-        # Fetch trips
         trips = db.query(Trip).filter(Trip.id.in_(trip_ids), Trip.is_closed.is_(True), Trip.deleted_at.is_(None)).all()
 
         if not trips:
             return jsonify({"error": "No trips found with provided IDs"}), 404
 
-        # Build comparison data
         comparison = {
             "trip_count": len(trips),
-            "trips": [],
-            "statistics": {},
+            "trips": [_trip_to_comparison_dict(t) for t in trips],
+            "statistics": _calculate_comparison_statistics(trips),
+            "insights": _generate_comparison_insights(trips),
         }
-
-        # Collect metrics for each trip
-        for trip in trips:
-            trip_data = {
-                "id": trip.id,
-                "start_time": trip.start_time.isoformat() if trip.start_time else None,
-                "distance_miles": trip.distance_miles,
-                "electric_miles": trip.electric_miles,
-                "gas_miles": trip.gas_miles,
-                "kwh_per_mile": trip.kwh_per_mile,
-                "gas_mpg": trip.gas_mpg,
-                "weather_temp_f": trip.weather_temp_f,
-                "weather_conditions": trip.weather_conditions,
-                "extreme_weather": trip.extreme_weather,
-                "elevation_gain_m": trip.elevation_gain_m,
-                "gas_mode_entered": trip.gas_mode_entered,
-                "weather_impact_factor": trip.weather_impact_factor,
-            }
-            comparison["trips"].append(trip_data)
-
-        # Calculate aggregate statistics
-        distances = [t.distance_miles for t in trips if t.distance_miles]
-        efficiencies = [t.kwh_per_mile for t in trips if t.kwh_per_mile]
-        temps = [t.weather_temp_f for t in trips if t.weather_temp_f]
-        elevations = [t.elevation_gain_m for t in trips if t.elevation_gain_m]
-
-        comparison["statistics"] = {
-            "distance": {
-                "min": round(min(distances), 1) if distances else None,
-                "max": round(max(distances), 1) if distances else None,
-                "avg": round(statistics.mean(distances), 1) if distances else None,
-                "total": round(sum(distances), 1) if distances else None,
-            },
-            "efficiency": {
-                "best": round(min(efficiencies), 3) if efficiencies else None,
-                "worst": round(max(efficiencies), 3) if efficiencies else None,
-                "avg": round(statistics.mean(efficiencies), 3) if efficiencies else None,
-                "variance": round(statistics.variance(efficiencies), 3) if len(efficiencies) > 1 else None,
-            },
-            "weather": {
-                "coldest": round(min(temps), 1) if temps else None,
-                "warmest": round(max(temps), 1) if temps else None,
-                "avg_temp": round(statistics.mean(temps), 1) if temps else None,
-                "extreme_weather_count": sum(1 for t in trips if t.extreme_weather),
-            },
-            "elevation": {
-                "min_gain": round(min(elevations), 0) if elevations else None,
-                "max_gain": round(max(elevations), 0) if elevations else None,
-                "avg_gain": round(statistics.mean(elevations), 0) if elevations else None,
-                "total_gain": round(sum(elevations), 0) if elevations else None,
-            },
-            "modes": {
-                "ev_only": sum(1 for t in trips if not t.gas_mode_entered),
-                "gas_used": sum(1 for t in trips if t.gas_mode_entered),
-            },
-        }
-
-        # Add insights/recommendations
-        insights = []
-
-        if efficiencies and len(efficiencies) > 1:
-            variance = statistics.variance(efficiencies)
-            if variance > 0.01:  # High variance
-                insights.append("High efficiency variance detected - consider analyzing conditions causing differences")
-
-        if temps and len(temps) > 1:
-            temp_range = max(temps) - min(temps)
-            if temp_range > 30:  # Large temperature range
-                insights.append(f"Wide temperature range ({temp_range:.0f}°F) - expect efficiency variations")
-
-        extreme_count = sum(1 for t in trips if t.extreme_weather)
-        if extreme_count > 0:
-            insights.append(f"{extreme_count}/{len(trips)} trips had extreme weather conditions")
-
-        comparison["insights"] = insights
 
         return jsonify(comparison)
 

@@ -113,6 +113,45 @@ def _quick_stats_cache_key(timeframe):
     return generate_cache_key("stats:quick", timeframe, units, include_trend)
 
 
+def _get_previous_period(timeframe, start_date, end_date):
+    """Calculate previous period dates for trend comparison."""
+    if timeframe == "this_year":
+        prev_year = start_date.year - 1
+        try:
+            prev_start = start_date.replace(year=prev_year)
+        except ValueError:
+            prev_start = start_date.replace(year=prev_year, day=28)
+        try:
+            prev_end = end_date.replace(year=prev_year)
+        except ValueError:
+            prev_end = end_date.replace(year=prev_year, day=28)
+        return prev_start, prev_end
+    period_duration = end_date - start_date
+    return start_date - period_duration, start_date
+
+
+def _add_trend_comparison(db, result, current_stats, timeframe, start_date, end_date, units):
+    """Add trend comparison data to the result dict."""
+    prev_start, prev_end = _get_previous_period(timeframe, start_date, end_date)
+
+    previous_trips = db.query(Trip).filter(
+        and_(
+            Trip.is_closed.is_(True),
+            Trip.deleted_at.is_(None),
+            Trip.start_time >= prev_start,
+            Trip.start_time < prev_end
+        )
+    ).all()
+
+    prev_stats = calculate_period_stats(previous_trips, units)
+    result["trends"] = calculate_trends(current_stats, prev_stats)
+    result["previous_period"] = {
+        "start_date": prev_start.isoformat(),
+        "end_date": prev_end.isoformat(),
+        "stats": prev_stats,
+    }
+
+
 @statistics_bp.route("/stats/quick/<timeframe>", methods=["GET"])
 @cache_result("stats:quick", ttl=300, tags=["statistics", "trips"], key_func=_quick_stats_cache_key)
 def get_quick_stats(timeframe):
@@ -174,35 +213,7 @@ def get_quick_stats(timeframe):
 
     # Add trend comparison if requested
     if include_trend:
-        if timeframe == "this_year":
-            # For this_year, compare same date range in previous year
-            prev_start = start_date.replace(year=start_date.year - 1)
-            prev_end = end_date.replace(year=end_date.year - 1)
-        else:
-            # Calculate previous period (same duration, shifted back)
-            period_duration = end_date - start_date
-            prev_start = start_date - period_duration
-            prev_end = start_date
-
-        previous_trips = db.query(Trip).filter(
-            and_(
-                Trip.is_closed.is_(True),
-                Trip.deleted_at.is_(None),
-                Trip.start_time >= prev_start,
-                Trip.start_time < prev_end
-            )
-        ).all()
-
-        prev_stats = calculate_period_stats(previous_trips, units)
-
-        # Calculate trends
-        trends = calculate_trends(current_stats, prev_stats)
-        result["trends"] = trends
-        result["previous_period"] = {
-            "start_date": prev_start.isoformat(),
-            "end_date": prev_end.isoformat(),
-            "stats": prev_stats
-        }
+        _add_trend_comparison(db, result, current_stats, timeframe, start_date, end_date, units)
 
     return jsonify(result), 200
 

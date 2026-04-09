@@ -102,6 +102,38 @@ def get_elevation_for_points(
     return all_elevations
 
 
+def _parse_elevation_response(data):
+    """Parse elevation API response data."""
+    elevations = data.get("elevation", [])
+    if isinstance(elevations, list):
+        return elevations
+    if isinstance(elevations, (int, float)):
+        return [elevations]
+    logger.warning(f"Unexpected elevation response format: {type(elevations)}")
+    return None
+
+
+def _handle_request_error(e, attempt, max_retries, event):
+    """Handle a request error during retry loop. Returns True if should abort (no retry)."""
+    label = f"attempt_{attempt + 1}"
+
+    if isinstance(e, requests.exceptions.Timeout):
+        logger.warning("Elevation API timeout (%s/%s)", label, max_retries)
+        event.add_technical_metric(f"{label}_timeout", value=True)
+    elif isinstance(e, requests.exceptions.ConnectionError):
+        logger.warning("Elevation API connection error (%s/%s)", label, max_retries)
+        event.add_technical_metric(f"{label}_connection_error", value=True)
+    elif isinstance(e, requests.exceptions.HTTPError):
+        if e.response is not None and 400 <= e.response.status_code < 500:
+            logger.warning("Elevation API client error: HTTP %s", e.response.status_code)
+            return True  # Don't retry client errors
+        logger.warning("Elevation API HTTP error (%s/%s): %s", label, max_retries, e)
+    else:
+        logger.exception("Elevation API unexpected error: %s", e)
+        event.add_technical_metric(f"{label}_unexpected_error", value=True)
+    return False
+
+
 def _request_with_retry(
     params: Dict[str, Any],
     timeout: int,
@@ -126,43 +158,12 @@ def _request_with_retry(
         try:
             response = requests.get(ELEVATION_API_URL, params=params, timeout=timeout)
             response.raise_for_status()
-            data = response.json()
-
-            # Parse response
-            elevations = data.get("elevation", [])
-            if isinstance(elevations, list):
-                return elevations
-            elif isinstance(elevations, (int, float)):
-                return [elevations]
-            else:
-                logger.warning(f"Unexpected elevation response format: {type(elevations)}")
-                return None
-
-        except requests.exceptions.Timeout as e:
-            last_error = e
-            logger.warning(f"Elevation API timeout (attempt {attempt + 1}/{max_retries})")
-            event.add_technical_metric(f"attempt_{attempt + 1}_timeout", True)
-
-        except requests.exceptions.ConnectionError as e:
-            last_error = e
-            logger.warning(f"Elevation API connection error (attempt {attempt + 1}/{max_retries})")
-            event.add_technical_metric(f"attempt_{attempt + 1}_connection_error", True)
-
-        except requests.exceptions.HTTPError as e:
-            last_error = e
-            if e.response is not None:
-                status_code = e.response.status_code
-                if 400 <= status_code < 500:
-                    logger.warning(f"Elevation API client error: HTTP {status_code}")
-                    return None
-            logger.warning(f"Elevation API HTTP error (attempt {attempt + 1}/{max_retries}): {e}")
-
+            return _parse_elevation_response(response.json())
         except Exception as e:
             last_error = e
-            logger.exception(f"Elevation API unexpected error: {e}")
-            event.add_technical_metric(f"attempt_{attempt + 1}_unexpected_error", True)
+            if _handle_request_error(e, attempt, max_retries, event):
+                return None
 
-        # Wait before retrying
         if attempt < max_retries - 1:
             time.sleep(delay)
             delay *= 2

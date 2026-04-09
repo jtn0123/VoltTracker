@@ -8,6 +8,29 @@ import { api } from '@/api';
 import { loadChartJs, createGradient, getChartDefaults, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis, getChartColor } from '@/charts';
 import type { ChargingSummary, ChargingSession, ChargingCurveResponse } from '@/types/api';
 
+/** Set text content of an element by ID if it exists. */
+function setText(id: string, text: string): void {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+/** Set innerHTML of an element by ID if it exists. */
+function setHtml(id: string, html: string): void {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
+/** Format a charging cost string from summary data. */
+function formatCostText(data: ChargingSummary): string {
+  if (data.monthly_cost) {
+    const prefix = data.has_explicit_costs ? '' : '~';
+    return `${prefix}$${data.monthly_cost.toFixed(2)}/month`;
+  }
+  if (data.total_cost != null) return `$${data.total_cost.toFixed(2)} total`;
+  if (data.electricity_rate) return `$${data.electricity_rate}/kWh rate`;
+  return 'No cost data';
+}
+
 /**
  * Load charging summary for electric efficiency cards
  */
@@ -17,44 +40,21 @@ export async function loadChargingSummary(): Promise<void> {
     if (result.error || !result.data) return;
     const data = result.data;
 
-    const totalKwh = document.getElementById('total-kwh');
-    if (totalKwh) {
-      if (data.total_kwh) {
-        totalKwh.innerHTML = `${data.total_kwh.toFixed(1)}<span class="card-unit">kWh</span>`;
-        const sessions = document.getElementById('charging-sessions');
-        if (sessions) sessions.textContent = `${data.total_sessions} charging sessions`;
-      } else {
-        totalKwh.textContent = '--';
-        const sessions = document.getElementById('charging-sessions');
-        if (sessions) sessions.textContent = 'No charging data';
-      }
+    if (data.total_kwh) {
+      setHtml('total-kwh', `${data.total_kwh.toFixed(1)}<span class="card-unit">kWh</span>`);
+      setText('charging-sessions', `${data.total_sessions} charging sessions`);
+    } else {
+      setText('total-kwh', '--');
+      setText('charging-sessions', 'No charging data');
     }
 
-    const avgKwhSession = document.getElementById('avg-kwh-session');
-    if (avgKwhSession) {
-      avgKwhSession.innerHTML = data.avg_kwh_per_session
-        ? `${data.avg_kwh_per_session.toFixed(1)}<span class="card-unit">kWh</span>`
-        : '--';
-    }
+    setHtml('avg-kwh-session', data.avg_kwh_per_session
+      ? `${data.avg_kwh_per_session.toFixed(1)}<span class="card-unit">kWh</span>` : '--');
 
-    const chargingCost = document.getElementById('charging-cost');
-    if (chargingCost) {
-      if (data.monthly_cost) {
-        const costLabel = data.has_explicit_costs ? '' : '~';
-        chargingCost.textContent = `${costLabel}$${data.monthly_cost.toFixed(2)}/month`;
-      } else if (data.total_cost != null) {
-        chargingCost.textContent = `$${data.total_cost.toFixed(2)} total`;
-      } else if (data.electricity_rate) {
-        chargingCost.textContent = `$${data.electricity_rate}/kWh rate`;
-      } else {
-        chargingCost.textContent = 'No cost data';
-      }
-    }
+    setText('charging-cost', formatCostText(data));
 
-    const l1El = document.getElementById('l1-sessions');
-    if (l1El && data.l1_sessions !== undefined) l1El.textContent = String(data.l1_sessions);
-    const l2El = document.getElementById('l2-sessions');
-    if (l2El && data.l2_sessions !== undefined) l2El.textContent = String(data.l2_sessions);
+    if (data.l1_sessions !== undefined) setText('l1-sessions', String(data.l1_sessions));
+    if (data.l2_sessions !== undefined) setText('l2-sessions', String(data.l2_sessions));
 
     updateCostComparison(data);
   } catch (error) {
@@ -118,6 +118,74 @@ export function formatChargingDuration(startTime: string, endTime: string): stri
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
+// Whitelist of charge types we accept from the server. Anything outside this
+// set falls back to a generic 'unknown' class so a malicious or malformed
+// charge_type can never inject CSS-class characters into the rendered HTML.
+const KNOWN_CHARGE_TYPES = new Set(['l1', 'l2', 'dcfc', 'dc']);
+
+/** Escape HTML special characters in user-provided strings before interpolation. */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[c] as string));
+}
+
+/** Format common session display fields. */
+function sessionFields(session: ChargingSession) {
+  // Whitelist + escape charge_type so neither the CSS class nor the visible
+  // text can be used as an XSS or CSS-injection vector.
+  const rawType = session.charge_type ?? '';
+  const typeKey = rawType.toLowerCase();
+  const safeTypeClass = KNOWN_CHARGE_TYPES.has(typeKey) ? typeKey : 'unknown';
+  const safeTypeText = escapeHtml(rawType);
+  const typeBadge = rawType
+    ? `<span class="badge badge-${safeTypeClass}">${safeTypeText}</span>`
+    : '--';
+
+  const energy = session.kwh_added != null ? session.kwh_added.toFixed(1) + ' kWh' : '--';
+  const soc = session.start_soc !== null && session.end_soc !== null
+    ? `${session.start_soc}% → ${session.end_soc}%` : '--';
+  const duration = session.end_time ? formatChargingDuration(session.start_time, session.end_time) : '--';
+  // location_name is user-controlled (manual entry) — escape before interpolation.
+  const location = escapeHtml(session.location_name || '--');
+  const dateStr = formatDateTime(new Date(session.start_time));
+  return { typeBadge, safeTypeClass, safeTypeText, energy, soc, duration, location, dateStr };
+}
+
+/** Render a charging session table row. */
+function renderChargingRow(session: ChargingSession): string {
+  const f = sessionFields(session);
+  return `<tr class="clickable" onclick="openChargingDetailModal(${session.id})">
+    <td>${f.dateStr}</td><td>${f.typeBadge}</td><td>${f.energy}</td>
+    <td>${f.soc}</td><td>${f.duration}</td><td>${f.location}</td>
+    <td><button class="btn-delete" onclick="event.stopPropagation(); deleteChargingSession(${session.id})" title="Delete session">×</button></td>
+  </tr>`;
+}
+
+/** Render a charging session card. */
+function renderChargingCard(session: ChargingSession): string {
+  const f = sessionFields(session);
+  // Reuse the whitelisted/escaped fields from sessionFields rather than
+  // re-interpolating raw session.charge_type, which would re-introduce the
+  // XSS surface this function was just hardened against.
+  const badge = f.safeTypeText
+    ? `<span class="charging-card-badge ${f.safeTypeClass}">${f.safeTypeText}</span>`
+    : '';
+  return `<div class="charging-card" role="listitem" onclick="openChargingDetailModal(${session.id})">
+    <div class="charging-card-header"><span class="charging-card-date">${f.dateStr}</span>${badge}</div>
+    <div class="charging-card-stats">
+      <div class="charging-card-stat"><span class="charging-card-stat-label">Energy</span><span class="charging-card-stat-value">${f.energy}</span></div>
+      <div class="charging-card-stat"><span class="charging-card-stat-label">SOC</span><span class="charging-card-stat-value">${f.soc}</span></div>
+      <div class="charging-card-stat"><span class="charging-card-stat-label">Duration</span><span class="charging-card-stat-value">${f.duration}</span></div>
+      <div class="charging-card-stat"><span class="charging-card-stat-label">Location</span><span class="charging-card-stat-value">${f.location}</span></div>
+    </div>
+  </div>`;
+}
+
 /**
  * Load charging history
  */
@@ -152,71 +220,10 @@ export async function loadChargingHistory(): Promise<void> {
       return;
     }
 
-    tableBody.innerHTML = sessions
-      .map(
-        (session) => `
-      <tr class="clickable" onclick="openChargingDetailModal(${session.id})">
-        <td>${formatDateTime(new Date(session.start_time))}</td>
-        <td>
-          ${
-            session.charge_type
-              ? `<span class="badge badge-${session.charge_type.toLowerCase()}">${session.charge_type}</span>`
-              : '--'
-          }
-        </td>
-        <td>${session.kwh_added != null ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</td>
-        <td>
-          ${
-            session.start_soc !== null && session.end_soc !== null
-              ? `${session.start_soc}% → ${session.end_soc}%`
-              : '--'
-          }
-        </td>
-        <td>${session.end_time ? formatChargingDuration(session.start_time, session.end_time) : '--'}</td>
-        <td>${session.location_name || '--'}</td>
-        <td>
-          <button class="btn-delete" onclick="event.stopPropagation(); deleteChargingSession(${session.id})" title="Delete session">×</button>
-        </td>
-      </tr>
-    `,
-      )
-      .join('');
+    tableBody.innerHTML = sessions.map(renderChargingRow).join('');
 
     if (cardsContainer) {
-      cardsContainer.innerHTML = sessions
-        .map(
-          (session) => `
-        <div class="charging-card" role="listitem" onclick="openChargingDetailModal(${session.id})">
-          <div class="charging-card-header">
-            <span class="charging-card-date">${formatDateTime(new Date(session.start_time))}</span>
-            ${
-              session.charge_type
-                ? `<span class="charging-card-badge ${session.charge_type.toLowerCase()}">${session.charge_type}</span>`
-                : ''
-            }
-          </div>
-          <div class="charging-card-stats">
-            <div class="charging-card-stat">
-              <span class="charging-card-stat-label">Energy</span>
-              <span class="charging-card-stat-value">${session.kwh_added != null ? session.kwh_added.toFixed(1) + ' kWh' : '--'}</span>
-            </div>
-            <div class="charging-card-stat">
-              <span class="charging-card-stat-label">SOC</span>
-              <span class="charging-card-stat-value">${session.start_soc !== null && session.end_soc !== null ? `${session.start_soc}% → ${session.end_soc}%` : '--'}</span>
-            </div>
-            <div class="charging-card-stat">
-              <span class="charging-card-stat-label">Duration</span>
-              <span class="charging-card-stat-value">${session.end_time ? formatChargingDuration(session.start_time, session.end_time) : '--'}</span>
-            </div>
-            <div class="charging-card-stat">
-              <span class="charging-card-stat-label">Location</span>
-              <span class="charging-card-stat-value">${session.location_name || '--'}</span>
-            </div>
-          </div>
-        </div>
-      `,
-        )
-        .join('');
+      cardsContainer.innerHTML = sessions.map(renderChargingCard).join('');
     }
   } catch (error) {
     console.error('Failed to load charging history:', error);
@@ -461,7 +468,7 @@ export async function renderChargingCurveChart(curveData: ChargingCurveResponse)
     return;
   }
 
-  if (!window.Chart) await loadChartJs();
+  if (!(globalThis as Record<string, unknown>).Chart) await loadChartJs();
 
   const curve = curveData.curve;
   const labels = curve.map((d) => formatTime(new Date(d.timestamp)));

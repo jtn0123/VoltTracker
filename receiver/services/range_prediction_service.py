@@ -72,6 +72,47 @@ def get_historical_efficiency(db: Session, days: int = 90) -> List[Tuple[float, 
     return data
 
 
+def _get_temperature_factor(temperature: float) -> float:
+    """Get efficiency factor based on temperature."""
+    if temperature < 32:
+        return 0.65  # 35% loss in freezing
+    if temperature < 50:
+        return 0.80  # 20% loss in cold
+    if temperature > 90:
+        return 0.90  # 10% loss in heat
+    return 1.0
+
+
+def _get_speed_factor(avg_speed: float) -> float:
+    """Get efficiency factor based on average speed."""
+    if avg_speed > 65:
+        return 0.75  # 25% loss at highway speeds
+    if avg_speed > 50:
+        return 0.85  # 15% loss at moderate highway
+    if avg_speed < 30:
+        return 1.10  # 10% gain in city driving
+    return 1.0
+
+
+def _calculate_confidence(historical, baseline_efficiency, predicted_range):
+    """Calculate prediction confidence and range bounds."""
+    if len(historical) >= 3:
+        efficiencies = [eff for _, _, _, eff in historical]
+        variance = sum((e - baseline_efficiency) ** 2 for e in efficiencies) / len(efficiencies)
+        std_dev = variance**0.5
+        data_confidence = min(1.0, len(historical) / 20.0)
+        variance_confidence = max(0.5, 1.0 - (std_dev / baseline_efficiency))
+        confidence = max(0.5, min(0.95, data_confidence * variance_confidence))
+        range_min = predicted_range * (1 - std_dev / baseline_efficiency)
+        range_max = predicted_range * (1 + std_dev / baseline_efficiency)
+    else:
+        std_dev = baseline_efficiency * 0.3
+        confidence = 0.5 if len(historical) > 0 else 0.3
+        range_min = predicted_range * 0.7
+        range_max = predicted_range * 1.3
+    return confidence, range_min, range_max, std_dev
+
+
 def predict_range_simple(
     db: Session,
     temperature: float = 70.0,
@@ -96,24 +137,8 @@ def predict_range_simple(
         # Default Volt Gen 2 efficiency: ~5.0 mi/kWh (0.2 kWh/mile)
         baseline_efficiency = 5.0
 
-    # Temperature adjustment (based on typical EV patterns)
-    # Efficiency peaks around 70°F, drops at extremes
-    temp_factor = 1.0
-    if temperature < 32:
-        temp_factor = 0.65  # 35% loss in freezing
-    elif temperature < 50:
-        temp_factor = 0.80  # 20% loss in cold
-    elif temperature > 90:
-        temp_factor = 0.90  # 10% loss in heat
-
-    # Speed adjustment (highway driving less efficient)
-    speed_factor = 1.0
-    if avg_speed > 65:
-        speed_factor = 0.75  # 25% loss at highway speeds
-    elif avg_speed > 50:
-        speed_factor = 0.85  # 15% loss at moderate highway
-    elif avg_speed < 30:
-        speed_factor = 1.10  # 10% gain in city driving
+    temp_factor = _get_temperature_factor(temperature)
+    speed_factor = _get_speed_factor(avg_speed)
 
     # Battery health adjustment
     # Clamp to 100% max (some readings might be slightly > 100%)
@@ -125,28 +150,9 @@ def predict_range_simple(
     # Calculate range
     predicted_range = adjusted_efficiency * battery_capacity_kwh
 
-    # Calculate confidence based on data quantity and variance
-    if len(historical) >= 3:
-        efficiencies = [eff for _, _, _, eff in historical]
-        variance = sum((e - baseline_efficiency) ** 2 for e in efficiencies) / len(efficiencies)
-        std_dev = variance**0.5
-
-        # Confidence decreases with high variance and low data quantity
-        data_confidence = min(1.0, len(historical) / 20.0)  # Max confidence at 20+ trips
-        variance_confidence = max(0.5, 1.0 - (std_dev / baseline_efficiency))
-        confidence = max(0.5, min(0.95, data_confidence * variance_confidence))
-
-        # Range bounds (confidence interval)
-        range_min = predicted_range * (1 - std_dev / baseline_efficiency)
-        range_max = predicted_range * (1 + std_dev / baseline_efficiency)
-    else:
-        # Low confidence with insufficient data
-        std_dev = baseline_efficiency * 0.3  # 30% uncertainty
-        confidence = 0.5 if len(historical) > 0 else 0.3
-
-        # Wider confidence interval
-        range_min = predicted_range * 0.7
-        range_max = predicted_range * 1.3
+    confidence, range_min, range_max, std_dev = _calculate_confidence(
+        historical, baseline_efficiency, predicted_range
+    )
 
     return {
         "predicted_range_miles": round(predicted_range, 1),
@@ -174,6 +180,27 @@ def predict_range_simple(
     }
 
 
+def _calculate_avg_speed(trips) -> float:
+    """Calculate average speed from recent trips."""
+    if not trips:
+        return 30.0
+    speeds = []
+    for trip in trips:
+        duration_hours = (trip.end_time - trip.start_time).total_seconds() / 3600.0
+        if duration_hours > 0:
+            speeds.append(trip.distance_miles / duration_hours)
+    return sum(speeds) / len(speeds) if speeds else 30.0
+
+
+def _get_battery_health(latest_health):
+    """Extract battery health percent and capacity from a reading."""
+    if not latest_health:
+        return 100.0, 16.5
+    capacity_kwh = latest_health.normalized_capacity_kwh or latest_health.capacity_kwh
+    health_pct = (capacity_kwh / 18.4) * 100.0 if capacity_kwh else 100.0
+    return health_pct, capacity_kwh if capacity_kwh else 16.5
+
+
 def get_current_conditions(db: Session) -> Dict:
     """
     Get current conditions for range prediction.
@@ -195,27 +222,12 @@ def get_current_conditions(db: Session) -> Dict:
         .all()
     )
 
-    if recent_trips_data:
-        speeds = []
-        for trip in recent_trips_data:
-            duration_hours = (trip.end_time - trip.start_time).total_seconds() / 3600.0
-            if duration_hours > 0:
-                speeds.append(trip.distance_miles / duration_hours)
-        avg_speed = sum(speeds) / len(speeds) if speeds else 30.0
-    else:
-        avg_speed = 30.0
+    avg_speed = _calculate_avg_speed(recent_trips_data)
 
     # Get latest temperature from recent trip
     latest_trip = db.query(Trip).filter(Trip.ambient_temp_avg_f.isnot(None)).order_by(Trip.start_time.desc()).first()
 
-    # Calculate battery health percent from kWh
-    if latest_health:
-        capacity_kwh = latest_health.normalized_capacity_kwh or latest_health.capacity_kwh
-        battery_health_pct = (capacity_kwh / 18.4) * 100.0 if capacity_kwh else 100.0
-        battery_capacity_kwh = capacity_kwh if capacity_kwh else 16.5
-    else:
-        battery_health_pct = 100.0
-        battery_capacity_kwh = 16.5
+    battery_health_pct, battery_capacity_kwh = _get_battery_health(latest_health)
 
     return {
         "battery_health_pct": battery_health_pct,

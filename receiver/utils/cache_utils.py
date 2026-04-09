@@ -108,6 +108,36 @@ def generate_cache_key(prefix: str, *args, **kwargs) -> str:
     return f"{prefix}:{key_hash}"
 
 
+def _try_get_cached(redis, cache_key):
+    """Try to retrieve a cached value from Redis."""
+    cached_value = redis.get(cache_key)
+    if cached_value is None:
+        logger.debug(f"Cache miss: {cache_key}")
+        return None
+    logger.debug(f"Cache hit: {cache_key}")
+    try:
+        return json.loads(cached_value.decode("utf-8"), object_hook=_datetime_decoder)
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        logger.warning(f"Corrupted cache entry {cache_key}: {e}. Deleting.")
+        redis.delete(cache_key)
+        return None
+
+
+def _try_store_cached(redis, cache_key, result, ttl, tags):
+    """Try to store a value in Redis cache with optional tags."""
+    try:
+        serialized = json.dumps(result, cls=_DateTimeEncoder).encode("utf-8")
+        redis.setex(cache_key, ttl, serialized)
+
+        if tags:
+            for tag in tags:
+                tag_key = f"tag:{tag}"
+                redis.sadd(tag_key, cache_key)
+                redis.expire(tag_key, ttl + 60)
+    except Exception as e:
+        logger.warning(f"Failed to cache result for {cache_key}: {e}")
+
+
 def cache_result(
     prefix: str,
     ttl: int = 300,
@@ -145,51 +175,22 @@ def cache_result(
         def wrapper(*args, **kwargs):
             redis = get_redis_cache()
 
-            # If Redis unavailable, execute function directly
             if redis is None:
                 return func(*args, **kwargs)
 
-            # Generate cache key
-            if key_func:
-                cache_key = key_func(*args, **kwargs)
-            else:
-                cache_key = generate_cache_key(prefix, *args, **kwargs)
+            cache_key = key_func(*args, **kwargs) if key_func else generate_cache_key(prefix, *args, **kwargs)
 
             try:
-                # Try to get cached result
-                cached_value = redis.get(cache_key)
-                if cached_value is not None:
-                    logger.debug(f"Cache hit: {cache_key}")
-                    # S2: Use JSON instead of pickle for deserialization
-                    return json.loads(cached_value.decode("utf-8"), object_hook=_datetime_decoder)
+                cached = _try_get_cached(redis, cache_key)
+                if cached is not None:
+                    return cached
 
-                logger.debug(f"Cache miss: {cache_key}")
-
-                # Execute function
                 result = func(*args, **kwargs)
-
-                # Cache the result
-                try:
-                    # S2: Use JSON instead of pickle for serialization
-                    serialized = json.dumps(result, cls=_DateTimeEncoder).encode("utf-8")
-                    redis.setex(cache_key, ttl, serialized)
-
-                    # Add to tag sets if provided
-                    if tags:
-                        for tag in tags:
-                            tag_key = f"tag:{tag}"
-                            redis.sadd(tag_key, cache_key)
-                            # Set TTL on tag set slightly longer than cache entries
-                            redis.expire(tag_key, ttl + 60)
-
-                except Exception as e:
-                    logger.warning(f"Failed to cache result for {cache_key}: {e}")
-
+                _try_store_cached(redis, cache_key, result, ttl, tags)
                 return result
 
             except Exception as e:
                 logger.error(f"Cache error for {cache_key}: {e}")
-                # Fall back to executing function
                 return func(*args, **kwargs)
 
         # Add cache invalidation method to the wrapper

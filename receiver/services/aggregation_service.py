@@ -150,6 +150,41 @@ def aggregate_charging_hourly(target_date: date | None = None) -> None:
         SessionLocal.remove()
 
 
+def _populate_monthly_summary(db, summary, trips, start_dt, end_dt) -> None:
+    """Populate a MonthlySummary from trips and charging sessions.
+
+    Always *reassigns* the derived fields (electric_percentage,
+    avg_kwh_per_mile, avg_mpg) — including resetting them to ``None`` when the
+    source list is empty — so a re-aggregation against an emptied month
+    doesn't leak stale values from the previous run. Also adds the missing
+    return type annotation that CodeRabbit's review flagged.
+    """
+    summary.total_trips = len(trips)
+    summary.total_distance_miles = sum(t.distance_miles or 0 for t in trips)
+    summary.total_electric_miles = sum(t.electric_miles or 0 for t in trips)
+    summary.total_gas_miles = sum(t.gas_miles or 0 for t in trips)
+    if summary.total_distance_miles and summary.total_distance_miles > 0:
+        summary.electric_percentage = (summary.total_electric_miles / summary.total_distance_miles) * 100
+    else:
+        summary.electric_percentage = None
+
+    efficiencies = [t.kwh_per_mile for t in trips if t.kwh_per_mile and t.kwh_per_mile > 0]
+    summary.avg_kwh_per_mile = sum(efficiencies) / len(efficiencies) if efficiencies else None
+    mpgs = [t.gas_mpg for t in trips if t.gas_mpg and t.gas_mpg > 0]
+    summary.avg_mpg = sum(mpgs) / len(mpgs) if mpgs else None
+
+    summary.total_kwh_used = sum(t.electric_kwh_used or 0 for t in trips)
+    summary.total_gallons_used = sum(t.fuel_used_gallons or 0 for t in trips)
+
+    charging = (
+        db.query(ChargingSession)
+        .filter(ChargingSession.start_time >= start_dt, ChargingSession.start_time < end_dt)
+        .all()
+    )
+    summary.total_charging_sessions = len(charging)
+    summary.total_kwh_charged = sum(c.kwh_added or 0 for c in charging)
+
+
 def aggregate_monthly_summary(year: int | None = None, month: int | None = None) -> None:
     """Aggregate monthly summary for a given month (default: previous month)."""
     db = SessionLocal()
@@ -183,31 +218,7 @@ def aggregate_monthly_summary(year: int | None = None, month: int | None = None)
             summary = MonthlySummary(year=year, month=month)
             db.add(summary)
 
-        summary.total_trips = len(trips)
-        summary.total_distance_miles = sum(t.distance_miles or 0 for t in trips)
-        summary.total_electric_miles = sum(t.electric_miles or 0 for t in trips)
-        summary.total_gas_miles = sum(t.gas_miles or 0 for t in trips)
-        if summary.total_distance_miles and summary.total_distance_miles > 0:
-            summary.electric_percentage = (summary.total_electric_miles / summary.total_distance_miles) * 100
-
-        efficiencies = [t.kwh_per_mile for t in trips if t.kwh_per_mile and t.kwh_per_mile > 0]
-        if efficiencies:
-            summary.avg_kwh_per_mile = sum(efficiencies) / len(efficiencies)
-        mpgs = [t.gas_mpg for t in trips if t.gas_mpg and t.gas_mpg > 0]
-        if mpgs:
-            summary.avg_mpg = sum(mpgs) / len(mpgs)
-
-        summary.total_kwh_used = sum(t.electric_kwh_used or 0 for t in trips)
-        summary.total_gallons_used = sum(t.fuel_used_gallons or 0 for t in trips)
-
-        # Charging sessions for this month
-        charging = (
-            db.query(ChargingSession)
-            .filter(ChargingSession.start_time >= start_dt, ChargingSession.start_time < end_dt)
-            .all()
-        )
-        summary.total_charging_sessions = len(charging)
-        summary.total_kwh_charged = sum(c.kwh_added or 0 for c in charging)
+        _populate_monthly_summary(db, summary, trips, start_dt, end_dt)
 
         db.commit()
         logger.info(f"Aggregated monthly summary for {year}-{month:02d}: {len(trips)} trips")

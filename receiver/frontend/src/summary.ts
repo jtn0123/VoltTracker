@@ -77,6 +77,79 @@ export async function loadSummary(): Promise<void> {
   }
 }
 
+/** Show empty state when no MPG data exists. */
+function showMpgEmptyState(ctx: HTMLCanvasElement): void {
+  // Hide the canvas instead of removing it via parent.innerHTML — wiping the
+  // parent removes the #mpg-chart element entirely, so the next call to
+  // loadMpgTrendChart() can't re-find it via document.getElementById and the
+  // chart never recovers without a full page reload.
+  const parent = ctx.parentElement;
+  if (!parent) return;
+
+  ctx.style.display = 'none';
+
+  // Reuse an existing empty-state node if loadMpgTrendChart was called twice
+  // for the same empty dataset; never duplicate it.
+  let emptyState = parent.querySelector<HTMLElement>('.empty-state');
+  if (!emptyState) {
+    emptyState = document.createElement('div');
+    emptyState.className = 'empty-state';
+    emptyState.innerHTML = '<h3>No Gas Trips Yet</h3><p>MPG data will appear after you complete trips using gasoline.</p>';
+    parent.appendChild(emptyState);
+  }
+}
+
+/** Render the MPG trend chart with Chart.js. */
+async function renderMpgChart(ctx: HTMLCanvasElement, data: MpgTrendPoint[]): Promise<void> {
+  if (!(globalThis as Record<string, unknown>).Chart) await loadChartJs();
+  if (state.mpgChart) state.mpgChart.destroy();
+
+  // Reverse the showMpgEmptyState() side effects in case the page just
+  // transitioned from "no gas trips" to "first gas trip arrived".
+  ctx.style.display = '';
+  const existingEmptyState = ctx.parentElement?.querySelector('.empty-state');
+  if (existingEmptyState) existingEmptyState.remove();
+
+  const context = ctx.getContext('2d');
+  if (!context) return;
+
+  const mpgColor = getChartColor(1);
+  const gradient = createGradient(context, `${mpgColor}66`, `${mpgColor}05`);
+
+  state.mpgChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.map((d) => formatChartDate(new Date(d.date))),
+      datasets: [{
+        label: 'MPG', data: data.map((d) => d.mpg),
+        borderColor: mpgColor, backgroundColor: gradient, borderWidth: 2.5,
+        fill: true, tension: 0.4, pointRadius: 5, pointHoverRadius: 7,
+        pointBackgroundColor: mpgColor, pointBorderColor: '#fff', pointBorderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: getEnhancedLegend(false),
+        tooltip: getEnhancedTooltip({
+          callbacks: {
+            label: (ctx: any) => {
+              const point = data[ctx.dataIndex];
+              return [`MPG: ${point.mpg}`, `Miles: ${point.gas_miles.toFixed(1)} mi`,
+                point.ambient_temp ? `Temp: ${point.ambient_temp}°F` : ''].filter(Boolean);
+            },
+          },
+        }),
+      },
+      scales: {
+        x: getEnhancedAxis(),
+        y: getEnhancedAxis({ suggestedMin: 20, suggestedMax: 50, title: { text: 'MPG', color: mpgColor } }),
+      },
+    },
+  });
+}
+
 /**
  * Load MPG trend chart
  */
@@ -100,82 +173,11 @@ export async function loadMpgTrend(days: number): Promise<void> {
     if (!ctx) return;
 
     if (data.length === 0) {
-      const parent = ctx.parentElement;
-      if (parent) {
-        parent.innerHTML = `
-          <div class="empty-state">
-            <h3>No Gas Trips Yet</h3>
-            <p>MPG data will appear after you complete trips using gasoline.</p>
-          </div>
-        `;
-      }
+      showMpgEmptyState(ctx);
       return;
     }
 
-    if (!window.Chart) {
-      await loadChartJs();
-    }
-
-    if (state.mpgChart) {
-      state.mpgChart.destroy();
-    }
-
-    const context = ctx.getContext('2d');
-    if (!context) return;
-
-    const mpgColor = getChartColor(1);
-    const gradient = createGradient(context, `${mpgColor}66`, `${mpgColor}05`);
-
-    state.mpgChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: data.map((d) => formatChartDate(new Date(d.date))),
-        datasets: [
-          {
-            label: 'MPG',
-            data: data.map((d) => d.mpg),
-            borderColor: mpgColor,
-            backgroundColor: gradient,
-            borderWidth: 2.5,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            pointBackgroundColor: mpgColor,
-            pointBorderColor: '#fff',
-            pointBorderWidth: 2,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: getEnhancedLegend(false),
-          tooltip: getEnhancedTooltip({
-            callbacks: {
-              label: (context: any) => {
-                const point = data[context.dataIndex];
-                return [
-                  `MPG: ${point.mpg}`,
-                  `Miles: ${point.gas_miles.toFixed(1)} mi`,
-                  point.ambient_temp ? `Temp: ${point.ambient_temp}°F` : '',
-                ].filter(Boolean);
-              },
-            },
-          }),
-        },
-        scales: {
-          x: getEnhancedAxis(),
-          y: getEnhancedAxis({
-            suggestedMin: 20,
-            suggestedMax: 50,
-            title: { text: 'MPG', color: mpgColor },
-          }),
-        },
-      },
-    });
+    await renderMpgChart(ctx, data);
   } catch (error) {
     console.error('Failed to load MPG trend:', error);
   }
