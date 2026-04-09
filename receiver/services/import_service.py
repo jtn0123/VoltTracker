@@ -107,8 +107,15 @@ def record_import(db, import_code, status, failure_reason=None, suggestion=None,
 
 
 def build_import_response(status, message, import_code, failure_reason=None,
-                          suggestion=None, stats=None, trip_id=None, http_status=200):
-    """Build standardized import response dict."""
+                          suggestion=None, stats=None, trip_id=None, http_status=200,
+                          first_error=None):
+    """Build standardized import response dict.
+
+    When ``failure_reason`` is set, the response also includes ``failure_details``
+    (from ``first_error``) and the first 10 parser errors (from ``stats['errors']``)
+    so callers — especially mobile clients without log access — can debug imports
+    from the API response alone.
+    """
     response = {
         "status": status,
         "import_code": import_code,
@@ -116,6 +123,11 @@ def build_import_response(status, message, import_code, failure_reason=None,
     }
     if failure_reason:
         response["failure_reason"] = failure_reason
+        # Surface error details so callers can debug without log access.
+        if first_error:
+            response["failure_details"] = first_error
+        if stats and stats.get("errors"):
+            response["errors"] = stats["errors"][:10]
     if suggestion:
         response["suggestion"] = suggestion
     if stats:

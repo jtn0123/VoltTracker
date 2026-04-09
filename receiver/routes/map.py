@@ -26,37 +26,138 @@ _KML_PLACEMARK_END = '    </Placemark>'
 map_bp = Blueprint("map", __name__)
 
 
-def subsample_gps_points(points: List[Dict[str, Any]], max_points: int = 100) -> List[Dict[str, Any]]:
+def perpendicular_distance(point: Dict[str, Any], line_start: Dict[str, Any],
+                           line_end: Dict[str, Any]) -> float:
     """
-    Subsample GPS points to reduce data size while preserving route shape.
-    Uses systematic sampling (every Nth point).
+    Calculate perpendicular distance from a point to a line segment.
+
+    Uses the formula for point-to-line distance in 2D coordinates.
+    For GPS coordinates, this is accurate enough for small distances.
+    """
+    # If line start and end are the same point, return distance to that point
+    if line_start['lat'] == line_end['lat'] and line_start['lon'] == line_end['lon']:
+        return ((point['lat'] - line_start['lat']) ** 2 +
+                (point['lon'] - line_start['lon']) ** 2) ** 0.5
+
+    dx = line_end['lon'] - line_start['lon']
+    dy = line_end['lat'] - line_start['lat']
+    line_length = (dx ** 2 + dy ** 2) ** 0.5
+    if line_length == 0:
+        return ((point['lat'] - line_start['lat']) ** 2 +
+                (point['lon'] - line_start['lon']) ** 2) ** 0.5
+
+    # Cross product gives the perpendicular distance
+    distance = abs(
+        dx * (line_start['lat'] - point['lat']) -
+        (line_start['lon'] - point['lon']) * dy
+    ) / line_length
+
+    return distance
+
+
+def rdp_simplify(points: List[Dict[str, Any]], epsilon: float = 0.00005) -> List[Dict[str, Any]]:
+    """
+    Ramer-Douglas-Peucker polyline simplification.
+
+    Preserves route shape by keeping points that deviate significantly from
+    straight lines, while removing points that are nearly collinear.
+
+    Args:
+        points: List of GPS points with 'lat' and 'lon' keys
+        epsilon: Maximum deviation threshold in degrees (~5.5m at equator for 0.00005)
+    """
+    if len(points) <= 2:
+        return points
+
+    max_distance = 0.0
+    max_index = 0
+
+    for i in range(1, len(points) - 1):
+        distance = perpendicular_distance(points[i], points[0], points[-1])
+        if distance > max_distance:
+            max_distance = distance
+            max_index = i
+
+    if max_distance > epsilon:
+        left_simplified = rdp_simplify(points[:max_index + 1], epsilon)
+        right_simplified = rdp_simplify(points[max_index:], epsilon)
+        # Avoid duplicating the split point
+        return left_simplified[:-1] + right_simplified
+    return [points[0], points[-1]]
+
+
+def filter_stationary_points(points: List[Dict[str, Any]],
+                             min_distance_meters: float = 5.0) -> List[Dict[str, Any]]:
+    """
+    Collapse consecutive GPS points within ``min_distance_meters`` of each other.
+
+    Handles GPS stuck/jitter where the device emits thousands of identical
+    fixes (e.g. a trip with 17k points all at the same location). Always keeps
+    the first and last points.
+    """
+    if len(points) <= 1:
+        return points
+
+    # Approximate degrees per meter at mid-latitudes (~32-40°)
+    meters_per_degree = 111000
+    min_degrees = min_distance_meters / meters_per_degree
+
+    filtered = [points[0]]
+    for p in points[1:]:
+        lat_diff = abs(p['lat'] - filtered[-1]['lat'])
+        lon_diff = abs(p['lon'] - filtered[-1]['lon'])
+        if lat_diff > min_degrees or lon_diff > min_degrees:
+            filtered.append(p)
+
+    # Always include the last point if not already preserved
+    last_point = points[-1]
+    if (abs(last_point['lat'] - filtered[-1]['lat']) > min_degrees or
+            abs(last_point['lon'] - filtered[-1]['lon']) > min_degrees):
+        filtered.append(last_point)
+
+    return filtered
+
+
+def subsample_gps_points(points: List[Dict[str, Any]], max_points: int = 300) -> List[Dict[str, Any]]:
+    """
+    Subsample GPS points to reduce payload size while preserving route shape.
+
+    Strategy:
+        1. Collapse stationary/duplicate points (handles GPS-stuck trips).
+        2. Apply Ramer-Douglas-Peucker simplification to preserve curves and turns.
+        3. If still over the limit, increase epsilon iteratively, then fall back
+           to systematic sampling on the simplified set.
 
     Args:
         points: List of GPS points with lat, lon, and optional metadata
-        max_points: Maximum number of points to return
-
-    Returns:
-        Subsampled list of GPS points
+        max_points: Maximum number of points to return (default 300)
     """
+    # Collapse GPS-stuck periods first
+    points = filter_stationary_points(points, min_distance_meters=5.0)
+
     if len(points) <= max_points:
         return points
 
-    # Calculate step size
-    step = len(points) / max_points
+    # RDP simplification — start moderate, widen if needed
+    epsilon = 0.00003  # ~3.3m at equator
+    simplified = rdp_simplify(points, epsilon)
 
-    # Always include first and last points
-    sampled = [points[0]]
+    while len(simplified) > max_points and epsilon < 0.001:
+        epsilon *= 1.5
+        simplified = rdp_simplify(points, epsilon)
 
-    # Sample intermediate points
-    for i in range(1, max_points - 1):
-        index = int(i * step)
-        if index < len(points):
-            sampled.append(points[index])
+    # Long trips: fall back to systematic sampling on the simplified set
+    if len(simplified) > max_points:
+        step = len(simplified) / max_points
+        sampled = [simplified[0]]
+        for i in range(1, max_points - 1):
+            index = int(i * step)
+            if index < len(simplified):
+                sampled.append(simplified[index])
+        sampled.append(simplified[-1])
+        return sampled
 
-    # Always include last point
-    sampled.append(points[-1])
-
-    return sampled
+    return simplified
 
 
 def calculate_efficiency_color(kwh_per_mile: Optional[float], _speed_mph: Optional[float] = None) -> str:
@@ -208,9 +309,10 @@ def _calculate_bounds(points: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _serialize_trip_for_map(trip: 'Trip', points: list, bounds: dict, raw_count: int) -> Dict[str, Any]:
+def _serialize_trip_for_map(trip: 'Trip', points: list, bounds: dict, raw_count: int,
+                            gps_quality: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Serialize a trip and its GPS data for the map response."""
-    return {
+    payload = {
         'id': trip.id,
         'session_id': trip.session_id,
         'start_time': trip.start_time.isoformat(),
@@ -225,6 +327,9 @@ def _serialize_trip_for_map(trip: 'Trip', points: list, bounds: dict, raw_count:
         'bounds': bounds,
         'point_count': raw_count,
     }
+    if gps_quality is not None:
+        payload['gps_quality'] = gps_quality
+    return payload
 
 
 @map_bp.route("/api/trips/map", methods=["GET"])
@@ -247,7 +352,7 @@ def get_trips_map_data():
     query, filter_info = _apply_map_metric_filters(query)
 
     max_trips = min(request.args.get("max_trips", default=100, type=int), 500)
-    max_points_per_trip = min(request.args.get("max_points_per_trip", default=100, type=int), 500)
+    max_points_per_trip = min(request.args.get("max_points_per_trip", default=300, type=int), 500)
 
     trips = query.order_by(Trip.start_time.desc()).limit(max_trips).all()
 
@@ -259,10 +364,24 @@ def get_trips_map_data():
         if len(telemetry) < 2:
             continue
 
+        original_point_count = len(telemetry)
         points = _build_trip_points(telemetry)
+
+        # Compute GPS quality from the unique-location ratio. <30% unique => poor.
+        unique_points = filter_stationary_points(points, min_distance_meters=5.0)
+        unique_point_count = len(unique_points)
+        quality_ratio = (unique_point_count / original_point_count) if original_point_count > 0 else 0
+        gps_quality_label = 'good' if quality_ratio > 0.3 else 'poor'
+
         points = subsample_gps_points(points, max_points_per_trip)
         bounds = _calculate_bounds(points)
-        trips_data.append(_serialize_trip_for_map(trip, points, bounds, len(telemetry)))
+        gps_quality = {
+            'total_points': original_point_count,
+            'unique_points': unique_point_count,
+            'displayed_points': len(points),
+            'quality': gps_quality_label,
+        }
+        trips_data.append(_serialize_trip_for_map(trip, points, bounds, original_point_count, gps_quality))
 
     filter_info['date_range'] = date_range_shortcut or 'custom'
     return jsonify({

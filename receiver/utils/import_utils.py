@@ -37,9 +37,18 @@ def generate_import_code() -> str:
 
 def get_file_hash(content: bytes) -> str:
     """
-    Compute SHA-256 hash of file content.
+    Compute SHA-256 hash of file content with normalization.
 
-    Used to detect exact duplicate file imports.
+    Normalizes content before hashing to detect duplicates even when
+    files have minor differences like BOM, line endings, or trailing whitespace.
+    This prevents false negatives when the same data is exported from
+    different systems (Windows vs Mac vs Linux).
+
+    Normalization steps:
+    1. Remove UTF-8 BOM if present
+    2. Convert CRLF to LF (Windows line endings)
+    3. Convert lone CR to LF (old Mac style)
+    4. Strip trailing whitespace
 
     Args:
         content: Raw file bytes
@@ -47,7 +56,22 @@ def get_file_hash(content: bytes) -> str:
     Returns:
         str: Hex-encoded SHA-256 hash (64 characters)
     """
-    return hashlib.sha256(content).hexdigest()
+    normalized = content
+
+    # Remove UTF-8 BOM if present
+    if normalized.startswith(b'\xef\xbb\xbf'):
+        normalized = normalized[3:]
+
+    # Normalize line endings: CRLF -> LF
+    normalized = normalized.replace(b'\r\n', b'\n')
+
+    # Also handle lone CR (old Mac style)
+    normalized = normalized.replace(b'\r', b'\n')
+
+    # Strip trailing whitespace/newlines
+    normalized = normalized.rstrip()
+
+    return hashlib.sha256(normalized).hexdigest()
 
 
 def format_reportable(

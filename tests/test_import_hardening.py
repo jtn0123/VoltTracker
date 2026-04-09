@@ -526,3 +526,128 @@ class TestStatsMapping:
         # Should report 2 duplicates (the overlapping timestamps)
         assert json_data["stats"]["duplicate_rows"] == 2
         assert json_data["stats"]["total_rows"] == 3
+
+
+class TestFileHashNormalization:
+    """Tests for file hash normalization (BOM, line endings, trailing whitespace)."""
+
+    def test_hash_same_for_bom_vs_no_bom(self):
+        content_no_bom = b"GPS Time,Latitude\n2026-01-06 10:30:00,37.7749"
+        content_with_bom = b"\xef\xbb\xbf" + content_no_bom
+
+        assert get_file_hash(content_no_bom) == get_file_hash(content_with_bom)
+
+    def test_hash_same_for_crlf_vs_lf(self):
+        content_lf = b"GPS Time,Latitude\n2026-01-06 10:30:00,37.7749"
+        content_crlf = b"GPS Time,Latitude\r\n2026-01-06 10:30:00,37.7749"
+
+        assert get_file_hash(content_lf) == get_file_hash(content_crlf)
+
+    def test_hash_same_for_trailing_newline_difference(self):
+        content_no_trailing = b"GPS Time,Latitude\n2026-01-06 10:30:00,37.7749"
+        content_with_trailing = b"GPS Time,Latitude\n2026-01-06 10:30:00,37.7749\n\n"
+
+        assert get_file_hash(content_no_trailing) == get_file_hash(content_with_trailing)
+
+    def test_hash_same_for_combined_differences(self):
+        """BOM + CRLF + trailing whitespace must hash the same as the clean file."""
+        content_clean = b"GPS Time,Latitude\n2026-01-06 10:30:00,37.7749"
+        content_messy = b"\xef\xbb\xbfGPS Time,Latitude\r\n2026-01-06 10:30:00,37.7749\r\n\r\n  "
+
+        assert get_file_hash(content_clean) == get_file_hash(content_messy)
+
+
+class TestReimportWithNormalization:
+    """Re-importing the same content with different encoding quirks should be a duplicate."""
+
+    def test_reimport_same_content_with_bom_rejected(self, client, db_session):
+        csv_content = b"""GPS Time,Latitude
+2026-01-06 13:30:00,37.7749
+2026-01-06 13:30:05,37.7750
+"""
+        data1 = {"file": (io.BytesIO(csv_content), "test1.csv")}
+        response1 = client.post("/api/import/csv", data=data1, content_type="multipart/form-data")
+        assert response1.status_code == 200
+
+        csv_content_with_bom = b"\xef\xbb\xbf" + csv_content
+        data2 = {"file": (io.BytesIO(csv_content_with_bom), "test2.csv")}
+        response2 = client.post("/api/import/csv", data=data2, content_type="multipart/form-data")
+
+        assert response2.status_code == 409
+        assert response2.get_json()["status"] == "duplicate"
+
+    def test_reimport_same_content_with_crlf_rejected(self, client, db_session):
+        csv_content_lf = b"""GPS Time,Latitude
+2026-01-06 14:30:00,37.7749
+2026-01-06 14:30:05,37.7750
+"""
+        data1 = {"file": (io.BytesIO(csv_content_lf), "test1.csv")}
+        response1 = client.post("/api/import/csv", data=data1, content_type="multipart/form-data")
+        assert response1.status_code == 200
+
+        csv_content_crlf = csv_content_lf.replace(b"\n", b"\r\n")
+        data2 = {"file": (io.BytesIO(csv_content_crlf), "test2.csv")}
+        response2 = client.post("/api/import/csv", data=data2, content_type="multipart/form-data")
+
+        assert response2.status_code == 409
+        assert response2.get_json()["status"] == "duplicate"
+
+
+class TestLatestImportEndpoint:
+    """Tests for the /api/imports/latest endpoint."""
+
+    def test_latest_import_returns_most_recent(self, client, db_session):
+        csv_content1 = b"""GPS Time,Latitude
+2026-01-06 15:30:00,37.7749
+"""
+        data1 = {"file": (io.BytesIO(csv_content1), "first.csv")}
+        client.post("/api/import/csv", data=data1, content_type="multipart/form-data")
+
+        csv_content2 = b"""GPS Time,Latitude
+2026-01-06 15:31:00,37.7750
+"""
+        data2 = {"file": (io.BytesIO(csv_content2), "second.csv")}
+        response2 = client.post("/api/import/csv", data=data2, content_type="multipart/form-data")
+        second_code = response2.get_json()["import_code"]
+
+        response = client.get("/api/imports/latest")
+        assert response.status_code == 200
+        json_data = response.get_json()
+        assert json_data["import_code"] == second_code
+        assert json_data["filename"] == "second.csv"
+
+    def test_latest_import_empty_returns_404(self, client, db_session):
+        response = client.get("/api/imports/latest")
+        assert response.status_code == 404
+        assert "No imports found" in response.get_json()["error"]
+
+
+class TestErrorDetailsInResponse:
+    """Failed imports should include enough error context for callers without log access."""
+
+    def test_failed_import_includes_failure_reason(self, client, db_session):
+        csv_content = b"""Invalid Header,No Timestamp
+value1,value2
+value3,value4
+"""
+        data = {"file": (io.BytesIO(csv_content), "bad.csv")}
+        response = client.post("/api/import/csv", data=data, content_type="multipart/form-data")
+
+        assert response.status_code == 400
+        json_data = response.get_json()
+        assert json_data["status"] == "failed"
+        assert "failure_reason" in json_data
+
+    def test_import_with_parse_errors_succeeds_partially(self, client, db_session):
+        """Imports with some bad rows should still succeed and report skipped rows."""
+        csv_content = b"""GPS Time,Latitude
+2026-01-06 16:30:00,37.7749
+invalid_timestamp,37.7750
+2026-01-06 16:30:10,37.7751
+"""
+        data = {"file": (io.BytesIO(csv_content), "partial.csv")}
+        response = client.post("/api/import/csv", data=data, content_type="multipart/form-data")
+
+        json_data = response.get_json()
+        assert response.status_code == 200
+        assert json_data["stats"]["skipped_rows"] >= 1

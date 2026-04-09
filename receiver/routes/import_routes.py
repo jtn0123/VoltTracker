@@ -199,7 +199,8 @@ def import_csv():
                               filename=file.filename, file_hash=file_hash, file_size=len(file_bytes),
                               import_event=import_event)
                 resp, code = build_import_response("failed", "All records already imported", import_code,
-                                                   failure_reason, suggestion, stats, http_status=400)
+                                                   failure_reason, suggestion, stats, http_status=400,
+                                                   first_error=import_event.get("first_error"))
                 return jsonify(resp), code
             else:
                 failure_reason = stats.get("failure_reason", "no_valid_rows")
@@ -210,7 +211,8 @@ def import_csv():
                               filename=file.filename, file_hash=file_hash, file_size=len(file_bytes),
                               import_event=import_event)
                 resp, code = build_import_response("failed", "No valid records found in CSV", import_code,
-                                                   failure_reason, suggestion, stats, http_status=400)
+                                                   failure_reason, suggestion, stats, http_status=400,
+                                                   first_error=import_event.get("first_error"))
                 return jsonify(resp), code
 
         # Insert records
@@ -229,7 +231,8 @@ def import_csv():
                           filename=file.filename, file_hash=file_hash, file_size=len(file_bytes),
                           import_event=import_event)
             resp, code = build_import_response("failed", f"Database commit failed: {str(commit_error)}",
-                                               import_code, "database_commit_error", http_status=500)
+                                               import_code, "database_commit_error", http_status=500,
+                                               first_error=import_event.get("first_error"))
             return jsonify(resp), code
 
         # Get timestamp range
@@ -307,7 +310,8 @@ def import_csv():
         record_import(db, import_code, "failed", "encoding_error", suggestion,
                       filename=file.filename, import_event=import_event)
         resp, code = build_import_response("failed", "File encoding error. Please use UTF-8 encoded CSV",
-                                           import_code, "encoding_error", suggestion, http_status=400)
+                                           import_code, "encoding_error", suggestion, http_status=400,
+                                           first_error=import_event.get("first_error"))
         return jsonify(resp), code
     except CSVImportError as e:
         import_event["failure_reason"] = "csv_import_error"
@@ -316,7 +320,8 @@ def import_csv():
         record_import(db, import_code, "failed", "csv_import_error", str(e),
                       filename=file.filename, import_event=import_event)
         resp, code = build_import_response("failed", f"Import failed: {e.message}",
-                                           import_code, "csv_import_error", http_status=400)
+                                           import_code, "csv_import_error", http_status=400,
+                                           first_error=import_event.get("first_error"))
         return jsonify(resp), code
     except Exception as e:
         import_event["failure_reason"] = "database_error"
@@ -327,7 +332,8 @@ def import_csv():
         record_import(db, import_code, "failed", "database_error", suggestion,
                       filename=file.filename if file else None, import_event=import_event)
         resp, code = build_import_response("failed", f"Import failed: {str(e)}",
-                                           import_code, "database_error", suggestion, http_status=500)
+                                           import_code, "database_error", suggestion, http_status=500,
+                                           first_error=import_event.get("first_error"))
         return jsonify(resp), code
 
 
@@ -350,6 +356,23 @@ def get_import_history():
     imports = query.limit(limit).all()
 
     return jsonify([imp.to_dict() for imp in imports])
+
+
+@import_bp.route("/imports/latest", methods=["GET"])
+def get_latest_import():
+    """Get the most recent CSV import for quick status/error checking.
+
+    Useful for checking import results without knowing the import code,
+    especially when importing via phone where viewing logs is difficult.
+    """
+    db = get_db()
+
+    latest = db.query(CsvImport).order_by(desc(CsvImport.created_at)).first()
+
+    if not latest:
+        return jsonify({"error": "No imports found"}), 404
+
+    return jsonify(latest.to_dict())
 
 
 @import_bp.route("/imports/<import_code>", methods=["GET"])

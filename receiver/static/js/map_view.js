@@ -165,11 +165,21 @@ function renderRoutes() {
             color = '#3b82f6';
         }
 
+        // Sparse-data trips (very few unique GPS points) get a dashed, dimmer
+        // polyline plus visible markers at each point so they're still readable.
+        // Use gps_quality.unique_points (raw unique-point count from the server)
+        // rather than trip.points.length (which reflects the post-subsampling
+        // point count shown on the map) so that dense tracks don't get flagged
+        // as sparse just because they were decimated for rendering.
+        const uniquePointCount = trip.gps_quality?.unique_points ?? trip.points.length;
+        const isSparseData = uniquePointCount < 10;
+
         const polyline = L.polyline(latlngs, {
             color: color,
-            weight: 3,
-            opacity: 0.7,
-            smoothFactor: 1
+            weight: isSparseData ? 2 : 3,
+            opacity: isSparseData ? 0.4 : 0.7,
+            smoothFactor: 1,
+            dashArray: isSparseData ? '5, 10' : null
         });
 
         polyline.on('click', () => showTripDetail(trip.id));
@@ -177,10 +187,32 @@ function renderRoutes() {
             this.setStyle({ weight: 5, opacity: 1 });
         });
         polyline.on('mouseout', function() {
-            this.setStyle({ weight: 3, opacity: 0.7 });
+            this.setStyle({
+                weight: isSparseData ? 2 : 3,
+                opacity: isSparseData ? 0.4 : 0.7
+            });
         });
 
         routeLayerGroup.addLayer(polyline);
+
+        if (isSparseData) {
+            trip.points.forEach((point, index) => {
+                const marker = L.circleMarker([point.lat, point.lon], {
+                    radius: 6,
+                    fillColor: color,
+                    color: '#fff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.9
+                });
+                marker.bindTooltip(`Point ${index + 1} of ${trip.points.length}`, {
+                    direction: 'top',
+                    offset: [0, -8]
+                });
+                marker.on('click', () => showTripDetail(trip.id));
+                routeLayerGroup.addLayer(marker);
+            });
+        }
 
         // Add start marker
         const startPoint = trip.points[0];
@@ -269,10 +301,17 @@ function updateTripList() {
         const date = new Date(trip.start_time);
         const isSelected = selectedTripIds.has(trip.id);
 
+        // Surface poor GPS quality (e.g. GPS-stuck trips) with a small badge.
+        const gpsQuality = trip.gps_quality;
+        const hasLowGpsQuality = gpsQuality && gpsQuality.quality === 'poor';
+        const gpsQualityBadge = hasLowGpsQuality
+            ? `<span class="badge badge-warning" title="Only ${gpsQuality.unique_points} unique GPS locations out of ${gpsQuality.total_points} points">Low GPS</span>`
+            : '';
+
         return `
             <div class="trip-card ${isSelected ? 'selected' : ''}" data-trip-id="${trip.id}">
                 <div class="trip-card-header">
-                    <div class="trip-card-date">${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
+                    <div class="trip-card-date">${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} ${gpsQualityBadge}</div>
                     <input type="checkbox" class="trip-card-checkbox" ${isSelected ? 'checked' : ''} onclick="toggleTripSelection('${trip.id}', event)">
                 </div>
                 <div class="trip-card-stats">
@@ -612,6 +651,43 @@ function clearFilters() {
  */
 function changeMapLayer() {
     currentLayer = document.querySelector('input[name="layer"]:checked').value;
+
+    // Swap legend visibility based on the active layer.
+    const heatmapLegend = document.getElementById('heatmap-legend');
+    const routesLegend = document.getElementById('routes-legend');
+    const legendTitle = document.getElementById('legend-title-text');
+    const legendDescription = document.getElementById('legend-description');
+    const legendLow = document.getElementById('legend-low');
+    const legendHigh = document.getElementById('legend-high');
+
+    if (currentLayer === 'routes') {
+        if (heatmapLegend) heatmapLegend.style.display = 'none';
+        if (routesLegend) routesLegend.style.display = 'block';
+    } else if (currentLayer === 'heatmap-density') {
+        if (routesLegend) routesLegend.style.display = 'none';
+        if (heatmapLegend) heatmapLegend.style.display = 'block';
+        if (legendTitle) legendTitle.textContent = 'Trip Density';
+        if (legendDescription) legendDescription.textContent = 'Areas with more GPS points from trips';
+        if (legendLow) legendLow.textContent = 'Low';
+        if (legendHigh) legendHigh.textContent = 'High';
+    } else if (currentLayer === 'heatmap-speed') {
+        if (routesLegend) routesLegend.style.display = 'none';
+        if (heatmapLegend) heatmapLegend.style.display = 'block';
+        if (legendTitle) legendTitle.textContent = 'Average Speed';
+        if (legendDescription) legendDescription.textContent = 'Higher intensity = faster driving';
+        if (legendLow) legendLow.textContent = '0 mph';
+        if (legendHigh) legendHigh.textContent = '70+ mph';
+    } else {
+        // Unknown layer value: hide both legends and clear text so no stale
+        // content leaks through from the previous selection.
+        if (routesLegend) routesLegend.style.display = 'none';
+        if (heatmapLegend) heatmapLegend.style.display = 'none';
+        if (legendTitle) legendTitle.textContent = '';
+        if (legendDescription) legendDescription.textContent = '';
+        if (legendLow) legendLow.textContent = '';
+        if (legendHigh) legendHigh.textContent = '';
+    }
+
     renderTrips();
 }
 

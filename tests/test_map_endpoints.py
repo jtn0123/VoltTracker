@@ -67,6 +67,55 @@ class TestMapDataEndpoint:
         assert 'north' in trip_data['bounds']
         assert 'center' in trip_data['bounds']
 
+        # GPS quality indicator
+        assert 'gps_quality' in trip_data
+        assert 'total_points' in trip_data['gps_quality']
+        assert 'unique_points' in trip_data['gps_quality']
+        assert 'quality' in trip_data['gps_quality']
+        # 10 distinct points → quality should be good
+        assert trip_data['gps_quality']['quality'] == 'good'
+
+    def test_map_data_gps_quality_poor(self, client, db_session):
+        """Trip dominated by stuck GPS points should report poor quality"""
+        session_id = uuid.uuid4()
+        trip = Trip(
+            session_id=session_id,
+            start_time=datetime.now(timezone.utc),
+            distance_miles=15.0,
+            is_closed=True
+        )
+        db_session.add(trip)
+
+        # 100 GPS points all at the same location (simulates stuck GPS),
+        # plus one point that actually moved.
+        base_time = datetime.now(timezone.utc)
+        for i in range(100):
+            telemetry = TelemetryRaw(
+                session_id=session_id,
+                timestamp=base_time + timedelta(seconds=i * 60),
+                latitude=41.5,
+                longitude=-81.7
+            )
+            db_session.add(telemetry)
+        telemetry2 = TelemetryRaw(
+            session_id=session_id,
+            timestamp=base_time + timedelta(seconds=6000),
+            latitude=41.51,
+            longitude=-81.7
+        )
+        db_session.add(telemetry2)
+        db_session.commit()
+
+        response = client.get('/api/trips/map')
+        assert response.status_code == 200
+        data = response.get_json()
+
+        trip_data = data['trips'][0]
+        assert trip_data['gps_quality']['total_points'] == 101
+        # Less than 30% unique → poor
+        assert trip_data['gps_quality']['quality'] == 'poor'
+        assert trip_data['gps_quality']['unique_points'] < 10
+
     def test_map_data_skip_trips_without_gps(self, client, db_session):
         """Trips without GPS data should be excluded"""
         session_id_1 = uuid.uuid4()
@@ -517,3 +566,184 @@ class TestSimilarTripsEndpoint:
         assert response.status_code == 200
         data = response.get_json()
         assert data['similar_trips'] == []
+
+
+class TestRouteSubsampling:
+    """Tests for stationary-point filtering, RDP simplification, and subsampling."""
+
+    def test_filter_stationary_removes_duplicates(self):
+        """filter_stationary_points should collapse consecutive duplicate locations."""
+        from receiver.routes.map import filter_stationary_points
+
+        # GPS-stuck simulation: 100 points at one location, then a real move,
+        # then 50 more stuck points, then another move.
+        points = [{'lat': 41.5, 'lon': -81.7} for _ in range(100)]
+        points.append({'lat': 41.501, 'lon': -81.7})  # ~111m north
+        points.extend([{'lat': 41.501, 'lon': -81.7} for _ in range(50)])
+        points.append({'lat': 41.502, 'lon': -81.7})
+
+        filtered = filter_stationary_points(points, min_distance_meters=5.0)
+
+        assert len(filtered) <= 5, f"Should collapse duplicates, got {len(filtered)}"
+        assert len(filtered) >= 3, "Should preserve actual movements"
+
+    def test_filter_stationary_keeps_movements(self):
+        """Points that move >5m between samples should all be kept."""
+        from receiver.routes.map import filter_stationary_points
+
+        points = [
+            {'lat': 41.5 + i * 0.0001, 'lon': -81.7}  # ~11m apart
+            for i in range(100)
+        ]
+
+        filtered = filter_stationary_points(points, min_distance_meters=5.0)
+
+        assert len(filtered) == 100
+
+    def test_filter_stationary_handles_gps_jitter(self):
+        """Sub-threshold jitter should collapse to far fewer points."""
+        from receiver.routes.map import filter_stationary_points
+
+        # ~1m apart — well below the 5m threshold
+        points = [{'lat': 41.5 + i * 0.00001, 'lon': -81.7} for i in range(50)]
+
+        filtered = filter_stationary_points(points, min_distance_meters=5.0)
+
+        assert len(filtered) < 20, f"Should collapse GPS jitter, got {len(filtered)}"
+
+    def test_rdp_preserves_turn_points(self):
+        """RDP should preserve corner/turn points."""
+        from receiver.routes.map import rdp_simplify
+
+        # L-shaped route: horizontal then vertical
+        points = []
+        for i in range(20):
+            points.append({'lat': 41.5, 'lon': -81.7 + i * 0.001})
+        for i in range(20):
+            points.append({'lat': 41.5 + i * 0.001, 'lon': -81.68})
+
+        simplified = rdp_simplify(points, epsilon=0.0001)
+
+        assert len(simplified) >= 3
+        assert simplified[0]['lat'] == 41.5
+        assert simplified[0]['lon'] == -81.7
+        assert simplified[-1]['lat'] == pytest.approx(41.519, abs=0.001)
+        assert simplified[-1]['lon'] == -81.68
+
+        corner_found = any(
+            abs(p['lat'] - 41.5) < 0.001 and abs(p['lon'] - (-81.68)) < 0.001
+            for p in simplified
+        )
+        assert corner_found, "Corner point at L-junction should be preserved"
+
+    def test_rdp_removes_collinear_points(self):
+        """A perfectly straight line should collapse to its endpoints."""
+        from receiver.routes.map import rdp_simplify
+
+        points = [{'lat': 41.5 + i * 0.001, 'lon': -81.7} for i in range(100)]
+        simplified = rdp_simplify(points, epsilon=0.0001)
+
+        assert len(simplified) == 2
+        assert simplified[0] == points[0]
+        assert simplified[-1] == points[-1]
+
+    def test_rdp_preserves_curves(self):
+        """A curved path should retain enough points to represent the curve."""
+        import math
+        from receiver.routes.map import rdp_simplify
+
+        points = []
+        for i in range(100):
+            angle = (i / 99) * (math.pi / 2)
+            points.append({
+                'lat': 41.5 + 0.01 * math.sin(angle),
+                'lon': -81.7 + 0.01 * math.cos(angle),
+            })
+
+        simplified = rdp_simplify(points, epsilon=0.00005)
+
+        assert len(simplified) >= 5
+        assert len(simplified) < 50
+
+        mid_point_found = any(
+            0.003 < abs(p['lat'] - 41.5) < 0.008
+            for p in simplified[1:-1]
+        )
+        assert mid_point_found, "Should preserve intermediate curve points"
+
+    def test_subsample_respects_max_points(self, client, db_session):
+        """API subsampling must never exceed max_points_per_trip."""
+        session_id = uuid.uuid4()
+        trip = Trip(
+            session_id=session_id,
+            start_time=datetime.now(timezone.utc),
+            distance_miles=100.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+
+        base_time = datetime.now(timezone.utc)
+        for i in range(2000):
+            telemetry = TelemetryRaw(
+                session_id=session_id,
+                timestamp=base_time + timedelta(seconds=i * 2),
+                latitude=41.5 + (i % 100) * 0.0001 + (i // 100) * 0.01,
+                longitude=-81.7 + (i % 100) * 0.0001,
+            )
+            db_session.add(telemetry)
+        db_session.commit()
+
+        response = client.get('/api/trips/map?max_points_per_trip=100')
+        assert response.status_code == 200
+        data = response.get_json()
+
+        points = data['trips'][0]['points']
+        assert len(points) <= 100
+        assert data['trips'][0]['point_count'] == 2000  # Original count preserved
+
+    def test_subsample_preserves_shape_in_api(self, client, db_session):
+        """The API endpoint should keep route shape (e.g. corner of an L route)."""
+        session_id = uuid.uuid4()
+        trip = Trip(
+            session_id=session_id,
+            start_time=datetime.now(timezone.utc),
+            distance_miles=30.0,
+            is_closed=True,
+        )
+        db_session.add(trip)
+
+        base_time = datetime.now(timezone.utc)
+        for i in range(300):
+            telemetry = TelemetryRaw(
+                session_id=session_id,
+                timestamp=base_time + timedelta(seconds=i),
+                latitude=41.5,
+                longitude=-81.7 + i * 0.0003,
+            )
+            db_session.add(telemetry)
+        for i in range(300):
+            telemetry = TelemetryRaw(
+                session_id=session_id,
+                timestamp=base_time + timedelta(seconds=300 + i),
+                latitude=41.5 + i * 0.0003,
+                longitude=-81.61,
+            )
+            db_session.add(telemetry)
+        db_session.commit()
+
+        response = client.get('/api/trips/map?max_points_per_trip=50')
+        assert response.status_code == 200
+        data = response.get_json()
+
+        points = data['trips'][0]['points']
+        assert len(points) <= 50
+        assert points[0]['lat'] == pytest.approx(41.5, abs=0.001)
+        assert points[0]['lon'] == pytest.approx(-81.7, abs=0.001)
+        assert points[-1]['lat'] == pytest.approx(41.59, abs=0.01)
+        assert points[-1]['lon'] == pytest.approx(-81.61, abs=0.001)
+
+        corner_region = any(
+            abs(p['lat'] - 41.5) < 0.01 and abs(p['lon'] - (-81.61)) < 0.01
+            for p in points
+        )
+        assert corner_region, "Corner region should be represented in subsampled points"

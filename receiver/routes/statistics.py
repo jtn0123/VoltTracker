@@ -15,7 +15,7 @@ from database import get_db
 from models import Trip
 from sqlalchemy import and_
 from utils.time_utils import parse_date_shortcut
-from utils.cache_utils import cache_result
+from utils.cache_utils import cache_result, generate_cache_key
 
 logger = logging.getLogger(__name__)
 
@@ -99,8 +99,22 @@ def calculate_trend_vs_previous(current_value, previous_value):
     }
 
 
+def _quick_stats_cache_key(timeframe):
+    """
+    Build a cache key for /stats/quick that includes the units and include_trend
+    query parameters.
+
+    Without this, the default key is derived only from the path arg ``timeframe``,
+    so an imperial request and a metric request hit the same key and the second
+    caller is served the first caller's units. include_trend has the same hazard.
+    """
+    units = request.args.get("units", "imperial").lower()
+    include_trend = request.args.get("include_trend", "true").lower()
+    return generate_cache_key("stats:quick", timeframe, units, include_trend)
+
+
 @statistics_bp.route("/stats/quick/<timeframe>", methods=["GET"])
-@cache_result("stats:quick", ttl=300, tags=["statistics", "trips"])
+@cache_result("stats:quick", ttl=300, tags=["statistics", "trips"], key_func=_quick_stats_cache_key)
 def get_quick_stats(timeframe):
     """
     Get quick statistics for common timeframes.

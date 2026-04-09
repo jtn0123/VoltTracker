@@ -581,3 +581,147 @@
 .marker-cluster-large div {
     background-color: rgba(239, 68, 68, 0.8);
 }
+
+/* ============================================
+   Map Legends
+   ============================================ */
+
+/* Heatmap Legend */
+.heatmap-legend {
+    position: fixed;
+    bottom: 30px;
+    right: 20px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    z-index: var(--z-controls);
+    min-width: 160px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.heatmap-legend .legend-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.heatmap-legend .legend-gradient {
+    margin-bottom: 6px;
+}
+
+.heatmap-legend .legend-gradient-bar {
+    height: 16px;
+    border-radius: 4px;
+    background: linear-gradient(to right,
+        rgba(0, 0, 255, 0.7),
+        rgba(0, 255, 255, 0.7),
+        rgba(0, 255, 0, 0.7),
+        rgba(255, 255, 0, 0.7),
+        rgba(255, 0, 0, 0.7)
+    );
+}
+
+.heatmap-legend .legend-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.heatmap-legend .legend-description {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    margin-top: 6px;
+    font-style: italic;
+}
+
+/* Routes Legend */
+.routes-legend {
+    position: fixed;
+    bottom: 30px;
+    right: 20px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    z-index: var(--z-controls);
+    min-width: 200px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.routes-legend .legend-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+}
+
+.routes-legend-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.routes-legend .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.routes-legend .legend-color {
+    width: 16px;
+    height: 4px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+/* Hide legends when filter sidebar is open on mobile */
+@media (max-width: 768px) {
+    .heatmap-legend,
+    .routes-legend {
+        bottom: 20px;
+        right: 10px;
+        left: 10px;
+        min-width: auto;
+    }
+
+    .filter-sidebar.open ~ .routes-legend,
+    .filter-sidebar.open ~ .heatmap-legend,
+    .trip-list-sidebar.open ~ .routes-legend,
+    .trip-list-sidebar.open ~ .heatmap-legend {
+        display: none !important;
+    }
+}
+
+/* ============================================
+   GPS Quality Badge
+   ============================================ */
+
+.badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.badge-warning {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.badge-success {
+    background-color: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
