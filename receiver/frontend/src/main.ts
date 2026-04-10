@@ -294,9 +294,20 @@ function removeSectionSkeleton(skeleton: HTMLElement): void {
   setTimeout(() => skeleton.remove(), 300);
 }
 
-function setupSectionObservers(): void {
+/**
+ * Map of section element ids → lazy loaders.
+ *
+ * NOTE: Observer keys must match real element ids in the template. Do not
+ * key on `battery-health-section` because that element is `display:none`
+ * until data loads — IntersectionObserver never fires on it. Instead we
+ * key on `soc-section`, which is always visible and adjacent to the
+ * battery cards, and lazy-load battery + SOC data together.
+ */
+export const LAZY_SECTION_IDS = ['soc-section', 'charging-section', 'import-section'] as const;
+
+export function setupSectionObservers(): void {
   const sectionMap: Record<string, () => Promise<void>> = {
-    'battery-section': async () => {
+    'soc-section': async () => {
       const mod = await getBattery();
       mod.loadBatteryHealth();
       mod.loadBatteryCells();
@@ -374,15 +385,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Defer non-critical sections via IntersectionObserver
   setupSectionObservers();
 
-  // If battery/charging sections don't exist as elements, fall back to idle loading
-  if (!document.getElementById('battery-section') && !document.getElementById('charging-section')) {
+  // If the observed sections don't exist as elements, fall back to idle
+  // loading so battery/charging data still populates above-the-fold cards
+  // (e.g. `#soc-count` on the summary grid is updated by `loadSocAnalysis`).
+  //
+  // Each section is checked independently — previously the conditions were
+  // `&&`-joined, so the presence of one section silently suppressed the
+  // fallback for the other.
+  const needsBatteryFallback = !document.getElementById('soc-section');
+  const needsChargingFallback = !document.getElementById('charging-section');
+  if (needsBatteryFallback || needsChargingFallback) {
     const loadDeferred = async () => {
-      const [bat, chg] = await Promise.all([getBattery(), getCharging()]);
-      bat.loadBatteryHealth();
-      bat.loadBatteryCells();
-      bat.loadSocAnalysis();
-      chg.loadChargingSummary();
-      chg.loadChargingHistory();
+      if (needsBatteryFallback) {
+        const bat = await getBattery();
+        bat.loadBatteryHealth();
+        bat.loadBatteryCells();
+        bat.loadSocAnalysis();
+      }
+      if (needsChargingFallback) {
+        const chg = await getCharging();
+        chg.loadChargingSummary();
+        chg.loadChargingHistory();
+      }
     };
     if (typeof requestIdleCallback !== 'undefined') {
       requestIdleCallback(() => {
