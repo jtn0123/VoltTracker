@@ -115,6 +115,7 @@ import { loadSummary, loadMpgTrend } from '@/summary';
 import { setupChartLazyLoading } from '@/charts';
 import { loadTrips, openTripModal, closeTripModal, deleteTrip, setTimeframe } from '@/trips';
 import { wireChargingActions } from '@/chargingWiring';
+import { setupCsvImport } from '@/csv-import-setup';
 
 // ── Lazy-loaded modules (below the fold / on demand) ─────────────────────────
 const loadBatteryModule = () => import('@/battery');
@@ -338,46 +339,6 @@ function setupSectionObservers(): void {
   }
 }
 
-// ── CSV Import Setup ─────────────────────────────────────────────────────────
-function setupCsvImport(): void {
-  const fileInput = document.getElementById('csv-file') as HTMLInputElement | null;
-  const fileNameDisplay = document.getElementById('file-name');
-  const importBtn = document.getElementById('import-btn') as HTMLButtonElement | null;
-  const importForm = document.getElementById('import-form');
-
-  if (fileInput) {
-    fileInput.addEventListener('change', () => {
-      const count = fileInput.files?.length || 0;
-      if (fileNameDisplay) {
-        if (count > 1) {
-          fileNameDisplay.textContent = `${count} files selected`;
-        } else if (count === 1) {
-          fileNameDisplay.textContent = fileInput.files![0].name;
-        } else {
-          fileNameDisplay.textContent = 'No file selected';
-        }
-      }
-      if (importBtn) importBtn.disabled = count === 0;
-    });
-  }
-
-  if (importForm) {
-    importForm.addEventListener('submit', async (e) => {
-      (await getImport()).handleImport(e);
-    });
-  }
-
-  if (importBtn) {
-    importBtn.addEventListener('click', async (e) => {
-      if (importBtn.disabled) {
-        e.preventDefault();
-        const mod = await getImport();
-        mod.showImportStatus('Please select CSV files first', 'error');
-      }
-    });
-  }
-}
-
 // ── Initialize dashboard ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -398,7 +359,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initBackToTop();
   initBottomNav();
   initScrollHandlers();
-  setupCsvImport();
+  setupCsvImport(getImport);
 
   // Load critical data in parallel
   const results = await Promise.allSettled([loadStatus(), loadSummary(), loadTrips(), loadLiveTelemetry()]);
