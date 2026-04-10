@@ -111,7 +111,7 @@ import {
   initServiceWorker,
 } from '@/ui';
 import { initWebSocket, loadLiveTelemetry, loadStatus } from '@/live';
-import { loadSummary, loadMpgTrend } from '@/summary';
+import { loadSummary, loadMpgTrend, loadCardSubtitles } from '@/summary';
 import { setupChartLazyLoading } from '@/charts';
 import { loadTrips, openTripModal, closeTripModal, deleteTrip, setTimeframe } from '@/trips';
 import { wireChargingActions } from '@/chargingWiring';
@@ -384,12 +384,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   initScrollHandlers();
   setupCsvImport(getImport);
 
-  // Load critical data in parallel
-  const results = await Promise.allSettled([loadStatus(), loadSummary(), loadTrips(), loadLiveTelemetry()]);
+  // Load critical data in parallel.
+  //
+  // JTN-487: `loadCardSubtitles` is included here so the top-of-page card
+  // subtitles (`#soc-count`, `#charging-sessions`) don't remain on the
+  // placeholder "Loading..." text until the user scrolls to the lazy-loaded
+  // battery/charging sections. It only touches the subtitle text — the
+  // heavy work (histograms, tables, cost comparison) is still deferred by
+  // the IntersectionObserver in `setupSectionObservers`.
+  const results = await Promise.allSettled([
+    loadStatus(),
+    loadSummary(),
+    loadTrips(),
+    loadLiveTelemetry(),
+    loadCardSubtitles(),
+  ]);
 
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
-      const names = ['loadStatus', 'loadSummary', 'loadTrips', 'loadLiveTelemetry'];
+      const names = ['loadStatus', 'loadSummary', 'loadTrips', 'loadLiveTelemetry', 'loadCardSubtitles'];
       console.error(`${names[index]} failed:`, result.reason);
     }
   });

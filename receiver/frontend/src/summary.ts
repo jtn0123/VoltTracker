@@ -6,7 +6,7 @@
 import { state, formatChartDate } from '@/core';
 import { api } from '@/api';
 import { loadChartJs, createGradient, getEnhancedLegend, getEnhancedTooltip, getEnhancedAxis, getChartColor } from '@/charts';
-import type { EfficiencySummary, MpgTrendPoint } from '@/types/api';
+import type { EfficiencySummary, MpgTrendPoint, SocAnalysis, ChargingSummary } from '@/types/api';
 import { EfficiencySummarySchema, MpgTrendPointSchema } from '@/types/schemas';
 import { z } from 'zod';
 
@@ -74,6 +74,56 @@ export async function loadSummary(): Promise<void> {
     updateSummaryCards(result.data);
   } catch (error) {
     console.error('Failed to load summary:', error);
+  }
+}
+
+/** Update the "Avg SOC Floor" card subtitle from a SOC analysis response. */
+function updateSocCountSubtitle(data: SocAnalysis | null): void {
+  const el = document.getElementById('soc-count');
+  if (!el) return;
+  el.textContent = data?.average_soc == null
+    ? 'No gas transition data available'
+    : `${data.count} transitions recorded`;
+}
+
+/** Update the "Total kWh Charged" card subtitle from a charging summary response. */
+function updateChargingSessionsSubtitle(data: ChargingSummary | null): void {
+  const el = document.getElementById('charging-sessions');
+  if (!el) return;
+  el.textContent = data?.total_kwh
+    ? `${data.total_sessions} charging sessions`
+    : 'No charging data';
+}
+
+/**
+ * JTN-487: Eagerly populate the top-of-page card subtitles that would
+ * otherwise depend on lazy-loaded battery/charging modules. Without this,
+ * `#soc-count` and `#charging-sessions` stay stuck on the literal
+ * "Loading..." placeholder until the user scrolls far enough for the
+ * battery or charging sections to enter the viewport.
+ *
+ * Keep this lightweight: we only read the fields we need for the
+ * subtitles; the heavy work (SOC histogram, charging table, cost
+ * comparison) is still lazy-loaded by the section observers. Both
+ * requests use the shared API cache, so when the lazy modules
+ * eventually call the same endpoints they hit the cache.
+ */
+export async function loadCardSubtitles(): Promise<void> {
+  const [socResult, chargingResult] = await Promise.allSettled([
+    api<SocAnalysis>('/api/soc/analysis', { useCache: true, maxAge: 300000, silent: true }),
+    api<ChargingSummary>('/api/charging/summary', { useCache: true, maxAge: 300000, silent: true }),
+  ]);
+
+  if (socResult.status === 'fulfilled' && !socResult.value.error) {
+    updateSocCountSubtitle(socResult.value.data ?? null);
+  } else {
+    updateSocCountSubtitle(null);
+  }
+
+  if (chargingResult.status === 'fulfilled' && !chargingResult.value.error) {
+    updateChargingSessionsSubtitle(chargingResult.value.data ?? null);
+  } else {
+    updateChargingSessionsSubtitle(null);
   }
 }
 

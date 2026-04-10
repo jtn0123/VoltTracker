@@ -29,7 +29,7 @@ vi.mock('@/core', () => ({
 }));
 
 import { api } from '@/api';
-import { loadSummary, loadMpgTrend } from '@/summary';
+import { loadSummary, loadMpgTrend, loadCardSubtitles } from '@/summary';
 
 describe('loadSummary', () => {
   beforeEach(() => {
@@ -137,6 +137,103 @@ describe('loadSummary', () => {
     (api as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network down'));
     // Should not throw
     await expect(loadSummary()).resolves.toBeUndefined();
+  });
+});
+
+// JTN-487: these tests guard the regression where the top-of-page summary
+// card subtitles (#soc-count, #charging-sessions) stayed stuck on the
+// literal placeholder "Loading..." until the user scrolled far enough for
+// the battery / charging IntersectionObserver sections to enter the
+// viewport. loadCardSubtitles is now called eagerly in the critical-path
+// Promise.allSettled block in main.ts and must populate (or clear) both
+// subtitles regardless of scroll position.
+describe('loadCardSubtitles (JTN-487)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <div class="card-subtitle" id="soc-count">Loading...</div>
+      <div class="card-subtitle" id="charging-sessions">Loading...</div>
+    `;
+    vi.clearAllMocks();
+  });
+
+  it('replaces "Loading..." with real subtitles when both APIs return data', async () => {
+    (api as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (url === '/api/soc/analysis') {
+        return { error: null, data: { average_soc: 42, count: 17, min_soc: 10, max_soc: 90 } };
+      }
+      if (url === '/api/charging/summary') {
+        return { error: null, data: { total_kwh: 123.4, total_sessions: 9 } };
+      }
+      return { error: 'unexpected url', data: null };
+    });
+
+    await loadCardSubtitles();
+
+    // Neither subtitle should still read the placeholder text.
+    expect(document.getElementById('soc-count')?.textContent).toBe('17 transitions recorded');
+    expect(document.getElementById('soc-count')?.textContent).not.toBe('Loading...');
+    expect(document.getElementById('charging-sessions')?.textContent).toBe('9 charging sessions');
+    expect(document.getElementById('charging-sessions')?.textContent).not.toBe('Loading...');
+  });
+
+  it('shows the empty-data subtitles when both APIs return null/zero data', async () => {
+    (api as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (url === '/api/soc/analysis') {
+        return { error: null, data: { average_soc: null, count: 0 } };
+      }
+      if (url === '/api/charging/summary') {
+        return { error: null, data: { total_kwh: null, total_sessions: 0 } };
+      }
+      return { error: 'unexpected url', data: null };
+    });
+
+    await loadCardSubtitles();
+
+    expect(document.getElementById('soc-count')?.textContent).toBe('No gas transition data available');
+    expect(document.getElementById('charging-sessions')?.textContent).toBe('No charging data');
+    // And crucially, neither is still the literal "Loading..." placeholder.
+    expect(document.getElementById('soc-count')?.textContent).not.toBe('Loading...');
+    expect(document.getElementById('charging-sessions')?.textContent).not.toBe('Loading...');
+  });
+
+  it('clears both subtitles even when one API errors and the other succeeds', async () => {
+    (api as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (url === '/api/soc/analysis') {
+        return { error: 'HTTP 500: server down' };
+      }
+      if (url === '/api/charging/summary') {
+        return { error: null, data: { total_kwh: 55.5, total_sessions: 4 } };
+      }
+      return { error: 'unexpected url', data: null };
+    });
+
+    await loadCardSubtitles();
+
+    // SOC API errored — subtitle falls back to the empty-state text, not "Loading...".
+    expect(document.getElementById('soc-count')?.textContent).toBe('No gas transition data available');
+    expect(document.getElementById('soc-count')?.textContent).not.toBe('Loading...');
+    // Charging succeeded — subtitle reflects the real count.
+    expect(document.getElementById('charging-sessions')?.textContent).toBe('4 charging sessions');
+  });
+
+  it('clears the subtitles even when both API calls reject', async () => {
+    (api as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network down'));
+
+    // loadCardSubtitles uses Promise.allSettled internally so it must not throw
+    // even when both branches reject.
+    await expect(loadCardSubtitles()).resolves.toBeUndefined();
+
+    expect(document.getElementById('soc-count')?.textContent).toBe('No gas transition data available');
+    expect(document.getElementById('charging-sessions')?.textContent).toBe('No charging data');
+  });
+
+  it('is a no-op (and does not throw) when the subtitle elements are missing from the DOM', async () => {
+    document.body.innerHTML = '';
+    (api as ReturnType<typeof vi.fn>).mockResolvedValue({
+      error: null,
+      data: { average_soc: 42, count: 17 },
+    });
+    await expect(loadCardSubtitles()).resolves.toBeUndefined();
   });
 });
 
