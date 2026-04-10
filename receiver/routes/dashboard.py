@@ -10,6 +10,7 @@ from config import Config
 from flask import Blueprint, jsonify, render_template
 from models import TelemetryRaw, Trip
 from sqlalchemy import desc
+from version import APP_VERSION
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -24,7 +25,10 @@ def dashboard():
     # (require_auth_globally), so only authenticated users can see the token.
     # The token allows the frontend JS to authenticate its Socket.IO connection.
     ws_token = Config.WEBSOCKET_TOKEN or Config.DASHBOARD_PASSWORD or ""
-    from app import APP_VERSION
+    # APP_VERSION is imported from the dedicated ``version`` module (not ``app``)
+    # so that serving this route does not trigger a re-import of ``app.py`` when
+    # the server is started via ``python receiver/app.py`` (where ``app`` is
+    # ``__main__``). See JTN-482.
     return render_template("index.html", ws_token=ws_token, app_version=APP_VERSION)
 
 

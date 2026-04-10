@@ -8,6 +8,7 @@ import logging
 import os
 
 from flask import Blueprint, jsonify, render_template, request
+from version import APP_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,9 @@ system_bp = Blueprint("system", __name__)
 @system_bp.route("/healthz", methods=["GET"])
 def health_check():
     """Liveness probe - basic check that app is running."""
-    from app import APP_VERSION
+    # APP_VERSION comes from the dedicated ``version`` module (not ``app``)
+    # to avoid re-importing ``app.py`` when the server is started via
+    # ``python receiver/app.py``. See JTN-482.
     return {"status": "healthy", "service": "volttracker", "version": APP_VERSION}, 200
 
 

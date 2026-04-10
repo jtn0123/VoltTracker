@@ -9,7 +9,6 @@ Module-level `app = create_app()` for backward compatibility.
 
 import atexit
 import hmac
-import json
 import logging
 import os
 
@@ -19,23 +18,10 @@ from flask_compress import Compress
 from flask_httpauth import HTTPBasicAuth
 from flask_socketio import SocketIO
 from extensions import limiter
+from version import APP_VERSION  # noqa: F401  (re-exported for backward compat)
 from werkzeug.security import check_password_hash
 
 _STATIC_PREFIX = "/static/"
-
-
-# Read version from package.json
-def _read_version():
-    """Read version from frontend package.json or fall back to unknown."""
-    try:
-        pkg_path = os.path.join(os.path.dirname(__file__), 'frontend', 'package.json')
-        with open(pkg_path) as f:
-            return json.load(f).get('version', 'unknown')
-    except Exception:
-        return 'unknown'
-
-
-APP_VERSION = _read_version()
 
 
 # Configure logging with rotation
