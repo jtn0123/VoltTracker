@@ -346,7 +346,19 @@ export function setupSectionObservers(): void {
 
   for (const id of Object.keys(sectionMap)) {
     const el = document.getElementById(id);
-    if (el) observer.observe(el);
+    if (el) {
+      observer.observe(el);
+    } else {
+      // Guardrail for JTN-483 / JTN-492: warn loudly when a lazy section id
+      // in sectionMap has no matching element in the DOM. Without this, a
+      // template/script id mismatch silently disables lazy-loading for a
+      // whole section and rots through releases undetected.
+      console.warn(
+        `[setupSectionObservers] no element found for id "${id}" — ` +
+          'lazy loading for this section will not fire. ' +
+          'Check that the template element id matches LAZY_SECTION_IDS.',
+      );
+    }
   }
 }
 

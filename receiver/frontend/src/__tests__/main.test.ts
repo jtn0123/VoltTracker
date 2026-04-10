@@ -242,4 +242,68 @@ describe('setupSectionObservers (JTN-483)', () => {
     expect(mock.observed).not.toContain(document.getElementById('battery-section')!);
     expect(mock.observed).not.toContain(document.getElementById('battery-health-section')!);
   });
+
+  // ── JTN-492 regression coverage ─────────────────────────────────────────
+  // The template at `receiver/templates/index.html` used to render the
+  // import section as `<section class="import-section">` with no `id`,
+  // so `document.getElementById('import-section')` returned null and the
+  // observer silently skipped the import module preload. These tests pin
+  // the fix (real id on the element) and the new guardrail warning.
+
+  it('observes #import-section when it exists in the DOM (JTN-492)', async () => {
+    const mock = installMockObserver();
+    document.body.innerHTML = `
+      <section id="soc-section"></section>
+      <section id="charging-section"></section>
+      <section id="import-section" class="import-section"></section>
+    `;
+
+    const { setupSectionObservers } = await import('../main');
+    setupSectionObservers();
+
+    const importEl = document.getElementById('import-section');
+    expect(importEl).not.toBeNull();
+    expect(mock.observed).toContain(importEl!);
+  });
+
+  it('warns when a lazy section id has no matching element (JTN-492)', async () => {
+    installMockObserver();
+    // Only render soc-section — charging-section and import-section are
+    // intentionally missing so the guardrail should warn for each one.
+    document.body.innerHTML = `
+      <section id="soc-section"></section>
+    `;
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { setupSectionObservers } = await import('../main');
+    setupSectionObservers();
+
+    const warned = warnSpy.mock.calls.map((args) => String(args[0]));
+    expect(warned.some((msg) => msg.includes('charging-section'))).toBe(true);
+    expect(warned.some((msg) => msg.includes('import-section'))).toBe(true);
+    expect(warned.every((msg) => !msg.includes('"soc-section"'))).toBe(true);
+
+    warnSpy.mockRestore();
+  });
+
+  it('observes every id in LAZY_SECTION_IDS when all are present in the DOM (JTN-492)', async () => {
+    // Render a DOM containing every id declared in LAZY_SECTION_IDS and
+    // assert the observer starts watching each one. This is the guardrail
+    // that pins the import-section fix and would catch a future drift
+    // where a new id is added to the constant but not to the template.
+    const mock = installMockObserver();
+    const mod = await import('../main');
+
+    document.body.innerHTML = mod.LAZY_SECTION_IDS
+      .map((id) => `<section id="${id}"></section>`)
+      .join('\n');
+
+    mod.setupSectionObservers();
+
+    for (const id of mod.LAZY_SECTION_IDS) {
+      const el = document.getElementById(id);
+      expect(el, `fixture missing #${id}`).not.toBeNull();
+      expect(mock.observed).toContain(el!);
+    }
+  });
 });
