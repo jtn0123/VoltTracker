@@ -7,7 +7,8 @@ Health checks, cache management, and utility endpoints.
 import logging
 import os
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, current_app, jsonify, render_template, request, send_from_directory
+
 from version import APP_VERSION
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,23 @@ def health_check():
     # to avoid re-importing ``app.py`` when the server is started via
     # ``python receiver/app.py``. See JTN-482.
     return {"status": "healthy", "service": "volttracker", "version": APP_VERSION}, 200
+
+
+@system_bp.route("/favicon.ico", methods=["GET"])
+def favicon():
+    """Serve the app icon at /favicon.ico so browsers stop logging 404s.
+
+    JTN-489: Every page load previously produced `GET /favicon.ico -> 404`
+    because the base templates never declared a favicon. Rather than ship a
+    separate .ico file, reuse the existing PWA SVG icon and return it with
+    the SVG mimetype. Browsers accept SVG favicons just fine.
+    """
+    static_dir = os.path.join(current_app.root_path, "static", "icons")
+    return send_from_directory(
+        static_dir,
+        "icon-192.svg",
+        mimetype="image/svg+xml",
+    )
 
 
 @system_bp.route("/clear-cache", methods=["GET"])

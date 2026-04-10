@@ -190,7 +190,55 @@ describe('loadMpgTrend', () => {
     await loadMpgTrend(30);
     await loadMpgTrend(30);
 
-    expect(document.querySelectorAll('.empty-state').length).toBe(1);
+    expect(document.querySelectorAll('.chart-container .empty-state').length).toBe(1);
+  });
+
+  it('JTN-490: collapses to a compact caption when the global trips empty state is already showing', async () => {
+    // Simulate the dashboard state after loadTrips() has painted its empty
+    // state but before loadMpgTrend() runs — on a brand-new empty database
+    // both fire on page load and previously rendered two stacked "no trips"
+    // blocks.
+    document.body.innerHTML = `
+      <table><tbody id="trips-table-body">
+        <tr><td colspan="7" class="empty-state"><h3>No Trips Recorded</h3></td></tr>
+      </tbody></table>
+      <div id="trip-cards"><div class="empty-state"><h3>No Trips Recorded</h3></div></div>
+      <div class="chart-container">
+        <canvas id="mpg-chart"></canvas>
+      </div>
+    `;
+    (api as ReturnType<typeof vi.fn>).mockResolvedValue({ error: null, data: [] });
+
+    await loadMpgTrend(30);
+
+    // Only ONE full "No Trips Recorded" heading should still be visible in
+    // the trip list, and the MPG section should NOT have rendered a second
+    // "No Gas Trips Yet" heading on top of it.
+    const chartEmpty = document.querySelector('.chart-container .empty-state');
+    expect(chartEmpty).not.toBeNull();
+    expect(chartEmpty?.innerHTML).not.toContain('No Gas Trips Yet');
+    expect(chartEmpty?.innerHTML).toContain('No gas MPG data yet');
+    // And the canvas is still hidden, not removed.
+    const canvas = document.getElementById('mpg-chart') as HTMLCanvasElement | null;
+    expect(canvas?.style.display).toBe('none');
+  });
+
+  it('JTN-490: keeps the full empty-state when the trips list has data', async () => {
+    document.body.innerHTML = `
+      <table><tbody id="trips-table-body">
+        <tr><td>15.2</td></tr>
+      </tbody></table>
+      <div id="trip-cards"><div class="trip-card">populated</div></div>
+      <div class="chart-container">
+        <canvas id="mpg-chart"></canvas>
+      </div>
+    `;
+    (api as ReturnType<typeof vi.fn>).mockResolvedValue({ error: null, data: [] });
+
+    await loadMpgTrend(30);
+
+    const chartEmpty = document.querySelector('.chart-container .empty-state');
+    expect(chartEmpty?.innerHTML).toContain('No Gas Trips Yet');
   });
 
   it('updates the active timeframe button class', async () => {

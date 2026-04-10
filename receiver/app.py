@@ -192,7 +192,9 @@ def _init_csrf_and_limiter(_app, cfg):
 
 
 _PUBLIC_PREFIXES = ("/health", "/readiness", "/ready", _STATIC_PREFIX, "/clear-cache")
-_PUBLIC_EXACT = frozenset({"/health", "/healthz", "/ready", "/readiness", "/clear-cache"})
+_PUBLIC_EXACT = frozenset({
+    "/health", "/healthz", "/ready", "/readiness", "/clear-cache", "/favicon.ico",
+})
 
 
 def _is_public_path(path):

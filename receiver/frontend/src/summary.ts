@@ -77,6 +77,20 @@ export async function loadSummary(): Promise<void> {
   }
 }
 
+/**
+ * Check whether the dashboard is currently showing a global "no trips"
+ * empty state (rendered by the trips module). JTN-490: when there are zero
+ * trips at all, we want to collapse the gas-specific MPG empty state into
+ * a compact caption instead of stacking two full empty-state blocks.
+ */
+function isDashboardGloballyEmpty(): boolean {
+  const tripsBody = document.getElementById('trips-table-body');
+  const tripCards = document.getElementById('trip-cards');
+  const bodyEmpty = !!tripsBody?.querySelector('.empty-state');
+  const cardsEmpty = !!tripCards?.querySelector('.empty-state');
+  return bodyEmpty || cardsEmpty;
+}
+
 /** Show empty state when no MPG data exists. */
 function showMpgEmptyState(ctx: HTMLCanvasElement): void {
   // Hide the canvas instead of removing it via parent.innerHTML — wiping the
@@ -88,15 +102,26 @@ function showMpgEmptyState(ctx: HTMLCanvasElement): void {
 
   ctx.style.display = 'none';
 
+  // JTN-490: When the global "No Trips Recorded" empty state is already on
+  // screen, a full "No Gas Trips Yet" heading underneath it reads as a
+  // duplicated placeholder. Collapse to a compact caption in that case.
+  const compact = isDashboardGloballyEmpty();
+  const html = compact
+    ? '<p class="empty-state-compact">No gas MPG data yet.</p>'
+    : '<h3>No Gas Trips Yet</h3><p>MPG data will appear after you complete trips using gasoline.</p>';
+
   // Reuse an existing empty-state node if loadMpgTrendChart was called twice
   // for the same empty dataset; never duplicate it.
   let emptyState = parent.querySelector<HTMLElement>('.empty-state');
   if (!emptyState) {
     emptyState = document.createElement('div');
     emptyState.className = 'empty-state';
-    emptyState.innerHTML = '<h3>No Gas Trips Yet</h3><p>MPG data will appear after you complete trips using gasoline.</p>';
     parent.appendChild(emptyState);
   }
+  // Overwrite innerHTML so toggling between compact/full modes (e.g. the
+  // trips list loads after the MPG chart) always reflects the latest state.
+  emptyState.innerHTML = html;
+  emptyState.classList.toggle('empty-state-compact-wrapper', compact);
 }
 
 /** Render the MPG trend chart with Chart.js. */

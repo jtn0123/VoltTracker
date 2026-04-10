@@ -274,6 +274,80 @@ class TestMapDataEndpoint:
 
         assert data['total_trips'] <= 100
 
+    # -----------------------------------------------------------------
+    # JTN-491: negative/invalid map filters should be rejected, not
+    # echoed back as part of an empty result set.
+    # -----------------------------------------------------------------
+
+    def test_map_data_rejects_negative_min_distance(self, client):
+        """Negative min_distance should return 400, not a silent empty set."""
+        response = client.get('/api/trips/map?min_distance=-5')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data.get('invalid_filter') == 'min_distance'
+
+    def test_map_data_rejects_negative_distance_range(self, client):
+        """Both bounds negative — the exact curl repro from the bug report."""
+        response = client.get('/api/trips/map?min_distance=-5&max_distance=-1')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'error' in data
+        # Response must not echo the bogus values back as "applied" filters.
+        assert 'filters_applied' not in data
+
+    def test_map_data_rejects_negative_efficiency(self, client):
+        """Negative min_efficiency should also be rejected."""
+        response = client.get('/api/trips/map?min_efficiency=-0.1')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data.get('invalid_filter') == 'min_efficiency'
+
+    def test_map_data_rejects_negative_max_efficiency(self, client):
+        response = client.get('/api/trips/map?max_efficiency=-0.1')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data.get('invalid_filter') == 'max_efficiency'
+
+    def test_map_data_rejects_negative_min_mpg(self, client):
+        response = client.get('/api/trips/map?min_mpg=-10')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data.get('invalid_filter') == 'min_mpg'
+
+    def test_map_data_rejects_inverted_distance_range(self, client):
+        """min_distance > max_distance is an impossible range."""
+        response = client.get('/api/trips/map?min_distance=10&max_distance=5')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data.get('invalid_filter') == 'min_distance'
+
+    def test_map_data_rejects_inverted_efficiency_range(self, client):
+        """min_efficiency > max_efficiency is an impossible range."""
+        response = client.get('/api/trips/map?min_efficiency=0.5&max_efficiency=0.2')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data.get('invalid_filter') == 'min_efficiency'
+
+    def test_map_data_rejects_non_numeric_filter(self, client):
+        """Non-numeric values are a client bug — return 400 not 500."""
+        response = client.get('/api/trips/map?min_distance=abc')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data.get('invalid_filter') == 'min_distance'
+
+    def test_map_data_accepts_zero_min_distance(self, client):
+        """min_distance=0 is a valid (if redundant) filter; must not 400."""
+        response = client.get('/api/trips/map?min_distance=0')
+        assert response.status_code == 200
+
+    def test_map_data_accepts_valid_positive_range(self, client):
+        """Valid positive bounds still work end-to-end."""
+        response = client.get('/api/trips/map?min_distance=1&max_distance=100')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['filters_applied']['min_distance'] == 1.0
+        assert data['filters_applied']['max_distance'] == 100.0
+
 
 class TestDetailedRouteEndpoint:
     """Tests for /api/trips/<id>/route endpoint"""

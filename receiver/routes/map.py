@@ -210,26 +210,132 @@ def _apply_map_date_filters(query):
     return query, request.args.get("date_range")
 
 
+# JTN-491: allow-listed filter field names. Only these exact values can
+# ever appear in an "invalid_filter" error, so the error payload can only
+# ever contain these literal strings — never user-supplied text.
+_MAP_FILTER_NUMERIC_FIELDS = (
+    "min_efficiency",
+    "max_efficiency",
+    "min_mpg",
+    "min_distance",
+    "max_distance",
+)
+
+# (lower, upper) pairs where lower must be <= upper when both present.
+_MAP_FILTER_RANGE_PAIRS = (
+    ("min_efficiency", "max_efficiency"),
+    ("min_distance", "max_distance"),
+)
+
+# Error codes for _parse_map_filter_numerics. Strings instead of an Enum
+# so the route handler keeps the tuple pattern lightweight.
+_MAP_FILTER_ERR_NOT_NUMBER = "not_a_number"
+_MAP_FILTER_ERR_NEGATIVE = "negative_value"
+_MAP_FILTER_ERR_INVERTED_RANGE = "inverted_range"
+
+
+def _parse_map_filter_numerics():
+    """Parse and validate the numeric map filters.
+
+    JTN-491: The endpoint previously accepted negative values and inverted
+    ranges silently, which produced empty result sets with no explanation.
+    This helper only returns structured error metadata (field name from the
+    hardcoded allow-list plus an error code); the route handler builds the
+    JSON response from static strings. That way no request data ever flows
+    into the response body, which is both correct and avoids tripping
+    CodeQL's reflected-XSS taint flow across the jsonify boundary.
+
+    Returns:
+        (filters_dict, error_info) where exactly one is None. error_info,
+        when set, is a tuple of ``(field_name, error_code)`` with both
+        values drawn from module-level constants.
+    """
+    filters: Dict[str, Optional[float]] = {}
+    for field in _MAP_FILTER_NUMERIC_FIELDS:
+        raw = request.args.get(field)
+        if raw is None or raw == "":
+            filters[field] = None
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return None, (field, _MAP_FILTER_ERR_NOT_NUMBER)
+        if value < 0:
+            return None, (field, _MAP_FILTER_ERR_NEGATIVE)
+        filters[field] = value
+
+    for lower_key, _upper_key in _MAP_FILTER_RANGE_PAIRS:
+        lower = filters[lower_key]
+        upper = filters[_upper_key]
+        if lower is not None and upper is not None and lower > upper:
+            return None, (lower_key, _MAP_FILTER_ERR_INVERTED_RANGE)
+
+    return filters, None
+
+
+# Static error messages keyed on (field, error_code). Built from literals
+# only — nothing from the request ever reaches the response body.
+_MAP_FILTER_ERROR_MESSAGES = {
+    ("min_efficiency", _MAP_FILTER_ERR_NOT_NUMBER): "min_efficiency must be a number",
+    ("max_efficiency", _MAP_FILTER_ERR_NOT_NUMBER): "max_efficiency must be a number",
+    ("min_mpg", _MAP_FILTER_ERR_NOT_NUMBER): "min_mpg must be a number",
+    ("min_distance", _MAP_FILTER_ERR_NOT_NUMBER): "min_distance must be a number",
+    ("max_distance", _MAP_FILTER_ERR_NOT_NUMBER): "max_distance must be a number",
+    ("min_efficiency", _MAP_FILTER_ERR_NEGATIVE): "min_efficiency must be >= 0",
+    ("max_efficiency", _MAP_FILTER_ERR_NEGATIVE): "max_efficiency must be >= 0",
+    ("min_mpg", _MAP_FILTER_ERR_NEGATIVE): "min_mpg must be >= 0",
+    ("min_distance", _MAP_FILTER_ERR_NEGATIVE): "min_distance must be >= 0",
+    ("max_distance", _MAP_FILTER_ERR_NEGATIVE): "max_distance must be >= 0",
+    ("min_efficiency", _MAP_FILTER_ERR_INVERTED_RANGE): "min_efficiency must be <= max_efficiency",
+    ("min_distance", _MAP_FILTER_ERR_INVERTED_RANGE): "min_distance must be <= max_distance",
+}
+
+
+def _build_map_filter_error_response(error_info):
+    """Build a 400 JSON response from a ``(field, code)`` error tuple.
+
+    The lookup table is keyed on hardcoded constants so every possible
+    response body is a literal string — no request data ever reaches the
+    output. The ``invalid_filter`` field is only ever one of the known
+    filter names from ``_MAP_FILTER_NUMERIC_FIELDS``.
+    """
+    field, code = error_info
+    message = _MAP_FILTER_ERROR_MESSAGES.get(
+        (field, code), "Invalid map filter"
+    )
+    return jsonify({"error": message, "invalid_filter": field}), 400
+
+
 def _apply_map_metric_filters(query):
-    """Apply efficiency, distance, and mode filters from request args."""
-    min_efficiency = request.args.get("min_efficiency", type=float)
-    if min_efficiency:
+    """Apply efficiency, distance, and mode filters from request args.
+
+    Returns a tuple of ``(query, filter_info, error_info)``. If
+    ``error_info`` is not ``None``, the caller should build and return a
+    400 response via ``_build_map_filter_error_response`` without running
+    the query.
+    """
+    numerics, error_info = _parse_map_filter_numerics()
+    if error_info is not None:
+        return query, None, error_info
+
+    min_efficiency = numerics["min_efficiency"]
+    if min_efficiency is not None:
         query = query.filter(Trip.kwh_per_mile >= min_efficiency)
 
-    max_efficiency = request.args.get("max_efficiency", type=float)
-    if max_efficiency:
+    max_efficiency = numerics["max_efficiency"]
+    if max_efficiency is not None:
         query = query.filter(Trip.kwh_per_mile <= max_efficiency)
 
-    min_mpg = request.args.get("min_mpg", type=float)
-    if min_mpg:
+    min_mpg = numerics["min_mpg"]
+    if min_mpg is not None:
         query = query.filter(Trip.gas_mpg >= min_mpg)
 
-    min_distance = request.args.get("min_distance", type=float)
-    if min_distance:
+    min_distance = numerics["min_distance"]
+    if min_distance is not None:
         query = query.filter(Trip.distance_miles >= min_distance)
 
-    max_distance = request.args.get("max_distance", type=float)
-    if max_distance:
+    max_distance = numerics["max_distance"]
+    if max_distance is not None:
         query = query.filter(Trip.distance_miles <= max_distance)
 
     gas_only = request.args.get("gas_only", "").lower() == "true"
@@ -248,7 +354,7 @@ def _apply_map_metric_filters(query):
         'max_distance': max_distance,
         'gas_only': gas_only,
         'ev_only': ev_only,
-    }
+    }, None
 
 
 def _fetch_telemetry_by_session(db, session_ids: list) -> dict:
@@ -358,7 +464,9 @@ def get_trips_map_data():
     query = db.query(Trip).filter(Trip.is_closed.is_(True), Trip.deleted_at.is_(None))
 
     query, date_range_shortcut = _apply_map_date_filters(query)
-    query, filter_info = _apply_map_metric_filters(query)
+    query, filter_info, error_info = _apply_map_metric_filters(query)
+    if error_info is not None:
+        return _build_map_filter_error_response(error_info)
 
     max_trips = min(request.args.get("max_trips", default=100, type=int), 500)
     max_points_per_trip = min(request.args.get("max_points_per_trip", default=300, type=int), 500)
