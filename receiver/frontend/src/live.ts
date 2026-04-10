@@ -9,6 +9,13 @@ import type { LiveTelemetryResponse, TelemetryPoint, WsTelemetryData, WsToastDat
 import { LiveTelemetryResponseSchema } from '@/types/schemas';
 import { ConnectionStatus, PowerFlowState } from '@/types/enums';
 
+// JTN-488: throttle repeated `[WS] Connection error` warnings so a flapping
+// Socket.IO handshake cannot flood the console (previously 30+/minute on the
+// dashboard, even more on the map page). The cap is intentionally low — one
+// warning per minute is enough to surface a real regression while leaving the
+// console useful for other errors.
+const WS_WARN_INTERVAL_MS = 60_000;
+
 /**
  * Initialize WebSocket connection for real-time updates
  */
@@ -35,10 +42,21 @@ export function initWebSocket(): void {
     });
 
     let reconnectAttempt = 0;
+    // JTN-488: rate-limit the console warning for connect_error. Only emit one
+    // warning per WS_WARN_INTERVAL_MS window, plus a final summary of how many
+    // errors were suppressed. This prevents the handshake-loop flood while
+    // still surfacing the first failure immediately.
+    let lastConnectErrorWarnAt = 0;
+    let suppressedErrorCount = 0;
 
     state.socket.on('connect', () => {
       if (DEBUG) console.log('[WS] Connected (attempts=%d)', reconnectAttempt);
       reconnectAttempt = 0;
+      if (suppressedErrorCount > 0) {
+        console.info('[WS] Recovered after %d suppressed connection error(s)', suppressedErrorCount);
+      }
+      lastConnectErrorWarnAt = 0;
+      suppressedErrorCount = 0;
       if (state.liveRefreshInterval) {
         clearInterval(state.liveRefreshInterval);
         state.liveRefreshInterval = null;
@@ -78,10 +96,26 @@ export function initWebSocket(): void {
     });
 
     state.socket.on('connect_error', (err: Error) => {
-      console.warn('[WS] Connection error: %s (attempt #%d), falling back to polling', err.message, reconnectAttempt);
       state.useWebSocket = false;
       if (!state.liveRefreshInterval) {
         state.liveRefreshInterval = setInterval(loadLiveTelemetry, 10000);
+      }
+      const now = Date.now();
+      if (now - lastConnectErrorWarnAt >= WS_WARN_INTERVAL_MS) {
+        const suppressedNote =
+          suppressedErrorCount > 0
+            ? ` (${suppressedErrorCount} similar error(s) suppressed in the last minute)`
+            : '';
+        console.warn(
+          '[WS] Connection error: %s (attempt #%d), falling back to polling%s',
+          err.message,
+          reconnectAttempt,
+          suppressedNote,
+        );
+        lastConnectErrorWarnAt = now;
+        suppressedErrorCount = 0;
+      } else {
+        suppressedErrorCount += 1;
       }
     });
   } catch (error) {

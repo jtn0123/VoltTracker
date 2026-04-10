@@ -79,11 +79,21 @@ auth = HTTPBasicAuth()
 
 
 def _init_socketio(_app, cfg):
-    """Initialize SocketIO and register connection handlers."""
+    """Initialize SocketIO and register connection handlers.
+
+    JTN-488: Pass ``manage_session=False`` so Flask-SocketIO does not try to
+    copy the Flask user session into the Socket.IO request context. That path
+    (``ctx.session = session_obj`` in flask_socketio/__init__.py) raises
+    ``AttributeError: property 'session' of 'RequestContext' object has no setter``
+    on Flask 3.1+, which breaks the namespace ``connect`` handler for every
+    client and produces the ``POST /socket.io/...  400`` flood reported in the
+    dashboard console. No handler here reads ``flask.session``, so disabling
+    managed sessions is safe and surgical.
+    """
     _async_mode = "threading" if os.environ.get("FLASK_TESTING") else "gevent"
     sio = SocketIO(
         _app, cors_allowed_origins=cfg.CORS_ALLOWED_ORIGINS, async_mode=_async_mode,
-        logger=False, engineio_logger=False
+        logger=False, engineio_logger=False, manage_session=False,
     )
     _app.extensions["socketio"] = sio
     _app.handle_connect = _register_ws_events(sio, cfg)
