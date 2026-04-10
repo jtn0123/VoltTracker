@@ -114,6 +114,7 @@ import { initWebSocket, loadLiveTelemetry, loadStatus } from '@/live';
 import { loadSummary, loadMpgTrend } from '@/summary';
 import { setupChartLazyLoading } from '@/charts';
 import { loadTrips, openTripModal, closeTripModal, deleteTrip, setTimeframe } from '@/trips';
+import { wireChargingActions } from '@/chargingWiring';
 
 // ── Lazy-loaded modules (below the fold / on demand) ─────────────────────────
 const loadBatteryModule = () => import('@/battery');
@@ -385,6 +386,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Attach click handlers programmatically (more reliable than inline onclick in modules)
   document.querySelector('.theme-toggle')?.addEventListener('click', () => toggleTheme());
   document.getElementById('export-btn')?.addEventListener('click', () => toggleExportMenu());
+
+  // Wire the "Add Charging Session" flow (JTN-484 / JTN-485).
+  wireChargingActions();
 
   initDatePicker();
   initWebSocket();
