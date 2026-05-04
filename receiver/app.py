@@ -220,7 +220,7 @@ def _is_public_path(path):
 
 _CSP_HEADER = (
     "default-src 'self'; "
-    "script-src 'self' cdn.jsdelivr.net cdn.socket.io unpkg.com; "
+    "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdn.socket.io unpkg.com; "
     "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net unpkg.com; "
     "img-src 'self' data: *.tile.openstreetmap.org unpkg.com; "
     "connect-src 'self' ws: wss:; "

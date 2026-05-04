@@ -139,17 +139,30 @@ export function handleRealtimeTelemetry(data: WsTelemetryData): void {
     state.liveTripActive = true;
   }
 
-  if (liveSection) liveSection.style.display = 'block';
+  if (liveSection) {
+    liveSection.style.display = 'block';
+    liveSection.classList.add('is-live');
+  }
   if (powerFlowSection && data.hv_power !== null) powerFlowSection.style.display = 'block';
 
   updateLiveValue('live-speed', data.speed, 0, ' mph');
+  updateLiveValue('live-speed-readout', data.speed, 1, '');
   updateLiveValue('live-rpm', data.rpm, 0, ' RPM');
   updateLiveValue('live-soc', data.soc, 1, '%');
   updateLiveValue('live-fuel', data.fuel_percent, 1, '%');
+  updateLiveGauge('live-speed-fill', data.speed, 120);
 
   if (data.hv_power !== null && data.hv_power !== undefined) {
     updateRealtimePowerDisplay(data.hv_power);
+    updateLiveValue('live-power', Math.abs(data.hv_power), 0, ' kW');
+    updateLiveValue('live-power-readout', Math.abs(data.hv_power), 1, '');
+    updateLiveGauge('live-power-fill', Math.abs(data.hv_power), 60);
   }
+
+  const statusPill = document.getElementById('live-status-pill');
+  if (statusPill) statusPill.textContent = 'Live';
+  const mode = document.getElementById('live-mode');
+  if (mode) mode.textContent = data.hv_power && data.hv_power < -1 ? 'Regen' : 'Driving';
 
   updateConnectionStatus(ConnectionStatus.Live);
   store.emit('telemetry:update', data);
@@ -164,16 +177,24 @@ function updateRealtimePowerDisplay(hvPower: number): void {
   const powerDirection = document.getElementById('power-direction');
 
   if (powerKw) powerKw.textContent = Math.abs(hvPower).toFixed(1) + ' kW';
+  updateLiveValue('live-power', Math.abs(hvPower), 0, ' kW');
+  updateLiveValue('live-power-readout', Math.abs(hvPower), 1, '');
+  updateLiveGauge('live-power-fill', Math.abs(hvPower), 60);
+
+  const powerSub = document.getElementById('live-power-sub');
   if (powerMode) {
     if (hvPower > 1) {
       powerMode.textContent = 'Discharging';
       powerMode.className = 'power-mode discharging';
+      if (powerSub) powerSub.textContent = 'drawing from battery';
     } else if (hvPower < -1) {
       powerMode.textContent = 'Regen';
       powerMode.className = 'power-mode regen';
+      if (powerSub) powerSub.textContent = 'returning to battery';
     } else {
       powerMode.textContent = 'Idle';
       powerMode.className = 'power-mode';
+      if (powerSub) powerSub.textContent = 'powertrain idle';
     }
   }
   if (powerDirection) {
@@ -190,6 +211,23 @@ export function updateLiveValue(elementId: string, value: number | null, decimal
   if (element && value !== null && value !== undefined) {
     element.textContent = value.toFixed(decimals) + (suffix || '');
   }
+}
+
+function updateLiveText(elementId: string, value: string): void {
+  const element = document.getElementById(elementId);
+  if (element) element.textContent = value;
+}
+
+function updateLiveGauge(elementClass: string, value: number | null, max: number): void {
+  const element = document.querySelector<SVGPathElement>(`.${elementClass}`);
+  if (!element || value === null || value === undefined) return;
+  const arcLength = 220;
+  const pct = Math.max(0, Math.min(1, value / max));
+  element.style.strokeDasharray = `${(pct * arcLength).toFixed(1)} ${arcLength}`;
+}
+
+function isLiveWorkspaceRequested(section: HTMLElement): boolean {
+  return globalThis.location.hash === '#live-trip-section' || section.dataset.routeVisible === 'true';
 }
 
 /**
@@ -224,29 +262,71 @@ function buildLiveTripHtml(data: LiveTelemetryResponse): string {
     modeClass = 'engine-off';
   }
 
+  const point = data.data!;
+  const speed = point.speed_mph ?? 0;
+  const power = point.hv_battery_power_kw ?? 0;
+  const soc = point.state_of_charge ?? point.soc ?? null;
+  const fuel = point.fuel_level_percent ?? point.fuel_percent ?? null;
+  const rpm = point.engine_rpm ?? 0;
+  const batteryTemp = point.battery_temp_f ? `${point.battery_temp_f.toFixed(0)}°F` : '--';
+
   return `
-    <div class="live-stats">
-      <div class="stat">
-        <span class="label">Miles</span>
-        <span class="value">${stats.miles_driven?.toFixed(1) || '--'}</span>
-      </div>
-      <div class="stat">
-        <span class="label">kWh</span>
-        <span class="value">${stats.kwh_used?.toFixed(2) || '--'}</span>
-      </div>
-      <div class="stat">
-        <span class="label">kWh/mi</span>
-        <span class="value">${stats.kwh_per_mile?.toFixed(2) || '--'}</span>
-      </div>
-      <div class="stat">
-        <span class="label">${modeLabel}</span>
-        <span class="value ${modeClass}">${modeValue}</span>
-      </div>
+    <div class="live-gauge-grid">
+      <article class="live-gauge-card">
+        <div class="live-card-title">Speed</div>
+        <div class="live-gauge">
+          <svg viewBox="0 0 200 160" aria-hidden="true">
+            <path d="M 30 130 A 70 70 0 0 1 170 130" class="live-gauge-track"></path>
+            <path d="M 30 130 A 70 70 0 0 1 170 130" class="live-gauge-fill live-speed-fill" style="stroke-dasharray: ${(Math.min(1, speed / 120) * 220).toFixed(1)} 220"></path>
+            <text x="100" y="105" class="live-gauge-value" id="live-speed">${speed.toFixed(0)} mph</text>
+            <text x="100" y="125" class="live-gauge-unit">MPH</text>
+          </svg>
+          <div>
+            <strong id="live-speed-readout">${speed.toFixed(1)}</strong>
+            <span>Trip average ${stats.miles_driven?.toFixed(1) || '--'} mi</span>
+            <small>${elapsed} elapsed</small>
+          </div>
+        </div>
+      </article>
+      <article class="live-gauge-card">
+        <div class="live-card-title">Power</div>
+        <div class="live-gauge">
+          <svg viewBox="0 0 200 160" aria-hidden="true">
+            <path d="M 30 130 A 70 70 0 0 1 170 130" class="live-gauge-track"></path>
+            <path d="M 30 130 A 70 70 0 0 1 170 130" class="live-gauge-fill live-power-fill" style="stroke-dasharray: ${(Math.min(1, Math.abs(power) / 60) * 220).toFixed(1)} 220"></path>
+            <text x="100" y="105" class="live-gauge-value" id="live-power">${Math.abs(power).toFixed(0)} kW</text>
+            <text x="100" y="125" class="live-gauge-unit">KW</text>
+          </svg>
+          <div>
+            <strong id="live-power-readout">${Math.abs(power).toFixed(1)}</strong>
+            <span>${power < -1 ? 'Returning to battery' : 'Drawing from battery'}</span>
+            <small id="live-power-sub">${power < -1 ? 'regen active' : 'powertrain active'}</small>
+          </div>
+        </div>
+      </article>
     </div>
-    <div class="live-meta">
-      SOC: ${data.data!.soc?.toFixed(0) || '--'}% |
-      Fuel: ${data.data!.fuel_percent?.toFixed(0) || '--'}% |
-      ${elapsed} elapsed
+    <div class="live-detail-grid">
+      <article class="live-stream-card">
+        <div class="live-card-title">Last 12 seconds</div>
+        <div class="live-live-summary">
+          <div><span>Miles</span><strong>${stats.miles_driven?.toFixed(1) || '--'}</strong></div>
+          <div><span>kWh</span><strong>${stats.kwh_used?.toFixed(2) || '--'}</strong></div>
+          <div><span>kWh/mi</span><strong>${stats.kwh_per_mile?.toFixed(2) || '--'}</strong></div>
+          <div><span>${modeLabel}</span><strong class="${modeClass}">${modeValue}</strong></div>
+        </div>
+      </article>
+      <article class="live-now-card">
+        <div class="live-card-title">Now</div>
+        <dl class="live-now-list">
+          <div><dt>Mode</dt><dd id="live-mode">${stats.in_gas_mode ? 'Gas assist' : 'EV'}</dd></div>
+          <div><dt>SOC</dt><dd id="live-soc">${soc !== null ? soc.toFixed(1) : '--'}%</dd></div>
+          <div><dt>Fuel</dt><dd id="live-fuel">${fuel !== null ? fuel.toFixed(1) : '--'}%</dd></div>
+          <div><dt>Engine</dt><dd id="live-rpm">${rpm.toFixed(0)} RPM</dd></div>
+          <div><dt>Battery temp</dt><dd id="live-battery-temp">${batteryTemp}</dd></div>
+          <div><dt>Heading</dt><dd>N · 12°</dd></div>
+          <div><dt>Elevation</dt><dd>-- ft</dd></div>
+        </dl>
+      </article>
     </div>
   `;
 }
@@ -270,8 +350,10 @@ export async function loadLiveTelemetry(): Promise<void> {
 
     if (data.active && data.data) {
       liveSection.style.display = 'block';
+      liveSection.classList.add('is-live');
 
       liveContent.innerHTML = buildLiveTripHtml(data);
+      updateLiveText('live-status-pill', 'Live');
 
       updatePowerFlow(data.data, powerFlowSection);
 
@@ -284,7 +366,10 @@ export async function loadLiveTelemetry(): Promise<void> {
         state.liveTripActive = false;
       }
 
-      liveSection.style.display = 'none';
+      const requested = isLiveWorkspaceRequested(liveSection);
+      liveSection.style.display = requested ? 'block' : 'none';
+      liveSection.classList.remove('is-live');
+      updateLiveText('live-status-pill', requested ? 'Live' : 'Idle');
       if (powerFlowSection) powerFlowSection.style.display = 'none';
       if (state.liveRefreshInterval) {
         clearInterval(state.liveRefreshInterval);

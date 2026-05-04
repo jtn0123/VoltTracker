@@ -11,13 +11,19 @@ import type { ChargingSummary, ChargingSession, ChargingCurveResponse } from '@/
 /** Set text content of an element by ID if it exists. */
 function setText(id: string, text: string): void {
   const el = document.getElementById(id);
-  if (el) el.textContent = text;
+  if (el) {
+    if (el.dataset.demoValue === 'true' && (text === '--' || text.startsWith('No ') || text.includes('/kWh rate'))) return;
+    el.textContent = text;
+  }
 }
 
 /** Set innerHTML of an element by ID if it exists. */
 function setHtml(id: string, html: string): void {
   const el = document.getElementById(id);
-  if (el) el.innerHTML = html;
+  if (el) {
+    if (el.dataset.demoValue === 'true' && html === '--') return;
+    el.innerHTML = html;
+  }
 }
 
 /** Format a charging cost string from summary data. */
@@ -42,16 +48,21 @@ export async function loadChargingSummary(): Promise<void> {
 
     if (data.total_kwh) {
       setHtml('total-kwh', `${data.total_kwh.toFixed(1)}<span class="card-unit">kWh</span>`);
+      setText('charging-30d-kwh', data.total_kwh.toFixed(1));
       setText('charging-sessions', `${data.total_sessions} charging sessions`);
+      setText('charging-page-sessions', `${data.total_sessions} sessions`);
     } else {
       setText('total-kwh', '--');
+      setText('charging-30d-kwh', '--');
       setText('charging-sessions', 'No charging data');
+      setText('charging-page-sessions', 'No charging data');
     }
 
     setHtml('avg-kwh-session', data.avg_kwh_per_session
       ? `${data.avg_kwh_per_session.toFixed(1)}<span class="card-unit">kWh</span>` : '--');
 
     setText('charging-cost', formatCostText(data));
+    if (data.total_cost != null) setText('charging-savings', `~$${(data.total_cost * 3.5).toFixed(0)}`);
 
     if (data.l1_sessions !== undefined) setText('l1-sessions', String(data.l1_sessions));
     if (data.l2_sessions !== undefined) setText('l2-sessions', String(data.l2_sessions));
@@ -201,6 +212,7 @@ export async function loadChargingHistory(): Promise<void> {
     if (!tableBody) return;
 
     if (!sessions || sessions.length === 0) {
+      if (tableBody.dataset.demoValue === 'true') return;
       tableBody.innerHTML = `
         <tr>
           <td colspan="7" class="empty-state">

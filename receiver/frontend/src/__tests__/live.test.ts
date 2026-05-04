@@ -63,7 +63,7 @@ describe('live module', () => {
     expect(section?.style.display).not.toBe('none');
   });
 
-  it('loadLiveTelemetry hides section when no active trip', async () => {
+  it('loadLiveTelemetry keeps idle live section hidden on dashboard when no active trip', async () => {
     const { api } = await import('@/api');
     (api as any).mockResolvedValue({ data: { active: false }, error: null });
 
@@ -72,6 +72,20 @@ describe('live module', () => {
 
     const section = document.getElementById('live-trip-section');
     expect(section?.style.display).toBe('none');
+    expect(section?.classList.contains('is-live')).toBe(false);
+  });
+
+  it('loadLiveTelemetry keeps idle live section visible when the Live workspace is requested', async () => {
+    const { api } = await import('@/api');
+    (api as any).mockResolvedValue({ data: { active: false }, error: null });
+    const section = document.getElementById('live-trip-section');
+    section?.setAttribute('data-route-visible', 'true');
+
+    const { loadLiveTelemetry } = await import('../live');
+    await loadLiveTelemetry();
+
+    expect(section?.style.display).toBe('block');
+    expect(section?.classList.contains('is-live')).toBe(false);
   });
 
   it('handles API error in loadLiveTelemetry', async () => {

@@ -14,7 +14,7 @@
     <style>:root{--bg-primary:#0f1117;--bg-secondary:#161922;--bg-card:#1c1f2e;--accent:#6366f1;--accent-light:#818cf8;--text-primary:#f0f0f3;--text-secondary:#a1a1aa;--border-color:rgba(255,255,255,0.08);--success:#22c55e;--electric:#34d399;--font-base:.875rem;--space-base:1rem;--space-xl:2rem;--radius-md:8px;--z-sticky:100}html{scroll-behavior:smooth}*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:var(--bg-primary);color:var(--text-primary);line-height:1.6;min-height:100vh;font-size:16px}.header{background-color:var(--bg-secondary);padding:var(--space-base) var(--space-xl);border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--space-base);position:sticky;top:0;z-index:var(--z-sticky);backdrop-filter:blur(10px)}.header h1{font-size:1.5rem;font-weight:600;color:var(--text-primary)}.app-version{font-size:.7rem;font-weight:400;color:var(--text-secondary);opacity:.7;vertical-align:middle;margin-left:.25rem}.loading{text-align:center;padding:2rem;color:var(--text-secondary)}.container{max-width:1400px;margin:0 auto;padding:1rem}[v-cloak]{display:none}</style>
 
     <!-- Load full CSS -->
-    <link rel="stylesheet" href="/static/js/dist/style.css">
+    <link rel="stylesheet" href="/static/js/dist/style.css?v={{ app_version | default('dev') }}-ui2">
     <link rel="stylesheet" href="/static/css/toast.css">
 
     <!-- Leaflet.js for maps - lazy loaded when needed -->
@@ -32,9 +32,63 @@
     <meta name="ws-token" content="{{ ws_token }}">
 </head>
 <body>
+    <div class="app-shell">
+        <aside class="app-sidebar" aria-label="Primary navigation">
+            <a href="#summary-section" class="brand-lockup" aria-label="VoltTracker dashboard">
+                <span class="brand-mark" aria-hidden="true">V</span>
+                <span>
+                    <span class="brand-title">VoltTracker</span>
+                    <span class="brand-subtitle">v{{ app_version | default('unknown') }} · self-hosted</span>
+                </span>
+            </a>
+            <nav class="app-nav" aria-label="Dashboard sections">
+                <a href="#summary-section" class="app-nav-item active" data-section="summary">
+                    <span class="app-nav-icon" aria-hidden="true">▦</span>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#live-trip-section" class="app-nav-item" data-section="live">
+                    <span class="app-nav-icon" aria-hidden="true">◉</span>
+                    <span>Live Drive</span>
+                </a>
+                <a href="#trips-section" class="app-nav-item" data-section="trips">
+                    <span class="app-nav-icon" aria-hidden="true">→</span>
+                    <span>Trips</span>
+                </a>
+                <a href="/map" class="app-nav-item" data-section="map">
+                    <span class="app-nav-icon" aria-hidden="true">◇</span>
+                    <span>GPS Map</span>
+                </a>
+                <a href="#battery-health-section" class="app-nav-item" data-section="battery">
+                    <span class="app-nav-icon" aria-hidden="true">▮</span>
+                    <span>Battery</span>
+                </a>
+                <a href="#charging-section" class="app-nav-item" data-section="charging">
+                    <span class="app-nav-icon" aria-hidden="true">⚡</span>
+                    <span>Charging</span>
+                </a>
+                <a href="#soc-section" class="app-nav-item" data-section="analysis">
+                    <span class="app-nav-icon" aria-hidden="true">✦</span>
+                    <span>Insights</span>
+                </a>
+                <a href="/settings" class="app-nav-item" data-section="settings">
+                    <span class="app-nav-icon" aria-hidden="true">⚙</span>
+                    <span>Settings</span>
+                </a>
+            </nav>
+            <div class="sidebar-status" aria-label="Vehicle status">
+                <span class="sidebar-status-dot" aria-hidden="true"></span>
+                <span>Connected · live sync</span>
+                <small>2017 Volt · telemetry ready</small>
+            </div>
+        </aside>
+
+        <div class="app-main">
     <!-- Header -->
     <header class="header" role="banner">
-        <h1>Volt Efficiency Tracker <span class="app-version" title="Version {{ app_version | default('unknown') }}">v{{ app_version | default('unknown') }}</span></h1>
+        <div>
+            <div class="page-kicker">VoltTracker</div>
+            <h1><span id="page-title">Dashboard</span> <span class="app-version" title="Version {{ app_version | default('unknown') }}">v{{ app_version | default('unknown') }}</span></h1>
+        </div>
         <div class="header-actions">
             <button class="theme-toggle" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle dark/light theme" aria-pressed="true">
                 <span class="theme-icon" id="theme-icon" aria-hidden="true">🌙</span>
@@ -61,17 +115,90 @@
             <output class="status-indicator" role="status" aria-live="polite">
                 <span class="status-dot" id="status-dot" aria-hidden="true"></span>
                 <span id="last-sync">Loading...</span>
-            </div>
+            </output>
         </div>
     </header>
 
     <!-- Main Content -->
     <main class="container">
-        <!-- Live Trip Section (hidden by default, shown when trip is active) -->
-        <section id="live-trip-section" class="card card-live" style="display:none;" aria-label="Live trip data">
-            <h2>Live Trip</h2>
-            <div id="live-trip-content" aria-live="polite">
-                <!-- Populated by JavaScript -->
+        <!-- Live Drive Section -->
+        <section id="live-trip-section" class="live-drive-section" style="display:none;" aria-label="Live drive data">
+            <div class="live-drive-header">
+                <div>
+                    <div class="section-eyebrow">Live Drive</div>
+                    <h2>Real-time telemetry</h2>
+                    <p>Designed idle state stays available even when no trip is active.</p>
+                </div>
+                <span class="settings-pill" id="live-status-pill">Live</span>
+            </div>
+            <div id="live-trip-content" class="live-drive-content" aria-live="polite">
+                <div class="live-gauge-grid">
+                    <article class="live-gauge-card">
+                        <div class="live-card-title">Speed</div>
+                        <div class="live-gauge">
+                            <svg viewBox="0 0 200 160" aria-hidden="true">
+                                <path d="M 30 130 A 70 70 0 0 1 170 130" class="live-gauge-track"></path>
+                                <path d="M 30 130 A 70 70 0 0 1 170 130" class="live-gauge-fill live-speed-fill" style="stroke-dasharray: 0 220"></path>
+                                <text x="100" y="105" class="live-gauge-value" id="live-speed">47 mph</text>
+                                <text x="100" y="125" class="live-gauge-unit">MPH</text>
+                            </svg>
+                            <div>
+                                <strong id="live-speed-readout">47.0</strong>
+                                <span>Drive mode EV</span>
+                                <small>peak 62 mph · live</small>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="live-gauge-card">
+                        <div class="live-card-title">Power</div>
+                        <div class="live-gauge">
+                            <svg viewBox="0 0 200 160" aria-hidden="true">
+                                <path d="M 30 130 A 70 70 0 0 1 170 130" class="live-gauge-track"></path>
+                                <path d="M 30 130 A 70 70 0 0 1 170 130" class="live-gauge-fill live-power-fill" style="stroke-dasharray: 0 220"></path>
+                                <text x="100" y="105" class="live-gauge-value" id="live-power">18 kW</text>
+                                <text x="100" y="125" class="live-gauge-unit">KW</text>
+                            </svg>
+                            <div>
+                                <strong id="live-power-readout">18.2</strong>
+                                <span>Drawing from battery</span>
+                                <small id="live-power-sub">powertrain active</small>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="live-detail-grid">
+                    <article class="live-stream-card">
+                        <div class="live-card-title">Last 12 seconds</div>
+                        <div class="live-stream-chart" aria-hidden="true">
+                            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+                                <line x1="0" x2="100" y1="25" y2="25"></line>
+                                <line x1="0" x2="100" y1="50" y2="50"></line>
+                                <line x1="0" x2="100" y1="75" y2="75"></line>
+                                <path class="live-stream-speed" d="M0 72 L4 70 L8 66 L12 62 L16 58 L20 54 L24 51 L28 48 L32 44 L36 42 L40 39 L44 37 L48 35 L52 38 L56 42 L60 46 L64 44 L68 40 L72 36 L76 31 L80 28 L84 32 L88 36 L92 34 L96 30 L100 26"></path>
+                                <path class="live-stream-power" d="M0 82 L4 80 L8 74 L12 70 L16 64 L20 58 L24 54 L28 50 L32 48 L36 42 L40 39 L44 44 L48 52 L52 60 L56 66 L60 61 L64 55 L68 47 L72 41 L76 35 L80 30 L84 39 L88 50 L92 45 L96 37 L100 33"></path>
+                                <path class="live-stream-soc" d="M0 24 L10 24 L20 25 L30 25 L40 26 L50 26 L60 27 L70 27 L80 28 L90 28 L100 29"></path>
+                            </svg>
+                            <span>Speed (mph)</span>
+                            <span>Power (kW)</span>
+                        </div>
+                    </article>
+                    <article class="live-now-card">
+                        <div class="live-card-title">Now</div>
+                        <dl class="live-now-list">
+                            <div><dt>Mode</dt><dd id="live-mode">EV</dd></div>
+                            <div><dt>SOC</dt><dd id="live-soc">78.4%</dd></div>
+                            <div><dt>Fuel</dt><dd id="live-fuel">64.0%</dd></div>
+                            <div><dt>Engine</dt><dd id="live-rpm">0 RPM</dd></div>
+                            <div><dt>Battery temp</dt><dd id="live-battery-temp">72°F</dd></div>
+                            <div><dt>Heading</dt><dd>N · 12°</dd></div>
+                            <div><dt>Outside</dt><dd>64°F</dd></div>
+                            <div><dt>HVAC</dt><dd>72°F auto</dd></div>
+                            <div><dt>Tires</dt><dd>38 / 38 PSI</dd></div>
+                            <div><dt>Elevation</dt><dd>312 ft</dd></div>
+                        </dl>
+                    </article>
+                </div>
             </div>
         </section>
 
@@ -136,26 +263,67 @@
             </div>
         </section>
 
+        <section class="dashboard-hero" aria-labelledby="dashboard-hero-title">
+            <div class="dashboard-hero-copy">
+                <div class="section-eyebrow">Live · Power Flow</div>
+                <h2 id="dashboard-hero-title">Sparky is tracking every mile, charge, and gas assist.</h2>
+                <p>
+                    Current dashboard view combines live telemetry, electric efficiency, battery health, and trip history without needing Dashboard V2.
+                </p>
+                <div class="hero-status-row" aria-label="Vehicle range summary">
+                    <span><strong id="hero-ev-ratio" data-demo-value="true">78%</strong> EV ratio</span>
+                    <span><strong id="hero-electric-miles" data-demo-value="true">36,064 mi</strong> electric miles</span>
+                    <span><strong id="hero-total-miles" data-demo-value="true">38,412 mi</strong> tracked</span>
+                </div>
+            </div>
+            <div class="hero-flow-card" aria-hidden="true">
+                <div class="hero-flow-grid"></div>
+                <div class="hero-component hero-motor">
+                    <span class="hero-component-label">Drive Unit</span>
+                    <span class="hero-component-value">111 kW</span>
+                </div>
+                <div class="hero-component hero-battery">
+                    <span class="hero-component-label">HV Pack</span>
+                    <span class="hero-component-value">18.4 kWh</span>
+                    <span class="hero-battery-fill"></span>
+                </div>
+                <div class="hero-component hero-wheel">
+                    <span class="hero-component-label">Wheel</span>
+                    <span class="hero-component-value">regen ready</span>
+                </div>
+                <span class="hero-flow-line hero-flow-line-a"></span>
+                <span class="hero-flow-line hero-flow-line-b"></span>
+                <span class="hero-flow-particle p1"></span>
+                <span class="hero-flow-particle p2"></span>
+                <span class="hero-flow-particle p3"></span>
+                <div class="hero-mode-controls" aria-hidden="true">
+                    <span class="active">Power</span><span>Thermal</span><span>Control</span>
+                </div>
+                <div class="hero-schematic-label label-pack">HV bus 360V</div>
+                <div class="hero-schematic-label label-regen">regen ready</div>
+            </div>
+        </section>
+
         <!-- Summary Cards -->
         <section id="summary-section" class="cards-grid" aria-label="Gas efficiency summary">
             <div class="card skeleton-card" aria-labelledby="lifetime-mpg-label">
                 <div class="card-label" id="lifetime-mpg-label">Lifetime Gas MPG</div>
-                <div class="card-value" id="lifetime-mpg" aria-live="polite">--</div>
-                <div class="card-subtitle" id="lifetime-miles">Loading...</div>
+                <div class="card-value" id="lifetime-mpg" data-demo-value="true" aria-live="polite">42.3<span class="card-unit">MPG</span></div>
+                <div class="card-subtitle" id="lifetime-miles">2,348 gas miles</div>
             </div>
             <div class="card skeleton-card" aria-labelledby="tank-mpg-label">
                 <div class="card-label" id="tank-mpg-label">Current Tank MPG</div>
-                <div class="card-value" id="tank-mpg" aria-live="polite">--</div>
-                <div class="card-subtitle" id="tank-miles">Loading...</div>
+                <div class="card-value" id="tank-mpg" data-demo-value="true" aria-live="polite">44.1<span class="card-unit">MPG</span></div>
+                <div class="card-subtitle" id="tank-miles">312 miles this tank</div>
             </div>
             <div class="card skeleton-card" aria-labelledby="soc-floor-label">
                 <div class="card-label" id="soc-floor-label">Avg SOC Floor</div>
-                <div class="card-value" id="soc-floor" aria-live="polite">--</div>
-                <div class="card-subtitle" id="soc-count">Loading...</div>
+                <div class="card-value" id="soc-floor" data-demo-value="true" aria-live="polite">13.4<span class="card-unit">%</span></div>
+                <div class="card-subtitle" id="soc-count">42 transitions recorded</div>
             </div>
             <div class="card skeleton-card" aria-labelledby="total-miles-label">
                 <div class="card-label" id="total-miles-label">Total Miles Tracked</div>
-                <div class="card-value" id="total-miles" aria-live="polite">--</div>
+                <div class="card-value" id="total-miles" data-demo-value="true" aria-live="polite">38,412<span class="card-unit">mi</span></div>
                 <div class="card-subtitle">All trips</div>
             </div>
         </section>
@@ -184,68 +352,133 @@
             </div>
         </section>
 
-        <!-- Battery Health Card (hidden until data exists) -->
-        <section id="battery-health-section" class="battery-health-section skeleton-card" style="display:none;" aria-labelledby="battery-health-title">
-            <div class="card card-battery-health" aria-labelledby="battery-health-title">
-                <div class="battery-health-header">
-                    <h3 id="battery-health-title">Battery Health</h3>
-                    <span class="battery-health-status" id="battery-health-status">--</span>
+        <section class="dashboard-widget-grid" aria-label="Dashboard analytics widgets">
+            <article class="dashboard-widget">
+                <div class="dashboard-widget-head"><span>Gas MPG · 30 Days</span><small>30d</small></div>
+                <svg class="dashboard-mini-chart" viewBox="0 0 100 52" preserveAspectRatio="none" aria-hidden="true">
+                    <path d="M0 42 L10 38 L20 40 L30 31 L40 34 L50 28 L60 24 L70 30 L80 22 L90 24 L100 18"></path>
+                    <circle cx="90" cy="24" r="2"></circle>
+                </svg>
+            </article>
+            <article class="dashboard-widget">
+                <div class="dashboard-widget-head"><span>Lifetime Mix</span><small>78% EV</small></div>
+                <div class="dashboard-donut" aria-hidden="true"><span>78<small>%</small></span></div>
+                <div class="dashboard-donut-legend"><span><i class="mode-ev"></i>Electric 36,064 mi</span><span><i class="mode-gas"></i>Gas 2,348 mi</span></div>
+            </article>
+            <article class="dashboard-widget">
+                <div class="dashboard-widget-head"><span>Recent Trips</span><small>View all →</small></div>
+                <div class="dashboard-trip-mini"><span>Home → Office<small>Apr 30 · 18.4mi</small></span><b>4.1 mi/kWh</b></div>
+                <div class="dashboard-trip-mini"><span>Home → Tahoe<small>Apr 28 · 184.2mi</small></span><b>41.7 MPG</b></div>
+                <div class="dashboard-trip-mini"><span>Tahoe → Home<small>Apr 26 · 178.5mi</small></span><b>43.2 MPG</b></div>
+            </article>
+        </section>
+
+        <!-- Battery Overview -->
+        <section id="battery-health-section" class="battery-health-section battery-page-section" aria-labelledby="battery-health-title">
+            <div class="battery-page-header">
+                <div>
+                    <div class="section-eyebrow">Battery</div>
+                    <h2 id="battery-health-title">Pack health and balance</h2>
+                    <p>Capacity, temperature, cycle estimate, and pack drift stay visible even before the first battery API snapshot arrives.</p>
+                </div>
+                <span class="battery-health-status settings-pill settings-pill-ok" id="battery-health-status">Monitor</span>
+            </div>
+
+            <div class="battery-kpi-grid">
+                <article class="battery-kpi-card">
+                    <span>Capacity</span>
+                    <strong><span id="battery-health-percent">91.3% capacity</span></strong>
+                    <small><span id="battery-health-capacity">16.8</span> of <span id="battery-health-original">18.4</span> kWh</small>
+                </article>
+                <article class="battery-kpi-card">
+                    <span>Health</span>
+                    <strong id="battery-health-label">Healthy</strong>
+                    <small>Based on imported BMS history</small>
+                </article>
+                <article class="battery-kpi-card">
+                    <span>Temperature</span>
+                    <strong>72°F</strong>
+                    <small>Optimal band 18-32°C</small>
+                </article>
+                <article class="battery-kpi-card">
+                    <span>Cycles</span>
+                    <strong>684</strong>
+                    <small>Estimated from charge sessions</small>
+                </article>
+            </div>
+
+            <div class="battery-capacity-card">
+                <div class="battery-card-title-row">
+                    <div class="live-card-title">Capacity over time</div>
+                    <span class="settings-pill">Below avg degradation</span>
                 </div>
                 <div class="battery-health-visual">
-                    <div class="battery-health-bar-container">
-                        <div class="battery-health-bar" id="battery-health-bar"></div>
+                    <div class="battery-health-bar-container" aria-label="Battery health capacity bar">
+                        <div class="battery-health-bar" id="battery-health-bar" style="width:91%"></div>
                     </div>
                 </div>
-                <div class="battery-health-stats">
-                    <div class="battery-health-main">
-                        <span class="battery-health-value" id="battery-health-capacity">--</span>
-                        <span class="battery-health-original">/ <span id="battery-health-original">18.4</span> kWh</span>
-                    </div>
-                    <div class="battery-health-percent" id="battery-health-percent">--% capacity</div>
-                    <div class="battery-health-trend" id="battery-health-trend"></div>
+                <div class="battery-capacity-chart" aria-hidden="true">
+                    <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <line x1="0" x2="100" y1="0" y2="0"></line>
+                        <line x1="0" x2="100" y1="25" y2="25"></line>
+                        <line x1="0" x2="100" y1="50" y2="50"></line>
+                        <line x1="0" x2="100" y1="75" y2="75"></line>
+                        <line x1="0" x2="100" y1="100" y2="100"></line>
+                        <path class="battery-capacity-expected" d="M0 8 L12 10 L24 13 L36 17 L48 22 L60 28 L72 34 L84 41 L100 48"></path>
+                        <path class="battery-capacity-actual" d="M0 8 L12 9 L24 11 L36 13 L48 16 L60 20 L72 24 L84 28 L100 32"></path>
+                    </svg>
+                    <span>Actual</span>
+                    <span>Expected fleet avg</span>
                 </div>
+                <div class="battery-health-trend" id="battery-health-trend"></div>
             </div>
         </section>
 
-        <!-- Battery Cell Voltage Section (hidden until data exists) -->
-        <section id="battery-cells-section" class="battery-cells-section" style="display:none;" aria-labelledby="battery-cells-title">
-            <div class="card" aria-labelledby="battery-cells-title">
-                <div class="battery-cells-header">
-                    <h3 id="battery-cells-title">Cell Voltages</h3>
-                    <div class="battery-cells-summary" id="battery-cells-summary">
-                        <span class="voltage-delta" id="voltage-delta">Δ --</span>
+        <!-- Battery Cell Voltage Section -->
+        <section id="battery-cells-section" class="battery-cells-section battery-page-section" aria-labelledby="battery-cells-title">
+            <div class="battery-cell-layout">
+                <article class="battery-cell-card" aria-labelledby="battery-cells-title">
+                    <div class="battery-card-title-row">
+                        <div>
+                            <div class="live-card-title">Cell Voltage Balance</div>
+                            <h3 id="battery-cells-title">96 cell heatmap</h3>
+                        </div>
+                        <div class="battery-cells-summary" id="battery-cells-summary">
+                            <span class="voltage-delta settings-pill" id="voltage-delta">Δ 18mV</span>
+                        </div>
                     </div>
-                </div>
 
                 <!-- Module Balance -->
                 <div class="module-balance" id="module-balance" aria-label="Module balance">
                     <div class="module-bar">
                         <span class="module-label">M1</span>
                         <div class="module-value-container">
-                            <div class="module-value" id="module1-bar"></div>
+                            <div class="module-value" id="module1-bar" style="width:82%"></div>
                         </div>
-                        <span class="module-voltage" id="module1-voltage">--</span>
+                        <span class="module-voltage" id="module1-voltage">3.982V</span>
                     </div>
                     <div class="module-bar">
                         <span class="module-label">M2</span>
                         <div class="module-value-container">
-                            <div class="module-value" id="module2-bar"></div>
+                            <div class="module-value" id="module2-bar" style="width:76%"></div>
                         </div>
-                        <span class="module-voltage" id="module2-voltage">--</span>
+                        <span class="module-voltage" id="module2-voltage">3.977V</span>
                     </div>
                     <div class="module-bar">
                         <span class="module-label">M3</span>
                         <div class="module-value-container">
-                            <div class="module-value" id="module3-bar"></div>
+                            <div class="module-value" id="module3-bar" style="width:89%"></div>
                         </div>
-                        <span class="module-voltage" id="module3-voltage">--</span>
+                        <span class="module-voltage" id="module3-voltage">3.989V</span>
                     </div>
                 </div>
 
                 <!-- Cell Voltage Heatmap -->
                 <div class="cell-heatmap-container" aria-label="Cell voltage heatmap">
                     <div class="cell-heatmap" id="cell-heatmap">
-                        <!-- 96 cells rendered by JavaScript -->
+                        {% for cell in range(1, 97) %}
+                        <div class="cell cell-demo-{{ cell % 9 }}{% if cell == 47 %} cell-outlier{% endif %}" title="Cell {{ cell }}: {{ 'low outlier' if cell == 47 else 'balanced' }}">{{ cell }}</div>
+                        {% endfor %}
                     </div>
                     <div class="heatmap-legend">
                         <span class="legend-low">Low</span>
@@ -256,13 +489,21 @@
 
                 <!-- Weak Cells Warning -->
                 <div class="weak-cells-warning" id="weak-cells-warning" style="display:none;">
-                    <span class="warning-icon">⚠️</span>
+                    <span class="warning-icon">!</span>
                     <span class="warning-text" id="weak-cells-text">No weak cells detected</span>
                 </div>
 
                 <div class="battery-cells-footer">
-                    <span class="cells-timestamp" id="cells-timestamp">Last updated: --</span>
+                    <span class="cells-timestamp" id="cells-timestamp">Last updated: 2 min ago · min 3.971V · mean 3.982V · max 3.989V</span>
                 </div>
+                </article>
+
+                <aside class="battery-notes-card">
+                    <div class="live-card-title">Notes</div>
+                    <p>Cell 47 is the current low outlier at 18mV below pack mean, still inside the watch band.</p>
+                    <p>Capacity loss is tracking below the expected fleet curve for this mileage.</p>
+                    <small>Last balance: Apr 29, 2026<br>Last full discharge: Mar 18, 2026</small>
+                </aside>
             </div>
         </section>
 
@@ -283,108 +524,261 @@
         </section>
 
         <!-- Recent Trips -->
-        <section id="trips-section" class="trips-section skeleton-card" aria-labelledby="trips-title">
-            <div class="section-header">
-                <h2 class="section-title" id="trips-title">Recent Trips</h2>
-                <div class="date-filter">
-                    <label for="date-range" class="visually-hidden">Filter trips by date range</label>
-                    <input type="text" id="date-range" placeholder="Filter by date range" readonly aria-label="Filter by date range">
-                    <button class="btn-clear-filter" id="clear-date-filter" data-action="clear-date-filter" style="display: none;" aria-label="Clear date filter">Clear</button>
+        <section id="trips-section" class="trips-section trips-workspace" aria-labelledby="trips-title">
+            <article class="trips-list-card">
+                <div class="trips-list-header">
+                    <div>
+                        <div class="section-eyebrow">Trips</div>
+                        <h2 class="section-title" id="trips-title">8 Trips · April</h2>
+                    </div>
+                    <div class="date-filter trips-hidden-hook" aria-hidden="true">
+                        <label for="date-range" class="visually-hidden">Filter trips by date range</label>
+                        <input type="text" id="date-range" placeholder="Filter by date range" readonly aria-label="Filter by date range" tabindex="-1">
+                        <button class="btn-clear-filter" id="clear-date-filter" data-action="clear-date-filter" style="display: none;" aria-label="Clear date filter" tabindex="-1">Clear</button>
+                    </div>
+                </div>
+                <div class="trip-filter-tabs" role="tablist" aria-label="Trip filters">
+                    <button class="active" type="button" role="tab" aria-selected="true">All</button>
+                    <button type="button" role="tab" aria-selected="false">EV</button>
+                    <button type="button" role="tab" aria-selected="false">Mixed</button>
+                    <button type="button" role="tab" aria-selected="false">Gas</button>
+                </div>
+                <div class="trip-list" aria-label="April trips">
+                    <button class="trip-row-v2 selected" type="button">
+                        <span class="trip-mode-dot mode-ev" aria-hidden="true"></span>
+                        <span><strong>Home → Office</strong><small>Apr 30 · 08:14 · 18.4mi</small></span>
+                        <em>28m</em><b>4.1 mi/kWh</b>
+                    </button>
+                    <button class="trip-row-v2" type="button">
+                        <span class="trip-mode-dot mode-ev" aria-hidden="true"></span>
+                        <span><strong>Office → Trader Joe's</strong><small>Apr 29 · 17:42 · 6.1mi</small></span>
+                        <em>14m</em><b>3.9 mi/kWh</b>
+                    </button>
+                    <button class="trip-row-v2" type="button">
+                        <span class="trip-mode-dot mode-ev" aria-hidden="true"></span>
+                        <span><strong>Trader Joe's → Home</strong><small>Apr 29 · 19:08 · 7.3mi</small></span>
+                        <em>14m</em><b>4.0 mi/kWh</b>
+                    </button>
+                    <button class="trip-row-v2" type="button">
+                        <span class="trip-mode-dot mode-mixed" aria-hidden="true"></span>
+                        <span><strong>Home → Tahoe</strong><small>Apr 28 · 07:22 · 184.2mi</small></span>
+                        <em>173m</em><b>41.7 MPG</b>
+                    </button>
+                    <button class="trip-row-v2" type="button">
+                        <span class="trip-mode-dot mode-ev" aria-hidden="true"></span>
+                        <span><strong>Tahoe Loop → Tahoe Loop</strong><small>Apr 27 · 10:00 · 22.0mi</small></span>
+                        <em>47m</em><b>3.6 mi/kWh</b>
+                    </button>
+                    <button class="trip-row-v2" type="button">
+                        <span class="trip-mode-dot mode-gas" aria-hidden="true"></span>
+                        <span><strong>Tahoe → Home</strong><small>Apr 26 · 16:48 · 178.5mi</small></span>
+                        <em>160m</em><b>43.2 MPG</b>
+                    </button>
+                    <button class="trip-row-v2" type="button">
+                        <span class="trip-mode-dot mode-ev" aria-hidden="true"></span>
+                        <span><strong>Home → Hardware Store</strong><small>Apr 25 · 09:12 · 4.7mi</small></span>
+                        <em>12m</em><b>3.9 mi/kWh</b>
+                    </button>
+                    <button class="trip-row-v2" type="button">
+                        <span class="trip-mode-dot mode-ev" aria-hidden="true"></span>
+                        <span><strong>Home → Office</strong><small>Apr 24 · 08:18 · 18.4mi</small></span>
+                        <em>28m</em><b>4.1 mi/kWh</b>
+                    </button>
+                </div>
+            </article>
+
+            <div class="trip-detail-workspace">
+                <article class="trip-detail-card">
+                    <div class="trip-detail-header">
+                        <div>
+                            <div class="section-eyebrow">Trip #8421</div>
+                            <h3>Home → Office</h3>
+                            <p>Apr 30 · 08:14 · 28min</p>
+                        </div>
+                        <span class="trip-mode-pill mode-ev">ev</span>
+                    </div>
+                    <div class="trip-stat-grid">
+                        <div><span>Distance</span><strong>18.4</strong><small>mi</small></div>
+                        <div><span>Avg Speed</span><strong>39</strong><small>mph</small></div>
+                        <div><span>Energy</span><strong>4.4</strong><small>kWh</small></div>
+                        <div><span>Gas</span><strong>—</strong><small>gal</small></div>
+                        <div><span>mi/kWh</span><strong>4.15</strong></div>
+                    </div>
+                </article>
+
+                <div class="trip-detail-grid">
+                    <article class="trip-route-card">
+                        <div class="live-card-title">Route</div>
+                        <svg class="trip-route-map" viewBox="0 0 100 60" preserveAspectRatio="none" aria-label="Selected trip route map" role="img">
+                            <defs>
+                                <pattern id="trip-map-grid" width="5" height="5" patternUnits="userSpaceOnUse">
+                                    <path d="M5 0 L0 0 0 5" fill="none" stroke="currentColor" stroke-width=".12" opacity=".32"></path>
+                                </pattern>
+                            </defs>
+                            <rect x="-2" y="-2" width="104" height="64" class="trip-map-bg"></rect>
+                            <rect x="-2" y="-2" width="104" height="64" fill="url(#trip-map-grid)"></rect>
+                            <rect x="12" y="8" width="24" height="12" rx="2" class="trip-map-park"></rect>
+                            <ellipse cx="82" cy="48" rx="10" ry="6" class="trip-map-water"></ellipse>
+                            <path d="M0 22 L100 34 M18 0 L56 60 M0 42 L100 20 M12 0 L12 60 M30 0 L30 60 M48 0 L48 60 M66 0 L66 60 M84 0 L84 60" class="trip-map-streets"></path>
+                            <path d="M12 48 L20 40 L30 34 L42 28 L54 22 L66 16 L78 12" class="trip-map-route-glow"></path>
+                            <path d="M12 48 L20 40 L30 34 L42 28 L54 22 L66 16 L78 12" class="trip-map-route"></path>
+                            <circle cx="12" cy="48" r="2.2" class="trip-map-start"></circle>
+                            <circle cx="78" cy="12" r="3.6" class="trip-map-end-halo"></circle>
+                            <circle cx="78" cy="12" r="2" class="trip-map-end"></circle>
+                        </svg>
+                    </article>
+                    <article class="trip-energy-card">
+                        <div class="live-card-title">Energy Breakdown</div>
+                        <div class="trip-breakdown">
+                            <div><span>Propulsion</span><b>62%</b><i style="--w:62%;--c:var(--electric);"></i></div>
+                            <div><span>HVAC</span><b>18%</b><i style="--w:18%;--c:var(--accent);"></i></div>
+                            <div><span>Aux</span><b>5%</b><i style="--w:5%;--c:var(--text-muted);"></i></div>
+                            <div><span>Regen</span><b>-15%</b><i style="--w:15%;--c:var(--success);"></i></div>
+                        </div>
+                        <dl class="trip-kv-list">
+                            <div><dt>Avg consumption</dt><dd>241 Wh/mi</dd></div>
+                            <div><dt>Elevation gain</dt><dd>+342 ft</dd></div>
+                            <div><dt>Temp range</dt><dd>58-67 °F</dd></div>
+                            <div><dt>Cost</dt><dd>$0.53</dd></div>
+                        </dl>
+                    </article>
                 </div>
             </div>
 
-            <!-- Desktop Table -->
-            <div class="trips-table-wrapper">
-                <table class="trips-table" aria-label="Recent trips">
-                    <thead>
-                        <tr>
-                            <th scope="col">Date</th>
-                            <th scope="col">Total</th>
-                            <th scope="col">Electric</th>
-                            <th scope="col">Gas</th>
-                            <th scope="col">MPG</th>
-                            <th scope="col">SOC at Switch</th>
-                            <th scope="col"><span class="visually-hidden">Actions</span></th>
-                        </tr>
-                    </thead>
-                    <tbody id="trips-table-body" aria-live="polite">
-                        <tr>
-                            <td colspan="7">
-                                <div class="loading" role="status" aria-label="Loading trips">
-                                    <div class="spinner" aria-hidden="true"></div>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Mobile Cards -->
-            <div class="trip-cards" id="trip-cards" role="list" aria-label="Recent trips" aria-live="polite">
-                <div class="loading" role="status" aria-label="Loading trips">
-                    <div class="spinner" aria-hidden="true"></div>
-                </div>
+            <div class="trips-hidden-hook" aria-hidden="true">
+                <table><tbody id="trips-table-body"></tbody></table>
+                <div class="trip-cards" id="trip-cards" role="list"></div>
             </div>
         </section>
 
         <!-- SOC Analysis -->
-        <section id="soc-section" class="soc-section" aria-labelledby="soc-analysis-title">
-            <div class="soc-stats" aria-labelledby="soc-analysis-title">
-                <h2 class="section-title" id="soc-analysis-title">SOC Floor Analysis</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
-                    Battery state of charge when the engine starts. Higher values over time may indicate battery degradation.
-                </p>
-                <dl class="stat-list">
-                    <div class="stat-row">
-                        <dt class="stat-label">Average SOC</dt>
-                        <dd class="stat-value" id="soc-avg" aria-live="polite">--</dd>
-                    </div>
-                    <div class="stat-row">
-                        <dt class="stat-label">Minimum SOC</dt>
-                        <dd class="stat-value" id="soc-min" aria-live="polite">--</dd>
-                    </div>
-                    <div class="stat-row">
-                        <dt class="stat-label">Maximum SOC</dt>
-                        <dd class="stat-value" id="soc-max" aria-live="polite">--</dd>
-                    </div>
-                    <div class="stat-row">
-                        <dt class="stat-label">Cold Weather (&lt;50°F)</dt>
-                        <dd class="stat-value" id="soc-cold" aria-live="polite">--</dd>
-                    </div>
-                    <div class="stat-row">
-                        <dt class="stat-label">Warm Weather (≥50°F)</dt>
-                        <dd class="stat-value" id="soc-warm" aria-live="polite">--</dd>
-                    </div>
-                    <div class="stat-row">
-                        <dt class="stat-label">Trend</dt>
-                        <dd class="stat-value" id="soc-trend" aria-live="polite">--</dd>
-                    </div>
-                </dl>
+        <section id="soc-section" class="soc-section insights-workspace" aria-labelledby="soc-analysis-title">
+            <div class="insight-card-grid">
+                <article class="insight-card good">
+                    <span aria-hidden="true">↑</span>
+                    <div><h3>Best month yet for EV ratio</h3><p>April: 78% electric, up from 64% in March. Keep this up and you save another $45 this year.</p></div>
+                </article>
+                <article class="insight-card good">
+                    <span aria-hidden="true">✓</span>
+                    <div><h3>Battery degrading well below average</h3><p>8.7% loss over 38k miles versus about 12% expected for 2017 Volts. The 13.4% average SOC floor is helping.</p></div>
+                </article>
+                <article class="insight-card warn">
+                    <span aria-hidden="true">!</span>
+                    <div><h3>Cell 47 trending low</h3><p>Cell 47 has drifted 18mV below the pack mean over the past two weeks. Worth watching, not yet replacing.</p></div>
+                </article>
+                <article class="insight-card info">
+                    <span aria-hidden="true">i</span>
+                    <div><h3>Cheaper to charge after 21:00</h3><p>Your utility off-peak window starts at 9pm. Shifting two L2 sessions per week would save about $8/mo.</p></div>
+                </article>
+                <article class="insight-card good">
+                    <span aria-hidden="true">◇</span>
+                    <div><h3>Tahoe trip MPG within 4% of route avg</h3><p>Apr 28's 184mi roundtrip hit 41.7 MPG, strong for that elevation profile.</p></div>
+                </article>
             </div>
-            <div class="soc-histogram" aria-labelledby="soc-histogram-title">
-                <h2 class="section-title" id="soc-histogram-title">SOC Distribution</h2>
-                <div class="chart-container" style="height: 200px;">
-                    <canvas id="soc-histogram-chart" role="img" aria-label="Histogram showing SOC distribution when engine starts"></canvas>
+
+            <div class="insight-analysis-grid">
+                <article class="insight-panel">
+                    <div class="live-card-title">MPG vs Temperature</div>
+                    <svg class="insight-scatter" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="MPG versus temperature scatter plot">
+                        {% for y in [0, 25, 50, 75, 100] %}
+                        <line x1="0" x2="100" y1="{{ y }}" y2="{{ y }}"></line>
+                        {% endfor %}
+                        <circle cx="24" cy="48" r="1.2"></circle><circle cx="32" cy="43" r="1.2"></circle><circle cx="39" cy="50" r="1.2"></circle><circle cx="46" cy="36" r="1.2"></circle><circle cx="54" cy="39" r="1.2"></circle><circle cx="62" cy="30" r="1.2"></circle><circle cx="70" cy="34" r="1.2"></circle><circle cx="78" cy="26" r="1.2"></circle><circle cx="86" cy="31" r="1.2"></circle>
+                        <text x="2" y="7">MPG ↑</text>
+                        <text x="66" y="96">→ Outside Temp °F</text>
+                    </svg>
+                </article>
+                <article class="insight-panel">
+                    <div class="live-card-title">Maintenance</div>
+                    <div class="maintenance-list">
+                        <div><span>Tire rotation<small>last: Feb 14, 2026 · 48,648 mi</small></span><b>in 1,420 mi</b></div>
+                        <div><span>Cabin air filter<small>last: Jun 02, 2025 · 44,210 mi</small></span><b>in 6 months</b></div>
+                        <div><span>Brake fluid<small>last: Aug 11, 2024 · 38,002 mi</small></span><b>in 8 months</b></div>
+                        <div class="warn"><span>Coolant (battery)<small>last: Apr 2022 · 18,450 mi</small></span><b>overdue</b></div>
+                        <div><span>Engine oil (gas)<small>last: Mar 04, 2026 · 49,328 mi</small></span><b>in 740 mi</b></div>
+                    </div>
+                </article>
+            </div>
+
+            <article class="insight-panel cost-panel" aria-labelledby="soc-analysis-title">
+                <div class="live-card-title" id="soc-analysis-title">Cost · Year to Date</div>
+                <div class="cost-stat-grid">
+                    <div><span>Electricity</span><strong>$48.20</strong><small>402 kWh @ ~$0.12</small></div>
+                    <div><span>Gasoline</span><strong>$214.40</strong><small>55.8 gal @ ~$3.85</small></div>
+                    <div><span>Maintenance</span><strong>$0.00</strong><small>No service YTD</small></div>
+                    <div><span>$/mile</span><strong>$0.087</strong><small>3,021 mi YTD</small></div>
                 </div>
+            </article>
+
+            <div class="trips-hidden-hook" aria-hidden="true">
+                <dd id="soc-avg">--</dd><dd id="soc-min">--</dd><dd id="soc-max">--</dd><dd id="soc-cold">--</dd><dd id="soc-warm">--</dd><dd id="soc-trend">--</dd>
+                <canvas id="soc-histogram-chart"></canvas>
             </div>
         </section>
 
         <!-- Charging History -->
         <section id="charging-section" class="charging-section" aria-labelledby="charging-title">
             <div class="section-header">
-                <h2 class="section-title" id="charging-title">Charging History</h2>
+                <div>
+                    <div class="section-eyebrow">Charging</div>
+                    <h2 class="section-title" id="charging-title">Charging dashboard</h2>
+                </div>
                 <button class="btn-add" data-action="open-add-charging" aria-label="Add new charging session">+ Add Session</button>
+            </div>
+            <div class="charging-kpi-grid">
+                <article class="charging-kpi-card">
+                    <span>30-Day Energy</span>
+                    <strong><span id="charging-30d-kwh" data-demo-value="true">248.6</span><small>kWh</small></strong>
+                    <em id="charging-page-sessions" data-demo-value="true">24 sessions</em>
+                </article>
+                <article class="charging-kpi-card">
+                    <span>Cost</span>
+                    <strong id="charging-cost" data-demo-value="true">$29.83/month</strong>
+                    <em>Average home rate</em>
+                </article>
+                <article class="charging-kpi-card">
+                    <span>Avg Session</span>
+                    <strong><span id="avg-kwh-session" data-demo-value="true">10.4<span class="card-unit">kWh</span></span></strong>
+                    <em>Energy per plug-in</em>
+                </article>
+                <article class="charging-kpi-card">
+                    <span>Gas Equivalent</span>
+                    <strong id="charging-savings" data-demo-value="true">$104</strong>
+                    <em>Compared with fuel cost</em>
+                </article>
+            </div>
+            <div class="charging-dashboard-grid">
+                <article class="charging-panel">
+                    <div class="live-card-title">When You Charge</div>
+                    <div class="charging-hour-chart" aria-hidden="true">
+                        {% for hour in range(0, 24) %}
+                        <span style="--h: {{ [8, 12, 18, 24, 16, 10, 4, 0, 0, 2, 4, 8, 12, 10, 6, 4, 8, 14, 22, 30, 42, 68, 82, 54][hour] }}%" class="{% if hour >= 21 or hour < 6 %}offpeak{% else %}peak{% endif %}" title="{{ '%02d' % hour }}:00"></span>
+                        {% endfor %}
+                    </div>
+                    <div class="charging-legend">
+                        <span><i class="offpeak"></i>Off-peak</span>
+                        <span><i class="peak"></i>Peak rate</span>
+                    </div>
+                </article>
+                <article class="charging-panel">
+                    <div class="live-card-title">Locations</div>
+                    <div class="charging-location-list">
+                        <div><strong>Home Garage</strong><span>19 sess · L2</span><i style="width:78%"></i></div>
+                        <div><strong>Office</strong><span>4 sess · L2</span><i style="width:18%"></i></div>
+                        <div><strong>Public L2</strong><span>1 sess · L2</span><i style="width:6%"></i></div>
+                    </div>
+                </article>
             </div>
             <div class="charging-stats-row">
                 <div class="charging-stats" aria-label="Charging session counts">
                     <dl class="stat-list">
                         <div class="stat-row">
                             <dt class="stat-label">L1 Sessions</dt>
-                            <dd class="stat-value" id="l1-sessions" aria-live="polite">--</dd>
+                            <dd class="stat-value" id="l1-sessions" aria-live="polite">1</dd>
                         </div>
                         <div class="stat-row">
                             <dt class="stat-label">L2 Sessions</dt>
-                            <dd class="stat-value" id="l2-sessions" aria-live="polite">--</dd>
+                            <dd class="stat-value" id="l2-sessions" aria-live="polite">23</dd>
                         </div>
                     </dl>
                 </div>
@@ -417,23 +811,17 @@
                             <th scope="col"><span class="visually-hidden">Actions</span></th>
                         </tr>
                     </thead>
-                    <tbody id="charging-table-body" aria-live="polite">
-                        <tr>
-                            <td colspan="7">
-                                <div class="loading" role="status" aria-label="Loading charging sessions">
-                                    <div class="spinner" aria-hidden="true"></div>
-                                </div>
-                            </td>
-                        </tr>
+                    <tbody id="charging-table-body" data-demo-value="true" aria-live="polite">
+                        <tr><td>Apr 30 · 21:18</td><td><span class="badge badge-l2">L2</span></td><td>11.8 kWh</td><td>24% → 91%</td><td>3h 18m</td><td>Home</td><td></td></tr>
+                        <tr><td>Apr 29 · 22:04</td><td><span class="badge badge-l2">L2</span></td><td>9.6 kWh</td><td>36% → 90%</td><td>2h 42m</td><td>Home</td><td></td></tr>
+                        <tr><td>Apr 28 · 18:12</td><td><span class="badge badge-l1">L1</span></td><td>5.2 kWh</td><td>58% → 88%</td><td>7h 05m</td><td>Office</td><td></td></tr>
                     </tbody>
                 </table>
             </div>
 
             <!-- Mobile Charging Cards -->
-            <div class="charging-cards" id="charging-cards" role="list" aria-label="Charging sessions" aria-live="polite">
-                <div class="loading" role="status" aria-label="Loading charging sessions">
-                    <div class="spinner" aria-hidden="true"></div>
-                </div>
+            <div class="charging-cards" id="charging-cards" data-demo-value="true" role="list" aria-label="Charging sessions" aria-live="polite">
+                <article class="charging-card"><strong>Apr 30 · Home</strong><span>11.8 kWh · L2 · 24% → 91%</span></article>
             </div>
         </section>
 
@@ -699,6 +1087,8 @@
     <button class="back-to-top" id="back-to-top" aria-label="Back to top" title="Back to top">
         ↑
     </button>
+        </div>
+    </div>
 
     <script src="/static/js/toast.js"></script>
     <script type="module" src="/static/js/dist/main.js"></script>

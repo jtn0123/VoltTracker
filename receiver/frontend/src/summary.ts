@@ -21,6 +21,7 @@ function setCardValue(primaryId: string, value: string | null, unit: string, sub
       if (sub) sub.textContent = subtitle;
     }
   } else {
+    if (el.dataset.demoValue === 'true') return;
     el.textContent = '--';
     if (subtitleId) {
       const sub = document.getElementById(subtitleId);
@@ -37,9 +38,11 @@ function updateSummaryCards(data: EfficiencySummary): void {
 
   const totalMiles = document.getElementById('total-miles');
   if (totalMiles) {
-    totalMiles.innerHTML = data.total_miles_tracked
-      ? `${data.total_miles_tracked.toLocaleString()}<span class="card-unit">mi</span>`
-      : '--';
+    if (data.total_miles_tracked) {
+      totalMiles.innerHTML = `${data.total_miles_tracked.toLocaleString()}<span class="card-unit">mi</span>`;
+    } else if (totalMiles.dataset.demoValue !== 'true') {
+      totalMiles.textContent = '--';
+    }
   }
 
   const kwhPerMile = document.getElementById('kwh-per-mile');
@@ -61,6 +64,24 @@ function updateSummaryCards(data: EfficiencySummary): void {
     evRatio.innerHTML = (data.ev_ratio !== undefined && data.ev_ratio !== null)
       ? `${data.ev_ratio}<span class="card-unit">%</span>`
       : '--';
+  }
+
+  const heroEvRatio = document.getElementById('hero-ev-ratio');
+  if (heroEvRatio) {
+    if (data.ev_ratio !== undefined && data.ev_ratio !== null) heroEvRatio.textContent = `${data.ev_ratio}%`;
+    else if (heroEvRatio.dataset.demoValue !== 'true') heroEvRatio.textContent = '--';
+  }
+
+  const heroElectricMiles = document.getElementById('hero-electric-miles');
+  if (heroElectricMiles) {
+    if (data.total_electric_miles) heroElectricMiles.textContent = `${data.total_electric_miles.toLocaleString()} mi`;
+    else if (heroElectricMiles.dataset.demoValue !== 'true') heroElectricMiles.textContent = '--';
+  }
+
+  const heroTotalMiles = document.getElementById('hero-total-miles');
+  if (heroTotalMiles) {
+    if (data.total_miles_tracked) heroTotalMiles.textContent = `${data.total_miles_tracked.toLocaleString()} mi`;
+    else if (heroTotalMiles.dataset.demoValue !== 'true') heroTotalMiles.textContent = '--';
   }
 }
 

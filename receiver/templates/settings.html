@@ -5,89 +5,321 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'dark')</script>
     <title>Settings - VoltTracker</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <!-- Critical CSS -->
-    <style>:root{--bg-primary:#0f1117;--bg-secondary:#161922;--bg-card:#1c1f2e;--accent:#6366f1;--accent-light:#818cf8;--text-primary:#f0f0f3;--text-secondary:#a1a1aa;--border-color:rgba(255,255,255,0.08);--success:#22c55e;--font-base:.875rem;--space-base:1rem;--space-xl:2rem;--radius-md:8px}*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:var(--bg-primary);color:var(--text-primary);line-height:1.6;min-height:100vh}a{color:var(--accent-light);text-decoration:none}</style>
+    <style>:root{--bg-primary:#06080d;--bg-secondary:#0a0e16;--bg-card:rgba(255,255,255,.045);--accent:#5fd9ff;--text-primary:#f0f4ff;--text-secondary:#c0c9dd;--text-muted:#7686a6;--border-color:rgba(120,160,220,.16);--success:#5fe3a4;--danger:#ff6b8a;--font-base:.875rem}*{box-sizing:border-box}body{margin:0;background:var(--bg-primary);color:var(--text-primary);font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.5}a{color:inherit;text-decoration:none}</style>
 
-    <link rel="stylesheet" href="/static/js/dist/style.css">
+    <link rel="stylesheet" href="/static/js/dist/style.css?v={{ app_version | default('dev') }}-ui2">
     <link rel="stylesheet" href="/static/css/toast.css">
 
     <link rel="manifest" href="/static/manifest.json">
-    <meta name="theme-color" content="#6366f1">
+    <meta name="theme-color" content="#5fd9ff">
     <link rel="icon" type="image/svg+xml" href="/static/icons/icon-192.svg">
     <link rel="alternate icon" href="/favicon.ico">
     <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 </head>
-<body>
-    <header class="header" role="banner">
-        <div style="display:flex;align-items:center;gap:1rem">
-            <a href="/" style="color:var(--text-secondary);font-size:1.5rem" aria-label="Back to dashboard">←</a>
-            <h1>Settings</h1>
-        </div>
-        <div class="header-actions">
-            <button class="theme-toggle" onclick="document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');localStorage.setItem('theme',document.documentElement.getAttribute('data-theme'))" title="Toggle theme" aria-label="Toggle dark/light theme">
-                <span class="theme-icon" aria-hidden="true">🌙</span>
-            </button>
-        </div>
-    </header>
+<body class="settings-page">
+    <div class="app-shell">
+        <aside class="app-sidebar" aria-label="Primary navigation">
+            <a href="/" class="brand-lockup" aria-label="VoltTracker dashboard">
+                <span class="brand-mark" aria-hidden="true">V</span>
+                <span>
+                    <span class="brand-title">VoltTracker</span>
+                    <span class="brand-subtitle">v{{ app_version | default('unknown') }} · self-hosted</span>
+                </span>
+            </a>
+            <nav class="app-nav" aria-label="Dashboard sections">
+                <a href="/" class="app-nav-item" data-section="summary"><span class="app-nav-icon" aria-hidden="true">▦</span><span>Dashboard</span></a>
+                <a href="/#live-trip-section" class="app-nav-item" data-section="live"><span class="app-nav-icon" aria-hidden="true">◉</span><span>Live Drive</span></a>
+                <a href="/#trips-section" class="app-nav-item" data-section="trips"><span class="app-nav-icon" aria-hidden="true">→</span><span>Trips</span></a>
+                <a href="/map" class="app-nav-item" data-section="map"><span class="app-nav-icon" aria-hidden="true">◇</span><span>GPS Map</span></a>
+                <a href="/#battery-health-section" class="app-nav-item" data-section="battery"><span class="app-nav-icon" aria-hidden="true">▮</span><span>Battery</span></a>
+                <a href="/#charging-section" class="app-nav-item" data-section="charging"><span class="app-nav-icon" aria-hidden="true">⚡</span><span>Charging</span></a>
+                <a href="/#soc-section" class="app-nav-item" data-section="analysis"><span class="app-nav-icon" aria-hidden="true">✦</span><span>Insights</span></a>
+                <a href="/settings" class="app-nav-item active" data-section="settings"><span class="app-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></a>
+            </nav>
+            <div class="sidebar-status" aria-label="Vehicle status">
+                <span class="sidebar-status-dot" aria-hidden="true"></span>
+                <span>Connected · settings sync</span>
+                <small>2017 Volt · preferences ready</small>
+            </div>
+        </aside>
 
-    <main class="container" style="max-width:700px">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <div role="alert" style="padding:0.75rem 1rem;border-radius:var(--radius-md);margin-bottom:1rem;background:{% if category == 'success' %}rgba(34,197,94,0.15);color:#22c55e{% else %}rgba(239,68,68,0.15);color:#ef4444{% endif %}">
-            {{ message }}
-        </div>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
+        <div class="app-main">
+            <header class="header" role="banner">
+                <div>
+                    <div class="page-kicker">VoltTracker</div>
+                    <h1>Settings</h1>
+                </div>
+                <div class="header-actions">
+                    <a class="btn-secondary settings-dashboard-link" href="/">Dashboard</a>
+                    <button class="theme-toggle" data-settings-theme-toggle title="Toggle theme" aria-label="Toggle dark/light theme">
+                        <span class="theme-icon" aria-hidden="true">🌙</span>
+                    </button>
+                </div>
+            </header>
 
-        <form method="POST" action="/settings" class="card" style="padding:var(--space-xl)">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <h2 style="margin-bottom:1.5rem;font-size:1.25rem">Application Settings</h2>
-
-            {% for key, setting in settings.items() %}
-            <div style="margin-bottom:1.5rem">
-                <label for="setting-{{ key }}" style="display:block;margin-bottom:0.5rem;font-weight:500">
-                    {{ setting.label }}
-                </label>
-                <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem">{{ setting.description }}</p>
-
-                {% if setting.type == 'select' %}
-                <select
-                    id="setting-{{ key }}"
-                    name="{{ key }}"
-                    style="width:100%;padding:0.6rem 0.75rem;border-radius:var(--radius-md);border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-base)"
-                >
-                    {% for option in setting.options %}
-                    <option value="{{ option }}" {% if setting.value == option %}selected{% endif %}>{{ option | capitalize }}</option>
+            <main class="settings-workspace" aria-labelledby="settings-title">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="settings-alerts">
+                    {% for category, message in messages %}
+                    <div class="settings-alert settings-alert-{{ category }}" role="alert">{{ message }}</div>
                     {% endfor %}
-                </select>
-                {% else %}
-                <input
-                    id="setting-{{ key }}"
-                    name="{{ key }}"
-                    type="{{ setting.type }}"
-                    value="{{ setting.value }}"
-                    {% if setting.step %}step="{{ setting.step }}"{% endif %}
-                    {% if setting.min is defined %}min="{{ setting.min }}"{% endif %}
-                    style="width:100%;padding:0.6rem 0.75rem;border-radius:var(--radius-md);border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-base)"
-                />
+                </div>
                 {% endif %}
-            </div>
-            {% endfor %}
+                {% endwith %}
 
-            <div style="display:flex;gap:0.75rem;margin-top:2rem">
-                <button type="submit" style="flex:1;padding:0.75rem;border-radius:var(--radius-md);border:none;background:var(--accent);color:#fff;font-size:var(--font-base);font-weight:600;cursor:pointer">
-                    Save Settings
-                </button>
-                <a href="/" style="flex:1;padding:0.75rem;border-radius:var(--radius-md);border:1px solid var(--border-color);text-align:center;color:var(--text-primary);font-size:var(--font-base)">
-                    Cancel
-                </a>
-            </div>
-        </form>
-    </main>
+                <section class="settings-intro" aria-labelledby="settings-title">
+                    <div>
+                        <div class="section-eyebrow">Preferences · Vehicle · Data</div>
+                        <h2 id="settings-title">Manage how VoltTracker behaves around Sparky.</h2>
+                        <p>Keep cost, battery, units, alerts, integrations, and data handling in one dense workspace.</p>
+                    </div>
+                    <div class="settings-save-panel">
+                        <span id="settings-save-status">No unsaved changes</span>
+                        <button class="btn-primary" type="submit" form="settings-form">Save Settings</button>
+                    </div>
+                </section>
+
+                <nav class="settings-tabs" aria-label="Settings sections">
+                    <a href="#profile">Profile</a>
+                    <a href="#vehicle">Vehicle</a>
+                    <a href="#units">Units</a>
+                    <a href="#theme">Theme</a>
+                    <a href="#integrations">Integrations</a>
+                    <a href="#notifications">Notifications</a>
+                    <a href="#data">Data</a>
+                    <a href="#about">About</a>
+                </nav>
+
+                <form id="settings-form" class="settings-stack" novalidate>
+                    <section id="profile" class="settings-card" aria-labelledby="profile-title">
+                        <div class="settings-card-header">
+                            <div>
+                                <h2 id="profile-title">Profile</h2>
+                                <p>Your account info as it appears inside VoltTracker.</p>
+                            </div>
+                            <button class="btn-secondary" type="button">Change avatar</button>
+                        </div>
+                        <div class="settings-profile-row">
+                            <div class="settings-avatar" aria-hidden="true">S</div>
+                            <div>
+                                <strong>Sam Rivera</strong>
+                                <span>sam@example.org · admin · joined Jul 2019</span>
+                            </div>
+                        </div>
+                        <div class="settings-field-grid">
+                            <label class="settings-field">Display name<input type="text" value="Sam Rivera" autocomplete="name"></label>
+                            <label class="settings-field">Email<input type="email" value="sam@example.org" autocomplete="email"><span class="settings-verified">Verified</span></label>
+                            <label class="settings-field">Timezone<input type="text" value="America/Los_Angeles"></label>
+                            <label class="settings-field">Locale<input type="text" value="en-US"></label>
+                        </div>
+                    </section>
+
+                    <section id="vehicle" class="settings-card" aria-labelledby="vehicle-title">
+                        <div class="settings-card-header">
+                            <div>
+                                <h2 id="vehicle-title">Vehicle</h2>
+                                <p>VoltTracker uses these specs to compute baselines and alerts.</p>
+                            </div>
+                            <button class="btn-secondary" type="button">Add vehicle</button>
+                        </div>
+                        <div class="settings-vehicle-strip">
+                            <div class="settings-vehicle-icon" aria-hidden="true">⚡</div>
+                            <div>
+                                <strong>Sparky</strong>
+                                <span>2017 Chevrolet Volt Premier · telemetry primary</span>
+                            </div>
+                            <span class="settings-pill settings-pill-ok">Active</span>
+                        </div>
+                        <div class="settings-field-grid">
+                            <label class="settings-field">Name<input type="text" value="Sparky"></label>
+                            <label class="settings-field">VIN<input type="text" value="1G1RD6•••••1042"></label>
+                            <label class="settings-field">Year / Make / Model<input type="text" value="2017 Chevrolet Volt"></label>
+                            <label class="settings-field">Trim<input type="text" value="Premier"></label>
+                            <label class="settings-field">Battery capacity<input name="battery_capacity" type="number" value="{{ settings.battery_capacity.value }}" step="{{ settings.battery_capacity.step }}" min="{{ settings.battery_capacity.min }}"></label>
+                            <label class="settings-field">In service<input type="text" value="Jul 2019"></label>
+                        </div>
+                    </section>
+
+                    <section id="units" class="settings-card" aria-labelledby="units-title">
+                        <div class="settings-card-header">
+                            <div>
+                                <h2 id="units-title">Units</h2>
+                                <p>Used everywhere a number with a unit appears.</p>
+                            </div>
+                        </div>
+                        <div class="settings-field-grid">
+                            <label class="settings-field">Electricity cost<input name="electricity_cost_rate" type="number" value="{{ settings.electricity_cost_rate.value }}" step="{{ settings.electricity_cost_rate.step }}" min="{{ settings.electricity_cost_rate.min }}"><small>$/kWh for home charging</small></label>
+                            <label class="settings-field">Gas price<input name="gas_price" type="number" value="{{ settings.gas_price.value }}" step="{{ settings.gas_price.step }}" min="{{ settings.gas_price.min }}"><small>$/gallon baseline</small></label>
+                            <div class="settings-field">
+                                <span>Distance</span>
+                                <div class="settings-segmented" role="radiogroup" aria-label="Distance units">
+                                    {% for option in settings.distance_units.options %}
+                                    <label>
+                                        <input type="radio" name="distance_units" value="{{ option }}" {% if settings.distance_units.value == option %}checked{% endif %}>
+                                        <span>{{ "miles" if option == "miles" else "kilometers" }}</span>
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="settings-field">
+                                <span>Temperature</span>
+                                <div class="settings-segmented" role="radiogroup" aria-label="Temperature units">
+                                    <label><input type="radio" name="temperature_units" value="F" checked><span>°F</span></label>
+                                    <label><input type="radio" name="temperature_units" value="C"><span>°C</span></label>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="theme" class="settings-card" aria-labelledby="theme-title">
+                        <div class="settings-card-header">
+                            <div>
+                                <h2 id="theme-title">Theme</h2>
+                                <p>Affects the entire app, including charts and indicators.</p>
+                            </div>
+                        </div>
+                        <div class="settings-theme-grid">
+                            <button type="button" class="settings-theme-card is-active" data-theme-choice="dark"><span><i></i><i></i><i></i></span><strong>Default Dark</strong></button>
+                            <button type="button" class="settings-theme-card" data-theme-choice="light"><span><i></i><i></i><i></i></span><strong>Daylight</strong></button>
+                            <button type="button" class="settings-theme-card" data-theme-choice="dark"><span><i></i><i></i><i></i></span><strong>High Contrast</strong></button>
+                            <button type="button" class="settings-theme-card" data-theme-choice="dark"><span><i></i><i></i><i></i></span><strong>Blueprint</strong></button>
+                        </div>
+                    </section>
+
+                    <section id="integrations" class="settings-card" aria-labelledby="integrations-title">
+                        <div class="settings-card-header">
+                            <div>
+                                <h2 id="integrations-title">Integrations</h2>
+                                <p>External services that read or write to your VoltTracker data.</p>
+                            </div>
+                        </div>
+                        <div class="settings-list">
+                            <div class="settings-list-row"><span><strong>Torque Pro</strong><small>Live telemetry uploader</small></span><span class="settings-pill settings-pill-ok">connected</span><button type="button" class="btn-secondary">Configure</button></div>
+                            <div class="settings-list-row"><span><strong>Home Assistant</strong><small>Expose charging and range sensors</small></span><span class="settings-pill">available</span><button type="button" class="btn-secondary">Connect</button></div>
+                            <div class="settings-list-row"><span><strong>Google Drive</strong><small>Nightly database backup</small></span><span class="settings-pill settings-pill-ok">connected</span><button type="button" class="btn-secondary">Configure</button></div>
+                        </div>
+                    </section>
+
+                    <section id="notifications" class="settings-card" aria-labelledby="notifications-title">
+                        <div class="settings-card-header">
+                            <div>
+                                <h2 id="notifications-title">Notifications</h2>
+                                <p>Alert me when vehicle or app state needs attention.</p>
+                            </div>
+                        </div>
+                        <div class="settings-list">
+                            <label class="settings-list-row"><span><strong>Low state of charge</strong><small>Below 15%</small></span><input class="settings-switch" type="checkbox" checked></label>
+                            <label class="settings-list-row"><span><strong>Charging complete</strong><small>Push and email</small></span><input class="settings-switch" type="checkbox" checked></label>
+                            <label class="settings-list-row"><span><strong>Cell imbalance</strong><small>Pack drift above 30 mV</small></span><input class="settings-switch" type="checkbox" checked></label>
+                            <label class="settings-list-row"><span><strong>Maintenance due</strong><small>Based on mileage and time</small></span><input class="settings-switch" type="checkbox"></label>
+                            <label class="settings-list-row"><span><strong>Weekly summary email</strong><small>Sundays at 7am</small></span><input class="settings-switch" type="checkbox" checked></label>
+                        </div>
+                    </section>
+
+                    <section id="data" class="settings-card" aria-labelledby="data-title">
+                        <div class="settings-card-header">
+                            <div>
+                                <h2 id="data-title">Data</h2>
+                                <p>Export, back up, or remove your data.</p>
+                            </div>
+                        </div>
+                        <div class="settings-action-row">
+                            <button type="button" class="btn-secondary">Export CSV</button>
+                            <button type="button" class="btn-secondary">Export JSON</button>
+                            <button type="button" class="btn-secondary">Backup database</button>
+                        </div>
+                        <div class="settings-data-note">142 MB · 7 years of trip and telemetry data · last backup Apr 28, 2026</div>
+                        <div class="settings-danger-zone">
+                            <strong>Danger zone</strong>
+                            <p>Permanently delete trip, charging, and telemetry data. This cannot be undone.</p>
+                            <button type="button" class="btn-secondary">Delete account</button>
+                        </div>
+                    </section>
+
+                    <section id="about" class="settings-card" aria-labelledby="about-title">
+                        <div class="settings-card-header">
+                            <div>
+                                <h2 id="about-title">About</h2>
+                                <p>Build and environment details.</p>
+                            </div>
+                        </div>
+                        <div class="settings-field-grid">
+                            <label class="settings-field">Version<input type="text" value="{{ app_version | default('unknown') }}" readonly></label>
+                            <label class="settings-field">API endpoint<input type="text" value="local receiver" readonly></label>
+                            <label class="settings-field">Last sync<input type="text" value="2 minutes ago" readonly></label>
+                            <label class="settings-field">Device<input type="text" value="Self-hosted VoltTracker" readonly></label>
+                        </div>
+                        <div class="settings-link-row">
+                            <a href="#">Release notes</a>
+                            <a href="#">Privacy policy</a>
+                            <a href="#">Terms</a>
+                            <a href="#">Open-source licenses</a>
+                        </div>
+                    </section>
+                </form>
+            </main>
+        </div>
+    </div>
 
     <script src="/static/js/toast.js"></script>
+    <script>
+      const form = document.getElementById('settings-form');
+      const statusEl = document.getElementById('settings-save-status');
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+      function setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+        document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+          button.classList.toggle('is-active', button.dataset.themeChoice === theme);
+        });
+      }
+
+      document.querySelector('[data-settings-theme-toggle]')?.addEventListener('click', () => {
+        const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        setTheme(next);
+      });
+
+      document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+        button.addEventListener('click', () => setTheme(button.dataset.themeChoice || 'dark'));
+      });
+
+      form?.addEventListener('input', () => {
+        statusEl.textContent = 'Unsaved changes';
+      });
+
+      form?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const data = new FormData(form);
+        const payload = {
+          electricity_cost_rate: data.get('electricity_cost_rate'),
+          gas_price: data.get('gas_price'),
+          battery_capacity: data.get('battery_capacity'),
+          distance_units: data.get('distance_units'),
+        };
+        statusEl.textContent = 'Saving...';
+        try {
+          const response = await fetch('/settings', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) throw new Error(`Save failed (${response.status})`);
+          statusEl.textContent = 'Saved';
+          window.showToast?.('Settings saved', 'success');
+        } catch (error) {
+          statusEl.textContent = 'Save failed';
+          window.showToast?.(error.message || 'Save failed', 'error');
+        }
+      });
+
+      setTheme(localStorage.getItem('theme') || document.documentElement.getAttribute('data-theme') || 'dark');
+    </script>
 </body>
 </html>

@@ -99,28 +99,67 @@ interface NavSection {
   nav: string;
 }
 
+const PAGE_TITLES: Record<string, string> = {
+  summary: 'Dashboard',
+  live: 'Live Drive',
+  trips: 'Trips',
+  map: 'GPS Map',
+  battery: 'Battery',
+  charging: 'Charging',
+  analysis: 'Insights',
+  settings: 'Settings',
+};
+
+function showRoutedSection(sectionId: string): HTMLElement | null {
+  const section = document.getElementById(sectionId);
+  if (sectionId === 'live-trip-section' && section) {
+    section.style.display = 'block';
+    section.dataset.routeVisible = 'true';
+    const statusPill = document.getElementById('live-status-pill');
+    if (statusPill) statusPill.textContent = 'Live';
+  }
+  return section;
+}
+
+function setRouteHash(href: string): void {
+  if (globalThis.location.hash === href) return;
+  globalThis.history.pushState(null, '', href);
+}
+
 /**
  * Initialize bottom navigation with scroll spy
  */
 export function initBottomNav(): void {
   const bottomNav = document.querySelector('.bottom-nav');
-  if (!bottomNav) return;
+  const appNav = document.querySelector('.app-nav');
+  if (!bottomNav && !appNav) return;
 
-  const navItems = bottomNav.querySelectorAll('.bottom-nav-item');
+  const navItems = document.querySelectorAll('.bottom-nav-item, .app-nav-item');
   const sections: NavSection[] = [
     { id: 'summary-section', nav: 'summary' },
+    { id: 'live-trip-section', nav: 'live' },
+    { id: 'battery-health-section', nav: 'battery' },
     { id: 'trips-section', nav: 'trips' },
-    { id: 'charging-section', nav: 'charging' },
     { id: 'soc-section', nav: 'analysis' },
+    { id: 'charging-section', nav: 'charging' },
   ];
 
   navItems.forEach((item) => {
     item.addEventListener('click', (e) => {
-      e.preventDefault();
       const anchor = item as HTMLAnchorElement;
-      const sectionId = anchor.getAttribute('href')?.substring(1);
+      const href = anchor.getAttribute('href') || '';
+      if (!href.startsWith('#')) return;
+
+      e.preventDefault();
+      const sectionId = href.substring(1);
       if (!sectionId) return;
-      const section = document.getElementById(sectionId);
+      setRouteHash(href);
+      let section = showRoutedSection(sectionId);
+      if (!section || section.offsetParent === null) {
+        section = sectionId === 'battery-health-section'
+          ? document.getElementById('soc-section')
+          : document.getElementById('summary-section');
+      }
       if (section) {
         const headerOffset = 80;
         const elementPosition = section.getBoundingClientRect().top;
@@ -131,6 +170,29 @@ export function initBottomNav(): void {
       }
     });
   });
+
+  const activateHash = (): void => {
+    const hash = globalThis.location.hash;
+    if (!hash) {
+      setActiveNavItem('summary');
+      return;
+    }
+    const sectionId = hash.substring(1);
+    const navItem = document.querySelector<HTMLElement>(
+      `.bottom-nav-item[href="${hash}"], .app-nav-item[href="${hash}"]`,
+    );
+    const section = showRoutedSection(sectionId);
+    if (navItem) setActiveNavItem(navItem.dataset.section || '');
+    if (section && section.offsetParent !== null) {
+      const headerOffset = 80;
+      const elementPosition = section.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + globalThis.pageYOffset - headerOffset;
+      globalThis.scrollTo({ top: offsetPosition, behavior: 'auto' });
+    }
+  };
+
+  activateHash();
+  globalThis.addEventListener('hashchange', activateHash);
 
   // Scroll handler registration is deferred to initScrollHandlers()
   _pendingNavSections = sections;
@@ -146,7 +208,7 @@ export function updateActiveNavOnScroll(sections: NavSection[]): void {
 
   for (let i = sections.length - 1; i >= 0; i--) {
     const section = document.getElementById(sections[i].id);
-    if (section && section.offsetTop <= scrollPosition) {
+    if (section && section.offsetParent !== null && section.offsetTop <= scrollPosition) {
       setActiveNavItem(sections[i].nav);
       break;
     }
@@ -157,7 +219,11 @@ export function updateActiveNavOnScroll(sections: NavSection[]): void {
  * Set active navigation item
  */
 export function setActiveNavItem(sectionName: string): void {
-  const navItems = document.querySelectorAll('.bottom-nav-item');
+  if (sectionName) {
+    document.body.dataset.activeSection = sectionName;
+  }
+
+  const navItems = document.querySelectorAll('.bottom-nav-item, .app-nav-item');
   navItems.forEach((item) => {
     const el = item as HTMLElement;
     if (el.dataset.section === sectionName) {
@@ -166,6 +232,11 @@ export function setActiveNavItem(sectionName: string): void {
       item.classList.remove('active');
     }
   });
+
+  const pageTitle = document.getElementById('page-title');
+  if (pageTitle && PAGE_TITLES[sectionName]) {
+    pageTitle.textContent = PAGE_TITLES[sectionName];
+  }
 }
 
 /**

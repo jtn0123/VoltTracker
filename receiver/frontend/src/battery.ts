@@ -11,13 +11,19 @@ import type { BatteryHealthResponse, BatteryCellsResponse, CellReading, SocAnaly
 /** Set text content of an element by ID if it exists. */
 function setText(id: string, text: string): void {
   const el = document.getElementById(id);
-  if (el) el.textContent = text;
+  if (el) {
+    if (el.dataset.demoValue === 'true' && text === '--') return;
+    el.textContent = text;
+  }
 }
 
 /** Set innerHTML of an element by ID if it exists. */
 function setHtml(id: string, html: string): void {
   const el = document.getElementById(id);
-  if (el) el.innerHTML = html;
+  if (el) {
+    if (el.dataset.demoValue === 'true' && html === '--') return;
+    el.innerHTML = html;
+  }
 }
 
 /** Get health bar CSS class based on percent. */
@@ -73,11 +79,16 @@ export async function loadBatteryHealth(): Promise<void> {
     const statusEl = document.getElementById('battery-health-status');
     if (statusEl && data.health_status) {
       statusEl.textContent = data.health_status.charAt(0).toUpperCase() + data.health_status.slice(1);
-      statusEl.className = `battery-health-status ${data.health_status}`;
+      statusEl.className = `battery-health-status settings-pill ${data.health_status}`;
+    }
+
+    const labelEl = document.getElementById('battery-health-label');
+    if (labelEl && data.health_status) {
+      labelEl.textContent = data.health_status.charAt(0).toUpperCase() + data.health_status.slice(1);
     }
 
     const barEl = document.getElementById('battery-health-bar');
-    if (barEl && data.health_percent) {
+    if (barEl && data.health_percent != null) {
       barEl.style.width = `${data.health_percent}%`;
       barEl.className = healthBarClass(data.health_percent);
     }

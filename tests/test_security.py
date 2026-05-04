@@ -16,7 +16,7 @@ class TestCSPHeader:
         assert response.status_code == 200
         csp = response.headers.get("Content-Security-Policy")
         assert csp is not None
-        assert "script-src 'self' cdn.jsdelivr.net cdn.socket.io unpkg.com" in csp
+        assert "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdn.socket.io unpkg.com" in csp
         assert "frame-ancestors 'none'" in csp
         assert "connect-src 'self' ws: wss:" in csp
 

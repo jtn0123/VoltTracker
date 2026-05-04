@@ -95,6 +95,7 @@ import './styles/live.css';
 import './styles/theme.css';
 import './styles/utilities.css';
 import './styles/skeleton.css';
+import './styles/v2-shell.css';
 
 // ── Critical (above-the-fold) imports ────────────────────────────────────────
 import { state, store } from '@/store';
