@@ -86,7 +86,7 @@ class TestGetRedisCache:
 
             # Reset global cache
             import utils.cache_utils
-            utils.cache_utils._redis_cache = None
+            utils.cache_utils._redis_cache = utils.cache_utils._UNINITIALIZED
 
             result = get_redis_cache()
 
@@ -102,7 +102,7 @@ class TestGetRedisCache:
             mock_instance.ping.return_value = True
 
             import utils.cache_utils
-            utils.cache_utils._redis_cache = None
+            utils.cache_utils._redis_cache = utils.cache_utils._UNINITIALIZED
 
             # First call
             result1 = get_redis_cache()
@@ -119,7 +119,7 @@ class TestGetRedisCache:
             mock_redis_class.from_url.side_effect = Exception("Connection failed")
 
             import utils.cache_utils
-            utils.cache_utils._redis_cache = None
+            utils.cache_utils._redis_cache = utils.cache_utils._UNINITIALIZED
 
             result = get_redis_cache()
 
@@ -133,7 +133,7 @@ class TestGetRedisCache:
             mock_instance.ping.side_effect = Exception("Ping failed")
 
             import utils.cache_utils
-            utils.cache_utils._redis_cache = None
+            utils.cache_utils._redis_cache = utils.cache_utils._UNINITIALIZED
 
             result = get_redis_cache()
 

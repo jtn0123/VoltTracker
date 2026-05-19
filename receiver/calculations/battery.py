@@ -87,6 +87,8 @@ def calculate_degradation_rate_per_10k_miles(
         >>> calculate_degradation_rate_per_10k_miles(-0.00001, 18.4)
         0.54
     """
+    if not nominal_capacity_kwh:
+        return 0.0
     degradation_kwh_per_10k = abs(slope_kwh_per_mile * 10000)
     degradation_percent_per_10k = (degradation_kwh_per_10k / nominal_capacity_kwh) * 100
     return round(degradation_percent_per_10k, 2)

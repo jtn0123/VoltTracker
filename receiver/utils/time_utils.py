@@ -143,11 +143,20 @@ def parse_date_range(
     """
     now = utc_now()
 
+    # A string is "date only" if it has no time component. A 10-digit
+    # Unix timestamp is also <= 10 chars but DOES carry a time, so a length
+    # check alone is wrong — check for an explicit time separator instead.
+    def _is_date_only(s: str) -> bool:
+        s = s.strip()
+        if s.isdigit():  # Unix timestamp carries a time component
+            return False
+        return len(s) <= 10 and "T" not in s and ":" not in s
+
     # Parse end date
     if end_str:
         end_date = parse_datetime(end_str, default=now)
         # Set to end of day if only date provided (no time)
-        if len(end_str) <= 10:  # Date only, no time component
+        if _is_date_only(end_str):
             end_date = end_date.replace(hour=23, minute=59, second=59)
     else:
         end_date = now
@@ -156,7 +165,7 @@ def parse_date_range(
     if start_str:
         start_date = parse_datetime(start_str, default=now - timedelta(days=default_days))
         # Set to start of day if only date provided
-        if len(start_str) <= 10:
+        if _is_date_only(start_str):
             start_date = start_date.replace(hour=0, minute=0, second=0)
     else:
         start_date = end_date - timedelta(days=default_days)

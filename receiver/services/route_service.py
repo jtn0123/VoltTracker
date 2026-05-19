@@ -155,9 +155,20 @@ def detect_routes(db: Session, min_trips: int = 3) -> List[Dict]:
 
     Simplified clustering: group trips with similar start/end points.
     """
-    # Get trips with GPS data
+    # Get trips with GPS data. Only closed trips with an end_time can be
+    # turned into routes — open trips have end_time=None and would crash the
+    # duration calculation in _create_new_route / _update_existing_route.
     trips = (
-        (db.query(Trip).filter(and_(Trip.distance_miles > 0.5, Trip.electric_miles > 0)))
+        (
+            db.query(Trip).filter(
+                and_(
+                    Trip.distance_miles > 0.5,
+                    Trip.electric_miles > 0,
+                    Trip.is_closed.is_(True),
+                    Trip.end_time.isnot(None),
+                )
+            )
+        )
         .order_by(Trip.start_time.desc())
         .limit(100)
         .all()

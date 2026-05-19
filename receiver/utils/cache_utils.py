@@ -20,8 +20,11 @@ from typing import Optional, Callable, List
 
 logger = logging.getLogger(__name__)
 
-# Global Redis connection (lazy-loaded)
-_redis_cache = None
+# Global Redis connection (lazy-loaded).
+# _UNINITIALIZED means "never tried"; None means "tried and failed" so we
+# don't re-attempt (and re-block on) a connection on every cache call.
+_UNINITIALIZED = object()
+_redis_cache = _UNINITIALIZED
 
 
 class _DateTimeEncoder(json.JSONEncoder):
@@ -53,21 +56,30 @@ def get_redis_cache():
     """
     global _redis_cache
 
-    if _redis_cache is None:
+    if _redis_cache is _UNINITIALIZED:
         try:
             from redis import Redis
             from config import Config
 
-            # Use cache DB (DB 0 by default)
+            # Use cache DB (DB 0 by default). Short socket timeouts ensure a
+            # missing/unreachable Redis fails fast instead of blocking the
+            # request thread for the OS default (~tens of seconds).
             redis_url = Config.REDIS_URL
-            _redis_cache = Redis.from_url(redis_url, decode_responses=False)
+            client = Redis.from_url(
+                redis_url,
+                decode_responses=False,
+                socket_connect_timeout=0.5,
+                socket_timeout=0.5,
+            )
 
             # Test connection
-            _redis_cache.ping()
+            client.ping()
+            _redis_cache = client
             logger.info(f"Connected to Redis for caching: {redis_url}")
 
         except Exception as e:
             logger.warning(f"Redis cache unavailable: {e}. Caching disabled.")
+            # Cache the failure so we don't retry (and re-block) every call.
             _redis_cache = None
 
     return _redis_cache
@@ -108,6 +120,50 @@ def generate_cache_key(prefix: str, *args, **kwargs) -> str:
     return f"{prefix}:{key_hash}"
 
 
+# Marker key used to tag a cached Flask response so it can be reconstructed.
+_FLASK_RESPONSE_MARKER = "__flask_response__"
+
+
+def _encode_for_cache(result):
+    """
+    Convert a function result into a JSON-serializable form.
+
+    Flask view functions commonly return a ``Response`` object or a
+    ``(body, status_code)`` tuple. A ``Response`` is not JSON-serializable,
+    so caching such a result would silently fail. Detect that shape and
+    store the decoded JSON body plus status code instead.
+    """
+    body, status = result, None
+    if isinstance(result, tuple) and len(result) == 2:
+        body, status = result
+
+    # Duck-type a Flask Response (avoid importing flask at module load).
+    if hasattr(body, "get_json") and hasattr(body, "status_code"):
+        try:
+            payload = body.get_json(silent=True)
+        except Exception:
+            payload = None
+        if payload is not None:
+            return {
+                _FLASK_RESPONSE_MARKER: True,
+                "payload": payload,
+                "status": status if status is not None else body.status_code,
+            }
+        # Non-JSON Response (e.g. file/XML export) - not cacheable here.
+        raise TypeError("Response body is not JSON; skipping cache")
+
+    return result
+
+
+def _decode_from_cache(cached):
+    """Reconstruct a function result from its cached representation."""
+    if isinstance(cached, dict) and cached.get(_FLASK_RESPONSE_MARKER):
+        from flask import jsonify
+
+        return jsonify(cached["payload"]), cached["status"]
+    return cached
+
+
 def _try_get_cached(redis, cache_key):
     """Try to retrieve a cached value from Redis."""
     cached_value = redis.get(cache_key)
@@ -116,7 +172,8 @@ def _try_get_cached(redis, cache_key):
         return None
     logger.debug(f"Cache hit: {cache_key}")
     try:
-        return json.loads(cached_value.decode("utf-8"), object_hook=_datetime_decoder)
+        decoded = json.loads(cached_value.decode("utf-8"), object_hook=_datetime_decoder)
+        return _decode_from_cache(decoded)
     except (UnicodeDecodeError, json.JSONDecodeError) as e:
         logger.warning(f"Corrupted cache entry {cache_key}: {e}. Deleting.")
         redis.delete(cache_key)
@@ -126,7 +183,8 @@ def _try_get_cached(redis, cache_key):
 def _try_store_cached(redis, cache_key, result, ttl, tags):
     """Try to store a value in Redis cache with optional tags."""
     try:
-        serialized = json.dumps(result, cls=_DateTimeEncoder).encode("utf-8")
+        encoded = _encode_for_cache(result)
+        serialized = json.dumps(encoded, cls=_DateTimeEncoder).encode("utf-8")
         redis.setex(cache_key, ttl, serialized)
 
         if tags:

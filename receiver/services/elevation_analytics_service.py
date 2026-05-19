@@ -220,8 +220,22 @@ def get_elevation_summary(db: Session) -> Dict[str, Any]:
         .first()
     )
 
-    # Trips with data
-    trips_with_elevation = db.query(func.count(Trip.id)).filter(and_(*filters)).scalar()
+    # Trips with data — count *all* closed trips that have elevation data,
+    # not just the efficiency-filtered subset used for `stats`. Using the
+    # base filter here would make the numerator and denominator of
+    # coverage_percent inconsistent (trips_without counts all closed trips
+    # lacking elevation, so trips_with_elevation must do the same).
+    trips_with_elevation = (
+        db.query(func.count(Trip.id))
+        .filter(
+            and_(
+                Trip.is_closed == True,  # noqa: E712
+                Trip.deleted_at.is_(None),
+                Trip.elevation_gain_m.isnot(None),
+            )
+        )
+        .scalar()
+    )
 
     trips_without = (
         db.query(func.count(Trip.id))

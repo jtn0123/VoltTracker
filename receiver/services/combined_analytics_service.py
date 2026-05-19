@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import String, and_, cast, extract, func, literal
+from sqlalchemy import and_, extract, func
 from sqlalchemy.orm import Session
 
 from models import Trip
@@ -178,39 +178,58 @@ def get_efficiency_time_series(
 
     filters = _get_base_filters(start_date, end_date)
 
-    # Build grouping based on period
+    # Build grouping based on period.
+    # For month/week grouping we group/order by the *numeric* year and
+    # period parts (not a concatenated string) so ordering is chronological.
+    # A string key like "2024-9" would sort lexically after "2024-11", and
+    # the period label is zero-padded in Python below.
     if group_by == "day":
         date_key = func.date(Trip.start_time)
+        group_cols = [date_key]
     elif group_by == "month":
-        # Use year and month for monthly grouping
         year_part = extract("year", Trip.start_time)
         month_part = extract("month", Trip.start_time)
-        date_key = cast(year_part, String) + literal("-") + cast(month_part, String)
+        group_cols = [year_part, month_part]
     else:  # week (default)
-        # Use year and week for weekly grouping
         year_part = extract("year", Trip.start_time)
         week_part = extract("week", Trip.start_time)
-        date_key = cast(year_part, String) + literal("-W") + cast(week_part, String)
+        group_cols = [year_part, week_part]
+
+    period_label = group_cols[0].label("period_a")
+    period_label_b = group_cols[1].label("period_b") if len(group_cols) > 1 else None
+
+    select_cols = [period_label]
+    if period_label_b is not None:
+        select_cols.append(period_label_b)
+    select_cols += [
+        func.avg(Trip.kwh_per_mile).label("avg_efficiency"),
+        func.count(Trip.id).label("trip_count"),
+        func.sum(Trip.electric_miles).label("total_miles"),
+        func.avg(Trip.weather_temp_f).label("avg_temp"),
+        func.avg(Trip.elevation_net_change_m).label("avg_elevation_change"),
+    ]
 
     results = (
-        db.query(
-            date_key.label("period"),
-            func.avg(Trip.kwh_per_mile).label("avg_efficiency"),
-            func.count(Trip.id).label("trip_count"),
-            func.sum(Trip.electric_miles).label("total_miles"),
-            func.avg(Trip.weather_temp_f).label("avg_temp"),
-            func.avg(Trip.elevation_net_change_m).label("avg_elevation_change"),
-        )
+        db.query(*select_cols)
         .filter(and_(*filters))
-        .group_by(date_key)
-        .order_by(date_key)
+        .group_by(*group_cols)
+        .order_by(*group_cols)
         .all()
     )
+
+    def _format_period(row):
+        if group_by == "day":
+            return str(row.period_a)
+        year = int(row.period_a)
+        part = int(row.period_b)
+        if group_by == "month":
+            return f"{year}-{part:02d}"
+        return f"{year}-W{part:02d}"
 
     time_series = []
     for row in results:
         time_series.append({
-            "period": str(row.period),
+            "period": _format_period(row),
             "avg_kwh_per_mile": round(row.avg_efficiency, 4) if row.avg_efficiency else None,
             "trip_count": row.trip_count,
             "total_miles": round(row.total_miles, 1) if row.total_miles else 0,

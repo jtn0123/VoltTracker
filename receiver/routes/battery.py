@@ -128,13 +128,17 @@ def get_battery_cell_readings():
     limit = request.args.get("limit", 10, type=int)
     days = request.args.get("days", type=int)
 
+    # Clamp limit to a valid range. A negative LIMIT raises an error on
+    # PostgreSQL, and a non-positive value is never useful here.
+    limit = max(1, min(limit, 100))
+
     query = db.query(BatteryCellReading).order_by(desc(BatteryCellReading.timestamp))
 
-    if days:
+    if days and days > 0:
         cutoff = utc_now() - timedelta(days=days)
         query = query.filter(BatteryCellReading.timestamp >= cutoff)
 
-    readings = query.limit(min(limit, 100)).all()
+    readings = query.limit(limit).all()
 
     return jsonify({"readings": [r.to_dict() for r in readings], "count": len(readings)})
 
@@ -267,6 +271,8 @@ def add_cell_reading():
 
     timestamp_str = data.get("timestamp")
     if timestamp_str:
+        if not isinstance(timestamp_str, str):
+            return jsonify({"error": "Invalid timestamp format"}), 400
         try:
             timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
         except ValueError:

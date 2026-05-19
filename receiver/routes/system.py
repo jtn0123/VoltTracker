@@ -97,13 +97,16 @@ def readiness_check():
     checks = {"database": False, "scheduler": False}
     errors = []
 
+    db = None
     try:
         db = SessionLocal()
         db.execute(text("SELECT 1"))
-        db.close()
         checks["database"] = True
     except Exception as e:
         errors.append(f"Database: {str(e)[:100]}")
+    finally:
+        if db is not None:
+            db.close()
 
     if os.environ.get("FLASK_TESTING"):
         checks["scheduler"] = True

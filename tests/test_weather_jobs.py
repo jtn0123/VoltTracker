@@ -11,7 +11,7 @@ JTN-453's ImportError.
 """
 
 from unittest.mock import patch
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 
 import jobs.weather_jobs as weather_jobs
@@ -311,11 +311,13 @@ class TestFetchElevationForTrip:
         db_session.add(trip)
         db_session.flush()
 
-        # Add telemetry with GPS coordinates
+        # Add telemetry with GPS coordinates. Stagger timestamps so they don't
+        # collide on the UNIQUE(session_id, timestamp) constraint.
+        base_time = datetime.now(timezone.utc)
         for i in range(5):
             telemetry = TelemetryRaw(
                 session_id=session_id,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=base_time + timedelta(seconds=i),
                 latitude=37.7749 + i * 0.001,
                 longitude=-122.4194 + i * 0.001,
                 speed_mph=45.0,

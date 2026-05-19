@@ -237,7 +237,7 @@ class TestClusterTripsByRoute:
     def test_cluster_single_trip(self, app, db_session):
         """Single trip should form single cluster"""
         from receiver.models import Trip, TelemetryRaw
-        from datetime import datetime, timezone
+        from datetime import datetime, timezone, timedelta
 
         session_id = uuid.uuid4()
         # Create trip with GPS data
@@ -249,11 +249,13 @@ class TestClusterTripsByRoute:
         )
         db_session.add(trip)
 
-        # Add GPS points
+        # Add GPS points. Stagger timestamps so they don't collide on the
+        # UNIQUE(session_id, timestamp) constraint on fast hardware.
+        base_time = datetime.now(timezone.utc)
         for i in range(5):
             telemetry = TelemetryRaw(
                 session_id=session_id,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=base_time + timedelta(seconds=i),
                 latitude=41.5 + i * 0.01,
                 longitude=-81.7 + i * 0.01
             )

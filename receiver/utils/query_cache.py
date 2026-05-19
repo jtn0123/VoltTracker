@@ -11,6 +11,7 @@ import logging
 from typing import Callable
 
 from utils.cache_utils import cache_result as redis_cache_result
+from utils.cache_utils import generate_cache_key
 from utils.cache_utils import invalidate_cache_pattern as _redis_invalidate_pattern
 from utils.cache_utils import get_cache_stats as _redis_cache_stats
 
@@ -18,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 # Re-export default TTL for backwards compatibility
 DEFAULT_TTL_SECONDS = 300
+
+
+def _is_db_session(obj) -> bool:
+    """Detect a SQLAlchemy Session (duck-typed to avoid a hard import)."""
+    return hasattr(obj, "query") and hasattr(obj, "commit") and hasattr(obj, "rollback")
 
 
 def cached_query(ttl: int = DEFAULT_TTL_SECONDS, key_prefix: str = ""):
@@ -35,7 +41,17 @@ def cached_query(ttl: int = DEFAULT_TTL_SECONDS, key_prefix: str = ""):
     def decorator(func: Callable) -> Callable:
         func_name = f"{key_prefix}:{func.__name__}" if key_prefix else func.__name__
 
-        @redis_cache_result(prefix=func_name, ttl=ttl, tags=[key_prefix] if key_prefix else None)
+        def _key_func(*args, **kwargs):
+            # A SQLAlchemy Session str() includes its memory address, which
+            # changes every call/process and would make the cache key
+            # non-deterministic (cache would never hit). Drop session args.
+            stable_args = tuple(a for a in args if not _is_db_session(a))
+            stable_kwargs = {k: v for k, v in kwargs.items() if not _is_db_session(v)}
+            return generate_cache_key(func_name, *stable_args, **stable_kwargs)
+
+        @redis_cache_result(
+            prefix=func_name, ttl=ttl, tags=[key_prefix] if key_prefix else None, key_func=_key_func
+        )
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)

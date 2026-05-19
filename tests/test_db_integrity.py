@@ -217,20 +217,32 @@ class TestCascadingDeletes:
         ).count()
         assert remaining == 1
 
-    def test_charging_session_start_time_unique(self, app, db_session):
-        """Charging sessions have unique start_time constraint."""
+    def test_charging_sessions_allow_duplicate_start_time(self, app, db_session):
+        """
+        Charging sessions may share an identical start_time.
+
+        start_time is intentionally NOT globally unique: telemetry timestamps
+        are second-precision and multi-vehicle deployments can have two
+        vehicles begin charging in the same second. Identity is the surrogate
+        primary key, not start_time.
+        """
         now = datetime.now(timezone.utc)
 
         s1 = ChargingSession(start_time=now, start_soc=20.0, is_complete=False)
-        db_session.add(s1)
-        db_session.commit()
-
         s2 = ChargingSession(start_time=now, start_soc=30.0, is_complete=False)
+        db_session.add(s1)
         db_session.add(s2)
 
-        with pytest.raises(IntegrityError):
-            db_session.commit()
-        db_session.rollback()
+        # Must not raise - both rows persist with distinct primary keys.
+        db_session.commit()
+
+        assert s1.id != s2.id
+        assert (
+            db_session.query(ChargingSession)
+            .filter(ChargingSession.start_time == now)
+            .count()
+            == 2
+        )
 
 
 class TestDataIntegrity:

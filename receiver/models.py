@@ -410,7 +410,11 @@ class ChargingSession(SerializableMixin, Base):
 
     __tablename__ = "charging_sessions"
     __table_args__ = (
-        UniqueConstraint('start_time', name='uq_charging_session_start_time'),
+        # NOTE: start_time is intentionally NOT globally unique. Distinct
+        # charging sessions can legitimately share an identical start_time:
+        # telemetry timestamps are second-precision, and multi-vehicle
+        # deployments (see session_id below) can have two vehicles begin
+        # charging in the same second. Identity is the surrogate primary key.
         Index('ix_charging_sessions_is_complete_start_time', 'is_complete', 'start_time'),
     )
 

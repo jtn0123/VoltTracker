@@ -47,7 +47,16 @@ def calculate_trip_basics(trip: Trip, telemetry: list) -> None:
         return
 
     trip.end_time = telemetry[-1].timestamp
-    trip.end_odometer = telemetry[-1].odometer_miles
+
+    # Use the last telemetry point that actually has an odometer reading.
+    # The final point can have a None odometer (sensor dropout at trip end),
+    # which would otherwise wipe out a valid end_odometer / distance.
+    end_odometer = next(
+        (t.odometer_miles for t in reversed(telemetry) if t.odometer_miles is not None),
+        None,
+    )
+    if end_odometer is not None:
+        trip.end_odometer = end_odometer
 
     if trip.start_odometer and trip.end_odometer:
         trip.distance_miles = trip.end_odometer - trip.start_odometer

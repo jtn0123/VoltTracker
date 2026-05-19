@@ -367,14 +367,14 @@ def _calculate_trip_stats(first: TelemetryRaw | None, latest: TelemetryRaw | Non
 
 def _opt_float(val):
     """Convert to float if not None, else None."""
-    return float(val) if val else None
+    return float(val) if val is not None else None
 
 
 def _build_telemetry_data(latest):
     """Build the 'data' dict for latest telemetry response."""
     engine_running = latest.engine_running
     if engine_running is None:
-        engine_running = latest.engine_rpm and latest.engine_rpm > Config.RPM_THRESHOLD
+        engine_running = bool(latest.engine_rpm is not None and latest.engine_rpm > Config.RPM_THRESHOLD)
     return {
         "timestamp": latest.timestamp.isoformat(),
         "soc": _opt_float(latest.state_of_charge),

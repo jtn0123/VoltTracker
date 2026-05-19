@@ -193,11 +193,10 @@ def _init_csrf_and_limiter(_app, cfg):
     _app.extensions["csrf"] = csrf
 
     limiter.init_app(_app)
-    if cfg.RATE_LIMIT_ENABLED:
-        limiter._default_limits = [  # type: ignore[attr-defined]
-            "200 per day", "50 per hour"
-        ]
-    limiter._enabled = cfg.RATE_LIMIT_ENABLED  # type: ignore[attr-defined]
+    # flask-limiter exposes the toggle as the public ``enabled`` attribute.
+    # The previous code assigned to ``limiter._enabled``, which is not a real
+    # attribute, so RATE_LIMIT_ENABLED=false silently failed to disable limiting.
+    limiter.enabled = cfg.RATE_LIMIT_ENABLED
     return csrf
 
 

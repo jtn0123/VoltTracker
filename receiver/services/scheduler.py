@@ -165,8 +165,15 @@ def check_refuel_events():
                         ),
                     )
                     db.add(fuel_event)
+                    # odometer_miles may be None (sensor dropout) — format safely
+                    # so a logging error can't roll back a valid refuel event.
+                    odo_str = (
+                        f"{fuel_event.odometer_miles:.1f} mi"
+                        if fuel_event.odometer_miles is not None
+                        else "unknown odometer"
+                    )
                     logger.info(
-                        f"Refuel detected: {fuel_event.gallons_added:.2f} gal at {fuel_event.odometer_miles:.1f} mi"
+                        f"Refuel detected: {fuel_event.gallons_added:.2f} gal at {odo_str}"
                     )
 
         db.commit()
@@ -217,7 +224,12 @@ def _handle_active_charging(db, recent, session_info):
     """Handle an active charging session: get/create session and update data."""
     active_session = _get_or_create_charging_session(db, recent, session_info)
     active_session.end_soc = session_info.get("current_soc")
-    active_session.peak_power_kw = session_info.get("peak_power_kw")
+    # peak_power_kw must be the running maximum across the whole session.
+    # session_info["peak_power_kw"] is only the peak of the last ~50-point
+    # window, so clobbering would lose an earlier (higher) peak.
+    new_peak = session_info.get("peak_power_kw")
+    if new_peak is not None and new_peak > (active_session.peak_power_kw or 0):
+        active_session.peak_power_kw = new_peak
     active_session.avg_power_kw = session_info.get("avg_power_kw")
     try:
         db.commit()
@@ -248,8 +260,11 @@ def check_charging_sessions():
                 _finalize_charging_session(db, active_session, reason="completed (no charger data)")
             return
 
-        # Convert to dicts for the detection function
-        points = [t.to_dict() for t in recent]
+        # Convert to dicts for the detection function.
+        # `recent` is ordered newest-first; detect_charging_session derives
+        # start_soc/current_soc from the first/last point and expects
+        # chronological (oldest-first) order, so reverse before passing.
+        points = [t.to_dict() for t in reversed(recent)]
         session_info = detect_charging_session(points)
 
         if session_info and session_info.get("is_charging"):

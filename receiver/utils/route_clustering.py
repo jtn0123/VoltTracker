@@ -76,12 +76,19 @@ def calculate_route_similarity(
     sampled1 = sample_route(route1_points, sample_size)
     sampled2 = sample_route(route2_points, sample_size)
 
-    # Calculate average distance between corresponding points
+    # Calculate average distance between corresponding points.
+    # zip() truncates to the shorter route, so divide by the number of
+    # compared pairs (not len(sampled1)) to keep the score symmetric.
     total_distance: float = 0
+    pair_count = 0
     for (lat1, lon1), (lat2, lon2) in zip(sampled1, sampled2):
         total_distance += haversine_distance(lat1, lon1, lat2, lon2)
+        pair_count += 1
 
-    avg_distance = total_distance / len(sampled1)
+    if pair_count == 0:
+        return 0.0
+
+    avg_distance = total_distance / pair_count
 
     # Convert distance to similarity score
     # Routes within 0.5 miles average distance = 90+ similarity

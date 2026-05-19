@@ -183,7 +183,11 @@ def _check_db_cache(db_session, lat_key, lon_key, timestamp_hour, latitude, long
         if not db_cache:
             return None
 
-        cache_age = utc_now() - db_cache.fetched_at
+        # fetched_at is a DateTime(timezone=True) column: Postgres returns it
+        # tz-aware while utc_now() is naive. Normalize both to naive UTC so the
+        # subtraction does not raise TypeError (which would silently disable
+        # the persistent weather cache).
+        cache_age = utc_now() - normalize_datetime(db_cache.fetched_at)
         if cache_age.total_seconds() >= Config.WEATHER_CACHE_TIMEOUT_SECONDS:
             db_session.delete(db_cache)
             db_session.commit()
@@ -435,13 +439,15 @@ def _parse_weather_response(data: Dict, timestamp: datetime) -> Optional[Dict[st
         return None
 
     weather_code = codes[idx] if idx < len(codes) else None
+    precip_value = precip[idx] if idx < len(precip) else None
 
     return {
         "temperature_f": temps[idx] if idx < len(temps) else None,
-        "precipitation_in": precip[idx] if idx < len(precip) else None,
+        "precipitation_in": precip_value,
         "wind_speed_mph": wind[idx] if idx < len(wind) else None,
         "weather_code": weather_code,
-        "is_raining": precip[idx] > 0 if idx < len(precip) else False,
+        # Open-Meteo can return null for missing hourly data; guard against None
+        "is_raining": precip_value is not None and precip_value > 0,
         "conditions": _weather_code_to_description(weather_code),
         "timestamp": timestamp.isoformat(),
     }

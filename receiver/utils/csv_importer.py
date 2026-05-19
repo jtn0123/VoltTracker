@@ -164,8 +164,10 @@ class TorqueCSVImporter:
         normalized_existing = set()
         for ts in existing_timestamps:
             if ts.tzinfo is not None:
-                # Convert to UTC then strip timezone
-                normalized_existing.add(ts.replace(tzinfo=None))
+                # Convert to UTC first, then strip timezone. Using replace()
+                # alone would keep the original wall-clock time and miss
+                # duplicates whose DB timestamp is in a non-UTC zone.
+                normalized_existing.add(ts.astimezone(timezone.utc).replace(tzinfo=None))
             else:
                 normalized_existing.add(ts)
 
@@ -177,9 +179,9 @@ class TorqueCSVImporter:
             if ts is None:
                 continue
 
-            # Normalize to naive datetime for comparison
+            # Normalize to naive UTC datetime for comparison
             if ts.tzinfo is not None:
-                ts_key = ts.replace(tzinfo=None)
+                ts_key = ts.astimezone(timezone.utc).replace(tzinfo=None)
             else:
                 ts_key = ts
 

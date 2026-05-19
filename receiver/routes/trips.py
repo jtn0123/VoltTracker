@@ -44,7 +44,9 @@ def _apply_date_filters(query):
         if date_range:
             start_dt, end_dt = date_range
             query = query.filter(Trip.start_time >= start_dt, Trip.start_time <= end_dt)
-        return query
+            return query
+        # Invalid shortcut: fall through to explicit start_date/end_date handling
+        # instead of silently dropping any other date filters.
 
     start_date = request.args.get("start_date")
     end_date = request.args.get("end_date")
@@ -330,6 +332,8 @@ def restore_trip(trip_id: int):
         trip.deleted_at = None
         db.commit()
 
+        invalidate_query_cache("trip")
+        invalidate_query_cache("stats")
         logger.info(f"Restored trip {trip_id}")
         return jsonify({"message": f"Trip {trip_id} restored successfully"})
     except Exception as e:
@@ -576,14 +580,19 @@ def get_mpg_trend():
         Trip.is_closed.is_(True),
     ]
 
-    if start_date_param:
-        from datetime import datetime as dt
-        filters.append(Trip.start_time >= dt.fromisoformat(start_date_param))
-        if end_date_param:
-            end_dt = dt.fromisoformat(
-                end_date_param + "T23:59:59" if "T" not in end_date_param else end_date_param
-            )
-            filters.append(Trip.start_time <= end_dt)
+    from datetime import datetime as dt
+    if start_date_param or end_date_param:
+        # Explicit date range; either bound may be supplied independently.
+        try:
+            if start_date_param:
+                filters.append(Trip.start_time >= dt.fromisoformat(start_date_param))
+            if end_date_param:
+                end_dt = dt.fromisoformat(
+                    end_date_param + "T23:59:59" if "T" not in end_date_param else end_date_param
+                )
+                filters.append(Trip.start_time <= end_dt)
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use ISO 8601 (YYYY-MM-DD)."}), 400
     elif days > 0:
         filters.append(Trip.start_time >= utc_now() - timedelta(days=days))
     # days <= 0 means "all time" — no date filter

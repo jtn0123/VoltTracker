@@ -37,7 +37,15 @@ torque_params = st.fixed_dictionaries(
 )
 
 
-@settings(max_examples=50, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
+# deadline=None: /torque/upload performs real DB writes (trip query + insert +
+# context enrichment), plus one-time connection init on the first example.
+# Hypothesis's 200ms default deadline is unrealistic for a write endpoint and
+# produces spurious DeadlineExceeded failures unrelated to correctness.
+@settings(
+    max_examples=50,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
+)
 @given(params=torque_params)
 def test_torque_upload_fuzz(client, params):
     """Torque upload endpoint should never crash with any query params."""

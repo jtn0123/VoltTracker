@@ -48,15 +48,24 @@ def _trip_csv_row(trip):
 
 
 def _parse_date_filter(param_name):
-    """Parse a date query param, returning (datetime, None) or (None, error_response)."""
+    """Parse a date query param, returning (datetime, None) or (None, error_response).
+
+    A date-only ``end_date`` (no time component) is expanded to the end of that
+    day so the requested day is included in ``start_time <= end_date`` filters;
+    otherwise it would resolve to midnight and exclude the entire end day.
+    """
     from datetime import datetime as dt
     value = request.args.get(param_name)
     if not value:
         return None, None
     try:
-        return dt.fromisoformat(value.replace("Z", _UTC_SUFFIX)), None
+        parsed = dt.fromisoformat(value.replace("Z", _UTC_SUFFIX))
     except ValueError:
         return None, (jsonify({"error": f"Invalid {param_name} format. Use ISO 8601 format."}), 400)
+    # Date-only end_date -> include the whole day.
+    if param_name == "end_date" and len(value) <= 10:
+        parsed = parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+    return parsed, None
 
 
 def _build_trip_export_query(db):
@@ -205,7 +214,8 @@ def export_all():
     start_date = request.args.get("start_date")
     end_date = request.args.get("end_date")
     try:
-        limit_val = min(int(request.args.get("limit", 10000)), 50000)
+        # Clamp to [1, 50000]; a negative LIMIT raises an error in PostgreSQL.
+        limit_val = max(1, min(int(request.args.get("limit", 10000)), 50000))
     except (ValueError, TypeError):
         limit_val = 10000
 

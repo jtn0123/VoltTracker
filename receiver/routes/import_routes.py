@@ -329,7 +329,8 @@ def get_import_history():
     db = get_db()
 
     try:
-        limit = min(int(request.args.get("limit", 20)), 100)
+        # Clamp to [1, 100]; a negative LIMIT raises an error in PostgreSQL.
+        limit = max(1, min(int(request.args.get("limit", 20)), 100))
     except (ValueError, TypeError):
         limit = 20
     status_filter = request.args.get("status")

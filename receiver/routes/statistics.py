@@ -312,14 +312,15 @@ def get_detailed_stats():
     if metric in ["distance", "all"]:
         distance_values = [t.distance_miles for t in trips if t.distance_miles]
         if distance_values:
-            distance_ci = calculate_confidence_interval(distance_values) if include_ci else None
-
-            # Convert to metric if needed
+            # Convert to metric *before* computing stats so the confidence
+            # interval is in the same unit as total/mean/median.
             if units == "metric":
                 distance_values = [d * 1.60934 for d in distance_values]
                 unit_label = "km"
             else:
                 unit_label = "miles"
+
+            distance_ci = calculate_confidence_interval(distance_values) if include_ci else None
 
             result["distance_analysis"] = {
                 "trip_count": len(distance_values),

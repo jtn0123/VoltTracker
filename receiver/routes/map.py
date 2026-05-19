@@ -709,13 +709,26 @@ def export_trip_as_kml(trip_id: int):
     )
 
 
+def _format_gpx_time(dt) -> str:
+    """Format a datetime as a GPX-compliant UTC timestamp (ISO 8601 with 'Z').
+
+    GPX requires UTC times suffixed with 'Z' and no numeric offset. The
+    telemetry timestamps are tz-aware (DateTime(timezone=True)), so naively
+    appending 'Z' to ``isoformat()`` would yield an invalid '...+00:00Z'.
+    """
+    from datetime import timezone
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc)
+    return dt.replace(tzinfo=None).isoformat() + "Z"
+
+
 def _build_gpx_trackpoint(t) -> List[str]:
     """Build GPX XML lines for a single trackpoint."""
     lines = [f'      <trkpt lat="{t.latitude}" lon="{t.longitude}">']
     if t.elevation_meters is not None:
         lines.append(f'        <ele>{t.elevation_meters:.1f}</ele>')
     if t.timestamp:
-        lines.append(f'        <time>{t.timestamp.isoformat()}Z</time>')
+        lines.append(f'        <time>{_format_gpx_time(t.timestamp)}</time>')
     lines.append('        <extensions>')
     if t.speed_mph is not None:
         lines.append(f'          <speed>{t.speed_mph * 0.44704:.2f}</speed>')
@@ -760,7 +773,7 @@ def generate_gpx(trip: Trip, telemetry: List[TelemetryRaw]) -> str:
         gpx.append(f', MPG: {trip.gas_mpg:.1f}')
 
     gpx.append('</desc>')
-    gpx.append(f'    <time>{trip.start_time.isoformat()}Z</time>')
+    gpx.append(f'    <time>{_format_gpx_time(trip.start_time)}</time>')
     gpx.append('  </metadata>')
 
     # Track segment

@@ -146,7 +146,9 @@ def analyze_soc_floor(transitions: List[dict]) -> dict:
             "temperature_correlation": None,
         }
 
-    soc_values = [t["soc_at_transition"] for t in transitions if t.get("soc_at_transition")]
+    # Use "is not None" — a SOC of exactly 0% is a valid (and important)
+    # battery-floor data point and must not be filtered out as falsy.
+    soc_values = [t["soc_at_transition"] for t in transitions if t.get("soc_at_transition") is not None]
 
     if not soc_values:
         return {

@@ -170,11 +170,13 @@ class TestMapDataEndpoint:
         )
         db_session.add(trip1)
 
-        # Add GPS points
+        # Add GPS points. Stagger timestamps to avoid colliding on the
+        # UNIQUE(session_id, timestamp) constraint.
+        base_time_1 = datetime.now(timezone.utc)
         for i in range(3):
             telemetry = TelemetryRaw(
                 session_id=session_id_1,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=base_time_1 + timedelta(seconds=i),
                 latitude=41.5 + i * 0.01,
                 longitude=-81.7 + i * 0.01
             )
@@ -190,10 +192,11 @@ class TestMapDataEndpoint:
         )
         db_session.add(trip2)
 
+        base_time_2 = datetime.now(timezone.utc)
         for i in range(3):
             telemetry = TelemetryRaw(
                 session_id=session_id_2,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=base_time_2 + timedelta(seconds=i),
                 latitude=41.6 + i * 0.01,
                 longitude=-81.8 + i * 0.01
             )
@@ -255,11 +258,13 @@ class TestMapDataEndpoint:
             )
             db_session.add(trip)
 
-            # Add minimal GPS data
+            # Add minimal GPS data. Stagger timestamps to avoid colliding on
+            # the UNIQUE(session_id, timestamp) constraint.
+            base_time = datetime.now(timezone.utc)
             for j in range(2):
                 telemetry = TelemetryRaw(
                     session_id=session_id,
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=base_time + timedelta(seconds=j),
                     latitude=41.5 + j * 0.01,
                     longitude=-81.7 + j * 0.01
                 )

@@ -198,9 +198,16 @@ class TorqueParser:
         time_str = form_data.get("time", "")
         if time_str:
             try:
-                # Torque sends time in milliseconds since epoch
+                # Torque sends time in milliseconds since epoch.
+                # Produce a naive UTC datetime to stay consistent with the
+                # utc_now() fallback below (and the rest of the codebase,
+                # which standardizes on naive UTC via utils.timezone).
+                # A mismatch here causes "can't subtract offset-naive and
+                # offset-aware datetimes" errors downstream.
                 timestamp_ms = int(time_str)
-                result["timestamp"] = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
+                result["timestamp"] = datetime.fromtimestamp(
+                    timestamp_ms / 1000, tz=timezone.utc
+                ).replace(tzinfo=None)
             except (ValueError, TypeError):
                 result["timestamp"] = utc_now()
         else:

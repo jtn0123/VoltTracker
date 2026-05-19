@@ -79,7 +79,12 @@ def save_settings():
         return jsonify({"error": "Content-Type must be application/json"}), 415
 
     db = get_db()
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    # A JSON content type does not guarantee a JSON object body: an empty,
+    # `null`, or non-object body makes get_json() return None / a scalar,
+    # which would crash the `key in data` membership test below.
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
 
     saved = {}
     for key, meta in SETTING_DEFAULTS.items():

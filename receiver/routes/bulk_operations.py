@@ -69,9 +69,13 @@ def bulk_delete_trips():
         deleted_count = len(trips)
 
         if permanent:
-            # Permanent delete - remove from database
-            # First delete associated data
+            # Permanent delete - remove from database.
+            # Derive the id/session lists from the *fetched* (non-deleted)
+            # trips, not the raw request input: deleting trips/soc_transitions
+            # by raw trip_ids would purge already-soft-deleted trips while
+            # leaving their telemetry (deleted by session_id) orphaned.
             session_ids = [t.session_id for t in trips]
+            target_trip_ids = [t.id for t in trips]
 
             # Delete telemetry
             telemetry_deleted = db.query(TelemetryRaw).filter(
@@ -80,11 +84,11 @@ def bulk_delete_trips():
 
             # Delete soc_transitions
             db.query(SocTransition).filter(
-                SocTransition.trip_id.in_(trip_ids)
+                SocTransition.trip_id.in_(target_trip_ids)
             ).delete(synchronize_session=False)
 
             # Delete trips
-            db.query(Trip).filter(Trip.id.in_(trip_ids)).delete(synchronize_session=False)
+            db.query(Trip).filter(Trip.id.in_(target_trip_ids)).delete(synchronize_session=False)
 
             db.commit()
 
@@ -279,10 +283,11 @@ def bulk_export_trips():
         return jsonify({"error": "Maximum 10000 trips per export"}), 400
 
     try:
-        # Fetch selected trips
+        # Fetch selected trips (exclude soft-deleted trips)
         trips = db.query(Trip).filter(
             Trip.id.in_(trip_ids),
-            Trip.is_closed.is_(True)
+            Trip.is_closed.is_(True),
+            Trip.deleted_at.is_(None)
         ).order_by(Trip.start_time.desc()).all()
 
         if not trips:
@@ -358,10 +363,11 @@ def bulk_trip_stats():
         return jsonify({"error": _ERR_TRIP_IDS_NONEMPTY}), 400
 
     try:
-        # Fetch selected trips
+        # Fetch selected trips (exclude soft-deleted trips)
         trips = db.query(Trip).filter(
             Trip.id.in_(trip_ids),
-            Trip.is_closed.is_(True)
+            Trip.is_closed.is_(True),
+            Trip.deleted_at.is_(None)
         ).all()
 
         if not trips:

@@ -319,16 +319,18 @@ class TestBatteryDegradationEdgeCases:
     """Edge case tests for battery_degradation_service.py."""
 
     def test_linear_regression_identical_x_values(self, app, db_session):
-        """All odometer readings identical (vertical line) causes division by zero."""
+        """All odometer readings identical (vertical line) is handled gracefully."""
         from services.battery_degradation_service import simple_linear_regression
 
-        # All same x value causes division by zero - this is an edge case
-        # that should be handled in production code but documents current behavior
+        # All same x value would make the regression denominator zero. The
+        # function must NOT raise ZeroDivisionError; with no mileage trend it
+        # reports zero slope and the mean capacity as the intercept.
         data = [(50000, 18.4), (50000, 18.3), (50000, 18.2)]
 
-        # This currently raises ZeroDivisionError - documents the edge case
-        with pytest.raises(ZeroDivisionError):
-            simple_linear_regression(data)
+        slope, intercept = simple_linear_regression(data)
+
+        assert slope == 0
+        assert intercept == pytest.approx((18.4 + 18.3 + 18.2) / 3)
 
     def test_linear_regression_single_point(self, app, db_session):
         """Only one data point."""

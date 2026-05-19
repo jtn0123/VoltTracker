@@ -203,11 +203,17 @@ class WideEvent:
             self.context["performance_breakdown"][f"{operation_name}_ms"] = round(duration_ms, 2)
 
     def set_duration(self) -> "WideEvent":
-        """Calculate and set the duration of the operation."""
-        if "start_time" in self.context:
+        """Calculate and set the duration of the operation.
+
+        If ``duration_ms`` was already set explicitly by the caller (e.g.
+        a measured value passed to ``log_telemetry_upload``), it is kept
+        and not overwritten by the wall-clock time since event creation.
+        """
+        if "duration_ms" not in self.context and "start_time" in self.context:
             duration_ms = (time.time() - self.context["start_time"]) * 1000
             self.context["duration_ms"] = round(duration_ms, 2)
-            del self.context["start_time"]  # Remove start_time from final log
+        # Remove start_time from final log regardless
+        self.context.pop("start_time", None)
         return self
 
     def should_emit(self, sample_rate: float = 0.05, slow_threshold_ms: float = 1000) -> bool:

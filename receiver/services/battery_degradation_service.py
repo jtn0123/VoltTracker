@@ -100,7 +100,12 @@ def simple_linear_regression(data: List[Tuple[float, float]]) -> Tuple[float, fl
     sum_xx = sum(x * x for x, y in data)
 
     # Calculate slope and intercept
-    slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x)
+    denominator = n * sum_xx - sum_x * sum_x
+    if denominator == 0:
+        # All x values are identical (e.g. multiple readings at the same
+        # odometer) — no mileage trend, treat as no degradation.
+        return (0, sum_y / n)
+    slope = (n * sum_xy - sum_x * sum_y) / denominator
     intercept = (sum_y - slope * sum_x) / n
 
     return (slope, intercept)
