@@ -26,6 +26,7 @@ Follow-up answers:
 - The short charge test used a Level 2 Tesla charger.
 - The foreground notification stayed visible as persistent/running/connected to OBDLink during the minimized-background leg.
 - VIN should be treated as private by default.
+- The impossible `255 km/h` frames likely occurred during the short charging portion.
 
 ## Pulled Data Summary
 
@@ -77,13 +78,14 @@ Rough timeline from logs:
 
 ## Important Bug Found: 255 km/h Speed Spikes
 
-The log contains several `010D: 410DFF` responses before real driving. PID `010D` directly encodes vehicle speed in km/h, so `FF` means 255 km/h. This is not plausible for the test and should be treated as an invalid/stale/unavailable value for this car state.
+The log contains several `010D: 410DFF` responses before real driving. PID `010D` directly encodes vehicle speed in km/h, so `FF` means 255 km/h. This is not plausible for the test and should be treated as an invalid/stale/unavailable value for this car state. Justin later noted these frames likely happened during the short Level 2 charging portion, so this may be a useful charge-transition signature rather than random adapter noise.
 
 Action:
 
 - Filter `010D == 255` out of live UI and storage-derived analytics.
 - Keep the raw frame in logs for debugging.
 - Add plausibility filtering: reject speed jumps that are physically impossible over one sample interval.
+- When charge-specific PIDs are added, compare plugged/charge-state responses against these `410DFF` windows.
 
 ## Unit Notes
 
@@ -137,7 +139,7 @@ Before the next car pass, install a build with:
 - Was the car plugged into Level 1 or Level 2 during the short charge test? Answer: Level 2 Tesla charger.
 - Did Android ask for location permission at any point? It should not have yet, which confirms GPS was not active.
 - During the minimized/background leg, did the notification remain visible the whole time? Answer: yes, persistent/running/connected to OBDLink was visible.
-- Was the impossible `255 km/h` segment before you actually moved, likely during accessory/charging/on transition?
+- Was the impossible `255 km/h` segment before you actually moved, likely during accessory/charging/on transition? Answer: likely during charging.
 - Do you want VIN stored in the local DB by default, or treated as private and only shown/exported when explicitly enabled? Answer: likely private.
 
 ## References
