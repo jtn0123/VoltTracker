@@ -8,7 +8,10 @@ final class ObdProtocol {
 
     static Integer parseSpeedKph(String response) {
         int[] bytes = mode01Bytes(response, "0D", 1);
-        return bytes == null ? null : bytes[0];
+        if (bytes == null || bytes[0] == 0xFF) {
+            return null;
+        }
+        return bytes[0];
     }
 
     static Float parseRpm(String response) {

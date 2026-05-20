@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 
 final class VoltTrackerDb extends SQLiteOpenHelper {
     static final String DATABASE_NAME = "volttracker_obd_poc.db";
-    static final int DATABASE_VERSION = 1;
+    static final int DATABASE_VERSION = 2;
 
     static final String TABLE_SESSIONS = "obd_sessions";
     static final String TABLE_TELEMETRY = "telemetry_samples";
@@ -54,6 +54,12 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                 + "soc REAL,"
                 + "battery_temp REAL,"
                 + "power_kw REAL,"
+                + "latitude REAL,"
+                + "longitude REAL,"
+                + "accuracy_m REAL,"
+                + "gps_speed_mps REAL,"
+                + "bearing_deg REAL,"
+                + "location_age_ms INTEGER,"
                 + "sample_number INTEGER,"
                 + "session_ms INTEGER,"
                 + "raw TEXT,"
@@ -102,7 +108,13 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        throw new IllegalStateException("No VoltTracker DB migrations exist from "
-                + oldVersion + " to " + newVersion);
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN latitude REAL");
+            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN longitude REAL");
+            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN accuracy_m REAL");
+            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN gps_speed_mps REAL");
+            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN bearing_deg REAL");
+            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN location_age_ms INTEGER");
+        }
     }
 }

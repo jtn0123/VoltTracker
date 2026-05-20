@@ -14,7 +14,12 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.IBinder;
 
 import org.json.JSONException;
@@ -53,6 +58,11 @@ public class ObdService extends Service {
     private static final String[] PROTOCOL_PROBES = {"ATSP0", "ATSP6", "ATSP7", "ATSP8"};
     private static final String[] CAPABILITY_PROBES = {"0100", "0120", "0140", "0160"};
     private static final String[] LIVE_PROBES = {"ATRV", "010D", "010C", "0105", "0104", "0111", "0142", "011F", "012F", "015C"};
+    private static final String[] VOLT_7E4_PROBES = {"2243AF1", "228334", "2241A31", "2234B2", "0902"};
+    private static final String[] VOLT_7E7_CELL_SAMPLE_PROBES = {
+            "2241811", "2241821", "2241831", "2241841",
+            "2241981", "2241B01", "2241C81", "2241F01", "2242401"
+    };
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor();
@@ -64,6 +74,8 @@ public class ObdService extends Service {
     private OutputStream output;
     private BufferedWriter sessionLog;
     private File sessionLogFile;
+    private LocationManager locationManager;
+    private volatile Location lastLocation;
     private String activeName = "OBD adapter";
     private long sessionStartedAtMs;
     private int sampleCount;
@@ -73,6 +85,31 @@ public class ObdService extends Service {
     private String activeAddress = "";
     private String lastSessionState = "";
     private String lastSessionDetail = "";
+    private Integer lastAcceptedSpeedKph;
+    private long lastAcceptedSpeedAtMs;
+    private final LocationListener locationListener = new LocationListener() {
+        @Override
+        public void onLocationChanged(Location location) {
+            if (location != null) {
+                lastLocation = location;
+            }
+        }
+
+        @Override
+        public void onProviderDisabled(String provider) {
+            logEvent("gps_provider_disabled", "provider", provider);
+        }
+
+        @Override
+        public void onProviderEnabled(String provider) {
+            logEvent("gps_provider_enabled", "provider", provider);
+        }
+
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+            // Deprecated but still required by older Android API levels.
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -92,7 +129,7 @@ public class ObdService extends Service {
         }
         if (ACTION_DEMO.equals(action)) {
             activeName = "Demo stream";
-            startForeground(NOTIFICATION_ID, buildNotification("Running demo telemetry"));
+            startForegroundSession("Running demo telemetry");
             startDemoSession();
             return START_STICKY;
         }
@@ -102,7 +139,7 @@ public class ObdService extends Service {
             if (activeName == null || activeName.trim().isEmpty()) {
                 activeName = "OBD adapter";
             }
-            startForeground(NOTIFICATION_ID, buildNotification("Connecting to " + activeName));
+            startForegroundSession("Connecting to " + activeName);
             startBluetoothSession(address);
             return START_STICKY;
         }
@@ -112,7 +149,7 @@ public class ObdService extends Service {
             if (activeName == null || activeName.trim().isEmpty()) {
                 activeName = "OBD adapter";
             }
-            startForeground(NOTIFICATION_ID, buildNotification("Scanning " + activeName));
+            startForegroundSession("Scanning " + activeName);
             startScanSession(address);
             return START_STICKY;
         }
@@ -153,8 +190,11 @@ public class ObdService extends Service {
         stopCurrentSession(null);
         sessionStartedAtMs = System.currentTimeMillis();
         sampleCount = 0;
+        lastAcceptedSpeedKph = null;
+        lastAcceptedSpeedAtMs = 0L;
         supportedPidsSummary = "";
         openSessionLog(scanMode ? "scan" : "obd", address);
+        startLocationCapture();
         running.set(true);
         activeTask = executor.submit(() -> runBluetoothLoop(address, scanMode));
     }
@@ -167,6 +207,52 @@ public class ObdService extends Service {
         openSessionLog("demo", null);
         running.set(true);
         activeTask = executor.submit(this::runDemoLoop);
+    }
+
+    @SuppressLint("MissingPermission")
+    private void startLocationCapture() {
+        lastLocation = null;
+        if (!hasLocationPermission()) {
+            logEvent("gps_skipped", "reason", "missing_location_permission");
+            return;
+        }
+        locationManager = getSystemService(LocationManager.class);
+        if (locationManager == null) {
+            logEvent("gps_skipped", "reason", "no_location_manager");
+            return;
+        }
+        try {
+            Location gps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            Location network = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+            lastLocation = newestLocation(gps, network);
+            locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    1000L,
+                    1.5f,
+                    locationListener
+            );
+            locationManager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    5000L,
+                    10f,
+                    locationListener
+            );
+            logEvent("gps_started");
+        } catch (IllegalArgumentException | SecurityException ex) {
+            logEvent("gps_start_failed", "message", safeMessage(ex));
+        }
+    }
+
+    private void stopLocationCapture() {
+        if (locationManager == null) {
+            return;
+        }
+        try {
+            locationManager.removeUpdates(locationListener);
+            logEvent("gps_stopped");
+        } catch (SecurityException ignored) {
+        }
+        locationManager = null;
     }
 
     @SuppressLint("MissingPermission")
@@ -319,12 +405,25 @@ public class ObdService extends Service {
             probeCommand(probe, 3200, raw);
         }
 
+        appendProbeLine(raw, "volt-discovery", "ATSH7E4 pack/state probes");
+        probeCommand("ATSH7E4", 1800, raw);
+        for (String probe : VOLT_7E4_PROBES) {
+            probeCommand(probe, 4200, raw);
+        }
+        appendProbeLine(raw, "volt-discovery", "ATSH7E7 sample cell probes");
+        probeCommand("ATSH7E7", 1800, raw);
+        for (String probe : VOLT_7E7_CELL_SAMPLE_PROBES) {
+            probeCommand(probe, 4200, raw);
+        }
+        probeCommand("ATSH7DF", 1800, raw);
+
         JSONObject sample = new JSONObject();
         try {
             sample.put("source", "scan");
             sample.put("connected", true);
             sample.put("adapter", activeName);
             sample.put("updatedAt", System.currentTimeMillis());
+            appendLocation(sample);
             sample.put("raw", tail(raw.toString(), 7200));
         } catch (JSONException ignored) {
             // Local values are safe.
@@ -348,8 +447,13 @@ public class ObdService extends Service {
             String speedRaw = sendRecoverableCommand("010D", 1500);
             raw = appendRaw(raw, "010D", speedRaw);
             Integer speed = ObdProtocol.parseSpeedKph(speedRaw);
-            if (speed != null) {
+            Integer acceptedSpeed = null;
+            if (speed != null && isPlausibleSpeed(speed)) {
                 sample.put("speedKph", speed);
+                acceptedSpeed = speed;
+            } else if (speed != null) {
+                sample.put("speedRejectedKph", speed);
+                logEvent("speed_rejected", "speedKph", String.valueOf(speed));
             }
 
             String rpmRaw = sendRecoverableCommand("010C", 1500);
@@ -387,14 +491,35 @@ public class ObdService extends Service {
             sample.put("sampleCount", sampleCount);
             sample.put("sessionMs", Math.max(0, System.currentTimeMillis() - sessionStartedAtMs));
             sample.put("supportedPids", supportedPidsSummary);
-            sample.put("vehicleState", classifyVehicleState(voltage, speed, rpm, load));
+            sample.put("vehicleState", classifyVehicleState(voltage, acceptedSpeed, rpm, load));
             sample.put("updatedAt", System.currentTimeMillis());
+            appendLocation(sample);
             sample.put("raw", raw.trim());
         } catch (IOException | JSONException ex) {
             logError("polling_error", ex);
             broadcastStatus("error", "OBD polling error: " + safeMessage(ex), true);
         }
         return sample;
+    }
+
+    private void appendLocation(JSONObject sample) throws JSONException {
+        Location location = lastLocation;
+        if (location == null) {
+            return;
+        }
+        sample.put("latitude", round6(location.getLatitude()));
+        sample.put("longitude", round6(location.getLongitude()));
+        if (location.hasAccuracy()) {
+            sample.put("accuracyM", round1(location.getAccuracy()));
+        }
+        if (location.hasSpeed()) {
+            sample.put("gpsSpeedMps", round1(location.getSpeed()));
+        }
+        if (location.hasBearing()) {
+            sample.put("bearingDeg", round1(location.getBearing()));
+        }
+        sample.put("locationProvider", location.getProvider());
+        sample.put("locationAgeMs", Math.max(0L, System.currentTimeMillis() - location.getTime()));
     }
 
     private String probeCommand(String command, long timeoutMs, StringBuilder raw) throws IOException {
@@ -478,6 +603,7 @@ public class ObdService extends Service {
             activeTask.cancel(true);
             activeTask = null;
         }
+        stopLocationCapture();
         closeSocket();
         if (statusMessage != null) {
             broadcastStatus("idle", statusMessage, false);
@@ -519,6 +645,11 @@ public class ObdService extends Service {
                 || checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED;
     }
 
+    private boolean hasLocationPermission() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
     private void broadcastTelemetry(JSONObject payload) {
         logJson("telemetry", payload);
         persistTelemetry(payload);
@@ -551,6 +682,19 @@ public class ObdService extends Service {
         intent.setPackage(getPackageName());
         intent.putExtra(EXTRA_JSON, payload.toString());
         sendBroadcast(intent);
+    }
+
+    private void startForegroundSession(String text) {
+        Notification notification = buildNotification(text);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            int serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
+            if (hasLocationPermission()) {
+                serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
+            }
+            startForeground(NOTIFICATION_ID, notification, serviceType);
+            return;
+        }
+        startForeground(NOTIFICATION_ID, notification);
     }
 
     private Notification buildNotification(String text) {
@@ -798,6 +942,16 @@ public class ObdService extends Service {
         return value.substring(value.length() - maxLength);
     }
 
+    private static Location newestLocation(Location first, Location second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        return first.getTime() >= second.getTime() ? first : second;
+    }
+
     private static String classifyVehicleState(Float voltage, Integer speed, Float rpm, Integer load) {
         boolean stationary = speed == null || speed == 0;
         boolean engineOff = rpm == null || rpm < 80;
@@ -813,6 +967,26 @@ public class ObdService extends Service {
             return stationary ? "engine-idle" : "driving-gas";
         }
         return "driving-ev";
+    }
+
+    private boolean isPlausibleSpeed(int speedKph) {
+        long now = System.currentTimeMillis();
+        if (speedKph < 0 || speedKph >= 255) {
+            return false;
+        }
+        if (lastAcceptedSpeedKph == null || lastAcceptedSpeedAtMs <= 0L) {
+            lastAcceptedSpeedKph = speedKph;
+            lastAcceptedSpeedAtMs = now;
+            return true;
+        }
+        double elapsedSeconds = Math.max(0.5, (now - lastAcceptedSpeedAtMs) / 1000.0);
+        double jumpPerSecond = Math.abs(speedKph - lastAcceptedSpeedKph) / elapsedSeconds;
+        if (jumpPerSecond > 45.0) {
+            return false;
+        }
+        lastAcceptedSpeedKph = speedKph;
+        lastAcceptedSpeedAtMs = now;
+        return true;
     }
 
     private static String friendlyConnectionMessage(Exception ex) {
@@ -836,6 +1010,10 @@ public class ObdService extends Service {
 
     private static double round1(double value) {
         return Math.round(value * 10.0) / 10.0;
+    }
+
+    private static double round6(double value) {
+        return Math.round(value * 1000000.0) / 1000000.0;
     }
 
     private static void sleep(long millis) {

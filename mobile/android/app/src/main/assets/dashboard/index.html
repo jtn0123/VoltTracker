@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Volt Tracker OBD</title>
 <style>
   :root {
@@ -985,6 +985,11 @@
           <strong id="throttleValue">--</strong>
           <small>mode 01 11</small>
         </article>
+        <article class="panel mini">
+          <div class="kicker">GPS</div>
+          <strong id="gpsValue">--</strong>
+          <small id="gpsDetail">location trace</small>
+        </article>
       </div>
     </section>
 
@@ -1711,12 +1716,17 @@
     const kph = Number(t.speedKph);
     const mph = Number.isFinite(kph) ? Math.round(kph * 0.621371) : null;
     setText("speedValue", mph);
-    setText("speedKph", Number.isFinite(kph) ? `${Math.round(kph)} km/h` : "-- km/h");
+    setText("speedKph", Number.isFinite(kph) ? `raw ${Math.round(kph)} km/h` : "-- km/h");
     setText("rpmValue", t.rpm ? `${t.rpm}` : "--");
     setText("voltageValue", t.voltage ? `${Number(t.voltage).toFixed(1)}V` : "--");
     setText("coolantValue", t.coolantC != null ? `${t.coolantC} deg C` : "--");
     setText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
     setText("throttleValue", t.throttlePct != null ? `${t.throttlePct}%` : "--");
+    const lat = Number(t.latitude);
+    const lon = Number(t.longitude);
+    const acc = Number(t.accuracyM);
+    setText("gpsValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
+    setText("gpsDetail", Number.isFinite(acc) ? `${Math.round(acc)}m accuracy` : "location trace");
     setText("updatedValue", t.updatedAt ? "now" : "waiting");
     setText("rawFrames", t.raw || "Waiting for telemetry...");
     const soc = t.soc == null || t.soc === "" ? NaN : Number(t.soc);

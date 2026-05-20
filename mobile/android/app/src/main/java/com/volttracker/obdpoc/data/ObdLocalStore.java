@@ -93,6 +93,12 @@ public final class ObdLocalStore implements Closeable {
             putOptionalDouble(values, "soc", safeSample, "soc");
             putOptionalDouble(values, "battery_temp", safeSample, "batteryTemp");
             putOptionalDouble(values, "power_kw", safeSample, "powerKw");
+            putOptionalDouble(values, "latitude", safeSample, "latitude");
+            putOptionalDouble(values, "longitude", safeSample, "longitude");
+            putOptionalDouble(values, "accuracy_m", safeSample, "accuracyM");
+            putOptionalDouble(values, "gps_speed_mps", safeSample, "gpsSpeedMps");
+            putOptionalDouble(values, "bearing_deg", safeSample, "bearingDeg");
+            putOptionalLong(values, "location_age_ms", safeSample, "locationAgeMs");
             putOptionalInt(values, "sample_number", safeSample, "sampleCount");
             putOptionalLong(values, "session_ms", safeSample, "sessionMs");
             values.put("raw", clean(safeSample.optString("raw", "")));
