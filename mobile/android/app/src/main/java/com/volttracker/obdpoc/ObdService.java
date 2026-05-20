@@ -524,7 +524,7 @@ public class ObdService extends Service {
 
     private String probeCommand(String command, long timeoutMs, StringBuilder raw) throws IOException {
         String response = sendRecoverableCommand(command, timeoutMs);
-        appendProbeLine(raw, command, ObdProtocol.summarize(response));
+        appendProbeLine(raw, command, summarizeForStorage(command, response));
         return response;
     }
 
@@ -806,7 +806,7 @@ public class ObdService extends Service {
             payload.put("command", command);
             payload.put("timeoutMs", timeoutMs);
             payload.put("durationMs", durationMs);
-            payload.put("response", ObdProtocol.summarize(response));
+            payload.put("response", summarizeForStorage(command, response));
             payload.put("gotPrompt", response != null && response.indexOf('>') >= 0);
             payload.put("empty", response == null || ObdProtocol.summarize(response).isEmpty());
         } catch (JSONException ignored) {
@@ -928,7 +928,22 @@ public class ObdService extends Service {
     }
 
     private static String appendRaw(String raw, String command, String response) {
-        return raw + command + ": " + ObdProtocol.summarize(response) + "\n";
+        return raw + command + ": " + summarizeForStorage(command, response) + "\n";
+    }
+
+    private static String summarizeForStorage(String command, String response) {
+        String summary = ObdProtocol.summarize(response);
+        if (!isVinCommand(command)) {
+            return summary;
+        }
+        if (summary.isEmpty()) {
+            return "";
+        }
+        return "[VIN redacted; responseLength=" + summary.length() + "]";
+    }
+
+    private static boolean isVinCommand(String command) {
+        return command != null && "0902".equals(command.trim().toUpperCase(Locale.US));
     }
 
     private static void appendProbeLine(StringBuilder raw, String label, String value) {

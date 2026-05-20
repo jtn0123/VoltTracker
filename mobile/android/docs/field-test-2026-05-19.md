@@ -21,6 +21,12 @@ Reported sequence:
 9. Observed speed trace shown during charging, but not kW/charging metrics.
 10. Observed unit confusion: dash was mph, app showed km/h in some output.
 
+Follow-up answers:
+
+- The short charge test used a Level 2 Tesla charger.
+- The foreground notification stayed visible as persistent/running/connected to OBDLink during the minimized-background leg.
+- VIN should be treated as private by default.
+
 ## Pulled Data Summary
 
 The latest field session contains a useful amount of basic OBD data:
@@ -113,6 +119,8 @@ Initial Voltage-derived targets to test in scan mode:
 
 Because the source is GPL-licensed, use it as a reference for PID discovery and formulas, not as copied app code.
 
+Privacy decision: future scan logs should confirm whether `0902` responds, but redact the VIN payload by default unless explicit export/show behavior is added.
+
 ## Next Validation Build
 
 Before the next car pass, install a build with:
@@ -126,11 +134,11 @@ Before the next car pass, install a build with:
 
 ## Questions For Justin
 
-- Was the car plugged into Level 1 or Level 2 during the short charge test?
+- Was the car plugged into Level 1 or Level 2 during the short charge test? Answer: Level 2 Tesla charger.
 - Did Android ask for location permission at any point? It should not have yet, which confirms GPS was not active.
-- During the minimized/background leg, did the notification remain visible the whole time?
+- During the minimized/background leg, did the notification remain visible the whole time? Answer: yes, persistent/running/connected to OBDLink was visible.
 - Was the impossible `255 km/h` segment before you actually moved, likely during accessory/charging/on transition?
-- Do you want VIN stored in the local DB by default, or treated as private and only shown/exported when explicitly enabled?
+- Do you want VIN stored in the local DB by default, or treated as private and only shown/exported when explicitly enabled? Answer: likely private.
 
 ## References
 
