@@ -45,6 +45,9 @@ public class MainActivity extends Activity {
     private boolean pageReady;
     private SharedPreferences prefs;
     private ObdLocalStore localStore;
+    private JSONObject lastTelemetry = new JSONObject();
+    private JSONObject lastStatus = new JSONObject();
+    private JSONObject lastStorage = new JSONObject();
 
     private final BroadcastReceiver obdReceiver = new BroadcastReceiver() {
         @Override
@@ -55,10 +58,14 @@ public class MainActivity extends Activity {
                 json = "{}";
             }
             if (ObdService.BROADCAST_TELEMETRY.equals(action)) {
+                lastTelemetry = parseJson(json);
                 callDashboard("window.VoltTrackerNative.updateTelemetry(" + JSONObject.quote(json) + ")");
+                publishAppState();
             } else if (ObdService.BROADCAST_STATUS.equals(action)) {
+                lastStatus = parseJson(json);
                 callDashboard("window.VoltTrackerNative.setStatus(" + JSONObject.quote(json) + ")");
                 publishStorageSummary();
+                publishAppState();
             }
         }
     };
@@ -95,6 +102,7 @@ public class MainActivity extends Activity {
                 pageReady = true;
                 publishDeviceList();
                 publishStorageSummary();
+                publishAppState();
                 publishStatus("ready", "Pick a paired OBD adapter or run demo mode.", false);
             }
         });
@@ -118,6 +126,7 @@ public class MainActivity extends Activity {
         }
         publishDeviceList();
         publishStorageSummary();
+        publishAppState();
     }
 
     @Override
@@ -292,11 +301,23 @@ public class MainActivity extends Activity {
             // Values are local literals.
         }
         callDashboard("window.VoltTrackerNative.setStatus(" + JSONObject.quote(payload.toString()) + ")");
+        lastStatus = payload;
+        publishAppState();
     }
 
     private boolean isBluetoothReady() {
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
         return adapter != null && adapter.isEnabled() && hasBluetoothConnectPermission();
+    }
+
+    private boolean hasLocationPermission() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean hasNotificationPermission() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
     }
 
     @SuppressLint("MissingPermission")
@@ -479,7 +500,9 @@ public class MainActivity extends Activity {
     }
 
     private void publishStorageSummary() {
-        callDashboard("window.VoltTrackerNative.setStorage(" + JSONObject.quote(getStorageSummaryJson()) + ")");
+        String storage = getStorageSummaryJson();
+        lastStorage = parseJson(storage);
+        callDashboard("window.VoltTrackerNative.setStorage(" + JSONObject.quote(storage) + ")");
     }
 
     private String getStorageSummaryJson() {
@@ -490,6 +513,109 @@ public class MainActivity extends Activity {
             return localStore.getStorageSummary().toString();
         } catch (RuntimeException ex) {
             return "{}";
+        }
+    }
+
+    private void publishAppState() {
+        callDashboard("window.VoltTrackerNative.setAppState(" + JSONObject.quote(getAppStateJson()) + ")");
+    }
+
+    private String getAppStateJson() {
+        JSONObject payload = new JSONObject();
+        try {
+            JSONObject app = new JSONObject();
+            app.put("version", appVersionName());
+            app.put("schemaVersion", 2);
+            payload.put("app", app);
+
+            JSONObject permissions = new JSONObject();
+            permissions.put("bluetooth", isBluetoothReady());
+            permissions.put("location", hasLocationPermission());
+            permissions.put("notifications", hasNotificationPermission());
+            payload.put("permissions", permissions);
+
+            JSONObject adapter = new JSONObject();
+            String lastAddress = prefs.getString(PREF_LAST_ADDRESS, "");
+            String lastName = prefs.getString(PREF_LAST_NAME, "");
+            adapter.put("name", coalesce(lastTelemetry.optString("adapter", ""), lastStatus.optString("adapter", ""), lastName));
+            adapter.put("address", redactAddress(lastAddress));
+            adapter.put("remembered", lastAddress != null && !lastAddress.trim().isEmpty());
+            adapter.put("connected", isConnectedState(lastStatus.optString("state", "")));
+            payload.put("adapter", adapter);
+
+            JSONObject session = new JSONObject();
+            session.put("mode", lastTelemetry.optString("source", ""));
+            session.put("state", lastStatus.optString("state", "idle"));
+            session.put("detail", lastStatus.optString("detail", ""));
+            session.put("sampleCount", lastTelemetry.optInt("sampleCount", 0));
+            session.put("sessionMs", lastTelemetry.optLong("sessionMs", 0L));
+            payload.put("session", session);
+
+            JSONObject vehicle = new JSONObject();
+            vehicle.put("state", lastTelemetry.optString("vehicleState", "unknown"));
+            vehicle.put("confidence", lastTelemetry.has("vehicleState") ? "observed" : "unknown");
+            vehicle.put("vinStored", false);
+            payload.put("vehicle", vehicle);
+
+            JSONObject gps = new JSONObject();
+            boolean hasLocation = lastTelemetry.has("latitude") && lastTelemetry.has("longitude");
+            gps.put("state", hasLocation ? "locked" : (hasLocationPermission() ? "waiting" : "blocked"));
+            if (lastTelemetry.has("accuracyM")) {
+                gps.put("accuracyM", lastTelemetry.optDouble("accuracyM"));
+            }
+            if (lastTelemetry.has("locationAgeMs")) {
+                gps.put("ageMs", lastTelemetry.optLong("locationAgeMs"));
+            }
+            payload.put("gps", gps);
+
+            payload.put("latestTelemetry", lastTelemetry);
+            payload.put("storage", lastStorage);
+        } catch (JSONException ignored) {
+            // Local state values are safe.
+        }
+        return payload.toString();
+    }
+
+    private static JSONObject parseJson(String json) {
+        try {
+            return json == null || json.trim().isEmpty() ? new JSONObject() : new JSONObject(json);
+        } catch (JSONException ex) {
+            return new JSONObject();
+        }
+    }
+
+    private static boolean isConnectedState(String state) {
+        String clean = state == null ? "" : state.toLowerCase(Locale.US);
+        return clean.equals("connected")
+                || clean.equals("connecting")
+                || clean.equals("initializing")
+                || clean.equals("scanning")
+                || clean.equals("scan-complete")
+                || clean.equals("demo");
+    }
+
+    private static String coalesce(String first, String second, String third) {
+        if (first != null && !first.trim().isEmpty()) {
+            return first;
+        }
+        if (second != null && !second.trim().isEmpty()) {
+            return second;
+        }
+        return third == null ? "" : third;
+    }
+
+    private static String redactAddress(String address) {
+        if (address == null || address.length() < 5) {
+            return "";
+        }
+        return "..." + address.substring(address.length() - 5);
+    }
+
+    private String appVersionName() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (PackageManager.NameNotFoundException ex) {
+            return "";
         }
     }
 

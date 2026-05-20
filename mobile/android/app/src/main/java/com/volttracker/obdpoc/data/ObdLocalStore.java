@@ -126,6 +126,144 @@ public final class ObdLocalStore implements Closeable {
         }
     }
 
+    public long recordPidObservation(long sessionId, JSONObject observation) {
+        JSONObject safeObservation = observation == null ? new JSONObject() : observation;
+        long observedAtMs = optTimestamp(safeObservation, "observedAtMs",
+                optTimestamp(safeObservation, "observedAt", safeObservation.optLong("updatedAt", System.currentTimeMillis())));
+        return recordPidObservation(sessionId, safeObservation, observedAtMs);
+    }
+
+    public long recordPidObservation(long sessionId, JSONObject observation, long observedAtMs) {
+        JSONObject safeObservation = observation == null ? new JSONObject() : observation;
+        SQLiteDatabase db = helper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            ContentValues values = new ContentValues();
+            values.put("session_id", sessionId);
+            values.put("observed_at_ms", observedAtMs);
+            values.put("command", clean(safeObservation.optString("command", "")));
+            values.put("header", clean(safeObservation.optString("header", "")));
+            values.put("pid", clean(safeObservation.optString("pid", "")));
+            values.put("name", clean(safeObservation.optString("name", "")));
+            values.put("value_text", clean(safeObservation.optString("valueText",
+                    safeObservation.optString("value", ""))));
+            putOptionalDouble(values, "value_numeric", safeObservation, "valueNumeric", "value");
+            values.put("unit", clean(safeObservation.optString("unit", "")));
+            values.put("raw_request", clean(safeObservation.optString("rawRequest",
+                    safeObservation.optString("request", ""))));
+            values.put("raw_response", clean(safeObservation.optString("rawResponse",
+                    safeObservation.optString("raw", ""))));
+            values.put("json", safeObservation.toString());
+
+            long id = db.insertOrThrow(VoltTrackerDb.TABLE_PID_OBSERVATIONS, null, values);
+            updateSessionLastEvent(db, sessionId, observedAtMs);
+            db.setTransactionSuccessful();
+            return id;
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    public long recordPidObservation(
+            long sessionId,
+            long observedAtMs,
+            String command,
+            String header,
+            String pid,
+            String name,
+            String valueText,
+            Double valueNumeric,
+            String unit,
+            String rawRequest,
+            String rawResponse
+    ) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("observedAtMs", observedAtMs);
+            payload.put("command", clean(command));
+            payload.put("header", clean(header));
+            payload.put("pid", clean(pid));
+            payload.put("name", clean(name));
+            payload.put("valueText", clean(valueText));
+            if (valueNumeric != null) {
+                payload.put("valueNumeric", valueNumeric.doubleValue());
+            }
+            payload.put("unit", clean(unit));
+            payload.put("rawRequest", clean(rawRequest));
+            payload.put("rawResponse", clean(rawResponse));
+        } catch (JSONException ignored) {
+            // Local numeric/string values are safe.
+        }
+        return recordPidObservation(sessionId, payload, observedAtMs);
+    }
+
+    public long recordLocationSample(long sessionId, JSONObject sample) {
+        JSONObject safeSample = sample == null ? new JSONObject() : sample;
+        long capturedAtMs = optTimestamp(safeSample, "capturedAtMs",
+                optTimestamp(safeSample, "timestampMs", safeSample.optLong("updatedAt", System.currentTimeMillis())));
+        return recordLocationSample(sessionId, safeSample, capturedAtMs);
+    }
+
+    public long recordLocationSample(long sessionId, JSONObject sample, long capturedAtMs) {
+        JSONObject safeSample = sample == null ? new JSONObject() : sample;
+        SQLiteDatabase db = helper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            ContentValues values = new ContentValues();
+            values.put("session_id", sessionId);
+            values.put("captured_at_ms", capturedAtMs);
+            values.put("provider", clean(safeSample.optString("provider",
+                    safeSample.optString("locationProvider", ""))));
+            values.put("latitude", safeSample.optDouble("latitude", 0d));
+            values.put("longitude", safeSample.optDouble("longitude", 0d));
+            putOptionalDouble(values, "accuracy_m", safeSample, "accuracyM");
+            putOptionalDouble(values, "altitude_m", safeSample, "altitudeM");
+            putOptionalDouble(values, "speed_mps", safeSample, "speedMps", "gpsSpeedMps");
+            putOptionalDouble(values, "bearing_deg", safeSample, "bearingDeg");
+            putOptionalLong(values, "location_age_ms", safeSample, "locationAgeMs");
+            putOptionalLong(values, "elapsed_realtime_nanos", safeSample, "elapsedRealtimeNanos");
+            values.put("json", safeSample.toString());
+
+            long id = db.insertOrThrow(VoltTrackerDb.TABLE_LOCATION_SAMPLES, null, values);
+            updateSessionLastEvent(db, sessionId, capturedAtMs);
+            db.setTransactionSuccessful();
+            return id;
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    public long recordLocationSample(
+            long sessionId,
+            long capturedAtMs,
+            String provider,
+            double latitude,
+            double longitude,
+            Double accuracyM,
+            Double altitudeM,
+            Double speedMps,
+            Double bearingDeg,
+            Long locationAgeMs,
+            Long elapsedRealtimeNanos
+    ) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("capturedAtMs", capturedAtMs);
+            payload.put("provider", clean(provider));
+            payload.put("latitude", latitude);
+            payload.put("longitude", longitude);
+            putNullable(payload, "accuracyM", accuracyM);
+            putNullable(payload, "altitudeM", altitudeM);
+            putNullable(payload, "speedMps", speedMps);
+            putNullable(payload, "bearingDeg", bearingDeg);
+            putNullable(payload, "locationAgeMs", locationAgeMs);
+            putNullable(payload, "elapsedRealtimeNanos", elapsedRealtimeNanos);
+        } catch (JSONException ignored) {
+            // Local numeric/string values are safe.
+        }
+        return recordLocationSample(sessionId, payload, capturedAtMs);
+    }
+
     public long recordStatus(long sessionId, String state, String detail, boolean blocked, JSONObject payload) {
         return recordEvent(sessionId, "status", state, detail, blocked, payload);
     }
@@ -310,6 +448,8 @@ public final class ObdLocalStore implements Closeable {
             payload.put("sampleCount", countRows(db, VoltTrackerDb.TABLE_TELEMETRY));
             payload.put("eventCount", countRows(db, VoltTrackerDb.TABLE_EVENTS));
             payload.put("adapterCount", countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY));
+            payload.put("pidObservationCount", countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS));
+            payload.put("locationSampleCount", countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES));
             ObdSessionRecord latest = firstOrNull(getRecentSessions(1));
             if (latest != null) {
                 payload.put("lastSessionId", latest.id);
@@ -382,6 +522,8 @@ public final class ObdLocalStore implements Closeable {
         SQLiteDatabase db = helper.getWritableDatabase();
         db.beginTransaction();
         try {
+            db.delete(VoltTrackerDb.TABLE_LOCATION_SAMPLES, null, null);
+            db.delete(VoltTrackerDb.TABLE_PID_OBSERVATIONS, null, null);
             db.delete(VoltTrackerDb.TABLE_EVENTS, null, null);
             db.delete(VoltTrackerDb.TABLE_TELEMETRY, null, null);
             db.delete(VoltTrackerDb.TABLE_SESSIONS, null, null);
@@ -503,6 +645,36 @@ public final class ObdLocalStore implements Closeable {
         }
     }
 
+    private static void putOptionalDouble(
+            ContentValues values,
+            String column,
+            JSONObject json,
+            String primaryKey,
+            String fallbackKey
+    ) {
+        if (json.has(primaryKey) && !json.isNull(primaryKey)) {
+            values.put(column, json.optDouble(primaryKey));
+        } else if (json.has(fallbackKey) && !json.isNull(fallbackKey)) {
+            values.put(column, json.optDouble(fallbackKey));
+        }
+    }
+
+    private static void putNullable(JSONObject json, String key, Double value) throws JSONException {
+        if (value != null) {
+            json.put(key, value.doubleValue());
+        }
+    }
+
+    private static void putNullable(JSONObject json, String key, Long value) throws JSONException {
+        if (value != null) {
+            json.put(key, value.longValue());
+        }
+    }
+
+    private static long optTimestamp(JSONObject json, String key, long fallback) {
+        return json.has(key) && !json.isNull(key) ? json.optLong(key, fallback) : fallback;
+    }
+
     private static int nullableInt(Cursor cursor, String column) {
         int index = cursor.getColumnIndexOrThrow(column);
         return cursor.isNull(index) ? 0 : cursor.getInt(index);
@@ -576,6 +748,16 @@ public final class ObdLocalStore implements Closeable {
         try (Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + table, null)) {
             return cursor.moveToFirst() ? cursor.getLong(0) : 0L;
         }
+    }
+
+    private static void updateSessionLastEvent(SQLiteDatabase db, long sessionId, long occurredAtMs) {
+        if (sessionId <= 0) {
+            return;
+        }
+        ContentValues values = new ContentValues();
+        values.put("last_event_at_ms", occurredAtMs);
+        db.update(VoltTrackerDb.TABLE_SESSIONS, values, "_id = ?",
+                new String[]{String.valueOf(sessionId)});
     }
 
     private static <T> T firstOrNull(List<T> items) {

@@ -220,6 +220,73 @@
     padding: 13px;
   }
 
+  .connection-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .connection-head strong {
+    display: block;
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 17px;
+  }
+
+  .connection-head small {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .primary-action {
+    min-width: 112px;
+    min-height: 52px;
+  }
+
+  .primary-action.is-stop {
+    border-color: rgba(255,107,95,0.3);
+    background: rgba(255,107,95,0.12);
+    color: #ffc0bb;
+  }
+
+  .state-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+    margin-top: 10px;
+  }
+
+  .state-grid div {
+    min-width: 0;
+    padding: 9px 8px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(0,0,0,0.14);
+  }
+
+  .state-grid span {
+    display: block;
+    color: var(--soft);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+  }
+
+  .state-grid strong {
+    display: block;
+    margin-top: 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+
   .control-row {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -237,6 +304,16 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
     margin-top: 9px;
+  }
+
+  .secondary-tools {
+    margin-top: 10px;
+  }
+
+  .secondary-tools summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 13px;
   }
 
   .primary {
@@ -889,6 +966,9 @@
   @media (max-width: 390px) {
     .mobile-controls { grid-template-columns: 1fr; }
     .ratio-card { grid-template-columns: 1fr; }
+    .state-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .connection-head { grid-template-columns: 1fr; }
+    .primary-action { width: 100%; }
     .ring { margin-inline: auto; }
   }
 </style>
@@ -903,7 +983,7 @@
       </div>
       <div id="stateBadge" class="badge" data-state="idle"><span class="dot"></span><span id="stateText">idle</span></div>
     </div>
-    <div class="mobile-controls">
+    <div class="mobile-controls demo-only" hidden>
       <div class="mode-toggle" aria-label="Propulsion state">
         <button type="button" data-mode="ev" class="is-active">EV</button>
         <button type="button" data-mode="gas">GAS</button>
@@ -922,19 +1002,34 @@
 
   <section id="view-drive" class="view is-active" data-view="drive">
     <article class="panel connect-card">
-      <div class="kicker">Adapter</div>
+      <div class="connection-head">
+        <div>
+          <div class="kicker">Adapter</div>
+          <strong id="adapterSummary">No adapter selected</strong>
+          <small id="appStateSummary">Pick a paired OBD adapter or run demo mode.</small>
+        </div>
+        <button id="connectBtn" type="button" class="primary primary-action">Connect</button>
+      </div>
+      <div class="state-grid" aria-label="Live app state">
+        <div><span>Logging</span><strong id="loggingState">idle</strong></div>
+        <div><span>GPS</span><strong id="gpsState">waiting</strong></div>
+        <div><span>DB</span><strong id="dbState">ready</strong></div>
+        <div><span>Source</span><strong id="dataSourceState">real</strong></div>
+      </div>
       <div class="control-row">
         <select id="deviceSelect"><option value="">No paired adapters found</option></select>
         <button id="refreshBtn" type="button">Refresh</button>
       </div>
-      <div class="button-grid">
-        <button id="permissionBtn" type="button">Permissions</button>
-        <button id="lastBtn" type="button">Last</button>
-        <button id="scanBtn" type="button" class="scan">Scan</button>
-        <button id="connectBtn" type="button" class="primary">Connect</button>
-        <button id="demoBtn" type="button" class="demo">Demo</button>
-        <button id="disconnectBtn" type="button" class="danger">Stop</button>
-      </div>
+      <details class="secondary-tools">
+        <summary>Tools and diagnostics</summary>
+        <div class="button-grid">
+          <button id="permissionBtn" type="button">Permissions</button>
+          <button id="lastBtn" type="button">Last</button>
+          <button id="scanBtn" type="button" class="scan">Scan</button>
+          <button id="demoBtn" type="button" class="demo">Demo</button>
+          <button id="disconnectBtn" type="button" class="danger">Stop</button>
+        </div>
+      </details>
       <p id="statusCopy" class="status-copy">Pick a paired OBD adapter or run demo mode.</p>
       <div id="demoBanner" class="demo-banner" hidden>
         <span>
@@ -1264,6 +1359,8 @@
         <div><span>Sessions</span><strong id="dbSessionCount">0</strong></div>
         <div><span>Samples</span><strong id="dbSampleCount">0</strong></div>
         <div><span>Events</span><strong id="dbEventCount">0</strong></div>
+        <div><span>PIDs</span><strong id="dbPidCount">0</strong></div>
+        <div><span>GPS</span><strong id="dbLocationCount">0</strong></div>
         <div><span>Size</span><strong id="dbSize">0 B</strong></div>
       </div>
       <div id="dbSessionList" style="margin-top:12px"></div>
@@ -1292,7 +1389,7 @@
   <button type="button" data-nav="trips"><i>T</i><span>Trips</span></button>
   <button type="button" data-nav="charge"><i>C</i><span>Charge</span></button>
   <button type="button" data-nav="insights"><i>I</i><span>Insights</span></button>
-  <button type="button" data-nav="settings"><i>S</i><span>Settings</span></button>
+  <button type="button" data-nav="settings"><i>D</i><span>Diag</span></button>
 </nav>
 
 <script>
@@ -1332,6 +1429,7 @@
     lastDevice: null,
     deviceHistory: [],
     storage: {},
+    appState: {},
     demoActive: false,
     status: {},
     speedHistory: [],
@@ -1356,7 +1454,7 @@
     trips: ["April - 10 trips - 480 mi", "Trips"],
     charge: ["Charging - 30 days", "Charge"],
     insights: ["Pack and efficiency", "Insights"],
-    settings: ["OBD bridge", "Settings"]
+    settings: ["OBD bridge", "Diagnostics"]
   };
 
   function parsePayload(payload, fallback) {
@@ -1594,10 +1692,15 @@
     const sessions = Number(storage.sessionCount || 0);
     const samples = Number(storage.sampleCount || 0);
     const events = Number(storage.eventCount || 0);
+    const pidRows = Number(storage.pidObservationCount || 0);
+    const locationRows = Number(storage.locationSampleCount || 0);
     setText("dbSessionCount", sessions);
     setText("dbSampleCount", samples);
     setText("dbEventCount", events);
+    setText("dbPidCount", pidRows);
+    setText("dbLocationCount", locationRows);
     setText("dbSize", formatBytes(Number(storage.databaseBytes || 0)));
+    setText("dbState", samples || pidRows || locationRows ? `${samples + pidRows + locationRows} rows` : "ready");
     const last = storage.lastEventAtMs || storage.lastStartedAtMs;
     setText("dbSummaryTitle", sessions ? `${samples} samples - ${formatWhen(last)}` : "No stored sessions yet");
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
@@ -1626,7 +1729,59 @@
     setText("stateText", next);
     setText("statusCopy", status.detail || "Ready.");
     if (status.lastAddress) state.lastDevice = { address: status.lastAddress, name: status.lastName || "" };
+    renderOperationalState();
     updateDiagnostics();
+  }
+
+  function setAppState(payload) {
+    state.appState = parsePayload(payload, {});
+    const nextTelemetry = state.appState.latestTelemetry || {};
+    if (nextTelemetry && Object.keys(nextTelemetry).length) {
+      state.telemetry = { ...state.telemetry, ...nextTelemetry };
+    }
+    if (state.appState.storage) {
+      state.storage = state.appState.storage;
+      updateStorageUi();
+    }
+    renderOperationalState();
+    updateLiveUi();
+  }
+
+  function renderOperationalState() {
+    const app = state.appState || {};
+    const adapter = app.adapter || {};
+    const session = app.session || {};
+    const gps = app.gps || {};
+    const storage = state.storage || {};
+    const status = state.status || {};
+    const selected = getSelectedDevice();
+    const adapterName = adapter.name || (selected && selected.name) || "No adapter selected";
+    const remembered = adapter.remembered || Boolean((getLastDevice() || {}).address);
+    const connected = Boolean(adapter.connected) || ["connected", "connecting", "initializing", "scanning", "demo"].includes(String(status.state || "").toLowerCase());
+    const sessionState = session.state || status.state || "idle";
+    const samples = Number(session.sampleCount || state.telemetry.sampleCount || 0);
+
+    setText("adapterSummary", adapterName);
+    setText("appStateSummary", status.detail || session.detail || (remembered ? "Ready to resume the remembered adapter." : "Pick a paired adapter to start logging."));
+    setText("loggingState", connected ? (samples ? `${samples} samples` : sessionState) : "idle");
+    setText("gpsState", gps.state || (state.telemetry.latitude ? "locked" : "waiting"));
+    setText("dataSourceState", state.demoActive ? "demo" : "real");
+    setText("dbState", Number(storage.sampleCount || 0) ? `${Number(storage.sampleCount || 0)} rows` : "ready");
+
+    const primary = el("connectBtn");
+    if (!primary) return;
+    primary.classList.toggle("is-stop", connected);
+    primary.classList.toggle("primary", !connected);
+    if (connected) {
+      primary.dataset.primaryAction = "stop";
+      primary.textContent = "Stop";
+    } else if (remembered) {
+      primary.dataset.primaryAction = "last";
+      primary.textContent = "Resume";
+    } else {
+      primary.dataset.primaryAction = "connect";
+      primary.textContent = "Connect";
+    }
   }
 
   function getLastDevice() {
@@ -1674,6 +1829,7 @@
       select.append(option);
     }
     select.value = address;
+    renderOperationalState();
   }
 
   function getSelectedDevice() {
@@ -1709,6 +1865,7 @@
     }
     updateLiveUi();
     drawTrace();
+    renderOperationalState();
   }
 
   function updateLiveUi() {
@@ -1741,6 +1898,7 @@
     fill.style.width = pct + "%";
     fill.style.left = Number.isFinite(power) && power < 0 ? (50 - pct) + "%" : "50%";
     setMeter("loadMeter", t.loadPct);
+    renderOperationalState();
     updateDiagnostics();
   }
 
@@ -1934,7 +2092,7 @@
   el("refreshBtn").addEventListener("click", () => handleAction("refresh"));
   el("lastBtn").addEventListener("click", () => handleAction("last"));
   el("scanBtn").addEventListener("click", () => handleAction("scan"));
-  el("connectBtn").addEventListener("click", () => handleAction("connect"));
+  el("connectBtn").addEventListener("click", () => handleAction(el("connectBtn").dataset.primaryAction || "connect"));
   el("disconnectBtn").addEventListener("click", () => handleAction("stop"));
   el("demoBtn").addEventListener("click", startDemo);
   el("demoStopBtn").addEventListener("click", stopDemo);
@@ -1954,9 +2112,10 @@
     setStatus({ state: "ready", detail: "Charging session staged locally." });
   });
 
-  window.VoltTrackerNative = { setDevices, setHistory, setStatus, setStorage, updateTelemetry };
+  window.VoltTrackerNative = { setDevices, setHistory, setStatus, setStorage, setAppState, updateTelemetry };
 
   setDemoActive(false);
+  renderOperationalState();
   updateLiveUi();
   drawTrace();
   refreshDevices();

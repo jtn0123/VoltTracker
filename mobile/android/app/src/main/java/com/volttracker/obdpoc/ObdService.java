@@ -85,6 +85,7 @@ public class ObdService extends Service {
     private String activeAddress = "";
     private String lastSessionState = "";
     private String lastSessionDetail = "";
+    private String currentHeader = "";
     private Integer lastAcceptedSpeedKph;
     private long lastAcceptedSpeedAtMs;
     private final LocationListener locationListener = new LocationListener() {
@@ -518,6 +519,7 @@ public class ObdService extends Service {
         if (location.hasBearing()) {
             sample.put("bearingDeg", round1(location.getBearing()));
         }
+        sample.put("provider", location.getProvider());
         sample.put("locationProvider", location.getProvider());
         sample.put("locationAgeMs", Math.max(0L, System.currentTimeMillis() - location.getTime()));
     }
@@ -789,6 +791,7 @@ public class ObdService extends Service {
         activeSessionId = 0L;
         activeMode = "";
         activeAddress = "";
+        currentHeader = "";
     }
 
     private void writeLatestPointer(File file) {
@@ -802,16 +805,22 @@ public class ObdService extends Service {
 
     private synchronized void logCommand(String command, long timeoutMs, long durationMs, String response) {
         JSONObject payload = new JSONObject();
+        long observedAtMs = System.currentTimeMillis();
+        String header = currentHeader;
         try {
             payload.put("command", command);
+            payload.put("header", header);
             payload.put("timeoutMs", timeoutMs);
             payload.put("durationMs", durationMs);
             payload.put("response", summarizeForStorage(command, response));
             payload.put("gotPrompt", response != null && response.indexOf('>') >= 0);
             payload.put("empty", response == null || ObdProtocol.summarize(response).isEmpty());
+            payload.put("observedAtMs", observedAtMs);
         } catch (JSONException ignored) {
         }
         logJson("command", payload);
+        persistPidObservation(command, header, observedAtMs, timeoutMs, durationMs, response);
+        updateHeaderState(command);
     }
 
     private synchronized void logError(String type, Exception ex) {
@@ -864,7 +873,12 @@ public class ObdService extends Service {
         if (sessionId <= 0 || payload == null || localStore == null) {
             return;
         }
-        persistAsync(() -> localStore.recordTelemetry(sessionId, payload));
+        persistAsync(() -> {
+            localStore.recordTelemetry(sessionId, payload);
+            if (payload.has("latitude") && payload.has("longitude")) {
+                localStore.recordLocationSample(sessionId, payload);
+            }
+        });
     }
 
     private void persistStatus(String state, String detail, boolean blocked, JSONObject payload) {
@@ -885,6 +899,40 @@ public class ObdService extends Service {
                     payload.optString("message",
                             payload.optString("event", payload.optString("command", ""))));
             localStore.recordEvent(sessionId, type, payload.optString("state", ""), detail, false, payload);
+        });
+    }
+
+    private void persistPidObservation(
+            String command,
+            String header,
+            long observedAtMs,
+            long timeoutMs,
+            long durationMs,
+            String response
+    ) {
+        final long sessionId = activeSessionId;
+        if (sessionId <= 0 || localStore == null) {
+            return;
+        }
+        String safeCommand = command == null ? "" : command.trim().toUpperCase(Locale.US);
+        String summary = summarizeForStorage(safeCommand, response);
+        persistAsync(() -> {
+            JSONObject payload = new JSONObject();
+            try {
+                payload.put("observedAtMs", observedAtMs);
+                payload.put("command", safeCommand);
+                payload.put("header", header == null ? "" : header);
+                payload.put("pid", pidForCommand(safeCommand));
+                payload.put("name", nameForCommand(safeCommand));
+                payload.put("rawRequest", safeCommand);
+                payload.put("rawResponse", summary);
+                payload.put("gotPrompt", response != null && response.indexOf('>') >= 0);
+                payload.put("timeoutMs", timeoutMs);
+                payload.put("durationMs", durationMs);
+            } catch (JSONException ignored) {
+                // Local values are safe.
+            }
+            localStore.recordPidObservation(sessionId, payload, observedAtMs);
         });
     }
 
@@ -944,6 +992,64 @@ public class ObdService extends Service {
 
     private static boolean isVinCommand(String command) {
         return command != null && "0902".equals(command.trim().toUpperCase(Locale.US));
+    }
+
+    private void updateHeaderState(String command) {
+        if (command == null) {
+            return;
+        }
+        String clean = command.trim().toUpperCase(Locale.US);
+        if (clean.startsWith("ATSH") && clean.length() > 4) {
+            currentHeader = clean.substring(4);
+        } else if ("ATZ".equals(clean) || "ATD".equals(clean) || "ATPC".equals(clean)) {
+            currentHeader = "";
+        }
+    }
+
+    private static String pidForCommand(String command) {
+        if (command == null) {
+            return "";
+        }
+        String clean = command.trim().toUpperCase(Locale.US);
+        if (clean.startsWith("01") && clean.length() >= 4) {
+            return clean.substring(2, 4);
+        }
+        if (clean.startsWith("22") && clean.length() >= 6) {
+            return clean.substring(2);
+        }
+        if (clean.startsWith("09") && clean.length() >= 4) {
+            return clean.substring(2, 4);
+        }
+        return "";
+    }
+
+    private static String nameForCommand(String command) {
+        if (command == null) {
+            return "";
+        }
+        String clean = command.trim().toUpperCase(Locale.US);
+        if ("ATRV".equals(clean)) {
+            return "adapter voltage";
+        }
+        if ("010D".equals(clean)) {
+            return "vehicle speed";
+        }
+        if ("010C".equals(clean)) {
+            return "engine rpm";
+        }
+        if ("0105".equals(clean)) {
+            return "coolant temperature";
+        }
+        if ("0104".equals(clean)) {
+            return "engine load";
+        }
+        if ("0111".equals(clean)) {
+            return "throttle position";
+        }
+        if ("0902".equals(clean)) {
+            return "vin";
+        }
+        return "";
     }
 
     private static void appendProbeLine(StringBuilder raw, String label, String value) {

@@ -6,12 +6,14 @@ import android.database.sqlite.SQLiteOpenHelper;
 
 final class VoltTrackerDb extends SQLiteOpenHelper {
     static final String DATABASE_NAME = "volttracker_obd_poc.db";
-    static final int DATABASE_VERSION = 2;
+    static final int DATABASE_VERSION = 3;
 
     static final String TABLE_SESSIONS = "obd_sessions";
     static final String TABLE_TELEMETRY = "telemetry_samples";
     static final String TABLE_EVENTS = "status_events";
     static final String TABLE_ADAPTER_HISTORY = "adapter_history";
+    static final String TABLE_PID_OBSERVATIONS = "pid_observations";
+    static final String TABLE_LOCATION_SAMPLES = "location_samples";
 
     VoltTrackerDb(Context context) {
         super(context.getApplicationContext(), DATABASE_NAME, null, DATABASE_VERSION);
@@ -104,6 +106,8 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                 + "(session_id, occurred_at_ms DESC)");
         db.execSQL("CREATE INDEX idx_adapter_history_seen ON " + TABLE_ADAPTER_HISTORY
                 + "(last_seen_ms DESC)");
+        createObservationTables(db);
+        createObservationIndexes(db);
     }
 
     @Override
@@ -116,5 +120,54 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
             db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN bearing_deg REAL");
             db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN location_age_ms INTEGER");
         }
+        if (oldVersion < 3) {
+            createObservationTables(db);
+            createObservationIndexes(db);
+        }
+    }
+
+    private static void createObservationTables(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_PID_OBSERVATIONS + " ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "session_id INTEGER NOT NULL,"
+                + "observed_at_ms INTEGER NOT NULL,"
+                + "command TEXT,"
+                + "header TEXT,"
+                + "pid TEXT,"
+                + "name TEXT,"
+                + "value_text TEXT,"
+                + "value_numeric REAL,"
+                + "unit TEXT,"
+                + "raw_request TEXT,"
+                + "raw_response TEXT,"
+                + "json TEXT NOT NULL,"
+                + "FOREIGN KEY(session_id) REFERENCES " + TABLE_SESSIONS + "(_id) ON DELETE CASCADE"
+                + ")");
+
+        db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_LOCATION_SAMPLES + " ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "session_id INTEGER NOT NULL,"
+                + "captured_at_ms INTEGER NOT NULL,"
+                + "provider TEXT,"
+                + "latitude REAL NOT NULL,"
+                + "longitude REAL NOT NULL,"
+                + "accuracy_m REAL,"
+                + "altitude_m REAL,"
+                + "speed_mps REAL,"
+                + "bearing_deg REAL,"
+                + "location_age_ms INTEGER,"
+                + "elapsed_realtime_nanos INTEGER,"
+                + "json TEXT NOT NULL,"
+                + "FOREIGN KEY(session_id) REFERENCES " + TABLE_SESSIONS + "(_id) ON DELETE CASCADE"
+                + ")");
+    }
+
+    private static void createObservationIndexes(SQLiteDatabase db) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_pid_observations_session_time ON "
+                + TABLE_PID_OBSERVATIONS + "(session_id, observed_at_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_pid_observations_command_header ON "
+                + TABLE_PID_OBSERVATIONS + "(command, header, observed_at_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_location_samples_session_time ON "
+                + TABLE_LOCATION_SAMPLES + "(session_id, captured_at_ms DESC)");
     }
 }
