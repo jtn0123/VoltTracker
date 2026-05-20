@@ -10,6 +10,41 @@ The Android app should become the primary car companion and field logger. The ph
 
 The UI should not mix real data, demo data, and future/placeholder data. Demo remains useful, but it should be an explicit sandbox.
 
+## Current Progress
+
+Last updated: 2026-05-20
+
+Current Android database schema: v4
+
+Completed:
+
+- App-state bridge from Android to the WebView, with a single `VoltTrackerNative.setAppState` payload.
+- Drive screen centered on connection, logging, GPS, database health, and source state.
+- Diagnostics tab separated from the driver-facing Drive screen.
+- Demo mode separated from real data states, with a clear stop path.
+- Remembered adapter flow for reconnect/resume.
+- Append-only `pid_observations` storage for command/response capture.
+- GPS sample persistence in `location_samples`.
+- Long-term schema tables: `vehicles`, `field_capabilities`, `trip_segments`, `charge_sessions`, `battery_snapshots`, `cell_snapshots`, and `exports`.
+- VIN redaction for raw scan/log output.
+- Initial typed parser layer for standard OBD values, adapter voltage, Volt SOC/capacity/odometer commands, sampled cell-voltage commands, and charging transition hints.
+- Database status counts surfaced in Diagnostics.
+
+In progress:
+
+- Real-car validation of exact Volt PID response formats and units.
+- Mapping parsed PID values into battery, cell, charge, vehicle-state, and capability tables.
+- Turning stored GPS/PID observations into trip and charge-session records.
+- Replacing remaining placeholder product views with database-backed empty, loading, and real-data states.
+
+Remaining:
+
+- Exportable diagnostic bundles with explicit privacy controls for VIN and location.
+- Long-run background logging tests for reconnect, GPS, screen-off, and app-minimized behavior.
+- Query-backed Trips, Charge, Map, and Insights screens.
+- Confidence labels for every derived classifier so weak inference is visible.
+- Migration tests and fixture-backed parser tests for every PID we decide to support.
+
 ## UI/UX Model
 
 ### Drive
@@ -63,7 +98,7 @@ Suggested shape:
 {
   "app": {
     "version": "0.1.0",
-    "schemaVersion": 2
+    "schemaVersion": 4
   },
   "permissions": {
     "bluetooth": true,
@@ -119,16 +154,16 @@ The database should be the source of truth for real app history. JSONL field log
 - Preserve unknown PID responses instead of throwing them away.
 - Treat VIN and precise location as private data by default.
 
-### Proposed Tables
+### Tables
 
-Current tables are a good start:
+Base tables:
 
 - `obd_sessions`
 - `telemetry_samples`
 - `status_events`
 - `adapter_history`
 
-Next tables to add:
+Roadmap tables now present in schema v4:
 
 - `vehicles`: one row per car, with VIN redacted or hashed by default.
 - `pid_observations`: every command/response pair with command, header, raw response, parsed value, parser version, and error state.
@@ -139,6 +174,14 @@ Next tables to add:
 - `cell_snapshots`: per-cell readings linked to a battery snapshot.
 - `field_capabilities`: what PIDs responded for this adapter/car/protocol/header.
 - `exports`: records of exported diagnostic bundles.
+
+Remaining database work:
+
+- Populate `vehicles` from verified identity signals without storing a full VIN by default.
+- Populate `field_capabilities` from scan results and parser confidence.
+- Materialize `trip_segments` and `charge_sessions` from observation windows.
+- Persist parsed pack and cell values into `battery_snapshots` and `cell_snapshots`.
+- Track diagnostic exports in `exports` once the export bundle format is defined.
 
 ### Raw-to-Useful Pipeline
 
@@ -156,19 +199,35 @@ Next tables to add:
 
 ## Implementation Order
 
+Done:
+
 1. Build the app-state bridge and make the UI render from it.
 2. Simplify Drive around real connection/logging state.
 3. Move raw/debug features into Diagnostics.
 4. Add `pid_observations` and `location_samples`.
-5. Add Volt PID parsers after scan results prove exact response formats.
-6. Add trip and charge-session builders.
-7. Add Insights from database summaries.
+5. Add schema v4 roadmap tables.
+6. Add the first parser layer for standard OBD, selected Volt commands, cell-voltage samples, and charge-transition hints.
+
+Next:
+
+1. Validate parser output against the newest field logs from the car.
+2. Save parsed battery, cell, capability, and vehicle-state facts into normalized tables.
+3. Build trip and charge-session materializers from stored PID and GPS samples.
+4. Wire Trips, Charge, Map, and Insights to database queries.
+5. Add export/privacy controls and migration/parser tests.
 
 ## Near-Term Definition Of Done
 
+Done:
+
 - Phone Drive screen clearly shows whether data is real or demo.
-- One-tap connect/resume works with the remembered adapter.
+- One-tap connect/resume is available with the remembered adapter.
 - GPS lock and DB write status are visible without opening raw logs.
 - Scan mode stores PID observations in a queryable table.
-- Charge/driving state classifiers are stored with confidence.
-- No product screen depends on fake/demo data unless Demo is explicitly active.
+- No product screen should depend on fake/demo data unless Demo is explicitly active.
+
+Still open:
+
+- Charge/driving state classifiers need to be stored with confidence after real-log validation.
+- Trips, Charge, Map, and Insights still need full database-backed product states.
+- Parser and migration tests need to be added around the Android database layer.
