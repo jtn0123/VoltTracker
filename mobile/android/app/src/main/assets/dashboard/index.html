@@ -1,0 +1,1876 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Volt Tracker OBD</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #07080c;
+    --panel: #171820;
+    --panel-2: #20222c;
+    --panel-3: #101117;
+    --line: rgba(255,255,255,0.1);
+    --line-strong: rgba(255,255,255,0.16);
+    --text: #f5f3ec;
+    --muted: #aaaab4;
+    --soft: #747582;
+    --volt: #e6ff3a;
+    --ok: #35e6a0;
+    --warn: #ffb84a;
+    --bad: #ff6b5f;
+    --mixed: #a48cff;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background:
+      radial-gradient(680px 430px at 68% -90px, rgba(230,255,58,0.17), transparent 62%),
+      linear-gradient(180deg, #12131a 0%, var(--bg) 52%);
+    color: var(--text);
+    font-family: Inter, Roboto, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    padding: max(14px, env(safe-area-inset-top)) 12px calc(86px + env(safe-area-inset-bottom));
+  }
+
+  button, select, input {
+    font: inherit;
+  }
+
+  button {
+    min-height: 42px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.055);
+    color: var(--text);
+    cursor: pointer;
+    padding: 0 11px;
+  }
+
+  select, input {
+    min-width: 0;
+    height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    padding: 0 12px;
+    background: var(--panel-2);
+    color: var(--text);
+  }
+
+  .app {
+    width: min(760px, 100%);
+    margin: 0 auto;
+  }
+
+  .topbar {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .top-main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .kicker {
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 760;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  h1, h2, h3, p {
+    margin: 0;
+  }
+
+  h1 {
+    margin-top: 4px;
+    font-size: 30px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    font-size: 22px;
+    line-height: 1.06;
+  }
+
+  h3 {
+    font-size: 17px;
+    line-height: 1.15;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.045);
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--soft);
+    box-shadow: 0 0 14px currentColor;
+  }
+
+  .badge[data-state="connected"] .dot,
+  .badge[data-state="scan-complete"] .dot { background: var(--ok); color: var(--ok); }
+  .badge[data-state="connecting"],
+  .badge[data-state="initializing"],
+  .badge[data-state="scanning"] { color: var(--warn); }
+  .badge[data-state="connecting"] .dot,
+  .badge[data-state="initializing"] .dot,
+  .badge[data-state="scanning"] .dot { background: var(--warn); color: var(--warn); }
+  .badge[data-state="error"], .badge[data-state="blocked"] { color: var(--bad); }
+  .badge[data-state="error"] .dot, .badge[data-state="blocked"] .dot { background: var(--bad); color: var(--bad); }
+
+  .mobile-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.9fr);
+    gap: 9px;
+  }
+
+  .mode-toggle, .drive-chip {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(255,255,255,0.045);
+    overflow: hidden;
+  }
+
+  .mode-toggle button {
+    flex: 1;
+    min-height: 100%;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted);
+    font-weight: 800;
+  }
+
+  .mode-toggle button.is-active {
+    margin: 5px;
+    color: #101015;
+    background: var(--volt);
+  }
+
+  .drive-chip {
+    padding-left: 10px;
+    gap: 8px;
+  }
+
+  .drive-chip .kicker {
+    font-size: 9px;
+    letter-spacing: 0.13em;
+  }
+
+  .drive-chip select {
+    flex: 1;
+    height: 100%;
+    border: 0;
+    background: transparent;
+    padding-inline: 0 10px;
+    font-weight: 700;
+  }
+
+  .panel {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.065), transparent 45%),
+      rgba(20,20,27,0.92);
+    box-shadow: 0 18px 48px rgba(0,0,0,0.34);
+  }
+
+  .view {
+    display: none;
+    gap: 12px;
+  }
+
+  .view.is-active {
+    display: grid;
+  }
+
+  .connect-card {
+    padding: 13px;
+  }
+
+  .control-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  #deviceSelect {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .button-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 9px;
+  }
+
+  .primary {
+    border-color: transparent;
+    background: var(--volt);
+    color: #101015;
+    font-weight: 850;
+  }
+
+  .scan {
+    border-color: rgba(230,255,58,0.32);
+    color: var(--volt);
+  }
+
+  .demo {
+    border-color: rgba(164,140,255,0.32);
+    color: #d9d1ff;
+  }
+
+  .danger {
+    border-color: rgba(255,107,95,0.3);
+    color: #ffc0bb;
+  }
+
+  .status-copy {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  .demo-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid rgba(164,140,255,0.28);
+    border-radius: 14px;
+    background: rgba(164,140,255,0.11);
+  }
+
+  .demo-banner strong {
+    display: block;
+    font-size: 13px;
+  }
+
+  .demo-banner small,
+  .empty-state p {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .demo-stop {
+    min-height: 36px;
+    border-color: rgba(255,107,95,0.34);
+    color: #ffc0bb;
+    white-space: nowrap;
+  }
+
+  .empty-state {
+    padding: 16px;
+  }
+
+  .hero {
+    display: grid;
+    gap: 12px;
+  }
+
+  .live-card {
+    min-height: 240px;
+    padding: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .live-card::after {
+    content: "";
+    position: absolute;
+    inset: auto -30px -72px;
+    height: 160px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 0%, rgba(230,255,58,0.16), transparent 64%);
+    pointer-events: none;
+  }
+
+  .live-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .speed-value {
+    margin-top: 16px;
+    font-size: clamp(76px, 24vw, 126px);
+    line-height: 0.86;
+    letter-spacing: -0.06em;
+    font-weight: 900;
+  }
+
+  .speed-unit {
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+  }
+
+  .power-pill {
+    min-width: 96px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(0,0,0,0.2);
+    text-align: right;
+  }
+
+  .power-pill strong {
+    display: block;
+    margin-top: 3px;
+    font-size: 21px;
+  }
+
+  .power-meter {
+    position: relative;
+    height: 11px;
+    margin-top: 18px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+
+  .power-zero {
+    position: absolute;
+    inset-block: 0;
+    left: 50%;
+    width: 1px;
+    background: rgba(255,255,255,0.35);
+  }
+
+  .power-fill {
+    position: absolute;
+    inset-block: 0;
+    left: 50%;
+    width: 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--mixed), var(--volt));
+    transition: left 0.25s ease, width 0.25s ease;
+  }
+
+  .mini-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .mini, .metric, .list-card, .insight, .charge-kpi, .setting-row {
+    padding: 14px;
+  }
+
+  .mini strong,
+  .metric strong,
+  .charge-kpi strong {
+    display: block;
+    margin-top: 7px;
+    font-size: 29px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+
+  .mini small,
+  .metric small,
+  .charge-kpi small {
+    color: var(--muted);
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .metric header, .charge-kpi header {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .meter {
+    height: 5px;
+    margin-top: 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+
+  .meter span {
+    display: block;
+    height: 100%;
+    width: 0%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--mixed), var(--volt));
+    transition: width 0.25s ease;
+  }
+
+  .ratio-card {
+    display: grid;
+    grid-template-columns: 112px 1fr;
+    gap: 14px;
+    align-items: center;
+    padding: 16px;
+  }
+
+  .ring {
+    width: 112px;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: conic-gradient(var(--volt) calc(var(--v, 0) * 1%), rgba(255,255,255,0.08) 0);
+    box-shadow: inset 0 0 0 14px rgba(0,0,0,0.28);
+  }
+
+  .ring strong {
+    font-size: 31px;
+  }
+
+  .ratio-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 9px;
+  }
+
+  .ratio-stats div {
+    min-width: 0;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.045);
+  }
+
+  .ratio-stats span,
+  .status-meta span {
+    display: block;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .ratio-stats b {
+    display: block;
+    margin-top: 5px;
+    font-size: 19px;
+  }
+
+  .status-card {
+    padding: 15px;
+  }
+
+  .status-head, .card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .status-meta {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 9px;
+    margin-top: 13px;
+  }
+
+  .status-meta div {
+    padding: 11px;
+    border-radius: 13px;
+    background: rgba(255,255,255,0.045);
+  }
+
+  .status-meta strong {
+    display: block;
+    margin-top: 5px;
+    font-size: 20px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .trace-card {
+    padding: 14px;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 116px;
+    margin-top: 12px;
+  }
+
+  .list-card header, .charge-card header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .link-btn {
+    min-height: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .trip-row, .session-row, .history-row {
+    width: 100%;
+    display: grid;
+    align-items: center;
+    gap: 10px;
+    min-height: 56px;
+    padding: 10px;
+    border: 0;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    border-radius: 0;
+    background: transparent;
+    text-align: left;
+  }
+
+  .trip-row {
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+  }
+
+  .session-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .history-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .trip-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--volt);
+    box-shadow: 0 0 12px var(--volt);
+  }
+
+  .trip-row[data-mode="mixed"] .trip-dot { background: var(--mixed); box-shadow: 0 0 12px var(--mixed); }
+  .trip-row[data-mode="gas"] .trip-dot { background: #ff7141; box-shadow: 0 0 12px #ff7141; }
+
+  .trip-row strong,
+  .session-row strong,
+  .history-row strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+  }
+
+  .trip-row small,
+  .session-row small,
+  .history-row small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+  }
+
+  .trip-row b,
+  .session-row b {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 7px;
+  }
+
+  .tabs button {
+    min-height: 38px;
+    border-radius: 999px;
+    color: var(--muted);
+  }
+
+  .tabs button.is-active {
+    border-color: transparent;
+    background: var(--volt);
+    color: #101015;
+    font-weight: 850;
+  }
+
+  .detail-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .route-card {
+    min-height: 198px;
+    padding: 14px;
+    overflow: hidden;
+  }
+
+  .route-box {
+    position: relative;
+    height: 150px;
+    margin-top: 12px;
+    border-radius: 14px;
+    overflow: hidden;
+    background:
+      linear-gradient(135deg, rgba(93,166,120,0.2), rgba(22,25,31,0.9)),
+      repeating-linear-gradient(24deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 24px);
+  }
+
+  .route-line {
+    position: absolute;
+    inset: 24px 24px 24px 20px;
+    border-bottom: 4px solid var(--volt);
+    border-right: 4px solid #ff7141;
+    border-radius: 0 0 78px 0;
+    transform: skew(-18deg);
+    filter: drop-shadow(0 0 8px rgba(230,255,58,0.45));
+  }
+
+  .route-pin {
+    position: absolute;
+    width: 15px;
+    height: 15px;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    background: var(--volt);
+  }
+
+  .route-pin.start { left: 28px; bottom: 25px; }
+  .route-pin.end { right: 31px; top: 25px; background: #ff7141; }
+
+  .energy-rows {
+    display: grid;
+    gap: 9px;
+    margin-top: 12px;
+  }
+
+  .energy-rows div {
+    display: grid;
+    grid-template-columns: 82px 1fr 38px;
+    gap: 8px;
+    align-items: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .energy-rows i {
+    display: block;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--volt);
+  }
+
+  .charge-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .hour-bars {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    align-items: end;
+    gap: 3px;
+    height: 118px;
+    margin-top: 14px;
+    padding: 10px;
+    border-radius: 14px;
+    background: rgba(0,0,0,0.18);
+  }
+
+  .hour-bars span {
+    min-height: 4px;
+    border-radius: 999px 999px 0 0;
+    background: rgba(255,255,255,0.18);
+  }
+
+  .hour-bars span.is-offpeak {
+    background: var(--volt);
+  }
+
+  .session-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: rgba(230,255,58,0.12);
+    color: var(--volt);
+    font-size: 12px;
+    font-weight: 850;
+  }
+
+  .insight-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .insight {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 11px;
+    align-items: flex-start;
+  }
+
+  .insight-icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    background: rgba(53,230,160,0.16);
+    color: var(--ok);
+    font-weight: 900;
+  }
+
+  .insight.warn .insight-icon {
+    background: rgba(255,184,74,0.15);
+    color: var(--warn);
+  }
+
+  .insight p {
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .cell-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 4px;
+    margin-top: 12px;
+  }
+
+  .cell {
+    height: 22px;
+    border-radius: 6px;
+    background: rgba(230,255,58,var(--c));
+    opacity: 0.82;
+  }
+
+  .cell.is-watch {
+    background: var(--warn);
+    box-shadow: 0 0 14px rgba(255,184,74,0.55);
+  }
+
+  .setting-stack {
+    display: grid;
+    gap: 10px;
+  }
+
+  .raw {
+    padding: 14px;
+  }
+
+  pre {
+    min-height: 120px;
+    max-height: 250px;
+    overflow: auto;
+    margin: 12px 0 0;
+    padding: 12px;
+    border-radius: 13px;
+    background: rgba(0,0,0,0.34);
+    color: #cfd1d9;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
+
+  .bottom-nav {
+    position: fixed;
+    z-index: 20;
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 7px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: rgba(17,18,24,0.94);
+    box-shadow: 0 16px 42px rgba(0,0,0,0.45);
+    backdrop-filter: blur(16px);
+  }
+
+  .bottom-nav button {
+    min-height: 54px;
+    display: grid;
+    place-items: center;
+    gap: 3px;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 760;
+  }
+
+  .bottom-nav button i {
+    font-style: normal;
+    font-size: 17px;
+    line-height: 1;
+  }
+
+  .bottom-nav button.is-active {
+    background: rgba(230,255,58,0.16);
+    color: var(--volt);
+  }
+
+  @media (min-width: 640px) {
+    body { padding-inline: 18px; }
+    .hero { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); }
+    .summary-grid { grid-template-columns: repeat(4, 1fr); }
+    .detail-grid { grid-template-columns: 1fr 1fr; }
+    .button-grid { grid-template-columns: repeat(6, 1fr); }
+  }
+
+  @media (max-width: 390px) {
+    .mobile-controls { grid-template-columns: 1fr; }
+    .ratio-card { grid-template-columns: 1fr; }
+    .ring { margin-inline: auto; }
+  }
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="topbar">
+    <div class="top-main">
+      <div>
+        <div id="screenKicker" class="kicker">Volt Tracker Android</div>
+        <h1 id="screenTitle">Drive</h1>
+      </div>
+      <div id="stateBadge" class="badge" data-state="idle"><span class="dot"></span><span id="stateText">idle</span></div>
+    </div>
+    <div class="mobile-controls">
+      <div class="mode-toggle" aria-label="Propulsion state">
+        <button type="button" data-mode="ev" class="is-active">EV</button>
+        <button type="button" data-mode="gas">GAS</button>
+      </div>
+      <label class="drive-chip">
+        <span class="kicker">Drive</span>
+        <select id="driveModeSelect">
+          <option value="normal">Normal</option>
+          <option value="sport">Sport</option>
+          <option value="mountain">Mountain</option>
+          <option value="hold">Hold</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <section id="view-drive" class="view is-active" data-view="drive">
+    <article class="panel connect-card">
+      <div class="kicker">Adapter</div>
+      <div class="control-row">
+        <select id="deviceSelect"><option value="">No paired adapters found</option></select>
+        <button id="refreshBtn" type="button">Refresh</button>
+      </div>
+      <div class="button-grid">
+        <button id="permissionBtn" type="button">Permissions</button>
+        <button id="lastBtn" type="button">Last</button>
+        <button id="scanBtn" type="button" class="scan">Scan</button>
+        <button id="connectBtn" type="button" class="primary">Connect</button>
+        <button id="demoBtn" type="button" class="demo">Demo</button>
+        <button id="disconnectBtn" type="button" class="danger">Stop</button>
+      </div>
+      <p id="statusCopy" class="status-copy">Pick a paired OBD adapter or run demo mode.</p>
+      <div id="demoBanner" class="demo-banner" hidden>
+        <span>
+          <strong>Demo preview is running</strong>
+          <small>Fake trips, charging, and insight cards are visible only in this mode.</small>
+        </span>
+        <button id="demoStopBtn" type="button" class="demo-stop">Stop demo</button>
+      </div>
+    </article>
+
+    <section class="hero">
+      <article class="panel live-card">
+        <div class="live-top">
+          <div>
+            <div class="kicker">Vehicle speed</div>
+            <div id="speedValue" class="speed-value">--</div>
+            <div class="speed-unit">MPH <span id="speedKph">-- km/h</span></div>
+          </div>
+          <div class="power-pill">
+            <span class="kicker">Power</span>
+            <strong id="powerValue">--</strong>
+          </div>
+        </div>
+        <div class="power-meter">
+          <span class="power-zero"></span>
+          <span id="powerFill" class="power-fill"></span>
+        </div>
+      </article>
+
+      <div class="mini-grid">
+        <article class="panel mini">
+          <div class="kicker">RPM</div>
+          <strong id="rpmValue">--</strong>
+          <small>engine speed</small>
+        </article>
+        <article class="panel mini">
+          <div class="kicker">Voltage</div>
+          <strong id="voltageValue">--</strong>
+          <small>adapter reported</small>
+        </article>
+        <article class="panel mini">
+          <div class="kicker">Coolant</div>
+          <strong id="coolantValue">--</strong>
+          <small>mode 01 05</small>
+        </article>
+        <article class="panel mini">
+          <div class="kicker">Throttle</div>
+          <strong id="throttleValue">--</strong>
+          <small>mode 01 11</small>
+        </article>
+      </div>
+    </section>
+
+    <article class="panel ratio-card demo-only" hidden>
+      <div id="evRing" class="ring" style="--v:78"><strong id="evRatioValue">78%</strong></div>
+      <div class="ratio-stats">
+        <div><span>Electric miles</span><b>36,064</b></div>
+        <div><span>Gas miles</span><b>2,348</b></div>
+        <div><span>$ / mile YTD</span><b>$0.087</b></div>
+        <div><span>Est. saved</span><b>$1,840</b></div>
+      </div>
+    </article>
+
+    <section class="summary-grid">
+      <article class="panel metric">
+        <header><span>Load</span><span>01 04</span></header>
+        <strong id="loadValue">--</strong>
+        <div class="meter"><span id="loadMeter"></span></div>
+      </article>
+      <article class="panel metric demo-only" hidden>
+        <header><span>Pack</span><span>Health</span></header>
+        <strong>91.3%</strong>
+        <div class="meter"><span style="width:91%"></span></div>
+      </article>
+      <article class="panel metric demo-only" hidden>
+        <header><span>Tank MPG</span><span>30d</span></header>
+        <strong>44.1</strong>
+        <small>312 mi since Apr 23</small>
+      </article>
+      <article class="panel metric demo-only" hidden>
+        <header><span>Electric</span><span>mi/kWh</span></header>
+        <strong>4.2</strong>
+        <small>241 Wh/mi best in March</small>
+      </article>
+    </section>
+
+    <article class="panel status-card demo-only" hidden>
+      <div class="status-head">
+        <div>
+          <div class="kicker">Parked - Garage</div>
+          <h3>Sparky - <span id="socValue">--</span> SOC</h3>
+        </div>
+        <button type="button" class="link-btn" data-nav-jump="settings">adapter</button>
+      </div>
+      <div class="status-meta">
+        <div><span>Range</span><strong id="rangeValue">--</strong></div>
+        <div><span>Fuel</span><strong>64%</strong></div>
+        <div><span>Pack</span><strong id="packTempValue">--</strong></div>
+        <div><span>Odo</span><strong>49,328</strong></div>
+      </div>
+    </article>
+
+    <article class="panel status-card">
+      <div class="status-head">
+        <div>
+          <div class="kicker">OBD session</div>
+          <h3 id="diagState">Waiting for adapter</h3>
+        </div>
+        <span class="badge"><span class="dot"></span><span id="diagSamples">0 samples</span></span>
+      </div>
+      <div class="status-meta">
+        <div><span>Adapter</span><strong id="diagAdapter">--</strong></div>
+        <div><span>Vehicle</span><strong id="diagVehicleState">--</strong></div>
+        <div><span>Runtime</span><strong id="diagSession">--</strong></div>
+        <div><span>PIDs</span><strong id="diagSupported">--</strong></div>
+      </div>
+    </article>
+
+    <article class="panel trace-card">
+      <div class="card-head">
+        <div>
+          <div class="kicker">Last 24 seconds</div>
+          <h3>Speed trace</h3>
+        </div>
+        <span class="badge"><span class="dot"></span><span id="updatedValue">waiting</span></span>
+      </div>
+      <canvas id="speedCanvas"></canvas>
+    </article>
+
+    <article class="panel list-card demo-only" hidden>
+      <header>
+        <span class="kicker">Recent trips</span>
+        <button type="button" class="link-btn" data-nav-jump="trips">view all</button>
+      </header>
+      <div id="homeTrips"></div>
+    </article>
+
+    <article class="panel list-card demo-only" hidden>
+      <header>
+        <span class="kicker">Insights - 5 new</span>
+        <button type="button" class="link-btn" data-nav-jump="insights">see all</button>
+      </header>
+      <div id="homeInsights" class="insight-list"></div>
+    </article>
+    <article class="panel empty-state non-demo-only">
+      <span class="kicker">App data</span>
+      <h3>No trip, charging, or insight history captured on this phone yet.</h3>
+      <p>Use Connect or Scan for real OBD telemetry. Use Demo when you want to preview the richer V2 screens.</p>
+    </article>
+  </section>
+
+  <section id="view-trips" class="view" data-view="trips">
+    <article class="panel empty-state non-demo-only">
+      <span class="kicker">Trips</span>
+      <h2>No real trips stored yet.</h2>
+      <p>Trip capture will come after the OBD bridge is stable. Demo mode shows the planned trip UI without mixing fake trips into the real app.</p>
+    </article>
+    <article class="panel list-card demo-only" hidden>
+      <header>
+        <div>
+          <span class="kicker">April - 10 trips - 480 mi</span>
+          <h2>Trips</h2>
+        </div>
+      </header>
+      <div class="tabs" id="tripTabs">
+        <button type="button" data-filter="all" class="is-active">All</button>
+        <button type="button" data-filter="ev">EV</button>
+        <button type="button" data-filter="mixed">Mixed</button>
+        <button type="button" data-filter="gas">Gas</button>
+      </div>
+      <div id="tripList" style="margin-top:10px"></div>
+    </article>
+
+    <section class="detail-grid demo-only" hidden>
+      <article class="panel route-card">
+        <div class="card-head">
+          <div>
+            <span class="kicker">Route</span>
+            <h3 id="tripDetailTitle">Home -> Office</h3>
+          </div>
+          <small id="tripDetailMeta" class="status-copy">18.4 mi</small>
+        </div>
+        <div class="route-box">
+          <span class="route-line"></span>
+          <span class="route-pin start"></span>
+          <span class="route-pin end"></span>
+        </div>
+      </article>
+
+      <article class="panel route-card">
+        <div class="card-head">
+          <div>
+            <span class="kicker">Energy</span>
+            <h3 id="tripEnergyTitle">241 Wh/mi</h3>
+          </div>
+        </div>
+        <div class="energy-rows">
+          <div><span>Propulsion</span><i style="width:62%"></i><b>62%</b></div>
+          <div><span>HVAC</span><i style="width:18%;background:#a4b8ff"></i><b>18%</b></div>
+          <div><span>Aux</span><i style="width:5%;background:rgba(255,255,255,0.32)"></i><b>5%</b></div>
+          <div><span>Regen</span><i style="width:15%;background:var(--ok)"></i><b>-15%</b></div>
+        </div>
+      </article>
+    </section>
+  </section>
+
+  <section id="view-charge" class="view" data-view="charge">
+    <article class="panel empty-state non-demo-only">
+      <span class="kicker">Charging</span>
+      <h2>No charging sessions captured yet.</h2>
+      <p>The standalone app does not have charging-session storage yet. Demo mode previews monthly charging KPIs, sessions, and time-of-day charts.</p>
+    </article>
+    <section class="charge-grid demo-only" hidden>
+      <article class="panel charge-kpi">
+        <header><span>Energy in</span><span>30d</span></header>
+        <strong id="chargeEnergy">248.6</strong>
+        <small>kWh - 24 sessions</small>
+      </article>
+      <article class="panel charge-kpi">
+        <header><span>Cost</span><span>/mo</span></header>
+        <strong>$29.83</strong>
+        <small>@ $0.12/kWh</small>
+      </article>
+      <article class="panel charge-kpi">
+        <header><span>Avg session</span><span>L2</span></header>
+        <strong>10.4</strong>
+        <small>kWh - about 3h</small>
+      </article>
+      <article class="panel charge-kpi">
+        <header><span>Gas saved</span><span>est.</span></header>
+        <strong>$104</strong>
+        <small>vs 42 MPG @ $3.85</small>
+      </article>
+    </section>
+
+    <article class="panel list-card demo-only" hidden>
+      <header>
+        <div>
+          <span class="kicker">When you charge</span>
+          <h3>Peak window - 21:00 to 23:00</h3>
+        </div>
+        <button type="button" class="link-btn" id="addChargeBtn">add</button>
+      </header>
+      <div id="hourBars" class="hour-bars"></div>
+    </article>
+
+    <article class="panel list-card demo-only" hidden>
+      <header>
+        <span class="kicker">Recent sessions</span>
+      </header>
+      <div id="sessionList"></div>
+    </article>
+  </section>
+
+  <section id="view-insights" class="view" data-view="insights">
+    <article class="panel empty-state non-demo-only">
+      <span class="kicker">Insights</span>
+      <h2>Waiting for enough real data.</h2>
+      <p>Live OBD values are available now; pack health, cell watch, savings, and monthly insights need stored history before they should appear here.</p>
+    </article>
+    <article class="panel ratio-card demo-only" hidden>
+      <div class="ring" style="--v:91"><strong>91%</strong></div>
+      <div>
+        <span class="kicker">HV pack</span>
+        <h2>Capacity looks healthy.</h2>
+        <p class="status-copy">16.8 kWh estimated usable, 8.7% loss, 684 cycles, cell 47 on watch.</p>
+      </div>
+    </article>
+
+    <article class="panel list-card demo-only" hidden>
+      <header>
+        <div>
+          <span class="kicker">Cell voltage - 96 cells</span>
+          <h3>Delta 18 mV</h3>
+        </div>
+        <span class="badge"><span class="dot"></span><span>cell 47</span></span>
+      </header>
+      <div id="cellGrid" class="cell-grid"></div>
+    </article>
+
+    <article class="panel list-card demo-only" hidden>
+      <header>
+        <span class="kicker">What changed this month</span>
+      </header>
+      <div id="insightList" class="insight-list"></div>
+    </article>
+  </section>
+
+  <section id="view-settings" class="view" data-view="settings">
+    <article class="panel connect-card">
+      <div class="kicker">Adapter controls</div>
+      <div class="button-grid">
+        <button type="button" data-action="permissions">Permissions</button>
+        <button type="button" data-action="refresh">Refresh</button>
+        <button type="button" data-action="last">Last</button>
+        <button type="button" data-action="scan" class="scan">Scan</button>
+        <button type="button" data-action="connect" class="primary">Connect</button>
+        <button type="button" data-action="demo" class="demo">Demo</button>
+        <button type="button" data-action="stopDemo" class="demo-stop">Stop demo</button>
+        <button type="button" data-action="stop" class="danger">Stop</button>
+      </div>
+      <p class="status-copy">Latest field logs remain saved inside the app private OBD log folder.</p>
+    </article>
+
+    <article id="historyCard" class="panel list-card" hidden>
+      <header>
+        <span class="kicker">Remembered adapters</span>
+        <span id="historyHint" class="status-copy">tap to select</span>
+      </header>
+      <div id="historyList"></div>
+    </article>
+
+    <article class="panel raw">
+      <div class="kicker">Raw ELM327 frames</div>
+      <pre id="rawFrames">Waiting for telemetry...</pre>
+    </article>
+
+    <article class="panel setting-row">
+      <div class="card-head">
+        <div>
+          <span class="kicker">Vehicle</span>
+          <h3>Sparky - 2017 Chevrolet Volt</h3>
+          <p class="status-copy">49,328 mi - 78% electric lifetime mix.</p>
+        </div>
+      </div>
+    </article>
+  </section>
+</main>
+
+<nav class="bottom-nav" aria-label="Main navigation">
+  <button type="button" data-nav="drive" class="is-active"><i>D</i><span>Drive</span></button>
+  <button type="button" data-nav="trips"><i>T</i><span>Trips</span></button>
+  <button type="button" data-nav="charge"><i>C</i><span>Charge</span></button>
+  <button type="button" data-nav="insights"><i>I</i><span>Insights</span></button>
+  <button type="button" data-nav="settings"><i>S</i><span>Settings</span></button>
+</nav>
+
+<script>
+  const bridge = window.VoltTrackerAndroid || null;
+  const el = (id) => document.getElementById(id);
+
+  const data = {
+    trips: [
+      { id: 8421, label: "Home -> Office", date: "Apr 30 - 08:14", miles: 18.4, mins: 28, efficiency: "4.1 mi/kWh", mode: "ev", wh: 241 },
+      { id: 8420, label: "Office -> Trader Joe's", date: "Apr 29 - 17:42", miles: 6.1, mins: 14, efficiency: "3.9 mi/kWh", mode: "ev", wh: 256 },
+      { id: 8419, label: "Trader Joe's -> Home", date: "Apr 29 - 19:08", miles: 7.3, mins: 14, efficiency: "4.0 mi/kWh", mode: "ev", wh: 250 },
+      { id: 8418, label: "Home -> Tahoe", date: "Apr 28 - 07:22", miles: 184.2, mins: 173, efficiency: "41.7 MPG", mode: "mixed", wh: 0 },
+      { id: 8417, label: "Tahoe Loop", date: "Apr 27 - 10:00", miles: 22.0, mins: 47, efficiency: "3.6 mi/kWh", mode: "ev", wh: 278 },
+      { id: 8416, label: "Tahoe -> Home", date: "Apr 26 - 16:48", miles: 178.5, mins: 160, efficiency: "43.2 MPG", mode: "gas", wh: 0 }
+    ],
+    sessions: [
+      { date: "Apr 30 - 21:18", type: "L2", kwh: 11.8, soc: "24->91", location: "Home", cost: "$1.41" },
+      { date: "Apr 29 - 22:04", type: "L2", kwh: 9.6, soc: "36->90", location: "Home", cost: "$1.15" },
+      { date: "Apr 28 - 18:12", type: "L1", kwh: 5.2, soc: "58->88", location: "Office", cost: "$0.62" },
+      { date: "Apr 27 - 20:48", type: "L2", kwh: 10.4, soc: "32->90", location: "Home", cost: "$1.25" }
+    ],
+    hourly: [8,12,18,24,16,10,4,0,0,2,4,8,12,10,6,4,8,14,22,30,42,68,82,54],
+    insights: [
+      { kind: "good", icon: "+", title: "Best month yet for EV ratio", body: "April hit 78% electric, up from 64% in March. Projected annual savings rises about $45." },
+      { kind: "good", icon: "OK", title: "Battery degrading below average", body: "8.7% capacity loss across 38k miles vs about 12% expected for 2017 Volts." },
+      { kind: "warn", icon: "!", title: "Cell 47 trending low", body: "Cell 47 has drifted 18 mV below the pack mean over the past two weeks." },
+      { kind: "info", icon: "i", title: "Cheaper to charge after 21:00", body: "Shifting two L2 sessions per week saves roughly $8 per month." },
+      { kind: "good", icon: "EV", title: "Tahoe trip MPG within 4% of route avg", body: "Apr 28's 184 mile roundtrip hit 41.7 MPG for that elevation profile." }
+    ]
+  };
+
+  const state = {
+    view: "drive",
+    mode: "ev",
+    tripFilter: "all",
+    selectedTripId: 8421,
+    lastDevice: null,
+    deviceHistory: [],
+    demoActive: false,
+    status: {},
+    speedHistory: [],
+    telemetry: {
+      speedKph: null,
+      rpm: null,
+      voltage: null,
+      coolantC: null,
+      loadPct: null,
+      throttlePct: null,
+      soc: null,
+      batteryTemp: null,
+      powerKw: null,
+      updatedAt: null,
+      raw: "",
+      ...loadCachedTelemetry()
+    }
+  };
+
+  const viewMeta = {
+    drive: ["Volt Tracker Android", "Drive"],
+    trips: ["April - 10 trips - 480 mi", "Trips"],
+    charge: ["Charging - 30 days", "Charge"],
+    insights: ["Pack and efficiency", "Insights"],
+    settings: ["OBD bridge", "Settings"]
+  };
+
+  function parsePayload(payload, fallback) {
+    if (!payload) return fallback;
+    try { return typeof payload === "string" ? JSON.parse(payload) : payload; }
+    catch (err) { return fallback; }
+  }
+
+  function loadCachedTelemetry() {
+    try {
+      const cached = JSON.parse(localStorage.getItem("volt-last-telemetry") || "{}");
+      const source = String(cached.source || "").toLowerCase();
+      return source.includes("demo") ? {} : cached;
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function setText(id, value) {
+    const node = el(id);
+    if (node) node.textContent = value == null || value === "" ? "--" : value;
+  }
+
+  function setMeter(id, value) {
+    const node = el(id);
+    if (node) node.style.width = Math.max(0, Math.min(100, Number(value) || 0)) + "%";
+  }
+
+  function setView(view) {
+    state.view = view;
+    document.querySelectorAll(".view").forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
+    document.querySelectorAll("[data-nav]").forEach((node) => node.classList.toggle("is-active", node.dataset.nav === view));
+    setText("screenKicker", viewMeta[view][0]);
+    setText("screenTitle", viewMeta[view][1]);
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
+  function setMode(mode) {
+    state.mode = mode;
+    document.querySelectorAll("[data-mode]").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.mode === mode));
+    const ratio = mode === "ev" ? 78 : 22;
+    el("evRing").style.setProperty("--v", ratio);
+    setText("evRatioValue", ratio + "%");
+  }
+
+  function setDemoActive(active, detail) {
+    const next = Boolean(active);
+    const changed = state.demoActive !== next;
+    state.demoActive = next;
+    document.body.classList.toggle("demo-active", next);
+    document.querySelectorAll(".demo-only").forEach((node) => {
+      node.hidden = !next;
+    });
+    document.querySelectorAll(".non-demo-only").forEach((node) => {
+      node.hidden = next;
+    });
+    const banner = el("demoBanner");
+    if (banner) banner.hidden = !next;
+    const bannerStop = el("demoStopBtn");
+    if (bannerStop) bannerStop.hidden = !next;
+    document.querySelectorAll('[data-action="stopDemo"]').forEach((button) => {
+      button.hidden = !next;
+    });
+    document.querySelectorAll('[data-action="demo"], #demoBtn').forEach((button) => {
+      button.textContent = next ? "Demo on" : "Demo";
+      button.classList.toggle("is-active", next);
+    });
+    if (detail) setStatus({ state: next ? "demo" : "ready", detail });
+    if (!changed) return;
+    renderTrips();
+    renderSessions();
+    renderInsights();
+    updateLiveUi();
+    drawTrace();
+  }
+
+  function clearDemoTelemetry() {
+    const source = String(state.telemetry.source || "").toLowerCase();
+    if (!source.includes("demo")) return;
+    state.telemetry = {
+      speedKph: null,
+      rpm: null,
+      voltage: null,
+      coolantC: null,
+      loadPct: null,
+      throttlePct: null,
+      soc: null,
+      batteryTemp: null,
+      powerKw: null,
+      updatedAt: null,
+      raw: ""
+    };
+    state.speedHistory = [];
+  }
+
+  function renderTrips() {
+    const home = el("homeTrips");
+    const list = el("tripList");
+    if (!state.demoActive) {
+      home.innerHTML = "";
+      list.innerHTML = "";
+      return;
+    }
+    const makeRow = (trip) => `
+      <button type="button" class="trip-row" data-trip-id="${trip.id}" data-mode="${trip.mode}">
+        <span class="trip-dot"></span>
+        <span><strong>${trip.label}</strong><small>${trip.date} - ${trip.miles} mi - ${trip.mins}m</small></span>
+        <b>${trip.efficiency}</b>
+      </button>`;
+    home.innerHTML = data.trips.slice(0, 5).map(makeRow).join("");
+    const filtered = data.trips.filter((trip) => state.tripFilter === "all" || trip.mode === state.tripFilter);
+    list.innerHTML = filtered.map(makeRow).join("");
+    document.querySelectorAll("[data-trip-id]").forEach((button) => {
+      button.addEventListener("click", () => selectTrip(Number(button.dataset.tripId)));
+    });
+    selectTrip(state.selectedTripId);
+  }
+
+  function selectTrip(id) {
+    state.selectedTripId = id;
+    const trip = data.trips.find((item) => item.id === id) || data.trips[0];
+    if (!trip) return;
+    setText("tripDetailTitle", trip.label);
+    setText("tripDetailMeta", `${trip.date} - ${trip.miles} mi - ${trip.mins} min`);
+    setText("tripEnergyTitle", trip.wh ? `${trip.wh} Wh/mi` : trip.efficiency);
+  }
+
+  function renderSessions() {
+    const bars = el("hourBars");
+    const list = el("sessionList");
+    if (!state.demoActive) {
+      bars.innerHTML = "";
+      list.innerHTML = "";
+      return;
+    }
+    bars.innerHTML = data.hourly.map((height, index) => {
+      const off = index >= 21 || index < 6;
+      return `<span class="${off ? "is-offpeak" : ""}" style="height:${height}%"></span>`;
+    }).join("");
+    list.innerHTML = data.sessions.map((s) => `
+      <button type="button" class="session-row">
+        <span class="session-badge">${s.type}</span>
+        <span><strong>${s.location}</strong><small>${s.date} - SOC ${s.soc}%</small></span>
+        <b>${s.kwh} kWh<br>${s.cost}</b>
+      </button>`).join("");
+  }
+
+  function renderInsights() {
+    const home = el("homeInsights");
+    const list = el("insightList");
+    const cells = el("cellGrid");
+    if (!state.demoActive) {
+      home.innerHTML = "";
+      list.innerHTML = "";
+      cells.innerHTML = "";
+      return;
+    }
+    const insightMarkup = data.insights.map((item) => `
+      <article class="panel insight ${item.kind === "warn" ? "warn" : ""}">
+        <span class="insight-icon">${item.icon}</span>
+        <span><strong>${item.title}</strong><p>${item.body}</p></span>
+      </article>`).join("");
+    home.innerHTML = data.insights.slice(0, 3).map((item) => `
+      <article class="insight ${item.kind === "warn" ? "warn" : ""}">
+        <span class="insight-icon">${item.icon}</span>
+        <span><strong>${item.title}</strong><p>${item.body}</p></span>
+      </article>`).join("");
+    list.innerHTML = insightMarkup;
+    cells.innerHTML = Array.from({ length: 96 }).map((_, i) => {
+      const watch = i + 1 === 47;
+      const c = watch ? 0.8 : 0.16 + ((i * 13 + 5) % 9) / 14;
+      return `<span class="cell ${watch ? "is-watch" : ""}" style="--c:${c}"></span>`;
+    }).join("");
+  }
+
+  function setDevices(payload) {
+    const devices = parsePayload(payload, []);
+    const select = el("deviceSelect");
+    const preferred = getLastDevice();
+    select.innerHTML = "";
+    if (!devices.length) {
+      select.innerHTML = '<option value="">No paired adapters found</option>';
+      return;
+    }
+    devices.forEach((device) => {
+      const option = document.createElement("option");
+      option.value = device.address;
+      option.dataset.name = device.name || "OBD adapter";
+      option.textContent = `${device.name || "OBD adapter"} - ${device.address}`;
+      select.append(option);
+    });
+    if (preferred.address) {
+      const option = Array.from(select.options).find((item) => item.value === preferred.address);
+      if (option) select.value = preferred.address;
+    } else {
+      const likely = devices.find((device) => device.obdCandidate);
+      if (likely) select.value = likely.address;
+    }
+  }
+
+  function setHistory(payload) {
+    const parsed = parsePayload(payload, []);
+    state.deviceHistory = Array.isArray(parsed) ? parsed : [];
+    const card = el("historyCard");
+    const list = el("historyList");
+    list.innerHTML = "";
+    card.hidden = state.deviceHistory.length === 0;
+    if (!state.deviceHistory.length) return;
+    const savedCount = state.deviceHistory.filter((device) => !device.candidate).length;
+    setText("historyHint", savedCount ? "tap to select" : "paired candidate");
+    list.innerHTML = state.deviceHistory.map((device, index) => {
+      const meta = device.candidate ? "paired candidate" : relativeTime(device.lastSeen);
+      const count = device.candidate ? "new" : (device.connectCount ? `${device.connectCount}x` : "");
+      return `<button type="button" class="history-row" data-history-index="${index}">
+        <span><strong>${device.name || "OBD adapter"}</strong><small>${device.address || "unknown"} - ${meta}</small></span>
+        <b>${count}</b>
+      </button>`;
+    }).join("");
+    document.querySelectorAll("[data-history-index]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const device = state.deviceHistory[Number(button.dataset.historyIndex)];
+        selectDevice(device.address, device.name || "OBD adapter");
+        setStatus({ state: "ready", detail: `Selected ${device.name || device.address}.` });
+      });
+    });
+  }
+
+  function setStatus(payload) {
+    const status = parsePayload(payload, {});
+    state.status = status;
+    const badge = el("stateBadge");
+    const next = status.state || "idle";
+    badge.dataset.state = next;
+    setText("stateText", next);
+    setText("statusCopy", status.detail || "Ready.");
+    if (status.lastAddress) state.lastDevice = { address: status.lastAddress, name: status.lastName || "" };
+    updateDiagnostics();
+  }
+
+  function getLastDevice() {
+    if (bridge && typeof bridge.getLastDevice === "function") {
+      state.lastDevice = parsePayload(bridge.getLastDevice(), state.lastDevice || {});
+    }
+    return state.lastDevice || {};
+  }
+
+  function relativeTime(value) {
+    const ts = Number(value);
+    if (!Number.isFinite(ts) || ts <= 0) return "saved";
+    const seconds = Math.max(1, Math.round((Date.now() - ts) / 1000));
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 48) return `${hours}h ago`;
+    return `${Math.round(hours / 24)}d ago`;
+  }
+
+  function selectDevice(address, name) {
+    if (!address) return;
+    const select = el("deviceSelect");
+    let option = Array.from(select.options).find((item) => item.value === address);
+    if (!option) {
+      option = document.createElement("option");
+      option.value = address;
+      option.dataset.name = name || "OBD adapter";
+      option.textContent = `${name || "OBD adapter"} - remembered`;
+      select.append(option);
+    }
+    select.value = address;
+  }
+
+  function getSelectedDevice() {
+    const option = el("deviceSelect").selectedOptions[0];
+    if (!option || !option.value) return null;
+    return {
+      address: option.value,
+      name: option.dataset.name || option.textContent || "OBD adapter"
+    };
+  }
+
+  function updateTelemetry(payload) {
+    const sample = parsePayload(payload, {});
+    const source = String(sample.source || "").toLowerCase();
+    const isDemoSample = source.includes("demo");
+    if (isDemoSample && !state.demoActive) setDemoActive(true);
+    if (sample.source && !isDemoSample && state.demoActive) {
+      clearDemoTelemetry();
+      setDemoActive(false);
+    }
+    state.telemetry = { ...state.telemetry, ...sample };
+    if (!isDemoSample) {
+      try {
+        localStorage.setItem("volt-last-telemetry", JSON.stringify(state.telemetry));
+      } catch (err) {
+        // The UI can keep running even if WebView storage is unavailable.
+      }
+    }
+    const kph = Number(sample.speedKph);
+    if (Number.isFinite(kph)) {
+      state.speedHistory.push(kph);
+      while (state.speedHistory.length > 48) state.speedHistory.shift();
+    }
+    updateLiveUi();
+    drawTrace();
+  }
+
+  function updateLiveUi() {
+    const t = state.telemetry;
+    const kph = Number(t.speedKph);
+    const mph = Number.isFinite(kph) ? Math.round(kph * 0.621371) : null;
+    setText("speedValue", mph);
+    setText("speedKph", Number.isFinite(kph) ? `${Math.round(kph)} km/h` : "-- km/h");
+    setText("rpmValue", t.rpm ? `${t.rpm}` : "--");
+    setText("voltageValue", t.voltage ? `${Number(t.voltage).toFixed(1)}V` : "--");
+    setText("coolantValue", t.coolantC != null ? `${t.coolantC} deg C` : "--");
+    setText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
+    setText("throttleValue", t.throttlePct != null ? `${t.throttlePct}%` : "--");
+    setText("updatedValue", t.updatedAt ? "now" : "waiting");
+    setText("rawFrames", t.raw || "Waiting for telemetry...");
+    const soc = t.soc == null || t.soc === "" ? NaN : Number(t.soc);
+    setText("socValue", Number.isFinite(soc) ? `${soc.toFixed(1)}%` : "--");
+    setText("rangeValue", Number.isFinite(soc) ? `${Math.round(soc * 0.523)} mi` : "--");
+    const batteryTemp = t.batteryTemp == null || t.batteryTemp === "" ? NaN : Number(t.batteryTemp);
+    setText("packTempValue", Number.isFinite(batteryTemp) ? `${batteryTemp.toFixed(1)} deg F` : "--");
+    const power = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
+    setText("powerValue", Number.isFinite(power) ? `${power.toFixed(1)} kW` : "--");
+    const pct = Number.isFinite(power) ? Math.min(50, Math.abs(power / 84) * 50) : 0;
+    const fill = el("powerFill");
+    fill.style.width = pct + "%";
+    fill.style.left = Number.isFinite(power) && power < 0 ? (50 - pct) + "%" : "50%";
+    setMeter("loadMeter", t.loadPct);
+    updateDiagnostics();
+  }
+
+  function updateDiagnostics() {
+    const t = state.telemetry || {};
+    const status = state.status || {};
+    const samples = Number(t.sampleCount || 0);
+    setText("diagState", status.detail || (t.updatedAt ? "Live OBD data received." : "Waiting for adapter"));
+    setText("diagSamples", samples ? `${samples} samples` : "0 samples");
+    setText("diagAdapter", t.adapter || status.adapter || "OBD adapter");
+    setText("diagVehicleState", t.vehicleState || "unknown");
+    setText("diagSession", t.sessionMs ? formatDuration(t.sessionMs) : "--");
+    setText("diagSupported", t.supportedPids ? summarizePidLine(t.supportedPids) : "unknown");
+  }
+
+  function summarizePidLine(value) {
+    const clean = String(value || "").replace(/SEARCHING\\.\\.\\./g, "").trim();
+    const match = clean.match(/4100[0-9A-F]+/i);
+    return match ? "01-00 ok" : (clean ? "adapter ok" : "unknown");
+  }
+
+  function formatDuration(ms) {
+    const seconds = Math.max(0, Math.round(Number(ms) / 1000));
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}m ${String(seconds % 60).padStart(2, "0")}s`;
+  }
+
+  function estimatePowerKw(t) {
+    const speed = Number(t.speedKph || 0);
+    const load = Number(t.loadPct || 28);
+    return state.mode === "gas" ? Math.max(8, load * 0.7) : Math.max(-4, 8 + speed * 0.18 + load * 0.12);
+  }
+
+  function drawTrace() {
+    const canvas = el("speedCanvas");
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, rect.width * dpr);
+    canvas.height = Math.max(1, rect.height * dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    const w = rect.width;
+    const h = rect.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      const y = (h / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    const samples = state.speedHistory;
+    if (samples.length < 2) return;
+    const max = Math.max(120, ...samples);
+    ctx.beginPath();
+    samples.forEach((value, index) => {
+      const x = (index / (samples.length - 1)) * w;
+      const y = h - (value / max) * (h - 18) - 8;
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = "#e6ff3a";
+    ctx.lineWidth = 4;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.shadowColor = "rgba(230,255,58,0.32)";
+    ctx.shadowBlur = 14;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  function refreshDevices() {
+    if (!bridge) {
+      setStatus({ state: "demo", detail: "Android bridge is not available in this browser preview." });
+      return;
+    }
+    setDevices(bridge.listDevices());
+    if (typeof bridge.getDeviceHistory === "function") setHistory(bridge.getDeviceHistory());
+  }
+
+  function connectSelected(scan) {
+    const selected = getSelectedDevice();
+    if (!selected) {
+      setStatus({ state: "blocked", detail: "Pick a paired or remembered OBD adapter first." });
+      return;
+    }
+    if (!bridge) return;
+    bridge.rememberDevice(selected.address, selected.name);
+    if (scan && typeof bridge.scan === "function") bridge.scan(selected.address, selected.name);
+    else bridge.connect(selected.address, selected.name);
+  }
+
+  function handleAction(action) {
+    if (action === "permissions") bridge && bridge.requestPermissions();
+    if (action === "refresh") bridge && bridge.refreshDevices();
+    if (action === "last") bridge && bridge.connectLast();
+    if (action === "scan") connectSelected(true);
+    if (action === "connect") connectSelected(false);
+    if (action === "demo") startDemo();
+    if (action === "stopDemo") stopDemo();
+    if (action === "stop") stopAll();
+  }
+
+  function startDemo() {
+    setDemoActive(true, "Demo preview is running.");
+    if (bridge) bridge.demo();
+    else runBrowserDemo();
+  }
+
+  function stopDemo() {
+    window.clearInterval(window.__voltDemoTimer);
+    if (bridge && state.demoActive) bridge.disconnect();
+    clearDemoTelemetry();
+    setDemoActive(false);
+    updateLiveUi();
+    drawTrace();
+    setStatus({ state: "idle", detail: "Demo stopped. Real data and captured history will appear here." });
+  }
+
+  function stopAll() {
+    window.clearInterval(window.__voltDemoTimer);
+    if (bridge) bridge.disconnect();
+    clearDemoTelemetry();
+    setDemoActive(false);
+    updateLiveUi();
+    drawTrace();
+    setStatus({ state: "idle", detail: "Stopped." });
+  }
+
+  function runBrowserDemo() {
+    let t = 0;
+    setStatus({ state: "connected", detail: "Browser-only demo is running." });
+    window.clearInterval(window.__voltDemoTimer);
+    window.__voltDemoTimer = window.setInterval(() => {
+      t += 1;
+      updateTelemetry({
+        source: "demo",
+        connected: true,
+        sampleCount: t,
+        sessionMs: t * 1000,
+        supportedPids: "browser demo",
+        vehicleState: "demo-preview",
+        speedKph: Math.round(54 + 23 * Math.sin(t / 3.4)),
+        rpm: state.mode === "gas" ? Math.round(1260 + 420 * Math.sin(t / 2.1)) : 0,
+        coolantC: Math.round(82 + 4 * Math.sin(t / 8)),
+        loadPct: Math.round(34 + 18 * Math.sin(t / 4.4)),
+        throttlePct: Math.round(18 + 14 * Math.sin(t / 2.7)),
+        voltage: 13.8,
+        soc: Math.max(13.4, 77.8 - t * 0.01),
+        batteryTemp: 72 + Math.sin(t / 8),
+        powerKw: state.mode === "gas" ? 32 + Math.sin(t / 3) * 8 : 16 + Math.sin(t / 2.2) * 12,
+        updatedAt: Date.now(),
+        raw: "browser demo"
+      });
+    }, 1000);
+  }
+
+  document.querySelectorAll("[data-nav]").forEach((button) => {
+    button.addEventListener("click", () => setView(button.dataset.nav));
+  });
+  document.querySelectorAll("[data-nav-jump]").forEach((button) => {
+    button.addEventListener("click", () => setView(button.dataset.navJump));
+  });
+  document.querySelectorAll("[data-mode]").forEach((button) => {
+    button.addEventListener("click", () => setMode(button.dataset.mode));
+  });
+  document.querySelectorAll("[data-action]").forEach((button) => {
+    button.addEventListener("click", () => handleAction(button.dataset.action));
+  });
+  el("permissionBtn").addEventListener("click", () => handleAction("permissions"));
+  el("refreshBtn").addEventListener("click", () => handleAction("refresh"));
+  el("lastBtn").addEventListener("click", () => handleAction("last"));
+  el("scanBtn").addEventListener("click", () => handleAction("scan"));
+  el("connectBtn").addEventListener("click", () => handleAction("connect"));
+  el("disconnectBtn").addEventListener("click", () => handleAction("stop"));
+  el("demoBtn").addEventListener("click", startDemo);
+  el("demoStopBtn").addEventListener("click", stopDemo);
+  el("driveModeSelect").addEventListener("change", (event) => {
+    setStatus({ state: "ready", detail: `Drive mode set to ${event.target.value}.` });
+  });
+  el("tripTabs").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-filter]");
+    if (!button) return;
+    state.tripFilter = button.dataset.filter;
+    document.querySelectorAll("#tripTabs button").forEach((node) => node.classList.toggle("is-active", node === button));
+    renderTrips();
+  });
+  el("addChargeBtn").addEventListener("click", () => {
+    data.sessions.unshift({ date: "Today - 21:10", type: "L2", kwh: 10.8, soc: "31->90", location: "Home", cost: "$1.30" });
+    renderSessions();
+    setStatus({ state: "ready", detail: "Charging session staged locally." });
+  });
+
+  window.VoltTrackerNative = { setDevices, setHistory, setStatus, updateTelemetry };
+
+  setDemoActive(false);
+  updateLiveUi();
+  drawTrace();
+  refreshDevices();
+  window.addEventListener("resize", drawTrace);
+  requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
+  setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 200);
+</script>
+</body>
+</html>
