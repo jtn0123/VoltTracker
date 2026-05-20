@@ -28,6 +28,9 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -103,7 +106,7 @@ public class MainActivity extends Activity {
                 publishDeviceList();
                 publishStorageSummary();
                 publishAppState();
-                publishStatus("ready", "Pick a paired OBD adapter or run demo mode.", false);
+                publishStatus("ready", "Pick a paired OBD adapter to start logging.", false);
             }
         });
         webView.addJavascriptInterface(new VoltBridge(), "VoltTrackerAndroid");
@@ -516,6 +519,35 @@ public class MainActivity extends Activity {
         }
     }
 
+    private String exportDebugBundleJson() {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("createdAtMs", System.currentTimeMillis());
+            payload.put("appState", parseJson(getAppStateJson()));
+            payload.put("storage", parseJson(getStorageSummaryJson()));
+            File dir = new File(getExternalFilesDir(null), "exports");
+            if (!dir.exists() && !dir.mkdirs()) {
+                payload.put("ok", false);
+                payload.put("error", "Could not create export directory.");
+                return payload.toString();
+            }
+            File file = new File(dir, "volttracker-debug-summary-" + System.currentTimeMillis() + ".json");
+            payload.put("ok", true);
+            payload.put("path", file.getAbsolutePath());
+            try (FileWriter writer = new FileWriter(file)) {
+                writer.write(payload.toString(2));
+            }
+        } catch (JSONException | IOException ex) {
+            try {
+                payload.put("ok", false);
+                payload.put("error", ex.getClass().getSimpleName() + ": " + ex.getMessage());
+            } catch (JSONException ignored) {
+                // Local strings are safe.
+            }
+        }
+        return payload.toString();
+    }
+
     private void publishAppState() {
         callDashboard("window.VoltTrackerNative.setAppState(" + JSONObject.quote(getAppStateJson()) + ")");
     }
@@ -668,6 +700,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String getStorageSummary() {
             return getStorageSummaryJson();
+        }
+
+        @JavascriptInterface
+        public String exportDebugBundle() {
+            return exportDebugBundleJson();
         }
 
         @JavascriptInterface

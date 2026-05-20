@@ -99,7 +99,7 @@
     margin-top: 4px;
     font-size: 30px;
     line-height: 1;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
   }
 
   h2 {
@@ -287,6 +287,82 @@
     font-size: 13px;
   }
 
+  .validation-card {
+    padding: 15px;
+  }
+
+  .validation-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .validation-row {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: rgba(0,0,0,0.13);
+  }
+
+  .validation-row::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--soft);
+    box-shadow: 0 0 12px rgba(116,117,130,0.6);
+  }
+
+  .validation-row[data-tone="ok"]::before {
+    background: var(--ok);
+    box-shadow: 0 0 12px rgba(53,230,160,0.55);
+  }
+
+  .validation-row[data-tone="warn"]::before {
+    background: var(--warn);
+    box-shadow: 0 0 12px rgba(255,184,74,0.55);
+  }
+
+  .validation-row[data-tone="bad"]::before {
+    background: var(--bad);
+    box-shadow: 0 0 12px rgba(255,107,95,0.55);
+  }
+
+  .validation-row span {
+    min-width: 0;
+  }
+
+  .validation-row strong,
+  .validation-row small {
+    display: block;
+  }
+
+  .validation-row strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+  }
+
+  .validation-row small {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.25;
+  }
+
+  .validation-row b {
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
   .control-row {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -314,6 +390,24 @@
     cursor: pointer;
     color: var(--muted);
     font-size: 13px;
+  }
+
+  .sandbox-tools {
+    margin-top: 10px;
+    padding: 11px;
+    border: 1px solid rgba(164,140,255,0.2);
+    border-radius: 14px;
+    background: rgba(164,140,255,0.06);
+  }
+
+  .sandbox-tools summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .sandbox-tools .button-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .primary {
@@ -419,7 +513,7 @@
     margin-top: 16px;
     font-size: clamp(76px, 24vw, 126px);
     line-height: 0.86;
-    letter-spacing: -0.06em;
+    letter-spacing: 0;
     font-weight: 900;
   }
 
@@ -490,7 +584,7 @@
     margin-top: 7px;
     font-size: 29px;
     line-height: 1;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
   }
 
   .mini small,
@@ -670,6 +764,115 @@
 
   .history-row {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .review-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    margin-top: 12px;
+  }
+
+  .review-grid div {
+    min-width: 0;
+    padding: 11px;
+    border-radius: 13px;
+    background: rgba(255,255,255,0.045);
+  }
+
+  .review-grid span {
+    display: block;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .review-grid strong {
+    display: block;
+    margin-top: 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 20px;
+  }
+
+  .warning-list,
+  .timeline-list,
+  .pid-frame-list,
+  .real-insight-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .warning-item,
+  .timeline-item,
+  .pid-frame-item,
+  .real-insight-item {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,0.075);
+    border-radius: 13px;
+    background: rgba(0,0,0,0.14);
+  }
+
+  .warning-item {
+    border-color: rgba(255,184,74,0.24);
+    background: rgba(255,184,74,0.08);
+  }
+
+  .pid-frame-item {
+    display: grid;
+    grid-template-columns: minmax(58px, auto) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .timeline-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+  }
+
+  .timeline-item::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    margin-top: 4px;
+    border-radius: 50%;
+    background: var(--volt);
+    box-shadow: 0 0 12px rgba(230,255,58,0.45);
+  }
+
+  .pid-frame-item strong,
+  .timeline-item strong,
+  .warning-item strong,
+  .real-insight-item strong {
+    display: block;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+  }
+
+  .pid-frame-item small,
+  .timeline-item small,
+  .warning-item small,
+  .real-insight-item small {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .pid-frame-item b {
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    white-space: nowrap;
   }
 
   .trip-dot {
@@ -1006,7 +1209,7 @@
         <div>
           <div class="kicker">Adapter</div>
           <strong id="adapterSummary">No adapter selected</strong>
-          <small id="appStateSummary">Pick a paired OBD adapter or run demo mode.</small>
+          <small id="appStateSummary">Pick a paired OBD adapter to start logging.</small>
         </div>
         <button id="connectBtn" type="button" class="primary primary-action">Connect</button>
       </div>
@@ -1026,15 +1229,14 @@
           <button id="permissionBtn" type="button">Permissions</button>
           <button id="lastBtn" type="button">Last</button>
           <button id="scanBtn" type="button" class="scan">Scan</button>
-          <button id="demoBtn" type="button" class="demo">Demo</button>
           <button id="disconnectBtn" type="button" class="danger">Stop</button>
         </div>
       </details>
-      <p id="statusCopy" class="status-copy">Pick a paired OBD adapter or run demo mode.</p>
+      <p id="statusCopy" class="status-copy">Pick a paired OBD adapter to start logging.</p>
       <div id="demoBanner" class="demo-banner" hidden>
         <span>
           <strong>Demo preview is running</strong>
-          <small>Fake trips, charging, and insight cards are visible only in this mode.</small>
+          <small>Preview data is isolated from real OBD history.</small>
         </span>
         <button id="demoStopBtn" type="button" class="demo-stop">Stop demo</button>
       </div>
@@ -1153,6 +1355,23 @@
       </div>
     </article>
 
+    <article class="panel validation-card">
+      <div class="card-head">
+        <div>
+          <span class="kicker">Test confidence</span>
+          <h3>Live validation</h3>
+        </div>
+        <span class="badge"><span class="dot"></span><span id="validationSummary">waiting</span></span>
+      </div>
+      <div class="validation-list">
+        <div id="validateObd" class="validation-row" data-tone="warn"><span><strong>OBD stream</strong><small>Waiting for adapter samples</small></span><b>idle</b></div>
+        <div id="validateGps" class="validation-row" data-tone="warn"><span><strong>GPS trace</strong><small>Waiting for location samples</small></span><b>idle</b></div>
+        <div id="validateDb" class="validation-row" data-tone="warn"><span><strong>Database writes</strong><small>Waiting for stored rows</small></span><b>ready</b></div>
+        <div id="validateParser" class="validation-row" data-tone="warn"><span><strong>PID parsing</strong><small>Waiting for parsed values</small></span><b>unknown</b></div>
+        <div id="validateBackground" class="validation-row" data-tone="warn"><span><strong>Background test</strong><small>Minimize the app during a drive to validate gaps</small></span><b>manual</b></div>
+      </div>
+    </article>
+
     <article class="panel trace-card">
       <div class="card-head">
         <div>
@@ -1182,7 +1401,7 @@
     <article class="panel empty-state non-demo-only">
       <span class="kicker">App data</span>
       <h3>No trip, charging, or insight history captured on this phone yet.</h3>
-      <p>Use Connect or Scan for real OBD telemetry. Use Demo when you want to preview the richer V2 screens.</p>
+      <p>Use Connect or Scan for real OBD telemetry. Preview screens are tucked away in Diagnostics so test drives stay focused on real data.</p>
     </article>
   </section>
 
@@ -1190,7 +1409,7 @@
     <article class="panel empty-state non-demo-only">
       <span class="kicker">Trips</span>
       <h2>No real trips stored yet.</h2>
-      <p>Trip capture will come after the OBD bridge is stable. Demo mode shows the planned trip UI without mixing fake trips into the real app.</p>
+      <p>Trip capture will come after the OBD bridge is stable. This view will stay empty until real sessions are materialized from stored GPS and PID samples.</p>
     </article>
     <article class="panel list-card demo-only" hidden>
       <header>
@@ -1245,7 +1464,7 @@
     <article class="panel empty-state non-demo-only">
       <span class="kicker">Charging</span>
       <h2>No charging sessions captured yet.</h2>
-      <p>The standalone app does not have charging-session storage yet. Demo mode previews monthly charging KPIs, sessions, and time-of-day charts.</p>
+      <p>The standalone app has the schema ready; the next step is validating charging PIDs and materializing real charge sessions.</p>
     </article>
     <section class="charge-grid demo-only" hidden>
       <article class="panel charge-kpi">
@@ -1332,12 +1551,19 @@
         <button type="button" data-action="last">Last</button>
         <button type="button" data-action="scan" class="scan">Scan</button>
         <button type="button" data-action="connect" class="primary">Connect</button>
-        <button type="button" data-action="demo" class="demo">Demo</button>
-        <button type="button" data-action="stopDemo" class="demo-stop">Stop demo</button>
         <button type="button" data-action="stop" class="danger">Stop</button>
       </div>
       <p class="status-copy">Structured samples are saved in SQLite; raw field logs still stay in the private OBD log folder.</p>
     </article>
+
+    <details class="sandbox-tools">
+      <summary>Preview sandbox</summary>
+      <p class="status-copy">Demo preview is isolated here for UI debugging. Keep it off during real car tests.</p>
+      <div class="button-grid">
+        <button type="button" data-action="demo" data-demo-label="Start demo preview" class="demo">Start demo preview</button>
+        <button type="button" data-action="stopDemo" class="demo-stop">Stop demo</button>
+      </div>
+    </details>
 
     <article id="historyCard" class="panel list-card" hidden>
       <header>
@@ -1345,6 +1571,35 @@
         <span id="historyHint" class="status-copy">tap to select</span>
       </header>
       <div id="historyList"></div>
+    </article>
+
+    <article id="reviewCard" class="panel list-card">
+      <header>
+        <div>
+          <span class="kicker">Last session review</span>
+          <h3 id="reviewTitle">No real session yet</h3>
+        </div>
+        <button type="button" class="link-btn" data-action="exportDebug">export</button>
+      </header>
+      <div class="review-grid">
+        <div><span>Max speed</span><strong id="reviewMaxSpeed">--</strong></div>
+        <div><span>GPS samples</span><strong id="reviewGpsCount">--</strong></div>
+        <div><span>PID parse</span><strong id="reviewPidParse">--</strong></div>
+        <div><span>Avg interval</span><strong id="reviewInterval">--</strong></div>
+      </div>
+      <div id="reviewWarnings" class="warning-list"></div>
+      <div id="realInsightList" class="real-insight-list"></div>
+      <div id="reviewTimeline" class="timeline-list"></div>
+    </article>
+
+    <article class="panel list-card">
+      <header>
+        <div>
+          <span class="kicker">Recent PID frames</span>
+          <h3 id="pidFrameTitle">Waiting for scan data</h3>
+        </div>
+      </header>
+      <div id="pidFrameList" class="pid-frame-list"></div>
     </article>
 
     <article class="panel list-card">
@@ -1452,12 +1707,19 @@
     }
   };
 
-  const viewMeta = {
+  const realViewMeta = {
     drive: ["Volt Tracker Android", "Drive"],
-    trips: ["April - 10 trips - 480 mi", "Trips"],
-    charge: ["Charging - 30 days", "Charge"],
-    insights: ["Pack and efficiency", "Insights"],
+    trips: ["Real sessions", "Trips"],
+    charge: ["Real charging", "Charge"],
+    insights: ["Database summaries", "Insights"],
     settings: ["OBD bridge", "Diagnostics"]
+  };
+
+  const demoViewMeta = {
+    ...realViewMeta,
+    trips: ["Preview sandbox", "Trips"],
+    charge: ["Preview sandbox", "Charge"],
+    insights: ["Preview sandbox", "Insights"]
   };
 
   function parsePayload(payload, fallback) {
@@ -1490,9 +1752,14 @@
     state.view = view;
     document.querySelectorAll(".view").forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
     document.querySelectorAll("[data-nav]").forEach((node) => node.classList.toggle("is-active", node.dataset.nav === view));
-    setText("screenKicker", viewMeta[view][0]);
-    setText("screenTitle", viewMeta[view][1]);
+    updateViewHeading();
     window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
+  function updateViewHeading() {
+    const meta = (state.demoActive ? demoViewMeta : realViewMeta)[state.view] || realViewMeta.drive;
+    setText("screenKicker", meta[0]);
+    setText("screenTitle", meta[1]);
   }
 
   function setMode(mode) {
@@ -1521,12 +1788,13 @@
     document.querySelectorAll('[data-action="stopDemo"]').forEach((button) => {
       button.hidden = !next;
     });
-    document.querySelectorAll('[data-action="demo"], #demoBtn').forEach((button) => {
-      button.textContent = next ? "Demo on" : "Demo";
+    document.querySelectorAll('[data-action="demo"]').forEach((button) => {
+      button.textContent = next ? "Demo on" : (button.dataset.demoLabel || "Demo");
       button.classList.toggle("is-active", next);
     });
     if (detail) setStatus({ state: next ? "demo" : "ready", detail });
     if (!changed) return;
+    updateViewHeading();
     renderTrips();
     renderSessions();
     renderInsights();
@@ -1688,6 +1956,8 @@
   function setStorage(payload) {
     state.storage = parsePayload(payload, {});
     updateStorageUi();
+    updateReviewUi();
+    updateValidationUi();
   }
 
   function updateStorageUi() {
@@ -1716,7 +1986,8 @@
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     const list = el("dbSessionList");
     if (!recent.length) {
-      list.innerHTML = '<p class="status-copy">Connect, scan, or run demo to create local SQLite rows.</p>';
+      list.innerHTML = '<p class="status-copy">Connect or scan to create local SQLite rows. Preview data stays isolated in the sandbox.</p>';
+      updateReviewUi();
       return;
     }
     list.innerHTML = recent.map((session) => `
@@ -1728,6 +1999,137 @@
         <b>${Number(session.sampleCount || 0)}x</b>
       </button>
     `).join("");
+    updateReviewUi();
+  }
+
+  function updateReviewUi() {
+    const review = (state.storage || {}).latestReview || {};
+    const session = review.session || {};
+    const hasSession = Boolean(session.id);
+    const warnings = Array.isArray(review.warnings) ? review.warnings : [];
+    const timeline = Array.isArray(review.timeline) ? review.timeline : [];
+    const frames = Array.isArray(review.recentPidFrames) ? review.recentPidFrames : [];
+    const maxSpeed = Number(review.maxSpeedKph || 0);
+    const gpsCount = Number(review.locationSampleCount || 0);
+    const parsed = Number(review.parsedPidCount || 0);
+    const unknown = Number(review.unknownPidCount || 0);
+    const interval = Number(review.avgSampleIntervalMs || 0);
+
+    setText("reviewTitle", hasSession
+      ? `${session.mode || "session"} - ${session.adapterName || "OBD adapter"}`
+      : "No real session yet");
+    setText("reviewMaxSpeed", maxSpeed ? `${Math.round(maxSpeed * 0.621371)} mph` : "--");
+    setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
+    setText("reviewPidParse", (parsed || unknown) ? `${parsed}/${parsed + unknown}` : "--");
+    setText("reviewInterval", interval ? formatShortDuration(interval) : "--");
+    setText("pidFrameTitle", frames.length ? `${frames.length} latest frames` : "Waiting for scan data");
+
+    const warningList = el("reviewWarnings");
+    if (warningList) {
+      if (!hasSession) {
+        warningList.innerHTML = '<p class="status-copy">Connect or scan once, then this becomes the post-test review.</p>';
+      } else if (!warnings.length) {
+        warningList.innerHTML = '<article class="real-insight-item"><strong>No warnings in stored summary</strong><small>That only means the current checks did not flag GPS, parser, or speed-sentinel issues.</small></article>';
+      } else {
+        warningList.innerHTML = warnings.map((item) => `
+          <article class="warning-item">
+            <strong>${escapeHtml(item.code || "warning")}${item.count ? ` - ${escapeHtml(item.count)}` : ""}</strong>
+            <small>${escapeHtml(item.detail || "")}</small>
+          </article>
+        `).join("");
+      }
+    }
+
+    const insightList = el("realInsightList");
+    if (insightList) {
+      insightList.innerHTML = hasSession
+        ? buildRealInsights(review).map((item) => `
+            <article class="real-insight-item">
+              <strong>${escapeHtml(item.title)}</strong>
+              <small>${escapeHtml(item.detail)}</small>
+            </article>
+          `).join("")
+        : "";
+    }
+
+    const timelineList = el("reviewTimeline");
+    if (timelineList) {
+      timelineList.innerHTML = timeline.length
+        ? timeline.slice(-8).map((item) => `
+            <article class="timeline-item">
+              <span>
+                <strong>${escapeHtml(item.detail || item.state || item.kind || "event")}</strong>
+                <small>${escapeHtml(item.kind || "event")} - ${formatWhen(item.atMs)}</small>
+              </span>
+            </article>
+          `).join("")
+        : (hasSession ? '<p class="status-copy">No stored event timeline for this session yet.</p>' : "");
+    }
+
+    const pidList = el("pidFrameList");
+    if (pidList) {
+      pidList.innerHTML = frames.length
+        ? frames.map((frame) => `
+            <article class="pid-frame-item">
+              <strong>${escapeHtml(frame.command || "--")}</strong>
+              <span>
+                <strong>${escapeHtml(frame.name || "Unparsed response")}</strong>
+                <small>${escapeHtml(frame.valueText || frame.rawResponse || "stored raw frame")}</small>
+              </span>
+              <b>${frame.parsed ? "parsed" : "raw"}</b>
+            </article>
+          `).join("")
+        : '<p class="status-copy">Run Scan or Connect to capture command/response frames.</p>';
+    }
+  }
+
+  function buildRealInsights(review) {
+    const warnings = Array.isArray(review.warnings) ? review.warnings : [];
+    const stateCounts = review.stateCounts || {};
+    const parsed = Number(review.parsedPidCount || 0);
+    const unknown = Number(review.unknownPidCount || 0);
+    const gps = Number(review.locationSampleCount || 0);
+    const maxSpeed = Number(review.maxSpeedKph || 0);
+    const hasChargeHint = warnings.some((item) => String(item.code || "") === "charge-speed-hint");
+    const hasDriving = Object.keys(stateCounts).some((key) => key.includes("driving"));
+    return [
+      {
+        title: maxSpeed ? `Max speed ${Math.round(maxSpeed * 0.621371)} mph` : "No speed peak yet",
+        detail: maxSpeed ? "Computed from accepted OBD speed samples for the latest session." : "Speed stays blank until accepted OBD speed samples are stored."
+      },
+      {
+        title: gps ? `${gps} GPS samples stored` : "No GPS route stored",
+        detail: gps ? "Route plotting has enough location samples to start review work." : "Check location permission and background behavior on the next drive."
+      },
+      {
+        title: parsed || unknown ? `${parsed} parsed PID frames, ${unknown} raw` : "No PID parse counts yet",
+        detail: "Raw frames are retained even when the parser does not understand them yet."
+      },
+      {
+        title: hasChargeHint ? "Possible charging transition detected" : "No charging clue detected",
+        detail: hasChargeHint ? "A rejected 255 km/h frame was stored as a Volt-specific clue to validate." : "Charging detection still needs more real plugged-in samples."
+      },
+      {
+        title: hasDriving ? "Possible driving state detected" : "No driving state detected",
+        detail: hasDriving ? stateCountSummary(stateCounts) : "Driving classifiers will become useful after a connected drive session."
+      }
+    ];
+  }
+
+  function stateCountSummary(counts) {
+    return Object.keys(counts || {})
+      .filter((key) => key && key !== "unknown")
+      .map((key) => `${key}: ${counts[key]}`)
+      .join(", ") || "Only unknown state samples stored.";
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function setStatus(payload) {
@@ -1741,6 +2143,7 @@
     if (status.lastAddress) state.lastDevice = { address: status.lastAddress, name: status.lastName || "" };
     renderOperationalState();
     updateDiagnostics();
+    updateValidationUi();
   }
 
   function setAppState(payload) {
@@ -1755,6 +2158,7 @@
     }
     renderOperationalState();
     updateLiveUi();
+    updateValidationUi();
   }
 
   function renderOperationalState() {
@@ -1843,6 +2247,12 @@
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
+  function formatShortDuration(ms) {
+    const value = Math.max(0, Number(ms) || 0);
+    if (value < 1000) return `${Math.round(value)}ms`;
+    return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}s`;
+  }
+
   function selectDevice(address, name) {
     if (!address) return;
     const select = el("deviceSelect");
@@ -1892,6 +2302,7 @@
     updateLiveUi();
     drawTrace();
     renderOperationalState();
+    updateValidationUi();
   }
 
   function updateLiveUi() {
@@ -1926,6 +2337,7 @@
     setMeter("loadMeter", t.loadPct);
     renderOperationalState();
     updateDiagnostics();
+    updateValidationUi();
   }
 
   function updateDiagnostics() {
@@ -1938,6 +2350,83 @@
     setText("diagVehicleState", t.vehicleState || "unknown");
     setText("diagSession", t.sessionMs ? formatDuration(t.sessionMs) : "--");
     setText("diagSupported", t.supportedPids ? summarizePidLine(t.supportedPids) : "unknown");
+  }
+
+  function updateValidationUi() {
+    const t = state.telemetry || {};
+    const app = state.appState || {};
+    const gps = app.gps || {};
+    const storage = state.storage || {};
+    const status = String((state.status || {}).state || "").toLowerCase();
+    const samples = Number((app.session || {}).sampleCount || t.sampleCount || 0);
+    const pidRows = Number(storage.pidObservationCount || 0);
+    const locationRows = Number(storage.locationSampleCount || 0);
+    const dbRows = dbRowCount(storage);
+    const updatedAt = Number(t.updatedAt || 0);
+    const ageMs = updatedAt > 0 ? Date.now() - updatedAt : NaN;
+    const hasFreshSample = samples > 0 && Number.isFinite(ageMs) && ageMs < 10000;
+    const hasAnySample = samples > 0 || pidRows > 0;
+    const hasGps = locationRows > 0 || gps.state === "locked" || (Number.isFinite(Number(t.latitude)) && Number.isFinite(Number(t.longitude)));
+    const confidence = String((app.vehicle || {}).confidence || t.vehicleStateConfidence || "").toLowerCase();
+    const hasParsed = Boolean(t.vehicleState || t.soc != null || t.voltage != null || t.rpm != null || t.speedKph != null);
+    const isBackgroundCandidate = hasAnySample && (status === "connected" || status === "scan-complete" || status === "scanning");
+
+    setValidationRow(
+      "validateObd",
+      hasFreshSample ? "ok" : (hasAnySample ? "warn" : "warn"),
+      "OBD stream",
+      hasFreshSample ? `Fresh sample ${formatAge(ageMs)} ago` : (hasAnySample ? "Samples stored, waiting for a fresh update" : "Waiting for adapter samples"),
+      samples ? `${samples}x` : "idle"
+    );
+    setValidationRow(
+      "validateGps",
+      hasGps ? "ok" : (gps.state === "blocked" ? "bad" : "warn"),
+      "GPS trace",
+      hasGps ? `${locationRows || "live"} location samples available` : (gps.state === "blocked" ? "Location permission blocked" : "Waiting for location samples"),
+      gps.state || "idle"
+    );
+    setValidationRow(
+      "validateDb",
+      dbRows > 0 ? "ok" : "warn",
+      "Database writes",
+      dbRows > 0 ? `${dbRows} rows saved on device` : "Waiting for stored rows",
+      dbRows ? "writing" : "ready"
+    );
+    setValidationRow(
+      "validateParser",
+      hasParsed ? (confidence === "inferred" ? "warn" : "ok") : "warn",
+      "PID parsing",
+      hasParsed ? `${t.vehicleState || "telemetry"} ${confidence ? "- " + confidence : ""}` : "Waiting for parsed values",
+      hasParsed ? "active" : "unknown"
+    );
+    setValidationRow(
+      "validateBackground",
+      isBackgroundCandidate ? "warn" : "warn",
+      "Background test",
+      isBackgroundCandidate ? "Minimize during a drive; confirm sample counts keep rising" : "Start logging before testing minimized behavior",
+      "manual"
+    );
+    const okCount = document.querySelectorAll(".validation-row[data-tone='ok']").length;
+    setText("validationSummary", okCount ? `${okCount}/5 ok` : "waiting");
+  }
+
+  function setValidationRow(id, tone, label, detail, value) {
+    const row = el(id);
+    if (!row) return;
+    row.dataset.tone = tone;
+    const strong = row.querySelector("strong");
+    const small = row.querySelector("small");
+    const tag = row.querySelector("b");
+    if (strong) strong.textContent = label;
+    if (small) small.textContent = detail;
+    if (tag) tag.textContent = value;
+  }
+
+  function formatAge(ms) {
+    const clean = Math.max(0, Number(ms) || 0);
+    if (clean < 1000) return "now";
+    if (clean < 60000) return `${Math.round(clean / 1000)}s`;
+    return `${Math.round(clean / 60000)}m`;
   }
 
   function summarizePidLine(value) {
@@ -2026,6 +2515,7 @@
     if (action === "refresh") bridge && bridge.refreshDevices();
     if (action === "refreshStorage") refreshStorage();
     if (action === "clearStorage") clearStorage();
+    if (action === "exportDebug") exportDebugBundle();
     if (action === "last") bridge && bridge.connectLast();
     if (action === "scan") connectSelected(true);
     if (action === "connect") connectSelected(false);
@@ -2074,6 +2564,19 @@
     setTimeout(refreshStorage, 250);
   }
 
+  function exportDebugBundle() {
+    if (!bridge || typeof bridge.exportDebugBundle !== "function") {
+      setStatus({ state: "blocked", detail: "Debug export is only available inside the Android app." });
+      return;
+    }
+    const result = parsePayload(bridge.exportDebugBundle(), {});
+    if (result.ok) {
+      setStatus({ state: "ready", detail: `Debug summary exported: ${result.path || "app files"}.` });
+    } else {
+      setStatus({ state: "blocked", detail: result.error || "Debug export failed." });
+    }
+  }
+
   function runBrowserDemo() {
     let t = 0;
     setStatus({ state: "connected", detail: "Browser-only demo is running." });
@@ -2120,7 +2623,6 @@
   el("scanBtn").addEventListener("click", () => handleAction("scan"));
   el("connectBtn").addEventListener("click", () => handleAction(el("connectBtn").dataset.primaryAction || "connect"));
   el("disconnectBtn").addEventListener("click", () => handleAction("stop"));
-  el("demoBtn").addEventListener("click", startDemo);
   el("demoStopBtn").addEventListener("click", stopDemo);
   el("driveModeSelect").addEventListener("change", (event) => {
     setStatus({ state: "ready", detail: `Drive mode set to ${event.target.value}.` });

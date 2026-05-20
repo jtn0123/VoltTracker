@@ -469,6 +469,7 @@ public final class ObdLocalStore implements Closeable {
             }
             payload.put("recentSessions", getRecentSessionsJson(6));
             payload.put("adapters", getAdapterHistoryJson(6));
+            payload.put("latestReview", latest == null ? new JSONObject() : getSessionReviewJson(db, latest));
         } catch (JSONException ignored) {
             // Local numeric/string values are safe.
         }
@@ -523,6 +524,206 @@ public final class ObdLocalStore implements Closeable {
             payload.put(item);
         }
         return payload;
+    }
+
+    private JSONObject getSessionReviewJson(SQLiteDatabase db, ObdSessionRecord session) throws JSONException {
+        JSONObject payload = new JSONObject();
+        payload.put("session", sessionToJson(session));
+        payload.put("pidObservationCount", countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                "session_id = ?", new String[]{String.valueOf(session.id)}));
+        payload.put("locationSampleCount", countRowsWhere(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                "session_id = ?", new String[]{String.valueOf(session.id)}));
+        payload.put("eventCount", countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
+                "session_id = ?", new String[]{String.valueOf(session.id)}));
+        payload.put("parsedPidCount", countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                "session_id = ? AND (value_text IS NOT NULL AND value_text != '')",
+                new String[]{String.valueOf(session.id)}));
+        payload.put("unknownPidCount", countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                "session_id = ? AND (value_text IS NULL OR value_text = '')",
+                new String[]{String.valueOf(session.id)}));
+        payload.put("maxSpeedKph", maxIntForSession(db, "speed_kph", session.id));
+        payload.put("avgSampleIntervalMs", averageSampleIntervalMs(db, session.id));
+        payload.put("stateCounts", stateCountsJson(db, session.id));
+        payload.put("timeline", recentEventsJson(db, session.id, 20));
+        payload.put("recentPidFrames", recentPidFramesJson(db, session.id, 20));
+        payload.put("speedTrace", recentSpeedTraceJson(db, session.id, 48));
+        payload.put("warnings", sessionWarningsJson(db, session.id));
+        return payload;
+    }
+
+    private static JSONObject sessionToJson(ObdSessionRecord record) throws JSONException {
+        JSONObject item = new JSONObject();
+        item.put("id", record.id);
+        item.put("mode", record.mode);
+        item.put("adapterName", record.adapterName);
+        item.put("adapterAddress", record.adapterAddress);
+        item.put("startedAtMs", record.startedAtMs);
+        item.put("endedAtMs", record.endedAtMs);
+        item.put("status", record.status);
+        item.put("sampleCount", record.sampleCount);
+        item.put("lastEventAtMs", record.lastEventAtMs);
+        return item;
+    }
+
+    private static JSONArray recentEventsJson(SQLiteDatabase db, long sessionId, int limit) throws JSONException {
+        JSONArray payload = new JSONArray();
+        try (Cursor cursor = db.query(
+                VoltTrackerDb.TABLE_EVENTS,
+                new String[]{"occurred_at_ms", "kind", "state", "detail", "blocked", "payload"},
+                "session_id = ?",
+                new String[]{String.valueOf(sessionId)},
+                null,
+                null,
+                "occurred_at_ms DESC",
+                boundedLimit(limit)
+        )) {
+            while (cursor.moveToNext()) {
+                JSONObject item = new JSONObject();
+                item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("occurred_at_ms")));
+                item.put("kind", clean(cursor.getString(cursor.getColumnIndexOrThrow("kind"))));
+                item.put("state", clean(cursor.getString(cursor.getColumnIndexOrThrow("state"))));
+                item.put("detail", clean(cursor.getString(cursor.getColumnIndexOrThrow("detail"))));
+                item.put("blocked", cursor.getInt(cursor.getColumnIndexOrThrow("blocked")) != 0);
+                item.put("payload", parseObject(cursor.getString(cursor.getColumnIndexOrThrow("payload"))));
+                payload.put(item);
+            }
+        }
+        return reverse(payload);
+    }
+
+    private static JSONArray recentPidFramesJson(SQLiteDatabase db, long sessionId, int limit) throws JSONException {
+        JSONArray payload = new JSONArray();
+        try (Cursor cursor = db.query(
+                VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                new String[]{
+                        "observed_at_ms", "command", "header", "pid", "name", "value_text",
+                        "value_numeric", "unit", "raw_response", "json"
+                },
+                "session_id = ?",
+                new String[]{String.valueOf(sessionId)},
+                null,
+                null,
+                "observed_at_ms DESC",
+                boundedLimit(limit)
+        )) {
+            while (cursor.moveToNext()) {
+                JSONObject item = new JSONObject();
+                String valueText = clean(cursor.getString(cursor.getColumnIndexOrThrow("value_text")));
+                JSONObject rawJson = parseObject(cursor.getString(cursor.getColumnIndexOrThrow("json")));
+                item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("observed_at_ms")));
+                item.put("command", clean(cursor.getString(cursor.getColumnIndexOrThrow("command"))));
+                item.put("header", clean(cursor.getString(cursor.getColumnIndexOrThrow("header"))));
+                item.put("pid", clean(cursor.getString(cursor.getColumnIndexOrThrow("pid"))));
+                item.put("name", clean(cursor.getString(cursor.getColumnIndexOrThrow("name"))));
+                item.put("valueText", valueText);
+                item.put("unit", clean(cursor.getString(cursor.getColumnIndexOrThrow("unit"))));
+                item.put("rawResponse", clean(cursor.getString(cursor.getColumnIndexOrThrow("raw_response"))));
+                item.put("durationMs", rawJson.optLong("durationMs", 0L));
+                item.put("gotPrompt", rawJson.optBoolean("gotPrompt", false));
+                item.put("parsed", !valueText.isEmpty());
+                payload.put(item);
+            }
+        }
+        return payload;
+    }
+
+    private static JSONArray recentSpeedTraceJson(SQLiteDatabase db, long sessionId, int limit) throws JSONException {
+        JSONArray payload = new JSONArray();
+        try (Cursor cursor = db.query(
+                VoltTrackerDb.TABLE_TELEMETRY,
+                new String[]{"captured_at_ms", "speed_kph", "vehicle_state", "json"},
+                "session_id = ?",
+                new String[]{String.valueOf(sessionId)},
+                null,
+                null,
+                "captured_at_ms DESC",
+                boundedLimit(limit)
+        )) {
+            while (cursor.moveToNext()) {
+                JSONObject item = new JSONObject();
+                JSONObject rawJson = parseObject(cursor.getString(cursor.getColumnIndexOrThrow("json")));
+                item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
+                item.put("speedKph", nullableInt(cursor, "speed_kph"));
+                item.put("state", clean(cursor.getString(cursor.getColumnIndexOrThrow("vehicle_state"))));
+                item.put("chargeTransitionHint", rawJson.optBoolean("chargeTransitionHint", false));
+                item.put("speedRejectedKph", rawJson.optInt("speedRejectedKph", 0));
+                payload.put(item);
+            }
+        }
+        return reverse(payload);
+    }
+
+    private static JSONObject stateCountsJson(SQLiteDatabase db, long sessionId) throws JSONException {
+        JSONObject payload = new JSONObject();
+        try (Cursor cursor = db.rawQuery(
+                "SELECT vehicle_state, COUNT(*) FROM " + VoltTrackerDb.TABLE_TELEMETRY
+                        + " WHERE session_id = ? GROUP BY vehicle_state",
+                new String[]{String.valueOf(sessionId)}
+        )) {
+            while (cursor.moveToNext()) {
+                String state = clean(cursor.getString(0));
+                payload.put(state.isEmpty() ? "unknown" : state, cursor.getLong(1));
+            }
+        }
+        return payload;
+    }
+
+    private static JSONArray sessionWarningsJson(SQLiteDatabase db, long sessionId) throws JSONException {
+        JSONArray payload = new JSONArray();
+        long chargeHints = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                "session_id = ? AND json LIKE ?",
+                new String[]{String.valueOf(sessionId), "%chargeTransitionHint%"});
+        long speedRejected = countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
+                "session_id = ? AND detail = ?",
+                new String[]{String.valueOf(sessionId), "speed_rejected"});
+        long gpsSamples = countRowsWhere(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                "session_id = ?", new String[]{String.valueOf(sessionId)});
+        long unknownPids = countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                "session_id = ? AND (value_text IS NULL OR value_text = '')",
+                new String[]{String.valueOf(sessionId)});
+        if (chargeHints > 0 || speedRejected > 0) {
+            payload.put(warning("charge-speed-hint",
+                    "Rejected 255 km/h speed frame seen. Treat it as a charging/transition clue, not vehicle speed.",
+                    Math.max(chargeHints, speedRejected)));
+        }
+        if (gpsSamples == 0) {
+            payload.put(warning("gps-missing", "No GPS samples were stored for this session.", 0));
+        }
+        if (unknownPids > 0) {
+            payload.put(warning("pid-unparsed",
+                    "Some PID responses are stored but not parsed yet.", unknownPids));
+        }
+        return payload;
+    }
+
+    private static JSONObject warning(String code, String detail, long count) throws JSONException {
+        JSONObject item = new JSONObject();
+        item.put("code", code);
+        item.put("detail", detail);
+        item.put("count", count);
+        return item;
+    }
+
+    private static int maxIntForSession(SQLiteDatabase db, String column, long sessionId) {
+        try (Cursor cursor = db.rawQuery(
+                "SELECT MAX(" + column + ") FROM " + VoltTrackerDb.TABLE_TELEMETRY + " WHERE session_id = ?",
+                new String[]{String.valueOf(sessionId)}
+        )) {
+            return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getInt(0) : 0;
+        }
+    }
+
+    private static long averageSampleIntervalMs(SQLiteDatabase db, long sessionId) {
+        try (Cursor cursor = db.rawQuery(
+                "SELECT MIN(captured_at_ms), MAX(captured_at_ms), COUNT(*) FROM "
+                        + VoltTrackerDb.TABLE_TELEMETRY + " WHERE session_id = ?",
+                new String[]{String.valueOf(sessionId)}
+        )) {
+            if (!cursor.moveToFirst() || cursor.getLong(2) < 2) {
+                return 0L;
+            }
+            return Math.max(0L, Math.round((cursor.getDouble(1) - cursor.getDouble(0)) / (cursor.getLong(2) - 1)));
+        }
     }
 
     public void clearAllData() {
@@ -762,6 +963,28 @@ public final class ObdLocalStore implements Closeable {
         try (Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + table, null)) {
             return cursor.moveToFirst() ? cursor.getLong(0) : 0L;
         }
+    }
+
+    private static long countRowsWhere(SQLiteDatabase db, String table, String where, String[] args) {
+        try (Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + table + " WHERE " + where, args)) {
+            return cursor.moveToFirst() ? cursor.getLong(0) : 0L;
+        }
+    }
+
+    private static JSONObject parseObject(String json) {
+        try {
+            return json == null || json.trim().isEmpty() ? new JSONObject() : new JSONObject(json);
+        } catch (JSONException ex) {
+            return new JSONObject();
+        }
+    }
+
+    private static JSONArray reverse(JSONArray source) throws JSONException {
+        JSONArray target = new JSONArray();
+        for (int i = source.length() - 1; i >= 0; i -= 1) {
+            target.put(source.get(i));
+        }
+        return target;
     }
 
     private static void updateSessionLastEvent(SQLiteDatabase db, long sessionId, long occurredAtMs) {
