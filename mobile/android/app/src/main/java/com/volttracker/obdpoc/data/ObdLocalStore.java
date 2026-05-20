@@ -470,6 +470,10 @@ public final class ObdLocalStore implements Closeable {
             payload.put("recentSessions", getRecentSessionsJson(6));
             payload.put("adapters", getAdapterHistoryJson(6));
             payload.put("latestReview", latest == null ? new JSONObject() : getSessionReviewJson(db, latest));
+            payload.put("latestRoute", latest == null ? new JSONObject() : routeForSessionJson(db, latest, 240));
+            payload.put("overview", overviewJson(db));
+            payload.put("chargeSummary", chargeSummaryJson(db));
+            payload.put("batterySummary", batterySummaryJson(db));
         } catch (JSONException ignored) {
             // Local numeric/string values are safe.
         }
@@ -554,7 +558,40 @@ public final class ObdLocalStore implements Closeable {
         payload.put("timeline", recentEventsJson(db, session.id, 20));
         payload.put("recentPidFrames", recentPidFramesJson(db, session.id, 20));
         payload.put("speedTrace", recentSpeedTraceJson(db, session.id, 48));
+        payload.put("route", routeForSessionJson(db, session, 180));
         payload.put("warnings", sessionWarningsJson(db, session.id));
+        return payload;
+    }
+
+    private static JSONObject overviewJson(SQLiteDatabase db) throws JSONException {
+        JSONObject payload = new JSONObject();
+        payload.put("distanceMeters", totalDistanceMeters(db));
+        payload.put("maxSpeedKph", maxInt(db, VoltTrackerDb.TABLE_TELEMETRY, "speed_kph"));
+        payload.put("avgSampleIntervalMs", averageSampleIntervalMs(db));
+        payload.put("drivingSamples", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                "vehicle_state LIKE ?", new String[]{"%driving%"}));
+        payload.put("chargingHints", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                "json LIKE ?", new String[]{"%chargeTransitionHint%"}));
+        payload.put("latestTelemetry", latestTelemetryJson(db));
+        return payload;
+    }
+
+    private static JSONObject chargeSummaryJson(SQLiteDatabase db) throws JSONException {
+        JSONObject payload = new JSONObject();
+        payload.put("chargeSessionCount", countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS));
+        payload.put("chargingHintCount", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                "json LIKE ?", new String[]{"%chargeTransitionHint%"}));
+        payload.put("maxPowerKw", maxDouble(db, VoltTrackerDb.TABLE_TELEMETRY, "power_kw"));
+        payload.put("latest", latestChargeSessionJson(db));
+        return payload;
+    }
+
+    private static JSONObject batterySummaryJson(SQLiteDatabase db) throws JSONException {
+        JSONObject payload = new JSONObject();
+        payload.put("snapshotCount", countRows(db, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS));
+        payload.put("cellSnapshotCount", countRows(db, VoltTrackerDb.TABLE_CELL_SNAPSHOTS));
+        payload.put("latestTelemetry", latestTelemetryJson(db));
+        payload.put("latestBatterySnapshot", latestBatterySnapshotJson(db));
         return payload;
     }
 
@@ -660,6 +697,149 @@ public final class ObdLocalStore implements Closeable {
         return reverse(payload);
     }
 
+    private static JSONObject routeForSessionJson(SQLiteDatabase db, ObdSessionRecord session, int limit) throws JSONException {
+        JSONObject payload = new JSONObject();
+        JSONArray points = routePointsForSessionJson(db, session.id, limit);
+        payload.put("session", sessionToJson(session));
+        payload.put("points", points);
+        payload.put("pointCount", points.length());
+        payload.put("distanceMeters", distanceMeters(points));
+        payload.put("bounds", boundsFor(points));
+        return payload;
+    }
+
+    private static JSONArray routePointsForSessionJson(SQLiteDatabase db, long sessionId, int limit) throws JSONException {
+        JSONArray points = new JSONArray();
+        try (Cursor cursor = db.query(
+                VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                new String[]{"captured_at_ms", "latitude", "longitude", "accuracy_m", "speed_mps", "bearing_deg"},
+                "session_id = ?",
+                new String[]{String.valueOf(sessionId)},
+                null,
+                null,
+                "captured_at_ms DESC",
+                boundedLimit(limit)
+        )) {
+            while (cursor.moveToNext()) {
+                JSONObject item = new JSONObject();
+                item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
+                item.put("lat", cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")));
+                item.put("lng", cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")));
+                item.put("accuracyM", nullableDouble(cursor, "accuracy_m"));
+                item.put("speedMps", nullableDouble(cursor, "speed_mps"));
+                item.put("bearingDeg", nullableDouble(cursor, "bearing_deg"));
+                points.put(item);
+            }
+        }
+        if (points.length() == 0) {
+            try (Cursor cursor = db.query(
+                    VoltTrackerDb.TABLE_TELEMETRY,
+                    new String[]{"captured_at_ms", "latitude", "longitude", "accuracy_m", "gps_speed_mps", "bearing_deg"},
+                    "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL",
+                    new String[]{String.valueOf(sessionId)},
+                    null,
+                    null,
+                    "captured_at_ms DESC",
+                    boundedLimit(limit)
+            )) {
+                while (cursor.moveToNext()) {
+                    JSONObject item = new JSONObject();
+                    item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
+                    item.put("lat", cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")));
+                    item.put("lng", cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")));
+                    item.put("accuracyM", nullableDouble(cursor, "accuracy_m"));
+                    item.put("speedMps", nullableDouble(cursor, "gps_speed_mps"));
+                    item.put("bearingDeg", nullableDouble(cursor, "bearing_deg"));
+                    points.put(item);
+                }
+            }
+        }
+        return reverse(points);
+    }
+
+    private static JSONObject latestTelemetryJson(SQLiteDatabase db) throws JSONException {
+        try (Cursor cursor = db.query(
+                VoltTrackerDb.TABLE_TELEMETRY,
+                new String[]{"captured_at_ms", "vehicle_state", "speed_kph", "rpm", "voltage", "soc", "battery_temp", "power_kw", "json"},
+                null,
+                null,
+                null,
+                null,
+                "captured_at_ms DESC",
+                "1"
+        )) {
+            if (!cursor.moveToFirst()) {
+                return new JSONObject();
+            }
+            JSONObject item = parseObject(cursor.getString(cursor.getColumnIndexOrThrow("json")));
+            item.put("capturedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
+            item.put("vehicleState", clean(cursor.getString(cursor.getColumnIndexOrThrow("vehicle_state"))));
+            item.put("speedKph", nullableInt(cursor, "speed_kph"));
+            item.put("rpm", nullableInt(cursor, "rpm"));
+            item.put("voltage", nullableDouble(cursor, "voltage"));
+            item.put("soc", nullableDouble(cursor, "soc"));
+            item.put("batteryTemp", nullableDouble(cursor, "battery_temp"));
+            item.put("powerKw", nullableDouble(cursor, "power_kw"));
+            return item;
+        }
+    }
+
+    private static JSONObject latestChargeSessionJson(SQLiteDatabase db) throws JSONException {
+        try (Cursor cursor = db.query(
+                VoltTrackerDb.TABLE_CHARGE_SESSIONS,
+                new String[]{"_id", "started_at_ms", "ended_at_ms", "charger_type", "start_soc", "end_soc", "power_kw", "energy_kwh", "confidence"},
+                null,
+                null,
+                null,
+                null,
+                "started_at_ms DESC",
+                "1"
+        )) {
+            if (!cursor.moveToFirst()) {
+                return new JSONObject();
+            }
+            JSONObject item = new JSONObject();
+            item.put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
+            item.put("startedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("started_at_ms")));
+            item.put("endedAtMs", nullableLong(cursor, "ended_at_ms"));
+            item.put("chargerType", clean(cursor.getString(cursor.getColumnIndexOrThrow("charger_type"))));
+            item.put("startSoc", nullableDouble(cursor, "start_soc"));
+            item.put("endSoc", nullableDouble(cursor, "end_soc"));
+            item.put("powerKw", nullableDouble(cursor, "power_kw"));
+            item.put("energyKwh", nullableDouble(cursor, "energy_kwh"));
+            item.put("confidence", nullableDouble(cursor, "confidence"));
+            return item;
+        }
+    }
+
+    private static JSONObject latestBatterySnapshotJson(SQLiteDatabase db) throws JSONException {
+        try (Cursor cursor = db.query(
+                VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS,
+                new String[]{"_id", "captured_at_ms", "soc", "capacity_ah", "soh_pct", "pack_voltage", "pack_current_a", "pack_power_kw", "battery_temp_c"},
+                null,
+                null,
+                null,
+                null,
+                "captured_at_ms DESC",
+                "1"
+        )) {
+            if (!cursor.moveToFirst()) {
+                return new JSONObject();
+            }
+            JSONObject item = new JSONObject();
+            item.put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
+            item.put("capturedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
+            item.put("soc", nullableDouble(cursor, "soc"));
+            item.put("capacityAh", nullableDouble(cursor, "capacity_ah"));
+            item.put("sohPct", nullableDouble(cursor, "soh_pct"));
+            item.put("packVoltage", nullableDouble(cursor, "pack_voltage"));
+            item.put("packCurrentA", nullableDouble(cursor, "pack_current_a"));
+            item.put("packPowerKw", nullableDouble(cursor, "pack_power_kw"));
+            item.put("batteryTempC", nullableDouble(cursor, "battery_temp_c"));
+            return item;
+        }
+    }
+
     private static JSONObject latestHealthJson(SQLiteDatabase db, long sessionId) throws JSONException {
         try (Cursor cursor = db.query(
                 VoltTrackerDb.TABLE_TELEMETRY,
@@ -760,6 +940,18 @@ public final class ObdLocalStore implements Closeable {
         }
     }
 
+    private static int maxInt(SQLiteDatabase db, String table, String column) {
+        try (Cursor cursor = db.rawQuery("SELECT MAX(" + column + ") FROM " + table, null)) {
+            return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getInt(0) : 0;
+        }
+    }
+
+    private static double maxDouble(SQLiteDatabase db, String table, String column) {
+        try (Cursor cursor = db.rawQuery("SELECT MAX(" + column + ") FROM " + table, null)) {
+            return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getDouble(0) : 0d;
+        }
+    }
+
     private static long averageSampleIntervalMs(SQLiteDatabase db, long sessionId) {
         try (Cursor cursor = db.rawQuery(
                 "SELECT MIN(captured_at_ms), MAX(captured_at_ms), COUNT(*) FROM "
@@ -771,6 +963,96 @@ public final class ObdLocalStore implements Closeable {
             }
             return Math.max(0L, Math.round((cursor.getDouble(1) - cursor.getDouble(0)) / (cursor.getLong(2) - 1)));
         }
+    }
+
+    private static long averageSampleIntervalMs(SQLiteDatabase db) {
+        try (Cursor cursor = db.rawQuery(
+                "SELECT MIN(captured_at_ms), MAX(captured_at_ms), COUNT(*) FROM "
+                        + VoltTrackerDb.TABLE_TELEMETRY,
+                null
+        )) {
+            if (!cursor.moveToFirst() || cursor.getLong(2) < 2) {
+                return 0L;
+            }
+            return Math.max(0L, Math.round((cursor.getDouble(1) - cursor.getDouble(0)) / (cursor.getLong(2) - 1)));
+        }
+    }
+
+    private static double totalDistanceMeters(SQLiteDatabase db) throws JSONException {
+        double total = 0d;
+        for (ObdSessionRecord session : getRecentSessions(db, 20)) {
+            total += distanceMeters(routePointsForSessionJson(db, session.id, 1000));
+        }
+        return total;
+    }
+
+    private static List<ObdSessionRecord> getRecentSessions(SQLiteDatabase db, int limit) {
+        List<ObdSessionRecord> records = new ArrayList<>();
+        try (Cursor cursor = db.query(
+                VoltTrackerDb.TABLE_SESSIONS,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "started_at_ms DESC",
+                boundedLimit(limit)
+        )) {
+            while (cursor.moveToNext()) {
+                records.add(readSession(cursor));
+            }
+        }
+        return records;
+    }
+
+    private static double distanceMeters(JSONArray points) throws JSONException {
+        double total = 0d;
+        JSONObject previous = null;
+        for (int i = 0; i < points.length(); i++) {
+            JSONObject point = points.getJSONObject(i);
+            if (previous != null) {
+                total += haversineMeters(
+                        previous.optDouble("lat"), previous.optDouble("lng"),
+                        point.optDouble("lat"), point.optDouble("lng"));
+            }
+            previous = point;
+        }
+        return total;
+    }
+
+    private static JSONObject boundsFor(JSONArray points) throws JSONException {
+        JSONObject payload = new JSONObject();
+        if (points.length() == 0) {
+            return payload;
+        }
+        double minLat = Double.MAX_VALUE;
+        double maxLat = -Double.MAX_VALUE;
+        double minLng = Double.MAX_VALUE;
+        double maxLng = -Double.MAX_VALUE;
+        for (int i = 0; i < points.length(); i++) {
+            JSONObject point = points.getJSONObject(i);
+            double lat = point.optDouble("lat");
+            double lng = point.optDouble("lng");
+            minLat = Math.min(minLat, lat);
+            maxLat = Math.max(maxLat, lat);
+            minLng = Math.min(minLng, lng);
+            maxLng = Math.max(maxLng, lng);
+        }
+        payload.put("minLat", minLat);
+        payload.put("maxLat", maxLat);
+        payload.put("minLng", minLng);
+        payload.put("maxLng", maxLng);
+        return payload;
+    }
+
+    private static double haversineMeters(double lat1, double lng1, double lat2, double lng2) {
+        double earthMeters = 6371000d;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2d) * Math.sin(dLat / 2d)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2d) * Math.sin(dLng / 2d);
+        return earthMeters * 2d * Math.atan2(Math.sqrt(a), Math.sqrt(1d - a));
     }
 
     public void clearAllData() {

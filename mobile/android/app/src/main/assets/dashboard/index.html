@@ -599,6 +599,16 @@
     gap: 10px;
   }
 
+  .real-overview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .real-overview-grid .metric strong {
+    font-size: 26px;
+  }
+
   .metric header, .charge-kpi header {
     display: flex;
     justify-content: space-between;
@@ -975,6 +985,136 @@
   .route-pin.start { left: 28px; bottom: 25px; }
   .route-pin.end { right: 31px; top: 25px; background: #ff7141; }
 
+  .map-layout {
+    display: grid;
+    gap: 12px;
+  }
+
+  .map-card {
+    padding: 14px;
+  }
+
+  .map-card.is-fullscreen {
+    position: fixed;
+    z-index: 40;
+    inset: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    display: flex;
+    flex-direction: column;
+    border-radius: 18px;
+  }
+
+  .map-card.is-fullscreen .map-frame {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .map-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .map-layer-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+    flex: 1;
+  }
+
+  .map-layer-tabs button,
+  .map-full-btn {
+    min-height: 34px;
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .map-layer-tabs button.is-active,
+  .map-full-btn[aria-pressed="true"] {
+    border-color: transparent;
+    background: var(--volt);
+    color: #111216;
+    font-weight: 850;
+  }
+
+  .map-frame {
+    position: relative;
+    min-height: 330px;
+    margin-top: 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 18% 75%, rgba(75,151,116,0.34), transparent 24%),
+      radial-gradient(circle at 78% 22%, rgba(62,111,168,0.28), transparent 28%),
+      linear-gradient(135deg, rgba(12,18,20,0.95), rgba(19,20,28,0.98));
+  }
+
+  .map-frame::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 34px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.026) 0 1px, transparent 1px 34px),
+      linear-gradient(34deg, transparent 0 34%, rgba(255,255,255,0.08) 34.5% 35.2%, transparent 36% 100%),
+      linear-gradient(150deg, transparent 0 44%, rgba(255,255,255,0.055) 44.5% 45.2%, transparent 46% 100%);
+    opacity: 0.88;
+  }
+
+  .map-frame[data-layer="heat"]::after {
+    content: "";
+    position: absolute;
+    inset: 16% 8% 15% 10%;
+    border-radius: 999px;
+    background: radial-gradient(ellipse at center, rgba(230,255,58,0.34), rgba(230,255,58,0.10) 42%, transparent 70%);
+    filter: blur(8px);
+  }
+
+  .map-svg {
+    position: relative;
+    z-index: 1;
+    display: block;
+    width: 100%;
+    height: 330px;
+  }
+
+  .map-card.is-fullscreen .map-svg {
+    height: 100%;
+  }
+
+  .map-empty {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    text-align: center;
+    color: var(--muted);
+  }
+
+  .map-empty strong {
+    display: block;
+    color: var(--text);
+    font-size: 17px;
+    margin-bottom: 6px;
+  }
+
+  .map-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .map-list {
+    display: grid;
+    gap: 8px;
+  }
+
   .energy-rows {
     display: grid;
     gap: 9px;
@@ -1091,6 +1231,27 @@
     box-shadow: 0 0 14px rgba(255,184,74,0.55);
   }
 
+  .scatter-lite {
+    height: 210px;
+    margin-top: 12px;
+    border-radius: 14px;
+    background:
+      linear-gradient(180deg, rgba(230,255,58,0.12), transparent),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.045) 0 1px, transparent 1px 42px);
+  }
+
+  .maintenance-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .maintenance-list .real-insight-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
   .setting-stack {
     display: grid;
     gap: 10px;
@@ -1122,7 +1283,7 @@
     right: max(8px, env(safe-area-inset-right));
     bottom: max(8px, env(safe-area-inset-bottom));
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 4px;
     max-width: 760px;
     margin: 0 auto;
@@ -1383,6 +1544,29 @@
       <canvas id="speedCanvas"></canvas>
     </article>
 
+    <section class="real-overview-grid non-demo-only">
+      <article class="panel metric">
+        <header><span>GPS distance</span><span>real</span></header>
+        <strong id="overviewDistance">--</strong>
+        <small id="overviewDistanceSub">waiting for route samples</small>
+      </article>
+      <article class="panel metric">
+        <header><span>Max speed</span><span>session</span></header>
+        <strong id="overviewMaxSpeed">--</strong>
+        <small>from accepted OBD speed</small>
+      </article>
+      <article class="panel metric">
+        <header><span>Battery</span><span>latest</span></header>
+        <strong id="overviewBattery">--</strong>
+        <small id="overviewBatterySub">SOC/power once observed</small>
+      </article>
+      <article class="panel metric">
+        <header><span>Charge</span><span>hints</span></header>
+        <strong id="overviewChargeHints">0</strong>
+        <small>possible plugged-in transitions</small>
+      </article>
+    </section>
+
     <article class="panel list-card demo-only" hidden>
       <header>
         <span class="kicker">Recent trips</span>
@@ -1398,7 +1582,7 @@
       </header>
       <div id="homeInsights" class="insight-list"></div>
     </article>
-    <article class="panel empty-state non-demo-only">
+    <article id="appEmptyState" class="panel empty-state non-demo-only">
       <span class="kicker">App data</span>
       <h3>No trip, charging, or insight history captured on this phone yet.</h3>
       <p>Use Connect or Scan for real OBD telemetry. Preview screens are tucked away in Diagnostics so test drives stay focused on real data.</p>
@@ -1406,10 +1590,20 @@
   </section>
 
   <section id="view-trips" class="view" data-view="trips">
-    <article class="panel empty-state non-demo-only">
+    <article id="tripsEmptyState" class="panel empty-state non-demo-only">
       <span class="kicker">Trips</span>
       <h2>No real trips stored yet.</h2>
       <p>Trip capture will come after the OBD bridge is stable. This view will stay empty until real sessions are materialized from stored GPS and PID samples.</p>
+    </article>
+    <article id="realTripsCard" class="panel list-card non-demo-only" hidden>
+      <header>
+        <div>
+          <span class="kicker">Real sessions</span>
+          <h2 id="realTripsTitle">Recorded drives</h2>
+        </div>
+        <button type="button" class="link-btn" data-nav-jump="map">map</button>
+      </header>
+      <div id="realTripsList"></div>
     </article>
     <article class="panel list-card demo-only" hidden>
       <header>
@@ -1460,12 +1654,81 @@
     </section>
   </section>
 
+  <section id="view-map" class="view" data-view="map">
+    <article id="mapCard" class="panel map-card">
+      <div class="card-head">
+        <div>
+          <span class="kicker" id="mapKicker">GPS map</span>
+          <h2 id="mapTitle">No route recorded yet</h2>
+        </div>
+        <span class="badge"><span class="dot"></span><span id="mapPointBadge">0 pts</span></span>
+      </div>
+      <div class="map-controls">
+        <div class="map-layer-tabs" role="tablist" aria-label="Map layer">
+          <button type="button" data-map-layer="routes" class="is-active">Routes</button>
+          <button type="button" data-map-layer="heat">Heat</button>
+          <button type="button" data-map-layer="stops">Stops</button>
+        </div>
+        <button id="mapFullBtn" type="button" class="map-full-btn" aria-pressed="false">Full</button>
+      </div>
+      <div id="mapFrame" class="map-frame" data-layer="routes">
+        <svg id="mapSvg" class="map-svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Recorded GPS route">
+          <polyline id="mapHeatLine" points="" fill="none" stroke="var(--volt)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" opacity="0.10"></polyline>
+          <polyline id="mapGlowLine" points="" fill="none" stroke="var(--volt)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.18"></polyline>
+          <polyline id="mapRouteLine" points="" fill="none" stroke="var(--volt)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          <circle id="mapStartPin" cx="0" cy="0" r="2.3" fill="var(--volt)" stroke="#fff" stroke-width="1.2"></circle>
+          <circle id="mapEndPin" cx="0" cy="0" r="2.8" fill="#ff7141" stroke="#fff" stroke-width="1.2"></circle>
+        </svg>
+        <div id="mapEmpty" class="map-empty">
+          <span><strong>No GPS route yet</strong>Start a logged drive with location permission enabled. The route will draw here from on-device SQLite samples.</span>
+        </div>
+      </div>
+      <div class="map-foot">
+        <span class="badge"><span class="dot"></span><span id="mapDistance">--</span></span>
+        <span class="badge"><span class="dot"></span><span id="mapDuration">--</span></span>
+        <span class="badge"><span class="dot"></span><span id="mapAccuracy">--</span></span>
+      </div>
+    </article>
+
+    <section class="map-layout">
+      <article class="panel list-card">
+        <header>
+          <span class="kicker">Recorded sessions</span>
+          <button type="button" class="link-btn" data-action="refreshStorage">refresh</button>
+        </header>
+        <div id="mapSessionList" class="map-list"></div>
+      </article>
+    </section>
+  </section>
+
   <section id="view-charge" class="view" data-view="charge">
-    <article class="panel empty-state non-demo-only">
+    <article id="chargeEmptyState" class="panel empty-state non-demo-only">
       <span class="kicker">Charging</span>
       <h2>No charging sessions captured yet.</h2>
       <p>The standalone app has the schema ready; the next step is validating charging PIDs and materializing real charge sessions.</p>
     </article>
+    <section class="charge-grid non-demo-only">
+      <article class="panel charge-kpi">
+        <header><span>Sessions</span><span>real</span></header>
+        <strong id="realChargeSessions">0</strong>
+        <small>materialized charge rows</small>
+      </article>
+      <article class="panel charge-kpi">
+        <header><span>Hints</span><span>parser</span></header>
+        <strong id="realChargeHints">0</strong>
+        <small>possible plugged-in events</small>
+      </article>
+      <article class="panel charge-kpi">
+        <header><span>Max power</span><span>observed</span></header>
+        <strong id="realChargePower">--</strong>
+        <small>from parsed telemetry</small>
+      </article>
+      <article class="panel charge-kpi">
+        <header><span>Status</span><span>confidence</span></header>
+        <strong id="realChargeStatus">needs data</strong>
+        <small>charging PIDs still validating</small>
+      </article>
+    </section>
     <section class="charge-grid demo-only" hidden>
       <article class="panel charge-kpi">
         <header><span>Energy in</span><span>30d</span></header>
@@ -1509,10 +1772,35 @@
   </section>
 
   <section id="view-insights" class="view" data-view="insights">
-    <article class="panel empty-state non-demo-only">
+    <article id="insightsEmptyState" class="panel empty-state non-demo-only">
       <span class="kicker">Insights</span>
       <h2>Waiting for enough real data.</h2>
       <p>Live OBD values are available now; pack health, cell watch, savings, and monthly insights need stored history before they should appear here.</p>
+    </article>
+    <article class="panel ratio-card non-demo-only">
+      <div id="realPackRing" class="ring" style="--v:0"><strong id="realPackValue">--</strong></div>
+      <div>
+        <span class="kicker">HV pack</span>
+        <h2 id="realPackTitle">Waiting for battery samples.</h2>
+        <p id="realPackCopy" class="status-copy">SOC, power, and pack health will stay unknown until those PIDs are validated and stored.</p>
+      </div>
+    </article>
+
+    <article class="panel list-card non-demo-only">
+      <header>
+        <div>
+          <span class="kicker">Correlation preview</span>
+          <h3>MPG vs temperature needs trip history</h3>
+        </div>
+      </header>
+      <canvas id="scatterCanvas" class="scatter-lite"></canvas>
+    </article>
+
+    <article class="panel list-card non-demo-only">
+      <header>
+        <span class="kicker">Maintenance</span>
+      </header>
+      <div id="maintenanceList" class="maintenance-list"></div>
     </article>
     <article class="panel ratio-card demo-only" hidden>
       <div class="ring" style="--v:91"><strong>91%</strong></div>
@@ -1647,6 +1935,7 @@
 <nav class="bottom-nav" aria-label="Main navigation">
   <button type="button" data-nav="drive" class="is-active"><i>D</i><span>Drive</span></button>
   <button type="button" data-nav="trips"><i>T</i><span>Trips</span></button>
+  <button type="button" data-nav="map"><i>M</i><span>Map</span></button>
   <button type="button" data-nav="charge"><i>C</i><span>Charge</span></button>
   <button type="button" data-nav="insights"><i>I</i><span>Insights</span></button>
   <button type="button" data-nav="settings"><i>D</i><span>Diag</span></button>
@@ -1691,6 +1980,8 @@
     storage: {},
     appState: {},
     demoActive: false,
+    mapLayer: "routes",
+    mapFull: false,
     status: {},
     speedHistory: [],
     telemetry: {
@@ -1711,6 +2002,7 @@
   const realViewMeta = {
     drive: ["Volt Tracker Android", "Drive"],
     trips: ["Real sessions", "Trips"],
+    map: ["GPS route", "Map"],
     charge: ["Real charging", "Charge"],
     insights: ["Database summaries", "Insights"],
     settings: ["OBD bridge", "Diagnostics"]
@@ -1741,6 +2033,10 @@
 
   function setView(view) {
     state.view = view;
+    if (view !== "map" && state.mapFull) {
+      state.mapFull = false;
+      renderMap();
+    }
     document.querySelectorAll(".view").forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
     document.querySelectorAll("[data-nav]").forEach((node) => node.classList.toggle("is-active", node.dataset.nav === view));
     updateViewHeading();
@@ -1948,6 +2244,8 @@
     state.storage = parsePayload(payload, {});
     updateStorageUi();
     updateReviewUi();
+    renderRealV2Ui();
+    renderMap();
     updateValidationUi();
   }
 
@@ -2128,6 +2426,228 @@
       .join(", ") || "Only unknown state samples stored.";
   }
 
+  function renderRealV2Ui() {
+    const storage = state.storage || {};
+    const overview = storage.overview || {};
+    const battery = storage.batterySummary || {};
+    const charge = storage.chargeSummary || {};
+    const route = storage.latestRoute || {};
+    const hasRows = dbRowCount(storage) > 0;
+    const hasRoute = Number(route.pointCount || 0) >= 2;
+    const hasCharge = Number(charge.chargeSessionCount || charge.chargingHintCount || 0) > 0;
+    const latest = battery.latestBatterySnapshot && Object.keys(battery.latestBatterySnapshot).length
+      ? battery.latestBatterySnapshot
+      : (battery.latestTelemetry || overview.latestTelemetry || {});
+    toggleHidden("appEmptyState", hasRows);
+    toggleHidden("tripsEmptyState", hasRoute || Number(storage.sessionCount || 0) > 0);
+    toggleHidden("chargeEmptyState", hasCharge);
+    toggleHidden("insightsEmptyState", hasRows);
+    toggleHidden("realTripsCard", !hasRows);
+    const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
+    setText("overviewDistance", routeDistance ? formatDistance(routeDistance) : "--");
+    setText("overviewDistanceSub", route.pointCount ? `${route.pointCount} GPS samples in latest route` : "waiting for route samples");
+    setText("overviewMaxSpeed", overview.maxSpeedKph ? `${Math.round(Number(overview.maxSpeedKph) * 0.621371)} mph` : "--");
+    const soc = Number(latest.soc);
+    const power = Number(latest.powerKw ?? latest.packPowerKw);
+    setText("overviewBattery", Number.isFinite(soc) && soc > 0 ? `${Math.round(soc)}%` : (Number.isFinite(power) && power ? `${power.toFixed(1)} kW` : "--"));
+    setText("overviewBatterySub", Number.isFinite(power) && power ? `${power.toFixed(1)} kW latest power` : "SOC/power once observed");
+    setText("overviewChargeHints", Number(charge.chargingHintCount || overview.chargingHints || 0));
+
+    const realTripsList = el("realTripsList");
+    const sessions = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
+    if (realTripsList) {
+      realTripsList.innerHTML = sessions.length
+        ? sessions.map((session) => `
+          <button type="button" class="trip-row" data-mode="${session.mode === "demo" ? "mixed" : "ev"}">
+            <span class="trip-dot"></span>
+            <span><strong>${escapeHtml(session.mode || "session")} - ${escapeHtml(session.adapterName || "OBD adapter")}</strong><small>${formatWhen(session.startedAtMs)} - ${session.status || "stored"}</small></span>
+            <b>${Number(session.sampleCount || 0)}x</b>
+          </button>`).join("")
+        : '<p class="status-copy">No stored real sessions yet.</p>';
+      setText("realTripsTitle", `${sessions.length} stored ${sessions.length === 1 ? "session" : "sessions"}`);
+    }
+
+    setText("realChargeSessions", Number(charge.chargeSessionCount || 0));
+    setText("realChargeHints", Number(charge.chargingHintCount || 0));
+    setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
+    setText("realChargeStatus", charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data"));
+
+    const ring = el("realPackRing");
+    const ringValue = el("realPackValue");
+    if (Number.isFinite(soc) && soc > 0) {
+      if (ring) ring.style.setProperty("--v", Math.max(0, Math.min(100, soc)));
+      if (ringValue) ringValue.textContent = `${Math.round(soc)}%`;
+      setText("realPackTitle", "Latest pack signal captured.");
+      setText("realPackCopy", `${Number.isFinite(power) ? power.toFixed(1) + " kW · " : ""}${latest.vehicleState || "vehicle state unknown"} · confidence grows as Volt-specific PIDs are validated.`);
+    } else {
+      if (ring) ring.style.setProperty("--v", 0);
+      if (ringValue) ringValue.textContent = "--";
+      setText("realPackTitle", "Waiting for battery samples.");
+      setText("realPackCopy", "SOC, power, and pack health will stay unknown until those PIDs are validated and stored.");
+    }
+
+    const maintenance = el("maintenanceList");
+    if (maintenance) {
+      maintenance.innerHTML = [
+        ["Tire rotation", "Track manually until odometer PID is validated", "manual"],
+        ["Battery coolant", "Needs service interval data before app reminders are trusted", "watch"],
+        ["Engine oil", "Gas-engine runtime PID will make this useful", "pending"]
+      ].map(([name, detail, tag]) => `
+        <article class="real-insight-item">
+          <span><strong>${name}</strong><small>${detail}</small></span>
+          <b>${tag}</b>
+        </article>`).join("");
+    }
+    drawScatterLite();
+  }
+
+  function toggleHidden(id, hidden) {
+    const node = el(id);
+    if (node) node.hidden = Boolean(hidden);
+  }
+
+  function renderMap() {
+    const storage = state.storage || {};
+    const route = storage.latestRoute || {};
+    const points = Array.isArray(route.points) ? route.points : [];
+    const hasRoute = points.length >= 2;
+    const frame = el("mapFrame");
+    if (frame) frame.dataset.layer = state.mapLayer;
+    document.querySelectorAll("[data-map-layer]").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.mapLayer === state.mapLayer);
+    });
+    const mapCard = el("mapCard");
+    if (mapCard) mapCard.classList.toggle("is-fullscreen", state.mapFull);
+    const fullBtn = el("mapFullBtn");
+    if (fullBtn) {
+      fullBtn.setAttribute("aria-pressed", state.mapFull ? "true" : "false");
+      fullBtn.textContent = state.mapFull ? "Exit" : "Full";
+    }
+
+    setText("mapPointBadge", `${points.length} pts`);
+    setText("mapTitle", hasRoute ? `${formatDistance(route.distanceMeters || 0)} latest route` : "No route recorded yet");
+    setText("mapKicker", hasRoute ? "GPS map - latest session" : "GPS map");
+    setText("mapDistance", hasRoute ? formatDistance(route.distanceMeters || 0) : "--");
+    const session = route.session || {};
+    const duration = Number(session.endedAtMs || Date.now()) - Number(session.startedAtMs || 0);
+    setText("mapDuration", hasRoute && duration > 0 ? formatDuration(duration) : "--");
+    const avgAccuracy = average(points.map((p) => Number(p.accuracyM)).filter(Number.isFinite));
+    setText("mapAccuracy", avgAccuracy ? `~${Math.round(avgAccuracy)}m GPS` : "--");
+    const empty = el("mapEmpty");
+    if (empty) empty.hidden = hasRoute;
+
+    const poly = routePolyline(points);
+    ["mapRouteLine", "mapGlowLine", "mapHeatLine"].forEach((id) => {
+      const node = el(id);
+      if (node) node.setAttribute("points", poly);
+    });
+    const start = projectRoutePoint(points[0], points);
+    const end = projectRoutePoint(points[points.length - 1], points);
+    setCircle("mapStartPin", start, hasRoute && state.mapLayer !== "heat");
+    setCircle("mapEndPin", end, hasRoute && state.mapLayer !== "heat");
+    const stopOpacity = state.mapLayer === "stops" ? "1" : "0.75";
+    const routeOpacity = state.mapLayer === "stops" ? "0.35" : "1";
+    const heatOpacity = state.mapLayer === "heat" ? "0.28" : "0.10";
+    const routeLine = el("mapRouteLine");
+    const heatLine = el("mapHeatLine");
+    if (routeLine) routeLine.setAttribute("opacity", routeOpacity);
+    if (heatLine) heatLine.setAttribute("opacity", heatOpacity);
+    ["mapStartPin", "mapEndPin"].forEach((id) => {
+      const node = el(id);
+      if (node) node.setAttribute("opacity", stopOpacity);
+    });
+
+    const list = el("mapSessionList");
+    const sessions = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
+    if (list) {
+      list.innerHTML = sessions.length
+        ? sessions.map((s) => `
+          <button type="button" class="history-row">
+            <span><strong>${escapeHtml(s.mode || "session")} - ${escapeHtml(s.adapterName || "OBD adapter")}</strong><small>${formatWhen(s.startedAtMs)} - ${Number(s.sampleCount || 0)} samples</small></span>
+            <b>${s.status || "stored"}</b>
+          </button>`).join("")
+        : '<p class="status-copy">No SQLite sessions yet. Start a real logged drive and the latest route will render here.</p>';
+    }
+  }
+
+  function setCircle(id, point, visible) {
+    const node = el(id);
+    if (!node) return;
+    node.hidden = !visible || !point;
+    if (!point) return;
+    node.setAttribute("cx", point.x.toFixed(2));
+    node.setAttribute("cy", point.y.toFixed(2));
+  }
+
+  function routePolyline(points) {
+    return points.map((point) => {
+      const p = projectRoutePoint(point, points);
+      return p ? `${p.x.toFixed(2)},${p.y.toFixed(2)}` : "";
+    }).filter(Boolean).join(" ");
+  }
+
+  function projectRoutePoint(point, points) {
+    if (!point || !Array.isArray(points) || points.length < 2) return null;
+    const lats = points.map((p) => Number(p.lat)).filter(Number.isFinite);
+    const lngs = points.map((p) => Number(p.lng)).filter(Number.isFinite);
+    if (!lats.length || !lngs.length) return null;
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const latSpan = Math.max(0.00001, maxLat - minLat);
+    const lngSpan = Math.max(0.00001, maxLng - minLng);
+    return {
+      x: 8 + ((Number(point.lng) - minLng) / lngSpan) * 84,
+      y: 92 - ((Number(point.lat) - minLat) / latSpan) * 84
+    };
+  }
+
+  function drawScatterLite() {
+    const canvas = el("scatterCanvas");
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+    ctx.strokeStyle = "rgba(255,255,255,0.10)";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 5; i++) {
+      const y = (rect.height / 5) * i;
+      ctx.beginPath();
+      ctx.moveTo(12, y);
+      ctx.lineTo(rect.width - 12, y);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(230,255,58,0.92)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(18, rect.height * 0.72);
+    ctx.bezierCurveTo(rect.width * 0.28, rect.height * 0.52, rect.width * 0.55, rect.height * 0.48, rect.width - 20, rect.height * 0.30);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(230,255,58,0.75)";
+    for (let i = 0; i < 18; i++) {
+      const x = 20 + (i / 17) * (rect.width - 40);
+      const y = rect.height * (0.70 - i * 0.018) + Math.sin(i * 1.7) * 18;
+      ctx.beginPath();
+      ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function average(values) {
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  }
+
+  function formatDistance(meters) {
+    const miles = Number(meters || 0) / 1609.344;
+    if (!Number.isFinite(miles) || miles <= 0) return "--";
+    return miles < 10 ? `${miles.toFixed(1)} mi` : `${Math.round(miles)} mi`;
+  }
+
   function escapeHtml(value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -2162,6 +2682,8 @@
     if (state.appState.storage) {
       state.storage = state.appState.storage;
       updateStorageUi();
+      renderRealV2Ui();
+      renderMap();
     }
     renderOperationalState();
     updateLiveUi();
@@ -2655,6 +3177,16 @@
   document.querySelectorAll("[data-action]").forEach((button) => {
     button.addEventListener("click", () => handleAction(button.dataset.action));
   });
+  document.querySelectorAll("[data-map-layer]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.mapLayer = button.dataset.mapLayer;
+      renderMap();
+    });
+  });
+  el("mapFullBtn").addEventListener("click", () => {
+    state.mapFull = !state.mapFull;
+    renderMap();
+  });
   el("permissionBtn").addEventListener("click", () => handleAction("permissions"));
   el("refreshBtn").addEventListener("click", () => handleAction("refresh"));
   el("lastBtn").addEventListener("click", () => handleAction("last"));
@@ -2683,10 +3215,15 @@
   setDemoActive(false);
   renderOperationalState();
   updateLiveUi();
+  renderRealV2Ui();
+  renderMap();
   drawTrace();
   refreshDevices();
   refreshStorage();
-  window.addEventListener("resize", drawTrace);
+  window.addEventListener("resize", () => {
+    drawTrace();
+    drawScatterLite();
+  });
   requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
   setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 200);
 </script>
