@@ -1586,6 +1586,8 @@
         <div><span>GPS samples</span><strong id="reviewGpsCount">--</strong></div>
         <div><span>PID parse</span><strong id="reviewPidParse">--</strong></div>
         <div><span>Avg interval</span><strong id="reviewInterval">--</strong></div>
+        <div><span>Background</span><strong id="reviewBackground">--</strong></div>
+        <div><span>Gaps</span><strong id="reviewGaps">--</strong></div>
       </div>
       <div id="reviewWarnings" class="warning-list"></div>
       <div id="realInsightList" class="real-insight-list"></div>
@@ -1702,8 +1704,7 @@
       batteryTemp: null,
       powerKw: null,
       updatedAt: null,
-      raw: "",
-      ...loadCachedTelemetry()
+      raw: ""
     }
   };
 
@@ -1726,16 +1727,6 @@
     if (!payload) return fallback;
     try { return typeof payload === "string" ? JSON.parse(payload) : payload; }
     catch (err) { return fallback; }
-  }
-
-  function loadCachedTelemetry() {
-    try {
-      const cached = JSON.parse(localStorage.getItem("volt-last-telemetry") || "{}");
-      const source = String(cached.source || "").toLowerCase();
-      return source.includes("demo") ? {} : cached;
-    } catch (err) {
-      return {};
-    }
   }
 
   function setText(id, value) {
@@ -2014,6 +2005,8 @@
     const parsed = Number(review.parsedPidCount || 0);
     const unknown = Number(review.unknownPidCount || 0);
     const interval = Number(review.avgSampleIntervalMs || 0);
+    const backgroundSamples = Number(review.backgroundSampleCount || (review.latestHealth || {}).backgroundSampleCount || 0);
+    const sampleGaps = Number(review.sampleGapEventCount || (review.latestHealth || {}).sampleGapCount || 0);
 
     setText("reviewTitle", hasSession
       ? `${session.mode || "session"} - ${session.adapterName || "OBD adapter"}`
@@ -2022,6 +2015,8 @@
     setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
     setText("reviewPidParse", (parsed || unknown) ? `${parsed}/${parsed + unknown}` : "--");
     setText("reviewInterval", interval ? formatShortDuration(interval) : "--");
+    setText("reviewBackground", backgroundSamples ? `${backgroundSamples} samples` : "--");
+    setText("reviewGaps", sampleGaps ? `${sampleGaps}` : "0");
     setText("pidFrameTitle", frames.length ? `${frames.length} latest frames` : "Waiting for scan data");
 
     const warningList = el("reviewWarnings");
@@ -2090,6 +2085,8 @@
     const unknown = Number(review.unknownPidCount || 0);
     const gps = Number(review.locationSampleCount || 0);
     const maxSpeed = Number(review.maxSpeedKph || 0);
+    const backgroundSamples = Number(review.backgroundSampleCount || (review.latestHealth || {}).backgroundSampleCount || 0);
+    const gapCount = Number(review.sampleGapEventCount || (review.latestHealth || {}).sampleGapCount || 0);
     const hasChargeHint = warnings.some((item) => String(item.code || "") === "charge-speed-hint");
     const hasDriving = Object.keys(stateCounts).some((key) => key.includes("driving"));
     return [
@@ -2112,6 +2109,14 @@
       {
         title: hasDriving ? "Possible driving state detected" : "No driving state detected",
         detail: hasDriving ? stateCountSummary(stateCounts) : "Driving classifiers will become useful after a connected drive session."
+      },
+      {
+        title: backgroundSamples ? `${backgroundSamples} samples captured in background` : "Background logging not proven yet",
+        detail: backgroundSamples ? "The foreground service kept writing samples while the app was minimized." : "Minimize the app during the next drive to prove background collection."
+      },
+      {
+        title: gapCount ? `${gapCount} sample gaps detected` : "No sample gaps flagged",
+        detail: gapCount ? "Review these gaps against Android background behavior and adapter reconnects." : "No long active-session sample gaps are stored for the latest session."
       }
     ];
   }
@@ -2149,8 +2154,10 @@
   function setAppState(payload) {
     state.appState = parsePayload(payload, {});
     const nextTelemetry = state.appState.latestTelemetry || {};
-    if (nextTelemetry && Object.keys(nextTelemetry).length) {
+    if (shouldAcceptTelemetry(nextTelemetry)) {
       state.telemetry = { ...state.telemetry, ...nextTelemetry };
+    } else if (!isActiveStatus()) {
+      resetTelemetry();
     }
     if (state.appState.storage) {
       state.storage = state.appState.storage;
@@ -2159,6 +2166,37 @@
     renderOperationalState();
     updateLiveUi();
     updateValidationUi();
+  }
+
+  function shouldAcceptTelemetry(sample) {
+    if (!sample || !Object.keys(sample).length) return false;
+    const source = String(sample.source || "").toLowerCase();
+    if (source.includes("demo")) return state.demoActive || isActiveStatus();
+    const updatedAt = Number(sample.updatedAt || 0);
+    const ageMs = updatedAt > 0 ? Date.now() - updatedAt : Number.POSITIVE_INFINITY;
+    return isActiveStatus() || ageMs < 30000 || dbRowCount(state.storage || {}) > 0;
+  }
+
+  function isActiveStatus() {
+    const status = String((state.status || {}).state || (state.appState.session || {}).state || "").toLowerCase();
+    return ["connected", "connecting", "initializing", "scanning", "scan-complete", "demo"].includes(status);
+  }
+
+  function resetTelemetry() {
+    state.telemetry = {
+      speedKph: null,
+      rpm: null,
+      voltage: null,
+      coolantC: null,
+      loadPct: null,
+      throttlePct: null,
+      soc: null,
+      batteryTemp: null,
+      powerKw: null,
+      updatedAt: null,
+      raw: ""
+    };
+    state.speedHistory = [];
   }
 
   function renderOperationalState() {
@@ -2287,13 +2325,6 @@
       setDemoActive(false);
     }
     state.telemetry = { ...state.telemetry, ...sample };
-    if (!isDemoSample) {
-      try {
-        localStorage.setItem("volt-last-telemetry", JSON.stringify(state.telemetry));
-      } catch (err) {
-        // The UI can keep running even if WebView storage is unavailable.
-      }
-    }
     const kph = Number(sample.speedKph);
     if (Number.isFinite(kph)) {
       state.speedHistory.push(kph);
@@ -2356,6 +2387,7 @@
     const t = state.telemetry || {};
     const app = state.appState || {};
     const gps = app.gps || {};
+    const lifecycle = app.lifecycle || {};
     const storage = state.storage || {};
     const status = String((state.status || {}).state || "").toLowerCase();
     const samples = Number((app.session || {}).sampleCount || t.sampleCount || 0);
@@ -2370,6 +2402,10 @@
     const confidence = String((app.vehicle || {}).confidence || t.vehicleStateConfidence || "").toLowerCase();
     const hasParsed = Boolean(t.vehicleState || t.soc != null || t.voltage != null || t.rpm != null || t.speedKph != null);
     const isBackgroundCandidate = hasAnySample && (status === "connected" || status === "scan-complete" || status === "scanning");
+    const backgroundSamples = Number(lifecycle.backgroundSampleCount || t.backgroundSampleCount || 0);
+    const gapCount = Number(lifecycle.sampleGapCount || t.sampleGapCount || 0);
+    const foregroundService = Boolean(lifecycle.foregroundServiceActive || t.foregroundServiceActive);
+    const appForeground = lifecycle.appForeground !== false && t.appForeground !== false;
 
     setValidationRow(
       "validateObd",
@@ -2401,10 +2437,12 @@
     );
     setValidationRow(
       "validateBackground",
-      isBackgroundCandidate ? "warn" : "warn",
+      backgroundSamples ? "ok" : (foregroundService ? "warn" : "warn"),
       "Background test",
-      isBackgroundCandidate ? "Minimize during a drive; confirm sample counts keep rising" : "Start logging before testing minimized behavior",
-      "manual"
+      backgroundSamples
+        ? `${backgroundSamples} samples while minimized${gapCount ? `, ${gapCount} gaps` : ""}`
+        : (isBackgroundCandidate ? "Minimize during a drive; confirm sample counts keep rising" : "Start logging before testing minimized behavior"),
+      foregroundService ? (appForeground ? "armed" : "active") : "manual"
     );
     const okCount = document.querySelectorAll(".validation-row[data-tone='ok']").length;
     setText("validationSummary", okCount ? `${okCount}/5 ok` : "waiting");

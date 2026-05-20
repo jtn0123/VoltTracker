@@ -46,6 +46,8 @@ public class ObdService extends Service {
     public static final String ACTION_SCAN = "com.volttracker.obdpoc.action.SCAN";
     public static final String ACTION_DEMO = "com.volttracker.obdpoc.action.DEMO";
     public static final String ACTION_DISCONNECT = "com.volttracker.obdpoc.action.DISCONNECT";
+    public static final String ACTION_APP_FOREGROUND = "com.volttracker.obdpoc.action.APP_FOREGROUND";
+    public static final String ACTION_APP_BACKGROUND = "com.volttracker.obdpoc.action.APP_BACKGROUND";
     public static final String BROADCAST_TELEMETRY = "com.volttracker.obdpoc.broadcast.TELEMETRY";
     public static final String BROADCAST_STATUS = "com.volttracker.obdpoc.broadcast.STATUS";
     public static final String EXTRA_ADDRESS = "address";
@@ -88,6 +90,13 @@ public class ObdService extends Service {
     private String currentHeader = "";
     private Integer lastAcceptedSpeedKph;
     private long lastAcceptedSpeedAtMs;
+    private volatile boolean appInForeground = true;
+    private volatile boolean foregroundServiceActive;
+    private int backgroundSampleCount;
+    private int sampleGapCount;
+    private long lastSampleAtMs;
+    private long lastSampleGapMs;
+    private long maxSampleGapMs;
     private final LocationListener locationListener = new LocationListener() {
         @Override
         public void onLocationChanged(Location location) {
@@ -125,8 +134,23 @@ public class ObdService extends Service {
         if (ACTION_DISCONNECT.equals(action)) {
             stopCurrentSession("Disconnected.");
             stopForeground(true);
+            foregroundServiceActive = false;
             stopSelf();
             return START_NOT_STICKY;
+        }
+        if (ACTION_APP_FOREGROUND.equals(action)) {
+            recordAppVisibility(true);
+            if (!running.get()) {
+                stopSelf(startId);
+            }
+            return running.get() ? START_STICKY : START_NOT_STICKY;
+        }
+        if (ACTION_APP_BACKGROUND.equals(action)) {
+            recordAppVisibility(false);
+            if (!running.get()) {
+                stopSelf(startId);
+            }
+            return running.get() ? START_STICKY : START_NOT_STICKY;
         }
         if (ACTION_DEMO.equals(action)) {
             activeName = "Demo stream";
@@ -191,6 +215,7 @@ public class ObdService extends Service {
         stopCurrentSession(null);
         sessionStartedAtMs = System.currentTimeMillis();
         sampleCount = 0;
+        resetSessionHealth();
         lastAcceptedSpeedKph = null;
         lastAcceptedSpeedAtMs = 0L;
         supportedPidsSummary = "";
@@ -204,6 +229,7 @@ public class ObdService extends Service {
         stopCurrentSession(null);
         sessionStartedAtMs = System.currentTimeMillis();
         sampleCount = 0;
+        resetSessionHealth();
         supportedPidsSummary = "demo";
         openSessionLog("demo", null);
         running.set(true);
@@ -340,6 +366,7 @@ public class ObdService extends Service {
                 sample.put("batteryTemp", round1(72.0 + Math.sin(t / 8.0)));
                 sample.put("powerKw", round1(16.0 + Math.sin(t / 2.2) * 12.0));
                 sample.put("updatedAt", System.currentTimeMillis());
+                appendSessionHealth(sample);
                 sample.put("raw", "demo");
             } catch (JSONException ignored) {
                 // Local numeric values are safe.
@@ -500,6 +527,7 @@ public class ObdService extends Service {
             sample.put("vehicleState", classifyVehicleState(voltage, acceptedSpeed, rpm, load, chargeTransitionHint));
             sample.put("vehicleStateConfidence", classifyVehicleStateConfidence(voltage, acceptedSpeed, rpm, chargeTransitionHint));
             sample.put("updatedAt", System.currentTimeMillis());
+            appendSessionHealth(sample);
             appendLocation(sample);
             sample.put("raw", raw.trim());
         } catch (IOException | JSONException ex) {
@@ -528,6 +556,41 @@ public class ObdService extends Service {
         sample.put("provider", location.getProvider());
         sample.put("locationProvider", location.getProvider());
         sample.put("locationAgeMs", Math.max(0L, System.currentTimeMillis() - location.getTime()));
+    }
+
+    private synchronized void resetSessionHealth() {
+        backgroundSampleCount = 0;
+        sampleGapCount = 0;
+        lastSampleAtMs = 0L;
+        lastSampleGapMs = 0L;
+        maxSampleGapMs = 0L;
+    }
+
+    private synchronized void appendSessionHealth(JSONObject sample) throws JSONException {
+        long now = sample.optLong("updatedAt", System.currentTimeMillis());
+        long gapMs = lastSampleAtMs > 0L ? Math.max(0L, now - lastSampleAtMs) : 0L;
+        if (gapMs > 0L) {
+            lastSampleGapMs = gapMs;
+            maxSampleGapMs = Math.max(maxSampleGapMs, gapMs);
+            if (gapMs > expectedSampleGapMs()) {
+                sampleGapCount += 1;
+                logEvent("sample_gap", "gapMs", String.valueOf(gapMs), "mode", activeMode);
+            }
+        }
+        lastSampleAtMs = now;
+        if (!appInForeground) {
+            backgroundSampleCount += 1;
+        }
+        sample.put("appForeground", appInForeground);
+        sample.put("foregroundServiceActive", foregroundServiceActive);
+        sample.put("backgroundSampleCount", backgroundSampleCount);
+        sample.put("sampleGapCount", sampleGapCount);
+        sample.put("lastSampleGapMs", lastSampleGapMs);
+        sample.put("maxSampleGapMs", maxSampleGapMs);
+    }
+
+    private long expectedSampleGapMs() {
+        return "demo".equals(activeMode) ? 3500L : 6000L;
     }
 
     private String probeCommand(String command, long timeoutMs, StringBuilder raw) throws IOException {
@@ -700,9 +763,11 @@ public class ObdService extends Service {
                 serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
             }
             startForeground(NOTIFICATION_ID, notification, serviceType);
+            foregroundServiceActive = true;
             return;
         }
         startForeground(NOTIFICATION_ID, notification);
+        foregroundServiceActive = true;
     }
 
     private Notification buildNotification(String text) {
@@ -730,6 +795,19 @@ public class ObdService extends Service {
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) {
             manager.notify(NOTIFICATION_ID, buildNotification(text));
+        }
+    }
+
+    private synchronized void recordAppVisibility(boolean foreground) {
+        if (appInForeground == foreground) {
+            return;
+        }
+        appInForeground = foreground;
+        logEvent(foreground ? "app_foregrounded" : "app_backgrounded",
+                "backgroundSampleCount", String.valueOf(backgroundSampleCount),
+                "sampleGapCount", String.valueOf(sampleGapCount));
+        if (running.get()) {
+            updateNotification(foreground ? "Logging while app is open" : "Background logging active");
         }
     }
 
@@ -795,6 +873,7 @@ public class ObdService extends Service {
         }
         sessionLog = null;
         activeSessionId = 0L;
+        foregroundServiceActive = false;
         activeMode = "";
         activeAddress = "";
         currentHeader = "";

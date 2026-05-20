@@ -543,6 +543,13 @@ public final class ObdLocalStore implements Closeable {
                 new String[]{String.valueOf(session.id)}));
         payload.put("maxSpeedKph", maxIntForSession(db, "speed_kph", session.id));
         payload.put("avgSampleIntervalMs", averageSampleIntervalMs(db, session.id));
+        payload.put("backgroundSampleCount", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                "session_id = ? AND json LIKE ?",
+                new String[]{String.valueOf(session.id), "%\"appForeground\":false%"}));
+        payload.put("sampleGapEventCount", countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
+                "session_id = ? AND detail = ?",
+                new String[]{String.valueOf(session.id), "sample_gap"}));
+        payload.put("latestHealth", latestHealthJson(db, session.id));
         payload.put("stateCounts", stateCountsJson(db, session.id));
         payload.put("timeline", recentEventsJson(db, session.id, 20));
         payload.put("recentPidFrames", recentPidFramesJson(db, session.id, 20));
@@ -653,6 +660,32 @@ public final class ObdLocalStore implements Closeable {
         return reverse(payload);
     }
 
+    private static JSONObject latestHealthJson(SQLiteDatabase db, long sessionId) throws JSONException {
+        try (Cursor cursor = db.query(
+                VoltTrackerDb.TABLE_TELEMETRY,
+                new String[]{"json"},
+                "session_id = ?",
+                new String[]{String.valueOf(sessionId)},
+                null,
+                null,
+                "captured_at_ms DESC",
+                "1"
+        )) {
+            if (!cursor.moveToFirst()) {
+                return new JSONObject();
+            }
+            JSONObject rawJson = parseObject(cursor.getString(cursor.getColumnIndexOrThrow("json")));
+            JSONObject payload = new JSONObject();
+            payload.put("appForeground", rawJson.optBoolean("appForeground", true));
+            payload.put("foregroundServiceActive", rawJson.optBoolean("foregroundServiceActive", false));
+            payload.put("backgroundSampleCount", rawJson.optInt("backgroundSampleCount", 0));
+            payload.put("sampleGapCount", rawJson.optInt("sampleGapCount", 0));
+            payload.put("lastSampleGapMs", rawJson.optLong("lastSampleGapMs", 0L));
+            payload.put("maxSampleGapMs", rawJson.optLong("maxSampleGapMs", 0L));
+            return payload;
+        }
+    }
+
     private static JSONObject stateCountsJson(SQLiteDatabase db, long sessionId) throws JSONException {
         JSONObject payload = new JSONObject();
         try (Cursor cursor = db.rawQuery(
@@ -681,6 +714,12 @@ public final class ObdLocalStore implements Closeable {
         long unknownPids = countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
                 "session_id = ? AND (value_text IS NULL OR value_text = '')",
                 new String[]{String.valueOf(sessionId)});
+        long sampleGaps = countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
+                "session_id = ? AND detail = ?",
+                new String[]{String.valueOf(sessionId), "sample_gap"});
+        long backgroundEvents = countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
+                "session_id = ? AND (detail = ? OR detail = ?)",
+                new String[]{String.valueOf(sessionId), "app_backgrounded", "app_foregrounded"});
         if (chargeHints > 0 || speedRejected > 0) {
             payload.put(warning("charge-speed-hint",
                     "Rejected 255 km/h speed frame seen. Treat it as a charging/transition clue, not vehicle speed.",
@@ -692,6 +731,14 @@ public final class ObdLocalStore implements Closeable {
         if (unknownPids > 0) {
             payload.put(warning("pid-unparsed",
                     "Some PID responses are stored but not parsed yet.", unknownPids));
+        }
+        if (sampleGaps > 0) {
+            payload.put(warning("sample-gap",
+                    "Logging had one or more long sample gaps while the session was active.", sampleGaps));
+        }
+        if (backgroundEvents > 0) {
+            payload.put(warning("background-tested",
+                    "App foreground/background transitions were captured for this session.", backgroundEvents));
         }
         return payload;
     }

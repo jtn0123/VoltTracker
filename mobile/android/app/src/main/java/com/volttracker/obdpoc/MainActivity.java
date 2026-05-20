@@ -130,10 +130,12 @@ public class MainActivity extends Activity {
         publishDeviceList();
         publishStorageSummary();
         publishAppState();
+        reportAppVisibility(true);
     }
 
     @Override
     protected void onPause() {
+        reportAppVisibility(false);
         super.onPause();
         try {
             unregisterReceiver(obdReceiver);
@@ -495,6 +497,16 @@ public class MainActivity extends Activity {
         startService(service);
     }
 
+    private void reportAppVisibility(boolean foreground) {
+        Intent service = new Intent(this, ObdService.class);
+        service.setAction(foreground ? ObdService.ACTION_APP_FOREGROUND : ObdService.ACTION_APP_BACKGROUND);
+        try {
+            startService(service);
+        } catch (IllegalStateException ignored) {
+            // Visibility is diagnostic only; do not interrupt the Activity lifecycle.
+        }
+    }
+
     private void callDashboard(String script) {
         if (!pageReady || webView == null) {
             return;
@@ -581,6 +593,9 @@ public class MainActivity extends Activity {
             session.put("detail", lastStatus.optString("detail", ""));
             session.put("sampleCount", lastTelemetry.optInt("sampleCount", 0));
             session.put("sessionMs", lastTelemetry.optLong("sessionMs", 0L));
+            session.put("backgroundSampleCount", lastTelemetry.optInt("backgroundSampleCount", 0));
+            session.put("sampleGapCount", lastTelemetry.optInt("sampleGapCount", 0));
+            session.put("maxSampleGapMs", lastTelemetry.optLong("maxSampleGapMs", 0L));
             payload.put("session", session);
 
             JSONObject vehicle = new JSONObject();
@@ -600,6 +615,15 @@ public class MainActivity extends Activity {
                 gps.put("ageMs", lastTelemetry.optLong("locationAgeMs"));
             }
             payload.put("gps", gps);
+
+            JSONObject lifecycle = new JSONObject();
+            lifecycle.put("appForeground", lastTelemetry.optBoolean("appForeground", true));
+            lifecycle.put("foregroundServiceActive", lastTelemetry.optBoolean("foregroundServiceActive", false));
+            lifecycle.put("backgroundSampleCount", lastTelemetry.optInt("backgroundSampleCount", 0));
+            lifecycle.put("sampleGapCount", lastTelemetry.optInt("sampleGapCount", 0));
+            lifecycle.put("lastSampleGapMs", lastTelemetry.optLong("lastSampleGapMs", 0L));
+            lifecycle.put("maxSampleGapMs", lastTelemetry.optLong("maxSampleGapMs", 0L));
+            payload.put("lifecycle", lifecycle);
 
             payload.put("latestTelemetry", lastTelemetry);
             payload.put("storage", lastStorage);
