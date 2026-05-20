@@ -1236,7 +1236,7 @@
         <button type="button" data-action="stopDemo" class="demo-stop">Stop demo</button>
         <button type="button" data-action="stop" class="danger">Stop</button>
       </div>
-      <p class="status-copy">Latest field logs remain saved inside the app private OBD log folder.</p>
+      <p class="status-copy">Structured samples are saved in SQLite; raw field logs still stay in the private OBD log folder.</p>
     </article>
 
     <article id="historyCard" class="panel list-card" hidden>
@@ -1245,6 +1245,24 @@
         <span id="historyHint" class="status-copy">tap to select</span>
       </header>
       <div id="historyList"></div>
+    </article>
+
+    <article class="panel list-card">
+      <header>
+        <div>
+          <span class="kicker">On-phone database</span>
+          <h3 id="dbSummaryTitle">No stored sessions yet</h3>
+        </div>
+        <button type="button" class="link-btn" data-action="refreshStorage">refresh</button>
+      </header>
+      <div class="status-meta">
+        <div><span>Sessions</span><strong id="dbSessionCount">0</strong></div>
+        <div><span>Samples</span><strong id="dbSampleCount">0</strong></div>
+        <div><span>Events</span><strong id="dbEventCount">0</strong></div>
+        <div><span>Size</span><strong id="dbSize">0 B</strong></div>
+      </div>
+      <div id="dbSessionList" style="margin-top:12px"></div>
+      <button type="button" data-action="clearStorage" class="danger" style="margin-top:12px;width:100%">Clear stored debug data</button>
     </article>
 
     <article class="panel raw">
@@ -1308,6 +1326,7 @@
     selectedTripId: 8421,
     lastDevice: null,
     deviceHistory: [],
+    storage: {},
     demoActive: false,
     status: {},
     speedHistory: [],
@@ -1560,6 +1579,39 @@
     });
   }
 
+  function setStorage(payload) {
+    state.storage = parsePayload(payload, {});
+    updateStorageUi();
+  }
+
+  function updateStorageUi() {
+    const storage = state.storage || {};
+    const sessions = Number(storage.sessionCount || 0);
+    const samples = Number(storage.sampleCount || 0);
+    const events = Number(storage.eventCount || 0);
+    setText("dbSessionCount", sessions);
+    setText("dbSampleCount", samples);
+    setText("dbEventCount", events);
+    setText("dbSize", formatBytes(Number(storage.databaseBytes || 0)));
+    const last = storage.lastEventAtMs || storage.lastStartedAtMs;
+    setText("dbSummaryTitle", sessions ? `${samples} samples - ${formatWhen(last)}` : "No stored sessions yet");
+    const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
+    const list = el("dbSessionList");
+    if (!recent.length) {
+      list.innerHTML = '<p class="status-copy">Connect, scan, or run demo to create local SQLite rows.</p>';
+      return;
+    }
+    list.innerHTML = recent.map((session) => `
+      <button type="button" class="history-row">
+        <span>
+          <strong>${session.mode || "session"} - ${session.adapterName || "OBD adapter"}</strong>
+          <small>${formatWhen(session.startedAtMs)} - ${session.status || "active"}</small>
+        </span>
+        <b>${Number(session.sampleCount || 0)}x</b>
+      </button>
+    `).join("");
+  }
+
   function setStatus(payload) {
     const status = parsePayload(payload, {});
     state.status = status;
@@ -1589,6 +1641,20 @@
     const hours = Math.round(minutes / 60);
     if (hours < 48) return `${hours}h ago`;
     return `${Math.round(hours / 24)}d ago`;
+  }
+
+  function formatWhen(value) {
+    const ts = Number(value);
+    if (!Number.isFinite(ts) || ts <= 0) return "not yet";
+    return relativeTime(ts);
+  }
+
+  function formatBytes(value) {
+    const bytes = Number(value);
+    if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+    if (bytes < 1024) return `${Math.round(bytes)} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
   function selectDevice(address, name) {
@@ -1764,6 +1830,8 @@
   function handleAction(action) {
     if (action === "permissions") bridge && bridge.requestPermissions();
     if (action === "refresh") bridge && bridge.refreshDevices();
+    if (action === "refreshStorage") refreshStorage();
+    if (action === "clearStorage") clearStorage();
     if (action === "last") bridge && bridge.connectLast();
     if (action === "scan") connectSelected(true);
     if (action === "connect") connectSelected(false);
@@ -1796,6 +1864,20 @@
     updateLiveUi();
     drawTrace();
     setStatus({ state: "idle", detail: "Stopped." });
+  }
+
+  function refreshStorage() {
+    if (bridge && typeof bridge.getStorageSummary === "function") {
+      setStorage(bridge.getStorageSummary());
+    }
+  }
+
+  function clearStorage() {
+    if (!bridge || typeof bridge.clearStoredData !== "function") return;
+    const confirmed = window.confirm("Clear local OBD sessions, samples, and debug events from this phone?");
+    if (!confirmed) return;
+    bridge.clearStoredData();
+    setTimeout(refreshStorage, 250);
   }
 
   function runBrowserDemo() {
@@ -1862,12 +1944,13 @@
     setStatus({ state: "ready", detail: "Charging session staged locally." });
   });
 
-  window.VoltTrackerNative = { setDevices, setHistory, setStatus, updateTelemetry };
+  window.VoltTrackerNative = { setDevices, setHistory, setStatus, setStorage, updateTelemetry };
 
   setDemoActive(false);
   updateLiveUi();
   drawTrace();
   refreshDevices();
+  refreshStorage();
   window.addEventListener("resize", drawTrace);
   requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
   setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 200);

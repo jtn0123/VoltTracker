@@ -10,6 +10,15 @@ It does three things:
 
 The POC also includes a demo telemetry mode so the UI can be tested without a scanner.
 
+## On-Phone Storage
+
+The app now writes two layers of local data:
+
+- Raw field-test JSONL files under app-private `files/obd-logs/`.
+- Structured SQLite data in `volttracker_obd_poc.db`.
+
+SQLite tables capture OBD sessions, parsed telemetry samples, status/debug events, and adapter history summaries. The Settings screen shows a database summary so field tests can confirm whether sessions and samples are being saved without pulling files from the phone.
+
 ## Current PIDs
 
 - `ATRV` adapter voltage
@@ -80,3 +89,11 @@ adb exec-out run-as $pkg cat "files/obd-logs/$latest" > $out
 ```
 
 Those logs include status transitions, connection failures, every ELM327 command and response, parsed telemetry samples, timing, empty responses, and whether the adapter prompt (`>`) was seen.
+
+The SQLite database can also be pulled after a test:
+
+```powershell
+$pkg = "com.volttracker.obdpoc"
+$out = "C:\Users\Justin\OneDrive\Documents\Github\VoltTracker\mobile\android\field-test-db.db"
+adb exec-out run-as $pkg cat databases/volttracker_obd_poc.db > $out
+```

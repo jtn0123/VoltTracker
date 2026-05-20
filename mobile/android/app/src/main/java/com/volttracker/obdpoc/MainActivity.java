@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc;
 
+import com.volttracker.obdpoc.data.ObdLocalStore;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -42,6 +44,7 @@ public class MainActivity extends Activity {
     private WebView webView;
     private boolean pageReady;
     private SharedPreferences prefs;
+    private ObdLocalStore localStore;
 
     private final BroadcastReceiver obdReceiver = new BroadcastReceiver() {
         @Override
@@ -55,6 +58,7 @@ public class MainActivity extends Activity {
                 callDashboard("window.VoltTrackerNative.updateTelemetry(" + JSONObject.quote(json) + ")");
             } else if (ObdService.BROADCAST_STATUS.equals(action)) {
                 callDashboard("window.VoltTrackerNative.setStatus(" + JSONObject.quote(json) + ")");
+                publishStorageSummary();
             }
         }
     };
@@ -64,6 +68,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        localStore = new ObdLocalStore(this);
         webView = new WebView(this);
         webView.setLayoutParams(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -84,6 +89,7 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 pageReady = true;
                 publishDeviceList();
+                publishStorageSummary();
                 publishStatus("ready", "Pick a paired OBD adapter or run demo mode.", false);
             }
         });
@@ -106,6 +112,7 @@ public class MainActivity extends Activity {
             registerReceiver(obdReceiver, filter);
         }
         publishDeviceList();
+        publishStorageSummary();
     }
 
     @Override
@@ -116,6 +123,15 @@ public class MainActivity extends Activity {
         } catch (IllegalArgumentException ignored) {
             // Receiver can already be unregistered if Android tears down the Activity quickly.
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (localStore != null) {
+            localStore.close();
+            localStore = null;
+        }
+        super.onDestroy();
     }
 
     @Override
@@ -320,7 +336,24 @@ public class MainActivity extends Activity {
                 .putString(PREF_LAST_NAME, cleanName)
                 .putString(PREF_DEVICE_HISTORY, history.toString())
                 .apply();
+        try {
+            if (localStore != null) {
+                localStore.recordAdapterSummary(
+                        cleanAddress,
+                        cleanName,
+                        ObdLocalStore.MODE_OBD,
+                        0L,
+                        "remembered",
+                        0,
+                        "",
+                        "Remembered adapter"
+                );
+            }
+        } catch (RuntimeException ignored) {
+            // Preferences remain the source of truth for adapter recall if DB storage fails.
+        }
         publishDeviceList();
+        publishStorageSummary();
         publishStatus("ready", "Remembered " + (cleanName.isEmpty() ? cleanAddress : cleanName) + ".", false);
     }
 
@@ -434,6 +467,21 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> webView.evaluateJavascript(script + ";", null));
     }
 
+    private void publishStorageSummary() {
+        callDashboard("window.VoltTrackerNative.setStorage(" + JSONObject.quote(getStorageSummaryJson()) + ")");
+    }
+
+    private String getStorageSummaryJson() {
+        if (localStore == null) {
+            return "{}";
+        }
+        try {
+            return localStore.getStorageSummary().toString();
+        } catch (RuntimeException ex) {
+            return "{}";
+        }
+    }
+
     public final class VoltBridge {
         @JavascriptInterface
         public String listDevices() {
@@ -447,7 +495,10 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void refreshDevices() {
-            runOnUiThread(MainActivity.this::publishDeviceList);
+            runOnUiThread(() -> {
+                publishDeviceList();
+                publishStorageSummary();
+            });
         }
 
         @JavascriptInterface
@@ -474,6 +525,27 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String getDeviceHistory() {
             return getDeviceHistoryJson();
+        }
+
+        @JavascriptInterface
+        public String getStorageSummary() {
+            return getStorageSummaryJson();
+        }
+
+        @JavascriptInterface
+        public void clearStoredData() {
+            runOnUiThread(() -> {
+                try {
+                    if (localStore != null) {
+                        localStore.clearAllData();
+                    }
+                } catch (RuntimeException ignored) {
+                    publishStatus("blocked", "Could not clear the local OBD database.", true);
+                    return;
+                }
+                publishStorageSummary();
+                publishStatus("ready", "On-phone OBD database cleared.", false);
+            });
         }
 
         @JavascriptInterface

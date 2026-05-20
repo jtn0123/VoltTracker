@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc;
 
+import com.volttracker.obdpoc.data.ObdLocalStore;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Notification;
@@ -30,6 +32,8 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ObdService extends Service {
@@ -51,8 +55,10 @@ public class ObdService extends Service {
     private static final String[] LIVE_PROBES = {"ATRV", "010D", "010C", "0105", "0104", "0111", "0142", "011F", "012F", "015C"};
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Future<?> activeTask;
+    private ObdLocalStore localStore;
     private BluetoothSocket socket;
     private InputStream input;
     private OutputStream output;
@@ -62,10 +68,16 @@ public class ObdService extends Service {
     private long sessionStartedAtMs;
     private int sampleCount;
     private String supportedPidsSummary = "";
+    private long activeSessionId;
+    private String activeMode = "";
+    private String activeAddress = "";
+    private String lastSessionState = "";
+    private String lastSessionDetail = "";
 
     @Override
     public void onCreate() {
         super.onCreate();
+        localStore = new ObdLocalStore(this);
         createNotificationChannel();
     }
 
@@ -116,6 +128,16 @@ public class ObdService extends Service {
     public void onDestroy() {
         stopCurrentSession("Service stopped.");
         executor.shutdownNow();
+        databaseExecutor.shutdown();
+        try {
+            databaseExecutor.awaitTermination(2, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
+        if (localStore != null) {
+            localStore.close();
+            localStore = null;
+        }
         super.onDestroy();
     }
 
@@ -499,6 +521,7 @@ public class ObdService extends Service {
 
     private void broadcastTelemetry(JSONObject payload) {
         logJson("telemetry", payload);
+        persistTelemetry(payload);
         broadcast(BROADCAST_TELEMETRY, payload);
     }
 
@@ -516,7 +539,10 @@ public class ObdService extends Service {
         } catch (JSONException ignored) {
             // Local values are safe.
         }
+        lastSessionState = state == null ? "" : state;
+        lastSessionDetail = detail == null ? "" : detail;
         logJson("status", payload);
+        persistStatus(state, detail, blocked, payload);
         broadcast(BROADCAST_STATUS, payload);
     }
 
@@ -564,15 +590,31 @@ public class ObdService extends Service {
         sessionLogFile = new File(dir, "session-" + System.currentTimeMillis() + "-" + mode + ".jsonl");
         try {
             sessionLog = new BufferedWriter(new FileWriter(sessionLogFile, true));
+            activeMode = mode == null ? "" : mode;
+            activeAddress = address == null ? "" : address;
+            lastSessionState = "active";
+            lastSessionDetail = "";
+            activeSessionId = localStore == null ? 0L : localStore.startSession(
+                    activeMode,
+                    activeAddress,
+                    activeName,
+                    sessionStartedAtMs > 0 ? sessionStartedAtMs : System.currentTimeMillis()
+            );
             logEvent("session_start", "mode", mode, "adapter", activeName, "address", address == null ? "" : address);
             writeLatestPointer(sessionLogFile);
-        } catch (IOException ex) {
+        } catch (IOException | RuntimeException ex) {
             sessionLog = null;
             sessionLogFile = null;
+            activeSessionId = 0L;
         }
     }
 
     private synchronized void closeSessionLog() {
+        long closingSessionId = activeSessionId;
+        String closingMode = activeMode;
+        String closingAddress = activeAddress;
+        String closingState = lastSessionState;
+        String closingDetail = lastSessionDetail;
         if (sessionLog != null) {
             try {
                 logEvent("session_end");
@@ -581,7 +623,28 @@ public class ObdService extends Service {
             } catch (IOException ignored) {
             }
         }
+        if (closingSessionId > 0 && localStore != null) {
+            try {
+                String status = finishStatusFor(closingState);
+                localStore.finishSession(closingSessionId, status, System.currentTimeMillis(), supportedPidsSummary);
+                localStore.recordAdapterSummary(
+                        closingAddress,
+                        activeName,
+                        closingMode,
+                        closingSessionId,
+                        status,
+                        sampleCount,
+                        supportedPidsSummary,
+                        closingDetail
+                );
+            } catch (RuntimeException ignored) {
+                // Field logging must keep working even if DB persistence has a bad day.
+            }
+        }
         sessionLog = null;
+        activeSessionId = 0L;
+        activeMode = "";
+        activeAddress = "";
     }
 
     private void writeLatestPointer(File file) {
@@ -647,6 +710,61 @@ public class ObdService extends Service {
             sessionLog.flush();
         } catch (IOException | JSONException ignored) {
         }
+        if (!"telemetry".equals(type) && !"status".equals(type)) {
+            persistEvent(type, payload);
+        }
+    }
+
+    private void persistTelemetry(JSONObject payload) {
+        final long sessionId = activeSessionId;
+        if (sessionId <= 0 || payload == null || localStore == null) {
+            return;
+        }
+        persistAsync(() -> localStore.recordTelemetry(sessionId, payload));
+    }
+
+    private void persistStatus(String state, String detail, boolean blocked, JSONObject payload) {
+        final long sessionId = activeSessionId;
+        if (sessionId <= 0 || payload == null || localStore == null) {
+            return;
+        }
+        persistAsync(() -> localStore.recordStatus(sessionId, state, detail, blocked, payload));
+    }
+
+    private void persistEvent(String type, JSONObject payload) {
+        final long sessionId = activeSessionId;
+        if (sessionId <= 0 || payload == null || localStore == null) {
+            return;
+        }
+        persistAsync(() -> {
+            String detail = payload.optString("detail",
+                    payload.optString("message",
+                            payload.optString("event", payload.optString("command", ""))));
+            localStore.recordEvent(sessionId, type, payload.optString("state", ""), detail, false, payload);
+        });
+    }
+
+    private void persistAsync(Runnable task) {
+        try {
+            databaseExecutor.execute(() -> {
+                try {
+                    task.run();
+                } catch (RuntimeException ignored) {
+                    // Persistence is diagnostic; never interrupt OBD polling for it.
+                }
+            });
+        } catch (RejectedExecutionException ignored) {
+        }
+    }
+
+    private static String finishStatusFor(String state) {
+        if ("error".equals(state) || "blocked".equals(state)) {
+            return ObdLocalStore.STATUS_ERROR;
+        }
+        if ("idle".equals(state)) {
+            return ObdLocalStore.STATUS_DISCONNECTED;
+        }
+        return ObdLocalStore.STATUS_COMPLETE;
     }
 
     private void createNotificationChannel() {
