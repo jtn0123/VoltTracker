@@ -221,7 +221,7 @@ _CSP_HEADER = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdn.socket.io unpkg.com; "
     "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net unpkg.com; "
-    "img-src 'self' data: *.tile.openstreetmap.org unpkg.com; "
+    "img-src 'self' data: *.tile.openstreetmap.org *.basemaps.cartocdn.com unpkg.com; "
     "connect-src 'self' ws: wss:; "
     "font-src 'self'; "
     "frame-ancestors 'none'"
