@@ -448,6 +448,7 @@ public class ObdService extends Service {
             String speedRaw = sendRecoverableCommand("010D", 1500);
             raw = appendRaw(raw, "010D", speedRaw);
             Integer speed = ObdProtocol.parseSpeedKph(speedRaw);
+            boolean chargeTransitionHint = ObdProtocol.hasMaxSpeedSentinel(speedRaw);
             Integer acceptedSpeed = null;
             if (speed != null && isPlausibleSpeed(speed)) {
                 sample.put("speedKph", speed);
@@ -455,6 +456,10 @@ public class ObdService extends Service {
             } else if (speed != null) {
                 sample.put("speedRejectedKph", speed);
                 logEvent("speed_rejected", "speedKph", String.valueOf(speed));
+            } else if (chargeTransitionHint) {
+                sample.put("speedRejectedKph", 255);
+                sample.put("chargeTransitionHint", true);
+                logEvent("speed_rejected", "speedKph", "255", "reason", "charge_transition_hint");
             }
 
             String rpmRaw = sendRecoverableCommand("010C", 1500);
@@ -492,7 +497,8 @@ public class ObdService extends Service {
             sample.put("sampleCount", sampleCount);
             sample.put("sessionMs", Math.max(0, System.currentTimeMillis() - sessionStartedAtMs));
             sample.put("supportedPids", supportedPidsSummary);
-            sample.put("vehicleState", classifyVehicleState(voltage, acceptedSpeed, rpm, load));
+            sample.put("vehicleState", classifyVehicleState(voltage, acceptedSpeed, rpm, load, chargeTransitionHint));
+            sample.put("vehicleStateConfidence", classifyVehicleStateConfidence(voltage, acceptedSpeed, rpm, chargeTransitionHint));
             sample.put("updatedAt", System.currentTimeMillis());
             appendLocation(sample);
             sample.put("raw", raw.trim());
@@ -916,6 +922,7 @@ public class ObdService extends Service {
         }
         String safeCommand = command == null ? "" : command.trim().toUpperCase(Locale.US);
         String summary = summarizeForStorage(safeCommand, response);
+        ObdProtocol.ParsedPidValue parsed = ObdProtocol.parseKnownValue(safeCommand, response);
         persistAsync(() -> {
             JSONObject payload = new JSONObject();
             try {
@@ -923,7 +930,14 @@ public class ObdService extends Service {
                 payload.put("command", safeCommand);
                 payload.put("header", header == null ? "" : header);
                 payload.put("pid", pidForCommand(safeCommand));
-                payload.put("name", nameForCommand(safeCommand));
+                payload.put("name", parsed == null ? nameForCommand(safeCommand) : parsed.name);
+                if (parsed != null) {
+                    payload.put("valueText", parsed.valueText);
+                    if (parsed.valueNumeric != null) {
+                        payload.put("valueNumeric", parsed.valueNumeric.doubleValue());
+                    }
+                    payload.put("unit", parsed.unit);
+                }
                 payload.put("rawRequest", safeCommand);
                 payload.put("rawResponse", summary);
                 payload.put("gotPrompt", response != null && response.indexOf('>') >= 0);
@@ -1073,11 +1087,14 @@ public class ObdService extends Service {
         return first.getTime() >= second.getTime() ? first : second;
     }
 
-    private static String classifyVehicleState(Float voltage, Integer speed, Float rpm, Integer load) {
+    private static String classifyVehicleState(Float voltage, Integer speed, Float rpm, Integer load, boolean chargeTransitionHint) {
         boolean stationary = speed == null || speed == 0;
         boolean engineOff = rpm == null || rpm < 80;
         boolean dcDcActive = voltage != null && voltage >= 13.0f;
         boolean hasLoad = load != null && load > 0;
+        if (stationary && engineOff && chargeTransitionHint) {
+            return "plugged-or-charging";
+        }
         if (stationary && engineOff && dcDcActive) {
             return "ready-parked";
         }
@@ -1088,6 +1105,19 @@ public class ObdService extends Service {
             return stationary ? "engine-idle" : "driving-gas";
         }
         return "driving-ev";
+    }
+
+    private static String classifyVehicleStateConfidence(Float voltage, Integer speed, Float rpm, boolean chargeTransitionHint) {
+        if (chargeTransitionHint) {
+            return "inferred";
+        }
+        if (voltage != null && speed != null && rpm != null) {
+            return "observed";
+        }
+        if (voltage != null || speed != null || rpm != null) {
+            return "partial";
+        }
+        return "unknown";
     }
 
     private boolean isPlausibleSpeed(int speedKph) {

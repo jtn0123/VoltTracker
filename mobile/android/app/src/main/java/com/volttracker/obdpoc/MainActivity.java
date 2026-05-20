@@ -525,7 +525,7 @@ public class MainActivity extends Activity {
         try {
             JSONObject app = new JSONObject();
             app.put("version", appVersionName());
-            app.put("schemaVersion", 2);
+            app.put("schemaVersion", 4);
             payload.put("app", app);
 
             JSONObject permissions = new JSONObject();
@@ -553,7 +553,8 @@ public class MainActivity extends Activity {
 
             JSONObject vehicle = new JSONObject();
             vehicle.put("state", lastTelemetry.optString("vehicleState", "unknown"));
-            vehicle.put("confidence", lastTelemetry.has("vehicleState") ? "observed" : "unknown");
+            vehicle.put("confidence", lastTelemetry.optString("vehicleStateConfidence",
+                    lastTelemetry.has("vehicleState") ? "observed" : "unknown"));
             vehicle.put("vinStored", false);
             payload.put("vehicle", vehicle);
 

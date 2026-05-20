@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 
 final class VoltTrackerDb extends SQLiteOpenHelper {
     static final String DATABASE_NAME = "volttracker_obd_poc.db";
-    static final int DATABASE_VERSION = 3;
+    static final int DATABASE_VERSION = 4;
 
     static final String TABLE_SESSIONS = "obd_sessions";
     static final String TABLE_TELEMETRY = "telemetry_samples";
@@ -14,6 +14,13 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
     static final String TABLE_ADAPTER_HISTORY = "adapter_history";
     static final String TABLE_PID_OBSERVATIONS = "pid_observations";
     static final String TABLE_LOCATION_SAMPLES = "location_samples";
+    static final String TABLE_VEHICLES = "vehicles";
+    static final String TABLE_FIELD_CAPABILITIES = "field_capabilities";
+    static final String TABLE_TRIP_SEGMENTS = "trip_segments";
+    static final String TABLE_CHARGE_SESSIONS = "charge_sessions";
+    static final String TABLE_BATTERY_SNAPSHOTS = "battery_snapshots";
+    static final String TABLE_CELL_SNAPSHOTS = "cell_snapshots";
+    static final String TABLE_EXPORTS = "exports";
 
     VoltTrackerDb(Context context) {
         super(context.getApplicationContext(), DATABASE_NAME, null, DATABASE_VERSION);
@@ -108,6 +115,8 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                 + "(last_seen_ms DESC)");
         createObservationTables(db);
         createObservationIndexes(db);
+        createRoadmapTables(db);
+        createRoadmapIndexes(db);
     }
 
     @Override
@@ -123,6 +132,10 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
         if (oldVersion < 3) {
             createObservationTables(db);
             createObservationIndexes(db);
+        }
+        if (oldVersion < 4) {
+            createRoadmapTables(db);
+            createRoadmapIndexes(db);
         }
     }
 
@@ -169,5 +182,171 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                 + TABLE_PID_OBSERVATIONS + "(command, header, observed_at_ms DESC)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_location_samples_session_time ON "
                 + TABLE_LOCATION_SAMPLES + "(session_id, captured_at_ms DESC)");
+    }
+
+    private static void createRoadmapTables(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_VEHICLES + " ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "vehicle_key TEXT NOT NULL UNIQUE,"
+                + "display_name TEXT,"
+                + "make TEXT,"
+                + "model TEXT,"
+                + "model_year INTEGER,"
+                + "vin_redacted TEXT,"
+                + "vin_hash TEXT,"
+                + "vin_source TEXT,"
+                + "first_seen_ms INTEGER NOT NULL,"
+                + "last_seen_ms INTEGER NOT NULL,"
+                + "created_at_ms INTEGER NOT NULL,"
+                + "updated_at_ms INTEGER NOT NULL,"
+                + "metadata_json TEXT"
+                + ")");
+
+        db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_FIELD_CAPABILITIES + " ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "vehicle_id INTEGER,"
+                + "adapter_key TEXT,"
+                + "protocol TEXT,"
+                + "header TEXT,"
+                + "command TEXT NOT NULL,"
+                + "pid TEXT,"
+                + "name TEXT,"
+                + "unit TEXT,"
+                + "supported INTEGER NOT NULL DEFAULT 1,"
+                + "response_count INTEGER NOT NULL DEFAULT 0,"
+                + "first_seen_ms INTEGER NOT NULL,"
+                + "last_seen_ms INTEGER NOT NULL,"
+                + "sample_json TEXT,"
+                + "FOREIGN KEY(vehicle_id) REFERENCES " + TABLE_VEHICLES + "(_id) ON DELETE SET NULL"
+                + ")");
+
+        db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_TRIP_SEGMENTS + " ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "session_id INTEGER,"
+                + "vehicle_id INTEGER,"
+                + "started_at_ms INTEGER NOT NULL,"
+                + "ended_at_ms INTEGER,"
+                + "start_sample_id INTEGER,"
+                + "end_sample_id INTEGER,"
+                + "route_available INTEGER NOT NULL DEFAULT 0,"
+                + "distance_m REAL,"
+                + "max_speed_kph REAL,"
+                + "avg_speed_kph REAL,"
+                + "energy_kwh REAL,"
+                + "classification TEXT,"
+                + "confidence REAL,"
+                + "created_at_ms INTEGER NOT NULL,"
+                + "summary_json TEXT,"
+                + "FOREIGN KEY(session_id) REFERENCES " + TABLE_SESSIONS + "(_id) ON DELETE SET NULL,"
+                + "FOREIGN KEY(vehicle_id) REFERENCES " + TABLE_VEHICLES + "(_id) ON DELETE SET NULL,"
+                + "FOREIGN KEY(start_sample_id) REFERENCES " + TABLE_TELEMETRY + "(_id) ON DELETE SET NULL,"
+                + "FOREIGN KEY(end_sample_id) REFERENCES " + TABLE_TELEMETRY + "(_id) ON DELETE SET NULL"
+                + ")");
+
+        db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_CHARGE_SESSIONS + " ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "session_id INTEGER,"
+                + "vehicle_id INTEGER,"
+                + "started_at_ms INTEGER NOT NULL,"
+                + "ended_at_ms INTEGER,"
+                + "charger_type TEXT,"
+                + "start_soc REAL,"
+                + "end_soc REAL,"
+                + "start_sample_id INTEGER,"
+                + "end_sample_id INTEGER,"
+                + "voltage REAL,"
+                + "current_a REAL,"
+                + "power_kw REAL,"
+                + "energy_kwh REAL,"
+                + "interrupted INTEGER NOT NULL DEFAULT 0,"
+                + "confidence REAL,"
+                + "created_at_ms INTEGER NOT NULL,"
+                + "summary_json TEXT,"
+                + "FOREIGN KEY(session_id) REFERENCES " + TABLE_SESSIONS + "(_id) ON DELETE SET NULL,"
+                + "FOREIGN KEY(vehicle_id) REFERENCES " + TABLE_VEHICLES + "(_id) ON DELETE SET NULL,"
+                + "FOREIGN KEY(start_sample_id) REFERENCES " + TABLE_TELEMETRY + "(_id) ON DELETE SET NULL,"
+                + "FOREIGN KEY(end_sample_id) REFERENCES " + TABLE_TELEMETRY + "(_id) ON DELETE SET NULL"
+                + ")");
+
+        db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_BATTERY_SNAPSHOTS + " ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "session_id INTEGER,"
+                + "vehicle_id INTEGER,"
+                + "captured_at_ms INTEGER NOT NULL,"
+                + "soc REAL,"
+                + "capacity_ah REAL,"
+                + "soh_pct REAL,"
+                + "pack_voltage REAL,"
+                + "pack_current_a REAL,"
+                + "pack_power_kw REAL,"
+                + "battery_temp_c REAL,"
+                + "odometer_km REAL,"
+                + "created_at_ms INTEGER NOT NULL,"
+                + "json TEXT,"
+                + "FOREIGN KEY(session_id) REFERENCES " + TABLE_SESSIONS + "(_id) ON DELETE SET NULL,"
+                + "FOREIGN KEY(vehicle_id) REFERENCES " + TABLE_VEHICLES + "(_id) ON DELETE SET NULL"
+                + ")");
+
+        db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_CELL_SNAPSHOTS + " ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "battery_snapshot_id INTEGER NOT NULL,"
+                + "cell_index INTEGER NOT NULL,"
+                + "voltage REAL,"
+                + "temperature_c REAL,"
+                + "resistance_mohm REAL,"
+                + "balance_mv REAL,"
+                + "json TEXT,"
+                + "FOREIGN KEY(battery_snapshot_id) REFERENCES " + TABLE_BATTERY_SNAPSHOTS
+                + "(_id) ON DELETE CASCADE"
+                + ")");
+
+        db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_EXPORTS + " ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "session_id INTEGER,"
+                + "vehicle_id INTEGER,"
+                + "created_at_ms INTEGER NOT NULL,"
+                + "exported_at_ms INTEGER,"
+                + "range_start_ms INTEGER,"
+                + "range_end_ms INTEGER,"
+                + "export_type TEXT NOT NULL,"
+                + "status TEXT NOT NULL,"
+                + "file_name TEXT,"
+                + "mime_type TEXT,"
+                + "bytes INTEGER,"
+                + "destination TEXT,"
+                + "include_precise_location INTEGER NOT NULL DEFAULT 0,"
+                + "include_raw_logs INTEGER NOT NULL DEFAULT 0,"
+                + "error TEXT,"
+                + "manifest_json TEXT,"
+                + "FOREIGN KEY(session_id) REFERENCES " + TABLE_SESSIONS + "(_id) ON DELETE SET NULL,"
+                + "FOREIGN KEY(vehicle_id) REFERENCES " + TABLE_VEHICLES + "(_id) ON DELETE SET NULL"
+                + ")");
+    }
+
+    private static void createRoadmapIndexes(SQLiteDatabase db) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_vehicles_last_seen ON "
+                + TABLE_VEHICLES + "(last_seen_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_field_capabilities_vehicle_seen ON "
+                + TABLE_FIELD_CAPABILITIES + "(vehicle_id, last_seen_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_field_capabilities_lookup ON "
+                + TABLE_FIELD_CAPABILITIES + "(adapter_key, protocol, header, command, pid)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_trip_segments_session_time ON "
+                + TABLE_TRIP_SEGMENTS + "(session_id, started_at_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_trip_segments_vehicle_time ON "
+                + TABLE_TRIP_SEGMENTS + "(vehicle_id, started_at_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_charge_sessions_session_time ON "
+                + TABLE_CHARGE_SESSIONS + "(session_id, started_at_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_charge_sessions_vehicle_time ON "
+                + TABLE_CHARGE_SESSIONS + "(vehicle_id, started_at_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_battery_snapshots_session_time ON "
+                + TABLE_BATTERY_SNAPSHOTS + "(session_id, captured_at_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_battery_snapshots_vehicle_time ON "
+                + TABLE_BATTERY_SNAPSHOTS + "(vehicle_id, captured_at_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_cell_snapshots_battery_cell ON "
+                + TABLE_CELL_SNAPSHOTS + "(battery_snapshot_id, cell_index)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_exports_session_time ON "
+                + TABLE_EXPORTS + "(session_id, created_at_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_exports_vehicle_time ON "
+                + TABLE_EXPORTS + "(vehicle_id, created_at_ms DESC)");
     }
 }

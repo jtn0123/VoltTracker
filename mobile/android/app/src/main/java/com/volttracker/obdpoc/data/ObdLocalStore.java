@@ -450,6 +450,13 @@ public final class ObdLocalStore implements Closeable {
             payload.put("adapterCount", countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY));
             payload.put("pidObservationCount", countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS));
             payload.put("locationSampleCount", countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES));
+            payload.put("vehicleCount", countRows(db, VoltTrackerDb.TABLE_VEHICLES));
+            payload.put("fieldCapabilityCount", countRows(db, VoltTrackerDb.TABLE_FIELD_CAPABILITIES));
+            payload.put("tripSegmentCount", countRows(db, VoltTrackerDb.TABLE_TRIP_SEGMENTS));
+            payload.put("chargeSessionCount", countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS));
+            payload.put("batterySnapshotCount", countRows(db, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS));
+            payload.put("cellSnapshotCount", countRows(db, VoltTrackerDb.TABLE_CELL_SNAPSHOTS));
+            payload.put("exportCount", countRows(db, VoltTrackerDb.TABLE_EXPORTS));
             ObdSessionRecord latest = firstOrNull(getRecentSessions(1));
             if (latest != null) {
                 payload.put("lastSessionId", latest.id);
@@ -522,11 +529,18 @@ public final class ObdLocalStore implements Closeable {
         SQLiteDatabase db = helper.getWritableDatabase();
         db.beginTransaction();
         try {
+            db.delete(VoltTrackerDb.TABLE_CELL_SNAPSHOTS, null, null);
+            db.delete(VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS, null, null);
+            db.delete(VoltTrackerDb.TABLE_EXPORTS, null, null);
+            db.delete(VoltTrackerDb.TABLE_CHARGE_SESSIONS, null, null);
+            db.delete(VoltTrackerDb.TABLE_TRIP_SEGMENTS, null, null);
+            db.delete(VoltTrackerDb.TABLE_FIELD_CAPABILITIES, null, null);
             db.delete(VoltTrackerDb.TABLE_LOCATION_SAMPLES, null, null);
             db.delete(VoltTrackerDb.TABLE_PID_OBSERVATIONS, null, null);
             db.delete(VoltTrackerDb.TABLE_EVENTS, null, null);
             db.delete(VoltTrackerDb.TABLE_TELEMETRY, null, null);
             db.delete(VoltTrackerDb.TABLE_SESSIONS, null, null);
+            db.delete(VoltTrackerDb.TABLE_VEHICLES, null, null);
             db.delete(VoltTrackerDb.TABLE_ADAPTER_HISTORY, null, null);
             db.setTransactionSuccessful();
         } finally {

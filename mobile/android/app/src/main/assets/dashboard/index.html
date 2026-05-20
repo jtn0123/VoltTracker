@@ -1361,6 +1361,9 @@
         <div><span>Events</span><strong id="dbEventCount">0</strong></div>
         <div><span>PIDs</span><strong id="dbPidCount">0</strong></div>
         <div><span>GPS</span><strong id="dbLocationCount">0</strong></div>
+        <div><span>Trips</span><strong id="dbTripCount">0</strong></div>
+        <div><span>Charge</span><strong id="dbChargeCount">0</strong></div>
+        <div><span>Battery</span><strong id="dbBatteryCount">0</strong></div>
         <div><span>Size</span><strong id="dbSize">0 B</strong></div>
       </div>
       <div id="dbSessionList" style="margin-top:12px"></div>
@@ -1694,13 +1697,20 @@
     const events = Number(storage.eventCount || 0);
     const pidRows = Number(storage.pidObservationCount || 0);
     const locationRows = Number(storage.locationSampleCount || 0);
+    const tripRows = Number(storage.tripSegmentCount || 0);
+    const chargeRows = Number(storage.chargeSessionCount || 0);
+    const batteryRows = Number(storage.batterySnapshotCount || 0);
+    const cellRows = Number(storage.cellSnapshotCount || 0);
     setText("dbSessionCount", sessions);
     setText("dbSampleCount", samples);
     setText("dbEventCount", events);
     setText("dbPidCount", pidRows);
     setText("dbLocationCount", locationRows);
+    setText("dbTripCount", tripRows);
+    setText("dbChargeCount", chargeRows);
+    setText("dbBatteryCount", batteryRows + cellRows);
     setText("dbSize", formatBytes(Number(storage.databaseBytes || 0)));
-    setText("dbState", samples || pidRows || locationRows ? `${samples + pidRows + locationRows} rows` : "ready");
+    setText("dbState", dbRowCount(storage) ? `${dbRowCount(storage)} rows` : "ready");
     const last = storage.lastEventAtMs || storage.lastStartedAtMs;
     setText("dbSummaryTitle", sessions ? `${samples} samples - ${formatWhen(last)}` : "No stored sessions yet");
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
@@ -1766,7 +1776,7 @@
     setText("loggingState", connected ? (samples ? `${samples} samples` : sessionState) : "idle");
     setText("gpsState", gps.state || (state.telemetry.latitude ? "locked" : "waiting"));
     setText("dataSourceState", state.demoActive ? "demo" : "real");
-    setText("dbState", Number(storage.sampleCount || 0) ? `${Number(storage.sampleCount || 0)} rows` : "ready");
+    setText("dbState", dbRowCount(storage) ? `${dbRowCount(storage)} rows` : "ready");
 
     const primary = el("connectBtn");
     if (!primary) return;
@@ -1782,6 +1792,22 @@
       primary.dataset.primaryAction = "connect";
       primary.textContent = "Connect";
     }
+  }
+
+  function dbRowCount(storage) {
+    const keys = [
+      "sampleCount",
+      "eventCount",
+      "pidObservationCount",
+      "locationSampleCount",
+      "tripSegmentCount",
+      "chargeSessionCount",
+      "batterySnapshotCount",
+      "cellSnapshotCount",
+      "fieldCapabilityCount",
+      "exportCount"
+    ];
+    return keys.reduce((total, key) => total + Number(storage[key] || 0), 0);
   }
 
   function getLastDevice() {
