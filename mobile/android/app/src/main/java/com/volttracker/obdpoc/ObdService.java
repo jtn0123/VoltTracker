@@ -1,6 +1,9 @@
 package com.volttracker.obdpoc;
 
 import com.volttracker.obdpoc.data.ObdLocalStore;
+import com.volttracker.obdpoc.location.FilteredLocation;
+import com.volttracker.obdpoc.location.LocationManagerTracker;
+import com.volttracker.obdpoc.location.LocationTracker;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -15,11 +18,7 @@ import android.bluetooth.BluetoothSocket;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
-import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.IBinder;
 
 import org.json.JSONException;
@@ -58,6 +57,8 @@ public class ObdService extends Service {
     private static final int NOTIFICATION_ID = 4207;
     private static final UUID ELM327_SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
     private static final long CONNECT_TIMEOUT_MS = 15000L;
+    // After this many consecutive failed reconnects the OBD loop gives up; GPS keeps logging.
+    static final int MAX_RECONNECT_ATTEMPTS = 6;
     // Package-private so the unit tests can assert these probe lists stay well-formed.
     static final String[] PROTOCOL_PROBES = {"ATSP0", "ATSP6", "ATSP7", "ATSP8"};
     static final String[] CAPABILITY_PROBES = {"0100", "0120", "0140", "0160"};
@@ -91,8 +92,7 @@ public class ObdService extends Service {
     private OutputStream output;
     private BufferedWriter sessionLog;
     private File sessionLogFile;
-    private LocationManager locationManager;
-    private volatile Location lastLocation;
+    private LocationTracker locationTracker;
     private String activeName = "OBD adapter";
     private long sessionStartedAtMs;
     private int sampleCount;
@@ -114,34 +114,11 @@ public class ObdService extends Service {
     private long lastSampleAtMs;
     private long lastSampleGapMs;
     private long maxSampleGapMs;
-    private final LocationListener locationListener = new LocationListener() {
-        @Override
-        public void onLocationChanged(Location location) {
-            if (location != null) {
-                lastLocation = location;
-            }
-        }
-
-        @Override
-        public void onProviderDisabled(String provider) {
-            logEvent("gps_provider_disabled", "provider", provider);
-        }
-
-        @Override
-        public void onProviderEnabled(String provider) {
-            logEvent("gps_provider_enabled", "provider", provider);
-        }
-
-        @Override
-        public void onStatusChanged(String provider, int status, Bundle extras) {
-            // Deprecated but still required by older Android API levels.
-        }
-    };
-
     @Override
     public void onCreate() {
         super.onCreate();
         localStore = new ObdLocalStore(this);
+        locationTracker = new LocationManagerTracker(this);
         createNotificationChannel();
     }
 
@@ -237,7 +214,7 @@ public class ObdService extends Service {
         lastPersistedStatusAtMs = 0L;
         supportedPidsSummary = "";
         openSessionLog(scanMode ? "scan" : "obd", address);
-        startLocationCapture();
+        startLocationTracking();
         running.set(true);
         activeTask = executor.submit(() -> runBluetoothLoop(address, scanMode));
     }
@@ -256,50 +233,45 @@ public class ObdService extends Service {
         activeTask = executor.submit(this::runDemoLoop);
     }
 
-    @SuppressLint("MissingPermission")
-    private void startLocationCapture() {
-        lastLocation = null;
+    private void startLocationTracking() {
+        if (locationTracker == null) {
+            return;
+        }
         if (!hasLocationPermission()) {
             logEvent("gps_skipped", "reason", "missing_location_permission");
             return;
         }
-        locationManager = getSystemService(LocationManager.class);
-        if (locationManager == null) {
-            logEvent("gps_skipped", "reason", "no_location_manager");
-            return;
-        }
-        try {
-            Location gps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-            Location network = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-            lastLocation = newestLocation(gps, network);
-            locationManager.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    1000L,
-                    1.5f,
-                    locationListener
-            );
-            locationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
-                    5000L,
-                    10f,
-                    locationListener
-            );
-            logEvent("gps_started");
-        } catch (IllegalArgumentException | SecurityException ex) {
-            logEvent("gps_start_failed", "message", safeMessage(ex));
+        locationTracker.start(this::onTrackedLocation);
+        logEvent("gps_started");
+    }
+
+    private void stopLocationTracking() {
+        if (locationTracker != null) {
+            locationTracker.stop();
+            logEvent("gps_stopped");
         }
     }
 
-    private void stopLocationCapture() {
-        if (locationManager == null) {
+    // Each accepted fix is persisted straight to the route on the GPS callback (not the OBD
+    // poll), so the trace keeps recording across reconnects and idle OBD periods.
+    private void onTrackedLocation(FilteredLocation location) {
+        final long sessionId = activeSessionId;
+        if (sessionId <= 0 || localStore == null || location == null
+                || ObdLocalStore.MODE_DEMO.equals(activeMode)) {
             return;
         }
-        try {
-            locationManager.removeUpdates(locationListener);
-            logEvent("gps_stopped");
-        } catch (SecurityException ignored) {
-        }
-        locationManager = null;
+        persistAsync(() -> localStore.recordLocationSample(
+                sessionId,
+                location.fixTimeMs,
+                location.provider,
+                location.latitude,
+                location.longitude,
+                location.accuracyM,
+                location.altitudeM,
+                location.speedMps,
+                location.bearingDeg,
+                location.locationAgeMs,
+                location.elapsedRealtimeNanos));
     }
 
     @SuppressLint("MissingPermission")
@@ -322,45 +294,88 @@ public class ObdService extends Service {
             return;
         }
 
+        int attempt = 0;
         try {
-            broadcastStatus("connecting", "Opening serial connection to " + activeName + "...", false);
-            if (hasBluetoothScanPermission()) {
-                adapter.cancelDiscovery();
-            } else {
-                logEvent("cancel_discovery_skipped", "reason", "missing BLUETOOTH_SCAN");
-            }
-            BluetoothDevice device = adapter.getRemoteDevice(address);
-            logEvent("bluetooth_socket_open", "address", address, "uuid", ELM327_SPP_UUID.toString());
-            socket = device.createRfcommSocketToServiceRecord(ELM327_SPP_UUID);
-            connectWithTimeout(socket);
-            input = socket.getInputStream();
-            output = socket.getOutputStream();
-            logEvent("bluetooth_socket_connected", "address", address);
-
-            broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false);
-            initializeElm327();
-            if (scanMode) {
-                runDiagnosticScan();
-                return;
-            }
-            broadcastStatus("connected", "Polling live OBD data from " + activeName + ".", false);
-            updateNotification("Connected to " + activeName);
-
             while (running.get()) {
-                JSONObject sample = readObdSample();
-                if (sample == null || sample.length() == 0) {
-                    break;
+                try {
+                    connectAndInitialize(adapter, address);
+                    if (scanMode) {
+                        runDiagnosticScan();
+                        return;
+                    }
+                    attempt = 0;
+                    broadcastStatus("connected", "Polling live OBD data from " + activeName + ".", false);
+                    updateNotification("Connected to " + activeName);
+                    pollUntilStoppedOrBroken();
+                    return; // running went false: a clean stop
+                } catch (IOException ex) {
+                    closeSocket();
+                    if (!running.get()) {
+                        return;
+                    }
+                    attempt += 1;
+                    if (attempt > MAX_RECONNECT_ATTEMPTS) {
+                        logError("reconnect_exhausted", ex);
+                        broadcastStatus("error",
+                                "Lost the adapter link and could not reconnect after "
+                                        + MAX_RECONNECT_ATTEMPTS + " tries.", true);
+                        // Give up cleanly: stopSelf() routes teardown through onDestroy ->
+                        // stopCurrentSession, which stops the GPS tracker and foreground
+                        // service rather than leaving them running with no session.
+                        stopSelf();
+                        return;
+                    }
+                    long backoffMs = reconnectBackoffMs(attempt);
+                    logEvent("reconnect", "attempt", String.valueOf(attempt),
+                            "backoffMs", String.valueOf(backoffMs), "reason", safeMessage(ex));
+                    broadcastStatus("connecting",
+                            "Adapter link dropped - reconnecting (" + attempt + "/"
+                                    + MAX_RECONNECT_ATTEMPTS + ")...", false);
+                    sleep(backoffMs);
                 }
-                broadcastTelemetry(sample);
-                sleep(850);
             }
-        } catch (IOException | RuntimeException ex) {
+        } catch (RuntimeException ex) {
             logError("connection_failure", ex);
             broadcastStatus("error", friendlyConnectionMessage(ex), true);
         } finally {
             logEvent("socket_closing");
             closeSocket();
             closeSessionLog();
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void connectAndInitialize(BluetoothAdapter adapter, String address) throws IOException {
+        broadcastStatus("connecting", "Opening serial connection to " + activeName + "...", false);
+        if (hasBluetoothScanPermission()) {
+            adapter.cancelDiscovery();
+        } else {
+            logEvent("cancel_discovery_skipped", "reason", "missing BLUETOOTH_SCAN");
+        }
+        BluetoothDevice device = adapter.getRemoteDevice(address);
+        logEvent("bluetooth_socket_open", "address", address, "uuid", ELM327_SPP_UUID.toString());
+        socket = device.createRfcommSocketToServiceRecord(ELM327_SPP_UUID);
+        connectWithTimeout(socket);
+        input = socket.getInputStream();
+        output = socket.getOutputStream();
+        logEvent("bluetooth_socket_connected", "address", address);
+        broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false);
+        initializeElm327();
+    }
+
+    // Polls until the session is stopped (returns) or the socket breaks (throws IOException,
+    // which the caller turns into a reconnect attempt).
+    private void pollUntilStoppedOrBroken() throws IOException {
+        while (running.get()) {
+            JSONObject sample = readObdSample();
+            if (sample == null || sample.length() == 0) {
+                // A non-fatal encoding glitch yielded no usable sample; skip it and keep
+                // the session polling rather than ending it on a transient issue.
+                logEvent("empty_sample_skipped");
+                continue;
+            }
+            broadcastTelemetry(sample);
+            sleep(850);
         }
     }
 
@@ -491,7 +506,8 @@ public class ObdService extends Service {
         updateNotification("Scan complete for " + activeName);
     }
 
-    private JSONObject readObdSample() {
+    // Throws IOException when the adapter socket has broken so the caller can reconnect.
+    private JSONObject readObdSample() throws IOException {
         JSONObject sample = new JSONObject();
         String raw = "";
         try {
@@ -567,34 +583,34 @@ public class ObdService extends Service {
             appendSessionHealth(sample);
             appendLocation(sample);
             sample.put("raw", raw.trim());
-        } catch (IOException | JSONException ex) {
-            logError("polling_error", ex);
-            broadcastStatus("error", "OBD polling error: " + safeMessage(ex), true);
-            running.set(false);
-            return null;
+        } catch (JSONException ex) {
+            // Local numeric values are safe; an encoding error is non-fatal, keep polling.
+            logError("sample_encoding_error", ex);
         }
         return sample;
     }
 
     private void appendLocation(JSONObject sample) throws JSONException {
-        Location location = lastLocation;
+        FilteredLocation location = locationTracker == null ? null : locationTracker.getLastLocation();
         if (location == null) {
             return;
         }
-        sample.put("latitude", round6(location.getLatitude()));
-        sample.put("longitude", round6(location.getLongitude()));
-        if (location.hasAccuracy()) {
-            sample.put("accuracyM", round1(location.getAccuracy()));
+        sample.put("latitude", location.latitude);
+        sample.put("longitude", location.longitude);
+        if (location.accuracyM != null) {
+            sample.put("accuracyM", location.accuracyM);
         }
-        if (location.hasSpeed()) {
-            sample.put("gpsSpeedMps", round1(location.getSpeed()));
+        if (location.speedMps != null) {
+            sample.put("gpsSpeedMps", location.speedMps);
         }
-        if (location.hasBearing()) {
-            sample.put("bearingDeg", round1(location.getBearing()));
+        if (location.bearingDeg != null) {
+            sample.put("bearingDeg", location.bearingDeg);
         }
-        sample.put("provider", location.getProvider());
-        sample.put("locationProvider", location.getProvider());
-        sample.put("locationAgeMs", Math.max(0L, System.currentTimeMillis() - location.getTime()));
+        if (location.provider != null) {
+            sample.put("provider", location.provider);
+            sample.put("locationProvider", location.provider);
+        }
+        sample.put("locationAgeMs", Math.max(0L, System.currentTimeMillis() - location.fixTimeMs));
     }
 
     private synchronized void resetSessionHealth() {
@@ -716,7 +732,7 @@ public class ObdService extends Service {
             activeTask.cancel(true);
             activeTask = null;
         }
-        stopLocationCapture();
+        stopLocationTracking();
         closeSocket();
         if (statusMessage != null) {
             broadcastStatus("idle", statusMessage, false);
@@ -1035,12 +1051,7 @@ public class ObdService extends Service {
             // Demo telemetry is a UI preview only; keep it out of the real database.
             return;
         }
-        persistAsync(() -> {
-            localStore.recordTelemetry(sessionId, payload);
-            if (payload.has("latitude") && payload.has("longitude")) {
-                localStore.recordLocationSample(sessionId, payload);
-            }
-        });
+        persistAsync(() -> localStore.recordTelemetry(sessionId, payload));
     }
 
     private void persistStatus(String state, String detail, boolean blocked, JSONObject payload) {
@@ -1251,14 +1262,13 @@ public class ObdService extends Service {
         return value.substring(value.length() - maxLength);
     }
 
-    private static Location newestLocation(Location first, Location second) {
-        if (first == null) {
-            return second;
+    // Exponential backoff between OBD reconnect attempts, capped at 30 s.
+    static long reconnectBackoffMs(int attempt) {
+        if (attempt < 1) {
+            return 0L;
         }
-        if (second == null) {
-            return first;
-        }
-        return first.getTime() >= second.getTime() ? first : second;
+        long base = 2000L * (1L << Math.min(attempt - 1, 4));
+        return Math.min(30000L, base);
     }
 
     static String classifyVehicleState(Float voltage, Integer speed, Float rpm, Integer load, boolean chargeTransitionHint) {
@@ -1335,10 +1345,6 @@ public class ObdService extends Service {
 
     private static double round1(double value) {
         return Math.round(value * 10.0) / 10.0;
-    }
-
-    private static double round6(double value) {
-        return Math.round(value * 1000000.0) / 1000000.0;
     }
 
     private static void sleep(long millis) {

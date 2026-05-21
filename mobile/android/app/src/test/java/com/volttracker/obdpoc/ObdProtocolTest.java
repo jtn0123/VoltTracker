@@ -214,4 +214,14 @@ public class ObdProtocolTest {
         assertEquals("410C1880", ObdProtocol.summarize("410C1880\r\n>"));
         assertEquals("", ObdProtocol.summarize(null));
     }
+
+    @Test
+    public void truncatedFramesYieldNull() {
+        // A partial response (the socket read finished before the full frame arrived)
+        // must decode to "no value" rather than a wrong number or a crash.
+        assertNull(ObdProtocol.parseSpeedKph("410D"));
+        assertNull(ObdProtocol.parseRpm("410C18"));
+        assertNull(ObdProtocol.parseCoolantC("4105"));
+        assertNull(ObdProtocol.parseKnownValue("222429", "622429"));
+    }
 }

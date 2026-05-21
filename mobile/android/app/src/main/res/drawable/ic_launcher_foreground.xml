@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Lightning bolt centred in the adaptive-icon safe zone. -->
+    <group
+        android:scaleX="2.9"
+        android:scaleY="2.9"
+        android:translateX="19.2"
+        android:translateY="19.2">
+        <path
+            android:fillColor="#FF7A45"
+            android:pathData="M7,2L7,13L10,13L10,22L17,10L13,10L17,2Z" />
+    </group>
+</vector>

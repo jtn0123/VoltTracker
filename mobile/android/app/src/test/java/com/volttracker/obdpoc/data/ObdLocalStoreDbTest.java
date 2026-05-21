@@ -119,4 +119,61 @@ public class ObdLocalStoreDbTest {
         assertEquals(0, summary.optInt("sessionCount"));
         assertEquals(0L, summary.optLong("sampleCount"));
     }
+
+    // ---- GPS route building (the data the map renders) -----------------------------
+
+    private void locationSample(long sessionId, long atMs, double lat, double lng, Double accuracyM) {
+        store.recordLocationSample(
+                sessionId, atMs, "gps", lat, lng, accuracyM, null, null, null, null, null);
+    }
+
+    @Test
+    public void recordedLocationSamplesBuildARecentRoute() throws Exception {
+        long id = store.startSession("obd", "00:11", "Adapter");
+        locationSample(id, 1000L, 32.70, -117.10, 5.0);
+        locationSample(id, 2000L, 32.71, -117.10, 5.0);
+        locationSample(id, 3000L, 32.72, -117.10, 5.0);
+
+        JSONArray routes = store.getStorageSummary().getJSONArray("recentRoutes");
+        assertEquals(1, routes.length());
+        JSONObject route = routes.getJSONObject(0);
+        assertEquals(3, route.optInt("pointCount"));
+        // ~0.02 deg of latitude is a little over 2 km
+        assertTrue("route should span ~2 km", route.optDouble("distanceMeters") > 2000);
+    }
+
+    @Test
+    public void aSinglePointDoesNotRenderAsARoute() throws Exception {
+        long id = store.startSession("obd", "00:11", "Adapter");
+        locationSample(id, 1000L, 32.70, -117.10, 5.0);
+
+        assertEquals(0, store.getStorageSummary().getJSONArray("recentRoutes").length());
+    }
+
+    @Test
+    public void routePointsAreReturnedInChronologicalOrder() throws Exception {
+        long id = store.startSession("obd", "00:11", "Adapter");
+        // inserted out of order; the route must still render oldest-first
+        locationSample(id, 3000L, 32.72, -117.10, 5.0);
+        locationSample(id, 1000L, 32.70, -117.10, 5.0);
+        locationSample(id, 2000L, 32.71, -117.10, 5.0);
+
+        JSONArray points = store.getStorageSummary()
+                .getJSONArray("recentRoutes").getJSONObject(0).getJSONArray("points");
+        assertEquals(1000L, points.getJSONObject(0).optLong("atMs"));
+        assertEquals(2000L, points.getJSONObject(1).optLong("atMs"));
+        assertEquals(3000L, points.getJSONObject(2).optLong("atMs"));
+    }
+
+    @Test
+    public void routePointsCarryAccuracyForRendering() throws Exception {
+        long id = store.startSession("obd", "00:11", "Adapter");
+        locationSample(id, 1000L, 32.70, -117.10, 7.5);
+        locationSample(id, 2000L, 32.71, -117.10, 9.0);
+
+        JSONArray points = store.getStorageSummary()
+                .getJSONArray("recentRoutes").getJSONObject(0).getJSONArray("points");
+        assertEquals(7.5, points.getJSONObject(0).optDouble("accuracyM"), 0.01);
+        assertEquals(9.0, points.getJSONObject(1).optDouble("accuracyM"), 0.01);
+    }
 }

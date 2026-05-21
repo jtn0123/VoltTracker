@@ -158,4 +158,27 @@ public class ObdServiceTest {
     public void summarizeLeavesNonVinResponsesIntact() {
         assertEquals("41 0C 18 80", ObdService.summarizeForStorage("010C", "41 0C 18 80\r>"));
     }
+
+    // ---- reconnectBackoffMs --------------------------------------------------------
+
+    @Test
+    public void reconnectBackoffGrowsExponentially() {
+        assertEquals(2000L, ObdService.reconnectBackoffMs(1));
+        assertEquals(4000L, ObdService.reconnectBackoffMs(2));
+        assertEquals(8000L, ObdService.reconnectBackoffMs(3));
+        assertEquals(16000L, ObdService.reconnectBackoffMs(4));
+    }
+
+    @Test
+    public void reconnectBackoffIsCappedAtThirtySeconds() {
+        assertEquals(30000L, ObdService.reconnectBackoffMs(5));
+        assertEquals(30000L, ObdService.reconnectBackoffMs(6));
+        assertEquals(30000L, ObdService.reconnectBackoffMs(100));
+    }
+
+    @Test
+    public void reconnectBackoffIsZeroForNonPositiveAttempts() {
+        assertEquals(0L, ObdService.reconnectBackoffMs(0));
+        assertEquals(0L, ObdService.reconnectBackoffMs(-3));
+    }
 }
