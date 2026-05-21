@@ -60,3 +60,6 @@ logs/
 
 # Backups
 backups/
+
+# Android OBD debug artifacts (large on-phone DB pulls, route-extraction scratch)
+mobile/android/docs/db-pulls/

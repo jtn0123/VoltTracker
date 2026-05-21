@@ -21,14 +21,25 @@ SQLite tables capture OBD sessions, parsed telemetry samples, status/debug event
 
 ## Current PIDs
 
+Polled live every cycle:
+
 - `ATRV` adapter voltage
 - `010D` vehicle speed
 - `010C` engine RPM
 - `0105` coolant temp
 - `0104` engine load
 - `0111` throttle position
+- `015B` hybrid battery state of charge
 
-Volt-specific hybrid data is intentionally not in this first slice. Once the adapter link is reliable, the next step is adding GM/Volt custom PIDs for SOC, pack data, EV/gas split, and battery health.
+Sent only by the diagnostic Scan (community-validated Chevy Volt mode-22 PIDs;
+see `docs/volt-pid-research-2026-05-20.md`):
+
+- Header `ATSH7E1`: `222429` HV pack voltage, `222414` HV pack current
+- Header `ATSH7E4`: `22434F` battery temp, `224368`/`224369` charger AC voltage/current,
+  `22436B`/`22436C`/`224373` charger HV voltage/current/power, `22437D` last-charge energy
+
+The Volt mode-22 decode formulas still need confirmation against a real car — run a
+Scan and verify the captured responses before promoting any of them to the live loop.
 
 ## Build
 

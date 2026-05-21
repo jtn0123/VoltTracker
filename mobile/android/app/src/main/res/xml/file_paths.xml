@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Backup files are written here before being handed to the share sheet. -->
+    <cache-path name="backups" path="backups/" />
+</paths>

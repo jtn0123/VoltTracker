@@ -13,10 +13,13 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.ViewGroup;
+import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -24,20 +27,29 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
+import androidx.core.content.FileProvider;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
+    private static final String TAG = "VoltTracker";
     private static final int REQUEST_PERMISSIONS = 4101;
     private static final String PREFS = "volt_obd_prefs";
     private static final String PREF_LAST_ADDRESS = "last_address";
@@ -51,6 +63,8 @@ public class MainActivity extends Activity {
     private JSONObject lastTelemetry = new JSONObject();
     private JSONObject lastStatus = new JSONObject();
     private JSONObject lastStorage = new JSONObject();
+    // Off-UI-thread worker for the heavy storage-summary query.
+    private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
 
     private final BroadcastReceiver obdReceiver = new BroadcastReceiver() {
         @Override
@@ -96,9 +110,18 @@ public class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         settings.setUseWideViewPort(false);
         settings.setLoadWithOverviewMode(false);
-        WebView.setWebContentsDebuggingEnabled(true);
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
 
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage message) {
+                if (message != null && message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    Log.e(TAG, "dashboard console: " + message.message()
+                            + " (" + message.sourceId() + ":" + message.lineNumber() + ")");
+                }
+                return true;
+            }
+        });
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
@@ -146,6 +169,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        backgroundExecutor.shutdownNow();
         if (localStore != null) {
             localStore.close();
             localStore = null;
@@ -515,9 +539,14 @@ public class MainActivity extends Activity {
     }
 
     private void publishStorageSummary() {
-        String storage = getStorageSummaryJson();
-        lastStorage = parseJson(storage);
-        callDashboard("window.VoltTrackerNative.setStorage(" + JSONObject.quote(storage) + ")");
+        // getStorageSummary runs many queries over a large DB; keep it off the UI thread.
+        backgroundExecutor.execute(() -> {
+            final String storage = getStorageSummaryJson();
+            runOnUiThread(() -> {
+                lastStorage = parseJson(storage);
+                callDashboard("window.VoltTrackerNative.setStorage(" + JSONObject.quote(storage) + ")");
+            });
+        });
     }
 
     private String getStorageSummaryJson() {
@@ -526,6 +555,28 @@ public class MainActivity extends Activity {
         }
         try {
             return localStore.getStorageSummary().toString();
+        } catch (RuntimeException ex) {
+            return "{}";
+        }
+    }
+
+    private String getTripsJson() {
+        if (localStore == null) {
+            return "[]";
+        }
+        try {
+            return localStore.getTripsJson(40).toString();
+        } catch (RuntimeException ex) {
+            return "[]";
+        }
+    }
+
+    private String getInsightsJson() {
+        if (localStore == null) {
+            return "{}";
+        }
+        try {
+            return localStore.getInsightsJson().toString();
         } catch (RuntimeException ex) {
             return "{}";
         }
@@ -558,6 +609,76 @@ public class MainActivity extends Activity {
             }
         }
         return payload.toString();
+    }
+
+    // Produces a complete on-device data backup and hands it to the Android share sheet
+    // so the user can save it anywhere (cloud, PC) — no server involved.
+    private void launchBackupShare() {
+        publishStatus("ready", "Preparing data backup...", false);
+        backgroundExecutor.execute(() -> {
+            final File backup = buildBackupFile();
+            runOnUiThread(() -> {
+                if (backup == null) {
+                    publishStatus("blocked", "Could not create the backup file.", true);
+                    return;
+                }
+                try {
+                    Uri uri = FileProvider.getUriForFile(
+                            this, getPackageName() + ".fileprovider", backup);
+                    Intent share = new Intent(Intent.ACTION_SEND);
+                    share.setType("application/octet-stream");
+                    share.putExtra(Intent.EXTRA_STREAM, uri);
+                    share.putExtra(Intent.EXTRA_SUBJECT, backup.getName());
+                    share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(share, "Back up Volt Tracker data"));
+                    publishStatus("ready", "Backup ready - choose where to save it.", false);
+                } catch (RuntimeException ex) {
+                    publishStatus("blocked", "Could not open the share sheet.", true);
+                }
+            });
+        });
+    }
+
+    private File buildBackupFile() {
+        if (localStore == null) {
+            return null;
+        }
+        try {
+            localStore.checkpoint();
+            File source = localStore.getDatabaseFile();
+            if (source == null || !source.exists()) {
+                return null;
+            }
+            File dir = new File(getCacheDir(), "backups");
+            if (!dir.exists() && !dir.mkdirs()) {
+                return null;
+            }
+            clearOldBackups(dir);
+            String stamp = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date());
+            File dest = new File(dir, "volttracker-backup-" + stamp + ".db");
+            try (FileInputStream in = new FileInputStream(source);
+                 FileOutputStream out = new FileOutputStream(dest)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) > 0) {
+                    out.write(buffer, 0, read);
+                }
+            }
+            return dest;
+        } catch (IOException | RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private static void clearOldBackups(File dir) {
+        File[] existing = dir.listFiles();
+        if (existing == null) {
+            return;
+        }
+        for (File file : existing) {
+            // Backups are transient hand-off copies; keep only the freshest one.
+            file.delete();
+        }
     }
 
     private void publishAppState() {
@@ -732,6 +853,21 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void shareBackup() {
+            runOnUiThread(MainActivity.this::launchBackupShare);
+        }
+
+        @JavascriptInterface
+        public String getTrips() {
+            return getTripsJson();
+        }
+
+        @JavascriptInterface
+        public String getInsights() {
+            return getInsightsJson();
+        }
+
+        @JavascriptInterface
         public void clearStoredData() {
             runOnUiThread(() -> {
                 try {
@@ -790,6 +926,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void disconnect() {
             runOnUiThread(MainActivity.this::stopObdService);
+        }
+
+        @JavascriptInterface
+        public void logClientError(String label, String detail) {
+            Log.e(TAG, "dashboard client error [" + label + "]: " + detail);
         }
     }
 }

@@ -1,0 +1,106 @@
+  <section id="view-settings" class="view" data-view="settings">
+    <article class="panel connect-card">
+      <div class="kicker">Adapter controls</div>
+      <div class="button-grid">
+        <button type="button" data-action="permissions">Permissions</button>
+        <button type="button" data-action="refresh">Refresh</button>
+        <button type="button" data-action="last">Last</button>
+        <button type="button" data-action="scan" class="scan">Scan</button>
+        <button type="button" data-action="connect" class="primary">Connect</button>
+        <button type="button" data-action="stop" class="danger">Stop</button>
+      </div>
+      <p class="status-copy">Structured samples are saved in SQLite; raw field logs still stay in the private OBD log folder.</p>
+    </article>
+
+    <details class="sandbox-tools">
+      <summary>Preview sandbox</summary>
+      <p class="status-copy">Demo preview is isolated here for UI debugging. Keep it off during real car tests.</p>
+      <div class="button-grid">
+        <button type="button" data-action="demo" data-demo-label="Start demo preview" class="demo">Start demo preview</button>
+        <button type="button" data-action="stopDemo" class="demo-stop">Stop demo</button>
+      </div>
+    </details>
+
+    <article id="historyCard" class="panel list-card" hidden>
+      <header>
+        <span class="kicker">Remembered adapters</span>
+        <span id="historyHint" class="status-copy">tap to select</span>
+      </header>
+      <div id="historyList"></div>
+    </article>
+
+    <article id="reviewCard" class="panel list-card">
+      <header>
+        <div>
+          <span class="kicker">Last session review</span>
+          <h3 id="reviewTitle">No real session yet</h3>
+        </div>
+        <button type="button" class="link-btn" data-action="exportDebug">export</button>
+      </header>
+      <div class="review-grid">
+        <div><span>Max speed</span><strong id="reviewMaxSpeed">--</strong></div>
+        <div><span>GPS samples</span><strong id="reviewGpsCount">--</strong></div>
+        <div><span>PID parse</span><strong id="reviewPidParse">--</strong></div>
+        <div><span>Avg interval</span><strong id="reviewInterval">--</strong></div>
+        <div><span>Background</span><strong id="reviewBackground">--</strong></div>
+        <div><span>Gaps</span><strong id="reviewGaps">--</strong></div>
+        <div><span>Useful</span><strong id="reviewUsefulSamples">--</strong></div>
+        <div><span>Empty</span><strong id="reviewEmptySamples">0</strong></div>
+      </div>
+      <div id="reviewWarnings" class="warning-list"></div>
+      <div id="realInsightList" class="real-insight-list"></div>
+      <div id="reviewTimeline" class="timeline-list"></div>
+    </article>
+
+    <article class="panel list-card">
+      <header>
+        <div>
+          <span class="kicker">Recent PID frames</span>
+          <h3 id="pidFrameTitle">Waiting for scan data</h3>
+        </div>
+      </header>
+      <div id="pidFrameList" class="pid-frame-list"></div>
+    </article>
+
+    <article class="panel list-card">
+      <header>
+        <div>
+          <span class="kicker">On-phone database</span>
+          <h3 id="dbSummaryTitle">No stored sessions yet</h3>
+        </div>
+        <button type="button" class="link-btn" data-action="refreshStorage">refresh</button>
+      </header>
+      <div class="status-meta">
+        <div><span>Sessions</span><strong id="dbSessionCount">0</strong></div>
+        <div><span>Samples</span><strong id="dbSampleCount">0</strong></div>
+        <div><span>Events</span><strong id="dbEventCount">0</strong></div>
+        <div><span>PIDs</span><strong id="dbPidCount">0</strong></div>
+        <div><span>GPS</span><strong id="dbLocationCount">0</strong></div>
+        <div><span>Trips</span><strong id="dbTripCount">0</strong></div>
+        <div><span>Charge</span><strong id="dbChargeCount">0</strong></div>
+        <div><span>Battery</span><strong id="dbBatteryCount">0</strong></div>
+        <div><span>Size</span><strong id="dbSize">0 B</strong></div>
+        <div><span>Raw rows</span><strong id="dbRawTelemetryCount">0</strong></div>
+        <div><span>Empty</span><strong id="dbEmptyTelemetryCount">0</strong></div>
+      </div>
+      <div id="dbSessionList" style="margin-top:12px"></div>
+      <p class="status-copy" style="margin-top:12px">Back up keeps a full copy of this on-phone database; pick any destination (cloud, email, PC) from the share sheet.</p>
+      <button type="button" data-action="backup" style="margin-top:8px;width:100%">Back up data to a file</button>
+      <button type="button" data-action="clearStorage" class="danger" style="margin-top:8px;width:100%">Clear stored debug data</button>
+    </article>
+
+    <article class="panel raw">
+      <div class="kicker">Raw ELM327 frames</div>
+      <pre id="rawFrames">Waiting for telemetry...</pre>
+    </article>
+
+    <article class="panel setting-row">
+      <div class="card-head">
+        <div>
+          <span class="kicker">Vehicle</span>
+          <h3>Sparky - 2017 Chevrolet Volt</h3>
+          <p class="status-copy">49,328 mi - 78% electric lifetime mix.</p>
+        </div>
+      </div>
+    </article>
+  </section>

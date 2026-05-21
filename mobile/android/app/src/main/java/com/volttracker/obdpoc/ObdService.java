@@ -57,13 +57,28 @@ public class ObdService extends Service {
     private static final String CHANNEL_ID = "volt_obd_connection";
     private static final int NOTIFICATION_ID = 4207;
     private static final UUID ELM327_SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
-    private static final String[] PROTOCOL_PROBES = {"ATSP0", "ATSP6", "ATSP7", "ATSP8"};
-    private static final String[] CAPABILITY_PROBES = {"0100", "0120", "0140", "0160"};
-    private static final String[] LIVE_PROBES = {"ATRV", "010D", "010C", "0105", "0104", "0111", "0142", "011F", "012F", "015C"};
-    private static final String[] VOLT_7E4_PROBES = {"2243AF1", "228334", "2241A31", "2234B2", "0902"};
-    private static final String[] VOLT_7E7_CELL_SAMPLE_PROBES = {
-            "2241811", "2241821", "2241831", "2241841",
-            "2241981", "2241B01", "2241C81", "2241F01", "2242401"
+    private static final long CONNECT_TIMEOUT_MS = 15000L;
+    // Package-private so the unit tests can assert these probe lists stay well-formed.
+    static final String[] PROTOCOL_PROBES = {"ATSP0", "ATSP6", "ATSP7", "ATSP8"};
+    static final String[] CAPABILITY_PROBES = {"0100", "0120", "0140", "0160"};
+    // 015B is the standard mode-01 hybrid-battery SOC PID; it answers on the normal bus
+    // with no ATSH header, so it is probed alongside the other live-data PIDs.
+    static final String[] LIVE_PROBES = {"ATRV", "010D", "010C", "0105", "0104", "0111", "015B", "0142", "011F", "012F", "015C"};
+    // Community-validated Chevy Volt mode-22 PIDs (Volt PID community sheet, see
+    // docs/volt-pids-community-sheet.csv). ATSH selects the controller before each group;
+    // decode formulas live in ObdProtocol.
+    static final String[] VOLT_7E1_PROBES = {
+            "222429",  // HV pack voltage
+            "222414"   // HV pack current (signed: discharge positive)
+    };
+    static final String[] VOLT_7E4_PROBES = {
+            "22434F",  // HV battery temperature
+            "224368",  // charger AC input voltage
+            "224369",  // charger AC input current
+            "22436B",  // charger HV output voltage
+            "22436C",  // charger HV output current
+            "224373",  // charger HV output power
+            "22437D"   // last charge AC energy
     };
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -317,7 +332,7 @@ public class ObdService extends Service {
             BluetoothDevice device = adapter.getRemoteDevice(address);
             logEvent("bluetooth_socket_open", "address", address, "uuid", ELM327_SPP_UUID.toString());
             socket = device.createRfcommSocketToServiceRecord(ELM327_SPP_UUID);
-            socket.connect();
+            connectWithTimeout(socket);
             input = socket.getInputStream();
             output = socket.getOutputStream();
             logEvent("bluetooth_socket_connected", "address", address);
@@ -371,7 +386,7 @@ public class ObdService extends Service {
                 sample.put("throttlePct", Math.round(18 + 14 * Math.sin(t / 2.7)));
                 sample.put("voltage", round1(13.8 + 0.2 * Math.sin(t / 5.0)));
                 sample.put("soc", Math.max(13.4, round1(77.8 - t * 0.01)));
-                sample.put("batteryTemp", round1(72.0 + Math.sin(t / 8.0)));
+                sample.put("batteryTemp", round1(24.0 + Math.sin(t / 8.0)));
                 sample.put("powerKw", round1(16.0 + Math.sin(t / 2.2) * 12.0));
                 sample.put("updatedAt", System.currentTimeMillis());
                 appendSessionHealth(sample);
@@ -437,18 +452,25 @@ public class ObdService extends Service {
             probeCommand("03", 3500, raw);
         }
 
+        // The protocol sweep above leaves the adapter on the last probe (ATSP8), which is
+        // the wrong CAN protocol for this car. Restore auto-detect so the live-data and
+        // Volt PID probes below run on the vehicle's real protocol instead of CAN ERROR.
+        appendProbeLine(raw, "volt-discovery", "restore auto protocol for live + Volt probes");
+        probeCommand("ATSP0", 1800, raw);
+        probeCommand("0100", 9000, raw);
+
         for (String probe : LIVE_PROBES) {
             probeCommand(probe, 3200, raw);
         }
 
-        appendProbeLine(raw, "volt-discovery", "ATSH7E4 pack/state probes");
+        appendProbeLine(raw, "volt-discovery", "ATSH7E4 battery and charger probes");
         probeCommand("ATSH7E4", 1800, raw);
         for (String probe : VOLT_7E4_PROBES) {
             probeCommand(probe, 4200, raw);
         }
-        appendProbeLine(raw, "volt-discovery", "ATSH7E7 sample cell probes");
-        probeCommand("ATSH7E7", 1800, raw);
-        for (String probe : VOLT_7E7_CELL_SAMPLE_PROBES) {
+        appendProbeLine(raw, "volt-discovery", "ATSH7E1 pack voltage and current probes");
+        probeCommand("ATSH7E1", 1800, raw);
+        for (String probe : VOLT_7E1_PROBES) {
             probeCommand(probe, 4200, raw);
         }
         probeCommand("ATSH7DF", 1800, raw);
@@ -523,6 +545,13 @@ public class ObdService extends Service {
             Integer throttle = ObdProtocol.parseThrottlePct(throttleRaw);
             if (throttle != null) {
                 sample.put("throttlePct", throttle);
+            }
+
+            String socRaw = sendRecoverableCommand("015B", 1500);
+            raw = appendRaw(raw, "015B", socRaw);
+            Integer soc = ObdProtocol.parseStateOfChargePct(socRaw);
+            if (soc != null) {
+                sample.put("soc", soc);
             }
 
             sampleCount += 1;
@@ -670,11 +699,14 @@ public class ObdService extends Service {
             return;
         }
         byte[] buffer = new byte[128];
-        while (input.available() > 0) {
-            int ignored = input.read(buffer, 0, Math.min(buffer.length, input.available()));
-            if (ignored < 0) {
+        int drained = 0;
+        // Cap the drain so a chatty/garbage adapter cannot spin this loop forever.
+        while (input.available() > 0 && drained < 8192) {
+            int read = input.read(buffer, 0, Math.min(buffer.length, input.available()));
+            if (read < 0) {
                 break;
             }
+            drained += read;
         }
     }
 
@@ -690,6 +722,28 @@ public class ObdService extends Service {
             broadcastStatus("idle", statusMessage, false);
         }
         closeSessionLog();
+    }
+
+    // BluetoothSocket.connect() has no timeout and can block for a long time on a dead
+    // adapter. A daemon watchdog closes the socket after CONNECT_TIMEOUT_MS, which makes
+    // the blocked connect() throw IOException so the normal failure path takes over.
+    private void connectWithTimeout(BluetoothSocket pendingSocket) throws IOException {
+        Thread watchdog = new Thread(() -> {
+            sleep(CONNECT_TIMEOUT_MS);
+            if (!pendingSocket.isConnected()) {
+                try {
+                    pendingSocket.close();
+                } catch (IOException ignored) {
+                }
+            }
+        });
+        watchdog.setDaemon(true);
+        watchdog.start();
+        try {
+            pendingSocket.connect();
+        } finally {
+            watchdog.interrupt();
+        }
     }
 
     private void closeSocket() {
@@ -811,11 +865,17 @@ public class ObdService extends Service {
         }
     }
 
-    private synchronized void recordAppVisibility(boolean foreground) {
+    private void recordAppVisibility(boolean foreground) {
         if (appInForeground == foreground) {
             return;
         }
         appInForeground = foreground;
+        // Offload the logging/notification work: it shares a monitor with sendCommand,
+        // so doing it inline would stall the calling (often main) thread on a slow probe.
+        persistAsync(() -> applyAppVisibility(foreground));
+    }
+
+    private synchronized void applyAppVisibility(boolean foreground) {
         logEvent(foreground ? "app_foregrounded" : "app_backgrounded",
                 "backgroundSampleCount", String.valueOf(backgroundSampleCount),
                 "sampleGapCount", String.valueOf(sampleGapCount));
@@ -969,6 +1029,10 @@ public class ObdService extends Service {
     private void persistTelemetry(JSONObject payload) {
         final long sessionId = activeSessionId;
         if (sessionId <= 0 || payload == null || localStore == null) {
+            return;
+        }
+        if (ObdLocalStore.MODE_DEMO.equals(activeMode)) {
+            // Demo telemetry is a UI preview only; keep it out of the real database.
             return;
         }
         persistAsync(() -> {

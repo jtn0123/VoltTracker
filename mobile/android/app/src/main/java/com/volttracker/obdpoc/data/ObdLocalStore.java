@@ -552,6 +552,116 @@ public final class ObdLocalStore implements Closeable {
         return payload;
     }
 
+    /**
+     * Real trip list, one entry per logged OBD driving session. Distance, duration and
+     * speeds are computed on read from telemetry and GPS samples already on disk; no
+     * separate trip table is required. Demo and scan sessions are excluded.
+     */
+    public JSONArray getTripsJson(int limit) {
+        JSONArray payload = new JSONArray();
+        SQLiteDatabase db = helper.getReadableDatabase();
+        try {
+            for (ObdSessionRecord session : getRecentSessions(db, Math.max(1, Math.min(limit, 100)))) {
+                if (!MODE_OBD.equals(session.mode)) {
+                    continue;
+                }
+                JSONObject trip = tripJson(db, session);
+                if (trip != null) {
+                    payload.put(trip);
+                }
+            }
+        } catch (JSONException ignored) {
+            // Local numeric/string values are safe.
+        }
+        return payload;
+    }
+
+    private static JSONObject tripJson(SQLiteDatabase db, ObdSessionRecord session) throws JSONException {
+        long usefulSamples = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
+                new String[]{String.valueOf(session.id)});
+        if (usefulSamples <= 0) {
+            // A session with no useful telemetry was a failed connection, not a trip.
+            return null;
+        }
+        JSONArray points = routePointsForSessionJson(db, session.id, 1000);
+        long endedAtMs = session.endedAtMs > 0 ? session.endedAtMs : session.lastEventAtMs;
+        long durationMs = endedAtMs > session.startedAtMs ? endedAtMs - session.startedAtMs : 0L;
+        JSONObject trip = new JSONObject();
+        trip.put("id", session.id);
+        trip.put("startedAtMs", session.startedAtMs);
+        trip.put("endedAtMs", endedAtMs);
+        trip.put("durationMs", durationMs);
+        trip.put("distanceMeters", distanceMeters(points));
+        trip.put("maxSpeedKph", maxIntForSession(db, "speed_kph", session.id));
+        trip.put("avgMovingSpeedKph", avgMovingSpeedKph(db, session.id));
+        trip.put("sampleCount", usefulSamples);
+        trip.put("pointCount", points.length());
+        trip.put("hasRoute", points.length() >= 2);
+        trip.put("adapterName", session.adapterName);
+        trip.put("status", session.status);
+        return trip;
+    }
+
+    private static double avgMovingSpeedKph(SQLiteDatabase db, long sessionId) {
+        try (Cursor cursor = db.rawQuery(
+                "SELECT AVG(speed_kph) FROM " + VoltTrackerDb.TABLE_TELEMETRY
+                        + " WHERE session_id = ? AND speed_kph > 0 AND " + USEFUL_TELEMETRY_WHERE,
+                new String[]{String.valueOf(sessionId)}
+        )) {
+            return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getDouble(0) : 0d;
+        }
+    }
+
+    /** Cross-session lifetime aggregates for the Insights screen, all derived from trips. */
+    public JSONObject getInsightsJson() {
+        JSONObject payload = new JSONObject();
+        SQLiteDatabase db = helper.getReadableDatabase();
+        try {
+            JSONArray trips = getTripsJson(100);
+            double totalDistance = 0d;
+            long totalDriveMs = 0L;
+            double longestTrip = 0d;
+            int maxSpeed = 0;
+            int gpsTripCount = 0;
+            long firstAt = 0L;
+            long lastAt = 0L;
+            for (int i = 0; i < trips.length(); i++) {
+                JSONObject trip = trips.getJSONObject(i);
+                double distance = trip.optDouble("distanceMeters", 0d);
+                totalDistance += distance;
+                longestTrip = Math.max(longestTrip, distance);
+                totalDriveMs += trip.optLong("durationMs", 0L);
+                maxSpeed = Math.max(maxSpeed, trip.optInt("maxSpeedKph", 0));
+                if (trip.optBoolean("hasRoute", false)) {
+                    gpsTripCount += 1;
+                }
+                long startedAt = trip.optLong("startedAtMs", 0L);
+                if (startedAt > 0) {
+                    firstAt = firstAt == 0 ? startedAt : Math.min(firstAt, startedAt);
+                    lastAt = Math.max(lastAt, startedAt);
+                }
+            }
+            int tripCount = trips.length();
+            payload.put("tripCount", tripCount);
+            payload.put("totalDistanceMeters", totalDistance);
+            payload.put("totalDriveMs", totalDriveMs);
+            payload.put("longestTripMeters", longestTrip);
+            payload.put("avgTripDistanceMeters", tripCount > 0 ? totalDistance / tripCount : 0d);
+            payload.put("maxSpeedKph", maxSpeed);
+            payload.put("gpsTripCount", gpsTripCount);
+            payload.put("firstTripAtMs", firstAt);
+            payload.put("lastTripAtMs", lastAt);
+            payload.put("sessionCount", countRows(db, VoltTrackerDb.TABLE_SESSIONS));
+            payload.put("sampleCount", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                    USEFUL_TELEMETRY_WHERE, null));
+            payload.put("locationSampleCount", countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES));
+        } catch (JSONException ignored) {
+            // Local numeric/string values are safe.
+        }
+        return payload;
+    }
+
     private JSONObject getSessionReviewJson(SQLiteDatabase db, ObdSessionRecord session) throws JSONException {
         JSONObject payload = new JSONObject();
         payload.put("session", sessionToJson(session));
@@ -1098,7 +1208,8 @@ public final class ObdLocalStore implements Closeable {
         return records;
     }
 
-    private static double distanceMeters(JSONArray points) throws JSONException {
+    // Package-private for unit testing of the route-distance math.
+    static double distanceMeters(JSONArray points) throws JSONException {
         double total = 0d;
         JSONObject previous = null;
         for (int i = 0; i < points.length(); i++) {
@@ -1138,7 +1249,8 @@ public final class ObdLocalStore implements Closeable {
         return payload;
     }
 
-    private static double haversineMeters(double lat1, double lng1, double lat2, double lng2) {
+    // Package-private for unit testing.
+    static double haversineMeters(double lat1, double lng1, double lat2, double lng2) {
         double earthMeters = 6371000d;
         double dLat = Math.toRadians(lat2 - lat1);
         double dLng = Math.toRadians(lng2 - lng1);
@@ -1173,6 +1285,15 @@ public final class ObdLocalStore implements Closeable {
 
     public File getDatabaseFile() {
         return context.getDatabasePath(VoltTrackerDb.DATABASE_NAME);
+    }
+
+    /** Flushes the write-ahead log into the main DB file so a file copy is a complete backup. */
+    public void checkpoint() {
+        try {
+            helper.getWritableDatabase().execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+        } catch (RuntimeException ignored) {
+            // Backup proceeds with whatever is already in the main file.
+        }
     }
 
     @Override

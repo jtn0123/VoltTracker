@@ -13,4 +13,58 @@ android {
         versionCode 1
         versionName "0.1.0"
     }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    testOptions {
+        unitTests {
+            returnDefaultValues = true
+            includeAndroidResources = true
+        }
+    }
+}
+
+dependencies {
+    // FileProvider, for handing the data-backup file to the Android share sheet.
+    implementation "androidx.core:core:1.13.1"
+    testImplementation "junit:junit:4.13.2"
+    // Real org.json implementation; the android.jar stub returns no-op defaults in unit tests.
+    testImplementation "org.json:json:20231013"
+    // Robolectric runs the real Android SQLite layer on the JVM for ObdLocalStore tests.
+    testImplementation "org.robolectric:robolectric:4.14.1"
+}
+
+// Assembles the shipped dashboard index.html from the per-screen partials in
+// src/main/dashboard-src/. Edit the small partials; never hand-edit the generated file.
+tasks.register("generateDashboardHtml") {
+    description = "Assembles assets/dashboard/index.html from dashboard-src partials."
+    def srcDir = file("src/main/dashboard-src")
+    def outFile = file("src/main/assets/dashboard/index.html")
+    inputs.dir(srcDir)
+    outputs.file(outFile)
+    doLast {
+        def sb = new StringBuilder()
+        new File(srcDir, "index.template.html").eachLine("UTF-8") { line ->
+            def m = (line =~ /^\s*<!-- include: (\S+) -->\s*$/)
+            if (m.find()) {
+                sb.append(new File(srcDir, m.group(1)).getText("UTF-8").replaceAll(/\s+$/, ""))
+            } else {
+                sb.append(line)
+            }
+            sb.append("\n")
+        }
+        outFile.setText(sb.toString().replaceAll(/\n+$/, "") + "\n", "UTF-8")
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn("generateDashboardHtml")
 }

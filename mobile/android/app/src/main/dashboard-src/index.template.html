@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Volt Tracker OBD</title>
+<link rel="stylesheet" href="lib/leaflet/leaflet.css">
+<script src="lib/leaflet/leaflet.js"></script>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/screens.css">
+</head>
+<body>
+<!-- include: partials/error-banner.html -->
+<main class="app">
+<!-- include: partials/topbar.html -->
+<!-- include: partials/drive.html -->
+<!-- include: partials/trips.html -->
+<!-- include: partials/map.html -->
+<!-- include: partials/charge.html -->
+<!-- include: partials/insights.html -->
+<!-- include: partials/settings.html -->
+</main>
+
+<nav class="bottom-nav" aria-label="Main navigation">
+  <button type="button" data-nav="drive" class="is-active" aria-label="Drive" aria-current="page"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20h-5v-5H9v5H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></i><span>Drive</span></button>
+  <button type="button" data-nav="trips" aria-label="Trips"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h10M5 12h14M5 17h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></i><span>Trips</span></button>
+  <button type="button" data-nav="map" aria-label="Map"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 5-2 6 2 5-2v14l-5 2-6-2-5 2zM9 4v14M15 6v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></i><span>Map</span></button>
+  <button type="button" data-nav="charge" aria-label="Charge"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 5 13h6l-1 9 9-13h-6z" fill="currentColor"/></svg></i><span>Charge</span></button>
+  <button type="button" data-nav="insights" aria-label="Insights"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></i><span>Insights</span></button>
+  <button type="button" data-nav="settings" aria-label="Diagnostics"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0-5v3m0 12v3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1M1 12h3m16 0h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></i><span>Diag</span></button>
+</nav>
+
+<script src="js/core.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/map.js"></script>
+<script src="js/telemetry.js"></script>
+<script src="js/actions.js"></script>
+</body>
+</html>

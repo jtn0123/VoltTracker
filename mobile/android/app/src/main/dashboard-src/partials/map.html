@@ -1,0 +1,45 @@
+  <section id="view-map" class="view" data-view="map">
+    <article id="mapCard" class="panel map-card">
+      <div class="card-head">
+        <div>
+          <span class="kicker" id="mapKicker">GPS map</span>
+          <h2 id="mapTitle">No route recorded yet</h2>
+        </div>
+        <span class="badge"><span class="dot"></span><span id="mapPointBadge">0 pts</span></span>
+      </div>
+      <div class="map-controls">
+        <div class="map-layer-tabs" role="tablist" aria-label="Map layer">
+          <button type="button" data-map-layer="routes" class="is-active" aria-selected="true">Routes</button>
+          <button type="button" data-map-layer="heat" aria-selected="false">Heat</button>
+          <button type="button" data-map-layer="stops" aria-selected="false">Stops</button>
+        </div>
+        <button id="mapFullBtn" type="button" class="map-full-btn" aria-pressed="false">Full</button>
+      </div>
+      <div id="mapFrame" class="map-frame" data-layer="routes">
+        <div id="mapLeaflet" class="map-canvas"></div>
+        <div class="map-legend" aria-hidden="true">
+          <span><i style="background:#ff6b4a"></i>slow</span>
+          <span><i style="background:#ffd23f"></i>mid</span>
+          <span><i style="background:#7ee06a"></i>fast</span>
+        </div>
+        <div id="mapEmpty" class="map-empty">
+          <span><strong>No GPS route yet</strong>Start a logged drive with location permission enabled. The route will draw here from on-device SQLite samples.</span>
+        </div>
+      </div>
+      <div class="map-foot">
+        <span class="badge"><span class="dot"></span><span id="mapDistance">--</span></span>
+        <span class="badge"><span class="dot"></span><span id="mapDuration">--</span></span>
+        <span class="badge"><span class="dot"></span><span id="mapAccuracy">--</span></span>
+      </div>
+    </article>
+
+    <section class="map-layout">
+      <article class="panel list-card">
+        <header>
+          <span class="kicker">Recorded sessions</span>
+          <button type="button" class="link-btn" data-action="refreshStorage">refresh</button>
+        </header>
+        <div id="mapSessionList" class="map-list"></div>
+      </article>
+    </section>
+  </section>

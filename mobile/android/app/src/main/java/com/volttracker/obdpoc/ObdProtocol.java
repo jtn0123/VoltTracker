@@ -56,6 +56,11 @@ final class ObdProtocol {
         return bytes == null ? null : Math.round(bytes[0] * 100f / 255f);
     }
 
+    static Integer parseStateOfChargePct(String response) {
+        int[] bytes = mode01Bytes(response, "5B", 1);
+        return bytes == null ? null : Math.round(bytes[0] * 100f / 255f);
+    }
+
     static Float parseVoltage(String response) {
         if (response == null) {
             return null;
@@ -121,25 +126,46 @@ final class ObdProtocol {
             Integer throttle = parseThrottlePct(response);
             return throttle == null ? null : value("throttle position", throttle.doubleValue(), "%", 0);
         }
-        if ("2243AF1".equals(cleanCommand)) {
-            Double soc = parseVoltRawSoc(response, cleanCommand);
-            return soc == null ? null : value("raw hv soc", soc, "%", 1);
+        if ("015B".equals(cleanCommand)) {
+            Integer soc = parseStateOfChargePct(response);
+            return soc == null ? null : value("state of charge", soc.doubleValue(), "%", 0);
         }
-        if ("228334".equals(cleanCommand)) {
-            Double soc = parseVoltDisplayedSoc(response, cleanCommand);
-            return soc == null ? null : value("displayed soc", soc, "%", 1);
+        if ("222429".equals(cleanCommand)) {
+            Double voltage = voltWordValue(response, cleanCommand, 64.0, true);
+            return voltage == null ? null : value("hv pack voltage", voltage, "V", 1);
         }
-        if ("2241A31".equals(cleanCommand)) {
-            Double capacity = parseVoltCapacityAh(response, cleanCommand);
-            return capacity == null ? null : value("battery capacity", capacity, "Ah", 1);
+        if ("222414".equals(cleanCommand)) {
+            Double current = voltWordValue(response, cleanCommand, 20.0, true);
+            return current == null ? null : value("hv pack current", current, "A", 2);
         }
-        if ("2234B2".equals(cleanCommand)) {
-            Double odometer = parseVoltOdometer(response, cleanCommand);
-            return odometer == null ? null : value("odometer", odometer, "mi", 0);
+        if ("22434F".equals(cleanCommand)) {
+            Double temp = voltByteValue(response, cleanCommand, 1.0, -40.0);
+            return temp == null ? null : value("hv battery temperature", temp, "deg C", 0);
         }
-        if (isVoltCellVoltageCommand(cleanCommand)) {
-            Double cellVoltage = parseVoltCellVoltage(response, cleanCommand);
-            return cellVoltage == null ? null : value("cell voltage", cellVoltage, "V", 4);
+        if ("224368".equals(cleanCommand)) {
+            Double voltage = voltByteValue(response, cleanCommand, 2.0, 0.0);
+            return voltage == null ? null : value("charger ac voltage", voltage, "V", 0);
+        }
+        if ("224369".equals(cleanCommand)) {
+            Double current = voltByteValue(response, cleanCommand, 0.2, 0.0);
+            return current == null ? null : value("charger ac current", current, "A", 1);
+        }
+        if ("22436B".equals(cleanCommand)) {
+            Double voltage = voltWordValue(response, cleanCommand, 2.0, true);
+            return voltage == null ? null : value("charger hv voltage", voltage, "V", 1);
+        }
+        if ("22436C".equals(cleanCommand)) {
+            Double current = voltWordValue(response, cleanCommand, 20.0, true);
+            return current == null ? null : value("charger hv current", current, "A", 2);
+        }
+        if ("224373".equals(cleanCommand)) {
+            Double power = voltWordValue(response, cleanCommand, 1.0, true);
+            return power == null ? null : value("charger hv power", power, "W", 0);
+        }
+        if ("22437D".equals(cleanCommand)) {
+            // Community formula is (A*256+B)*10 Wh; dividing by 0.1 applies the x10 scale.
+            Double energy = voltWordValue(response, cleanCommand, 0.1, false);
+            return energy == null ? null : value("last charge energy", energy, "Wh", 0);
         }
         return null;
     }
@@ -166,48 +192,27 @@ final class ObdProtocol {
         return bytes;
     }
 
-    private static Double parseVoltRawSoc(String response, String command) {
+    // First data byte after the mode-22 positive-response marker, scaled: byte * scale + offset.
+    private static Double voltByteValue(String response, String command, double scale, double offset) {
         int[] payload = mode22Payload(response, command);
-        Integer raw = lastWord(payload);
-        return raw == null ? null : raw * 100.0 / 65535.0;
-    }
-
-    private static Double parseVoltDisplayedSoc(String response, String command) {
-        int[] payload = mode22Payload(response, command);
-        Integer raw = lastByte(payload);
-        return raw == null ? null : raw * 100.0 / 255.0;
-    }
-
-    private static Double parseVoltCapacityAh(String response, String command) {
-        int[] payload = mode22Payload(response, command);
-        Integer raw = lastWord(payload);
-        return raw == null ? null : raw / 10.0;
-    }
-
-    private static Double parseVoltOdometer(String response, String command) {
-        int[] payload = mode22Payload(response, command);
-        Long raw = lastDword(payload);
-        return raw == null ? null : raw / 64.0;
-    }
-
-    private static Double parseVoltCellVoltage(String response, String command) {
-        int[] payload = mode22Payload(response, command);
-        Integer raw = lastWord(payload);
-        return raw == null ? null : raw * 5.0 / 65535.0;
-    }
-
-    private static boolean isVoltCellVoltageCommand(String command) {
-        if (command == null || !command.startsWith("224")) {
-            return false;
+        if (payload == null || payload.length < 1) {
+            return null;
         }
-        String body = command.substring(2);
-        String pid = body.length() >= 4 ? body.substring(0, 4) : body;
-        try {
-            int value = Integer.parseInt(pid, 16);
-            return value >= 0x4181 && value <= 0x4240;
-        } catch (NumberFormatException ex) {
-            return false;
+        return payload[0] * scale + offset;
+    }
+
+    // First 16-bit word after the mode-22 marker, divided by divisor. When signed is true the
+    // word is read as two's-complement so discharge/charge keep their sign.
+    private static Double voltWordValue(String response, String command, double divisor, boolean signed) {
+        int[] payload = mode22Payload(response, command);
+        if (payload == null || payload.length < 2) {
+            return null;
         }
+        int word = payload[0] * 256 + payload[1];
+        if (signed && word > 0x7FFF) {
+            word -= 0x10000;
+        }
+        return word / divisor;
     }
 
     private static int[] mode22Payload(String response, String command) {
@@ -241,31 +246,6 @@ final class ObdProtocol {
             bytes[i] = Integer.parseInt(hex.substring(offset, offset + 2), 16);
         }
         return bytes;
-    }
-
-    private static Integer lastByte(int[] bytes) {
-        if (bytes == null || bytes.length < 1) {
-            return null;
-        }
-        return bytes[bytes.length - 1];
-    }
-
-    private static Integer lastWord(int[] bytes) {
-        if (bytes == null || bytes.length < 2) {
-            return null;
-        }
-        return bytes[bytes.length - 2] * 256 + bytes[bytes.length - 1];
-    }
-
-    private static Long lastDword(int[] bytes) {
-        if (bytes == null || bytes.length < 4) {
-            return null;
-        }
-        int offset = bytes.length - 4;
-        return ((long) bytes[offset] << 24)
-                + ((long) bytes[offset + 1] << 16)
-                + ((long) bytes[offset + 2] << 8)
-                + bytes[offset + 3];
     }
 
     private static ParsedPidValue value(String name, Double value, String unit, int decimals) {
