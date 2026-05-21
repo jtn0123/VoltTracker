@@ -9,7 +9,7 @@
     if (typeof L === "undefined") return null;
     const container = el("mapLeaflet");
     if (!container) return null;
-    mapInstance = L.map(container, { zoomControl: true, attributionControl: true })
+    mapInstance = L.map(container, { zoomControl: false, attributionControl: true })
       .setView([39.5, -98.35], 4);
     const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       subdomains: "abcd",
@@ -26,7 +26,6 @@
       }
     });
     tiles.addTo(mapInstance);
-    L.control.scale({ imperial: true, metric: false, position: "bottomleft" }).addTo(mapInstance);
     return mapInstance;
   }
 
@@ -91,9 +90,9 @@
     const latlngs = points.map((p) => [Number(p.lat), Number(p.lng)]);
 
     mapLayerGroups.routes = L.layerGroup([
-      L.polyline(latlngs, { color: "#e6ff3a", weight: 9, opacity: 0.16 }),
-      L.polyline(latlngs, { color: "#e6ff3a", weight: 3.5, opacity: 1 }),
-      L.circleMarker(latlngs[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#e6ff3a", fillOpacity: 1 }),
+      L.polyline(latlngs, { color: "#ff7a45", weight: 9, opacity: 0.16 }),
+      L.polyline(latlngs, { color: "#ff7a45", weight: 3.5, opacity: 1 }),
+      L.circleMarker(latlngs[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#ff7a45", fillOpacity: 1 }),
       L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: "#fff", weight: 2, fillColor: "#ff7141", fillOpacity: 1 })
     ]);
 
@@ -111,7 +110,7 @@
     });
 
     mapLayerGroups.stops = L.layerGroup([
-      L.polyline(latlngs, { color: "#e6ff3a", weight: 2.5, opacity: 0.4 })
+      L.polyline(latlngs, { color: "#ff7a45", weight: 2.5, opacity: 0.4 })
     ]);
     detectStops(points).slice(0, 20).forEach((stop) => {
       const radius = Math.min(13, 7 + stop.durationMs / 120000);

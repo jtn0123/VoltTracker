@@ -223,7 +223,7 @@
     const kph = Number(t.speedKph);
     const mph = Number.isFinite(kph) ? Math.round(kph * 0.621371) : null;
     setText("speedValue", mph);
-    setText("speedKph", Number.isFinite(kph) ? `raw ${Math.round(kph)} km/h` : "-- km/h");
+    setText("speedKph", Number.isFinite(kph) ? `${Math.round(kph)} km/h` : "-- km/h");
     setText("rpmValue", t.rpm ? `${t.rpm}` : "--");
     setText("voltageValue", t.voltage ? `${Number(t.voltage).toFixed(1)}V` : "--");
     setText("coolantValue", t.coolantC != null ? `${t.coolantC} deg C` : "--");
@@ -245,14 +245,26 @@
     setText("rangeValue", "--");
     const batteryTemp = t.batteryTemp == null || t.batteryTemp === "" ? NaN : Number(t.batteryTemp);
     setText("packTempValue", Number.isFinite(batteryTemp) ? `${batteryTemp.toFixed(1)} deg C` : "--");
+    setText("driveSocValue", Number.isFinite(soc) ? `${Math.round(soc)}%` : "--");
+    setMeter("driveSocMeter", Number.isFinite(soc) ? soc : 0);
+    setText("drivePackTempValue", Number.isFinite(batteryTemp) ? `${Math.round(batteryTemp)} deg C` : "--");
     const power = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
     setText("powerValue", Number.isFinite(power) ? `${power.toFixed(1)} kW` : "--");
-    setText("powerDetail", Number.isFinite(power) ? "observed" : "Volt PID needed");
-    const pct = Number.isFinite(power) ? Math.min(50, Math.abs(power / 84) * 50) : 0;
+    const powerState = !Number.isFinite(power) ? "coast"
+      : power < -0.5 ? "regen"
+      : power > 0.5 ? "drive"
+      : "coast";
+    const powerDetail = el("powerDetail");
+    if (powerDetail) {
+      powerDetail.textContent = powerState;
+      powerDetail.dataset.state = powerState;
+    }
+    const pct = Number.isFinite(power) ? Math.min(50, Math.abs(power / 80) * 50) : 0;
     const fill = el("powerFill");
     if (fill) {
       fill.style.width = pct + "%";
       fill.style.left = Number.isFinite(power) && power < 0 ? (50 - pct) + "%" : "50%";
+      fill.classList.toggle("is-regen", powerState === "regen");
     }
     setMeter("loadMeter", t.loadPct);
     renderOperationalState();
@@ -400,11 +412,11 @@
       if (index === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
-    ctx.strokeStyle = "#e6ff3a";
+    ctx.strokeStyle = "#ff7a45";
     ctx.lineWidth = 4;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.shadowColor = "rgba(230,255,58,0.32)";
+    ctx.shadowColor = "rgba(255,122,69,0.32)";
     ctx.shadowBlur = 14;
     ctx.stroke();
     ctx.shadowBlur = 0;

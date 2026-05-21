@@ -44,6 +44,81 @@
     </div>
   </header>
   <section id="view-drive" class="view is-active" data-view="drive">
+    <section class="hero">
+      <article class="panel live-card">
+        <div class="live-head">
+          <span class="kicker">Vehicle speed</span>
+          <span class="rate-chip"><span class="rate-dot"></span>4 Hz</span>
+        </div>
+        <div class="speed-row">
+          <div id="speedValue" class="speed-value">--</div>
+          <div class="speed-units">
+            <span class="speed-unit-main">MPH</span>
+            <span id="speedKph" class="speed-unit-sub">-- km/h</span>
+          </div>
+        </div>
+        <div class="power-block">
+          <div class="power-head">
+            <div class="power-label">
+              <span class="kicker">Power</span>
+              <strong id="powerValue">--</strong>
+            </div>
+            <span id="powerDetail" class="power-state" data-state="coast">coast</span>
+          </div>
+          <div class="power-meter">
+            <span class="power-zero"></span>
+            <span id="powerFill" class="power-fill"></span>
+          </div>
+          <div class="power-scale"><span>-80</span><span>0</span><span>+80</span></div>
+        </div>
+      </article>
+
+      <article class="panel battery-strip">
+        <div class="battery-head">
+          <div>
+            <div class="kicker">HV Battery</div>
+            <div class="battery-soc">
+              <strong id="driveSocValue">--</strong>
+              <span class="battery-soc-sub">state of charge</span>
+            </div>
+          </div>
+          <div class="battery-temp">
+            <div class="kicker">Pack temp</div>
+            <strong id="drivePackTempValue">--</strong>
+          </div>
+        </div>
+        <div class="meter battery-meter"><span id="driveSocMeter"></span></div>
+      </article>
+
+      <div class="mini-grid">
+        <article class="panel mini">
+          <div class="kicker">RPM</div>
+          <strong id="rpmValue">--</strong>
+          <small>engine speed</small>
+        </article>
+        <article class="panel mini">
+          <div class="kicker">Voltage</div>
+          <strong id="voltageValue">--</strong>
+          <small>adapter reported</small>
+        </article>
+        <article class="panel mini">
+          <div class="kicker">Coolant</div>
+          <strong id="coolantValue">--</strong>
+          <small>mode 01 05</small>
+        </article>
+        <article class="panel mini">
+          <div class="kicker">Throttle</div>
+          <strong id="throttleValue">--</strong>
+          <small>mode 01 11</small>
+        </article>
+        <article class="panel mini is-wide">
+          <div class="kicker">GPS</div>
+          <strong id="gpsValue">--</strong>
+          <small id="gpsDetail">location trace</small>
+        </article>
+      </div>
+    </section>
+
     <article class="panel connect-card">
       <div class="connection-head">
         <div>
@@ -81,55 +156,6 @@
         <button id="demoStopBtn" type="button" class="demo-stop">Stop demo</button>
       </div>
     </article>
-
-    <section class="hero">
-      <article class="panel live-card">
-        <div class="live-top">
-          <div>
-            <div class="kicker">Vehicle speed</div>
-            <div id="speedValue" class="speed-value">--</div>
-            <div class="speed-unit">MPH <span id="speedKph">-- km/h</span></div>
-          </div>
-          <div class="power-pill">
-            <span class="kicker">Power</span>
-            <strong id="powerValue">--</strong>
-            <small id="powerDetail">PID needed</small>
-          </div>
-        </div>
-        <div class="power-meter">
-          <span class="power-zero"></span>
-          <span id="powerFill" class="power-fill"></span>
-        </div>
-      </article>
-
-      <div class="mini-grid">
-        <article class="panel mini">
-          <div class="kicker">RPM</div>
-          <strong id="rpmValue">--</strong>
-          <small>engine speed</small>
-        </article>
-        <article class="panel mini">
-          <div class="kicker">Voltage</div>
-          <strong id="voltageValue">--</strong>
-          <small>adapter reported</small>
-        </article>
-        <article class="panel mini">
-          <div class="kicker">Coolant</div>
-          <strong id="coolantValue">--</strong>
-          <small>mode 01 05</small>
-        </article>
-        <article class="panel mini">
-          <div class="kicker">Throttle</div>
-          <strong id="throttleValue">--</strong>
-          <small>mode 01 11</small>
-        </article>
-        <article class="panel mini is-wide">
-          <div class="kicker">GPS</div>
-          <strong id="gpsValue">--</strong>
-          <small id="gpsDetail">location trace</small>
-        </article>
-      </div>
-    </section>
 
     <article class="panel ratio-card demo-only" hidden>
       <div id="evRing" class="ring" style="--v:78"><strong id="evRatioValue">78%</strong></div>
@@ -343,36 +369,45 @@
   </section>
   <section id="view-map" class="view" data-view="map">
     <article id="mapCard" class="panel map-card">
-      <div class="card-head">
-        <div>
-          <span class="kicker" id="mapKicker">GPS map</span>
-          <h2 id="mapTitle">No route recorded yet</h2>
-        </div>
-        <span class="badge"><span class="dot"></span><span id="mapPointBadge">0 pts</span></span>
-      </div>
-      <div class="map-controls">
-        <div class="map-layer-tabs" role="tablist" aria-label="Map layer">
-          <button type="button" data-map-layer="routes" class="is-active" aria-selected="true">Routes</button>
-          <button type="button" data-map-layer="heat" aria-selected="false">Heat</button>
-          <button type="button" data-map-layer="stops" aria-selected="false">Stops</button>
-        </div>
-        <button id="mapFullBtn" type="button" class="map-full-btn" aria-pressed="false">Full</button>
-      </div>
       <div id="mapFrame" class="map-frame" data-layer="routes">
         <div id="mapLeaflet" class="map-canvas"></div>
+
+        <div class="map-overlay-top">
+          <div class="map-layer-tabs" role="tablist" aria-label="Map layer">
+            <button type="button" data-map-layer="routes" class="is-active" aria-selected="true">Routes</button>
+            <button type="button" data-map-layer="heat" aria-selected="false">Heat</button>
+            <button type="button" data-map-layer="stops" aria-selected="false">Stops</button>
+          </div>
+          <div class="map-top-right">
+            <button id="mapFullBtn" type="button" class="map-full-btn" aria-pressed="false">Full map</button>
+            <div class="map-compass" aria-hidden="true">N</div>
+          </div>
+        </div>
+
         <div class="map-legend" aria-hidden="true">
           <span><i style="background:#ff6b4a"></i>slow</span>
           <span><i style="background:#ffd23f"></i>mid</span>
           <span><i style="background:#7ee06a"></i>fast</span>
         </div>
+
         <div id="mapEmpty" class="map-empty">
           <span><strong>No GPS route yet</strong>Start a logged drive with location permission enabled. The route will draw here from on-device SQLite samples.</span>
         </div>
-      </div>
-      <div class="map-foot">
-        <span class="badge"><span class="dot"></span><span id="mapDistance">--</span></span>
-        <span class="badge"><span class="dot"></span><span id="mapDuration">--</span></span>
-        <span class="badge"><span class="dot"></span><span id="mapAccuracy">--</span></span>
+
+        <div class="map-sheet">
+          <div class="map-sheet-head">
+            <div>
+              <span class="kicker" id="mapKicker">GPS map</span>
+              <h2 id="mapTitle">No route recorded yet</h2>
+            </div>
+            <span class="badge"><span class="dot"></span><span id="mapPointBadge">0 pts</span></span>
+          </div>
+          <div class="map-sheet-stats">
+            <div><span class="kicker">Distance</span><strong id="mapDistance">--</strong></div>
+            <div><span class="kicker">Duration</span><strong id="mapDuration">--</strong></div>
+            <div><span class="kicker">Avg &plusmn;</span><strong id="mapAccuracy">--</strong></div>
+          </div>
+        </div>
       </div>
     </article>
 
@@ -617,7 +652,25 @@
       <pre id="rawFrames">Waiting for telemetry...</pre>
     </article>
 
-    <article class="panel setting-row">
+    <article class="panel setting-row non-demo-only" id="vehicleCard">
+      <div class="card-head">
+        <div>
+          <span class="kicker">Vehicle</span>
+          <h3 id="vehicleName">No vehicle identified yet</h3>
+          <p id="vehicleSummary" class="status-copy">Vehicle identity fills in once VIN and odometer PIDs are validated.</p>
+        </div>
+      </div>
+      <div class="review-grid">
+        <div><span>Model year</span><strong id="vehicleYear">--</strong></div>
+        <div><span>Odometer</span><strong id="vehicleOdometer">--</strong></div>
+        <div><span>Logged distance</span><strong id="vehicleLoggedDistance">--</strong></div>
+        <div><span>Electric mix</span><strong id="vehicleEvMix">--</strong></div>
+        <div><span>Battery health</span><strong id="vehicleBatteryHealth">--</strong></div>
+        <div style="grid-column:1 / -1"><span>VIN</span><strong id="vehicleVin">--</strong></div>
+      </div>
+    </article>
+
+    <article class="panel setting-row demo-only" hidden>
       <div class="card-head">
         <div>
           <span class="kicker">Vehicle</span>

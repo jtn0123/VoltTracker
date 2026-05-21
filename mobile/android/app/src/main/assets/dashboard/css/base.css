@@ -9,7 +9,9 @@
     --text: #f5f3ec;
     --muted: #aaaab4;
     --soft: #747582;
-    --volt: #e6ff3a;
+    --volt: #ff7a45;
+    --volt-deep: #e85a1f;
+    --ev: #b8e63b;
     --ok: #35e6a0;
     --warn: #ffb84a;
     --bad: #ff6b5f;
@@ -24,7 +26,7 @@
     width: 100%;
     overflow-x: hidden;
     background:
-      radial-gradient(680px 430px at 68% -90px, rgba(230,255,58,0.17), transparent 62%),
+      radial-gradient(680px 430px at 68% -90px, rgba(255,122,69,0.14), transparent 62%),
       linear-gradient(180deg, #12131a 0%, var(--bg) 52%);
     color: var(--text);
     font-family: Inter, Roboto, system-ui, sans-serif;
@@ -414,7 +416,7 @@
   }
 
   .scan {
-    border-color: rgba(230,255,58,0.32);
+    border-color: rgba(255,122,69,0.32);
     color: var(--volt);
   }
 

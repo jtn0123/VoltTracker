@@ -30,83 +30,147 @@
   }
 
   .live-card {
-    min-height: 240px;
     padding: 18px;
     position: relative;
     overflow: hidden;
   }
 
-  .live-card::after {
-    content: "";
-    position: absolute;
-    inset: auto -30px -72px;
-    height: 160px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 50% 0%, rgba(230,255,58,0.16), transparent 64%);
-    pointer-events: none;
-  }
-
-  .live-top {
+  .live-head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
   }
 
-  .speed-value {
-    margin-top: 16px;
-    font-size: clamp(76px, 24vw, 126px);
-    line-height: 0.86;
-    letter-spacing: 0;
-    font-weight: 900;
-  }
-
-  .speed-unit {
+  .rate-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 9px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: rgba(0,0,0,0.2);
     color: var(--muted);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 13px;
-    font-weight: 750;
-    letter-spacing: 0.08em;
+    font-size: 11px;
+    white-space: nowrap;
   }
 
-  .power-pill {
-    min-width: 96px;
-    padding: 10px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: rgba(0,0,0,0.2);
-    text-align: right;
+  .rate-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 8px var(--ok);
   }
 
-  .power-pill small {
-    display: block;
-    margin-top: 3px;
+  .speed-row {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 4px 0 8px;
+  }
+
+  .speed-row::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    left: -26px;
+    width: 188px;
+    top: -4px;
+    bottom: 6px;
+    background: radial-gradient(82px 54px at 60px 54%, rgba(255,122,69,0.34), transparent);
+    pointer-events: none;
+  }
+
+  .speed-value {
+    flex: 0 1 auto;
+    font-size: clamp(88px, 27vw, 118px);
+    line-height: 0.82;
+    letter-spacing: -0.05em;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .speed-units {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+    padding-bottom: 12px;
+  }
+
+  .speed-unit-main {
     color: var(--muted);
-    font-size: 10px;
-    line-height: 1.2;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: 0.14em;
   }
 
-  .power-pill strong {
-    display: block;
-    margin-top: 3px;
-    font-size: 21px;
+  .speed-unit-sub {
+    color: var(--soft);
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
+
+  .power-block {
+    margin-top: 14px;
+  }
+
+  .power-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .power-label {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .power-label strong {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .power-state {
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .power-state[data-state="drive"] { color: var(--volt); }
+  .power-state[data-state="regen"] { color: var(--ev); }
 
   .power-meter {
     position: relative;
-    height: 11px;
-    margin-top: 18px;
+    height: 8px;
     border-radius: 999px;
-    background: rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.07);
     overflow: hidden;
   }
 
   .power-zero {
     position: absolute;
-    inset-block: 0;
+    inset-block: -2px;
     left: 50%;
-    width: 1px;
-    background: rgba(255,255,255,0.35);
+    width: 2px;
+    background: rgba(255,255,255,0.28);
+    transform: translateX(-1px);
   }
 
   .power-fill {
@@ -115,8 +179,72 @@
     left: 50%;
     width: 0;
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--mixed), var(--volt));
+    background: linear-gradient(90deg, var(--volt), var(--volt-deep));
+    box-shadow: 0 0 16px rgba(255,122,69,0.4);
     transition: left 0.25s ease, width 0.25s ease;
+  }
+
+  .power-fill.is-regen {
+    background: linear-gradient(90deg, var(--ev), rgba(184,230,59,0.6));
+    box-shadow: 0 0 16px rgba(184,230,59,0.45);
+  }
+
+  .power-scale {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    opacity: 0.7;
+  }
+
+  .battery-strip {
+    padding: 14px;
+  }
+
+  .battery-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .battery-soc {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .battery-soc strong {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .battery-soc-sub {
+    font-size: 12px;
+    color: var(--soft);
+  }
+
+  .battery-temp {
+    flex: none;
+    text-align: right;
+  }
+
+  .battery-temp strong {
+    display: block;
+    margin-top: 6px;
+    font-size: 20px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .meter.battery-meter span {
+    background: var(--ev);
   }
 
   .mini-grid {
@@ -195,7 +323,7 @@
     height: 100%;
     width: 0%;
     border-radius: inherit;
-    background: linear-gradient(90deg, var(--mixed), var(--volt));
+    background: var(--volt);
     transition: width 0.25s ease;
   }
 
@@ -371,6 +499,12 @@
     font-size: 20px;
   }
 
+  #vehicleVin {
+    font-size: 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.04em;
+  }
+
   .warning-list,
   .timeline-list,
   .pid-frame-list,
@@ -417,7 +551,7 @@
     margin-top: 4px;
     border-radius: 50%;
     background: var(--volt);
-    box-shadow: 0 0 12px rgba(230,255,58,0.45);
+    box-shadow: 0 0 12px rgba(255,122,69,0.45);
   }
 
   .pid-frame-item strong,

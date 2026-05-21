@@ -248,6 +248,48 @@
           <b>${tag}</b>
         </article>`).join("");
     }
+
+    renderVehicleUi();
+  }
+
+  // Vehicle identity card. Reads state.appState.vehicle once the OBD bridge can
+  // supply it; every field degrades to "--" until its PID/source is validated.
+  // Expected vehicle fields: name, vin, year, make, model, odometerMiles (or
+  // odometerKm), evSharePct, batteryHealthPct.
+  function renderVehicleUi() {
+    const vehicle = (state.appState || {}).vehicle || {};
+    const insights = state.insights || {};
+
+    const year = vehicle.year || vehicle.modelYear || "";
+    const identity = [year, vehicle.make || "", vehicle.model || ""].filter(Boolean).join(" ").trim();
+    const name = vehicle.name || vehicle.nickname || "";
+    const known = Boolean(name || identity || vehicle.vin);
+
+    setText("vehicleName", name || identity || "No vehicle identified yet");
+    setText("vehicleSummary", known
+      ? "Identity reported by the OBD bridge. Blank fields wait on PIDs that are not validated yet."
+      : "Vehicle identity fills in once VIN and odometer PIDs are validated.");
+    setText("vehicleVin", vehicle.vin || "--");
+    setText("vehicleYear", year || "--");
+
+    const odoMiles = Number(vehicle.odometerMiles);
+    const odoKm = Number(vehicle.odometerKm);
+    let odometer = "--";
+    if (Number.isFinite(odoMiles) && odoMiles > 0) {
+      odometer = `${Math.round(odoMiles).toLocaleString()} mi`;
+    } else if (Number.isFinite(odoKm) && odoKm > 0) {
+      odometer = `${Math.round(odoKm * 0.621371).toLocaleString()} mi`;
+    }
+    setText("vehicleOdometer", odometer);
+
+    const loggedMeters = Number(insights.totalDistanceMeters || 0);
+    setText("vehicleLoggedDistance", loggedMeters > 0 ? formatDistance(loggedMeters) : "--");
+
+    const evMix = Number(vehicle.evSharePct != null ? vehicle.evSharePct : vehicle.electricSharePct);
+    setText("vehicleEvMix", Number.isFinite(evMix) ? `${Math.round(evMix)}% electric` : "--");
+
+    const health = Number(vehicle.batteryHealthPct != null ? vehicle.batteryHealthPct : vehicle.packHealthPct);
+    setText("vehicleBatteryHealth", Number.isFinite(health) ? `${health.toFixed(1)}%` : "--");
   }
 
   function toggleHidden(id, hidden) {
