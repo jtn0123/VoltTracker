@@ -690,7 +690,7 @@ public class ObdService extends Service {
         logEvent("elm_escape_sent", "settleMs", String.valueOf(settleMs));
     }
 
-    private static boolean hasElmPrompt(String response) {
+    static boolean hasElmPrompt(String response) {
         return response != null && response.indexOf('>') >= 0;
     }
 
@@ -1137,7 +1137,7 @@ public class ObdService extends Service {
         }
     }
 
-    private static String finishStatusFor(String state) {
+    static String finishStatusFor(String state) {
         if ("error".equals(state) || "blocked".equals(state)) {
             return ObdLocalStore.STATUS_ERROR;
         }
@@ -1167,7 +1167,7 @@ public class ObdService extends Service {
         return raw + command + ": " + summarizeForStorage(command, response) + "\n";
     }
 
-    private static String summarizeForStorage(String command, String response) {
+    static String summarizeForStorage(String command, String response) {
         String summary = ObdProtocol.summarize(response);
         if (!isVinCommand(command)) {
             return summary;
@@ -1194,7 +1194,7 @@ public class ObdService extends Service {
         }
     }
 
-    private static String pidForCommand(String command) {
+    static String pidForCommand(String command) {
         if (command == null) {
             return "";
         }
@@ -1211,7 +1211,7 @@ public class ObdService extends Service {
         return "";
     }
 
-    private static String nameForCommand(String command) {
+    static String nameForCommand(String command) {
         if (command == null) {
             return "";
         }
@@ -1261,7 +1261,7 @@ public class ObdService extends Service {
         return first.getTime() >= second.getTime() ? first : second;
     }
 
-    private static String classifyVehicleState(Float voltage, Integer speed, Float rpm, Integer load, boolean chargeTransitionHint) {
+    static String classifyVehicleState(Float voltage, Integer speed, Float rpm, Integer load, boolean chargeTransitionHint) {
         boolean stationary = speed == null || speed == 0;
         boolean engineOff = rpm == null || rpm < 80;
         boolean dcDcActive = voltage != null && voltage >= 13.0f;
@@ -1281,7 +1281,7 @@ public class ObdService extends Service {
         return "driving-ev";
     }
 
-    private static String classifyVehicleStateConfidence(Float voltage, Integer speed, Float rpm, boolean chargeTransitionHint) {
+    static String classifyVehicleStateConfidence(Float voltage, Integer speed, Float rpm, boolean chargeTransitionHint) {
         if (chargeTransitionHint) {
             return "inferred";
         }
@@ -1314,7 +1314,7 @@ public class ObdService extends Service {
         return true;
     }
 
-    private static String friendlyConnectionMessage(Exception ex) {
+    static String friendlyConnectionMessage(Exception ex) {
         String message = safeMessage(ex).toLowerCase(Locale.US);
         if (message.contains("socket might closed") || message.contains("timeout") || message.contains("read failed")) {
             return "Adapter serial channel did not open. Make sure the car is awake, close other OBD apps, then retry.";

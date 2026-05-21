@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 
 final class VoltTrackerDb extends SQLiteOpenHelper {
     static final String DATABASE_NAME = "volttracker_obd_poc.db";
-    static final int DATABASE_VERSION = 4;
+    static final int DATABASE_VERSION = 5;
 
     static final String TABLE_SESSIONS = "obd_sessions";
     static final String TABLE_TELEMETRY = "telemetry_samples";
@@ -71,6 +71,8 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                 + "location_age_ms INTEGER,"
                 + "sample_number INTEGER,"
                 + "session_ms INTEGER,"
+                + "charge_transition_hint INTEGER,"
+                + "app_foreground INTEGER,"
                 + "raw TEXT,"
                 + "json TEXT NOT NULL,"
                 + "FOREIGN KEY(session_id) REFERENCES " + TABLE_SESSIONS + "(_id) ON DELETE CASCADE"
@@ -136,6 +138,19 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
         if (oldVersion < 4) {
             createRoadmapTables(db);
             createRoadmapIndexes(db);
+        }
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN charge_transition_hint INTEGER");
+            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN app_foreground INTEGER");
+            // Backfill existing rows from their stored JSON so the new columns are not NULL.
+            db.execSQL("UPDATE " + TABLE_TELEMETRY + " SET charge_transition_hint = 1"
+                    + " WHERE charge_transition_hint IS NULL AND json LIKE '%chargeTransitionHint%'");
+            db.execSQL("UPDATE " + TABLE_TELEMETRY + " SET charge_transition_hint = 0"
+                    + " WHERE charge_transition_hint IS NULL");
+            db.execSQL("UPDATE " + TABLE_TELEMETRY + " SET app_foreground = 0"
+                    + " WHERE app_foreground IS NULL AND json LIKE '%\"appForeground\":false%'");
+            db.execSQL("UPDATE " + TABLE_TELEMETRY + " SET app_foreground = 1"
+                    + " WHERE app_foreground IS NULL");
         }
     }
 

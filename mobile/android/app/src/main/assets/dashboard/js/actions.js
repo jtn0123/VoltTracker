@@ -26,6 +26,7 @@
     if (action === "clearStorage") clearStorage();
     if (action === "exportDebug") exportDebugBundle();
     if (action === "backup") shareBackup();
+    if (action === "restore") restoreBackup();
     if (action === "last") bridge && bridge.connectLast();
     if (action === "scan") connectSelected(true);
     if (action === "connect") connectSelected(false);
@@ -80,6 +81,17 @@
       return;
     }
     bridge.shareBackup();
+  }
+
+  function restoreBackup() {
+    if (!bridge || typeof bridge.restoreBackup !== "function") {
+      setStatus({ state: "blocked", detail: "Restore is only available inside the Android app." });
+      return;
+    }
+    if (!window.confirm("Restore will REPLACE all data on this phone with the backup file. Continue?")) {
+      return;
+    }
+    bridge.restoreBackup();
   }
 
   function exportDebugBundle() {

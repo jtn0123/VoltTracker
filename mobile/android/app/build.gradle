@@ -14,9 +14,38 @@ android {
         versionName "0.1.0"
     }
 
+    // Release signing activates only when mobile/android/keystore.properties exists
+    // (gitignored). Without it, release builds are produced unsigned.
+    signingConfigs {
+        release {
+            def keystoreProps = rootProject.file("keystore.properties")
+            if (keystoreProps.exists()) {
+                def props = new Properties()
+                keystoreProps.withInputStream { props.load(it) }
+                ["storeFile", "storePassword", "keyAlias", "keyPassword"].each { key ->
+                    if (!props.getProperty(key)?.trim()) {
+                        throw new GradleException("keystore.properties is missing '" + key + "'")
+                    }
+                }
+                def keystore = file(props.getProperty("storeFile"))
+                if (!keystore.exists()) {
+                    throw new GradleException("keystore.properties storeFile not found: " + keystore)
+                }
+                storeFile keystore
+                storePassword props.getProperty("storePassword")
+                keyAlias props.getProperty("keyAlias")
+                keyPassword props.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            if (rootProject.file("keystore.properties").exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 

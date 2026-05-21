@@ -112,6 +112,8 @@ public final class ObdLocalStore implements Closeable {
             putOptionalLong(values, "location_age_ms", safeSample, "locationAgeMs");
             putOptionalInt(values, "sample_number", safeSample, "sampleCount");
             putOptionalLong(values, "session_ms", safeSample, "sessionMs");
+            putOptionalBool(values, "charge_transition_hint", safeSample, "chargeTransitionHint");
+            putOptionalBool(values, "app_foreground", safeSample, "appForeground");
             values.put("raw", clean(safeSample.optString("raw", "")));
             values.put("json", safeSample.toString());
 
@@ -685,8 +687,8 @@ public final class ObdLocalStore implements Closeable {
         payload.put("maxSpeedKph", maxIntForSession(db, "speed_kph", session.id));
         payload.put("avgSampleIntervalMs", averageSampleIntervalMs(db, session.id));
         payload.put("backgroundSampleCount", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND json LIKE ?",
-                new String[]{String.valueOf(session.id), "%\"appForeground\":false%"}));
+                "session_id = ? AND app_foreground = 0",
+                new String[]{String.valueOf(session.id)}));
         payload.put("sampleGapEventCount", countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
                 "session_id = ? AND detail = ?",
                 new String[]{String.valueOf(session.id), "sample_gap"}));
@@ -708,7 +710,7 @@ public final class ObdLocalStore implements Closeable {
         payload.put("drivingSamples", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
                 "vehicle_state LIKE ?", new String[]{"%driving%"}));
         payload.put("chargingHints", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                "json LIKE ?", new String[]{"%chargeTransitionHint%"}));
+                "charge_transition_hint = 1", null));
         payload.put("latestTelemetry", latestTelemetryJson(db));
         return payload;
     }
@@ -717,7 +719,7 @@ public final class ObdLocalStore implements Closeable {
         JSONObject payload = new JSONObject();
         payload.put("chargeSessionCount", countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS));
         payload.put("chargingHintCount", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                "json LIKE ?", new String[]{"%chargeTransitionHint%"}));
+                "charge_transition_hint = 1", null));
         payload.put("maxPowerKw", maxDouble(db, VoltTrackerDb.TABLE_TELEMETRY, "power_kw"));
         payload.put("latest", latestChargeSessionJson(db));
         return payload;
@@ -1040,8 +1042,8 @@ public final class ObdLocalStore implements Closeable {
     private static JSONArray sessionWarningsJson(SQLiteDatabase db, long sessionId) throws JSONException {
         JSONArray payload = new JSONArray();
         long chargeHints = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND json LIKE ?",
-                new String[]{String.valueOf(sessionId), "%chargeTransitionHint%"});
+                "session_id = ? AND charge_transition_hint = 1",
+                new String[]{String.valueOf(sessionId)});
         long speedRejected = countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
                 "session_id = ? AND detail = ?",
                 new String[]{String.valueOf(sessionId), "speed_rejected"});
@@ -1394,6 +1396,12 @@ public final class ObdLocalStore implements Closeable {
     private static void putOptionalLong(ContentValues values, String column, JSONObject json, String key) {
         if (json.has(key) && !json.isNull(key)) {
             values.put(column, json.optLong(key));
+        }
+    }
+
+    private static void putOptionalBool(ContentValues values, String column, JSONObject json, String key) {
+        if (json.has(key) && !json.isNull(key)) {
+            values.put(column, json.optBoolean(key) ? 1 : 0);
         }
     }
 

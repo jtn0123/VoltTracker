@@ -13,6 +13,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -38,6 +40,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,6 +55,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
     private static final String TAG = "VoltTracker";
     private static final int REQUEST_PERMISSIONS = 4101;
+    private static final int REQUEST_RESTORE = 4202;
     private static final String PREFS = "volt_obd_prefs";
     private static final String PREF_LAST_ADDRESS = "last_address";
     private static final String PREF_LAST_NAME = "last_name";
@@ -656,14 +661,7 @@ public class MainActivity extends Activity {
             clearOldBackups(dir);
             String stamp = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date());
             File dest = new File(dir, "volttracker-backup-" + stamp + ".db");
-            try (FileInputStream in = new FileInputStream(source);
-                 FileOutputStream out = new FileOutputStream(dest)) {
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = in.read(buffer)) > 0) {
-                    out.write(buffer, 0, read);
-                }
-            }
+            copyFile(source, dest);
             return dest;
         } catch (IOException | RuntimeException ex) {
             return null;
@@ -677,6 +675,155 @@ public class MainActivity extends Activity {
         }
         for (File file : existing) {
             // Backups are transient hand-off copies; keep only the freshest one.
+            file.delete();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_RESTORE && resultCode == RESULT_OK
+                && data != null && data.getData() != null) {
+            restoreFromUri(data.getData());
+        }
+    }
+
+    private void launchRestorePicker() {
+        // Refuse restore while a logging session is active so the swap cannot race
+        // in-flight ObdService database writes.
+        String state = lastStatus == null ? "" : lastStatus.optString("state", "");
+        if (isConnectedState(state)) {
+            publishStatus("blocked", "Stop logging before restoring a backup.", true);
+            return;
+        }
+        try {
+            Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            pick.addCategory(Intent.CATEGORY_OPENABLE);
+            pick.setType("*/*");
+            startActivityForResult(pick, REQUEST_RESTORE);
+        } catch (RuntimeException ex) {
+            publishStatus("blocked", "Could not open the file picker.", true);
+        }
+    }
+
+    private void restoreFromUri(Uri uri) {
+        publishStatus("ready", "Restoring backup...", false);
+        backgroundExecutor.execute(() -> {
+            final boolean ok = applyRestore(uri);
+            runOnUiThread(() -> {
+                if (ok) {
+                    publishDeviceList();
+                    publishStorageSummary();
+                    publishStatus("ready", "Backup restored - reconnect to resume logging.", false);
+                } else {
+                    publishStatus("blocked",
+                            "Restore failed - that file is not a valid Volt Tracker backup.", true);
+                }
+            });
+        });
+    }
+
+    // Replaces the on-device database with a user-picked backup file. The file is copied
+    // out and verified as SQLite before the live database is touched.
+    private boolean applyRestore(Uri uri) {
+        File temp = new File(getCacheDir(), "restore-tmp.db");
+        try {
+            try (InputStream in = getContentResolver().openInputStream(uri);
+                 FileOutputStream out = new FileOutputStream(temp)) {
+                if (in == null) {
+                    return false;
+                }
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) > 0) {
+                    out.write(buffer, 0, read);
+                }
+            }
+            if (!isVoltTrackerBackup(temp)) {
+                return false;
+            }
+            File dbFile = localStore == null ? null : localStore.getDatabaseFile();
+            if (dbFile == null) {
+                return false;
+            }
+            // Stop any logging session so the database file is not held open.
+            stopObdServiceForRestore();
+            if (localStore != null) {
+                localStore.close();
+                localStore = null;
+            }
+            copyFile(temp, dbFile);
+            deleteIfExists(new File(dbFile.getPath() + "-wal"));
+            deleteIfExists(new File(dbFile.getPath() + "-shm"));
+            localStore = new ObdLocalStore(this);
+            return true;
+        } catch (IOException | RuntimeException ex) {
+            if (localStore == null) {
+                try {
+                    localStore = new ObdLocalStore(this);
+                } catch (RuntimeException ignored) {
+                    // Nothing more we can do; the next launch will recreate it.
+                }
+            }
+            return false;
+        } finally {
+            temp.delete();
+        }
+    }
+
+    private void stopObdServiceForRestore() {
+        try {
+            Intent stop = new Intent(this, ObdService.class);
+            stop.setAction(ObdService.ACTION_DISCONNECT);
+            startService(stop);
+        } catch (RuntimeException ignored) {
+            // Best effort; restore proceeds regardless.
+        }
+    }
+
+    // Confirms a restore file is a real Volt Tracker database: a SQLite file that
+    // contains the app's core tables. A plain SQLite file with a foreign schema would
+    // leave the app's queries broken after the swap.
+    private static boolean isVoltTrackerBackup(File file) {
+        byte[] header = new byte[16];
+        try (FileInputStream in = new FileInputStream(file)) {
+            if (in.read(header) != header.length
+                    || !new String(header, StandardCharsets.US_ASCII).startsWith("SQLite format 3")) {
+                return false;
+            }
+        } catch (IOException ex) {
+            return false;
+        }
+        SQLiteDatabase db = null;
+        try {
+            db = SQLiteDatabase.openDatabase(file.getPath(), null, SQLiteDatabase.OPEN_READONLY);
+            try (Cursor cursor = db.rawQuery(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)",
+                    new String[]{"obd_sessions", "telemetry_samples"})) {
+                return cursor.getCount() == 2;
+            }
+        } catch (RuntimeException ex) {
+            return false;
+        } finally {
+            if (db != null) {
+                db.close();
+            }
+        }
+    }
+
+    private static void copyFile(File source, File dest) throws IOException {
+        try (FileInputStream in = new FileInputStream(source);
+             FileOutputStream out = new FileOutputStream(dest)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) > 0) {
+                out.write(buffer, 0, read);
+            }
+        }
+    }
+
+    private static void deleteIfExists(File file) {
+        if (file.exists()) {
             file.delete();
         }
     }
@@ -754,7 +901,7 @@ public class MainActivity extends Activity {
         return payload.toString();
     }
 
-    private static JSONObject parseJson(String json) {
+    static JSONObject parseJson(String json) {
         try {
             return json == null || json.trim().isEmpty() ? new JSONObject() : new JSONObject(json);
         } catch (JSONException ex) {
@@ -762,7 +909,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private static boolean isConnectedState(String state) {
+    static boolean isConnectedState(String state) {
         String clean = state == null ? "" : state.toLowerCase(Locale.US);
         return clean.equals("connected")
                 || clean.equals("connecting")
@@ -772,7 +919,7 @@ public class MainActivity extends Activity {
                 || clean.equals("demo");
     }
 
-    private static String coalesce(String first, String second, String third) {
+    static String coalesce(String first, String second, String third) {
         if (first != null && !first.trim().isEmpty()) {
             return first;
         }
@@ -782,7 +929,7 @@ public class MainActivity extends Activity {
         return third == null ? "" : third;
     }
 
-    private static String redactAddress(String address) {
+    static String redactAddress(String address) {
         if (address == null || address.length() < 5) {
             return "";
         }
@@ -855,6 +1002,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void shareBackup() {
             runOnUiThread(MainActivity.this::launchBackupShare);
+        }
+
+        @JavascriptInterface
+        public void restoreBackup() {
+            runOnUiThread(MainActivity.this::launchRestorePicker);
         }
 
         @JavascriptInterface
