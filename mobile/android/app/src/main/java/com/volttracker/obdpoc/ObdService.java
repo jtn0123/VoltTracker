@@ -29,7 +29,6 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothSocket;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
@@ -43,9 +42,6 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -102,9 +98,7 @@ public class ObdService extends Service {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Future<?> activeTask;
     private ObdLocalStore localStore;
-    private BluetoothSocket socket;
-    private InputStream input;
-    private OutputStream output;
+    private final ElmConnection connection = new ElmConnection();
     private BufferedWriter sessionLog;
     private File sessionLogFile;
     private LocationTracker locationTracker;
@@ -367,10 +361,7 @@ public class ObdService extends Service {
         }
         BluetoothDevice device = adapter.getRemoteDevice(address);
         logEvent("bluetooth_socket_open", "address", address, "uuid", ELM327_SPP_UUID.toString());
-        socket = device.createRfcommSocketToServiceRecord(ELM327_SPP_UUID);
-        connectWithTimeout(socket);
-        input = socket.getInputStream();
-        output = socket.getOutputStream();
+        connection.open(device, ELM327_SPP_UUID, CONNECT_TIMEOUT_MS);
         logEvent("bluetooth_socket_connected", "address", address);
         broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false);
         initializeElm327();
@@ -677,62 +668,15 @@ public class ObdService extends Service {
     }
 
     private synchronized String sendCommand(String command, long timeoutMs) throws IOException {
-        if (output == null || input == null) {
-            throw new IOException("Adapter stream is not open");
-        }
-        drainInput();
         long startedAt = System.currentTimeMillis();
-        output.write((command + "\r").getBytes(StandardCharsets.US_ASCII));
-        output.flush();
-
-        StringBuilder response = new StringBuilder();
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        byte[] buffer = new byte[128];
-        while (System.currentTimeMillis() < deadline && running.get()) {
-            int available = input.available();
-            if (available > 0) {
-                int read = input.read(buffer, 0, Math.min(buffer.length, available));
-                if (read > 0) {
-                    String chunk = new String(buffer, 0, read, StandardCharsets.US_ASCII);
-                    response.append(chunk);
-                    if (chunk.indexOf('>') >= 0) {
-                        break;
-                    }
-                }
-            } else {
-                sleep(25);
-            }
-        }
-        String rawResponse = response.toString();
+        String rawResponse = connection.transact(command, timeoutMs, running::get);
         logCommand(command, timeoutMs, System.currentTimeMillis() - startedAt, rawResponse);
         return rawResponse;
     }
 
     private synchronized void sendEscape(long settleMs) throws IOException {
-        if (output == null || input == null) {
-            return;
-        }
-        output.write(0x1B);
-        output.flush();
-        sleep(settleMs);
-        drainInput();
+        connection.sendEscape(settleMs);
         logEvent("elm_escape_sent", "settleMs", String.valueOf(settleMs));
-    }
-
-    private void drainInput() throws IOException {
-        if (input == null) {
-            return;
-        }
-        byte[] buffer = new byte[128];
-        int drained = 0;
-        // Cap the drain so a chatty/garbage adapter cannot spin this loop forever.
-        while (input.available() > 0 && drained < 8192) {
-            int read = input.read(buffer, 0, Math.min(buffer.length, input.available()));
-            if (read < 0) {
-                break;
-            }
-            drained += read;
-        }
     }
 
     private void stopCurrentSession(String statusMessage) {
@@ -749,50 +693,8 @@ public class ObdService extends Service {
         closeSessionLog();
     }
 
-    // BluetoothSocket.connect() has no timeout and can block for a long time on a dead
-    // adapter. A daemon watchdog closes the socket after CONNECT_TIMEOUT_MS, which makes
-    // the blocked connect() throw IOException so the normal failure path takes over.
-    private void connectWithTimeout(BluetoothSocket pendingSocket) throws IOException {
-        Thread watchdog = new Thread(() -> {
-            sleep(CONNECT_TIMEOUT_MS);
-            if (!pendingSocket.isConnected()) {
-                try {
-                    pendingSocket.close();
-                } catch (IOException ignored) {
-                }
-            }
-        });
-        watchdog.setDaemon(true);
-        watchdog.start();
-        try {
-            pendingSocket.connect();
-        } finally {
-            watchdog.interrupt();
-        }
-    }
-
     private void closeSocket() {
-        try {
-            if (input != null) {
-                input.close();
-            }
-        } catch (IOException ignored) {
-        }
-        try {
-            if (output != null) {
-                output.close();
-            }
-        } catch (IOException ignored) {
-        }
-        try {
-            if (socket != null) {
-                socket.close();
-            }
-        } catch (IOException ignored) {
-        }
-        input = null;
-        output = null;
-        socket = null;
+        connection.close();
     }
 
     private boolean hasBluetoothConnectPermission() {
