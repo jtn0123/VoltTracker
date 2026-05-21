@@ -18,17 +18,17 @@ public class ObdLocalStoreTest {
 
     @Test
     public void haversineForOneDegreeLatitude() {
-        assertEquals(ONE_DEGREE_METERS, ObdLocalStore.haversineMeters(0, 0, 1, 0), 1.0);
+        assertEquals(ONE_DEGREE_METERS, ObdStoreSupport.haversineMeters(0, 0, 1, 0), 1.0);
     }
 
     @Test
     public void haversineForOneDegreeLongitudeAtEquator() {
-        assertEquals(ONE_DEGREE_METERS, ObdLocalStore.haversineMeters(0, 0, 0, 1), 1.0);
+        assertEquals(ONE_DEGREE_METERS, ObdStoreSupport.haversineMeters(0, 0, 0, 1), 1.0);
     }
 
     @Test
     public void haversineForIdenticalPointIsZero() {
-        assertEquals(0.0, ObdLocalStore.haversineMeters(34.05, -118.25, 34.05, -118.25), 0.001);
+        assertEquals(0.0, ObdStoreSupport.haversineMeters(34.05, -118.25, 34.05, -118.25), 0.001);
     }
 
     @Test
@@ -38,13 +38,13 @@ public class ObdLocalStoreTest {
                 point(0, 1),
                 point(1, 1));
         // Leg 1: (0,0)->(0,1) and leg 2: (0,1)->(1,1), each ~one degree.
-        assertEquals(ONE_DEGREE_METERS * 2, ObdLocalStore.distanceMeters(points), 5.0);
+        assertEquals(ONE_DEGREE_METERS * 2, ObdStoreSupport.distanceMeters(points), 5.0);
     }
 
     @Test
     public void routeDistanceIsZeroForEmptyOrSinglePoint() throws JSONException {
-        assertEquals(0.0, ObdLocalStore.distanceMeters(new JSONArray()), 0.001);
-        assertEquals(0.0, ObdLocalStore.distanceMeters(points(point(40.7, -74.0))), 0.001);
+        assertEquals(0.0, ObdStoreSupport.distanceMeters(new JSONArray()), 0.001);
+        assertEquals(0.0, ObdStoreSupport.distanceMeters(points(point(40.7, -74.0))), 0.001);
     }
 
     private static JSONObject point(double lat, double lng) throws JSONException {
