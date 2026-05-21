@@ -2,7 +2,6 @@ package com.volttracker.obdpoc;
 
 import com.volttracker.obdpoc.data.ObdLocalStore;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
@@ -12,44 +11,36 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.ViewGroup;
 import android.webkit.ConsoleMessage;
-import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
-import androidx.core.content.FileProvider;
-
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
-    private static final String TAG = "VoltTracker";
-    private static final int REQUEST_PERMISSIONS = 4101;
-    private static final int REQUEST_RESTORE = 4202;
+    static final String TAG = "VoltTracker";
     private static final String PREFS = "volt_obd_prefs";
     private WebView webView;
     private boolean pageReady;
     private SharedPreferences prefs;
-    private DeviceCatalog deviceCatalog;
-    private DataBackup dataBackup;
-    private ObdLocalStore localStore;
+    DeviceCatalog deviceCatalog;
+    DataBackup dataBackup;
+    BackupController backupController;
+    PermissionGate permissionGate;
+    ObdLocalStore localStore;
     private JSONObject lastTelemetry = new JSONObject();
     private JSONObject lastStatus = new JSONObject();
     private JSONObject lastStorage = new JSONObject();
@@ -84,6 +75,8 @@ public class MainActivity extends Activity {
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         deviceCatalog = new DeviceCatalog(this, prefs);
         dataBackup = new DataBackup(this);
+        backupController = new BackupController(this, dataBackup, backgroundExecutor);
+        permissionGate = new PermissionGate(this);
         localStore = new ObdLocalStore(this);
         webView = new WebView(this);
         webView.setLayoutParams(new FrameLayout.LayoutParams(
@@ -124,10 +117,10 @@ public class MainActivity extends Activity {
                 publishStatus("ready", "Pick a paired OBD adapter to start logging.", false);
             }
         });
-        webView.addJavascriptInterface(new VoltBridge(), "VoltTrackerAndroid");
+        webView.addJavascriptInterface(new VoltBridge(this), "VoltTrackerAndroid");
         webView.loadUrl("file:///android_asset/dashboard/index.html");
 
-        ensurePermissions();
+        permissionGate.ensureGranted();
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
@@ -172,7 +165,7 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_PERMISSIONS) {
+        if (requestCode == PermissionGate.REQUEST_CODE) {
             publishDeviceList();
             if (deviceCatalog.hasBluetoothConnectPermission()) {
                 publishStatus("ready", "Bluetooth permission granted. Pick a paired adapter.", false);
@@ -182,41 +175,14 @@ public class MainActivity extends Activity {
         }
     }
 
-    private boolean ensurePermissions() {
-        List<String> missing = new ArrayList<>();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                missing.add(Manifest.permission.BLUETOOTH_CONNECT);
-            }
-            if (checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-                missing.add(Manifest.permission.BLUETOOTH_SCAN);
-            }
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            missing.add(Manifest.permission.POST_NOTIFICATIONS);
-        }
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            missing.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        }
-        if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            missing.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-        }
-        if (!missing.isEmpty()) {
-            requestPermissions(missing.toArray(new String[0]), REQUEST_PERMISSIONS);
-            return false;
-        }
-        return true;
-    }
-
-    private void publishDeviceList() {
+    void publishDeviceList() {
         callDashboard("window.VoltTrackerNative.setDevices("
                 + JSONObject.quote(deviceCatalog.getBondedDevicesJson()) + ")");
         callDashboard("window.VoltTrackerNative.setHistory("
                 + JSONObject.quote(deviceCatalog.getDeviceHistoryJson()) + ")");
     }
 
-    private void publishStatus(String state, String detail, boolean blocked) {
+    void publishStatus(String state, String detail, boolean blocked) {
         JSONObject payload = new JSONObject();
         try {
             payload.put("state", state);
@@ -238,19 +204,9 @@ public class MainActivity extends Activity {
         return adapter != null && adapter.isEnabled() && deviceCatalog.hasBluetoothConnectPermission();
     }
 
-    private boolean hasLocationPermission() {
-        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-    }
-
-    private boolean hasNotificationPermission() {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
-                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-    }
-
     @SuppressLint("MissingPermission")
-    private void startObdService(String action, String address, String name) {
-        if (!ensurePermissions()) {
+    void startObdService(String action, String address, String name) {
+        if (!permissionGate.ensureGranted()) {
             publishStatus("blocked", "Grant Bluetooth permission, then connect again.", true);
             return;
         }
@@ -284,7 +240,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void rememberDevice(String address, String name) {
+    void rememberDevice(String address, String name) {
         String cleanAddress = deviceCatalog.remember(address, name);
         if (cleanAddress.isEmpty()) {
             return;
@@ -311,7 +267,7 @@ public class MainActivity extends Activity {
         publishStatus("ready", "Remembered " + (cleanName.isEmpty() ? cleanAddress : cleanName) + ".", false);
     }
 
-    private void stopObdService() {
+    void stopObdService() {
         Intent service = new Intent(this, ObdService.class);
         service.setAction(ObdService.ACTION_DISCONNECT);
         startService(service);
@@ -334,7 +290,7 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> webView.evaluateJavascript(script + ";", null));
     }
 
-    private void publishStorageSummary() {
+    void publishStorageSummary() {
         // getStorageSummary runs many queries over a large DB; keep it off the UI thread.
         backgroundExecutor.execute(() -> {
             final String storage = getStorageSummaryJson();
@@ -345,7 +301,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    private String getStorageSummaryJson() {
+    String getStorageSummaryJson() {
         if (localStore == null) {
             return "{}";
         }
@@ -356,7 +312,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private String getTripsJson() {
+    String getTripsJson() {
         if (localStore == null) {
             return "[]";
         }
@@ -367,7 +323,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private String getInsightsJson() {
+    String getInsightsJson() {
         if (localStore == null) {
             return "{}";
         }
@@ -378,196 +334,32 @@ public class MainActivity extends Activity {
         }
     }
 
-    // Produces a complete on-device data backup and hands it to the Android share sheet
-    // so the user can save it anywhere (cloud, PC) — no server involved.
-    private void launchBackupShare() {
-        publishStatus("ready", "Preparing data backup...", false);
-        backgroundExecutor.execute(() -> {
-            final File backup = dataBackup.buildBackupFile(localStore);
-            runOnUiThread(() -> {
-                if (backup == null) {
-                    publishStatus("blocked", "Could not create the backup file.", true);
-                    return;
-                }
-                try {
-                    Uri uri = FileProvider.getUriForFile(
-                            this, getPackageName() + ".fileprovider", backup);
-                    Intent share = new Intent(Intent.ACTION_SEND);
-                    share.setType("application/octet-stream");
-                    share.putExtra(Intent.EXTRA_STREAM, uri);
-                    share.putExtra(Intent.EXTRA_SUBJECT, backup.getName());
-                    share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    startActivity(Intent.createChooser(share, "Back up Volt Tracker data"));
-                    publishStatus("ready", "Backup ready - choose where to save it.", false);
-                } catch (RuntimeException ex) {
-                    publishStatus("blocked", "Could not open the share sheet.", true);
-                }
-            });
-        });
-    }
-
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_RESTORE && resultCode == RESULT_OK
-                && data != null && data.getData() != null) {
-            restoreFromUri(data.getData());
-        }
+        backupController.onActivityResult(requestCode, resultCode, data);
     }
 
-    private void launchRestorePicker() {
-        // Refuse restore while a logging session is active so the swap cannot race
-        // in-flight ObdService database writes.
-        String state = lastStatus == null ? "" : lastStatus.optString("state", "");
-        if (isConnectedState(state)) {
-            publishStatus("blocked", "Stop logging before restoring a backup.", true);
-            return;
-        }
-        try {
-            Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            pick.addCategory(Intent.CATEGORY_OPENABLE);
-            pick.setType("*/*");
-            startActivityForResult(pick, REQUEST_RESTORE);
-        } catch (RuntimeException ex) {
-            publishStatus("blocked", "Could not open the file picker.", true);
-        }
-    }
-
-    private void restoreFromUri(Uri uri) {
-        publishStatus("ready", "Restoring backup...", false);
-        backgroundExecutor.execute(() -> {
-            final boolean ok = applyRestore(uri);
-            runOnUiThread(() -> {
-                if (ok) {
-                    publishDeviceList();
-                    publishStorageSummary();
-                    publishStatus("ready", "Backup restored - reconnect to resume logging.", false);
-                } else {
-                    publishStatus("blocked",
-                            "Restore failed - that file is not a valid Volt Tracker backup.", true);
-                }
-            });
-        });
-    }
-
-    // Replaces the on-device database with a user-picked backup file. The file is staged
-    // and verified as a Volt Tracker SQLite database before the live database is touched.
-    private boolean applyRestore(Uri uri) {
-        File staged = dataBackup.stageRestoreFile(uri);
-        if (staged == null) {
-            return false;
-        }
-        try {
-            File dbFile = localStore == null ? null : localStore.getDatabaseFile();
-            if (dbFile == null) {
-                return false;
-            }
-            // Stop any logging session so the database file is not held open.
-            stopObdServiceForRestore();
-            if (localStore != null) {
-                localStore.close();
-                localStore = null;
-            }
-            DataBackup.copyFile(staged, dbFile);
-            DataBackup.deleteIfExists(new File(dbFile.getPath() + "-wal"));
-            DataBackup.deleteIfExists(new File(dbFile.getPath() + "-shm"));
-            localStore = new ObdLocalStore(this);
-            return true;
-        } catch (IOException | RuntimeException ex) {
-            if (localStore == null) {
-                try {
-                    localStore = new ObdLocalStore(this);
-                } catch (RuntimeException ignored) {
-                    // Nothing more we can do; the next launch will recreate it.
-                }
-            }
-            return false;
-        } finally {
-            staged.delete();
-        }
-    }
-
-    private void stopObdServiceForRestore() {
-        try {
-            Intent stop = new Intent(this, ObdService.class);
-            stop.setAction(ObdService.ACTION_DISCONNECT);
-            startService(stop);
-        } catch (RuntimeException ignored) {
-            // Best effort; restore proceeds regardless.
-        }
+    /** True while an OBD logging session is connecting or active. */
+    boolean isLoggingActive() {
+        return isConnectedState(lastStatus == null ? "" : lastStatus.optString("state", ""));
     }
 
     private void publishAppState() {
         callDashboard("window.VoltTrackerNative.setAppState(" + JSONObject.quote(getAppStateJson()) + ")");
     }
 
-    private String getAppStateJson() {
-        JSONObject payload = new JSONObject();
-        try {
-            JSONObject app = new JSONObject();
-            app.put("version", appVersionName());
-            app.put("schemaVersion", 4);
-            payload.put("app", app);
-
-            JSONObject permissions = new JSONObject();
-            permissions.put("bluetooth", isBluetoothReady());
-            permissions.put("location", hasLocationPermission());
-            permissions.put("notifications", hasNotificationPermission());
-            payload.put("permissions", permissions);
-
-            JSONObject adapter = new JSONObject();
-            String lastAddress = deviceCatalog.lastAddress();
-            String lastName = deviceCatalog.lastName();
-            adapter.put("name", coalesce(lastTelemetry.optString("adapter", ""), lastStatus.optString("adapter", ""), lastName));
-            adapter.put("address", redactAddress(lastAddress));
-            adapter.put("remembered", lastAddress != null && !lastAddress.trim().isEmpty());
-            adapter.put("connected", isConnectedState(lastStatus.optString("state", "")));
-            payload.put("adapter", adapter);
-
-            JSONObject session = new JSONObject();
-            session.put("mode", lastTelemetry.optString("source", ""));
-            session.put("state", lastStatus.optString("state", "idle"));
-            session.put("detail", lastStatus.optString("detail", ""));
-            session.put("sampleCount", lastTelemetry.optInt("sampleCount", 0));
-            session.put("sessionMs", lastTelemetry.optLong("sessionMs", 0L));
-            session.put("backgroundSampleCount", lastTelemetry.optInt("backgroundSampleCount", 0));
-            session.put("sampleGapCount", lastTelemetry.optInt("sampleGapCount", 0));
-            session.put("maxSampleGapMs", lastTelemetry.optLong("maxSampleGapMs", 0L));
-            payload.put("session", session);
-
-            JSONObject vehicle = new JSONObject();
-            vehicle.put("state", lastTelemetry.optString("vehicleState", "unknown"));
-            vehicle.put("confidence", lastTelemetry.optString("vehicleStateConfidence",
-                    lastTelemetry.has("vehicleState") ? "observed" : "unknown"));
-            vehicle.put("vinStored", false);
-            payload.put("vehicle", vehicle);
-
-            JSONObject gps = new JSONObject();
-            boolean hasLocation = lastTelemetry.has("latitude") && lastTelemetry.has("longitude");
-            gps.put("state", hasLocation ? "locked" : (hasLocationPermission() ? "waiting" : "blocked"));
-            if (lastTelemetry.has("accuracyM")) {
-                gps.put("accuracyM", lastTelemetry.optDouble("accuracyM"));
-            }
-            if (lastTelemetry.has("locationAgeMs")) {
-                gps.put("ageMs", lastTelemetry.optLong("locationAgeMs"));
-            }
-            payload.put("gps", gps);
-
-            JSONObject lifecycle = new JSONObject();
-            lifecycle.put("appForeground", lastTelemetry.optBoolean("appForeground", true));
-            lifecycle.put("foregroundServiceActive", lastTelemetry.optBoolean("foregroundServiceActive", false));
-            lifecycle.put("backgroundSampleCount", lastTelemetry.optInt("backgroundSampleCount", 0));
-            lifecycle.put("sampleGapCount", lastTelemetry.optInt("sampleGapCount", 0));
-            lifecycle.put("lastSampleGapMs", lastTelemetry.optLong("lastSampleGapMs", 0L));
-            lifecycle.put("maxSampleGapMs", lastTelemetry.optLong("maxSampleGapMs", 0L));
-            payload.put("lifecycle", lifecycle);
-
-            payload.put("latestTelemetry", lastTelemetry);
-            payload.put("storage", lastStorage);
-        } catch (JSONException ignored) {
-            // Local state values are safe.
-        }
-        return payload.toString();
+    String getAppStateJson() {
+        return AppStateJson.build(
+                appVersionName(),
+                isBluetoothReady(),
+                permissionGate.hasLocation(),
+                permissionGate.hasNotifications(),
+                deviceCatalog.lastAddress(),
+                deviceCatalog.lastName(),
+                lastTelemetry,
+                lastStatus,
+                lastStorage);
     }
 
     static JSONObject parseJson(String json) {
@@ -613,145 +405,4 @@ public class MainActivity extends Activity {
         }
     }
 
-    public final class VoltBridge {
-        @JavascriptInterface
-        public String listDevices() {
-            return deviceCatalog.getBondedDevicesJson();
-        }
-
-        @JavascriptInterface
-        public void requestPermissions() {
-            runOnUiThread(MainActivity.this::ensurePermissions);
-        }
-
-        @JavascriptInterface
-        public void refreshDevices() {
-            runOnUiThread(() -> {
-                publishDeviceList();
-                publishStorageSummary();
-            });
-        }
-
-        @JavascriptInterface
-        public void connect(String address, String name) {
-            runOnUiThread(() -> {
-                rememberDevice(address, name);
-                startObdService(ObdService.ACTION_CONNECT, address, name);
-            });
-        }
-
-        @JavascriptInterface
-        public void scan(String address, String name) {
-            runOnUiThread(() -> {
-                rememberDevice(address, name);
-                startObdService(ObdService.ACTION_SCAN, address, name);
-            });
-        }
-
-        @JavascriptInterface
-        public String getLastDevice() {
-            return deviceCatalog.getLastDeviceJson();
-        }
-
-        @JavascriptInterface
-        public String getDeviceHistory() {
-            return deviceCatalog.getDeviceHistoryJson();
-        }
-
-        @JavascriptInterface
-        public String getStorageSummary() {
-            return getStorageSummaryJson();
-        }
-
-        @JavascriptInterface
-        public String exportDebugBundle() {
-            return dataBackup.exportDebugBundle(getAppStateJson(), getStorageSummaryJson());
-        }
-
-        @JavascriptInterface
-        public void shareBackup() {
-            runOnUiThread(MainActivity.this::launchBackupShare);
-        }
-
-        @JavascriptInterface
-        public void restoreBackup() {
-            runOnUiThread(MainActivity.this::launchRestorePicker);
-        }
-
-        @JavascriptInterface
-        public String getTrips() {
-            return getTripsJson();
-        }
-
-        @JavascriptInterface
-        public String getInsights() {
-            return getInsightsJson();
-        }
-
-        @JavascriptInterface
-        public void clearStoredData() {
-            runOnUiThread(() -> {
-                try {
-                    if (localStore != null) {
-                        localStore.clearAllData();
-                    }
-                } catch (RuntimeException ignored) {
-                    publishStatus("blocked", "Could not clear the local OBD database.", true);
-                    return;
-                }
-                publishStorageSummary();
-                publishStatus("ready", "On-phone OBD database cleared.", false);
-            });
-        }
-
-        @JavascriptInterface
-        public void rememberDevice(String address, String name) {
-            runOnUiThread(() -> MainActivity.this.rememberDevice(address, name));
-        }
-
-        @JavascriptInterface
-        public void connectLast() {
-            JSONObject device = deviceCatalog.getLastOrCandidateDevice();
-            String address = device.optString("address", "");
-            String name = device.optString("name", "");
-            runOnUiThread(() -> {
-                if (address == null || address.trim().isEmpty()) {
-                    publishStatus("blocked", "No remembered adapter yet. Connect once to save it.", true);
-                    return;
-                }
-                rememberDevice(address, name);
-                startObdService(ObdService.ACTION_CONNECT, address, name);
-            });
-        }
-
-        @JavascriptInterface
-        public void scanLast() {
-            JSONObject device = deviceCatalog.getLastOrCandidateDevice();
-            String address = device.optString("address", "");
-            String name = device.optString("name", "");
-            runOnUiThread(() -> {
-                if (address == null || address.trim().isEmpty()) {
-                    publishStatus("blocked", "No remembered adapter yet. Connect once to save it.", true);
-                    return;
-                }
-                rememberDevice(address, name);
-                startObdService(ObdService.ACTION_SCAN, address, name);
-            });
-        }
-
-        @JavascriptInterface
-        public void demo() {
-            runOnUiThread(() -> startObdService(ObdService.ACTION_DEMO, null, "Demo stream"));
-        }
-
-        @JavascriptInterface
-        public void disconnect() {
-            runOnUiThread(MainActivity.this::stopObdService);
-        }
-
-        @JavascriptInterface
-        public void logClientError(String label, String detail) {
-            Log.e(TAG, "dashboard client error [" + label + "]: " + detail);
-        }
-    }
 }
