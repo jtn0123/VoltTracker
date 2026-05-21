@@ -6,15 +6,12 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -31,24 +28,14 @@ import android.widget.FrameLayout;
 
 import androidx.core.content.FileProvider;
 
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -57,13 +44,11 @@ public class MainActivity extends Activity {
     private static final int REQUEST_PERMISSIONS = 4101;
     private static final int REQUEST_RESTORE = 4202;
     private static final String PREFS = "volt_obd_prefs";
-    private static final String PREF_LAST_ADDRESS = "last_address";
-    private static final String PREF_LAST_NAME = "last_name";
-    private static final String PREF_DEVICE_HISTORY = "device_history";
-    private static final int MAX_DEVICE_HISTORY = 8;
     private WebView webView;
     private boolean pageReady;
     private SharedPreferences prefs;
+    private DeviceCatalog deviceCatalog;
+    private DataBackup dataBackup;
     private ObdLocalStore localStore;
     private JSONObject lastTelemetry = new JSONObject();
     private JSONObject lastStatus = new JSONObject();
@@ -97,6 +82,8 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        deviceCatalog = new DeviceCatalog(this, prefs);
+        dataBackup = new DataBackup(this);
         localStore = new ObdLocalStore(this);
         webView = new WebView(this);
         webView.setLayoutParams(new FrameLayout.LayoutParams(
@@ -187,7 +174,7 @@ public class MainActivity extends Activity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_PERMISSIONS) {
             publishDeviceList();
-            if (hasBluetoothConnectPermission()) {
+            if (deviceCatalog.hasBluetoothConnectPermission()) {
                 publishStatus("ready", "Bluetooth permission granted. Pick a paired adapter.", false);
             } else {
                 publishStatus("blocked", "Bluetooth permission is required to talk to the OBD adapter.", true);
@@ -222,104 +209,11 @@ public class MainActivity extends Activity {
         return true;
     }
 
-    private boolean hasBluetoothConnectPermission() {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S
-                || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
-    }
-
-    @SuppressLint("MissingPermission")
-    private String getBondedDevicesJson() {
-        JSONArray devices = new JSONArray();
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        if (adapter == null || !hasBluetoothConnectPermission()) {
-            return devices.toString();
-        }
-
-        Set<BluetoothDevice> bonded = adapter.getBondedDevices();
-        List<BluetoothDevice> sorted = new ArrayList<>(bonded);
-        Collections.sort(sorted, (left, right) -> {
-            int candidateSort = Boolean.compare(isLikelyObdDevice(right), isLikelyObdDevice(left));
-            if (candidateSort != 0) {
-                return candidateSort;
-            }
-            return safeName(left).toLowerCase(Locale.US).compareTo(safeName(right).toLowerCase(Locale.US));
-        });
-
-        for (BluetoothDevice device : sorted) {
-            JSONObject item = new JSONObject();
-            try {
-                item.put("name", safeName(device));
-                item.put("address", device.getAddress());
-                item.put("type", device.getType());
-                item.put("bondState", device.getBondState());
-                item.put("obdCandidate", isLikelyObdDevice(device));
-                devices.put(item);
-            } catch (JSONException ignored) {
-                // Skip malformed device entries. Android-provided addresses should be valid.
-            }
-        }
-        return devices.toString();
-    }
-
-    @SuppressLint("MissingPermission")
-    private JSONArray getLikelyObdCandidates() {
-        JSONArray candidates = new JSONArray();
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        if (adapter == null || !hasBluetoothConnectPermission()) {
-            return candidates;
-        }
-
-        List<BluetoothDevice> sorted = new ArrayList<>(adapter.getBondedDevices());
-        Collections.sort(sorted, (left, right) ->
-                safeName(left).toLowerCase(Locale.US).compareTo(safeName(right).toLowerCase(Locale.US)));
-        for (BluetoothDevice device : sorted) {
-            if (!isLikelyObdDevice(device)) {
-                continue;
-            }
-            JSONObject item = new JSONObject();
-            try {
-                item.put("address", device.getAddress());
-                item.put("name", safeName(device));
-                item.put("lastSeen", 0);
-                item.put("connectCount", 0);
-                item.put("candidate", true);
-                candidates.put(item);
-            } catch (JSONException ignored) {
-                // Skip malformed device entries.
-            }
-        }
-        return candidates;
-    }
-
-    @SuppressLint("MissingPermission")
-    private static String safeName(BluetoothDevice device) {
-        String name = device.getName();
-        if (name == null || name.trim().isEmpty()) {
-            return "OBD adapter";
-        }
-        return name.trim();
-    }
-
-    @SuppressLint("MissingPermission")
-    private static boolean isLikelyObdDevice(BluetoothDevice device) {
-        return isLikelyObdName(safeName(device));
-    }
-
-    private static boolean isLikelyObdName(String name) {
-        String lower = name == null ? "" : name.toLowerCase(Locale.US);
-        return lower.contains("obd")
-                || lower.contains("elm")
-                || lower.contains("vlink")
-                || lower.contains("veepeak")
-                || lower.contains("obdlink")
-                || lower.contains("mx+")
-                || lower.contains("carista")
-                || lower.contains("scanner");
-    }
-
     private void publishDeviceList() {
-        callDashboard("window.VoltTrackerNative.setDevices(" + JSONObject.quote(getBondedDevicesJson()) + ")");
-        callDashboard("window.VoltTrackerNative.setHistory(" + JSONObject.quote(getDeviceHistoryJson()) + ")");
+        callDashboard("window.VoltTrackerNative.setDevices("
+                + JSONObject.quote(deviceCatalog.getBondedDevicesJson()) + ")");
+        callDashboard("window.VoltTrackerNative.setHistory("
+                + JSONObject.quote(deviceCatalog.getDeviceHistoryJson()) + ")");
     }
 
     private void publishStatus(String state, String detail, boolean blocked) {
@@ -329,8 +223,8 @@ public class MainActivity extends Activity {
             payload.put("detail", detail);
             payload.put("blocked", blocked);
             payload.put("bluetoothReady", isBluetoothReady());
-            payload.put("lastAddress", prefs.getString(PREF_LAST_ADDRESS, ""));
-            payload.put("lastName", prefs.getString(PREF_LAST_NAME, ""));
+            payload.put("lastAddress", deviceCatalog.lastAddress());
+            payload.put("lastName", deviceCatalog.lastName());
         } catch (JSONException ignored) {
             // Values are local literals.
         }
@@ -341,7 +235,7 @@ public class MainActivity extends Activity {
 
     private boolean isBluetoothReady() {
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        return adapter != null && adapter.isEnabled() && hasBluetoothConnectPermission();
+        return adapter != null && adapter.isEnabled() && deviceCatalog.hasBluetoothConnectPermission();
     }
 
     private boolean hasLocationPermission() {
@@ -391,17 +285,11 @@ public class MainActivity extends Activity {
     }
 
     private void rememberDevice(String address, String name) {
-        if (address == null || address.trim().isEmpty()) {
+        String cleanAddress = deviceCatalog.remember(address, name);
+        if (cleanAddress.isEmpty()) {
             return;
         }
-        String cleanAddress = address.trim();
         String cleanName = name == null ? "" : name.trim();
-        JSONArray history = updatedDeviceHistory(cleanAddress, cleanName);
-        prefs.edit()
-                .putString(PREF_LAST_ADDRESS, cleanAddress)
-                .putString(PREF_LAST_NAME, cleanName)
-                .putString(PREF_DEVICE_HISTORY, history.toString())
-                .apply();
         try {
             if (localStore != null) {
                 localStore.recordAdapterSummary(
@@ -421,103 +309,6 @@ public class MainActivity extends Activity {
         publishDeviceList();
         publishStorageSummary();
         publishStatus("ready", "Remembered " + (cleanName.isEmpty() ? cleanAddress : cleanName) + ".", false);
-    }
-
-    private String getLastDeviceJson() {
-        return getLastOrCandidateDevice().toString();
-    }
-
-    private JSONObject getLastOrCandidateDevice() {
-        JSONObject payload = new JSONObject();
-        String address = prefs.getString(PREF_LAST_ADDRESS, "");
-        String name = prefs.getString(PREF_LAST_NAME, "");
-        if ((address == null || address.trim().isEmpty())) {
-            JSONObject candidate = getLikelyObdCandidates().optJSONObject(0);
-            if (candidate != null) {
-                return candidate;
-            }
-        }
-        try {
-            payload.put("address", address == null ? "" : address);
-            payload.put("name", name == null ? "" : name);
-        } catch (JSONException ignored) {
-            // Preference strings are local.
-        }
-        return payload;
-    }
-
-    private String getDeviceHistoryJson() {
-        JSONArray history = parseDeviceHistory();
-        if (history.length() == 0) {
-            String address = prefs.getString(PREF_LAST_ADDRESS, "");
-            if (address != null && !address.trim().isEmpty()) {
-                JSONObject item = new JSONObject();
-                try {
-                    item.put("address", address.trim());
-                    item.put("name", prefs.getString(PREF_LAST_NAME, ""));
-                    item.put("lastSeen", System.currentTimeMillis());
-                    item.put("connectCount", 1);
-                    history.put(item);
-                } catch (JSONException ignored) {
-                    // Preference strings are local.
-                }
-            } else {
-                history = getLikelyObdCandidates();
-            }
-        }
-        return history.toString();
-    }
-
-    private JSONArray parseDeviceHistory() {
-        String stored = prefs.getString(PREF_DEVICE_HISTORY, "[]");
-        try {
-            return new JSONArray(stored);
-        } catch (JSONException ex) {
-            return new JSONArray();
-        }
-    }
-
-    private JSONArray updatedDeviceHistory(String address, String name) {
-        JSONArray current = parseDeviceHistory();
-        JSONArray next = new JSONArray();
-        JSONObject remembered = new JSONObject();
-        long now = System.currentTimeMillis();
-        int connectCount = 1;
-        long firstSeen = now;
-
-        for (int i = 0; i < current.length(); i++) {
-            JSONObject item = current.optJSONObject(i);
-            if (item == null) {
-                continue;
-            }
-            if (address.equalsIgnoreCase(item.optString("address", ""))) {
-                connectCount = item.optInt("connectCount", 0) + 1;
-                firstSeen = item.optLong("firstSeen", now);
-                if (name.isEmpty()) {
-                    name = item.optString("name", "");
-                }
-            }
-        }
-
-        try {
-            remembered.put("address", address);
-            remembered.put("name", name);
-            remembered.put("firstSeen", firstSeen);
-            remembered.put("lastSeen", now);
-            remembered.put("connectCount", connectCount);
-            next.put(remembered);
-
-            for (int i = 0; i < current.length() && next.length() < MAX_DEVICE_HISTORY; i++) {
-                JSONObject item = current.optJSONObject(i);
-                if (item == null || address.equalsIgnoreCase(item.optString("address", ""))) {
-                    continue;
-                }
-                next.put(item);
-            }
-        } catch (JSONException ignored) {
-            // Local values are safe.
-        }
-        return next;
     }
 
     private void stopObdService() {
@@ -587,41 +378,12 @@ public class MainActivity extends Activity {
         }
     }
 
-    private String exportDebugBundleJson() {
-        JSONObject payload = new JSONObject();
-        try {
-            payload.put("createdAtMs", System.currentTimeMillis());
-            payload.put("appState", parseJson(getAppStateJson()));
-            payload.put("storage", parseJson(getStorageSummaryJson()));
-            File dir = new File(getExternalFilesDir(null), "exports");
-            if (!dir.exists() && !dir.mkdirs()) {
-                payload.put("ok", false);
-                payload.put("error", "Could not create export directory.");
-                return payload.toString();
-            }
-            File file = new File(dir, "volttracker-debug-summary-" + System.currentTimeMillis() + ".json");
-            payload.put("ok", true);
-            payload.put("path", file.getAbsolutePath());
-            try (FileWriter writer = new FileWriter(file)) {
-                writer.write(payload.toString(2));
-            }
-        } catch (JSONException | IOException ex) {
-            try {
-                payload.put("ok", false);
-                payload.put("error", ex.getClass().getSimpleName() + ": " + ex.getMessage());
-            } catch (JSONException ignored) {
-                // Local strings are safe.
-            }
-        }
-        return payload.toString();
-    }
-
     // Produces a complete on-device data backup and hands it to the Android share sheet
     // so the user can save it anywhere (cloud, PC) — no server involved.
     private void launchBackupShare() {
         publishStatus("ready", "Preparing data backup...", false);
         backgroundExecutor.execute(() -> {
-            final File backup = buildBackupFile();
+            final File backup = dataBackup.buildBackupFile(localStore);
             runOnUiThread(() -> {
                 if (backup == null) {
                     publishStatus("blocked", "Could not create the backup file.", true);
@@ -642,41 +404,6 @@ public class MainActivity extends Activity {
                 }
             });
         });
-    }
-
-    private File buildBackupFile() {
-        if (localStore == null) {
-            return null;
-        }
-        try {
-            localStore.checkpoint();
-            File source = localStore.getDatabaseFile();
-            if (source == null || !source.exists()) {
-                return null;
-            }
-            File dir = new File(getCacheDir(), "backups");
-            if (!dir.exists() && !dir.mkdirs()) {
-                return null;
-            }
-            clearOldBackups(dir);
-            String stamp = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date());
-            File dest = new File(dir, "volttracker-backup-" + stamp + ".db");
-            copyFile(source, dest);
-            return dest;
-        } catch (IOException | RuntimeException ex) {
-            return null;
-        }
-    }
-
-    private static void clearOldBackups(File dir) {
-        File[] existing = dir.listFiles();
-        if (existing == null) {
-            return;
-        }
-        for (File file : existing) {
-            // Backups are transient hand-off copies; keep only the freshest one.
-            file.delete();
-        }
     }
 
     @Override
@@ -723,25 +450,14 @@ public class MainActivity extends Activity {
         });
     }
 
-    // Replaces the on-device database with a user-picked backup file. The file is copied
-    // out and verified as SQLite before the live database is touched.
+    // Replaces the on-device database with a user-picked backup file. The file is staged
+    // and verified as a Volt Tracker SQLite database before the live database is touched.
     private boolean applyRestore(Uri uri) {
-        File temp = new File(getCacheDir(), "restore-tmp.db");
+        File staged = dataBackup.stageRestoreFile(uri);
+        if (staged == null) {
+            return false;
+        }
         try {
-            try (InputStream in = getContentResolver().openInputStream(uri);
-                 FileOutputStream out = new FileOutputStream(temp)) {
-                if (in == null) {
-                    return false;
-                }
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = in.read(buffer)) > 0) {
-                    out.write(buffer, 0, read);
-                }
-            }
-            if (!isVoltTrackerBackup(temp)) {
-                return false;
-            }
             File dbFile = localStore == null ? null : localStore.getDatabaseFile();
             if (dbFile == null) {
                 return false;
@@ -752,9 +468,9 @@ public class MainActivity extends Activity {
                 localStore.close();
                 localStore = null;
             }
-            copyFile(temp, dbFile);
-            deleteIfExists(new File(dbFile.getPath() + "-wal"));
-            deleteIfExists(new File(dbFile.getPath() + "-shm"));
+            DataBackup.copyFile(staged, dbFile);
+            DataBackup.deleteIfExists(new File(dbFile.getPath() + "-wal"));
+            DataBackup.deleteIfExists(new File(dbFile.getPath() + "-shm"));
             localStore = new ObdLocalStore(this);
             return true;
         } catch (IOException | RuntimeException ex) {
@@ -767,7 +483,7 @@ public class MainActivity extends Activity {
             }
             return false;
         } finally {
-            temp.delete();
+            staged.delete();
         }
     }
 
@@ -778,53 +494,6 @@ public class MainActivity extends Activity {
             startService(stop);
         } catch (RuntimeException ignored) {
             // Best effort; restore proceeds regardless.
-        }
-    }
-
-    // Confirms a restore file is a real Volt Tracker database: a SQLite file that
-    // contains the app's core tables. A plain SQLite file with a foreign schema would
-    // leave the app's queries broken after the swap.
-    private static boolean isVoltTrackerBackup(File file) {
-        byte[] header = new byte[16];
-        try (FileInputStream in = new FileInputStream(file)) {
-            if (in.read(header) != header.length
-                    || !new String(header, StandardCharsets.US_ASCII).startsWith("SQLite format 3")) {
-                return false;
-            }
-        } catch (IOException ex) {
-            return false;
-        }
-        SQLiteDatabase db = null;
-        try {
-            db = SQLiteDatabase.openDatabase(file.getPath(), null, SQLiteDatabase.OPEN_READONLY);
-            try (Cursor cursor = db.rawQuery(
-                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)",
-                    new String[]{"obd_sessions", "telemetry_samples"})) {
-                return cursor.getCount() == 2;
-            }
-        } catch (RuntimeException ex) {
-            return false;
-        } finally {
-            if (db != null) {
-                db.close();
-            }
-        }
-    }
-
-    private static void copyFile(File source, File dest) throws IOException {
-        try (FileInputStream in = new FileInputStream(source);
-             FileOutputStream out = new FileOutputStream(dest)) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = in.read(buffer)) > 0) {
-                out.write(buffer, 0, read);
-            }
-        }
-    }
-
-    private static void deleteIfExists(File file) {
-        if (file.exists()) {
-            file.delete();
         }
     }
 
@@ -847,8 +516,8 @@ public class MainActivity extends Activity {
             payload.put("permissions", permissions);
 
             JSONObject adapter = new JSONObject();
-            String lastAddress = prefs.getString(PREF_LAST_ADDRESS, "");
-            String lastName = prefs.getString(PREF_LAST_NAME, "");
+            String lastAddress = deviceCatalog.lastAddress();
+            String lastName = deviceCatalog.lastName();
             adapter.put("name", coalesce(lastTelemetry.optString("adapter", ""), lastStatus.optString("adapter", ""), lastName));
             adapter.put("address", redactAddress(lastAddress));
             adapter.put("remembered", lastAddress != null && !lastAddress.trim().isEmpty());
@@ -947,7 +616,7 @@ public class MainActivity extends Activity {
     public final class VoltBridge {
         @JavascriptInterface
         public String listDevices() {
-            return getBondedDevicesJson();
+            return deviceCatalog.getBondedDevicesJson();
         }
 
         @JavascriptInterface
@@ -981,12 +650,12 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String getLastDevice() {
-            return getLastDeviceJson();
+            return deviceCatalog.getLastDeviceJson();
         }
 
         @JavascriptInterface
         public String getDeviceHistory() {
-            return getDeviceHistoryJson();
+            return deviceCatalog.getDeviceHistoryJson();
         }
 
         @JavascriptInterface
@@ -996,7 +665,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String exportDebugBundle() {
-            return exportDebugBundleJson();
+            return dataBackup.exportDebugBundle(getAppStateJson(), getStorageSummaryJson());
         }
 
         @JavascriptInterface
@@ -1042,7 +711,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void connectLast() {
-            JSONObject device = getLastOrCandidateDevice();
+            JSONObject device = deviceCatalog.getLastOrCandidateDevice();
             String address = device.optString("address", "");
             String name = device.optString("name", "");
             runOnUiThread(() -> {
@@ -1057,7 +726,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void scanLast() {
-            JSONObject device = getLastOrCandidateDevice();
+            JSONObject device = deviceCatalog.getLastOrCandidateDevice();
             String address = device.optString("address", "");
             String name = device.optString("name", "");
             runOnUiThread(() -> {
