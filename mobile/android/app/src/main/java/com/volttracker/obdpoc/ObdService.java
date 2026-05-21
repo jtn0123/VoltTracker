@@ -92,6 +92,8 @@ public class ObdService extends Service {
     private long lastAcceptedSpeedAtMs;
     private volatile boolean appInForeground = true;
     private volatile boolean foregroundServiceActive;
+    private String lastPersistedStatusKey = "";
+    private long lastPersistedStatusAtMs = 0L;
     private int backgroundSampleCount;
     private int sampleGapCount;
     private long lastSampleAtMs;
@@ -154,7 +156,6 @@ public class ObdService extends Service {
         }
         if (ACTION_DEMO.equals(action)) {
             activeName = "Demo stream";
-            startForegroundSession("Running demo telemetry");
             startDemoSession();
             return START_STICKY;
         }
@@ -164,7 +165,6 @@ public class ObdService extends Service {
             if (activeName == null || activeName.trim().isEmpty()) {
                 activeName = "OBD adapter";
             }
-            startForegroundSession("Connecting to " + activeName);
             startBluetoothSession(address);
             return START_STICKY;
         }
@@ -174,7 +174,6 @@ public class ObdService extends Service {
             if (activeName == null || activeName.trim().isEmpty()) {
                 activeName = "OBD adapter";
             }
-            startForegroundSession("Scanning " + activeName);
             startScanSession(address);
             return START_STICKY;
         }
@@ -213,11 +212,14 @@ public class ObdService extends Service {
 
     private void startObdSession(String address, boolean scanMode) {
         stopCurrentSession(null);
+        startForegroundSession((scanMode ? "Scanning " : "Connecting to ") + activeName);
         sessionStartedAtMs = System.currentTimeMillis();
         sampleCount = 0;
         resetSessionHealth();
         lastAcceptedSpeedKph = null;
         lastAcceptedSpeedAtMs = 0L;
+        lastPersistedStatusKey = "";
+        lastPersistedStatusAtMs = 0L;
         supportedPidsSummary = "";
         openSessionLog(scanMode ? "scan" : "obd", address);
         startLocationCapture();
@@ -227,9 +229,12 @@ public class ObdService extends Service {
 
     private void startDemoSession() {
         stopCurrentSession(null);
+        startForegroundSession("Running demo telemetry");
         sessionStartedAtMs = System.currentTimeMillis();
         sampleCount = 0;
         resetSessionHealth();
+        lastPersistedStatusKey = "";
+        lastPersistedStatusAtMs = 0L;
         supportedPidsSummary = "demo";
         openSessionLog("demo", null);
         running.set(true);
@@ -328,6 +333,9 @@ public class ObdService extends Service {
 
             while (running.get()) {
                 JSONObject sample = readObdSample();
+                if (sample == null || sample.length() == 0) {
+                    break;
+                }
                 broadcastTelemetry(sample);
                 sleep(850);
             }
@@ -533,6 +541,8 @@ public class ObdService extends Service {
         } catch (IOException | JSONException ex) {
             logError("polling_error", ex);
             broadcastStatus("error", "OBD polling error: " + safeMessage(ex), true);
+            running.set(false);
+            return null;
         }
         return sample;
     }
@@ -722,6 +732,9 @@ public class ObdService extends Service {
     }
 
     private void broadcastTelemetry(JSONObject payload) {
+        if (payload == null || payload.length() == 0) {
+            return;
+        }
         logJson("telemetry", payload);
         persistTelemetry(payload);
         broadcast(BROADCAST_TELEMETRY, payload);
@@ -971,7 +984,25 @@ public class ObdService extends Service {
         if (sessionId <= 0 || payload == null || localStore == null) {
             return;
         }
+        if (shouldThrottleStatus(state, detail, blocked)) {
+            return;
+        }
         persistAsync(() -> localStore.recordStatus(sessionId, state, detail, blocked, payload));
+    }
+
+    private synchronized boolean shouldThrottleStatus(String state, String detail, boolean blocked) {
+        long now = System.currentTimeMillis();
+        String key = (state == null ? "" : state)
+                + "|"
+                + (detail == null ? "" : detail)
+                + "|"
+                + blocked;
+        if (key.equals(lastPersistedStatusKey) && now - lastPersistedStatusAtMs < 5000L) {
+            return true;
+        }
+        lastPersistedStatusKey = key;
+        lastPersistedStatusAtMs = now;
+        return false;
     }
 
     private void persistEvent(String type, JSONObject payload) {

@@ -25,6 +25,14 @@ public final class ObdLocalStore implements Closeable {
     public static final String STATUS_ERROR = "error";
     public static final String STATUS_DISCONNECTED = "disconnected";
 
+    private static final String USEFUL_TELEMETRY_WHERE = "("
+            + "COALESCE(source, '') != ''"
+            + " OR speed_kph IS NOT NULL"
+            + " OR rpm IS NOT NULL"
+            + " OR voltage IS NOT NULL"
+            + " OR TRIM(COALESCE(raw, '')) != ''"
+            + ")";
+
     private final Context context;
     private final VoltTrackerDb helper;
 
@@ -76,6 +84,9 @@ public final class ObdLocalStore implements Closeable {
 
     public long recordTelemetry(long sessionId, JSONObject sample, long capturedAtMs) {
         JSONObject safeSample = sample == null ? new JSONObject() : sample;
+        if (!isUsefulTelemetry(safeSample)) {
+            return -1L;
+        }
         SQLiteDatabase db = helper.getWritableDatabase();
         db.beginTransaction();
         try {
@@ -386,7 +397,7 @@ public final class ObdLocalStore implements Closeable {
         try (Cursor cursor = helper.getReadableDatabase().query(
                 VoltTrackerDb.TABLE_TELEMETRY,
                 null,
-                "session_id = ?",
+                "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
                 new String[]{String.valueOf(sessionId)},
                 null,
                 null,
@@ -445,7 +456,11 @@ public final class ObdLocalStore implements Closeable {
             payload.put("database", VoltTrackerDb.DATABASE_NAME);
             payload.put("databaseBytes", getDatabaseFile().length());
             payload.put("sessionCount", countRows(db, VoltTrackerDb.TABLE_SESSIONS));
-            payload.put("sampleCount", countRows(db, VoltTrackerDb.TABLE_TELEMETRY));
+            long rawTelemetryCount = countRows(db, VoltTrackerDb.TABLE_TELEMETRY);
+            long usefulTelemetryCount = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, USEFUL_TELEMETRY_WHERE, null);
+            payload.put("rawTelemetryCount", rawTelemetryCount);
+            payload.put("sampleCount", usefulTelemetryCount);
+            payload.put("emptyTelemetryCount", Math.max(0L, rawTelemetryCount - usefulTelemetryCount));
             payload.put("eventCount", countRows(db, VoltTrackerDb.TABLE_EVENTS));
             payload.put("adapterCount", countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY));
             payload.put("pidObservationCount", countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS));
@@ -469,8 +484,10 @@ public final class ObdLocalStore implements Closeable {
             }
             payload.put("recentSessions", getRecentSessionsJson(6));
             payload.put("adapters", getAdapterHistoryJson(6));
-            payload.put("latestReview", latest == null ? new JSONObject() : getSessionReviewJson(db, latest));
-            payload.put("latestRoute", latest == null ? new JSONObject() : routeForSessionJson(db, latest, 240));
+            ObdSessionRecord reviewSession = latestReviewableSession(db);
+            payload.put("latestReview", reviewSession == null ? new JSONObject() : getSessionReviewJson(db, reviewSession));
+            payload.put("latestRoute", reviewSession == null ? new JSONObject() : routeForSessionJson(db, reviewSession, 240));
+            payload.put("recentRoutes", recentRoutesJson(db, 8, 500));
             payload.put("overview", overviewJson(db));
             payload.put("chargeSummary", chargeSummaryJson(db));
             payload.put("batterySummary", batterySummaryJson(db));
@@ -494,6 +511,11 @@ public final class ObdLocalStore implements Closeable {
                 item.put("status", record.status);
                 item.put("supportedPids", record.supportedPids);
                 item.put("sampleCount", record.sampleCount);
+                long usefulSamples = countRowsWhere(helper.getReadableDatabase(), VoltTrackerDb.TABLE_TELEMETRY,
+                        "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
+                        new String[]{String.valueOf(record.id)});
+                item.put("usefulSampleCount", usefulSamples);
+                item.put("emptySampleCount", Math.max(0L, record.sampleCount - usefulSamples));
                 item.put("lastEventAtMs", record.lastEventAtMs);
             } catch (JSONException ignored) {
                 // Local fields are safe.
@@ -545,6 +567,11 @@ public final class ObdLocalStore implements Closeable {
         payload.put("unknownPidCount", countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
                 "session_id = ? AND (value_text IS NULL OR value_text = '')",
                 new String[]{String.valueOf(session.id)}));
+        long usefulTelemetry = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
+                new String[]{String.valueOf(session.id)});
+        payload.put("usefulTelemetryCount", usefulTelemetry);
+        payload.put("emptyTelemetryCount", Math.max(0L, session.sampleCount - usefulTelemetry));
         payload.put("maxSpeedKph", maxIntForSession(db, "speed_kph", session.id));
         payload.put("avgSampleIntervalMs", averageSampleIntervalMs(db, session.id));
         payload.put("backgroundSampleCount", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
@@ -676,7 +703,7 @@ public final class ObdLocalStore implements Closeable {
         try (Cursor cursor = db.query(
                 VoltTrackerDb.TABLE_TELEMETRY,
                 new String[]{"captured_at_ms", "speed_kph", "vehicle_state", "json"},
-                "session_id = ?",
+                "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
                 new String[]{String.valueOf(sessionId)},
                 null,
                 null,
@@ -705,6 +732,24 @@ public final class ObdLocalStore implements Closeable {
         payload.put("pointCount", points.length());
         payload.put("distanceMeters", distanceMeters(points));
         payload.put("bounds", boundsFor(points));
+        return payload;
+    }
+
+    private static JSONArray recentRoutesJson(SQLiteDatabase db, int sessionLimit, int pointLimit) throws JSONException {
+        JSONArray payload = new JSONArray();
+        for (ObdSessionRecord session : getRecentSessions(db, sessionLimit)) {
+            JSONArray points = routePointsForSessionJson(db, session.id, pointLimit);
+            if (points.length() < 2) {
+                continue;
+            }
+            JSONObject route = new JSONObject();
+            route.put("session", sessionToJson(session));
+            route.put("points", points);
+            route.put("pointCount", points.length());
+            route.put("distanceMeters", distanceMeters(points));
+            route.put("bounds", boundsFor(points));
+            payload.put(route);
+        }
         return payload;
     }
 
@@ -761,7 +806,7 @@ public final class ObdLocalStore implements Closeable {
         try (Cursor cursor = db.query(
                 VoltTrackerDb.TABLE_TELEMETRY,
                 new String[]{"captured_at_ms", "vehicle_state", "speed_kph", "rpm", "voltage", "soc", "battery_temp", "power_kw", "json"},
-                null,
+                USEFUL_TELEMETRY_WHERE,
                 null,
                 null,
                 null,
@@ -844,7 +889,7 @@ public final class ObdLocalStore implements Closeable {
         try (Cursor cursor = db.query(
                 VoltTrackerDb.TABLE_TELEMETRY,
                 new String[]{"json"},
-                "session_id = ?",
+                "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
                 new String[]{String.valueOf(sessionId)},
                 null,
                 null,
@@ -870,7 +915,8 @@ public final class ObdLocalStore implements Closeable {
         JSONObject payload = new JSONObject();
         try (Cursor cursor = db.rawQuery(
                 "SELECT vehicle_state, COUNT(*) FROM " + VoltTrackerDb.TABLE_TELEMETRY
-                        + " WHERE session_id = ? GROUP BY vehicle_state",
+                        + " WHERE session_id = ? AND " + USEFUL_TELEMETRY_WHERE
+                        + " GROUP BY vehicle_state",
                 new String[]{String.valueOf(sessionId)}
         )) {
             while (cursor.moveToNext()) {
@@ -900,6 +946,15 @@ public final class ObdLocalStore implements Closeable {
         long backgroundEvents = countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
                 "session_id = ? AND (detail = ? OR detail = ?)",
                 new String[]{String.valueOf(sessionId), "app_backgrounded", "app_foregrounded"});
+        long emptyTelemetry = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                "session_id = ? AND NOT " + USEFUL_TELEMETRY_WHERE,
+                new String[]{String.valueOf(sessionId)});
+        long movingWithZeroRpm = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                "session_id = ? AND speed_kph > 0 AND rpm = 0 AND " + USEFUL_TELEMETRY_WHERE,
+                new String[]{String.valueOf(sessionId)});
+        long powerRows = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                "session_id = ? AND power_kw IS NOT NULL AND " + USEFUL_TELEMETRY_WHERE,
+                new String[]{String.valueOf(sessionId)});
         if (chargeHints > 0 || speedRejected > 0) {
             payload.put(warning("charge-speed-hint",
                     "Rejected 255 km/h speed frame seen. Treat it as a charging/transition clue, not vehicle speed.",
@@ -920,6 +975,21 @@ public final class ObdLocalStore implements Closeable {
             payload.put(warning("background-tested",
                     "App foreground/background transitions were captured for this session.", backgroundEvents));
         }
+        if (emptyTelemetry > 0) {
+            payload.put(warning("empty-telemetry",
+                    "This older session contains empty telemetry rows from a broken adapter pipe. Product summaries now ignore them.",
+                    emptyTelemetry));
+        }
+        if (movingWithZeroRpm > 0) {
+            payload.put(warning("rpm-zero-moving",
+                    "Vehicle speed was observed while standard engine RPM stayed at 0. Validate engine-running behavior with Scan.",
+                    movingWithZeroRpm));
+        }
+        if (powerRows == 0) {
+            payload.put(warning("power-pid-missing",
+                    "No real power/kW rows are stored yet. Pack or charger power needs validated Volt-specific PIDs.",
+                    0));
+        }
         return payload;
     }
 
@@ -933,7 +1003,8 @@ public final class ObdLocalStore implements Closeable {
 
     private static int maxIntForSession(SQLiteDatabase db, String column, long sessionId) {
         try (Cursor cursor = db.rawQuery(
-                "SELECT MAX(" + column + ") FROM " + VoltTrackerDb.TABLE_TELEMETRY + " WHERE session_id = ?",
+                "SELECT MAX(" + column + ") FROM " + VoltTrackerDb.TABLE_TELEMETRY
+                        + " WHERE session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
                 new String[]{String.valueOf(sessionId)}
         )) {
             return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getInt(0) : 0;
@@ -941,13 +1012,15 @@ public final class ObdLocalStore implements Closeable {
     }
 
     private static int maxInt(SQLiteDatabase db, String table, String column) {
-        try (Cursor cursor = db.rawQuery("SELECT MAX(" + column + ") FROM " + table, null)) {
+        String where = VoltTrackerDb.TABLE_TELEMETRY.equals(table) ? " WHERE " + USEFUL_TELEMETRY_WHERE : "";
+        try (Cursor cursor = db.rawQuery("SELECT MAX(" + column + ") FROM " + table + where, null)) {
             return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getInt(0) : 0;
         }
     }
 
     private static double maxDouble(SQLiteDatabase db, String table, String column) {
-        try (Cursor cursor = db.rawQuery("SELECT MAX(" + column + ") FROM " + table, null)) {
+        String where = VoltTrackerDb.TABLE_TELEMETRY.equals(table) ? " WHERE " + USEFUL_TELEMETRY_WHERE : "";
+        try (Cursor cursor = db.rawQuery("SELECT MAX(" + column + ") FROM " + table + where, null)) {
             return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getDouble(0) : 0d;
         }
     }
@@ -955,7 +1028,8 @@ public final class ObdLocalStore implements Closeable {
     private static long averageSampleIntervalMs(SQLiteDatabase db, long sessionId) {
         try (Cursor cursor = db.rawQuery(
                 "SELECT MIN(captured_at_ms), MAX(captured_at_ms), COUNT(*) FROM "
-                        + VoltTrackerDb.TABLE_TELEMETRY + " WHERE session_id = ?",
+                        + VoltTrackerDb.TABLE_TELEMETRY
+                        + " WHERE session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
                 new String[]{String.valueOf(sessionId)}
         )) {
             if (!cursor.moveToFirst() || cursor.getLong(2) < 2) {
@@ -968,7 +1042,8 @@ public final class ObdLocalStore implements Closeable {
     private static long averageSampleIntervalMs(SQLiteDatabase db) {
         try (Cursor cursor = db.rawQuery(
                 "SELECT MIN(captured_at_ms), MAX(captured_at_ms), COUNT(*) FROM "
-                        + VoltTrackerDb.TABLE_TELEMETRY,
+                        + VoltTrackerDb.TABLE_TELEMETRY
+                        + " WHERE " + USEFUL_TELEMETRY_WHERE,
                 null
         )) {
             if (!cursor.moveToFirst() || cursor.getLong(2) < 2) {
@@ -984,6 +1059,24 @@ public final class ObdLocalStore implements Closeable {
             total += distanceMeters(routePointsForSessionJson(db, session.id, 1000));
         }
         return total;
+    }
+
+    private static ObdSessionRecord latestReviewableSession(SQLiteDatabase db) {
+        for (ObdSessionRecord session : getRecentSessions(db, 20)) {
+            long usefulTelemetry = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
+                    "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
+                    new String[]{String.valueOf(session.id)});
+            long pidRows = countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                    "session_id = ?",
+                    new String[]{String.valueOf(session.id)});
+            long locationRows = countRowsWhere(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                    "session_id = ?",
+                    new String[]{String.valueOf(session.id)});
+            if (usefulTelemetry > 0 || pidRows > 0 || locationRows > 0) {
+                return session;
+            }
+        }
+        return null;
     }
 
     private static List<ObdSessionRecord> getRecentSessions(SQLiteDatabase db, int limit) {
@@ -1277,6 +1370,26 @@ public final class ObdLocalStore implements Closeable {
 
     private static String chooseLatest(String candidate, String fallback) {
         return candidate == null || candidate.trim().isEmpty() ? clean(fallback) : candidate.trim();
+    }
+
+    private static boolean isUsefulTelemetry(JSONObject sample) {
+        if (sample == null || sample.length() == 0) {
+            return false;
+        }
+        if (!clean(sample.optString("source", "")).isEmpty()) {
+            return true;
+        }
+        if (!clean(sample.optString("raw", "")).isEmpty()) {
+            return true;
+        }
+        return sample.has("speedKph")
+                || sample.has("rpm")
+                || sample.has("voltage")
+                || sample.has("latitude")
+                || sample.has("longitude")
+                || sample.has("soc")
+                || sample.has("batteryTemp")
+                || sample.has("powerKw");
     }
 
     private static String clean(String value) {

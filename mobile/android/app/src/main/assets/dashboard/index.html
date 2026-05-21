@@ -28,6 +28,8 @@
   html, body {
     margin: 0;
     min-height: 100%;
+    width: 100%;
+    overflow-x: hidden;
     background:
       radial-gradient(680px 430px at 68% -90px, rgba(230,255,58,0.17), transparent 62%),
       linear-gradient(180deg, #12131a 0%, var(--bg) 52%);
@@ -67,6 +69,7 @@
   .app {
     width: min(760px, 100%);
     margin: 0 auto;
+    overflow: clip;
   }
 
   .topbar {
@@ -534,6 +537,14 @@
     text-align: right;
   }
 
+  .power-pill small {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
   .power-pill strong {
     display: block;
     margin-top: 3px;
@@ -574,7 +585,7 @@
   }
 
   .mini, .metric, .list-card, .insight, .charge-kpi, .setting-row {
-    padding: 14px;
+    padding: 12px;
   }
 
   .mini strong,
@@ -587,6 +598,10 @@
     letter-spacing: 0;
   }
 
+  .mini.is-wide {
+    grid-column: 1 / -1;
+  }
+
   .mini small,
   .metric small,
   .charge-kpi small {
@@ -595,7 +610,13 @@
 
   .summary-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .drive-signal-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
     gap: 10px;
   }
 
@@ -996,16 +1017,23 @@
 
   .map-card.is-fullscreen {
     position: fixed;
-    z-index: 40;
-    inset: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    z-index: 80;
+    inset: 0;
     display: flex;
     flex-direction: column;
-    border-radius: 18px;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    border-radius: 0;
+    border: 0;
+    background:
+      radial-gradient(620px 430px at 76% -120px, rgba(230,255,58,0.16), transparent 62%),
+      #090a0f;
   }
 
   .map-card.is-fullscreen .map-frame {
     flex: 1;
     min-height: 0;
+    height: auto;
+    border-radius: 14px;
   }
 
   .map-controls {
@@ -1041,15 +1069,15 @@
 
   .map-frame {
     position: relative;
-    min-height: 330px;
+    min-height: 360px;
     margin-top: 12px;
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 16px;
     overflow: hidden;
     background:
       radial-gradient(circle at 18% 75%, rgba(75,151,116,0.34), transparent 24%),
-      radial-gradient(circle at 78% 22%, rgba(62,111,168,0.28), transparent 28%),
-      linear-gradient(135deg, rgba(12,18,20,0.95), rgba(19,20,28,0.98));
+      radial-gradient(circle at 78% 22%, rgba(62,111,168,0.30), transparent 28%),
+      linear-gradient(135deg, rgba(8,16,19,0.96), rgba(17,18,26,0.98));
   }
 
   .map-frame::before {
@@ -1060,8 +1088,80 @@
       repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 34px),
       repeating-linear-gradient(90deg, rgba(255,255,255,0.026) 0 1px, transparent 1px 34px),
       linear-gradient(34deg, transparent 0 34%, rgba(255,255,255,0.08) 34.5% 35.2%, transparent 36% 100%),
-      linear-gradient(150deg, transparent 0 44%, rgba(255,255,255,0.055) 44.5% 45.2%, transparent 46% 100%);
+      linear-gradient(150deg, transparent 0 44%, rgba(255,255,255,0.055) 44.5% 45.2%, transparent 46% 100%),
+      linear-gradient(72deg, transparent 0 56%, rgba(230,255,58,0.10) 56.2% 56.8%, transparent 57.3% 100%);
     opacity: 0.88;
+  }
+
+  .map-road-labels {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    pointer-events: none;
+    color: rgba(245,243,236,0.48);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .map-road-labels span {
+    position: absolute;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.24);
+  }
+
+  .map-road-labels span:nth-child(1) { left: 9%; top: 18%; }
+  .map-road-labels span:nth-child(2) { right: 10%; top: 38%; }
+  .map-road-labels span:nth-child(3) { left: 12%; bottom: 14%; }
+
+  .map-hud {
+    position: absolute;
+    z-index: 3;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  .map-compass,
+  .map-scale {
+    border: 1px solid rgba(255,255,255,0.13);
+    border-radius: 999px;
+    background: rgba(5,6,9,0.62);
+    color: rgba(245,243,236,0.78);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    backdrop-filter: blur(8px);
+  }
+
+  .map-compass {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+  }
+
+  .map-scale {
+    min-width: 88px;
+    padding: 6px 9px;
+  }
+
+  .map-scale::before {
+    content: "";
+    display: block;
+    width: 52px;
+    height: 3px;
+    margin-bottom: 4px;
+    border-radius: 999px;
+    background: var(--volt);
   }
 
   .map-frame[data-layer="heat"]::after {
@@ -1075,10 +1175,10 @@
 
   .map-svg {
     position: relative;
-    z-index: 1;
+    z-index: 2;
     display: block;
     width: 100%;
-    height: 330px;
+    height: 360px;
   }
 
   .map-card.is-fullscreen .map-svg {
@@ -1113,6 +1213,12 @@
   .map-list {
     display: grid;
     gap: 8px;
+  }
+
+  .map-list .history-row.is-active {
+    border-radius: 13px;
+    border: 1px solid rgba(230,255,58,0.28);
+    background: rgba(230,255,58,0.10);
   }
 
   .energy-rows {
@@ -1215,15 +1321,15 @@
   .cell-grid {
     display: grid;
     grid-template-columns: repeat(12, 1fr);
-    gap: 4px;
+    gap: 3px;
     margin-top: 12px;
   }
 
   .cell {
-    height: 22px;
-    border-radius: 6px;
+    height: 18px;
+    border-radius: 4px;
     background: rgba(230,255,58,var(--c));
-    opacity: 0.82;
+    opacity: 0.66;
   }
 
   .cell.is-watch {
@@ -1308,9 +1414,15 @@
     font-weight: 760;
   }
 
+  .bottom-nav button i,
+  .bottom-nav button svg {
+    display: block;
+    width: 19px;
+    height: 19px;
+  }
+
   .bottom-nav button i {
     font-style: normal;
-    font-size: 17px;
     line-height: 1;
   }
 
@@ -1319,10 +1431,19 @@
     color: var(--volt);
   }
 
+  body.map-full-active {
+    overflow: hidden;
+  }
+
+  body.map-full-active .bottom-nav {
+    display: none;
+  }
+
   @media (min-width: 640px) {
     body { padding-inline: 18px; }
     .hero { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); }
     .summary-grid { grid-template-columns: repeat(4, 1fr); }
+    .drive-signal-grid { grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr); }
     .detail-grid { grid-template-columns: 1fr 1fr; }
     .button-grid { grid-template-columns: repeat(6, 1fr); }
   }
@@ -1334,6 +1455,8 @@
     .connection-head { grid-template-columns: 1fr; }
     .primary-action { width: 100%; }
     .ring { margin-inline: auto; }
+    .drive-signal-grid { grid-template-columns: 1fr; }
+    .bottom-nav button span { font-size: 10px; }
   }
 </style>
 </head>
@@ -1414,6 +1537,7 @@
           <div class="power-pill">
             <span class="kicker">Power</span>
             <strong id="powerValue">--</strong>
+            <small id="powerDetail">PID needed</small>
           </div>
         </div>
         <div class="power-meter">
@@ -1443,7 +1567,7 @@
           <strong id="throttleValue">--</strong>
           <small>mode 01 11</small>
         </article>
-        <article class="panel mini">
+        <article class="panel mini is-wide">
           <div class="kicker">GPS</div>
           <strong id="gpsValue">--</strong>
           <small id="gpsDetail">location trace</small>
@@ -1461,12 +1585,20 @@
       </div>
     </article>
 
-    <section class="summary-grid">
+    <section class="drive-signal-grid">
       <article class="panel metric">
         <header><span>Load</span><span>01 04</span></header>
         <strong id="loadValue">--</strong>
         <div class="meter"><span id="loadMeter"></span></div>
       </article>
+      <article class="panel metric">
+        <header><span>GPS</span><span>route</span></header>
+        <strong id="gpsMetricValue">--</strong>
+        <small id="gpsMetricSub">waiting for location samples</small>
+      </article>
+    </section>
+
+    <section class="summary-grid">
       <article class="panel metric demo-only" hidden>
         <header><span>Pack</span><span>Health</span></header>
         <strong>91.3%</strong>
@@ -1665,14 +1797,18 @@
       </div>
       <div class="map-controls">
         <div class="map-layer-tabs" role="tablist" aria-label="Map layer">
-          <button type="button" data-map-layer="routes" class="is-active">Routes</button>
-          <button type="button" data-map-layer="heat">Heat</button>
-          <button type="button" data-map-layer="stops">Stops</button>
+          <button type="button" data-map-layer="routes" class="is-active" aria-selected="true">Routes</button>
+          <button type="button" data-map-layer="heat" aria-selected="false">Heat</button>
+          <button type="button" data-map-layer="stops" aria-selected="false">Stops</button>
         </div>
         <button id="mapFullBtn" type="button" class="map-full-btn" aria-pressed="false">Full</button>
       </div>
       <div id="mapFrame" class="map-frame" data-layer="routes">
+        <div class="map-road-labels" aria-hidden="true"><span>Start</span><span>Route</span><span>End</span></div>
         <svg id="mapSvg" class="map-svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Recorded GPS route">
+          <polyline id="mapGuideA" points="7,78 24,66 38,62 56,48 76,32 93,20" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          <polyline id="mapGuideB" points="12,20 26,34 38,47 52,58 68,70 88,83" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          <polyline id="mapGuideC" points="18,90 34,76 49,66 62,52 74,36 84,10" fill="none" stroke="rgba(230,255,58,0.09)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"></polyline>
           <polyline id="mapHeatLine" points="" fill="none" stroke="var(--volt)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" opacity="0.10"></polyline>
           <polyline id="mapGlowLine" points="" fill="none" stroke="var(--volt)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.18"></polyline>
           <polyline id="mapRouteLine" points="" fill="none" stroke="var(--volt)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></polyline>
@@ -1681,6 +1817,10 @@
         </svg>
         <div id="mapEmpty" class="map-empty">
           <span><strong>No GPS route yet</strong>Start a logged drive with location permission enabled. The route will draw here from on-device SQLite samples.</span>
+        </div>
+        <div class="map-hud" aria-hidden="true">
+          <span class="map-compass">N</span>
+          <span class="map-scale" id="mapScaleText">scale</span>
         </div>
       </div>
       <div class="map-foot">
@@ -1876,6 +2016,8 @@
         <div><span>Avg interval</span><strong id="reviewInterval">--</strong></div>
         <div><span>Background</span><strong id="reviewBackground">--</strong></div>
         <div><span>Gaps</span><strong id="reviewGaps">--</strong></div>
+        <div><span>Useful</span><strong id="reviewUsefulSamples">--</strong></div>
+        <div><span>Empty</span><strong id="reviewEmptySamples">0</strong></div>
       </div>
       <div id="reviewWarnings" class="warning-list"></div>
       <div id="realInsightList" class="real-insight-list"></div>
@@ -1910,6 +2052,8 @@
         <div><span>Charge</span><strong id="dbChargeCount">0</strong></div>
         <div><span>Battery</span><strong id="dbBatteryCount">0</strong></div>
         <div><span>Size</span><strong id="dbSize">0 B</strong></div>
+        <div><span>Raw rows</span><strong id="dbRawTelemetryCount">0</strong></div>
+        <div><span>Empty</span><strong id="dbEmptyTelemetryCount">0</strong></div>
       </div>
       <div id="dbSessionList" style="margin-top:12px"></div>
       <button type="button" data-action="clearStorage" class="danger" style="margin-top:12px;width:100%">Clear stored debug data</button>
@@ -1933,12 +2077,12 @@
 </main>
 
 <nav class="bottom-nav" aria-label="Main navigation">
-  <button type="button" data-nav="drive" class="is-active"><i>D</i><span>Drive</span></button>
-  <button type="button" data-nav="trips"><i>T</i><span>Trips</span></button>
-  <button type="button" data-nav="map"><i>M</i><span>Map</span></button>
-  <button type="button" data-nav="charge"><i>C</i><span>Charge</span></button>
-  <button type="button" data-nav="insights"><i>I</i><span>Insights</span></button>
-  <button type="button" data-nav="settings"><i>D</i><span>Diag</span></button>
+  <button type="button" data-nav="drive" class="is-active" aria-label="Drive" aria-current="page"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20h-5v-5H9v5H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></i><span>Drive</span></button>
+  <button type="button" data-nav="trips" aria-label="Trips"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h10M5 12h14M5 17h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></i><span>Trips</span></button>
+  <button type="button" data-nav="map" aria-label="Map"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 5-2 6 2 5-2v14l-5 2-6-2-5 2zM9 4v14M15 6v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></i><span>Map</span></button>
+  <button type="button" data-nav="charge" aria-label="Charge"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 5 13h6l-1 9 9-13h-6z" fill="currentColor"/></svg></i><span>Charge</span></button>
+  <button type="button" data-nav="insights" aria-label="Insights"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></i><span>Insights</span></button>
+  <button type="button" data-nav="settings" aria-label="Diagnostics"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0-5v3m0 12v3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1M1 12h3m16 0h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></i><span>Diag</span></button>
 </nav>
 
 <script>
@@ -1982,6 +2126,7 @@
     demoActive: false,
     mapLayer: "routes",
     mapFull: false,
+    selectedMapSessionId: null,
     status: {},
     speedHistory: [],
     telemetry: {
@@ -2035,10 +2180,19 @@
     state.view = view;
     if (view !== "map" && state.mapFull) {
       state.mapFull = false;
+      document.body.classList.remove("map-full-active");
       renderMap();
     }
     document.querySelectorAll(".view").forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
-    document.querySelectorAll("[data-nav]").forEach((node) => node.classList.toggle("is-active", node.dataset.nav === view));
+    document.querySelectorAll("[data-nav]").forEach((node) => {
+      const active = node.dataset.nav === view;
+      node.classList.toggle("is-active", active);
+      if (active) {
+        node.setAttribute("aria-current", "page");
+      } else {
+        node.removeAttribute("aria-current");
+      }
+    });
     updateViewHeading();
     window.scrollTo({ top: 0, behavior: "auto" });
   }
@@ -2269,6 +2423,8 @@
     setText("dbChargeCount", chargeRows);
     setText("dbBatteryCount", batteryRows + cellRows);
     setText("dbSize", formatBytes(Number(storage.databaseBytes || 0)));
+    setText("dbRawTelemetryCount", Number(storage.rawTelemetryCount || samples || 0));
+    setText("dbEmptyTelemetryCount", Number(storage.emptyTelemetryCount || 0));
     setText("dbState", dbRowCount(storage) ? `${dbRowCount(storage)} rows` : "ready");
     const last = storage.lastEventAtMs || storage.lastStartedAtMs;
     setText("dbSummaryTitle", sessions ? `${samples} samples - ${formatWhen(last)}` : "No stored sessions yet");
@@ -2283,9 +2439,9 @@
       <button type="button" class="history-row">
         <span>
           <strong>${session.mode || "session"} - ${session.adapterName || "OBD adapter"}</strong>
-          <small>${formatWhen(session.startedAtMs)} - ${session.status || "active"}</small>
+          <small>${formatWhen(session.startedAtMs)} - ${session.status || "active"} - ${Number(session.usefulSampleCount ?? session.sampleCount ?? 0)} useful</small>
         </span>
-        <b>${Number(session.sampleCount || 0)}x</b>
+        <b>${Number(session.emptySampleCount || 0) ? `${Number(session.emptySampleCount || 0)} empty` : `${Number(session.sampleCount || 0)}x`}</b>
       </button>
     `).join("");
     updateReviewUi();
@@ -2305,6 +2461,8 @@
     const interval = Number(review.avgSampleIntervalMs || 0);
     const backgroundSamples = Number(review.backgroundSampleCount || (review.latestHealth || {}).backgroundSampleCount || 0);
     const sampleGaps = Number(review.sampleGapEventCount || (review.latestHealth || {}).sampleGapCount || 0);
+    const usefulSamples = Number(review.usefulTelemetryCount || 0);
+    const emptySamples = Number(review.emptyTelemetryCount || 0);
 
     setText("reviewTitle", hasSession
       ? `${session.mode || "session"} - ${session.adapterName || "OBD adapter"}`
@@ -2315,6 +2473,8 @@
     setText("reviewInterval", interval ? formatShortDuration(interval) : "--");
     setText("reviewBackground", backgroundSamples ? `${backgroundSamples} samples` : "--");
     setText("reviewGaps", sampleGaps ? `${sampleGaps}` : "0");
+    setText("reviewUsefulSamples", usefulSamples ? `${usefulSamples}` : "--");
+    setText("reviewEmptySamples", emptySamples ? `${emptySamples}` : "0");
     setText("pidFrameTitle", frames.length ? `${frames.length} latest frames` : "Waiting for scan data");
 
     const warningList = el("reviewWarnings");
@@ -2431,7 +2591,7 @@
     const overview = storage.overview || {};
     const battery = storage.batterySummary || {};
     const charge = storage.chargeSummary || {};
-    const route = storage.latestRoute || {};
+    const route = selectedMapRoute(storage);
     const hasRows = dbRowCount(storage) > 0;
     const hasRoute = Number(route.pointCount || 0) >= 2;
     const hasCharge = Number(charge.chargeSessionCount || charge.chargingHintCount || 0) > 0;
@@ -2508,31 +2668,40 @@
 
   function renderMap() {
     const storage = state.storage || {};
-    const route = storage.latestRoute || {};
+    const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
+    if (!state.selectedMapSessionId && routes.length) {
+      state.selectedMapSessionId = (routes[0].session || {}).id || null;
+    }
+    const route = selectedMapRoute(storage);
     const points = Array.isArray(route.points) ? route.points : [];
     const hasRoute = points.length >= 2;
     const frame = el("mapFrame");
     if (frame) frame.dataset.layer = state.mapLayer;
     document.querySelectorAll("[data-map-layer]").forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.mapLayer === state.mapLayer);
+      const active = button.dataset.mapLayer === state.mapLayer;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-selected", active ? "true" : "false");
     });
     const mapCard = el("mapCard");
     if (mapCard) mapCard.classList.toggle("is-fullscreen", state.mapFull);
+    document.body.classList.toggle("map-full-active", state.mapFull);
     const fullBtn = el("mapFullBtn");
     if (fullBtn) {
       fullBtn.setAttribute("aria-pressed", state.mapFull ? "true" : "false");
-      fullBtn.textContent = state.mapFull ? "Exit" : "Full";
+      fullBtn.textContent = state.mapFull ? "Exit map" : "Full map";
     }
 
     setText("mapPointBadge", `${points.length} pts`);
-    setText("mapTitle", hasRoute ? `${formatDistance(route.distanceMeters || 0)} latest route` : "No route recorded yet");
-    setText("mapKicker", hasRoute ? "GPS map - latest session" : "GPS map");
+    const routeSession = sessionForRoute(route);
+    setText("mapTitle", hasRoute ? `${formatDistance(route.distanceMeters || 0)} route` : "No route recorded yet");
+    setText("mapKicker", hasRoute ? `GPS map - ${formatWhen(routeSession.startedAtMs)}` : "GPS map");
     setText("mapDistance", hasRoute ? formatDistance(route.distanceMeters || 0) : "--");
     const session = route.session || {};
     const duration = Number(session.endedAtMs || Date.now()) - Number(session.startedAtMs || 0);
     setText("mapDuration", hasRoute && duration > 0 ? formatDuration(duration) : "--");
     const avgAccuracy = average(points.map((p) => Number(p.accuracyM)).filter(Number.isFinite));
     setText("mapAccuracy", avgAccuracy ? `~${Math.round(avgAccuracy)}m GPS` : "--");
+    setText("mapScaleText", hasRoute ? approxMapScale(route.distanceMeters || 0) : "scale");
     const empty = el("mapEmpty");
     if (empty) empty.hidden = hasRoute;
 
@@ -2558,16 +2727,31 @@
     });
 
     const list = el("mapSessionList");
-    const sessions = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     if (list) {
-      list.innerHTML = sessions.length
-        ? sessions.map((s) => `
-          <button type="button" class="history-row">
-            <span><strong>${escapeHtml(s.mode || "session")} - ${escapeHtml(s.adapterName || "OBD adapter")}</strong><small>${formatWhen(s.startedAtMs)} - ${Number(s.sampleCount || 0)} samples</small></span>
+      list.innerHTML = routes.length
+        ? routes.map((r) => {
+          const s = sessionForRoute(r);
+          const active = String(s.id || "") === String(state.selectedMapSessionId || "");
+          return `
+          <button type="button" class="history-row ${active ? "is-active" : ""}" data-map-session="${escapeHtml(s.id || "")}">
+            <span><strong>${escapeHtml(s.mode || "session")} - ${escapeHtml(s.adapterName || "OBD adapter")}</strong><small>${formatWhen(s.startedAtMs)} - ${formatDistance(Number(r.distanceMeters || 0))} - ${Number(r.pointCount || 0)} pts</small></span>
             <b>${s.status || "stored"}</b>
-          </button>`).join("")
-        : '<p class="status-copy">No SQLite sessions yet. Start a real logged drive and the latest route will render here.</p>';
+          </button>`;
+        }).join("")
+        : '<p class="status-copy">No route-bearing SQLite sessions yet. Start a real logged drive with GPS permission and the route will render here.</p>';
     }
+  }
+
+  function selectedMapRoute(storage) {
+    const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
+    if (routes.length) {
+      return routes.find((route) => String((route.session || {}).id || "") === String(state.selectedMapSessionId || "")) || routes[0];
+    }
+    return storage.latestRoute || {};
+  }
+
+  function sessionForRoute(route) {
+    return route && route.session ? route.session : {};
   }
 
   function setCircle(id, point, visible) {
@@ -2593,14 +2777,27 @@
     if (!lats.length || !lngs.length) return null;
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
+    const midLat = (minLat + maxLat) / 2;
+    const lngScale = Math.max(0.2, Math.cos(midLat * Math.PI / 180));
+    const scaledLngs = lngs.map((lng) => lng * lngScale);
+    const minLng = Math.min(...scaledLngs);
+    const maxLng = Math.max(...scaledLngs);
     const latSpan = Math.max(0.00001, maxLat - minLat);
     const lngSpan = Math.max(0.00001, maxLng - minLng);
+    const lngValue = Number(point.lng) * lngScale;
     return {
-      x: 8 + ((Number(point.lng) - minLng) / lngSpan) * 84,
+      x: 8 + ((lngValue - minLng) / lngSpan) * 84,
       y: 92 - ((Number(point.lat) - minLat) / latSpan) * 84
     };
+  }
+
+  function approxMapScale(distanceMeters) {
+    const miles = Number(distanceMeters || 0) / 1609.344;
+    if (!Number.isFinite(miles) || miles <= 0) return "scale";
+    if (miles < 1) return "0.25 mi";
+    if (miles < 5) return "1 mi";
+    if (miles < 20) return "5 mi";
+    return "10 mi";
   }
 
   function drawScatterLite() {
@@ -2874,6 +3071,10 @@
     const acc = Number(t.accuracyM);
     setText("gpsValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
     setText("gpsDetail", Number.isFinite(acc) ? `${Math.round(acc)}m accuracy` : "location trace");
+    setText("gpsMetricValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
+    setText("gpsMetricSub", Number.isFinite(acc)
+      ? `${Math.round(acc)}m accuracy - ${t.locationAgeMs ? formatShortDuration(Number(t.locationAgeMs)) + " old" : "fresh"}`
+      : "waiting for location samples");
     setText("updatedValue", t.updatedAt ? "now" : "waiting");
     setText("rawFrames", t.raw || "Waiting for telemetry...");
     const soc = t.soc == null || t.soc === "" ? NaN : Number(t.soc);
@@ -2883,6 +3084,7 @@
     setText("packTempValue", Number.isFinite(batteryTemp) ? `${batteryTemp.toFixed(1)} deg F` : "--");
     const power = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
     setText("powerValue", Number.isFinite(power) ? `${power.toFixed(1)} kW` : "--");
+    setText("powerDetail", Number.isFinite(power) ? "observed" : "Volt PID needed");
     const pct = Number.isFinite(power) ? Math.min(50, Math.abs(power / 84) * 50) : 0;
     const fill = el("powerFill");
     fill.style.width = pct + "%";
@@ -3182,6 +3384,12 @@
       state.mapLayer = button.dataset.mapLayer;
       renderMap();
     });
+  });
+  el("mapSessionList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-map-session]");
+    if (!button) return;
+    state.selectedMapSessionId = button.dataset.mapSession;
+    renderMap();
   });
   el("mapFullBtn").addEventListener("click", () => {
     state.mapFull = !state.mapFull;
