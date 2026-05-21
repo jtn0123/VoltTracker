@@ -23,9 +23,6 @@ import static com.volttracker.obdpoc.ObdElmDecode.tail;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -38,9 +35,7 @@ import android.os.IBinder;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Locale;
 import java.util.UUID;
@@ -64,8 +59,6 @@ public class ObdService extends Service {
     public static final String EXTRA_NAME = "name";
     public static final String EXTRA_JSON = "json";
 
-    private static final String CHANNEL_ID = "volt_obd_connection";
-    private static final int NOTIFICATION_ID = 4207;
     private static final UUID ELM327_SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
     private static final long CONNECT_TIMEOUT_MS = 15000L;
     // After this many consecutive failed reconnects the OBD loop gives up; GPS keeps logging.
@@ -99,8 +92,8 @@ public class ObdService extends Service {
     private Future<?> activeTask;
     private ObdLocalStore localStore;
     private final ElmConnection connection = new ElmConnection();
-    private BufferedWriter sessionLog;
-    private File sessionLogFile;
+    private ObdSessionLog sessionLog;
+    private ObdNotifications notifications;
     private LocationTracker locationTracker;
     private String activeName = "OBD adapter";
     private long sessionStartedAtMs;
@@ -127,7 +120,9 @@ public class ObdService extends Service {
         super.onCreate();
         localStore = new ObdLocalStore(this);
         locationTracker = new LocationManagerTracker(this);
-        createNotificationChannel();
+        notifications = new ObdNotifications(this);
+        notifications.createChannel();
+        sessionLog = new ObdSessionLog(new File(getFilesDir(), "obd-logs"));
     }
 
     @Override
@@ -729,8 +724,9 @@ public class ObdService extends Service {
             payload.put("blocked", blocked);
             payload.put("adapter", activeName);
             payload.put("updatedAt", System.currentTimeMillis());
-            if (sessionLogFile != null) {
-                payload.put("logFile", sessionLogFile.getName());
+            String logFileName = sessionLog.fileName();
+            if (logFileName != null) {
+                payload.put("logFile", logFileName);
             }
         } catch (JSONException ignored) {
             // Local values are safe.
@@ -750,46 +746,23 @@ public class ObdService extends Service {
     }
 
     private void startForegroundSession(String text) {
-        Notification notification = buildNotification(text);
+        Notification notification = notifications.build(text);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             int serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
             if (hasLocationPermission()) {
                 serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
             }
-            startForeground(NOTIFICATION_ID, notification, serviceType);
+            startForeground(ObdNotifications.NOTIFICATION_ID, notification, serviceType);
             foregroundServiceActive = true;
             return;
         }
-        startForeground(NOTIFICATION_ID, notification);
+        startForeground(ObdNotifications.NOTIFICATION_ID, notification);
         foregroundServiceActive = true;
-    }
-
-    private Notification buildNotification(String text) {
-        Intent open = new Intent(this, MainActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(
-                this,
-                0,
-                open,
-                PendingIntent.FLAG_IMMUTABLE
-        );
-        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new Notification.Builder(this, CHANNEL_ID)
-                : new Notification.Builder(this);
-        return builder
-                .setSmallIcon(R.drawable.ic_stat_obd)
-                .setContentTitle("Volt Tracker OBD")
-                .setContentText(text)
-                .setContentIntent(pendingIntent)
-                .setOngoing(true)
-                .build();
     }
 
     private void updateNotification(String text) {
         logEvent("notification", "text", text);
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        if (manager != null) {
-            manager.notify(NOTIFICATION_ID, buildNotification(text));
-        }
+        notifications.post(text);
     }
 
     private void recordAppVisibility(boolean foreground) {
@@ -813,13 +786,12 @@ public class ObdService extends Service {
 
     private synchronized void openSessionLog(String mode, String address) {
         closeSessionLog();
-        File dir = new File(getFilesDir(), "obd-logs");
-        if (!dir.exists() && !dir.mkdirs()) {
+        sessionLog.open(mode);
+        if (!sessionLog.isOpen()) {
+            activeSessionId = 0L;
             return;
         }
-        sessionLogFile = new File(dir, "session-" + System.currentTimeMillis() + "-" + mode + ".jsonl");
         try {
-            sessionLog = new BufferedWriter(new FileWriter(sessionLogFile, true));
             activeMode = mode == null ? "" : mode;
             activeAddress = address == null ? "" : address;
             lastSessionState = "active";
@@ -831,10 +803,7 @@ public class ObdService extends Service {
                     sessionStartedAtMs > 0 ? sessionStartedAtMs : System.currentTimeMillis()
             );
             logEvent("session_start", "mode", mode, "adapter", activeName, "address", address == null ? "" : address);
-            writeLatestPointer(sessionLogFile);
-        } catch (IOException | RuntimeException ex) {
-            sessionLog = null;
-            sessionLogFile = null;
+        } catch (RuntimeException ex) {
             activeSessionId = 0L;
         }
     }
@@ -845,14 +814,10 @@ public class ObdService extends Service {
         String closingAddress = activeAddress;
         String closingState = lastSessionState;
         String closingDetail = lastSessionDetail;
-        if (sessionLog != null) {
-            try {
-                logEvent("session_end");
-                sessionLog.flush();
-                sessionLog.close();
-            } catch (IOException ignored) {
-            }
+        if (sessionLog.isOpen()) {
+            logEvent("session_end");
         }
+        sessionLog.close();
         if (closingSessionId > 0 && localStore != null) {
             try {
                 String status = finishStatusFor(closingState);
@@ -871,21 +836,11 @@ public class ObdService extends Service {
                 // Field logging must keep working even if DB persistence has a bad day.
             }
         }
-        sessionLog = null;
         activeSessionId = 0L;
         foregroundServiceActive = false;
         activeMode = "";
         activeAddress = "";
         currentHeader = "";
-    }
-
-    private void writeLatestPointer(File file) {
-        File pointer = new File(new File(getFilesDir(), "obd-logs"), "latest.txt");
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(pointer, false))) {
-            writer.write(file.getName());
-            writer.newLine();
-        } catch (IOException ignored) {
-        }
     }
 
     private synchronized void logCommand(String command, long timeoutMs, long durationMs, String response) {
@@ -932,22 +887,7 @@ public class ObdService extends Service {
     }
 
     private synchronized void logJson(String type, JSONObject payload) {
-        if (sessionLog == null) {
-            return;
-        }
-        JSONObject line = new JSONObject();
-        try {
-            line.put("ts", System.currentTimeMillis());
-            line.put("type", type);
-            line.put("payload", payload);
-            if (sessionLogFile != null) {
-                line.put("file", sessionLogFile.getName());
-            }
-            sessionLog.write(line.toString());
-            sessionLog.newLine();
-            sessionLog.flush();
-        } catch (IOException | JSONException ignored) {
-        }
+        sessionLog.write(type, payload);
         if (!"telemetry".equals(type) && !"status".equals(type)) {
             persistEvent(type, payload);
         }
@@ -1056,22 +996,6 @@ public class ObdService extends Service {
                 }
             });
         } catch (RejectedExecutionException ignored) {
-        }
-    }
-
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return;
-        }
-        NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID,
-                "OBD connection",
-                NotificationManager.IMPORTANCE_LOW
-        );
-        channel.setDescription("Shows while Volt Tracker is connected to an OBD adapter.");
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        if (manager != null) {
-            manager.createNotificationChannel(channel);
         }
     }
 
