@@ -1,0 +1,499 @@
+package com.volttracker.obdpoc;
+
+import com.volttracker.obdpoc.location.FilteredLocation;
+
+import static com.volttracker.obdpoc.ObdElmDecode.appendProbeLine;
+import static com.volttracker.obdpoc.ObdElmDecode.appendRaw;
+import static com.volttracker.obdpoc.ObdElmDecode.classifyVehicleState;
+import static com.volttracker.obdpoc.ObdElmDecode.classifyVehicleStateConfidence;
+import static com.volttracker.obdpoc.ObdElmDecode.friendlyConnectionMessage;
+import static com.volttracker.obdpoc.ObdElmDecode.hasElmPrompt;
+import static com.volttracker.obdpoc.ObdElmDecode.reconnectBackoffMs;
+import static com.volttracker.obdpoc.ObdElmDecode.round1;
+import static com.volttracker.obdpoc.ObdElmDecode.safeMessage;
+import static com.volttracker.obdpoc.ObdElmDecode.summarizeForStorage;
+import static com.volttracker.obdpoc.ObdElmDecode.tail;
+
+import android.annotation.SuppressLint;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.IOException;
+
+/**
+ * Runs the OBD adapter IO on the {@link ObdService} worker thread: the connect/reconnect
+ * loop, ELM327 init, the live-data poll, the diagnostic scan, and the demo stream. Command
+ * IO is serialized on {@code ObdService.ioLock} so a reconnect cannot race a session stop;
+ * connection parameters and probe lists live in {@link ObdProbes}.
+ */
+final class ObdPollingEngine {
+
+    private final ObdService service;
+    private final ElmConnection connection = new ElmConnection();
+    private final SpeedPlausibilityFilter speedFilter = new SpeedPlausibilityFilter();
+    private int sampleCount;
+    private String supportedPidsSummary = "";
+    private int backgroundSampleCount;
+    private int sampleGapCount;
+    private long lastSampleAtMs;
+    private long lastSampleGapMs;
+    private long maxSampleGapMs;
+
+    ObdPollingEngine(ObdService service) {
+        this.service = service;
+    }
+
+    /** Resets the per-session counters before a new session's loop is submitted. */
+    void beginSession(String supportedPidsSeed) {
+        sampleCount = 0;
+        resetSessionHealth();
+        speedFilter.reset();
+        supportedPidsSummary = supportedPidsSeed;
+    }
+
+    int sampleCount() {
+        return sampleCount;
+    }
+
+    String supportedPidsSummary() {
+        return supportedPidsSummary;
+    }
+
+    int backgroundSampleCount() {
+        return backgroundSampleCount;
+    }
+
+    int sampleGapCount() {
+        return sampleGapCount;
+    }
+
+    void closeSocket() {
+        connection.close();
+    }
+
+    @SuppressLint("MissingPermission")
+    void runBluetoothLoop(String address, boolean scanMode) {
+        if (address == null || address.trim().isEmpty()) {
+            service.broadcastStatus("error", "No adapter selected.", true);
+            service.closeSessionLog();
+            return;
+        }
+        if (!service.hasBluetoothConnectPermission()) {
+            service.broadcastStatus("error", "Bluetooth permission is missing.", true);
+            service.closeSessionLog();
+            return;
+        }
+
+        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        if (adapter == null || !adapter.isEnabled()) {
+            service.broadcastStatus("error", "Bluetooth is off or unavailable.", true);
+            service.closeSessionLog();
+            return;
+        }
+
+        int attempt = 0;
+        try {
+            while (service.running.get()) {
+                try {
+                    connectAndInitialize(adapter, address);
+                    if (scanMode) {
+                        runDiagnosticScan();
+                        return;
+                    }
+                    attempt = 0;
+                    service.broadcastStatus("connected",
+                            "Polling live OBD data from " + service.activeName + ".", false);
+                    service.updateNotification("Connected to " + service.activeName);
+                    pollUntilStoppedOrBroken();
+                    return; // running went false: a clean stop
+                } catch (IOException ex) {
+                    closeSocket();
+                    if (!service.running.get()) {
+                        return;
+                    }
+                    attempt += 1;
+                    if (attempt > ObdProbes.MAX_RECONNECT_ATTEMPTS) {
+                        service.recorder.logError("reconnect_exhausted", ex);
+                        service.broadcastStatus("error",
+                                "Lost the adapter link and could not reconnect after "
+                                        + ObdProbes.MAX_RECONNECT_ATTEMPTS + " tries.", true);
+                        // Give up cleanly: stopSelf() routes teardown through onDestroy ->
+                        // stopCurrentSession, which stops the GPS tracker and foreground
+                        // service rather than leaving them running with no session.
+                        service.stopSelf();
+                        return;
+                    }
+                    long backoffMs = reconnectBackoffMs(attempt);
+                    service.recorder.logEvent("reconnect", "attempt", String.valueOf(attempt),
+                            "backoffMs", String.valueOf(backoffMs), "reason", safeMessage(ex));
+                    service.broadcastStatus("connecting",
+                            "Adapter link dropped - reconnecting (" + attempt + "/"
+                                    + ObdProbes.MAX_RECONNECT_ATTEMPTS + ")...", false);
+                    sleep(backoffMs);
+                }
+            }
+        } catch (RuntimeException ex) {
+            service.recorder.logError("connection_failure", ex);
+            service.broadcastStatus("error", friendlyConnectionMessage(ex), true);
+        } finally {
+            service.recorder.logEvent("socket_closing");
+            closeSocket();
+            service.closeSessionLog();
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void connectAndInitialize(BluetoothAdapter adapter, String address) throws IOException {
+        service.broadcastStatus("connecting",
+                "Opening serial connection to " + service.activeName + "...", false);
+        if (service.hasBluetoothScanPermission()) {
+            adapter.cancelDiscovery();
+        } else {
+            service.recorder.logEvent("cancel_discovery_skipped", "reason", "missing BLUETOOTH_SCAN");
+        }
+        BluetoothDevice device = adapter.getRemoteDevice(address);
+        service.recorder.logEvent("bluetooth_socket_open", "address", address,
+                "uuid", ObdProbes.ELM327_SPP_UUID.toString());
+        connection.open(device, ObdProbes.ELM327_SPP_UUID, ObdProbes.CONNECT_TIMEOUT_MS);
+        service.recorder.logEvent("bluetooth_socket_connected", "address", address);
+        service.broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false);
+        initializeElm327();
+    }
+
+    // Polls until the session is stopped (returns) or the socket breaks (throws IOException,
+    // which the caller turns into a reconnect attempt).
+    private void pollUntilStoppedOrBroken() throws IOException {
+        while (service.running.get()) {
+            JSONObject sample = readObdSample();
+            if (sample == null || sample.length() == 0) {
+                // A non-fatal encoding glitch yielded no usable sample; skip it and keep
+                // the session polling rather than ending it on a transient issue.
+                service.recorder.logEvent("empty_sample_skipped");
+                continue;
+            }
+            service.broadcastTelemetry(sample);
+            sleep(850);
+        }
+    }
+
+    void runDemoLoop() {
+        service.broadcastStatus("connected",
+                "Demo telemetry is running without an OBD adapter.", false);
+        long start = System.currentTimeMillis();
+        while (service.running.get()) {
+            double t = (System.currentTimeMillis() - start) / 1000.0;
+            JSONObject sample = new JSONObject();
+            try {
+                sampleCount += 1;
+                sample.put("source", "demo");
+                sample.put("connected", true);
+                sample.put("adapter", service.activeName);
+                sample.put("sampleCount", sampleCount);
+                sample.put("sessionMs", Math.max(0, System.currentTimeMillis() - service.sessionStartedAtMs));
+                sample.put("supportedPids", supportedPidsSummary);
+                sample.put("vehicleState", "demo-preview");
+                sample.put("speedKph", Math.max(0, Math.round(54 + 23 * Math.sin(t / 3.4))));
+                sample.put("rpm", Math.round(1260 + 420 * Math.sin(t / 2.1)));
+                sample.put("coolantC", Math.round(82 + 4 * Math.sin(t / 8.0)));
+                sample.put("loadPct", Math.round(34 + 18 * Math.sin(t / 4.4)));
+                sample.put("throttlePct", Math.round(18 + 14 * Math.sin(t / 2.7)));
+                sample.put("voltage", round1(13.8 + 0.2 * Math.sin(t / 5.0)));
+                sample.put("soc", Math.max(13.4, round1(77.8 - t * 0.01)));
+                sample.put("batteryTemp", round1(24.0 + Math.sin(t / 8.0)));
+                sample.put("powerKw", round1(16.0 + Math.sin(t / 2.2) * 12.0));
+                sample.put("updatedAt", System.currentTimeMillis());
+                appendSessionHealth(sample);
+                sample.put("raw", "demo");
+            } catch (JSONException ignored) {
+                // Local numeric values are safe.
+            }
+            service.broadcastTelemetry(sample);
+            sleep(1000);
+        }
+    }
+
+    private void initializeElm327() throws IOException {
+        sendCommand("ATZ", 3200);
+        sendCommand("ATE0", 1400);
+        sendCommand("ATL0", 1400);
+        sendCommand("ATS0", 1400);
+        sendCommand("ATH0", 1400);
+        sendCommand("ATAT1", 1400);
+        sendCommand("ATST64", 1400);
+        sendCommand("ATSP0", 1800);
+        String supportedPids = sendCommand("0100", 9000);
+        if (hasElmPrompt(supportedPids)) {
+            supportedPidsSummary = ObdProtocol.summarize(supportedPids);
+            service.recorder.logEvent("protocol_probe_success", "command", "0100",
+                    "response", supportedPidsSummary);
+        }
+        if (!hasElmPrompt(supportedPids)) {
+            service.recorder.logEvent("protocol_probe_no_prompt", "command", "0100",
+                    "response", ObdProtocol.summarize(supportedPids));
+            sendEscape(600);
+            sendCommand("ATPC", 1400);
+            sendCommand("ATSP6", 1400);
+            supportedPids = sendCommand("0100", 9000);
+            if (hasElmPrompt(supportedPids)) {
+                supportedPidsSummary = ObdProtocol.summarize(supportedPids);
+                service.recorder.logEvent("protocol_probe_success", "command", "0100_after_ATSP6",
+                        "response", supportedPidsSummary);
+            }
+            if (!hasElmPrompt(supportedPids)) {
+                service.recorder.logEvent("protocol_probe_no_prompt", "command",
+                        "0100_after_ATSP6", "response", ObdProtocol.summarize(supportedPids));
+                sendEscape(600);
+                sendCommand("ATPC", 1400);
+                sendCommand("ATSP0", 1400);
+            }
+        }
+    }
+
+    private void runDiagnosticScan() throws IOException {
+        service.broadcastStatus("scanning",
+                "Running protocol, PID, VIN, DTC, and live-data probes...", false);
+        service.updateNotification("Scanning " + service.activeName);
+
+        StringBuilder raw = new StringBuilder();
+        appendProbeLine(raw, "adapter", service.activeName);
+        probeCommand("ATI", 1800, raw);
+        probeCommand("ATDP", 1800, raw);
+        probeCommand("ATDPN", 1800, raw);
+        probeCommand("ATRV", 1800, raw);
+
+        for (String protocol : ObdProbes.PROTOCOL_PROBES) {
+            probeCommand(protocol, 1800, raw);
+            for (String capability : ObdProbes.CAPABILITY_PROBES) {
+                probeCommand(capability, "0100".equals(capability) ? 9000 : 3500, raw);
+            }
+            probeCommand("0902", 6000, raw);
+            probeCommand("03", 3500, raw);
+        }
+
+        // The protocol sweep above leaves the adapter on the last probe (ATSP8), which is
+        // the wrong CAN protocol for this car. Restore auto-detect so the live-data and
+        // Volt PID probes below run on the vehicle's real protocol instead of CAN ERROR.
+        appendProbeLine(raw, "volt-discovery", "restore auto protocol for live + Volt probes");
+        probeCommand("ATSP0", 1800, raw);
+        probeCommand("0100", 9000, raw);
+
+        for (String probe : ObdProbes.LIVE_PROBES) {
+            probeCommand(probe, 3200, raw);
+        }
+
+        appendProbeLine(raw, "volt-discovery", "ATSH7E4 battery and charger probes");
+        probeCommand("ATSH7E4", 1800, raw);
+        for (String probe : ObdProbes.VOLT_7E4_PROBES) {
+            probeCommand(probe, 4200, raw);
+        }
+        appendProbeLine(raw, "volt-discovery", "ATSH7E1 pack voltage and current probes");
+        probeCommand("ATSH7E1", 1800, raw);
+        for (String probe : ObdProbes.VOLT_7E1_PROBES) {
+            probeCommand(probe, 4200, raw);
+        }
+        probeCommand("ATSH7DF", 1800, raw);
+
+        JSONObject sample = new JSONObject();
+        try {
+            sample.put("source", "scan");
+            sample.put("connected", true);
+            sample.put("adapter", service.activeName);
+            sample.put("updatedAt", System.currentTimeMillis());
+            appendLocation(sample);
+            sample.put("raw", tail(raw.toString(), 7200));
+        } catch (JSONException ignored) {
+            // Local values are safe.
+        }
+        service.broadcastTelemetry(sample);
+        service.broadcastStatus("scan-complete",
+                "Diagnostic scan complete. You can disconnect and bring the phone back for the log.",
+                false);
+        service.updateNotification("Scan complete for " + service.activeName);
+    }
+
+    // Throws IOException when the adapter socket has broken so the caller can reconnect.
+    private JSONObject readObdSample() throws IOException {
+        JSONObject sample = new JSONObject();
+        String raw = "";
+        try {
+            String voltageRaw = sendRecoverableCommand("ATRV", 1500);
+            raw = appendRaw(raw, "ATRV", voltageRaw);
+            Float voltage = ObdProtocol.parseVoltage(voltageRaw);
+            if (voltage != null) {
+                sample.put("voltage", voltage);
+            }
+            String speedRaw = sendRecoverableCommand("010D", 1500);
+            raw = appendRaw(raw, "010D", speedRaw);
+            Integer speed = ObdProtocol.parseSpeedKph(speedRaw);
+            boolean chargeTransitionHint = ObdProtocol.hasMaxSpeedSentinel(speedRaw);
+            Integer acceptedSpeed = null;
+            if (speed != null && speedFilter.accept(speed, System.currentTimeMillis())) {
+                sample.put("speedKph", speed);
+                acceptedSpeed = speed;
+            } else if (speed != null) {
+                sample.put("speedRejectedKph", speed);
+                service.recorder.logEvent("speed_rejected", "speedKph", String.valueOf(speed));
+            } else if (chargeTransitionHint) {
+                sample.put("speedRejectedKph", 255);
+                sample.put("chargeTransitionHint", true);
+                service.recorder.logEvent("speed_rejected", "speedKph", "255",
+                        "reason", "charge_transition_hint");
+            }
+            String rpmRaw = sendRecoverableCommand("010C", 1500);
+            raw = appendRaw(raw, "010C", rpmRaw);
+            Float rpm = ObdProtocol.parseRpm(rpmRaw);
+            if (rpm != null) {
+                sample.put("rpm", Math.round(rpm));
+            }
+            String coolantRaw = sendRecoverableCommand("0105", 1500);
+            raw = appendRaw(raw, "0105", coolantRaw);
+            Integer coolant = ObdProtocol.parseCoolantC(coolantRaw);
+            if (coolant != null) {
+                sample.put("coolantC", coolant);
+            }
+            String loadRaw = sendRecoverableCommand("0104", 1500);
+            raw = appendRaw(raw, "0104", loadRaw);
+            Integer load = ObdProtocol.parseEngineLoadPct(loadRaw);
+            if (load != null) {
+                sample.put("loadPct", load);
+            }
+            String throttleRaw = sendRecoverableCommand("0111", 1500);
+            raw = appendRaw(raw, "0111", throttleRaw);
+            Integer throttle = ObdProtocol.parseThrottlePct(throttleRaw);
+            if (throttle != null) {
+                sample.put("throttlePct", throttle);
+            }
+            String socRaw = sendRecoverableCommand("015B", 1500);
+            raw = appendRaw(raw, "015B", socRaw);
+            Integer soc = ObdProtocol.parseStateOfChargePct(socRaw);
+            if (soc != null) {
+                sample.put("soc", soc);
+            }
+
+            sampleCount += 1;
+            sample.put("source", "obd");
+            sample.put("connected", true);
+            sample.put("adapter", service.activeName);
+            sample.put("sampleCount", sampleCount);
+            sample.put("sessionMs", Math.max(0, System.currentTimeMillis() - service.sessionStartedAtMs));
+            sample.put("supportedPids", supportedPidsSummary);
+            sample.put("vehicleState",
+                    classifyVehicleState(voltage, acceptedSpeed, rpm, load, chargeTransitionHint));
+            sample.put("vehicleStateConfidence",
+                    classifyVehicleStateConfidence(voltage, acceptedSpeed, rpm, chargeTransitionHint));
+            sample.put("updatedAt", System.currentTimeMillis());
+            appendSessionHealth(sample);
+            appendLocation(sample);
+            sample.put("raw", raw.trim());
+        } catch (JSONException ex) {
+            // Local numeric values are safe; an encoding error is non-fatal, keep polling.
+            service.recorder.logError("sample_encoding_error", ex);
+        }
+        return sample;
+    }
+
+    private void appendLocation(JSONObject sample) throws JSONException {
+        FilteredLocation location =
+                service.locationTracker == null ? null : service.locationTracker.getLastLocation();
+        if (location == null) {
+            return;
+        }
+        sample.put("latitude", location.latitude);
+        sample.put("longitude", location.longitude);
+        if (location.accuracyM != null) {
+            sample.put("accuracyM", location.accuracyM);
+        }
+        if (location.speedMps != null) {
+            sample.put("gpsSpeedMps", location.speedMps);
+        }
+        if (location.bearingDeg != null) {
+            sample.put("bearingDeg", location.bearingDeg);
+        }
+        if (location.provider != null) {
+            sample.put("provider", location.provider);
+            sample.put("locationProvider", location.provider);
+        }
+        sample.put("locationAgeMs", Math.max(0L, System.currentTimeMillis() - location.fixTimeMs));
+    }
+
+    private void resetSessionHealth() {
+        synchronized (service.ioLock) {
+            backgroundSampleCount = 0;
+            sampleGapCount = 0;
+            lastSampleAtMs = 0L;
+            lastSampleGapMs = 0L;
+            maxSampleGapMs = 0L;
+        }
+    }
+
+    private void appendSessionHealth(JSONObject sample) throws JSONException {
+        synchronized (service.ioLock) {
+            long now = sample.optLong("updatedAt", System.currentTimeMillis());
+            long gapMs = lastSampleAtMs > 0L ? Math.max(0L, now - lastSampleAtMs) : 0L;
+            if (gapMs > 0L) {
+                lastSampleGapMs = gapMs;
+                maxSampleGapMs = Math.max(maxSampleGapMs, gapMs);
+                long expectedGapMs = "demo".equals(service.recorder.activeMode()) ? 3500L : 6000L;
+                if (gapMs > expectedGapMs) {
+                    sampleGapCount += 1;
+                    service.recorder.logEvent("sample_gap", "gapMs", String.valueOf(gapMs),
+                            "mode", service.recorder.activeMode());
+                }
+            }
+            lastSampleAtMs = now;
+            if (!service.appInForeground) {
+                backgroundSampleCount += 1;
+            }
+            sample.put("appForeground", service.appInForeground);
+            sample.put("foregroundServiceActive", service.foregroundServiceActive);
+            sample.put("backgroundSampleCount", backgroundSampleCount);
+            sample.put("sampleGapCount", sampleGapCount);
+            sample.put("lastSampleGapMs", lastSampleGapMs);
+            sample.put("maxSampleGapMs", maxSampleGapMs);
+        }
+    }
+
+    private String probeCommand(String command, long timeoutMs, StringBuilder raw) throws IOException {
+        String response = sendRecoverableCommand(command, timeoutMs);
+        appendProbeLine(raw, command, summarizeForStorage(command, response));
+        return response;
+    }
+
+    private String sendRecoverableCommand(String command, long timeoutMs) throws IOException {
+        String response = sendCommand(command, timeoutMs);
+        if (!hasElmPrompt(response)) {
+            service.recorder.logEvent("command_no_prompt_recovery", "command", command,
+                    "response", ObdProtocol.summarize(response));
+            sendEscape(700);
+        }
+        return response;
+    }
+
+    private String sendCommand(String command, long timeoutMs) throws IOException {
+        synchronized (service.ioLock) {
+            long startedAt = System.currentTimeMillis();
+            String rawResponse = connection.transact(command, timeoutMs, service.running::get);
+            service.recorder.logCommand(command, timeoutMs,
+                    System.currentTimeMillis() - startedAt, rawResponse);
+            return rawResponse;
+        }
+    }
+
+    private void sendEscape(long settleMs) throws IOException {
+        synchronized (service.ioLock) {
+            connection.sendEscape(settleMs);
+            service.recorder.logEvent("elm_escape_sent", "settleMs", String.valueOf(settleMs));
+        }
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
