@@ -158,6 +158,40 @@ public class ObdProtocolTest {
         assertEquals("%", v.unit);
     }
 
+    // ---- parsePackPowerKw (HV pack power for the live poll) -------------------------
+
+    @Test
+    public void packPowerKwFromRealCaptures() {
+        // Session 15 scan captures: 222429 -> 0x5806/64 = 352.09 V,
+        // 222414 -> 0x004E/20 = 3.9 A. Power = V * A / 1000.
+        Double powerKw = ObdProtocol.parsePackPowerKw("6224295806", "622414004E");
+        assertNotNull(powerKw);
+        assertEquals(1.373, powerKw, 0.01);
+    }
+
+    @Test
+    public void packPowerKwIsNegativeWhenCharging() {
+        // Charge current decodes negative (0xFDA8 -> -30 A), so pack power follows suit.
+        Double powerKw = ObdProtocol.parsePackPowerKw("6224295A00", "622414FDA8");
+        assertNotNull(powerKw);
+        assertEquals(-10.8, powerKw, 0.01);
+    }
+
+    @Test
+    public void packPowerKwIsNullWhenAFrameIsMissing() {
+        assertNull(ObdProtocol.parsePackPowerKw("6224295806", "NO DATA"));
+        assertNull(ObdProtocol.parsePackPowerKw("CAN ERROR", "622414004E"));
+        assertNull(ObdProtocol.parsePackPowerKw(null, "622414004E"));
+    }
+
+    @Test
+    public void batteryTemperatureFromRealCapture() {
+        // Session 15 scan capture: 22434F -> 0x43(67) - 40 = 27 deg C.
+        ParsedPidValue temp = ObdProtocol.parseKnownValue("22434F", "62434F43");
+        assertNotNull(temp);
+        assertEquals(27.0, temp.valueNumeric, 0.001);
+    }
+
     // ---- Error and noise handling: must return null, never throw --------------------
 
     @Test
@@ -213,6 +247,17 @@ public class ObdProtocolTest {
     public void summarizeStripsControlCharacters() {
         assertEquals("410C1880", ObdProtocol.summarize("410C1880\r\n>"));
         assertEquals("", ObdProtocol.summarize(null));
+    }
+
+    @Test
+    public void cleanSupportedPidsStripsElmSearchingNoise() {
+        // The ELM prints "SEARCHING..." glued onto the first 4100 frame while it
+        // auto-detects the protocol; only the capability frames belong in the field.
+        assertEquals("4100BE7FB813 410080000001",
+                ObdProtocol.cleanSupportedPids("SEARCHING...4100BE7FB813\r410080000001\r>"));
+        assertEquals("4100BE7FB813", ObdProtocol.cleanSupportedPids("4100BE7FB813\r>"));
+        assertEquals("", ObdProtocol.cleanSupportedPids("SEARCHING...\r>"));
+        assertEquals("", ObdProtocol.cleanSupportedPids(null));
     }
 
     @Test

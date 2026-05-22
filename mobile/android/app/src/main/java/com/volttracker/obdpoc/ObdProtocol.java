@@ -100,6 +100,20 @@ final class ObdProtocol {
                 .trim();
     }
 
+    /**
+     * Cleans an 0100-style capability response for storage in the supported-PID field.
+     * {@link #summarize} only strips line endings and the prompt; while the ELM327
+     * auto-detects the protocol it also emits the "SEARCHING..." status word inline —
+     * and glued straight onto — the first {@code 4100} frame. That token is noise here,
+     * so strip it and collapse the whitespace, leaving only the capability frames.
+     */
+    static String cleanSupportedPids(String response) {
+        return summarize(response)
+                .replaceAll("(?i)SEARCHING\\.*", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
     static ParsedPidValue parseKnownValue(String command, String response) {
         String cleanCommand = command == null ? "" : command.trim().toUpperCase(Locale.US);
         if ("ATRV".equals(cleanCommand)) {
@@ -168,6 +182,21 @@ final class ObdProtocol {
             return energy == null ? null : value("last charge energy", energy, "Wh", 0);
         }
         return null;
+    }
+
+    /**
+     * HV pack power in kW from the Volt mode-22 pack-voltage (222429) and pack-current
+     * (222414) responses. Discharge current is decoded as positive, so discharge power
+     * is positive. Returns null if either frame is missing or malformed.
+     */
+    static Double parsePackPowerKw(String voltageResponse, String currentResponse) {
+        ParsedPidValue voltage = parseKnownValue("222429", voltageResponse);
+        ParsedPidValue current = parseKnownValue("222414", currentResponse);
+        if (voltage == null || voltage.valueNumeric == null
+                || current == null || current.valueNumeric == null) {
+            return null;
+        }
+        return voltage.valueNumeric * current.valueNumeric / 1000.0;
     }
 
     private static int[] mode01Bytes(String response, String pid, int expectedBytes) {

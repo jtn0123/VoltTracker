@@ -103,6 +103,19 @@ final class ObdElmDecode {
         return Math.min(30000L, base);
     }
 
+    /**
+     * Backoff before retrying the initial connect, before any link was ever established.
+     * Quicker and gentler than {@link #reconnectBackoffMs}: a first-attempt RFCOMM glitch
+     * retries almost immediately, and a genuinely asleep car exhausts its tries fast
+     * instead of stalling the user through ~90 s of exponential backoff.
+     */
+    static long initialConnectBackoffMs(int attempt) {
+        if (attempt < 1) {
+            return 0L;
+        }
+        return Math.min(3000L, 500L * attempt);
+    }
+
     static String classifyVehicleState(Float voltage, Integer speed, Float rpm, Integer load, boolean chargeTransitionHint) {
         boolean stationary = speed == null || speed == 0;
         boolean engineOff = rpm == null || rpm < 80;
@@ -140,10 +153,14 @@ final class ObdElmDecode {
         if ("error".equals(state) || "blocked".equals(state)) {
             return ObdLocalStore.STATUS_ERROR;
         }
-        if ("idle".equals(state)) {
-            return ObdLocalStore.STATUS_DISCONNECTED;
+        // "complete" means the session actually reached the adapter. A teardown while
+        // still "connecting"/"initializing" — e.g. the user retried before the link
+        // came up — never connected, so it falls through to "disconnected" below.
+        if ("connected".equals(state) || "scanning".equals(state)
+                || "scan-complete".equals(state)) {
+            return ObdLocalStore.STATUS_COMPLETE;
         }
-        return ObdLocalStore.STATUS_COMPLETE;
+        return ObdLocalStore.STATUS_DISCONNECTED;
     }
 
     static String friendlyConnectionMessage(Exception ex) {

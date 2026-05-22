@@ -8,6 +8,7 @@ import static com.volttracker.obdpoc.ObdElmDecode.classifyVehicleState;
 import static com.volttracker.obdpoc.ObdElmDecode.classifyVehicleStateConfidence;
 import static com.volttracker.obdpoc.ObdElmDecode.friendlyConnectionMessage;
 import static com.volttracker.obdpoc.ObdElmDecode.hasElmPrompt;
+import static com.volttracker.obdpoc.ObdElmDecode.initialConnectBackoffMs;
 import static com.volttracker.obdpoc.ObdElmDecode.reconnectBackoffMs;
 import static com.volttracker.obdpoc.ObdElmDecode.round1;
 import static com.volttracker.obdpoc.ObdElmDecode.safeMessage;
@@ -95,10 +96,14 @@ final class ObdPollingEngine {
         }
 
         int attempt = 0;
+        // Distinguishes a never-established link from a mid-session drop: the wording
+        // and backoff differ, since "reconnecting" makes no sense before a first connect.
+        boolean everConnected = false;
         try {
             while (service.running.get()) {
                 try {
                     connectAndInitialize(adapter, address);
+                    everConnected = true;
                     if (scanMode) {
                         runDiagnosticScan();
                         return;
@@ -117,21 +122,31 @@ final class ObdPollingEngine {
                     attempt += 1;
                     if (attempt > ObdProbes.MAX_RECONNECT_ATTEMPTS) {
                         service.recorder.logError("reconnect_exhausted", ex);
-                        service.broadcastStatus("error",
-                                "Lost the adapter link and could not reconnect after "
-                                        + ObdProbes.MAX_RECONNECT_ATTEMPTS + " tries.", true);
+                        service.broadcastStatus("error", everConnected
+                                ? "Lost the adapter link and could not reconnect after "
+                                        + ObdProbes.MAX_RECONNECT_ATTEMPTS + " tries."
+                                : "Could not reach " + service.activeName + " after "
+                                        + ObdProbes.MAX_RECONNECT_ATTEMPTS
+                                        + " tries. Make sure the car is awake and the "
+                                        + "adapter is plugged in.", true);
                         // Give up cleanly: stopSelf() routes teardown through onDestroy ->
                         // stopCurrentSession, which stops the GPS tracker and foreground
                         // service rather than leaving them running with no session.
                         service.stopSelf();
                         return;
                     }
-                    long backoffMs = reconnectBackoffMs(attempt);
+                    long backoffMs = everConnected
+                            ? reconnectBackoffMs(attempt)
+                            : initialConnectBackoffMs(attempt);
                     service.recorder.logEvent("reconnect", "attempt", String.valueOf(attempt),
-                            "backoffMs", String.valueOf(backoffMs), "reason", safeMessage(ex));
-                    service.broadcastStatus("connecting",
-                            "Adapter link dropped - reconnecting (" + attempt + "/"
-                                    + ObdProbes.MAX_RECONNECT_ATTEMPTS + ")...", false);
+                            "backoffMs", String.valueOf(backoffMs), "reason", safeMessage(ex),
+                            "everConnected", String.valueOf(everConnected));
+                    service.broadcastStatus("connecting", everConnected
+                            ? "Adapter link dropped - reconnecting (" + attempt + "/"
+                                    + ObdProbes.MAX_RECONNECT_ATTEMPTS + ")..."
+                            : "Couldn't reach " + service.activeName + " - retrying ("
+                                    + attempt + "/" + ObdProbes.MAX_RECONNECT_ATTEMPTS
+                                    + ")...", false);
                     sleep(backoffMs);
                 }
             }
@@ -226,7 +241,7 @@ final class ObdPollingEngine {
         sendCommand("ATSP0", 1800);
         String supportedPids = sendCommand("0100", 9000);
         if (hasElmPrompt(supportedPids)) {
-            supportedPidsSummary = ObdProtocol.summarize(supportedPids);
+            supportedPidsSummary = ObdProtocol.cleanSupportedPids(supportedPids);
             service.recorder.logEvent("protocol_probe_success", "command", "0100",
                     "response", supportedPidsSummary);
         }
@@ -238,7 +253,7 @@ final class ObdPollingEngine {
             sendCommand("ATSP6", 1400);
             supportedPids = sendCommand("0100", 9000);
             if (hasElmPrompt(supportedPids)) {
-                supportedPidsSummary = ObdProtocol.summarize(supportedPids);
+                supportedPidsSummary = ObdProtocol.cleanSupportedPids(supportedPids);
                 service.recorder.logEvent("protocol_probe_success", "command", "0100_after_ATSP6",
                         "response", supportedPidsSummary);
             }
@@ -371,6 +386,30 @@ final class ObdPollingEngine {
             Integer soc = ObdProtocol.parseStateOfChargePct(socRaw);
             if (soc != null) {
                 sample.put("soc", soc);
+            }
+
+            // Volt HV pack metrics (battery temp, pack power) live on dedicated ECUs
+            // reached via ATSH headers — see ObdProbes.VOLT_7E1_PROBES / VOLT_7E4_PROBES.
+            // Restore the functional header (7DF) afterwards so the next cycle's mode-01
+            // PIDs still broadcast to every ECU. A thrown IOException ends the poll and
+            // the reconnect re-runs initializeElm327 (ATSP0), so the header self-heals.
+            sendCommand("ATSH7E1", 1500);
+            String packVoltageRaw = sendRecoverableCommand("222429", 1500);
+            raw = appendRaw(raw, "222429", packVoltageRaw);
+            String packCurrentRaw = sendRecoverableCommand("222414", 1500);
+            raw = appendRaw(raw, "222414", packCurrentRaw);
+            sendCommand("ATSH7E4", 1500);
+            String batteryTempRaw = sendRecoverableCommand("22434F", 1500);
+            raw = appendRaw(raw, "22434F", batteryTempRaw);
+            sendCommand("ATSH7DF", 1500);
+            ObdProtocol.ParsedPidValue batteryTemp =
+                    ObdProtocol.parseKnownValue("22434F", batteryTempRaw);
+            if (batteryTemp != null && batteryTemp.valueNumeric != null) {
+                sample.put("batteryTemp", round1(batteryTemp.valueNumeric));
+            }
+            Double powerKw = ObdProtocol.parsePackPowerKw(packVoltageRaw, packCurrentRaw);
+            if (powerKw != null) {
+                sample.put("powerKw", round1(powerKw));
             }
 
             sampleCount += 1;

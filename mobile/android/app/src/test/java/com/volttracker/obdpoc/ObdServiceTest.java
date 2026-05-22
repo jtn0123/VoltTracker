@@ -123,6 +123,20 @@ public class ObdServiceTest {
         assertEquals(ObdLocalStore.STATUS_ERROR, ObdElmDecode.finishStatusFor("blocked"));
         assertEquals(ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor("idle"));
         assertEquals(ObdLocalStore.STATUS_COMPLETE, ObdElmDecode.finishStatusFor("connected"));
+        assertEquals(ObdLocalStore.STATUS_COMPLETE, ObdElmDecode.finishStatusFor("scanning"));
+        assertEquals(ObdLocalStore.STATUS_COMPLETE, ObdElmDecode.finishStatusFor("scan-complete"));
+    }
+
+    @Test
+    public void finishStatusIsNotCompleteForSessionThatNeverConnected() {
+        // Regression: a session torn down while still connecting — e.g. the user tapped
+        // Connect again before the link came up — never reached the adapter, so it must
+        // not be recorded as "complete". It was, because "complete" was the catch-all.
+        assertEquals(ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor("connecting"));
+        assertEquals(ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor("initializing"));
+        assertEquals(ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor("active"));
+        assertEquals(ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor(""));
+        assertEquals(ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor(null));
     }
 
     // ---- friendlyConnectionMessage -------------------------------------------------
@@ -180,5 +194,28 @@ public class ObdServiceTest {
     public void reconnectBackoffIsZeroForNonPositiveAttempts() {
         assertEquals(0L, ObdElmDecode.reconnectBackoffMs(0));
         assertEquals(0L, ObdElmDecode.reconnectBackoffMs(-3));
+    }
+
+    // ---- initialConnectBackoffMs ---------------------------------------------------
+
+    @Test
+    public void initialConnectBackoffIsQuickAndCapped() {
+        assertEquals(0L, ObdElmDecode.initialConnectBackoffMs(0));
+        assertEquals(0L, ObdElmDecode.initialConnectBackoffMs(-1));
+        assertEquals(500L, ObdElmDecode.initialConnectBackoffMs(1));
+        assertEquals(1000L, ObdElmDecode.initialConnectBackoffMs(2));
+        assertEquals(3000L, ObdElmDecode.initialConnectBackoffMs(6));
+        assertEquals(3000L, ObdElmDecode.initialConnectBackoffMs(100));
+    }
+
+    @Test
+    public void initialConnectBackoffIsNeverSlowerThanReconnectBackoff() {
+        // The first connect has no link to "drop"; it should retry faster than a
+        // mid-session reconnect so a transient RFCOMM glitch recovers quickly.
+        for (int attempt = 1; attempt <= ObdProbes.MAX_RECONNECT_ATTEMPTS; attempt++) {
+            assertTrue("attempt " + attempt,
+                    ObdElmDecode.initialConnectBackoffMs(attempt)
+                            <= ObdElmDecode.reconnectBackoffMs(attempt));
+        }
     }
 }
