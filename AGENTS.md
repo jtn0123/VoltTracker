@@ -1,8 +1,23 @@
 # VoltTracker Development Guidelines
 
+This repository is the **Volt Tracker Android app** (`mobile/android/`). The
+former Flask/PostgreSQL web receiver has been deprecated and moved to `archive/`
+— do not work on it unless explicitly asked.
+
 ## Testing
 
-- **Test Location**: All tests must be in the `/tests` directory at the project root. Do not create test files inside the `receiver/` package.
-- **Test Command**: `SECRET_KEY=test pytest tests/ --cov=receiver --cov-report=term-missing`
-- **Coverage Threshold**: Minimum 80% (CI enforced), target 90%+
-- **Virtual Environment**: Use `.venv` - activate with `source .venv/bin/activate`
+- **Test Location**: `mobile/android/app/src/test/java/com/volttracker/obdpoc/`.
+  Do not create test files outside this directory.
+- **Test Command**: `cd mobile/android && ./gradlew :app:testDebugUnitTest`
+  (on Windows use `.\gradlew.bat`).
+- **Style**: Pure JVM + Robolectric for the SQLite layer — no instrumented tests.
+
+## Building
+
+- **Build**: `cd mobile/android && ./gradlew :app:assembleDebug`
+- **Install**: `./gradlew :app:installDebug` (or `adb install -r`)
+- **Dashboard**: `assets/dashboard/index.html` is generated — edit the partials in
+  `app/src/main/dashboard-src/partials/*.html`, then run
+  `./gradlew generateDashboardHtml`. Never hand-edit the generated file.
+
+See `CLAUDE.md` for full details.
