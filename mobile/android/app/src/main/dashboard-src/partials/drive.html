@@ -1,4 +1,13 @@
 <section id="view-drive" class="view is-active" data-view="drive">
+  <!-- Session chip strip — mirrors the Map tab's drive picker. Morphs between
+       Idle / Connecting / Recording / Demo and adds a "Last drive" jump-to-map
+       chip when there's history. Same .map-drive-chips visual vocabulary. -->
+  <div
+    id="driveNowChips"
+    class="map-drive-chips drive-now-chips"
+    aria-label="Drive session status"
+  ></div>
+
   <section class="hero">
     <!-- C3: speed+power cluster announces value changes politely so screen
          readers see "stale" / unit changes without barging into other UI. -->
@@ -14,6 +23,18 @@
           <span id="speedKph" class="speed-unit-sub">-- km/h</span>
         </div>
       </div>
+
+      <!-- Live speed trace — same .scrub-chart styling as the Map scrubber.
+           The "now" cursor is pinned to the right edge; new samples push the
+           trace leftward. Rendered by drive.js as an SVG. -->
+      <div
+        id="liveTraceChart"
+        class="scrub-chart live-trace-chart"
+        aria-hidden="true"
+      >
+        <div class="scrub-cursor live-trace-cursor"></div>
+      </div>
+
       <div class="power-block">
         <div class="power-head">
           <div class="power-label">
@@ -52,33 +73,71 @@
       <div class="meter battery-meter"><span id="driveSocMeter"></span></div>
     </article>
 
-    <div class="mini-grid">
-      <article class="panel mini">
-        <div class="kicker">RPM</div>
+    <!-- Live readout — same .scrub-readout pattern as the Map scrubber: 6
+         compact cells, monospace tabular-nums, color-coded kickers. Replaces
+         the old .mini-grid + .drive-signal-grid clutter. -->
+    <div
+      id="liveReadout"
+      class="scrub-readout live-readout panel"
+      role="group"
+      aria-label="Live OBD signals"
+    >
+      <div>
+        <span class="kicker" style="color: #ff7a45">RPM</span>
         <strong id="rpmValue">--</strong>
-        <small>engine speed</small>
-      </article>
-      <article class="panel mini">
-        <div class="kicker">Voltage</div>
+      </div>
+      <div>
+        <span class="kicker" style="color: #8b94ad">Volts</span>
         <strong id="voltageValue">--</strong>
-        <small>adapter reported</small>
-      </article>
-      <article class="panel mini">
-        <div class="kicker">Coolant</div>
+      </div>
+      <div>
+        <span class="kicker" style="color: #ffb84a">Coolant</span>
         <strong id="coolantValue">--</strong>
-        <small>mode 01 05</small>
-      </article>
-      <article class="panel mini">
-        <div class="kicker">Throttle</div>
+      </div>
+      <div>
+        <span class="kicker" style="color: #b8e63b">Throttle</span>
         <strong id="throttleValue">--</strong>
-        <small>mode 01 11</small>
-      </article>
-      <article class="panel mini is-wide">
-        <div class="kicker">GPS</div>
+      </div>
+      <div>
+        <span class="kicker" style="color: #b8e63b">Load</span>
+        <strong id="loadValue">--</strong>
+      </div>
+      <div>
+        <span class="kicker" style="color: #a48cff">GPS</span>
         <strong id="gpsValue">--</strong>
-        <small id="gpsDetail">location trace</small>
-      </article>
+      </div>
     </div>
+
+    <!-- Two small SVG charts mirroring the scrubber's track styling. Power
+         bars +/- around zero; SOC trace falls over the current session. -->
+    <section class="live-microcharts">
+      <article class="panel live-micro">
+        <header>
+          <span class="kicker">Power last 60s</span>
+          <span
+            id="powerMicroTag"
+            class="micro-tag"
+            data-tone="idle"
+            data-kind="power"
+            >kW</span
+          >
+        </header>
+        <div id="powerBarsChart" class="live-trace-chart"></div>
+      </article>
+      <article class="panel live-micro">
+        <header>
+          <span class="kicker">SOC this session</span>
+          <span
+            id="socMicroTag"
+            class="micro-tag"
+            data-tone="idle"
+            data-kind="soc"
+            >%</span
+          >
+        </header>
+        <div id="socTraceChart" class="live-trace-chart"></div>
+      </article>
+    </section>
   </section>
 
   <article class="panel connect-card">
@@ -141,19 +200,6 @@
     </div>
   </article>
 
-  <section class="drive-signal-grid">
-    <article class="panel metric">
-      <header><span>Load</span><span>01 04</span></header>
-      <strong id="loadValue">--</strong>
-      <div class="meter"><span id="loadMeter"></span></div>
-    </article>
-    <article class="panel metric">
-      <header><span>GPS</span><span>route</span></header>
-      <strong id="gpsMetricValue">--</strong>
-      <small id="gpsMetricSub">waiting for location samples</small>
-    </article>
-  </section>
-
   <section class="summary-grid">
     <article class="panel metric demo-only" hidden>
       <header><span>Pack</span><span>Health</span></header>
@@ -210,17 +256,17 @@
     </div>
   </article>
 
-  <article class="panel validation-card">
-    <div class="card-head">
+  <details class="panel validation-card validation-collapse">
+    <summary class="card-head">
       <div>
-        <span class="kicker">Test confidence</span>
+        <span class="kicker">Health</span>
         <h3>Live validation</h3>
       </div>
       <span class="badge"
         ><span class="dot"></span
         ><span id="validationSummary">waiting</span></span
       >
-    </div>
+    </summary>
     <div class="validation-list">
       <div id="validateObd" class="validation-row" data-tone="warn">
         <span
@@ -253,21 +299,7 @@
         ><b>manual</b>
       </div>
     </div>
-  </article>
-
-  <article class="panel trace-card">
-    <div class="card-head">
-      <div>
-        <div class="kicker">Last 24 seconds</div>
-        <h3>Speed trace</h3>
-      </div>
-      <span class="badge"
-        ><span class="dot"></span><span id="updatedValue">waiting</span></span
-      >
-    </div>
-    <!-- The numeric speed is already announced via #speedValue above; the trace is decorative. -->
-    <canvas id="speedCanvas" aria-hidden="true" role="presentation"></canvas>
-  </article>
+  </details>
 
   <section class="real-overview-grid non-demo-only">
     <article class="panel metric">

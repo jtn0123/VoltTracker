@@ -873,3 +873,316 @@
     font-size: 10.5px;
     color: var(--muted);
   }
+
+  /* Drive-tab polish ──────────────────────────────────────────────────────────
+     Reuses .map-drive-chips / .scrub-chart / .scrub-readout vocabulary from the
+     Map tab so the Drive screen feels like the same product. */
+
+  /* Top session chip strip. Inherits the .map-drive-chips horizontal scroll-snap
+     behavior; this rule just tightens the vertical rhythm and adds a recording
+     pulse to the active chip. */
+  .drive-now-chips {
+    margin-bottom: 4px;
+  }
+
+  .drive-now-chip {
+    flex: 0 0 auto;
+    min-width: 158px;
+    padding: 10px 13px;
+    text-align: left;
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    background: rgba(16, 18, 22, 0.85);
+    color: var(--text);
+    scroll-snap-align: start;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .drive-now-chip .dl {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 750;
+  }
+
+  .drive-now-chip .dl u {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--soft);
+    box-shadow: 0 0 8px rgba(116, 117, 130, 0.6);
+  }
+
+  .drive-now-chip .dm {
+    display: flex;
+    gap: 8px;
+    margin-top: 5px;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .drive-now-chip .dm b {
+    color: var(--text);
+    font-weight: 700;
+  }
+
+  .drive-now-chip[data-tone="live"] {
+    border-color: var(--volt);
+    background: rgba(255, 122, 69, 0.18);
+    box-shadow: 0 6px 14px rgba(255, 122, 69, 0.18);
+  }
+
+  .drive-now-chip[data-tone="live"] .dl u {
+    background: var(--volt);
+    box-shadow: 0 0 10px rgba(255, 122, 69, 0.7);
+    animation: drive-chip-pulse 1.6s ease-in-out infinite;
+  }
+
+  .drive-now-chip[data-tone="ok"] .dl u {
+    background: var(--ok);
+    box-shadow: 0 0 8px rgba(53, 230, 160, 0.55);
+  }
+
+  .drive-now-chip[data-tone="demo"] {
+    border-color: rgba(184, 230, 59, 0.45);
+    background: rgba(184, 230, 59, 0.1);
+  }
+
+  .drive-now-chip[data-tone="demo"] .dl u {
+    background: #b8e63b;
+    box-shadow: 0 0 8px rgba(184, 230, 59, 0.55);
+  }
+
+  /* "Last drive" chip is a button that jumps to Map; keep it visually quieter
+     than the live status chip but with the same shape. */
+  button.drive-now-chip {
+    cursor: pointer;
+    font: inherit;
+  }
+
+  button.drive-now-chip:hover,
+  button.drive-now-chip:focus-visible {
+    border-color: rgba(255, 122, 69, 0.55);
+  }
+
+  @keyframes drive-chip-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.55; transform: scale(0.78); }
+  }
+
+  /* Live trace charts inside the Drive tab. Same .scrub-chart styling, but
+     these aren't draggable — disable the resize cursor + pointer events so
+     pulling on them doesn't feel like a broken control. */
+  .live-trace-chart {
+    cursor: default;
+    touch-action: auto;
+    margin-top: 10px;
+    min-height: 86px;
+    user-select: text;
+  }
+
+  .live-trace-chart .scrub-cursor {
+    pointer-events: none;
+  }
+
+  /* "Now" cursor pinned to the right edge — the live trace flows in from the
+     right, so the cursor marks the most recent sample. Animate left so newly
+     arriving samples don't feel jumpy. */
+  .live-trace-cursor {
+    left: 100%;
+    transition: opacity 0.2s ease;
+  }
+
+  .live-trace-cursor::before {
+    background: var(--volt);
+    box-shadow: 0 0 8px rgba(255, 122, 69, 0.55);
+  }
+
+  /* Six-cell readout panel under the live card. Inherits .scrub-readout for
+     monospace tabular-nums + center-aligned values, then we add panel chrome. */
+  .live-readout {
+    margin: 0;
+    padding: 4px 0;
+    border-top: 0;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  /* Small-screen fallback: six columns get cramped under ~390px so wrap into 3. */
+  @media (max-width: 390px) {
+    .live-readout {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .live-readout div:nth-child(3n) {
+      border-right: 0;
+    }
+  }
+
+  /* Micro-charts row — power bars + SOC trace. */
+  .live-microcharts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  @media (max-width: 390px) {
+    .live-microcharts {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .live-micro {
+    padding: 12px 14px;
+  }
+
+  .live-micro header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  /* Live current-value chip in the micro-card headers. Tone is set by
+     renderPowerMicroHeader / renderSocMicroHeader and drives the color so the
+     value reads as a fresh "right now" callout, not just a unit label. */
+  .live-micro .micro-tag {
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.04);
+    transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+  }
+
+  .live-micro .micro-tag[data-kind="power"][data-tone="drive"] {
+    color: var(--volt);
+    background: rgba(255, 122, 69, 0.12);
+    border-color: rgba(255, 122, 69, 0.4);
+  }
+  .live-micro .micro-tag[data-kind="power"][data-tone="regen"] {
+    color: var(--ev);
+    background: rgba(184, 230, 59, 0.12);
+    border-color: rgba(184, 230, 59, 0.4);
+  }
+  .live-micro .micro-tag[data-kind="power"][data-tone="coast"] {
+    color: var(--soft);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .live-micro .micro-tag[data-kind="soc"][data-tone="ok"] {
+    color: var(--ok);
+    background: rgba(53, 230, 160, 0.12);
+    border-color: rgba(53, 230, 160, 0.4);
+  }
+  .live-micro .micro-tag[data-kind="soc"][data-tone="warn"] {
+    color: var(--warn);
+    background: rgba(255, 184, 74, 0.12);
+    border-color: rgba(255, 184, 74, 0.4);
+  }
+  .live-micro .micro-tag[data-kind="soc"][data-tone="idle"] {
+    color: #a48cff;
+    background: rgba(164, 140, 255, 0.1);
+  }
+
+  /* Power kW value colored by drive/regen/coast — matches the existing power
+     meter fill so the value reads at a glance without having to read the
+     state pill on the right. */
+  .power-label strong {
+    color: var(--text);
+    transition: color 0.18s ease;
+  }
+  .power-block:has(.power-state[data-state="drive"]) .power-label strong {
+    color: var(--volt);
+  }
+  .power-block:has(.power-state[data-state="regen"]) .power-label strong {
+    color: var(--ev);
+  }
+  .power-block:has(.power-state[data-state="coast"]) .power-label strong {
+    color: var(--soft);
+  }
+
+  /* Tighten the speed value's radial glow from a wide blob into a tight
+     halo, so it reads as a highlight rather than competing with the digit. */
+  .speed-row::after {
+    left: -8px;
+    width: 138px;
+    top: 4px;
+    bottom: 4px;
+    background: radial-gradient(
+      54px 38px at 60px 50%,
+      rgba(255, 122, 69, 0.32),
+      transparent 75%
+    );
+  }
+
+  /* Speed-trace cap label sits in the SVG; this readout chip surfaces the
+     max + current cap below the chart in a more legible chip. Falls back
+     gracefully because the field is updated only when samples exist. */
+  .live-trace-chart {
+    overflow: hidden;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  /* Slight bump on the live-readout cells so values breathe — the 4px 0
+     baseline was too cramped on mid-density phones. */
+  .live-readout div {
+    padding: 9px 4px;
+  }
+  .live-readout .kicker {
+    font-size: 9px;
+    letter-spacing: 0.05em;
+  }
+  .live-readout strong {
+    font-size: 13.5px;
+  }
+
+  /* Collapsed-by-default validation card. The summary stays as the regular
+     .card-head, with a small disclosure caret tucked into the badge so the
+     control discoverable but quiet. */
+  .validation-collapse {
+    padding-bottom: 14px;
+  }
+
+  .validation-collapse > summary {
+    list-style: none;
+    cursor: pointer;
+    /* Stretch summary to fill the panel padding so the whole row is tappable. */
+    margin: -14px -14px 0;
+    padding: 14px 14px;
+    border-radius: 16px;
+  }
+
+  .validation-collapse > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .validation-collapse > summary > div .kicker {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Replace the native disclosure marker with a chevron in the kicker so the
+     toggle reads as a button without taking extra space. */
+  .validation-collapse > summary > div .kicker::after {
+    content: "▾";
+    color: var(--soft);
+    font-size: 10px;
+    transition: transform 0.2s ease;
+  }
+
+  .validation-collapse[open] > summary > div .kicker::after {
+    transform: rotate(180deg);
+  }
+
+  .validation-collapse > .validation-list {
+    margin-top: 12px;
+  }

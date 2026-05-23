@@ -11,9 +11,9 @@
   // place so partials and CSS stay in sync.
   const LIVE_TILE_IDS = [
     "speedValue", "speedKph", "rpmValue", "voltageValue", "coolantValue",
-    "loadValue", "throttleValue", "gpsValue", "gpsDetail", "gpsMetricValue",
-    "gpsMetricSub", "updatedValue", "socValue", "rangeValue", "packTempValue",
-    "driveSocValue", "drivePackTempValue", "powerValue"
+    "loadValue", "throttleValue", "gpsValue", "updatedValue", "socValue",
+    "rangeValue", "packTempValue", "driveSocValue", "drivePackTempValue",
+    "powerValue"
   ];
   // C6: how long (ms) since the last accepted sample before we mark tiles stale.
   const STALE_THRESHOLD_MS = 3000;
@@ -100,6 +100,12 @@
       raw: ""
     };
     state.speedHistory = [];
+    state.powerHistory = [];
+    state.socHistory = [];
+    state.sessionStartSoc = null;
+    state.sessionDistanceM = 0;
+    state.sessionLastLat = null;
+    state.sessionLastLng = null;
     state.lastSampleAt = 0;
     applyStaleIndicator();
   }
@@ -245,6 +251,50 @@
       // because we push exactly one sample per call.
       if (state.speedHistory.length > 48) state.speedHistory.shift();
     }
+    // Drive-tab live charts: power bars and SOC trace. Same fixed-window
+    // discipline as the speed history.
+    const power = Number(sample.powerKw);
+    if (Number.isFinite(power)) {
+      state.powerHistory.push(power);
+      if (state.powerHistory.length > 60) state.powerHistory.shift();
+    }
+    const soc = Number(sample.soc);
+    if (Number.isFinite(soc)) {
+      // Capture the session-start SOC so the "Δ since session" chip on the
+      // SOC micro-card always points at a stable baseline, independent of
+      // whatever recent window the chart happens to be showing.
+      if (!Number.isFinite(state.sessionStartSoc)) state.sessionStartSoc = soc;
+      // Push every sample (no value-change throttle): keeping the latest
+      // sample in history at all times means the chart and the "Δ" chip
+      // can never disagree, and the fixed cap below bounds memory. The old
+      // 0.1% threshold caused a stale-trace bug where the chart didn't
+      // include the current SOC and looked like it was rising while the
+      // delta said falling. Cap is 240 entries → ~4 min @ 1 Hz which is
+      // plenty for a "current trend" widget.
+      state.socHistory.push(soc);
+      if (state.socHistory.length > 240) state.socHistory.shift();
+    }
+    // Running session distance, ticked off accepted GPS samples.
+    const lat = Number(sample.latitude);
+    const lon = Number(sample.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      if (
+        Number.isFinite(state.sessionLastLat) &&
+        Number.isFinite(state.sessionLastLng)
+      ) {
+        const step = VD.haversineMetersJs(
+          state.sessionLastLat,
+          state.sessionLastLng,
+          lat,
+          lon
+        );
+        // Reject tiny GPS jitter and very large jumps (likely a fix
+        // reacquisition) so the distance counter stays honest.
+        if (step >= 2 && step < 250) state.sessionDistanceM += step;
+      }
+      state.sessionLastLat = lat;
+      state.sessionLastLng = lon;
+    }
     scheduleRender();
   }
 
@@ -258,8 +308,9 @@
 
   function flushRender() {
     // updateLiveUi() already calls renderOperationalState() + updateValidationUi()
-    // (see below), so the rAF burst is just these two — keep them in lockstep with
-    // the tail of updateLiveUi() if either ever needs to call something new.
+    // (see below) plus renderDriveLive() at its tail, so the rAF burst is just
+    // these two — keep them in lockstep with the tail of updateLiveUi() if
+    // either ever needs to call something new.
     updateLiveUi();
     drawTrace();
   }
@@ -298,29 +349,27 @@
     VD.setText("speedValue", mph);
     VD.setText("speedKph", Number.isFinite(kph) ? `${Math.round(kph)} km/h` : "-- km/h");
     VD.setText("rpmValue", t.rpm ? `${t.rpm}` : "--");
-    VD.setText("voltageValue", t.voltage ? `${Number(t.voltage).toFixed(1)}V` : "--");
-    VD.setText("coolantValue", t.coolantC != null ? `${t.coolantC} deg C` : "--");
+    VD.setText("voltageValue", t.voltage ? `${Number(t.voltage).toFixed(1)} V` : "--");
+    VD.setText("coolantValue", t.coolantC != null ? `${t.coolantC} °C` : "--");
     VD.setText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
     VD.setText("throttleValue", t.throttlePct != null ? `${t.throttlePct}%` : "--");
     const lat = Number(t.latitude);
     const lon = Number(t.longitude);
     const acc = Number(t.accuracyM);
     VD.setText("gpsValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
-    VD.setText("gpsDetail", Number.isFinite(acc) ? `${Math.round(acc)}m accuracy` : "location trace");
-    VD.setText("gpsMetricValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
-    VD.setText("gpsMetricSub", Number.isFinite(acc)
-      ? `${Math.round(acc)}m accuracy - ${t.locationAgeMs ? formatShortDuration(Number(t.locationAgeMs)) + " old" : "fresh"}`
-      : "waiting for location samples");
+    // gpsDetail / gpsMetricValue / gpsMetricSub all disappeared with the old
+    // .mini-grid + .drive-signal-grid; the GPS chip in .live-readout now
+    // carries the same signal in the unified scrub-readout style.
     VD.setText("updatedValue", t.updatedAt ? "now" : "waiting");
     VD.setText("rawFrames", t.raw || "Waiting for telemetry...");
     const soc = t.soc == null || t.soc === "" ? NaN : Number(t.soc);
     VD.setText("socValue", Number.isFinite(soc) ? `${soc.toFixed(1)}%` : "--");
     VD.setText("rangeValue", "--");
     const batteryTemp = t.batteryTemp == null || t.batteryTemp === "" ? NaN : Number(t.batteryTemp);
-    VD.setText("packTempValue", Number.isFinite(batteryTemp) ? `${batteryTemp.toFixed(1)} deg C` : "--");
+    VD.setText("packTempValue", Number.isFinite(batteryTemp) ? `${batteryTemp.toFixed(1)} °C` : "--");
     VD.setText("driveSocValue", Number.isFinite(soc) ? `${Math.round(soc)}%` : "--");
     VD.setMeter("driveSocMeter", Number.isFinite(soc) ? soc : 0);
-    VD.setText("drivePackTempValue", Number.isFinite(batteryTemp) ? `${Math.round(batteryTemp)} deg C` : "--");
+    VD.setText("drivePackTempValue", Number.isFinite(batteryTemp) ? `${Math.round(batteryTemp)} °C` : "--");
     const power = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
     VD.setText("powerValue", Number.isFinite(power) ? `${power.toFixed(1)} kW` : "--");
     const powerState = !Number.isFinite(power) ? "coast"
@@ -344,6 +393,10 @@
     updateDiagnostics();
     updateValidationUi();
     applyStaleIndicator();
+    // Drive-tab chip strip + micro-charts. Driven from updateLiveUi so every
+    // path that refreshes the dashboard (setAppState, scheduled render,
+    // setDemoActive) also keeps the Drive polish in sync.
+    if (typeof VD.renderDriveLive === "function") VD.renderDriveLive();
   }
 
   function updateDiagnostics() {

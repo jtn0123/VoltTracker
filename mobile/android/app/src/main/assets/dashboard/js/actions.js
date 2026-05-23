@@ -362,6 +362,9 @@
   VD.loadTrips();
   VD.loadInsights();
   VD.drawTrace();
+  // Initial paint of the Drive-tab live polish — without this the session chip
+  // strip + micro-charts stay empty until the first telemetry sample arrives.
+  if (typeof VD.renderDriveLive === "function") VD.renderDriveLive();
   refreshDevices();
   refreshStorage();
   if (!bridge) VD.loadSampleData();

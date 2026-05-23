@@ -6,11 +6,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
+// Drive-tab gpsDetail / gpsMetricValue / gpsMetricSub were retired when the
+// live readout strip replaced the old .mini-grid + .drive-signal-grid layout
+// (see drive.html). Keep this list in lockstep with LIVE_TILE_IDS in
+// telemetry.js.
 const STALE_TILE_IDS = [
   'speedValue', 'speedKph', 'rpmValue', 'voltageValue', 'coolantValue',
-  'loadValue', 'throttleValue', 'gpsValue', 'gpsDetail', 'gpsMetricValue',
-  'gpsMetricSub', 'updatedValue', 'socValue', 'rangeValue', 'packTempValue',
-  'driveSocValue', 'drivePackTempValue', 'powerValue',
+  'loadValue', 'throttleValue', 'gpsValue', 'updatedValue', 'socValue',
+  'rangeValue', 'packTempValue', 'driveSocValue', 'drivePackTempValue',
+  'powerValue',
 ];
 
 describe('C6 stale-tile indicator', () => {

@@ -114,6 +114,19 @@
     selectedMapSessionId: null,
     status: {},
     speedHistory: [],
+    // Drive-tab live charts: power bars (last ~60s) and SOC trace across the
+    // current session. Capped lengths to keep render cheap.
+    powerHistory: [],
+    socHistory: [],
+    // Captured the first time SOC is observed in a session. Anchors the
+    // "Δ since session start" chip on the SOC micro-card so it stays honest
+    // even after the rolling-window socHistory has rotated out the start.
+    sessionStartSoc: null,
+    // Running session distance in meters, derived from haversine-stepped GPS
+    // samples. Reset on session start; surfaced in the Drive "Recording" chip.
+    sessionDistanceM: 0,
+    sessionLastLat: null,
+    sessionLastLng: null,
     // Tracked by telemetry.js for the C6 BT-disconnected stale-data indicator.
     lastSampleAt: 0,
     // C1: latest telemetry render is throttled via requestAnimationFrame; this
@@ -256,6 +269,12 @@
       raw: ""
     };
     state.speedHistory = [];
+    state.powerHistory = [];
+    state.socHistory = [];
+    state.sessionStartSoc = null;
+    state.sessionDistanceM = 0;
+    state.sessionLastLat = null;
+    state.sessionLastLng = null;
   }
 
   function renderTrips() {
