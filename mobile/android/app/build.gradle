@@ -2,6 +2,26 @@ plugins {
     id "com.android.application"
 }
 
+apply plugin: "com.diffplug.spotless"
+
+spotless {
+    java {
+        target "src/main/java/**/*.java", "src/test/java/**/*.java"
+        googleJavaFormat("1.22.0").aosp()
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+    format "dashboard", {
+        target "src/main/assets/dashboard/**/*.{js,css,html}",
+               "src/main/dashboard-src/**/*.html"
+        targetExclude "src/main/assets/dashboard/lib/**", "src/main/assets/dashboard/index.html"
+        prettier("3.2.5")
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
 android {
     namespace "com.volttracker.obdpoc"
     compileSdk 36
@@ -58,15 +78,30 @@ android {
             returnDefaultValues = true
             includeAndroidResources = true
         }
+        unitTests.all {
+            jacoco.includeNoLocationClasses = true
+            jacoco.excludes = ["jdk.internal.*"]
+        }
+    }
+
+    lint {
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
+        warningsAsErrors = false
+        checkDependencies = true
+        htmlReport = true
+        xmlReport = true
     }
 }
+
+apply from: "jacoco.gradle"
 
 dependencies {
     // FileProvider, for handing the data-backup file to the Android share sheet.
     implementation "androidx.core:core:1.13.1"
     testImplementation "junit:junit:4.13.2"
     // Real org.json implementation; the android.jar stub returns no-op defaults in unit tests.
-    testImplementation "org.json:json:20231013"
+    testImplementation "org.json:json:20240303"
     // Robolectric runs the real Android SQLite layer on the JVM for ObdLocalStore tests.
     testImplementation "org.robolectric:robolectric:4.14.1"
 }

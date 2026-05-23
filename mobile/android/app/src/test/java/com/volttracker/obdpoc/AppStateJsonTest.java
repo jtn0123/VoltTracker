@@ -13,9 +13,18 @@ public class AppStateJsonTest {
 
     @Test
     public void buildFillsDefaultsWhenSnapshotsAreEmpty() throws JSONException {
-        JSONObject payload = new JSONObject(AppStateJson.build(
-                "1.2.3", false, false, false, "", "",
-                new JSONObject(), new JSONObject(), new JSONObject()));
+        JSONObject payload =
+                new JSONObject(
+                        AppStateJson.build(
+                                "1.2.3",
+                                false,
+                                false,
+                                false,
+                                "",
+                                "",
+                                new JSONObject(),
+                                new JSONObject(),
+                                new JSONObject()));
 
         assertEquals("1.2.3", payload.getJSONObject("app").getString("version"));
         JSONObject permissions = payload.getJSONObject("permissions");
@@ -35,9 +44,18 @@ public class AppStateJsonTest {
         telemetry.put("longitude", -71.0);
         telemetry.put("vehicleState", "driving");
 
-        JSONObject payload = new JSONObject(AppStateJson.build(
-                "9.9", true, true, true, "00:11:22:33:44:55", "OBDLink",
-                telemetry, new JSONObject(), new JSONObject()));
+        JSONObject payload =
+                new JSONObject(
+                        AppStateJson.build(
+                                "9.9",
+                                true,
+                                true,
+                                true,
+                                "00:11:22:33:44:55",
+                                "OBDLink",
+                                telemetry,
+                                new JSONObject(),
+                                new JSONObject()));
 
         assertEquals("locked", payload.getJSONObject("gps").getString("state"));
         assertEquals("driving", payload.getJSONObject("vehicle").getString("state"));
@@ -49,9 +67,18 @@ public class AppStateJsonTest {
         JSONObject status = new JSONObject();
         status.put("state", "connected");
 
-        JSONObject payload = new JSONObject(AppStateJson.build(
-                "1.0", true, true, true, "00:11:22:33:44:55", "OBDLink",
-                new JSONObject(), status, new JSONObject()));
+        JSONObject payload =
+                new JSONObject(
+                        AppStateJson.build(
+                                "1.0",
+                                true,
+                                true,
+                                true,
+                                "00:11:22:33:44:55",
+                                "OBDLink",
+                                new JSONObject(),
+                                status,
+                                new JSONObject()));
 
         JSONObject adapter = payload.getJSONObject("adapter");
         assertTrue(adapter.getBoolean("remembered"));

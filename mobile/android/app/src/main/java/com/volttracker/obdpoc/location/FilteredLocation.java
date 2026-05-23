@@ -14,9 +14,17 @@ public final class FilteredLocation {
     public final Long elapsedRealtimeNanos;
     public final String provider;
 
-    public FilteredLocation(double latitude, double longitude, Double accuracyM, Double altitudeM,
-                            Double speedMps, Double bearingDeg, long fixTimeMs, Long locationAgeMs,
-                            Long elapsedRealtimeNanos, String provider) {
+    public FilteredLocation(
+            double latitude,
+            double longitude,
+            Double accuracyM,
+            Double altitudeM,
+            Double speedMps,
+            Double bearingDeg,
+            long fixTimeMs,
+            Long locationAgeMs,
+            Long elapsedRealtimeNanos,
+            String provider) {
         this.latitude = latitude;
         this.longitude = longitude;
         this.accuracyM = accuracyM;

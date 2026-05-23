@@ -4,14 +4,13 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.os.Build;
-
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Centralizes the runtime-permission handling for {@link MainActivity}: requesting the
- * Bluetooth, location, and notification permissions the OBD service needs and reporting
- * which are currently granted. Extracted so the SDK-version branching lives in one place.
+ * Centralizes the runtime-permission handling for {@link MainActivity}: requesting the Bluetooth,
+ * location, and notification permissions the OBD service needs and reporting which are currently
+ * granted. Extracted so the SDK-version branching lives in one place.
  */
 final class PermissionGate {
 

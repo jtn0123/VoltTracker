@@ -21,8 +21,7 @@ public final class StatusEventRecord {
             String state,
             String detail,
             boolean blocked,
-            String payload
-    ) {
+            String payload) {
         this.id = id;
         this.sessionId = sessionId;
         this.occurredAtMs = occurredAtMs;

@@ -30,8 +30,7 @@ public final class AdapterHistoryRecord {
             String lastMode,
             String lastStatus,
             String supportedPids,
-            String lastEventDetail
-    ) {
+            String lastEventDetail) {
         this.adapterKey = nonNull(adapterKey);
         this.address = nonNull(address);
         this.name = nonNull(name);

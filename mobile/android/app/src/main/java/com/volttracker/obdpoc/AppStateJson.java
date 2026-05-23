@@ -4,18 +4,24 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
- * Assembles the {@code setAppState} JSON payload pushed to the dashboard from the
- * latest telemetry, status, and storage snapshots. Extracted from {@link MainActivity}
- * as a pure function so the payload shape stays unit-testable.
+ * Assembles the {@code setAppState} JSON payload pushed to the dashboard from the latest telemetry,
+ * status, and storage snapshots. Extracted from {@link MainActivity} as a pure function so the
+ * payload shape stays unit-testable.
  */
 final class AppStateJson {
 
-    private AppStateJson() {
-    }
+    private AppStateJson() {}
 
-    static String build(String version, boolean bluetoothReady, boolean locationGranted,
-                         boolean notificationsGranted, String lastAddress, String lastName,
-                         JSONObject telemetry, JSONObject status, JSONObject storage) {
+    static String build(
+            String version,
+            boolean bluetoothReady,
+            boolean locationGranted,
+            boolean notificationsGranted,
+            String lastAddress,
+            String lastName,
+            JSONObject telemetry,
+            JSONObject status,
+            JSONObject storage) {
         JSONObject payload = new JSONObject();
         try {
             JSONObject app = new JSONObject();
@@ -30,8 +36,12 @@ final class AppStateJson {
             payload.put("permissions", permissions);
 
             JSONObject adapter = new JSONObject();
-            adapter.put("name", MainActivity.coalesce(
-                    telemetry.optString("adapter", ""), status.optString("adapter", ""), lastName));
+            adapter.put(
+                    "name",
+                    MainActivity.coalesce(
+                            telemetry.optString("adapter", ""),
+                            status.optString("adapter", ""),
+                            lastName));
             adapter.put("address", MainActivity.redactAddress(lastAddress));
             adapter.put("remembered", lastAddress != null && !lastAddress.trim().isEmpty());
             adapter.put("connected", MainActivity.isConnectedState(status.optString("state", "")));
@@ -50,8 +60,11 @@ final class AppStateJson {
 
             JSONObject vehicle = new JSONObject();
             vehicle.put("state", telemetry.optString("vehicleState", "unknown"));
-            vehicle.put("confidence", telemetry.optString("vehicleStateConfidence",
-                    telemetry.has("vehicleState") ? "observed" : "unknown"));
+            vehicle.put(
+                    "confidence",
+                    telemetry.optString(
+                            "vehicleStateConfidence",
+                            telemetry.has("vehicleState") ? "observed" : "unknown"));
             vehicle.put("vinStored", false);
             payload.put("vehicle", vehicle);
 
@@ -68,7 +81,9 @@ final class AppStateJson {
 
             JSONObject lifecycle = new JSONObject();
             lifecycle.put("appForeground", telemetry.optBoolean("appForeground", true));
-            lifecycle.put("foregroundServiceActive", telemetry.optBoolean("foregroundServiceActive", false));
+            lifecycle.put(
+                    "foregroundServiceActive",
+                    telemetry.optBoolean("foregroundServiceActive", false));
             lifecycle.put("backgroundSampleCount", telemetry.optInt("backgroundSampleCount", 0));
             lifecycle.put("sampleGapCount", telemetry.optInt("sampleGapCount", 0));
             lifecycle.put("lastSampleGapMs", telemetry.optLong("lastSampleGapMs", 0L));

@@ -4,13 +4,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import org.junit.Test;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import org.junit.Test;
 
 /** Drives {@link ElmConnection#transact} against in-memory streams — no Bluetooth needed. */
 public class ElmConnectionTest {
@@ -30,8 +29,9 @@ public class ElmConnectionTest {
 
     @Test
     public void transactReturnsImmediatelyWhenKeepWaitingIsFalse() throws IOException {
-        ElmConnection connection = new ElmConnection(
-                new ByteArrayInputStream(new byte[0]), new ByteArrayOutputStream());
+        ElmConnection connection =
+                new ElmConnection(
+                        new ByteArrayInputStream(new byte[0]), new ByteArrayOutputStream());
 
         long start = System.currentTimeMillis();
         String response = connection.transact("010C", 10_000L, () -> false);

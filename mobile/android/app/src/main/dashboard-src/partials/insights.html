@@ -1,90 +1,113 @@
-  <section id="view-insights" class="view" data-view="insights">
-    <article class="panel diagnostic-report-card non-demo-only">
-      <header class="diagnostic-report-head">
-        <div>
-          <span class="kicker">Check engine</span>
-          <h3 id="dtcTitle">No car-code scan yet</h3>
-        </div>
-        <span id="dtcReportBadge" class="session-badge">ready</span>
-      </header>
-      <div class="dtc-action-row">
-        <button type="button" data-action="scan" class="scan">Scan car codes</button>
-        <button type="button" data-nav-jump="settings">Debug logs</button>
-      </div>
-      <div class="dtc-status-grid">
-        <div><span>Codes</span><strong id="dtcTotalCount">0</strong></div>
-        <div><span>Current/stored</span><strong id="dtcStoredCount">0</strong></div>
-        <div><span>Pending</span><strong id="dtcPendingCount">0</strong></div>
-        <div><span>Permanent</span><strong id="dtcPermanentCount">0</strong></div>
-        <div><span>Freeze-frame</span><strong id="dtcFreezeCount">0</strong></div>
-        <div><span>Last seen</span><strong id="dtcLastSeen">--</strong></div>
-      </div>
-      <div id="dtcList" class="dtc-list">
-        <p class="status-copy">Current, pending, permanent, and freeze-frame results will appear here after a scan.</p>
-      </div>
-    </article>
-
-    <article id="insightsEmptyState" class="panel empty-state non-demo-only">
-      <span class="kicker">Insights</span>
-      <h2>Waiting for enough real data.</h2>
-      <p>Live OBD values are available now; pack health, cell watch, savings, and monthly insights need stored history before they should appear here.</p>
-    </article>
-    <article class="panel ratio-card non-demo-only">
-      <div id="realPackRing" class="ring" style="--v:0"><strong id="realPackValue">--</strong></div>
+<section id="view-insights" class="view" data-view="insights">
+  <article class="panel diagnostic-report-card non-demo-only">
+    <header class="diagnostic-report-head">
       <div>
-        <span class="kicker">HV pack</span>
-        <h2 id="realPackTitle">Waiting for battery samples.</h2>
-        <p id="realPackCopy" class="status-copy">SOC, power, and pack health will stay unknown until those PIDs are validated and stored.</p>
+        <span class="kicker">Check engine</span>
+        <h3 id="dtcTitle">No car-code scan yet</h3>
       </div>
-    </article>
-
-    <article class="panel non-demo-only" id="insightStatsCard">
-      <header>
-        <div>
-          <span class="kicker">Lifetime totals</span>
-          <h3>From your logged drives</h3>
-        </div>
-      </header>
-      <div class="state-grid" aria-label="Lifetime driving totals">
-        <div><span>Trips</span><strong id="insightTripCount">--</strong></div>
-        <div><span>Distance</span><strong id="insightTotalDistance">--</strong></div>
-        <div><span>Drive time</span><strong id="insightDriveTime">--</strong></div>
-        <div><span>Top speed</span><strong id="insightTopSpeed">--</strong></div>
-        <div><span>Longest trip</span><strong id="insightLongest">--</strong></div>
-        <div><span>GPS trips</span><strong id="insightGpsTrips">--</strong></div>
-      </div>
-    </article>
-
-    <article class="panel list-card non-demo-only">
-      <header>
-        <span class="kicker">Maintenance</span>
-      </header>
-      <div id="maintenanceList" class="maintenance-list"></div>
-    </article>
-    <article class="panel ratio-card demo-only" hidden>
-      <div class="ring" style="--v:91"><strong>91%</strong></div>
+      <span id="dtcReportBadge" class="session-badge">ready</span>
+    </header>
+    <div class="dtc-action-row">
+      <button type="button" data-action="scan" class="scan">
+        Scan car codes
+      </button>
+      <button type="button" data-nav-jump="settings">Debug logs</button>
+    </div>
+    <div class="dtc-status-grid">
+      <div><span>Codes</span><strong id="dtcTotalCount">0</strong></div>
       <div>
-        <span class="kicker">HV pack</span>
-        <h2>Capacity looks healthy.</h2>
-        <p class="status-copy">16.8 kWh estimated usable, 8.7% loss, 684 cycles, cell 47 on watch.</p>
+        <span>Current/stored</span><strong id="dtcStoredCount">0</strong>
       </div>
-    </article>
+      <div><span>Pending</span><strong id="dtcPendingCount">0</strong></div>
+      <div><span>Permanent</span><strong id="dtcPermanentCount">0</strong></div>
+      <div><span>Freeze-frame</span><strong id="dtcFreezeCount">0</strong></div>
+      <div><span>Last seen</span><strong id="dtcLastSeen">--</strong></div>
+    </div>
+    <div id="dtcList" class="dtc-list">
+      <p class="status-copy">
+        Current, pending, permanent, and freeze-frame results will appear here
+        after a scan.
+      </p>
+    </div>
+  </article>
 
-    <article class="panel list-card demo-only" hidden>
-      <header>
-        <div>
-          <span class="kicker">Cell voltage - 96 cells</span>
-          <h3>Delta 18 mV</h3>
-        </div>
-        <span class="badge"><span class="dot"></span><span>cell 47</span></span>
-      </header>
-      <div id="cellGrid" class="cell-grid"></div>
-    </article>
+  <article id="insightsEmptyState" class="panel empty-state non-demo-only">
+    <span class="kicker">Insights</span>
+    <h2>Waiting for enough real data.</h2>
+    <p>
+      Live OBD values are available now; pack health, cell watch, savings, and
+      monthly insights need stored history before they should appear here.
+    </p>
+  </article>
+  <article class="panel ratio-card non-demo-only">
+    <div id="realPackRing" class="ring" style="--v: 0">
+      <strong id="realPackValue">--</strong>
+    </div>
+    <div>
+      <span class="kicker">HV pack</span>
+      <h2 id="realPackTitle">Waiting for battery samples.</h2>
+      <p id="realPackCopy" class="status-copy">
+        SOC, power, and pack health will stay unknown until those PIDs are
+        validated and stored.
+      </p>
+    </div>
+  </article>
 
-    <article class="panel list-card demo-only" hidden>
-      <header>
-        <span class="kicker">What changed this month</span>
-      </header>
-      <div id="insightList" class="insight-list"></div>
-    </article>
-  </section>
+  <article class="panel non-demo-only" id="insightStatsCard">
+    <header>
+      <div>
+        <span class="kicker">Lifetime totals</span>
+        <h3>From your logged drives</h3>
+      </div>
+    </header>
+    <div class="state-grid" aria-label="Lifetime driving totals">
+      <div><span>Trips</span><strong id="insightTripCount">--</strong></div>
+      <div>
+        <span>Distance</span><strong id="insightTotalDistance">--</strong>
+      </div>
+      <div>
+        <span>Drive time</span><strong id="insightDriveTime">--</strong>
+      </div>
+      <div><span>Top speed</span><strong id="insightTopSpeed">--</strong></div>
+      <div>
+        <span>Longest trip</span><strong id="insightLongest">--</strong>
+      </div>
+      <div><span>GPS trips</span><strong id="insightGpsTrips">--</strong></div>
+    </div>
+  </article>
+
+  <article class="panel list-card non-demo-only">
+    <header>
+      <span class="kicker">Maintenance</span>
+    </header>
+    <div id="maintenanceList" class="maintenance-list"></div>
+  </article>
+  <article class="panel ratio-card demo-only" hidden>
+    <div class="ring" style="--v: 91"><strong>91%</strong></div>
+    <div>
+      <span class="kicker">HV pack</span>
+      <h2>Capacity looks healthy.</h2>
+      <p class="status-copy">
+        16.8 kWh estimated usable, 8.7% loss, 684 cycles, cell 47 on watch.
+      </p>
+    </div>
+  </article>
+
+  <article class="panel list-card demo-only" hidden>
+    <header>
+      <div>
+        <span class="kicker">Cell voltage - 96 cells</span>
+        <h3>Delta 18 mV</h3>
+      </div>
+      <span class="badge"><span class="dot"></span><span>cell 47</span></span>
+    </header>
+    <div id="cellGrid" class="cell-grid"></div>
+  </article>
+
+  <article class="panel list-card demo-only" hidden>
+    <header>
+      <span class="kicker">What changed this month</span>
+    </header>
+    <div id="insightList" class="insight-list"></div>
+  </article>
+</section>

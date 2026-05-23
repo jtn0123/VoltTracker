@@ -3,34 +3,32 @@ package com.volttracker.obdpoc.data;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
-
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-
 /**
- * Stateless helpers shared by the {@link ObdLocalStore} layer: ContentValues/Cursor
- * marshalling, small SQL count/aggregate queries, value cleaning, and route geometry.
- * Extracted from {@code ObdLocalStore} so each store class stays focused and small;
- * report and writer classes static-import these.
+ * Stateless helpers shared by the {@link ObdLocalStore} layer: ContentValues/Cursor marshalling,
+ * small SQL count/aggregate queries, value cleaning, and route geometry. Extracted from {@code
+ * ObdLocalStore} so each store class stays focused and small; report and writer classes
+ * static-import these.
  */
 final class ObdStoreSupport {
 
-    private ObdStoreSupport() {
-    }
+    private ObdStoreSupport() {}
 
     /** A telemetry row counts as "useful" only if it carries at least one real reading. */
-    static final String USEFUL_TELEMETRY_WHERE = "("
-            + "COALESCE(source, '') != ''"
-            + " OR speed_kph IS NOT NULL"
-            + " OR rpm IS NOT NULL"
-            + " OR voltage IS NOT NULL"
-            + " OR TRIM(COALESCE(raw, '')) != ''"
-            + ")";
+    static final String USEFUL_TELEMETRY_WHERE =
+            "("
+                    + "COALESCE(source, '') != ''"
+                    + " OR speed_kph IS NOT NULL"
+                    + " OR rpm IS NOT NULL"
+                    + " OR voltage IS NOT NULL"
+                    + " OR TRIM(COALESCE(raw, '')) != ''"
+                    + ")";
 
     // ---- ContentValues / JSON marshalling ------------------------------------------
 
@@ -52,7 +50,8 @@ final class ObdStoreSupport {
         }
     }
 
-    static void putOptionalDouble(ContentValues values, String column, JSONObject json, String key) {
+    static void putOptionalDouble(
+            ContentValues values, String column, JSONObject json, String key) {
         if (json.has(key) && !json.isNull(key)) {
             values.put(column, json.optDouble(key));
         }
@@ -63,8 +62,7 @@ final class ObdStoreSupport {
             String column,
             JSONObject json,
             String primaryKey,
-            String fallbackKey
-    ) {
+            String fallbackKey) {
         if (json.has(primaryKey) && !json.isNull(primaryKey)) {
             values.put(column, json.optDouble(primaryKey));
         } else if (json.has(fallbackKey) && !json.isNull(fallbackKey)) {
@@ -116,8 +114,7 @@ final class ObdStoreSupport {
                 cursor.getString(cursor.getColumnIndexOrThrow("status")),
                 cursor.getString(cursor.getColumnIndexOrThrow("supported_pids")),
                 cursor.getInt(cursor.getColumnIndexOrThrow("sample_count")),
-                nullableLong(cursor, "last_event_at_ms")
-        );
+                nullableLong(cursor, "last_event_at_ms"));
     }
 
     static TelemetrySampleRecord readTelemetry(Cursor cursor) {
@@ -139,8 +136,7 @@ final class ObdStoreSupport {
                 nullableInt(cursor, "sample_number"),
                 nullableLong(cursor, "session_ms"),
                 cursor.getString(cursor.getColumnIndexOrThrow("raw")),
-                cursor.getString(cursor.getColumnIndexOrThrow("json"))
-        );
+                cursor.getString(cursor.getColumnIndexOrThrow("json")));
     }
 
     static StatusEventRecord readStatusEvent(Cursor cursor) {
@@ -152,8 +148,7 @@ final class ObdStoreSupport {
                 cursor.getString(cursor.getColumnIndexOrThrow("state")),
                 cursor.getString(cursor.getColumnIndexOrThrow("detail")),
                 cursor.getInt(cursor.getColumnIndexOrThrow("blocked")) != 0,
-                cursor.getString(cursor.getColumnIndexOrThrow("payload"))
-        );
+                cursor.getString(cursor.getColumnIndexOrThrow("payload")));
     }
 
     static AdapterHistoryRecord readAdapterHistory(Cursor cursor) {
@@ -171,8 +166,7 @@ final class ObdStoreSupport {
                 cursor.getString(cursor.getColumnIndexOrThrow("last_mode")),
                 cursor.getString(cursor.getColumnIndexOrThrow("last_status")),
                 cursor.getString(cursor.getColumnIndexOrThrow("supported_pids")),
-                cursor.getString(cursor.getColumnIndexOrThrow("last_event_detail"))
-        );
+                cursor.getString(cursor.getColumnIndexOrThrow("last_event_detail")));
     }
 
     // ---- value cleaning ------------------------------------------------------------
@@ -253,67 +247,115 @@ final class ObdStoreSupport {
 
     // ---- small SQL queries ---------------------------------------------------------
 
+    /**
+     * Guards string-built SQL helpers below. Table names cannot be parameterized in SQLite, so we
+     * allow them to be inlined — but only if they are a known table. Anything else is a bug (or a
+     * hostile caller) and should fail fast.
+     */
+    private static String requireKnownTable(String table) {
+        if (!VoltTrackerDb.KNOWN_TABLES.contains(table)) {
+            throw new IllegalArgumentException("Unknown SQL table: " + table);
+        }
+        return table;
+    }
+
+    /** Same idea for column names — they too cannot be parameterized. */
+    private static String requireSimpleIdentifier(String column) {
+        if (column == null || column.isEmpty() || !column.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+            throw new IllegalArgumentException("Unsafe SQL identifier: " + column);
+        }
+        return column;
+    }
+
     static long countRows(SQLiteDatabase db, String table) {
-        try (Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + table, null)) {
+        try (Cursor cursor =
+                db.rawQuery("SELECT COUNT(*) FROM " + requireKnownTable(table), null)) {
             return cursor.moveToFirst() ? cursor.getLong(0) : 0L;
         }
     }
 
     static long countRowsWhere(SQLiteDatabase db, String table, String where, String[] args) {
-        try (Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + table + " WHERE " + where, args)) {
+        try (Cursor cursor =
+                db.rawQuery(
+                        "SELECT COUNT(*) FROM " + requireKnownTable(table) + " WHERE " + where,
+                        args)) {
             return cursor.moveToFirst() ? cursor.getLong(0) : 0L;
         }
     }
 
     static int maxInt(SQLiteDatabase db, String table, String column) {
-        String where = VoltTrackerDb.TABLE_TELEMETRY.equals(table) ? " WHERE " + USEFUL_TELEMETRY_WHERE : "";
-        try (Cursor cursor = db.rawQuery("SELECT MAX(" + column + ") FROM " + table + where, null)) {
+        String safeTable = requireKnownTable(table);
+        String safeColumn = requireSimpleIdentifier(column);
+        String where =
+                VoltTrackerDb.TABLE_TELEMETRY.equals(safeTable)
+                        ? " WHERE " + USEFUL_TELEMETRY_WHERE
+                        : "";
+        try (Cursor cursor =
+                db.rawQuery("SELECT MAX(" + safeColumn + ") FROM " + safeTable + where, null)) {
             return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getInt(0) : 0;
         }
     }
 
     static double maxDouble(SQLiteDatabase db, String table, String column) {
-        String where = VoltTrackerDb.TABLE_TELEMETRY.equals(table) ? " WHERE " + USEFUL_TELEMETRY_WHERE : "";
-        try (Cursor cursor = db.rawQuery("SELECT MAX(" + column + ") FROM " + table + where, null)) {
+        String safeTable = requireKnownTable(table);
+        String safeColumn = requireSimpleIdentifier(column);
+        String where =
+                VoltTrackerDb.TABLE_TELEMETRY.equals(safeTable)
+                        ? " WHERE " + USEFUL_TELEMETRY_WHERE
+                        : "";
+        try (Cursor cursor =
+                db.rawQuery("SELECT MAX(" + safeColumn + ") FROM " + safeTable + where, null)) {
             return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getDouble(0) : 0d;
         }
     }
 
     static int maxIntForSession(SQLiteDatabase db, String column, long sessionId) {
-        try (Cursor cursor = db.rawQuery(
-                "SELECT MAX(" + column + ") FROM " + VoltTrackerDb.TABLE_TELEMETRY
-                        + " WHERE session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
-                new String[]{String.valueOf(sessionId)}
-        )) {
+        try (Cursor cursor =
+                db.rawQuery(
+                        "SELECT MAX("
+                                + requireSimpleIdentifier(column)
+                                + ") FROM "
+                                + VoltTrackerDb.TABLE_TELEMETRY
+                                + " WHERE session_id = ? AND "
+                                + USEFUL_TELEMETRY_WHERE,
+                        new String[] {String.valueOf(sessionId)})) {
             return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getInt(0) : 0;
         }
     }
 
     static long averageSampleIntervalMs(SQLiteDatabase db, long sessionId) {
-        try (Cursor cursor = db.rawQuery(
-                "SELECT MIN(captured_at_ms), MAX(captured_at_ms), COUNT(*) FROM "
-                        + VoltTrackerDb.TABLE_TELEMETRY
-                        + " WHERE session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
-                new String[]{String.valueOf(sessionId)}
-        )) {
+        try (Cursor cursor =
+                db.rawQuery(
+                        "SELECT MIN(captured_at_ms), MAX(captured_at_ms), COUNT(*) FROM "
+                                + VoltTrackerDb.TABLE_TELEMETRY
+                                + " WHERE session_id = ? AND "
+                                + USEFUL_TELEMETRY_WHERE,
+                        new String[] {String.valueOf(sessionId)})) {
             if (!cursor.moveToFirst() || cursor.getLong(2) < 2) {
                 return 0L;
             }
-            return Math.max(0L, Math.round((cursor.getDouble(1) - cursor.getDouble(0)) / (cursor.getLong(2) - 1)));
+            return Math.max(
+                    0L,
+                    Math.round(
+                            (cursor.getDouble(1) - cursor.getDouble(0)) / (cursor.getLong(2) - 1)));
         }
     }
 
     static long averageSampleIntervalMs(SQLiteDatabase db) {
-        try (Cursor cursor = db.rawQuery(
-                "SELECT MIN(captured_at_ms), MAX(captured_at_ms), COUNT(*) FROM "
-                        + VoltTrackerDb.TABLE_TELEMETRY
-                        + " WHERE " + USEFUL_TELEMETRY_WHERE,
-                null
-        )) {
+        try (Cursor cursor =
+                db.rawQuery(
+                        "SELECT MIN(captured_at_ms), MAX(captured_at_ms), COUNT(*) FROM "
+                                + VoltTrackerDb.TABLE_TELEMETRY
+                                + " WHERE "
+                                + USEFUL_TELEMETRY_WHERE,
+                        null)) {
             if (!cursor.moveToFirst() || cursor.getLong(2) < 2) {
                 return 0L;
             }
-            return Math.max(0L, Math.round((cursor.getDouble(1) - cursor.getDouble(0)) / (cursor.getLong(2) - 1)));
+            return Math.max(
+                    0L,
+                    Math.round(
+                            (cursor.getDouble(1) - cursor.getDouble(0)) / (cursor.getLong(2) - 1)));
         }
     }
 
@@ -323,8 +365,11 @@ final class ObdStoreSupport {
         }
         ContentValues values = new ContentValues();
         values.put("last_event_at_ms", occurredAtMs);
-        db.update(VoltTrackerDb.TABLE_SESSIONS, values, "_id = ?",
-                new String[]{String.valueOf(sessionId)});
+        db.update(
+                VoltTrackerDb.TABLE_SESSIONS,
+                values,
+                "_id = ?",
+                new String[] {String.valueOf(sessionId)});
     }
 
     // ---- JSON utilities ------------------------------------------------------------
@@ -353,9 +398,16 @@ final class ObdStoreSupport {
 
     static List<ObdSessionRecord> getRecentSessions(SQLiteDatabase db, int limit) {
         List<ObdSessionRecord> records = new ArrayList<>();
-        try (Cursor cursor = db.query(
-                VoltTrackerDb.TABLE_SESSIONS, null, null, null, null, null,
-                "started_at_ms DESC", boundedLimit(limit))) {
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_SESSIONS,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        "started_at_ms DESC",
+                        boundedLimit(limit))) {
             while (cursor.moveToNext()) {
                 records.add(readSession(cursor));
             }
@@ -379,15 +431,28 @@ final class ObdStoreSupport {
 
     // ---- route geometry ------------------------------------------------------------
 
+    /**
+     * Sums the great-circle distance between consecutive route points using the haversine formula.
+     * Assumes the caller has already noise-filtered the points (see {@link
+     * com.volttracker.obdpoc.location.LocationFilter}); this method does no smoothing of its own,
+     * so a single bad GPS sample will inflate the total.
+     *
+     * <p>Each point is a {@code JSONObject} with numeric {@code "lat"} and {@code "lng"} keys.
+     * Missing or zero coordinates are still summed — pre-filter the array if that is not what you
+     * want.
+     *
+     * @return distance in meters, or {@code 0} for an empty or single-point array.
+     */
     static double distanceMeters(JSONArray points) throws JSONException {
         double total = 0d;
         JSONObject previous = null;
         for (int i = 0; i < points.length(); i++) {
             JSONObject point = points.getJSONObject(i);
             if (previous != null) {
-                total += haversineMeters(
-                        previous.optDouble("lat"), previous.optDouble("lng"),
-                        point.optDouble("lat"), point.optDouble("lng"));
+                total +=
+                        haversineMeters(
+                                previous.optDouble("lat"), previous.optDouble("lng"),
+                                point.optDouble("lat"), point.optDouble("lng"));
             }
             previous = point;
         }
@@ -423,9 +488,12 @@ final class ObdStoreSupport {
         double earthMeters = 6371000d;
         double dLat = Math.toRadians(lat2 - lat1);
         double dLng = Math.toRadians(lng2 - lng1);
-        double a = Math.sin(dLat / 2d) * Math.sin(dLat / 2d)
-                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                * Math.sin(dLng / 2d) * Math.sin(dLng / 2d);
+        double a =
+                Math.sin(dLat / 2d) * Math.sin(dLat / 2d)
+                        + Math.cos(Math.toRadians(lat1))
+                                * Math.cos(Math.toRadians(lat2))
+                                * Math.sin(dLng / 2d)
+                                * Math.sin(dLng / 2d);
         return earthMeters * 2d * Math.atan2(Math.sqrt(a), Math.sqrt(1d - a));
     }
 }

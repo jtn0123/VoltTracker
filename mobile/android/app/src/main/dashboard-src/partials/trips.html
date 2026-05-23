@@ -1,65 +1,82 @@
-  <section id="view-trips" class="view" data-view="trips">
-    <article id="tripsEmptyState" class="panel empty-state non-demo-only">
-      <span class="kicker">Trips</span>
-      <h2>No real trips stored yet.</h2>
-      <p>Trip capture will come after the OBD bridge is stable. This view will stay empty until real sessions are materialized from stored GPS and PID samples.</p>
-    </article>
-    <article id="realTripsCard" class="panel list-card non-demo-only" hidden>
-      <header>
-        <div>
-          <span class="kicker">Logged drives</span>
-          <h2 id="realTripsTitle">Your trips</h2>
-        </div>
-        <button type="button" class="link-btn" data-nav-jump="map">map</button>
-      </header>
-      <p class="status-copy">Each logged OBD session with movement. Tap a trip with GPS to see its route.</p>
-      <div id="realTripsList"></div>
-    </article>
-    <article class="panel list-card demo-only" hidden>
-      <header>
-        <div>
-          <span class="kicker">April - 10 trips - 480 mi</span>
-          <h2>Trips</h2>
-        </div>
-      </header>
-      <div class="tabs" id="tripTabs">
-        <button type="button" data-filter="all" class="is-active">All</button>
-        <button type="button" data-filter="ev">EV</button>
-        <button type="button" data-filter="mixed">Mixed</button>
-        <button type="button" data-filter="gas">Gas</button>
+<section id="view-trips" class="view" data-view="trips">
+  <article id="tripsEmptyState" class="panel empty-state non-demo-only">
+    <span class="kicker">Trips</span>
+    <h2>No real trips stored yet.</h2>
+    <p>
+      Trip capture will come after the OBD bridge is stable. This view will stay
+      empty until real sessions are materialized from stored GPS and PID
+      samples.
+    </p>
+  </article>
+  <article id="realTripsCard" class="panel list-card non-demo-only" hidden>
+    <header>
+      <div>
+        <span class="kicker">Logged drives</span>
+        <h2 id="realTripsTitle">Your trips</h2>
       </div>
-      <div id="tripList" style="margin-top:10px"></div>
+      <button type="button" class="link-btn" data-nav-jump="map">map</button>
+    </header>
+    <p class="status-copy">
+      Each logged OBD session with movement. Tap a trip with GPS to see its
+      route.
+    </p>
+    <div id="realTripsList"></div>
+  </article>
+  <article class="panel list-card demo-only" hidden>
+    <header>
+      <div>
+        <span class="kicker">April - 10 trips - 480 mi</span>
+        <h2>Trips</h2>
+      </div>
+    </header>
+    <div class="tabs" id="tripTabs">
+      <button type="button" data-filter="all" class="is-active">All</button>
+      <button type="button" data-filter="ev">EV</button>
+      <button type="button" data-filter="mixed">Mixed</button>
+      <button type="button" data-filter="gas">Gas</button>
+    </div>
+    <div id="tripList" style="margin-top: 10px"></div>
+  </article>
+
+  <section class="detail-grid demo-only" hidden>
+    <article class="panel route-card">
+      <div class="card-head">
+        <div>
+          <span class="kicker">Route</span>
+          <h3 id="tripDetailTitle">Home -&gt; Office</h3>
+        </div>
+        <small id="tripDetailMeta" class="status-copy">18.4 mi</small>
+      </div>
+      <div class="route-box">
+        <span class="route-line"></span>
+        <span class="route-pin start"></span>
+        <span class="route-pin end"></span>
+      </div>
     </article>
 
-    <section class="detail-grid demo-only" hidden>
-      <article class="panel route-card">
-        <div class="card-head">
-          <div>
-            <span class="kicker">Route</span>
-            <h3 id="tripDetailTitle">Home -> Office</h3>
-          </div>
-          <small id="tripDetailMeta" class="status-copy">18.4 mi</small>
+    <article class="panel route-card">
+      <div class="card-head">
+        <div>
+          <span class="kicker">Energy</span>
+          <h3 id="tripEnergyTitle">241 Wh/mi</h3>
         </div>
-        <div class="route-box">
-          <span class="route-line"></span>
-          <span class="route-pin start"></span>
-          <span class="route-pin end"></span>
+      </div>
+      <div class="energy-rows">
+        <div><span>Propulsion</span><i style="width: 62%"></i><b>62%</b></div>
+        <div>
+          <span>HVAC</span><i style="width: 18%; background: #a4b8ff"></i
+          ><b>18%</b>
         </div>
-      </article>
-
-      <article class="panel route-card">
-        <div class="card-head">
-          <div>
-            <span class="kicker">Energy</span>
-            <h3 id="tripEnergyTitle">241 Wh/mi</h3>
-          </div>
+        <div>
+          <span>Aux</span
+          ><i style="width: 5%; background: rgba(255, 255, 255, 0.32)"></i
+          ><b>5%</b>
         </div>
-        <div class="energy-rows">
-          <div><span>Propulsion</span><i style="width:62%"></i><b>62%</b></div>
-          <div><span>HVAC</span><i style="width:18%;background:#a4b8ff"></i><b>18%</b></div>
-          <div><span>Aux</span><i style="width:5%;background:rgba(255,255,255,0.32)"></i><b>5%</b></div>
-          <div><span>Regen</span><i style="width:15%;background:var(--ok)"></i><b>-15%</b></div>
+        <div>
+          <span>Regen</span><i style="width: 15%; background: var(--ok)"></i
+          ><b>-15%</b>
         </div>
-      </article>
-    </section>
+      </div>
+    </article>
   </section>
+</section>

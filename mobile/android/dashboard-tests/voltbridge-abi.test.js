@@ -1,0 +1,36 @@
+// Verifies the window.VoltTrackerNative surface — the WebView callback ABI
+// that the Android side invokes via WebView#evaluateJavascript. A typo or
+// rename here silently no-ops on the native side, which is why this is the
+// first smoke check.
+import { describe, it, expect, beforeEach } from 'vitest';
+
+import { loadDashboard } from './setup/load-dashboard.js';
+
+// Frozen list of method names actions.js MUST expose on window.VoltTrackerNative.
+// Keep in sync with the literal object at the bottom of actions.js.
+const NATIVE_METHODS = ['setDevices', 'setHistory', 'setStatus', 'setStorage', 'setAppState', 'updateTelemetry'];
+
+describe('window.VoltTrackerNative ABI', () => {
+  beforeEach(() => {
+    // Each test gets a fresh dashboard load — the IIFEs mutate globals, so
+    // we cannot share state across tests safely.
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    loadDashboard();
+  });
+
+  it('exposes the 6 documented callback methods', () => {
+    expect(window.VoltTrackerNative).toBeDefined();
+    for (const name of NATIVE_METHODS) {
+      expect(typeof window.VoltTrackerNative[name], `VoltTrackerNative.${name}`).toBe('function');
+    }
+  });
+
+  it('exposes exactly the documented methods — no extras, no missing', () => {
+    const actual = Object.keys(window.VoltTrackerNative).sort();
+    const expected = [...NATIVE_METHODS].sort();
+    expect(actual).toEqual(expected);
+  });
+});

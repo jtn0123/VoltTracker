@@ -1,0 +1,12 @@
+{
+  "name": "volttracker-dashboard-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --reporter=basic"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0",
+    "vitest": "^1.6.0"
+  }
+}

@@ -8,22 +8,19 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
- * Owns paired-adapter discovery, OBD-likelihood heuristics, and the remembered-device
- * history persisted in {@link SharedPreferences}. Extracted from {@link MainActivity}
- * so the Bluetooth/preferences plumbing is isolated and the name heuristics stay
- * unit-testable.
+ * Owns paired-adapter discovery, OBD-likelihood heuristics, and the remembered-device history
+ * persisted in {@link SharedPreferences}. Extracted from {@link MainActivity} so the
+ * Bluetooth/preferences plumbing is isolated and the name heuristics stay unit-testable.
  */
 final class DeviceCatalog {
 
@@ -64,13 +61,18 @@ final class DeviceCatalog {
 
         Set<BluetoothDevice> bonded = adapter.getBondedDevices();
         List<BluetoothDevice> sorted = new ArrayList<>(bonded);
-        Collections.sort(sorted, (left, right) -> {
-            int candidateSort = Boolean.compare(isLikelyObdDevice(right), isLikelyObdDevice(left));
-            if (candidateSort != 0) {
-                return candidateSort;
-            }
-            return safeName(left).toLowerCase(Locale.US).compareTo(safeName(right).toLowerCase(Locale.US));
-        });
+        Collections.sort(
+                sorted,
+                (left, right) -> {
+                    int candidateSort =
+                            Boolean.compare(isLikelyObdDevice(right), isLikelyObdDevice(left));
+                    if (candidateSort != 0) {
+                        return candidateSort;
+                    }
+                    return safeName(left)
+                            .toLowerCase(Locale.US)
+                            .compareTo(safeName(right).toLowerCase(Locale.US));
+                });
 
         for (BluetoothDevice device : sorted) {
             JSONObject item = new JSONObject();
@@ -97,8 +99,12 @@ final class DeviceCatalog {
         }
 
         List<BluetoothDevice> sorted = new ArrayList<>(adapter.getBondedDevices());
-        Collections.sort(sorted, (left, right) ->
-                safeName(left).toLowerCase(Locale.US).compareTo(safeName(right).toLowerCase(Locale.US)));
+        Collections.sort(
+                sorted,
+                (left, right) ->
+                        safeName(left)
+                                .toLowerCase(Locale.US)
+                                .compareTo(safeName(right).toLowerCase(Locale.US)));
         for (BluetoothDevice device : sorted) {
             if (!isLikelyObdDevice(device)) {
                 continue;

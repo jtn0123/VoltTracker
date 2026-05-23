@@ -1,7 +1,5 @@
 package com.volttracker.obdpoc;
 
-import com.volttracker.obdpoc.data.ObdLocalStore;
-
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
@@ -22,13 +20,12 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-
-import org.json.JSONException;
-import org.json.JSONObject;
-
+import com.volttracker.obdpoc.data.ObdLocalStore;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class MainActivity extends Activity {
     static final String TAG = "VoltTracker";
@@ -44,29 +41,41 @@ public class MainActivity extends Activity {
     private JSONObject lastTelemetry = new JSONObject();
     private JSONObject lastStatus = new JSONObject();
     private JSONObject lastStorage = new JSONObject();
-    // Off-UI-thread worker for the heavy storage-summary query.
+    // Off-UI-thread worker for heavy DB work (storage summary, clearAllData, etc).
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
 
-    private final BroadcastReceiver obdReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            String json = intent.getStringExtra(ObdService.EXTRA_JSON);
-            if (json == null) {
-                json = "{}";
-            }
-            if (ObdService.BROADCAST_TELEMETRY.equals(action)) {
-                lastTelemetry = parseJson(json);
-                callDashboard("window.VoltTrackerNative.updateTelemetry(" + JSONObject.quote(json) + ")");
-                publishAppState();
-            } else if (ObdService.BROADCAST_STATUS.equals(action)) {
-                lastStatus = parseJson(json);
-                callDashboard("window.VoltTrackerNative.setStatus(" + JSONObject.quote(json) + ")");
-                publishStorageSummary();
-                publishAppState();
-            }
-        }
-    };
+    /** Submits {@code task} to the background executor used for heavy DB work. */
+    void runOnBackground(Runnable task) {
+        backgroundExecutor.execute(task);
+    }
+
+    private final BroadcastReceiver obdReceiver =
+            new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    String action = intent.getAction();
+                    String json = intent.getStringExtra(ObdService.EXTRA_JSON);
+                    if (json == null) {
+                        json = "{}";
+                    }
+                    if (ObdService.BROADCAST_TELEMETRY.equals(action)) {
+                        lastTelemetry = parseJson(json);
+                        callDashboard(
+                                "window.VoltTrackerNative.updateTelemetry("
+                                        + JSONObject.quote(json)
+                                        + ")");
+                        publishAppState();
+                    } else if (ObdService.BROADCAST_STATUS.equals(action)) {
+                        lastStatus = parseJson(json);
+                        callDashboard(
+                                "window.VoltTrackerNative.setStatus("
+                                        + JSONObject.quote(json)
+                                        + ")");
+                        publishStorageSummary();
+                        publishAppState();
+                    }
+                }
+            };
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -78,11 +87,33 @@ public class MainActivity extends Activity {
         backupController = new BackupController(this, dataBackup, backgroundExecutor);
         permissionGate = new PermissionGate(this);
         localStore = new ObdLocalStore(this);
+        // Trim raw telemetry/location/event/PID rows older than the retention window
+        // on every cold start. Cheap (indexed cutoff scan) and runs off the UI thread.
+        backgroundExecutor.execute(
+                () -> {
+                    try {
+                        int retentionDays =
+                                prefs.getInt(
+                                        "raw_retention_days",
+                                        ObdLocalStore.DEFAULT_RAW_RETENTION_DAYS);
+                        int pruned = localStore.pruneRawDataOlderThan(retentionDays);
+                        if (pruned > 0) {
+                            Log.i(
+                                    TAG,
+                                    "Pruned "
+                                            + pruned
+                                            + " raw rows older than "
+                                            + retentionDays
+                                            + " days");
+                        }
+                    } catch (RuntimeException ex) {
+                        Log.w(TAG, "Retention prune failed; continuing without it", ex);
+                    }
+                });
         webView = new WebView(this);
-        webView.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
+        webView.setLayoutParams(
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(webView);
 
         WebSettings settings = webView.getSettings();
@@ -97,26 +128,37 @@ public class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(false);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
 
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public boolean onConsoleMessage(ConsoleMessage message) {
-                if (message != null && message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
-                    Log.e(TAG, "dashboard console: " + message.message()
-                            + " (" + message.sourceId() + ":" + message.lineNumber() + ")");
-                }
-                return true;
-            }
-        });
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                pageReady = true;
-                publishDeviceList();
-                publishStorageSummary();
-                publishAppState();
-                publishStatus("ready", "Pick a paired OBD adapter to start logging.", false);
-            }
-        });
+        webView.setWebChromeClient(
+                new WebChromeClient() {
+                    @Override
+                    public boolean onConsoleMessage(ConsoleMessage message) {
+                        if (message != null
+                                && message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                            Log.e(
+                                    TAG,
+                                    "dashboard console: "
+                                            + message.message()
+                                            + " ("
+                                            + message.sourceId()
+                                            + ":"
+                                            + message.lineNumber()
+                                            + ")");
+                        }
+                        return true;
+                    }
+                });
+        webView.setWebViewClient(
+                new WebViewClient() {
+                    @Override
+                    public void onPageFinished(WebView view, String url) {
+                        pageReady = true;
+                        publishDeviceList();
+                        publishStorageSummary();
+                        publishAppState();
+                        publishStatus(
+                                "ready", "Pick a paired OBD adapter to start logging.", false);
+                    }
+                });
         webView.addJavascriptInterface(new VoltBridge(this), "VoltTrackerAndroid");
         webView.loadUrl("file:///android_asset/dashboard/index.html");
 
@@ -163,23 +205,32 @@ public class MainActivity extends Activity {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    public void onRequestPermissionsResult(
+            int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PermissionGate.REQUEST_CODE) {
             publishDeviceList();
             if (deviceCatalog.hasBluetoothConnectPermission()) {
-                publishStatus("ready", "Bluetooth permission granted. Pick a paired adapter.", false);
+                publishStatus(
+                        "ready", "Bluetooth permission granted. Pick a paired adapter.", false);
             } else {
-                publishStatus("blocked", "Bluetooth permission is required to talk to the OBD adapter.", true);
+                publishStatus(
+                        "blocked",
+                        "Bluetooth permission is required to talk to the OBD adapter.",
+                        true);
             }
         }
     }
 
     void publishDeviceList() {
-        callDashboard("window.VoltTrackerNative.setDevices("
-                + JSONObject.quote(deviceCatalog.getBondedDevicesJson()) + ")");
-        callDashboard("window.VoltTrackerNative.setHistory("
-                + JSONObject.quote(deviceCatalog.getDeviceHistoryJson()) + ")");
+        callDashboard(
+                "window.VoltTrackerNative.setDevices("
+                        + JSONObject.quote(deviceCatalog.getBondedDevicesJson())
+                        + ")");
+        callDashboard(
+                "window.VoltTrackerNative.setHistory("
+                        + JSONObject.quote(deviceCatalog.getDeviceHistoryJson())
+                        + ")");
     }
 
     void publishStatus(String state, String detail, boolean blocked) {
@@ -194,14 +245,17 @@ public class MainActivity extends Activity {
         } catch (JSONException ignored) {
             // Values are local literals.
         }
-        callDashboard("window.VoltTrackerNative.setStatus(" + JSONObject.quote(payload.toString()) + ")");
+        callDashboard(
+                "window.VoltTrackerNative.setStatus(" + JSONObject.quote(payload.toString()) + ")");
         lastStatus = payload;
         publishAppState();
     }
 
     private boolean isBluetoothReady() {
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        return adapter != null && adapter.isEnabled() && deviceCatalog.hasBluetoothConnectPermission();
+        return adapter != null
+                && adapter.isEnabled()
+                && deviceCatalog.hasBluetoothConnectPermission();
     }
 
     @SuppressLint("MissingPermission")
@@ -256,15 +310,19 @@ public class MainActivity extends Activity {
                         "remembered",
                         0,
                         "",
-                        "Remembered adapter"
-                );
+                        "Remembered adapter");
             }
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException ex) {
             // Preferences remain the source of truth for adapter recall if DB storage fails.
+            // Use redactAddress so device identifiers don't end up in logcat in clear text.
+            Log.w(TAG, "recordAdapterSummary failed for " + redactAddress(cleanAddress), ex);
         }
         publishDeviceList();
         publishStorageSummary();
-        publishStatus("ready", "Remembered " + (cleanName.isEmpty() ? cleanAddress : cleanName) + ".", false);
+        publishStatus(
+                "ready",
+                "Remembered " + (cleanName.isEmpty() ? cleanAddress : cleanName) + ".",
+                false);
     }
 
     void stopObdService() {
@@ -275,7 +333,8 @@ public class MainActivity extends Activity {
 
     private void reportAppVisibility(boolean foreground) {
         Intent service = new Intent(this, ObdService.class);
-        service.setAction(foreground ? ObdService.ACTION_APP_FOREGROUND : ObdService.ACTION_APP_BACKGROUND);
+        service.setAction(
+                foreground ? ObdService.ACTION_APP_FOREGROUND : ObdService.ACTION_APP_BACKGROUND);
         try {
             startService(service);
         } catch (IllegalStateException ignored) {
@@ -292,13 +351,18 @@ public class MainActivity extends Activity {
 
     void publishStorageSummary() {
         // getStorageSummary runs many queries over a large DB; keep it off the UI thread.
-        backgroundExecutor.execute(() -> {
-            final String storage = getStorageSummaryJson();
-            runOnUiThread(() -> {
-                lastStorage = parseJson(storage);
-                callDashboard("window.VoltTrackerNative.setStorage(" + JSONObject.quote(storage) + ")");
-            });
-        });
+        backgroundExecutor.execute(
+                () -> {
+                    final String storage = getStorageSummaryJson();
+                    runOnUiThread(
+                            () -> {
+                                lastStorage = parseJson(storage);
+                                callDashboard(
+                                        "window.VoltTrackerNative.setStorage("
+                                                + JSONObject.quote(storage)
+                                                + ")");
+                            });
+                });
     }
 
     String getStorageSummaryJson() {
@@ -308,6 +372,7 @@ public class MainActivity extends Activity {
         try {
             return localStore.getStorageSummary().toString();
         } catch (RuntimeException ex) {
+            Log.w(TAG, "getStorageSummary failed; returning empty payload", ex);
             return "{}";
         }
     }
@@ -319,6 +384,7 @@ public class MainActivity extends Activity {
         try {
             return localStore.getTripsJson(40).toString();
         } catch (RuntimeException ex) {
+            Log.w(TAG, "getTripsJson failed; returning empty list", ex);
             return "[]";
         }
     }
@@ -330,6 +396,7 @@ public class MainActivity extends Activity {
         try {
             return localStore.getInsightsJson().toString();
         } catch (RuntimeException ex) {
+            Log.w(TAG, "getInsightsJson failed; returning empty payload", ex);
             return "{}";
         }
     }
@@ -346,7 +413,10 @@ public class MainActivity extends Activity {
     }
 
     private void publishAppState() {
-        callDashboard("window.VoltTrackerNative.setAppState(" + JSONObject.quote(getAppStateJson()) + ")");
+        callDashboard(
+                "window.VoltTrackerNative.setAppState("
+                        + JSONObject.quote(getAppStateJson())
+                        + ")");
     }
 
     String getAppStateJson() {
@@ -404,5 +474,4 @@ public class MainActivity extends Activity {
             return "";
         }
     }
-
 }

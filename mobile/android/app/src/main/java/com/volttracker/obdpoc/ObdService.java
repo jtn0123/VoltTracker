@@ -1,9 +1,5 @@
 package com.volttracker.obdpoc;
 
-import com.volttracker.obdpoc.data.ObdLocalStore;
-import com.volttracker.obdpoc.location.LocationManagerTracker;
-import com.volttracker.obdpoc.location.LocationTracker;
-
 import android.Manifest;
 import android.app.Notification;
 import android.app.Service;
@@ -12,29 +8,32 @@ import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
-
-import org.json.JSONException;
-import org.json.JSONObject;
-
+import com.volttracker.obdpoc.data.ObdLocalStore;
+import com.volttracker.obdpoc.location.LocationManagerTracker;
+import com.volttracker.obdpoc.location.LocationTracker;
 import java.io.File;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
- * Foreground service that owns an OBD logging session: Android lifecycle, the session
- * start/stop, the foreground notification, GPS tracking, and status broadcasts to the
- * dashboard. The adapter IO runs in {@link ObdPollingEngine}; the per-session record
- * (field log + database) lives in {@link SessionRecorder}.
+ * Foreground service that owns an OBD logging session: Android lifecycle, the session start/stop,
+ * the foreground notification, GPS tracking, and status broadcasts to the dashboard. The adapter IO
+ * runs in {@link ObdPollingEngine}; the per-session record (field log + database) lives in {@link
+ * SessionRecorder}.
  */
 public class ObdService extends Service {
     public static final String ACTION_CONNECT = "com.volttracker.obdpoc.action.CONNECT";
     public static final String ACTION_SCAN = "com.volttracker.obdpoc.action.SCAN";
     public static final String ACTION_DEMO = "com.volttracker.obdpoc.action.DEMO";
     public static final String ACTION_DISCONNECT = "com.volttracker.obdpoc.action.DISCONNECT";
-    public static final String ACTION_APP_FOREGROUND = "com.volttracker.obdpoc.action.APP_FOREGROUND";
-    public static final String ACTION_APP_BACKGROUND = "com.volttracker.obdpoc.action.APP_BACKGROUND";
+    public static final String ACTION_APP_FOREGROUND =
+            "com.volttracker.obdpoc.action.APP_FOREGROUND";
+    public static final String ACTION_APP_BACKGROUND =
+            "com.volttracker.obdpoc.action.APP_BACKGROUND";
     public static final String BROADCAST_TELEMETRY = "com.volttracker.obdpoc.broadcast.TELEMETRY";
     public static final String BROADCAST_STATUS = "com.volttracker.obdpoc.broadcast.STATUS";
     public static final String EXTRA_ADDRESS = "address";
@@ -65,8 +64,9 @@ public class ObdService extends Service {
         locationTracker = new LocationManagerTracker(this);
         notifications = new ObdNotifications(this);
         notifications.createChannel();
-        recorder = new SessionRecorder(ioLock,
-                new ObdSessionLog(new File(getFilesDir(), "obd-logs")), localStore);
+        recorder =
+                new SessionRecorder(
+                        ioLock, new ObdSessionLog(new File(getFilesDir(), "obd-logs")), localStore);
         engine = new ObdPollingEngine(this);
     }
 
@@ -193,17 +193,21 @@ public class ObdService extends Service {
 
     boolean hasBluetoothConnectPermission() {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.S
-                || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+                || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
+                        == PackageManager.PERMISSION_GRANTED;
     }
 
     boolean hasBluetoothScanPermission() {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.S
-                || checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED;
+                || checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)
+                        == PackageManager.PERMISSION_GRANTED;
     }
 
     private boolean hasLocationPermission() {
-        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                        == PackageManager.PERMISSION_GRANTED
+                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        == PackageManager.PERMISSION_GRANTED;
     }
 
     void broadcastTelemetry(JSONObject payload) {
@@ -276,11 +280,15 @@ public class ObdService extends Service {
 
     private void applyAppVisibility(boolean foreground) {
         synchronized (ioLock) {
-            recorder.logEvent(foreground ? "app_foregrounded" : "app_backgrounded",
-                    "backgroundSampleCount", String.valueOf(engine.backgroundSampleCount()),
-                    "sampleGapCount", String.valueOf(engine.sampleGapCount()));
+            recorder.logEvent(
+                    foreground ? "app_foregrounded" : "app_backgrounded",
+                    "backgroundSampleCount",
+                    String.valueOf(engine.backgroundSampleCount()),
+                    "sampleGapCount",
+                    String.valueOf(engine.sampleGapCount()));
             if (running.get()) {
-                updateNotification(foreground ? "Logging while app is open" : "Background logging active");
+                updateNotification(
+                        foreground ? "Logging while app is open" : "Background logging active");
             }
         }
     }
@@ -289,15 +297,21 @@ public class ObdService extends Service {
         synchronized (ioLock) {
             lastSessionState = "active";
             lastSessionDetail = "";
-            recorder.openSession(mode, address, activeName,
+            recorder.openSession(
+                    mode,
+                    address,
+                    activeName,
                     sessionStartedAtMs > 0 ? sessionStartedAtMs : System.currentTimeMillis());
         }
     }
 
     void closeSessionLog() {
         synchronized (ioLock) {
-            recorder.closeSession(lastSessionState, lastSessionDetail,
-                    engine.supportedPidsSummary(), engine.sampleCount());
+            recorder.closeSession(
+                    lastSessionState,
+                    lastSessionDetail,
+                    engine.supportedPidsSummary(),
+                    engine.sampleCount());
             foregroundServiceActive = false;
         }
     }

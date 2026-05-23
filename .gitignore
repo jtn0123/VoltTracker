@@ -68,3 +68,4 @@ mobile/android/docs/db-pulls/
 keystore.properties
 *.jks
 *.keystore
+.claude/

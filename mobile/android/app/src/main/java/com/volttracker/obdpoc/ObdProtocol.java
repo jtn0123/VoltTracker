@@ -7,8 +7,7 @@ import java.util.Locale;
 import java.util.Set;
 
 final class ObdProtocol {
-    private ObdProtocol() {
-    }
+    private ObdProtocol() {}
 
     static final class ParsedPidValue {
         final String name;
@@ -40,8 +39,7 @@ final class ObdProtocol {
                 String moduleKey,
                 String moduleName,
                 String header,
-                String rawResponse
-        ) {
+                String rawResponse) {
             this.code = code == null ? "" : code;
             this.status = status == null ? "" : status;
             this.statusLabel = statusLabel == null ? "" : statusLabel;
@@ -97,11 +95,12 @@ final class ObdProtocol {
         if (response == null) {
             return null;
         }
-        String cleaned = response.replace(">", "")
-                .replace("\r", "")
-                .replace("\n", "")
-                .trim()
-                .toUpperCase(Locale.US);
+        String cleaned =
+                response.replace(">", "")
+                        .replace("\r", "")
+                        .replace("\n", "")
+                        .trim()
+                        .toUpperCase(Locale.US);
         int end = cleaned.indexOf('V');
         if (end < 0) {
             return null;
@@ -126,18 +125,15 @@ final class ObdProtocol {
         if (response == null) {
             return "";
         }
-        return response.replace("\r", " ")
-                .replace("\n", " ")
-                .replace(">", "")
-                .trim();
+        return response.replace("\r", " ").replace("\n", " ").replace(">", "").trim();
     }
 
     /**
-     * Cleans an 0100-style capability response for storage in the supported-PID field.
-     * {@link #summarize} only strips line endings and the prompt; while the ELM327
-     * auto-detects the protocol it also emits the "SEARCHING..." status word inline —
-     * and glued straight onto — the first {@code 4100} frame. That token is noise here,
-     * so strip it and collapse the whitespace, leaving only the capability frames.
+     * Cleans an 0100-style capability response for storage in the supported-PID field. {@link
+     * #summarize} only strips line endings and the prompt; while the ELM327 auto-detects the
+     * protocol it also emits the "SEARCHING..." status word inline — and glued straight onto — the
+     * first {@code 4100} frame. That token is noise here, so strip it and collapse the whitespace,
+     * leaving only the capability frames.
      */
     static String cleanSupportedPids(String response) {
         return summarize(response)
@@ -162,7 +158,9 @@ final class ObdProtocol {
         }
         if ("0105".equals(cleanCommand)) {
             Integer coolant = parseCoolantC(response);
-            return coolant == null ? null : value("coolant temperature", coolant.doubleValue(), "deg C", 0);
+            return coolant == null
+                    ? null
+                    : value("coolant temperature", coolant.doubleValue(), "deg C", 0);
         }
         if ("0104".equals(cleanCommand)) {
             Integer load = parseEngineLoadPct(response);
@@ -170,7 +168,9 @@ final class ObdProtocol {
         }
         if ("0111".equals(cleanCommand)) {
             Integer throttle = parseThrottlePct(response);
-            return throttle == null ? null : value("throttle position", throttle.doubleValue(), "%", 0);
+            return throttle == null
+                    ? null
+                    : value("throttle position", throttle.doubleValue(), "%", 0);
         }
         if ("015B".equals(cleanCommand)) {
             Integer soc = parseStateOfChargePct(response);
@@ -217,22 +217,21 @@ final class ObdProtocol {
     }
 
     static List<DiagnosticTroubleCode> parseDiagnosticTroubleCodes(
-            String command,
-            String response,
-            String header
-    ) {
+            String command, String response, String header) {
         List<DiagnosticTroubleCode> codes = new ArrayList<>();
         String marker = positiveDtcMarker(command);
         if (marker == null || response == null) {
             return codes;
         }
         String cleanHeader = cleanHeader(header);
-        String moduleKey = cleanHeader.isEmpty() || "7DF".equals(cleanHeader)
-                ? "generic-obd"
-                : "header-" + cleanHeader;
-        String moduleName = "generic-obd".equals(moduleKey)
-                ? "ECM / powertrain (generic OBD-II)"
-                : "OBD module header " + cleanHeader;
+        String moduleKey =
+                cleanHeader.isEmpty() || "7DF".equals(cleanHeader)
+                        ? "generic-obd"
+                        : "header-" + cleanHeader;
+        String moduleName =
+                "generic-obd".equals(moduleKey)
+                        ? "ECM / powertrain (generic OBD-II)"
+                        : "OBD module header " + cleanHeader;
         String status = dtcStatusForCommand(command);
         String statusLabel = dtcStatusLabel(status);
         String raw = summarize(response);
@@ -244,15 +243,31 @@ final class ObdProtocol {
             if (index < 0 && collectingMultiFrame) {
                 String continuation = continuationPayload(hex);
                 if (!continuation.isEmpty()) {
-                    parseDiagnosticPayload(continuation, status, statusLabel, moduleKey,
-                            moduleName, cleanHeader, raw, seen, codes);
+                    parseDiagnosticPayload(
+                            continuation,
+                            status,
+                            statusLabel,
+                            moduleKey,
+                            moduleName,
+                            cleanHeader,
+                            raw,
+                            seen,
+                            codes);
                 }
                 continue;
             }
             while (index >= 0) {
                 String payload = hex.substring(index + marker.length());
-                parseDiagnosticPayload(payload, status, statusLabel, moduleKey, moduleName,
-                        cleanHeader, raw, seen, codes);
+                parseDiagnosticPayload(
+                        payload,
+                        status,
+                        statusLabel,
+                        moduleKey,
+                        moduleName,
+                        cleanHeader,
+                        raw,
+                        seen,
+                        codes);
                 collectingMultiFrame = true;
                 index = hex.indexOf(marker, index + marker.length());
             }
@@ -261,23 +276,33 @@ final class ObdProtocol {
             String hex = response.toUpperCase(Locale.US).replaceAll("[^0-9A-F]", "");
             int index = hex.indexOf(marker);
             if (index >= 0) {
-                parseDiagnosticPayload(hex.substring(index + marker.length()), status, statusLabel,
-                        moduleKey, moduleName, cleanHeader, raw, seen, codes);
+                parseDiagnosticPayload(
+                        hex.substring(index + marker.length()),
+                        status,
+                        statusLabel,
+                        moduleKey,
+                        moduleName,
+                        cleanHeader,
+                        raw,
+                        seen,
+                        codes);
             }
         }
         return codes;
     }
 
     /**
-     * HV pack power in kW from the Volt mode-22 pack-voltage (222429) and pack-current
-     * (222414) responses. Discharge current is decoded as positive, so discharge power
-     * is positive. Returns null if either frame is missing or malformed.
+     * HV pack power in kW from the Volt mode-22 pack-voltage (222429) and pack-current (222414)
+     * responses. Discharge current is decoded as positive, so discharge power is positive. Returns
+     * null if either frame is missing or malformed.
      */
     static Double parsePackPowerKw(String voltageResponse, String currentResponse) {
         ParsedPidValue voltage = parseKnownValue("222429", voltageResponse);
         ParsedPidValue current = parseKnownValue("222414", currentResponse);
-        if (voltage == null || voltage.valueNumeric == null
-                || current == null || current.valueNumeric == null) {
+        if (voltage == null
+                || voltage.valueNumeric == null
+                || current == null
+                || current.valueNumeric == null) {
             return null;
         }
         return voltage.valueNumeric * current.valueNumeric / 1000.0;
@@ -350,7 +375,9 @@ final class ObdProtocol {
     }
 
     private static String cleanHeader(String header) {
-        return header == null ? "" : header.trim().toUpperCase(Locale.US).replaceAll("[^0-9A-F]", "");
+        return header == null
+                ? ""
+                : header.trim().toUpperCase(Locale.US).replaceAll("[^0-9A-F]", "");
     }
 
     private static String continuationPayload(String hex) {
@@ -405,8 +432,7 @@ final class ObdProtocol {
             String header,
             String rawResponse,
             Set<String> seen,
-            List<DiagnosticTroubleCode> output
-    ) {
+            List<DiagnosticTroubleCode> output) {
         if (payload == null) {
             return;
         }
@@ -426,8 +452,15 @@ final class ObdProtocol {
             String code = decodeDtc(first, second);
             String key = moduleKey + "|" + status + "|" + code;
             if (seen.add(key)) {
-                output.add(new DiagnosticTroubleCode(
-                        code, status, statusLabel, moduleKey, moduleName, header, rawResponse));
+                output.add(
+                        new DiagnosticTroubleCode(
+                                code,
+                                status,
+                                statusLabel,
+                                moduleKey,
+                                moduleName,
+                                header,
+                                rawResponse));
             }
         }
     }
@@ -442,7 +475,8 @@ final class ObdProtocol {
     }
 
     // First data byte after the mode-22 positive-response marker, scaled: byte * scale + offset.
-    private static Double voltByteValue(String response, String command, double scale, double offset) {
+    private static Double voltByteValue(
+            String response, String command, double scale, double offset) {
         int[] payload = mode22Payload(response, command);
         if (payload == null || payload.length < 1) {
             return null;
@@ -452,7 +486,8 @@ final class ObdProtocol {
 
     // First 16-bit word after the mode-22 marker, divided by divisor. When signed is true the
     // word is read as two's-complement so discharge/charge keep their sign.
-    private static Double voltWordValue(String response, String command, double divisor, boolean signed) {
+    private static Double voltWordValue(
+            String response, String command, double divisor, boolean signed) {
         int[] payload = mode22Payload(response, command);
         if (payload == null || payload.length < 2) {
             return null;

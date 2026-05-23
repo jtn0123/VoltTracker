@@ -5,7 +5,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.After;
@@ -17,8 +16,8 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 /**
- * Exercises the real SQLite data layer via Robolectric: writes, the on-read trip and
- * insight aggregation, and clearAllData. Previously this layer had no test coverage.
+ * Exercises the real SQLite data layer via Robolectric: writes, the on-read trip and insight
+ * aggregation, and clearAllData. Previously this layer had no test coverage.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 34)
@@ -160,8 +159,8 @@ public class ObdLocalStoreDbTest {
         store.recordDiagnosticCode(id, diagnosticCode("U0073", "stored", 1000));
         store.recordDiagnosticCode(id, diagnosticCode("U0073", "stored", 1200));
 
-        JSONObject code = store.getStorageSummary()
-                .getJSONArray("latestDiagnosticCodes").getJSONObject(0);
+        JSONObject code =
+                store.getStorageSummary().getJSONArray("latestDiagnosticCodes").getJSONObject(0);
         assertEquals("U0073", code.optString("dtc"));
         assertEquals(1L, code.optLong("seenCount"));
         assertEquals(1200L, code.optLong("lastSeenMs"));
@@ -169,12 +168,14 @@ public class ObdLocalStoreDbTest {
 
     // ---- GPS route building (the data the map renders) -----------------------------
 
-    private void locationSample(long sessionId, long atMs, double lat, double lng, Double accuracyM) {
+    private void locationSample(
+            long sessionId, long atMs, double lat, double lng, Double accuracyM) {
         store.recordLocationSample(
                 sessionId, atMs, "gps", lat, lng, accuracyM, null, null, null, null, null);
     }
 
-    private static JSONObject diagnosticCode(String dtc, String status, long seenAtMs) throws Exception {
+    private static JSONObject diagnosticCode(String dtc, String status, long seenAtMs)
+            throws Exception {
         JSONObject code = new JSONObject();
         code.put("dtc", dtc);
         code.put("status", status);
@@ -217,8 +218,11 @@ public class ObdLocalStoreDbTest {
         locationSample(id, 1000L, 32.70, -117.10, 5.0);
         locationSample(id, 2000L, 32.71, -117.10, 5.0);
 
-        JSONArray points = store.getStorageSummary()
-                .getJSONArray("recentRoutes").getJSONObject(0).getJSONArray("points");
+        JSONArray points =
+                store.getStorageSummary()
+                        .getJSONArray("recentRoutes")
+                        .getJSONObject(0)
+                        .getJSONArray("points");
         assertEquals(1000L, points.getJSONObject(0).optLong("atMs"));
         assertEquals(2000L, points.getJSONObject(1).optLong("atMs"));
         assertEquals(3000L, points.getJSONObject(2).optLong("atMs"));
@@ -230,9 +234,232 @@ public class ObdLocalStoreDbTest {
         locationSample(id, 1000L, 32.70, -117.10, 7.5);
         locationSample(id, 2000L, 32.71, -117.10, 9.0);
 
-        JSONArray points = store.getStorageSummary()
-                .getJSONArray("recentRoutes").getJSONObject(0).getJSONArray("points");
+        JSONArray points =
+                store.getStorageSummary()
+                        .getJSONArray("recentRoutes")
+                        .getJSONObject(0)
+                        .getJSONArray("points");
         assertEquals(7.5, points.getJSONObject(0).optDouble("accuracyM"), 0.01);
         assertEquals(9.0, points.getJSONObject(1).optDouble("accuracyM"), 0.01);
+    }
+
+    // ---- finalizeSession: session-end + adapter-summary atomicity ------------------
+
+    @Test
+    public void finalizeSessionUpdatesSessionAndAdapterSummaryInOneCall() {
+        long id = store.startSession("obd", "AA:BB:CC", "Adapter X", 10_000L);
+
+        store.finalizeSession(
+                id,
+                ObdLocalStore.STATUS_COMPLETE,
+                20_000L,
+                "0100,0120",
+                "AA:BB:CC",
+                "Adapter X",
+                "obd",
+                7,
+                "polled HV pack");
+
+        // Session row was ended.
+        ObdSessionRecord session = store.getSession(id);
+        assertNotNull(session);
+        assertEquals(ObdLocalStore.STATUS_COMPLETE, session.status);
+        assertEquals(20_000L, session.endedAtMs);
+        assertEquals("0100,0120", session.supportedPids);
+
+        // Adapter-history row was upserted.
+        java.util.List<AdapterHistoryRecord> history = store.getAdapterHistory(10);
+        assertEquals(1, history.size());
+        AdapterHistoryRecord adapter = history.get(0);
+        assertEquals("AA:BB:CC", adapter.address);
+        assertEquals("Adapter X", adapter.name);
+        assertEquals("obd", adapter.lastMode);
+        assertEquals(ObdLocalStore.STATUS_COMPLETE, adapter.lastStatus);
+        assertEquals(id, adapter.lastSessionId);
+        assertEquals(7, adapter.sampleCount);
+        assertEquals("0100,0120", adapter.supportedPids);
+        assertEquals("polled HV pack", adapter.lastEventDetail);
+    }
+
+    @Test
+    public void finalizeSessionMatchesSeparateFinishAndAdapterSummary() {
+        // Run the legacy two-call path against one adapter key, and finalizeSession against
+        // an independent adapter key with identical inputs. Both must produce the same end
+        // state — finalizeSession is meant to be a pure atomic wrapper, not a new behavior.
+        long legacyId = store.startSession("obd", "11:11", "Legacy", 1_000L);
+        store.finishSession(legacyId, ObdLocalStore.STATUS_COMPLETE, 2_000L, "0100");
+        store.recordAdapterSummary(
+                "11:11",
+                "Legacy",
+                "obd",
+                legacyId,
+                ObdLocalStore.STATUS_COMPLETE,
+                3,
+                "0100",
+                "trip end");
+
+        long atomicId = store.startSession("obd", "22:22", "Atomic", 1_000L);
+        store.finalizeSession(
+                atomicId,
+                ObdLocalStore.STATUS_COMPLETE,
+                2_000L,
+                "0100",
+                "22:22",
+                "Atomic",
+                "obd",
+                3,
+                "trip end");
+
+        ObdSessionRecord legacySession = store.getSession(legacyId);
+        ObdSessionRecord atomicSession = store.getSession(atomicId);
+        assertEquals(legacySession.status, atomicSession.status);
+        assertEquals(legacySession.endedAtMs, atomicSession.endedAtMs);
+        assertEquals(legacySession.supportedPids, atomicSession.supportedPids);
+
+        java.util.List<AdapterHistoryRecord> history = store.getAdapterHistory(10);
+        assertEquals(2, history.size());
+        AdapterHistoryRecord legacy = adapterFor(history, "11:11");
+        AdapterHistoryRecord atomic = adapterFor(history, "22:22");
+        assertNotNull(legacy);
+        assertNotNull(atomic);
+        assertEquals(legacy.sampleCount, atomic.sampleCount);
+        assertEquals(legacy.connectCount, atomic.connectCount);
+        assertEquals(legacy.lastStatus, atomic.lastStatus);
+        assertEquals(legacy.lastMode, atomic.lastMode);
+        assertEquals(legacy.supportedPids, atomic.supportedPids);
+        assertEquals(legacy.lastEventDetail, atomic.lastEventDetail);
+    }
+
+    @Test
+    public void finalizeSessionRolledBackWhenAdapterWriteThrows() {
+        // The adapter-summary INSERT runs inside the same transaction as the session
+        // UPDATE. If we drop the adapter_history table mid-flight the INSERT throws and
+        // the surrounding transaction must roll back — leaving the session row as it was
+        // before finalizeSession ran (active, no ended_at_ms).
+        long id = store.startSession("obd", "33:33", "Faulty", 1_000L);
+        assertEquals(ObdLocalStore.STATUS_ACTIVE, store.getSession(id).status);
+
+        // Drop the table the second write targets so insertWithOnConflict throws.
+        // We reach for the helper via reflection because the test only needs to prove the
+        // transaction wrapper rolls back — production code never does this.
+        try {
+            java.lang.reflect.Field helperField = ObdLocalStore.class.getDeclaredField("helper");
+            helperField.setAccessible(true);
+            VoltTrackerDb helper = (VoltTrackerDb) helperField.get(store);
+            helper.getWritableDatabase()
+                    .execSQL("DROP TABLE " + VoltTrackerDb.TABLE_ADAPTER_HISTORY);
+        } catch (Exception e) {
+            throw new AssertionError("setup: could not drop adapter_history", e);
+        }
+
+        boolean threw = false;
+        try {
+            store.finalizeSession(
+                    id,
+                    ObdLocalStore.STATUS_COMPLETE,
+                    2_000L,
+                    "0100",
+                    "33:33",
+                    "Faulty",
+                    "obd",
+                    5,
+                    "should rollback");
+        } catch (RuntimeException expected) {
+            threw = true;
+        }
+        assertTrue("finalizeSession should propagate the failure", threw);
+
+        // Recreate the dropped table so getSession's helper queries don't blow up on the
+        // adapter side and so tearDown's clearAllData stays well-formed.
+        try {
+            java.lang.reflect.Field helperField = ObdLocalStore.class.getDeclaredField("helper");
+            helperField.setAccessible(true);
+            VoltTrackerDb helper = (VoltTrackerDb) helperField.get(store);
+            helper.getWritableDatabase()
+                    .execSQL(
+                            "CREATE TABLE "
+                                    + VoltTrackerDb.TABLE_ADAPTER_HISTORY
+                                    + " ("
+                                    + "adapter_key TEXT PRIMARY KEY,"
+                                    + "address TEXT,"
+                                    + "name TEXT,"
+                                    + "first_seen_ms INTEGER NOT NULL,"
+                                    + "last_seen_ms INTEGER NOT NULL,"
+                                    + "connect_count INTEGER NOT NULL DEFAULT 0,"
+                                    + "scan_count INTEGER NOT NULL DEFAULT 0,"
+                                    + "demo_count INTEGER NOT NULL DEFAULT 0,"
+                                    + "sample_count INTEGER NOT NULL DEFAULT 0,"
+                                    + "last_session_id INTEGER,"
+                                    + "last_mode TEXT,"
+                                    + "last_status TEXT,"
+                                    + "supported_pids TEXT,"
+                                    + "last_event_detail TEXT"
+                                    + ")");
+        } catch (Exception e) {
+            throw new AssertionError("teardown: could not recreate adapter_history", e);
+        }
+
+        // The transaction rolled back: the session UPDATE was undone, so status is still
+        // active and ended_at_ms is still zero. If finishSession had been called outside a
+        // transaction the session would now read STATUS_COMPLETE here — that's the exact
+        // bug B3 is fixing.
+        ObdSessionRecord after = store.getSession(id);
+        assertNotNull(after);
+        assertEquals(ObdLocalStore.STATUS_ACTIVE, after.status);
+        assertEquals(0L, after.endedAtMs);
+    }
+
+    private static AdapterHistoryRecord adapterFor(
+            java.util.List<AdapterHistoryRecord> records, String address) {
+        for (AdapterHistoryRecord record : records) {
+            if (address.equals(record.address)) {
+                return record;
+            }
+        }
+        return null;
+    }
+
+    // -- G1 retention -------------------------------------------------------
+
+    @Test
+    public void pruneRawDataDeletesOldTelemetryAndKeepsRecent() throws Exception {
+        long sessionId = store.startSession("obd", "AA:BB:CC", "Adapter");
+        long now = System.currentTimeMillis();
+        // Old (>90 days)
+        long old = now - 91L * 86_400_000L;
+        store.recordTelemetry(sessionId, sample(40, 1500, 10.0, 20.0, old), old);
+        // Recent (<1 day)
+        long recent = now - 60_000L;
+        store.recordTelemetry(sessionId, sample(50, 1700, 10.1, 20.1, recent), recent);
+        assertEquals(2, store.getStorageSummary().optInt("rawTelemetryCount"));
+
+        int deleted = store.pruneRawDataOlderThan(60);
+
+        assertTrue("expected to delete the old row", deleted >= 1);
+        assertEquals(1, store.getStorageSummary().optInt("rawTelemetryCount"));
+    }
+
+    @Test
+    public void pruneRawDataIsNoopForNonPositiveDays() throws Exception {
+        long sessionId = store.startSession("obd", "AA:BB:CC", "Adapter");
+        long old = System.currentTimeMillis() - 91L * 86_400_000L;
+        store.recordTelemetry(sessionId, sample(40, 1500, 10.0, 20.0, old), old);
+
+        assertEquals(0, store.pruneRawDataOlderThan(0));
+        assertEquals(0, store.pruneRawDataOlderThan(-7));
+        assertEquals(1, store.getStorageSummary().optInt("rawTelemetryCount"));
+    }
+
+    @Test
+    public void pruneRawDataKeepsSessionRowEvenWhenAllTelemetryIsPruned() throws Exception {
+        long sessionId = store.startSession("obd", "AA:BB:CC", "Adapter");
+        long old = System.currentTimeMillis() - 365L * 86_400_000L;
+        store.recordTelemetry(sessionId, sample(40, 1500, 10.0, 20.0, old), old);
+
+        store.pruneRawDataOlderThan(30);
+
+        // session row is summary data — must NOT be pruned by raw-data retention
+        assertEquals(1, store.getStorageSummary().optInt("sessionCount"));
+        assertEquals(0, store.getStorageSummary().optInt("rawTelemetryCount"));
     }
 }

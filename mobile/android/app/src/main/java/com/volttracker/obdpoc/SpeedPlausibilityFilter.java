@@ -1,9 +1,9 @@
 package com.volttracker.obdpoc;
 
 /**
- * Rejects implausible OBD vehicle-speed readings: out-of-range values and physically
- * impossible jumps from the last accepted reading. Mirrors the GPS {@code LocationFilter}
- * pattern. Pure and stateful-but-deterministic, so it is unit-testable without a device.
+ * Rejects implausible OBD vehicle-speed readings: out-of-range values and physically impossible
+ * jumps from the last accepted reading. Mirrors the GPS {@code LocationFilter} pattern. Pure and
+ * stateful-but-deterministic, so it is unit-testable without a device.
  */
 final class SpeedPlausibilityFilter {
 
@@ -21,7 +21,7 @@ final class SpeedPlausibilityFilter {
 
     /**
      * @param speedKph the freshly decoded speed
-     * @param nowMs    current time, supplied so the decision is testable
+     * @param nowMs current time, supplied so the decision is testable
      * @return true if the reading is plausible and should be accepted
      */
     boolean accept(int speedKph, long nowMs) {

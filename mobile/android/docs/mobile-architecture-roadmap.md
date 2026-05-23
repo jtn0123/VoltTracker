@@ -141,6 +141,39 @@ Suggested shape:
 }
 ```
 
+## Layering Rule
+
+The Android code is organized in four layers. **Calls flow downward only** — a
+higher layer may depend on a lower layer, never the reverse.
+
+```text
+UI / WebView         MainActivity, VoltBridge, dashboard/*       (Activity, JS bridge)
+       ↓
+Service              ObdService, ObdNotifications, PermissionGate (foreground lifecycle)
+       ↓
+Engine               ObdPollingEngine, SessionRecorder, ObdProtocol, ElmConnection,
+                     ObdElmDecode, ObdProbes, location/* (Bluetooth IO, parsing, GPS)
+       ↓
+Data                 data/* (ObdLocalStore, VoltTrackerDb, ObdStore*) — SQLite only
+```
+
+Rules:
+
+- `data/*` must not import anything outside `com.volttracker.obdpoc.data` and the
+  Android SDK. It is the only layer allowed to call `SQLiteDatabase` /
+  `SQLiteOpenHelper` / `ContentValues`.
+- Engine code may use `data/*` but must not import `MainActivity`, the WebView,
+  or the JS bridge.
+- The service layer orchestrates engine work and publishes status broadcasts; it
+  must not touch the WebView directly.
+- `MainActivity` and `VoltBridge` may call into the service via Intents and into
+  `data/*` for read-only queries (e.g. storage summary). They must not call
+  `getWritableDatabase()` directly — go through an `ObdLocalStore` method.
+
+When in doubt: if a change would require a `data/*` class to import from the
+engine or above, the abstraction is in the wrong file. Extract a small
+read-only DTO into `data/*` instead.
+
 ## Database Strategy
 
 The database should be the source of truth for real app history. JSONL field logs are still useful as black-box debug artifacts, but product screens should read from SQLite.

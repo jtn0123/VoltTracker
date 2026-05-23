@@ -3,15 +3,16 @@ package com.volttracker.obdpoc.location;
 import java.util.Locale;
 
 /**
- * Pure decision logic for accepting or rejecting a raw location fix before it becomes a
- * stored route point. Has no Android dependencies so it is unit-testable on the JVM.
+ * Pure decision logic for accepting or rejecting a raw location fix before it becomes a stored
+ * route point. Has no Android dependencies so it is unit-testable on the JVM.
  *
  * <p>Rejection rules, applied in order:
+ *
  * <ul>
- *   <li>accuracy worse than {@code maxAccuracyM}</li>
- *   <li>a fix whose own timestamp is older than {@code staleFixMs} (a cached/replayed fix)</li>
- *   <li>a coarse {@code network} fix that arrives while GPS fixes are still fresh</li>
- *   <li>a physically impossible jump from the last accepted point</li>
+ *   <li>accuracy worse than {@code maxAccuracyM}
+ *   <li>a fix whose own timestamp is older than {@code staleFixMs} (a cached/replayed fix)
+ *   <li>a coarse {@code network} fix that arrives while GPS fixes are still fresh
+ *   <li>a physically impossible jump from the last accepted point
  * </ul>
  *
  * <p>The jump check is bypassed once {@code maxConsecutiveRejects} fixes in a row have been
@@ -30,7 +31,8 @@ public final class LocationFilter {
     static final float DEFAULT_MAX_ACCURACY_M = 50f;
     static final long DEFAULT_STALE_FIX_MS = 10_000L;
     static final long DEFAULT_NETWORK_SUPPRESS_MS = 15_000L;
-    static final double DEFAULT_MAX_IMPLIED_SPEED_MPS = 67.0; // ~150 mph; clearly a teleport above this
+    static final double DEFAULT_MAX_IMPLIED_SPEED_MPS =
+            67.0; // ~150 mph; clearly a teleport above this
     static final int DEFAULT_MAX_CONSECUTIVE_REJECTS = 5;
 
     private final float maxAccuracyM;
@@ -47,12 +49,20 @@ public final class LocationFilter {
     private int consecutiveRejects;
 
     public LocationFilter() {
-        this(DEFAULT_MAX_ACCURACY_M, DEFAULT_STALE_FIX_MS, DEFAULT_NETWORK_SUPPRESS_MS,
-                DEFAULT_MAX_IMPLIED_SPEED_MPS, DEFAULT_MAX_CONSECUTIVE_REJECTS);
+        this(
+                DEFAULT_MAX_ACCURACY_M,
+                DEFAULT_STALE_FIX_MS,
+                DEFAULT_NETWORK_SUPPRESS_MS,
+                DEFAULT_MAX_IMPLIED_SPEED_MPS,
+                DEFAULT_MAX_CONSECUTIVE_REJECTS);
     }
 
-    public LocationFilter(float maxAccuracyM, long staleFixMs, long networkSuppressMs,
-                          double maxImpliedSpeedMps, int maxConsecutiveRejects) {
+    public LocationFilter(
+            float maxAccuracyM,
+            long staleFixMs,
+            long networkSuppressMs,
+            double maxImpliedSpeedMps,
+            int maxConsecutiveRejects) {
         this.maxAccuracyM = maxAccuracyM;
         this.staleFixMs = staleFixMs;
         this.networkSuppressMs = networkSuppressMs;
@@ -63,11 +73,11 @@ public final class LocationFilter {
     /**
      * @param accuracyM horizontal accuracy in metres, or a non-positive value when unknown
      * @param fixTimeMs the fix's own timestamp (epoch ms), or non-positive when unknown
-     * @param provider  the originating provider name (e.g. "gps", "network", "fused")
-     * @param nowMs     current wall-clock time
+     * @param provider the originating provider name (e.g. "gps", "network", "fused")
+     * @param nowMs current wall-clock time
      */
-    public Decision evaluate(double lat, double lng, float accuracyM,
-                             long fixTimeMs, String provider, long nowMs) {
+    public Decision evaluate(
+            double lat, double lng, float accuracyM, long fixTimeMs, String provider, long nowMs) {
         if (accuracyM > 0f && accuracyM > maxAccuracyM) {
             return reject(Decision.REJECT_ACCURACY);
         }
@@ -134,8 +144,9 @@ public final class LocationFilter {
         double p2 = Math.toRadians(lat2);
         double dp = Math.toRadians(lat2 - lat1);
         double dl = Math.toRadians(lng2 - lng1);
-        double a = Math.sin(dp / 2) * Math.sin(dp / 2)
-                + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+        double a =
+                Math.sin(dp / 2) * Math.sin(dp / 2)
+                        + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
         return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 }

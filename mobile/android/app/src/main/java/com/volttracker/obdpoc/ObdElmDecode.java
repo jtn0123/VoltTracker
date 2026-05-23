@@ -1,18 +1,16 @@
 package com.volttracker.obdpoc;
 
 import com.volttracker.obdpoc.data.ObdLocalStore;
-
 import java.util.Locale;
 
 /**
- * Stateless decoding, classification and formatting helpers for the OBD/ELM layer.
- * Extracted from {@link ObdService} so the service file stays focused and these pure
- * functions are unit-testable on their own. {@code ObdService} static-imports this class.
+ * Stateless decoding, classification and formatting helpers for the OBD/ELM layer. Extracted from
+ * {@link ObdService} so the service file stays focused and these pure functions are unit-testable
+ * on their own. {@code ObdService} static-imports this class.
  */
 final class ObdElmDecode {
 
-    private ObdElmDecode() {
-    }
+    private ObdElmDecode() {}
 
     static boolean hasElmPrompt(String response) {
         return response != null && response.indexOf('>') >= 0;
@@ -104,10 +102,10 @@ final class ObdElmDecode {
     }
 
     /**
-     * Backoff before retrying the initial connect, before any link was ever established.
-     * Quicker and gentler than {@link #reconnectBackoffMs}: a first-attempt RFCOMM glitch
-     * retries almost immediately, and a genuinely asleep car exhausts its tries fast
-     * instead of stalling the user through ~90 s of exponential backoff.
+     * Backoff before retrying the initial connect, before any link was ever established. Quicker
+     * and gentler than {@link #reconnectBackoffMs}: a first-attempt RFCOMM glitch retries almost
+     * immediately, and a genuinely asleep car exhausts its tries fast instead of stalling the user
+     * through ~90 s of exponential backoff.
      */
     static long initialConnectBackoffMs(int attempt) {
         if (attempt < 1) {
@@ -116,7 +114,8 @@ final class ObdElmDecode {
         return Math.min(3000L, 500L * attempt);
     }
 
-    static String classifyVehicleState(Float voltage, Integer speed, Float rpm, Integer load, boolean chargeTransitionHint) {
+    static String classifyVehicleState(
+            Float voltage, Integer speed, Float rpm, Integer load, boolean chargeTransitionHint) {
         boolean stationary = speed == null || speed == 0;
         boolean engineOff = rpm == null || rpm < 80;
         boolean dcDcActive = voltage != null && voltage >= 13.0f;
@@ -136,7 +135,8 @@ final class ObdElmDecode {
         return "driving-ev";
     }
 
-    static String classifyVehicleStateConfidence(Float voltage, Integer speed, Float rpm, boolean chargeTransitionHint) {
+    static String classifyVehicleStateConfidence(
+            Float voltage, Integer speed, Float rpm, boolean chargeTransitionHint) {
         if (chargeTransitionHint) {
             return "inferred";
         }
@@ -156,7 +156,8 @@ final class ObdElmDecode {
         // "complete" means the session actually reached the adapter. A teardown while
         // still "connecting"/"initializing" — e.g. the user retried before the link
         // came up — never connected, so it falls through to "disconnected" below.
-        if ("connected".equals(state) || "scanning".equals(state)
+        if ("connected".equals(state)
+                || "scanning".equals(state)
                 || "scan-complete".equals(state)) {
             return ObdLocalStore.STATUS_COMPLETE;
         }
@@ -165,7 +166,9 @@ final class ObdElmDecode {
 
     static String friendlyConnectionMessage(Exception ex) {
         String message = safeMessage(ex).toLowerCase(Locale.US);
-        if (message.contains("socket might closed") || message.contains("timeout") || message.contains("read failed")) {
+        if (message.contains("socket might closed")
+                || message.contains("timeout")
+                || message.contains("read failed")) {
             return "Adapter serial channel did not open. Make sure the car is awake, close other OBD apps, then retry.";
         }
         if (message.contains("permission")) {

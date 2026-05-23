@@ -1,69 +1,72 @@
-  <section id="view-charge" class="view" data-view="charge">
-    <article id="chargeEmptyState" class="panel empty-state non-demo-only">
-      <span class="kicker">Charging</span>
-      <h2>No charging sessions captured yet.</h2>
-      <p>The standalone app has the schema ready; the next step is validating charging PIDs and materializing real charge sessions.</p>
+<section id="view-charge" class="view" data-view="charge">
+  <article id="chargeEmptyState" class="panel empty-state non-demo-only">
+    <span class="kicker">Charging</span>
+    <h2>No charging sessions captured yet.</h2>
+    <p>
+      The standalone app has the schema ready; the next step is validating
+      charging PIDs and materializing real charge sessions.
+    </p>
+  </article>
+  <section class="charge-grid non-demo-only">
+    <article class="panel charge-kpi">
+      <header><span>Sessions</span><span>real</span></header>
+      <strong id="realChargeSessions">0</strong>
+      <small>materialized charge rows</small>
     </article>
-    <section class="charge-grid non-demo-only">
-      <article class="panel charge-kpi">
-        <header><span>Sessions</span><span>real</span></header>
-        <strong id="realChargeSessions">0</strong>
-        <small>materialized charge rows</small>
-      </article>
-      <article class="panel charge-kpi">
-        <header><span>Hints</span><span>parser</span></header>
-        <strong id="realChargeHints">0</strong>
-        <small>possible plugged-in events</small>
-      </article>
-      <article class="panel charge-kpi">
-        <header><span>Max power</span><span>observed</span></header>
-        <strong id="realChargePower">--</strong>
-        <small>from parsed telemetry</small>
-      </article>
-      <article class="panel charge-kpi">
-        <header><span>Status</span><span>confidence</span></header>
-        <strong id="realChargeStatus">needs data</strong>
-        <small>charging PIDs still validating</small>
-      </article>
-    </section>
-    <section class="charge-grid demo-only" hidden>
-      <article class="panel charge-kpi">
-        <header><span>Energy in</span><span>30d</span></header>
-        <strong id="chargeEnergy">248.6</strong>
-        <small>kWh - 24 sessions</small>
-      </article>
-      <article class="panel charge-kpi">
-        <header><span>Cost</span><span>/mo</span></header>
-        <strong>$29.83</strong>
-        <small>@ $0.12/kWh</small>
-      </article>
-      <article class="panel charge-kpi">
-        <header><span>Avg session</span><span>L2</span></header>
-        <strong>10.4</strong>
-        <small>kWh - about 3h</small>
-      </article>
-      <article class="panel charge-kpi">
-        <header><span>Gas saved</span><span>est.</span></header>
-        <strong>$104</strong>
-        <small>vs 42 MPG @ $3.85</small>
-      </article>
-    </section>
-
-    <article class="panel list-card demo-only" hidden>
-      <header>
-        <div>
-          <span class="kicker">When you charge</span>
-          <h3>Peak window - 21:00 to 23:00</h3>
-        </div>
-        <button type="button" class="link-btn" id="addChargeBtn">add</button>
-      </header>
-      <div id="hourBars" class="hour-bars"></div>
+    <article class="panel charge-kpi">
+      <header><span>Hints</span><span>parser</span></header>
+      <strong id="realChargeHints">0</strong>
+      <small>possible plugged-in events</small>
     </article>
-
-    <article class="panel list-card demo-only" hidden>
-      <header>
-        <span class="kicker">Recent sessions</span>
-      </header>
-      <div id="sessionList"></div>
+    <article class="panel charge-kpi">
+      <header><span>Max power</span><span>observed</span></header>
+      <strong id="realChargePower">--</strong>
+      <small>from parsed telemetry</small>
+    </article>
+    <article class="panel charge-kpi">
+      <header><span>Status</span><span>confidence</span></header>
+      <strong id="realChargeStatus">needs data</strong>
+      <small>charging PIDs still validating</small>
     </article>
   </section>
+  <section class="charge-grid demo-only" hidden>
+    <article class="panel charge-kpi">
+      <header><span>Energy in</span><span>30d</span></header>
+      <strong id="chargeEnergy">248.6</strong>
+      <small>kWh - 24 sessions</small>
+    </article>
+    <article class="panel charge-kpi">
+      <header><span>Cost</span><span>/mo</span></header>
+      <strong>$29.83</strong>
+      <small>@ $0.12/kWh</small>
+    </article>
+    <article class="panel charge-kpi">
+      <header><span>Avg session</span><span>L2</span></header>
+      <strong>10.4</strong>
+      <small>kWh - about 3h</small>
+    </article>
+    <article class="panel charge-kpi">
+      <header><span>Gas saved</span><span>est.</span></header>
+      <strong>$104</strong>
+      <small>vs 42 MPG @ $3.85</small>
+    </article>
+  </section>
+
+  <article class="panel list-card demo-only" hidden>
+    <header>
+      <div>
+        <span class="kicker">When you charge</span>
+        <h3>Peak window - 21:00 to 23:00</h3>
+      </div>
+      <button type="button" class="link-btn" id="addChargeBtn">add</button>
+    </header>
+    <div id="hourBars" class="hour-bars"></div>
+  </article>
+
+  <article class="panel list-card demo-only" hidden>
+    <header>
+      <span class="kicker">Recent sessions</span>
+    </header>
+    <div id="sessionList"></div>
+  </article>
+</section>

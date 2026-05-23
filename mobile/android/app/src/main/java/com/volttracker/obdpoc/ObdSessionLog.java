@@ -1,18 +1,17 @@
 package com.volttracker.obdpoc;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
- * Writes the per-session {@code .jsonl} field log to disk: one JSON line per command,
- * event, telemetry sample or status change. Extracted from {@link ObdService} so the
- * file IO is isolated from the OBD/session orchestration. This class owns only the
- * file — the database session lifecycle stays in {@code ObdService}.
+ * Writes the per-session {@code .jsonl} field log to disk: one JSON line per command, event,
+ * telemetry sample or status change. Extracted from {@link ObdService} so the file IO is isolated
+ * from the OBD/session orchestration. This class owns only the file — the database session
+ * lifecycle stays in {@code ObdService}.
  */
 final class ObdSessionLog {
 
@@ -30,7 +29,8 @@ final class ObdSessionLog {
         if (!logsDir.exists() && !logsDir.mkdirs()) {
             return;
         }
-        File pending = new File(logsDir, "session-" + System.currentTimeMillis() + "-" + mode + ".jsonl");
+        File pending =
+                new File(logsDir, "session-" + System.currentTimeMillis() + "-" + mode + ".jsonl");
         try {
             writer = new BufferedWriter(new FileWriter(pending, true));
             file = pending;

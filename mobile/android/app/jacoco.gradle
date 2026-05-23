@@ -1,0 +1,43 @@
+apply plugin: "jacoco"
+
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+tasks.register("jacocoTestReport", JacocoReport) {
+    dependsOn "testDebugUnitTest"
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    def fileFilter = ["**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*"]
+    def debugTree = fileTree(dir: "${project.layout.buildDirectory.get()}/intermediates/javac/debug/compileDebugJavaWithJavac/classes", excludes: fileFilter)
+    def mainSrc = "${project.projectDir}/src/main/java"
+    sourceDirectories.setFrom(files([mainSrc]))
+    classDirectories.setFrom(files([debugTree]))
+    executionData.setFrom(fileTree(dir: project.layout.buildDirectory.get(), includes: ["jacoco/testDebugUnitTest.exec"]))
+}
+
+// Coverage floors are BASELINES, not goals. They prevent regression from the
+// current numbers (project-wide LINE ~48%, data package LINE ~76% at the time
+// these were set). Raise them as the test suite improves; do not lower without
+// discussion.
+tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
+    dependsOn "jacocoTestReport"
+    def fileFilter = ["**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*"]
+    def debugTree = fileTree(dir: "${project.layout.buildDirectory.get()}/intermediates/javac/debug/compileDebugJavaWithJavac/classes", excludes: fileFilter)
+    def mainSrc = "${project.projectDir}/src/main/java"
+    sourceDirectories.setFrom(files([mainSrc]))
+    classDirectories.setFrom(files([debugTree]))
+    executionData.setFrom(fileTree(dir: project.layout.buildDirectory.get(), includes: ["jacoco/testDebugUnitTest.exec"]))
+    violationRules {
+        rule {
+            element = "PACKAGE"
+            includes = ["com.volttracker.obdpoc.data"]
+            limit { counter = "LINE"; minimum = 0.70 }
+        }
+        rule {
+            limit { counter = "LINE"; minimum = 0.43 }
+        }
+    }
+}

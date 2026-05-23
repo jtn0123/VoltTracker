@@ -1,10 +1,18 @@
+(function () {
+  "use strict";
+
+  const VD = window.VoltDashboard;
+  const state = VD.state;
+  const bridge = VD.bridge;
+  const el = VD.el;
+
   function setStorage(payload) {
-    state.storage = parsePayload(payload, {});
+    state.storage = VD.parsePayload(payload, {});
     updateStorageUi();
     updateReviewUi();
     renderRealV2Ui();
-    renderMap();
-    updateValidationUi();
+    VD.renderMap();
+    VD.updateValidationUi();
     loadTrips();
     loadInsights();
   }
@@ -21,39 +29,59 @@
     const chargeRows = Number(storage.chargeSessionCount || 0);
     const batteryRows = Number(storage.batterySnapshotCount || 0);
     const cellRows = Number(storage.cellSnapshotCount || 0);
-    setText("dbSessionCount", sessions);
-    setText("dbSampleCount", samples);
-    setText("dbEventCount", events);
-    setText("dbPidCount", pidRows);
-    setText("dbDtcCount", dtcRows);
-    setText("dbLocationCount", locationRows);
-    setText("dbTripCount", tripRows);
-    setText("dbChargeCount", chargeRows);
-    setText("dbBatteryCount", batteryRows + cellRows);
-    setText("dbSize", formatBytes(Number(storage.databaseBytes || 0)));
-    setText("dbRawTelemetryCount", Number(storage.rawTelemetryCount || samples || 0));
-    setText("dbEmptyTelemetryCount", Number(storage.emptyTelemetryCount || 0));
-    setText("dbState", dbRowCount(storage) ? `${dbRowCount(storage)} rows` : "ready");
+    VD.setText("dbSessionCount", sessions);
+    VD.setText("dbSampleCount", samples);
+    VD.setText("dbEventCount", events);
+    VD.setText("dbPidCount", pidRows);
+    VD.setText("dbDtcCount", dtcRows);
+    VD.setText("dbLocationCount", locationRows);
+    VD.setText("dbTripCount", tripRows);
+    VD.setText("dbChargeCount", chargeRows);
+    VD.setText("dbBatteryCount", batteryRows + cellRows);
+    VD.setText("dbSize", VD.formatBytes(Number(storage.databaseBytes || 0)));
+    VD.setText("dbRawTelemetryCount", Number(storage.rawTelemetryCount || samples || 0));
+    VD.setText("dbEmptyTelemetryCount", Number(storage.emptyTelemetryCount || 0));
+    VD.setText("dbState", VD.dbRowCount(storage) ? `${VD.dbRowCount(storage)} rows` : "ready");
     const last = storage.lastEventAtMs || storage.lastStartedAtMs;
-    setText("dbSummaryTitle", sessions ? `${samples} samples - ${formatWhen(last)}` : "No stored sessions yet");
+    VD.setText("dbSummaryTitle", sessions ? `${samples} samples - ${VD.formatWhen(last)}` : "No stored sessions yet");
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     const list = el("dbSessionList");
     updateDiagnosticCodeUi();
     if (!recent.length) {
-      list.innerHTML = '<p class="status-copy">Connect or scan to create local SQLite rows. Preview data stays isolated in the sandbox.</p>';
+      list.replaceChildren(buildStatusCopy("Connect or scan to create local SQLite rows. Preview data stays isolated in the sandbox."));
       updateReviewUi();
       return;
     }
-    list.innerHTML = recent.map((session) => `
-      <button type="button" class="history-row">
-        <span>
-          <strong>${session.mode || "session"} - ${session.adapterName || "OBD adapter"}</strong>
-          <small>${formatWhen(session.startedAtMs)} - ${session.status || "active"} - ${Number(session.usefulSampleCount ?? session.sampleCount ?? 0)} useful</small>
-        </span>
-        <b>${Number(session.emptySampleCount || 0) ? `${Number(session.emptySampleCount || 0)} empty` : `${Number(session.sampleCount || 0)}x`}</b>
-      </button>
-    `).join("");
+    list.replaceChildren(...recent.map(buildRecentSessionRow));
     updateReviewUi();
+  }
+
+  // ---- C4 row builders: prefer document.createElement + textContent over
+  // innerHTML += template literals so storage strings can never be reinterpreted
+  // as markup. Each builder returns a single root Element.
+
+  function buildStatusCopy(text) {
+    const p = document.createElement("p");
+    p.className = "status-copy";
+    p.textContent = text;
+    return p;
+  }
+
+  function buildRecentSessionRow(session) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "history-row";
+    const center = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = `${session.mode || "session"} - ${session.adapterName || "OBD adapter"}`;
+    const small = document.createElement("small");
+    small.textContent = `${VD.formatWhen(session.startedAtMs)} - ${session.status || "active"} - ${Number(session.usefulSampleCount ?? session.sampleCount ?? 0)} useful`;
+    center.append(strong, small);
+    const right = document.createElement("b");
+    const empty = Number(session.emptySampleCount || 0);
+    right.textContent = empty ? `${empty} empty` : `${Number(session.sampleCount || 0)}x`;
+    button.append(center, right);
+    return button;
   }
 
   function updateDiagnosticCodeUi() {
@@ -69,40 +97,62 @@
     const totalCodes = Number(storage.diagnosticCodeCount ?? codes.length);
     const storedOrCurrent = Number(statusCounts.stored || 0) + Number(statusCounts.current || 0);
     const latestSeen = codes.reduce((latest, code) => Math.max(latest, Number(code.lastSeenMs || 0)), 0);
-    setText("dtcTitle", totalCodes ? `${totalCodes} code${totalCodes === 1 ? "" : "s"} saved` : "No car-code scan yet");
-    setText("dtcReportBadge", totalCodes ? "evidence saved" : "ready");
-    setText("dtcTotalCount", totalCodes);
-    setText("dtcStoredCount", storedOrCurrent);
-    setText("dtcPendingCount", Number(statusCounts.pending || 0));
-    setText("dtcPermanentCount", Number(statusCounts.permanent || 0));
-    setText("dtcFreezeCount", Number(statusCounts["freeze-frame"] || 0));
-    setText("dtcLastSeen", latestSeen ? formatWhen(latestSeen) : "--");
+    VD.setText("dtcTitle", totalCodes ? `${totalCodes} code${totalCodes === 1 ? "" : "s"} saved` : "No car-code scan yet");
+    VD.setText("dtcReportBadge", totalCodes ? "evidence saved" : "ready");
+    VD.setText("dtcTotalCount", totalCodes);
+    VD.setText("dtcStoredCount", storedOrCurrent);
+    VD.setText("dtcPendingCount", Number(statusCounts.pending || 0));
+    VD.setText("dtcPermanentCount", Number(statusCounts.permanent || 0));
+    VD.setText("dtcFreezeCount", Number(statusCounts["freeze-frame"] || 0));
+    VD.setText("dtcLastSeen", latestSeen ? VD.formatWhen(latestSeen) : "--");
     if (!list) return;
     if (!codes.length) {
-      list.innerHTML = `
-        <article class="dtc-empty-state">
-          <strong>No saved code evidence</strong>
-          <small>Current, pending, permanent, and freeze-frame results will appear here after a scan.</small>
-        </article>
-      `;
+      list.replaceChildren(buildDtcEmptyState());
       return;
     }
-    list.innerHTML = codes.map((code) => `
-      <article class="dtc-item" data-status="${escapeHtml(code.status || "stored")}">
-        <span class="dtc-code-block">
-          <b class="dtc-code">${escapeHtml(code.dtc || "--")}</b>
-          <small>${escapeHtml(code.statusLabel || code.status || "stored")}</small>
-        </span>
-        <span class="dtc-module-block">
-          <strong>${escapeHtml(code.moduleName || "generic OBD-II")}</strong>
-          <small>${code.header ? `header ${escapeHtml(code.header)} - ` : ""}first ${formatWhen(code.firstSeenMs)} - last ${formatWhen(code.lastSeenMs)}</small>
-        </span>
-        <span class="dtc-repeat-block">
-          <b>${Number(code.seenCount || 0)}x</b>
-          <small>seen</small>
-        </span>
-      </article>
-    `).join("");
+    list.replaceChildren(...codes.map(buildDtcItem));
+  }
+
+  function buildDtcEmptyState() {
+    const article = document.createElement("article");
+    article.className = "dtc-empty-state";
+    const strong = document.createElement("strong");
+    strong.textContent = "No saved code evidence";
+    const small = document.createElement("small");
+    small.textContent = "Current, pending, permanent, and freeze-frame results will appear here after a scan.";
+    article.append(strong, small);
+    return article;
+  }
+
+  function buildDtcItem(code) {
+    const article = document.createElement("article");
+    article.className = "dtc-item";
+    article.dataset.status = String(code.status || "stored");
+    const codeBlock = document.createElement("span");
+    codeBlock.className = "dtc-code-block";
+    const codeB = document.createElement("b");
+    codeB.className = "dtc-code";
+    codeB.textContent = code.dtc || "--";
+    const codeSmall = document.createElement("small");
+    codeSmall.textContent = code.statusLabel || code.status || "stored";
+    codeBlock.append(codeB, codeSmall);
+    const moduleBlock = document.createElement("span");
+    moduleBlock.className = "dtc-module-block";
+    const moduleStrong = document.createElement("strong");
+    moduleStrong.textContent = code.moduleName || "generic OBD-II";
+    const moduleSmall = document.createElement("small");
+    const headerLabel = code.header ? `header ${code.header} - ` : "";
+    moduleSmall.textContent = `${headerLabel}first ${VD.formatWhen(code.firstSeenMs)} - last ${VD.formatWhen(code.lastSeenMs)}`;
+    moduleBlock.append(moduleStrong, moduleSmall);
+    const repeatBlock = document.createElement("span");
+    repeatBlock.className = "dtc-repeat-block";
+    const repeatB = document.createElement("b");
+    repeatB.textContent = `${Number(code.seenCount || 0)}x`;
+    const repeatSmall = document.createElement("small");
+    repeatSmall.textContent = "seen";
+    repeatBlock.append(repeatB, repeatSmall);
+    article.append(codeBlock, moduleBlock, repeatBlock);
+    return article;
   }
 
   function updateReviewUi() {
@@ -122,76 +172,115 @@
     const usefulSamples = Number(review.usefulTelemetryCount || 0);
     const emptySamples = Number(review.emptyTelemetryCount || 0);
 
-    setText("reviewTitle", hasSession
+    VD.setText("reviewTitle", hasSession
       ? `${session.mode || "session"} - ${session.adapterName || "OBD adapter"}`
       : "No real session yet");
-    setText("reviewMaxSpeed", maxSpeed ? `${Math.round(maxSpeed * 0.621371)} mph` : "--");
-    setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
-    setText("reviewPidParse", (parsed || unknown) ? `${parsed}/${parsed + unknown}` : "--");
-    setText("reviewInterval", interval ? formatShortDuration(interval) : "--");
-    setText("reviewBackground", backgroundSamples ? `${backgroundSamples} samples` : "--");
-    setText("reviewGaps", sampleGaps ? `${sampleGaps}` : "0");
-    setText("reviewUsefulSamples", usefulSamples ? `${usefulSamples}` : "--");
-    setText("reviewEmptySamples", emptySamples ? `${emptySamples}` : "0");
-    setText("pidFrameTitle", frames.length ? `${frames.length} latest frames` : "Waiting for scan data");
+    VD.setText("reviewMaxSpeed", maxSpeed ? `${Math.round(maxSpeed * 0.621371)} mph` : "--");
+    VD.setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
+    VD.setText("reviewPidParse", (parsed || unknown) ? `${parsed}/${parsed + unknown}` : "--");
+    VD.setText("reviewInterval", interval ? VD.formatShortDuration(interval) : "--");
+    VD.setText("reviewBackground", backgroundSamples ? `${backgroundSamples} samples` : "--");
+    VD.setText("reviewGaps", sampleGaps ? `${sampleGaps}` : "0");
+    VD.setText("reviewUsefulSamples", usefulSamples ? `${usefulSamples}` : "--");
+    VD.setText("reviewEmptySamples", emptySamples ? `${emptySamples}` : "0");
+    VD.setText("pidFrameTitle", frames.length ? `${frames.length} latest frames` : "Waiting for scan data");
 
     const warningList = el("reviewWarnings");
     if (warningList) {
       if (!hasSession) {
-        warningList.innerHTML = '<p class="status-copy">Connect or scan once, then this becomes the post-test review.</p>';
+        warningList.replaceChildren(buildStatusCopy("Connect or scan once, then this becomes the post-test review."));
       } else if (!warnings.length) {
-        warningList.innerHTML = '<article class="real-insight-item"><strong>No warnings in stored summary</strong><small>That only means the current checks did not flag GPS, parser, or speed-sentinel issues.</small></article>';
+        warningList.replaceChildren(buildRealInsightItem(
+          "No warnings in stored summary",
+          "That only means the current checks did not flag GPS, parser, or speed-sentinel issues."
+        ));
       } else {
-        warningList.innerHTML = warnings.map((item) => `
-          <article class="warning-item">
-            <strong>${escapeHtml(item.code || "warning")}${item.count ? ` - ${escapeHtml(item.count)}` : ""}</strong>
-            <small>${escapeHtml(item.detail || "")}</small>
-          </article>
-        `).join("");
+        warningList.replaceChildren(...warnings.map(buildWarningItem));
       }
     }
 
     const insightList = el("realInsightList");
     if (insightList) {
-      insightList.innerHTML = hasSession
-        ? buildRealInsights(review).map((item) => `
-            <article class="real-insight-item">
-              <strong>${escapeHtml(item.title)}</strong>
-              <small>${escapeHtml(item.detail)}</small>
-            </article>
-          `).join("")
-        : "";
+      if (hasSession) {
+        insightList.replaceChildren(
+          ...buildRealInsights(review).map((item) => buildRealInsightItem(item.title, item.detail))
+        );
+      } else {
+        insightList.replaceChildren();
+      }
     }
 
     const timelineList = el("reviewTimeline");
     if (timelineList) {
-      timelineList.innerHTML = timeline.length
-        ? timeline.slice(-8).map((item) => `
-            <article class="timeline-item">
-              <span>
-                <strong>${escapeHtml(item.detail || item.state || item.kind || "event")}</strong>
-                <small>${escapeHtml(item.kind || "event")} - ${formatWhen(item.atMs)}</small>
-              </span>
-            </article>
-          `).join("")
-        : (hasSession ? '<p class="status-copy">No stored event timeline for this session yet.</p>' : "");
+      if (timeline.length) {
+        timelineList.replaceChildren(...timeline.slice(-8).map(buildTimelineItem));
+      } else if (hasSession) {
+        timelineList.replaceChildren(buildStatusCopy("No stored event timeline for this session yet."));
+      } else {
+        timelineList.replaceChildren();
+      }
     }
 
     const pidList = el("pidFrameList");
     if (pidList) {
-      pidList.innerHTML = frames.length
-        ? frames.map((frame) => `
-            <article class="pid-frame-item">
-              <strong>${escapeHtml(frame.command || "--")}</strong>
-              <span>
-                <strong>${escapeHtml(frame.name || "Unparsed response")}</strong>
-                <small>${escapeHtml(frame.valueText || frame.rawResponse || "stored raw frame")}</small>
-              </span>
-              <b>${frame.parsed ? "parsed" : "raw"}</b>
-            </article>
-          `).join("")
-        : '<p class="status-copy">Run Scan or Connect to capture command/response frames.</p>';
+      if (frames.length) {
+        pidList.replaceChildren(...frames.map(buildPidFrameItem));
+      } else {
+        pidList.replaceChildren(buildStatusCopy("Run Scan or Connect to capture command/response frames."));
+      }
     }
+  }
+
+  function buildRealInsightItem(title, detail) {
+    const article = document.createElement("article");
+    article.className = "real-insight-item";
+    const strong = document.createElement("strong");
+    strong.textContent = title;
+    const small = document.createElement("small");
+    small.textContent = detail;
+    article.append(strong, small);
+    return article;
+  }
+
+  function buildWarningItem(item) {
+    const article = document.createElement("article");
+    article.className = "warning-item";
+    const strong = document.createElement("strong");
+    strong.textContent = `${item.code || "warning"}${item.count ? ` - ${item.count}` : ""}`;
+    const small = document.createElement("small");
+    small.textContent = item.detail || "";
+    article.append(strong, small);
+    return article;
+  }
+
+  function buildTimelineItem(item) {
+    const article = document.createElement("article");
+    article.className = "timeline-item";
+    const wrapper = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = item.detail || item.state || item.kind || "event";
+    const small = document.createElement("small");
+    small.textContent = `${item.kind || "event"} - ${VD.formatWhen(item.atMs)}`;
+    wrapper.append(strong, small);
+    article.append(wrapper);
+    return article;
+  }
+
+  function buildPidFrameItem(frame) {
+    const article = document.createElement("article");
+    article.className = "pid-frame-item";
+    const cmd = document.createElement("strong");
+    cmd.textContent = frame.command || "--";
+    const center = document.createElement("span");
+    const name = document.createElement("strong");
+    name.textContent = frame.name || "Unparsed response";
+    const detail = document.createElement("small");
+    detail.textContent = frame.valueText || frame.rawResponse || "stored raw frame";
+    center.append(name, detail);
+    const right = document.createElement("b");
+    right.textContent = frame.parsed ? "parsed" : "raw";
+    article.append(cmd, center, right);
+    return article;
   }
 
   function buildRealInsights(review) {
@@ -249,8 +338,8 @@
     const overview = storage.overview || {};
     const battery = storage.batterySummary || {};
     const charge = storage.chargeSummary || {};
-    const route = selectedMapRoute(storage);
-    const hasRows = dbRowCount(storage) > 0;
+    const route = VD.selectedMapRoute(storage);
+    const hasRows = VD.dbRowCount(storage) > 0;
     const hasRoute = Number(route.pointCount || 0) >= 2;
     const hasCharge = Number(charge.chargeSessionCount || charge.chargingHintCount || 0) > 0;
     const latest = battery.latestBatterySnapshot && Object.keys(battery.latestBatterySnapshot).length
@@ -260,48 +349,60 @@
     toggleHidden("chargeEmptyState", hasCharge);
     toggleHidden("insightsEmptyState", hasRows);
     const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
-    setText("overviewDistance", routeDistance ? formatDistance(routeDistance) : "--");
-    setText("overviewDistanceSub", route.pointCount ? `${route.pointCount} GPS samples in latest route` : "waiting for route samples");
-    setText("overviewMaxSpeed", overview.maxSpeedKph ? `${Math.round(Number(overview.maxSpeedKph) * 0.621371)} mph` : "--");
+    VD.setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
+    VD.setText("overviewDistanceSub", route.pointCount ? `${route.pointCount} GPS samples in latest route` : "waiting for route samples");
+    VD.setText("overviewMaxSpeed", overview.maxSpeedKph ? `${Math.round(Number(overview.maxSpeedKph) * 0.621371)} mph` : "--");
     const soc = Number(latest.soc);
     const power = Number(latest.powerKw ?? latest.packPowerKw);
-    setText("overviewBattery", Number.isFinite(soc) && soc > 0 ? `${Math.round(soc)}%` : (Number.isFinite(power) && power ? `${power.toFixed(1)} kW` : "--"));
-    setText("overviewBatterySub", Number.isFinite(power) && power ? `${power.toFixed(1)} kW latest power` : "SOC/power once observed");
-    setText("overviewChargeHints", Number(charge.chargingHintCount || overview.chargingHints || 0));
+    VD.setText("overviewBattery", Number.isFinite(soc) && soc > 0 ? `${Math.round(soc)}%` : (Number.isFinite(power) && power ? `${power.toFixed(1)} kW` : "--"));
+    VD.setText("overviewBatterySub", Number.isFinite(power) && power ? `${power.toFixed(1)} kW latest power` : "SOC/power once observed");
+    VD.setText("overviewChargeHints", Number(charge.chargingHintCount || overview.chargingHints || 0));
 
-    setText("realChargeSessions", Number(charge.chargeSessionCount || 0));
-    setText("realChargeHints", Number(charge.chargingHintCount || 0));
-    setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
-    setText("realChargeStatus", charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data"));
+    VD.setText("realChargeSessions", Number(charge.chargeSessionCount || 0));
+    VD.setText("realChargeHints", Number(charge.chargingHintCount || 0));
+    VD.setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
+    VD.setText("realChargeStatus", charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data"));
 
     const ring = el("realPackRing");
     const ringValue = el("realPackValue");
     if (Number.isFinite(soc) && soc > 0) {
       if (ring) ring.style.setProperty("--v", Math.max(0, Math.min(100, soc)));
       if (ringValue) ringValue.textContent = `${Math.round(soc)}%`;
-      setText("realPackTitle", "Latest pack signal captured.");
-      setText("realPackCopy", `${Number.isFinite(power) ? power.toFixed(1) + " kW · " : ""}${latest.vehicleState || "vehicle state unknown"} · confidence grows as Volt-specific PIDs are validated.`);
+      VD.setText("realPackTitle", "Latest pack signal captured.");
+      VD.setText("realPackCopy", `${Number.isFinite(power) ? power.toFixed(1) + " kW · " : ""}${latest.vehicleState || "vehicle state unknown"} · confidence grows as Volt-specific PIDs are validated.`);
     } else {
       if (ring) ring.style.setProperty("--v", 0);
       if (ringValue) ringValue.textContent = "--";
-      setText("realPackTitle", "Waiting for battery samples.");
-      setText("realPackCopy", "SOC, power, and pack health will stay unknown until those PIDs are validated and stored.");
+      VD.setText("realPackTitle", "Waiting for battery samples.");
+      VD.setText("realPackCopy", "SOC, power, and pack health will stay unknown until those PIDs are validated and stored.");
     }
 
     const maintenance = el("maintenanceList");
     if (maintenance) {
-      maintenance.innerHTML = [
+      const rows = [
         ["Tire rotation", "Track manually until odometer PID is validated", "manual"],
         ["Battery coolant", "Needs service interval data before app reminders are trusted", "watch"],
         ["Engine oil", "Gas-engine runtime PID will make this useful", "pending"]
-      ].map(([name, detail, tag]) => `
-        <article class="real-insight-item">
-          <span><strong>${name}</strong><small>${detail}</small></span>
-          <b>${tag}</b>
-        </article>`).join("");
+      ];
+      maintenance.replaceChildren(...rows.map(([name, detail, tag]) => buildMaintenanceRow(name, detail, tag)));
     }
 
     renderVehicleUi();
+  }
+
+  function buildMaintenanceRow(name, detail, tag) {
+    const article = document.createElement("article");
+    article.className = "real-insight-item";
+    const center = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = name;
+    const small = document.createElement("small");
+    small.textContent = detail;
+    center.append(strong, small);
+    const right = document.createElement("b");
+    right.textContent = tag;
+    article.append(center, right);
+    return article;
   }
 
   // Vehicle identity card. Reads state.appState.vehicle once the OBD bridge can
@@ -317,12 +418,12 @@
     const name = vehicle.name || vehicle.nickname || "";
     const known = Boolean(name || identity || vehicle.vin);
 
-    setText("vehicleName", name || identity || "No vehicle identified yet");
-    setText("vehicleSummary", known
+    VD.setText("vehicleName", name || identity || "No vehicle identified yet");
+    VD.setText("vehicleSummary", known
       ? "Identity reported by the OBD bridge. Blank fields wait on PIDs that are not validated yet."
       : "Vehicle identity fills in once VIN and odometer PIDs are validated.");
-    setText("vehicleVin", vehicle.vin || "--");
-    setText("vehicleYear", year || "--");
+    VD.setText("vehicleVin", vehicle.vin || "--");
+    VD.setText("vehicleYear", year || "--");
 
     const odoMiles = Number(vehicle.odometerMiles);
     const odoKm = Number(vehicle.odometerKm);
@@ -332,16 +433,16 @@
     } else if (Number.isFinite(odoKm) && odoKm > 0) {
       odometer = `${Math.round(odoKm * 0.621371).toLocaleString()} mi`;
     }
-    setText("vehicleOdometer", odometer);
+    VD.setText("vehicleOdometer", odometer);
 
     const loggedMeters = Number(insights.totalDistanceMeters || 0);
-    setText("vehicleLoggedDistance", loggedMeters > 0 ? formatDistance(loggedMeters) : "--");
+    VD.setText("vehicleLoggedDistance", loggedMeters > 0 ? VD.formatDistance(loggedMeters) : "--");
 
     const evMix = Number(vehicle.evSharePct != null ? vehicle.evSharePct : vehicle.electricSharePct);
-    setText("vehicleEvMix", Number.isFinite(evMix) ? `${Math.round(evMix)}% electric` : "--");
+    VD.setText("vehicleEvMix", Number.isFinite(evMix) ? `${Math.round(evMix)}% electric` : "--");
 
     const health = Number(vehicle.batteryHealthPct != null ? vehicle.batteryHealthPct : vehicle.packHealthPct);
-    setText("vehicleBatteryHealth", Number.isFinite(health) ? `${health.toFixed(1)}%` : "--");
+    VD.setText("vehicleBatteryHealth", Number.isFinite(health) ? `${health.toFixed(1)}%` : "--");
   }
 
   function toggleHidden(id, hidden) {
@@ -351,7 +452,7 @@
 
   function loadTrips() {
     if (bridge && typeof bridge.getTrips === "function") {
-      const parsed = parsePayload(bridge.getTrips(), []);
+      const parsed = VD.parsePayload(bridge.getTrips(), []);
       state.trips = Array.isArray(parsed) ? parsed : [];
     }
     renderRealTrips();
@@ -363,31 +464,37 @@
     toggleHidden("realTripsCard", trips.length === 0);
     toggleHidden("tripsEmptyState", trips.length > 0);
     const list = el("realTripsList");
-    if (list) list.innerHTML = trips.map(renderTripRow).join("");
-    setText("realTripsTitle", trips.length
+    if (list) list.replaceChildren(...trips.map(renderTripRow));
+    VD.setText("realTripsTitle", trips.length
       ? `${trips.length} logged ${trips.length === 1 ? "drive" : "drives"}`
       : "Your trips");
   }
 
   function renderTripRow(trip) {
-    const distance = formatDistance(Number(trip.distanceMeters || 0));
-    const duration = Number(trip.durationMs) > 0 ? formatDuration(Number(trip.durationMs)) : null;
+    const distance = VD.formatDistance(Number(trip.distanceMeters || 0));
+    const duration = Number(trip.durationMs) > 0 ? VD.formatDuration(Number(trip.durationMs)) : null;
     const topMph = trip.maxSpeedKph ? Math.round(Number(trip.maxSpeedKph) * 0.621371) : 0;
     const meta = [distance !== "--" ? distance : null, duration, topMph ? `top ${topMph} mph` : null]
       .filter(Boolean).join(" · ") || "no movement logged";
-    return `
-      <button type="button" class="history-row" data-trip-map="${escapeHtml(String(trip.id))}">
-        <span>
-          <strong>${escapeHtml(formatWhen(trip.startedAtMs))}</strong>
-          <small>${escapeHtml(meta)}</small>
-        </span>
-        <b>${trip.hasRoute ? "route" : `${Number(trip.sampleCount || 0)}x`}</b>
-      </button>`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "history-row";
+    button.dataset.tripMap = String(trip.id);
+    const center = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = VD.formatWhen(trip.startedAtMs);
+    const small = document.createElement("small");
+    small.textContent = meta;
+    center.append(strong, small);
+    const right = document.createElement("b");
+    right.textContent = trip.hasRoute ? "route" : `${Number(trip.sampleCount || 0)}x`;
+    button.append(center, right);
+    return button;
   }
 
   function loadInsights() {
     if (bridge && typeof bridge.getInsights === "function") {
-      state.insights = parsePayload(bridge.getInsights(), {});
+      state.insights = VD.parsePayload(bridge.getInsights(), {});
     }
     renderInsightStats();
   }
@@ -395,10 +502,28 @@
   function renderInsightStats() {
     const insights = state.insights || {};
     const trips = Number(insights.tripCount || 0);
-    setText("insightTripCount", trips || "--");
-    setText("insightTotalDistance", trips ? formatDistance(Number(insights.totalDistanceMeters || 0)) : "--");
-    setText("insightDriveTime", Number(insights.totalDriveMs) > 0 ? formatDuration(Number(insights.totalDriveMs)) : "--");
-    setText("insightTopSpeed", insights.maxSpeedKph ? `${Math.round(Number(insights.maxSpeedKph) * 0.621371)} mph` : "--");
-    setText("insightLongest", Number(insights.longestTripMeters) > 0 ? formatDistance(Number(insights.longestTripMeters)) : "--");
-    setText("insightGpsTrips", trips ? `${Number(insights.gpsTripCount || 0)}/${trips}` : "--");
+    VD.setText("insightTripCount", trips || "--");
+    VD.setText("insightTotalDistance", trips ? VD.formatDistance(Number(insights.totalDistanceMeters || 0)) : "--");
+    VD.setText("insightDriveTime", Number(insights.totalDriveMs) > 0 ? VD.formatDuration(Number(insights.totalDriveMs)) : "--");
+    VD.setText("insightTopSpeed", insights.maxSpeedKph ? `${Math.round(Number(insights.maxSpeedKph) * 0.621371)} mph` : "--");
+    VD.setText("insightLongest", Number(insights.longestTripMeters) > 0 ? VD.formatDistance(Number(insights.longestTripMeters)) : "--");
+    VD.setText("insightGpsTrips", trips ? `${Number(insights.gpsTripCount || 0)}/${trips}` : "--");
   }
+
+  Object.assign(VD, {
+    setStorage,
+    updateStorageUi,
+    updateDiagnosticCodeUi,
+    updateReviewUi,
+    buildRealInsights,
+    stateCountSummary,
+    renderRealV2Ui,
+    renderVehicleUi,
+    toggleHidden,
+    loadTrips,
+    renderRealTrips,
+    renderTripRow,
+    loadInsights,
+    renderInsightStats
+  });
+})();

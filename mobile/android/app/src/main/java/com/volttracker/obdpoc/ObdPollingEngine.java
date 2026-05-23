@@ -1,8 +1,5 @@
 package com.volttracker.obdpoc;
 
-import com.volttracker.obdpoc.location.FilteredLocation;
-
-import static com.volttracker.obdpoc.ObdElmDecode.appendProbeLine;
 import static com.volttracker.obdpoc.ObdElmDecode.appendRaw;
 import static com.volttracker.obdpoc.ObdElmDecode.classifyVehicleState;
 import static com.volttracker.obdpoc.ObdElmDecode.classifyVehicleStateConfidence;
@@ -12,29 +9,32 @@ import static com.volttracker.obdpoc.ObdElmDecode.initialConnectBackoffMs;
 import static com.volttracker.obdpoc.ObdElmDecode.reconnectBackoffMs;
 import static com.volttracker.obdpoc.ObdElmDecode.round1;
 import static com.volttracker.obdpoc.ObdElmDecode.safeMessage;
-import static com.volttracker.obdpoc.ObdElmDecode.summarizeForStorage;
-import static com.volttracker.obdpoc.ObdElmDecode.tail;
 
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-
+import android.util.Log;
+import com.volttracker.obdpoc.location.FilteredLocation;
+import java.io.IOException;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.IOException;
-
 /**
- * Runs the OBD adapter IO on the {@link ObdService} worker thread: the connect/reconnect
- * loop, ELM327 init, the live-data poll, the diagnostic scan, and the demo stream. Command
- * IO is serialized on {@code ObdService.ioLock} so a reconnect cannot race a session stop;
- * connection parameters and probe lists live in {@link ObdProbes}.
+ * Runs the OBD adapter IO on the {@link ObdService} worker thread: the connect/reconnect loop,
+ * ELM327 init, and the live-data poll. The diagnostic-scan and demo streams live in {@link
+ * DiagnosticScanRunner} and {@link DemoPollingLoop} respectively and share this engine's command-IO
+ * surface ({@link #sendRecoverableCommand}, {@link #appendLocation}, {@link #appendSessionHealth},
+ * {@link #incrementSampleCount}). Command IO is serialized on {@code ObdService.ioLock} so a
+ * reconnect cannot race a session stop; connection parameters and probe lists live in {@link
+ * ObdProbes}.
  */
 final class ObdPollingEngine {
 
     private final ObdService service;
     private final ElmConnection connection = new ElmConnection();
     private final SpeedPlausibilityFilter speedFilter = new SpeedPlausibilityFilter();
+    private final DemoPollingLoop demoLoop;
+    private final DiagnosticScanRunner scanRunner;
     private int sampleCount;
     private String supportedPidsSummary = "";
     private int backgroundSampleCount;
@@ -45,6 +45,8 @@ final class ObdPollingEngine {
 
     ObdPollingEngine(ObdService service) {
         this.service = service;
+        this.demoLoop = new DemoPollingLoop(service, this);
+        this.scanRunner = new DiagnosticScanRunner(service, this);
     }
 
     /** Resets the per-session counters before a new session's loop is submitted. */
@@ -75,6 +77,35 @@ final class ObdPollingEngine {
         connection.close();
     }
 
+    /**
+     * Drives the BT-adapter session state machine for the lifetime of one session.
+     *
+     * <p>Two failure modes are tracked separately:
+     *
+     * <ol>
+     *   <li><b>Never-connected</b> ({@code everConnected == false}): the very first {@code
+     *       connectAndInitialize} threw, so the adapter was never reachable. Status messages say
+     *       "Couldn't reach &lt;name&gt;" and the backoff curve used is {@link
+     *       com.volttracker.obdpoc.ObdElmDecode#initialConnectBackoffMs} (gentler — the user may
+     *       still be turning the car on).
+     *   <li><b>Mid-session drop</b> ({@code everConnected == true}): we had a working session and
+     *       lost it. Status messages say "Adapter link dropped" and the backoff curve used is
+     *       {@link com.volttracker.obdpoc.ObdElmDecode#reconnectBackoffMs} (more aggressive — the
+     *       link was just up).
+     * </ol>
+     *
+     * <p>On either path, after {@link ObdProbes#MAX_RECONNECT_ATTEMPTS} consecutive failures, the
+     * service stops itself cleanly via {@code service.stopSelf()}, which routes teardown through
+     * {@code ObdService.onDestroy → stopCurrentSession} so GPS and foreground notifications are
+     * released.
+     *
+     * <p>Scan mode short-circuits the live-poll loop: one connect, one {@link
+     * DiagnosticScanRunner#run()}, then return.
+     *
+     * <p>This method must run on a worker thread (the service IO thread); the service's {@code
+     * ioLock} serializes its writes against teardown so a reconnect cannot race a {@code
+     * stopCurrentSession}.
+     */
     @SuppressLint("MissingPermission")
     void runBluetoothLoop(String address, boolean scanMode) {
         if (address == null || address.trim().isEmpty()) {
@@ -105,12 +136,14 @@ final class ObdPollingEngine {
                     connectAndInitialize(adapter, address);
                     everConnected = true;
                     if (scanMode) {
-                        runDiagnosticScan();
+                        scanRunner.run();
                         return;
                     }
                     attempt = 0;
-                    service.broadcastStatus("connected",
-                            "Polling live OBD data from " + service.activeName + ".", false);
+                    service.broadcastStatus(
+                            "connected",
+                            "Polling live OBD data from " + service.activeName + ".",
+                            false);
                     service.updateNotification("Connected to " + service.activeName);
                     pollUntilStoppedOrBroken();
                     return; // running went false: a clean stop
@@ -121,36 +154,71 @@ final class ObdPollingEngine {
                     }
                     attempt += 1;
                     if (attempt > ObdProbes.MAX_RECONNECT_ATTEMPTS) {
-                        service.recorder.logError("reconnect_exhausted", ex);
-                        service.broadcastStatus("error", everConnected
-                                ? "Lost the adapter link and could not reconnect after "
-                                        + ObdProbes.MAX_RECONNECT_ATTEMPTS + " tries."
-                                : "Could not reach " + service.activeName + " after "
+                        // Catastrophic — also write to logcat so a post-crash bug report
+                        // has the failure reason even if the JSONL log did not flush.
+                        Log.w(
+                                MainActivity.TAG,
+                                "OBD reconnect exhausted for "
+                                        + service.activeName
+                                        + " after "
                                         + ObdProbes.MAX_RECONNECT_ATTEMPTS
-                                        + " tries. Make sure the car is awake and the "
-                                        + "adapter is plugged in.", true);
+                                        + " attempts",
+                                ex);
+                        service.recorder.logError("reconnect_exhausted", ex);
+                        service.broadcastStatus(
+                                "error",
+                                everConnected
+                                        ? "Lost the adapter link and could not reconnect after "
+                                                + ObdProbes.MAX_RECONNECT_ATTEMPTS
+                                                + " tries."
+                                        : "Could not reach "
+                                                + service.activeName
+                                                + " after "
+                                                + ObdProbes.MAX_RECONNECT_ATTEMPTS
+                                                + " tries. Make sure the car is awake and the "
+                                                + "adapter is plugged in.",
+                                true);
                         // Give up cleanly: stopSelf() routes teardown through onDestroy ->
                         // stopCurrentSession, which stops the GPS tracker and foreground
                         // service rather than leaving them running with no session.
                         service.stopSelf();
                         return;
                     }
-                    long backoffMs = everConnected
-                            ? reconnectBackoffMs(attempt)
-                            : initialConnectBackoffMs(attempt);
-                    service.recorder.logEvent("reconnect", "attempt", String.valueOf(attempt),
-                            "backoffMs", String.valueOf(backoffMs), "reason", safeMessage(ex),
-                            "everConnected", String.valueOf(everConnected));
-                    service.broadcastStatus("connecting", everConnected
-                            ? "Adapter link dropped - reconnecting (" + attempt + "/"
-                                    + ObdProbes.MAX_RECONNECT_ATTEMPTS + ")..."
-                            : "Couldn't reach " + service.activeName + " - retrying ("
-                                    + attempt + "/" + ObdProbes.MAX_RECONNECT_ATTEMPTS
-                                    + ")...", false);
+                    long backoffMs =
+                            everConnected
+                                    ? reconnectBackoffMs(attempt)
+                                    : initialConnectBackoffMs(attempt);
+                    service.recorder.logEvent(
+                            "reconnect",
+                            "attempt",
+                            String.valueOf(attempt),
+                            "backoffMs",
+                            String.valueOf(backoffMs),
+                            "reason",
+                            safeMessage(ex),
+                            "everConnected",
+                            String.valueOf(everConnected));
+                    service.broadcastStatus(
+                            "connecting",
+                            everConnected
+                                    ? "Adapter link dropped - reconnecting ("
+                                            + attempt
+                                            + "/"
+                                            + ObdProbes.MAX_RECONNECT_ATTEMPTS
+                                            + ")..."
+                                    : "Couldn't reach "
+                                            + service.activeName
+                                            + " - retrying ("
+                                            + attempt
+                                            + "/"
+                                            + ObdProbes.MAX_RECONNECT_ATTEMPTS
+                                            + ")...",
+                            false);
                     sleep(backoffMs);
                 }
             }
         } catch (RuntimeException ex) {
+            Log.w(MainActivity.TAG, "OBD loop runtime failure for " + service.activeName, ex);
             service.recorder.logError("connection_failure", ex);
             service.broadcastStatus("error", friendlyConnectionMessage(ex), true);
         } finally {
@@ -162,16 +230,21 @@ final class ObdPollingEngine {
 
     @SuppressLint("MissingPermission")
     private void connectAndInitialize(BluetoothAdapter adapter, String address) throws IOException {
-        service.broadcastStatus("connecting",
-                "Opening serial connection to " + service.activeName + "...", false);
+        service.broadcastStatus(
+                "connecting", "Opening serial connection to " + service.activeName + "...", false);
         if (service.hasBluetoothScanPermission()) {
             adapter.cancelDiscovery();
         } else {
-            service.recorder.logEvent("cancel_discovery_skipped", "reason", "missing BLUETOOTH_SCAN");
+            service.recorder.logEvent(
+                    "cancel_discovery_skipped", "reason", "missing BLUETOOTH_SCAN");
         }
         BluetoothDevice device = adapter.getRemoteDevice(address);
-        service.recorder.logEvent("bluetooth_socket_open", "address", address,
-                "uuid", ObdProbes.ELM327_SPP_UUID.toString());
+        service.recorder.logEvent(
+                "bluetooth_socket_open",
+                "address",
+                address,
+                "uuid",
+                ObdProbes.ELM327_SPP_UUID.toString());
         connection.open(device, ObdProbes.ELM327_SPP_UUID, ObdProbes.CONNECT_TIMEOUT_MS);
         service.recorder.logEvent("bluetooth_socket_connected", "address", address);
         service.broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false);
@@ -194,40 +267,14 @@ final class ObdPollingEngine {
         }
     }
 
+    /** Thin delegate kept on the engine so {@link ObdService} can submit it as a Runnable. */
     void runDemoLoop() {
-        service.broadcastStatus("connected",
-                "Demo telemetry is running without an OBD adapter.", false);
-        long start = System.currentTimeMillis();
-        while (service.running.get()) {
-            double t = (System.currentTimeMillis() - start) / 1000.0;
-            JSONObject sample = new JSONObject();
-            try {
-                sampleCount += 1;
-                sample.put("source", "demo");
-                sample.put("connected", true);
-                sample.put("adapter", service.activeName);
-                sample.put("sampleCount", sampleCount);
-                sample.put("sessionMs", Math.max(0, System.currentTimeMillis() - service.sessionStartedAtMs));
-                sample.put("supportedPids", supportedPidsSummary);
-                sample.put("vehicleState", "demo-preview");
-                sample.put("speedKph", Math.max(0, Math.round(54 + 23 * Math.sin(t / 3.4))));
-                sample.put("rpm", Math.round(1260 + 420 * Math.sin(t / 2.1)));
-                sample.put("coolantC", Math.round(82 + 4 * Math.sin(t / 8.0)));
-                sample.put("loadPct", Math.round(34 + 18 * Math.sin(t / 4.4)));
-                sample.put("throttlePct", Math.round(18 + 14 * Math.sin(t / 2.7)));
-                sample.put("voltage", round1(13.8 + 0.2 * Math.sin(t / 5.0)));
-                sample.put("soc", Math.max(13.4, round1(77.8 - t * 0.01)));
-                sample.put("batteryTemp", round1(24.0 + Math.sin(t / 8.0)));
-                sample.put("powerKw", round1(16.0 + Math.sin(t / 2.2) * 12.0));
-                sample.put("updatedAt", System.currentTimeMillis());
-                appendSessionHealth(sample);
-                sample.put("raw", "demo");
-            } catch (JSONException ignored) {
-                // Local numeric values are safe.
-            }
-            service.broadcastTelemetry(sample);
-            sleep(1000);
-        }
+        demoLoop.run();
+    }
+
+    /** Returns the new sample count after incrementing; used by {@link DemoPollingLoop}. */
+    int incrementSampleCount() {
+        return ++sampleCount;
     }
 
     private void initializeElm327() throws IOException {
@@ -242,104 +289,41 @@ final class ObdPollingEngine {
         String supportedPids = sendCommand("0100", 9000);
         if (hasElmPrompt(supportedPids)) {
             supportedPidsSummary = ObdProtocol.cleanSupportedPids(supportedPids);
-            service.recorder.logEvent("protocol_probe_success", "command", "0100",
-                    "response", supportedPidsSummary);
+            service.recorder.logEvent(
+                    "protocol_probe_success", "command", "0100", "response", supportedPidsSummary);
         }
         if (!hasElmPrompt(supportedPids)) {
-            service.recorder.logEvent("protocol_probe_no_prompt", "command", "0100",
-                    "response", ObdProtocol.summarize(supportedPids));
+            service.recorder.logEvent(
+                    "protocol_probe_no_prompt",
+                    "command",
+                    "0100",
+                    "response",
+                    ObdProtocol.summarize(supportedPids));
             sendEscape(600);
             sendCommand("ATPC", 1400);
             sendCommand("ATSP6", 1400);
             supportedPids = sendCommand("0100", 9000);
             if (hasElmPrompt(supportedPids)) {
                 supportedPidsSummary = ObdProtocol.cleanSupportedPids(supportedPids);
-                service.recorder.logEvent("protocol_probe_success", "command", "0100_after_ATSP6",
-                        "response", supportedPidsSummary);
+                service.recorder.logEvent(
+                        "protocol_probe_success",
+                        "command",
+                        "0100_after_ATSP6",
+                        "response",
+                        supportedPidsSummary);
             }
             if (!hasElmPrompt(supportedPids)) {
-                service.recorder.logEvent("protocol_probe_no_prompt", "command",
-                        "0100_after_ATSP6", "response", ObdProtocol.summarize(supportedPids));
+                service.recorder.logEvent(
+                        "protocol_probe_no_prompt",
+                        "command",
+                        "0100_after_ATSP6",
+                        "response",
+                        ObdProtocol.summarize(supportedPids));
                 sendEscape(600);
                 sendCommand("ATPC", 1400);
                 sendCommand("ATSP0", 1400);
             }
         }
-    }
-
-    private void runDiagnosticScan() throws IOException {
-        service.broadcastStatus("scanning",
-                "Running protocol, DTC, freeze-frame, VIN, and live-data probes...", false);
-        service.updateNotification("Scanning " + service.activeName);
-
-        StringBuilder raw = new StringBuilder();
-        appendProbeLine(raw, "adapter", service.activeName);
-        probeCommand("ATI", 1800, raw);
-        probeCommand("ATDP", 1800, raw);
-        probeCommand("ATDPN", 1800, raw);
-        probeCommand("ATRV", 1800, raw);
-
-        for (String protocol : ObdProbes.PROTOCOL_PROBES) {
-            probeCommand(protocol, 1800, raw);
-            for (String capability : ObdProbes.CAPABILITY_PROBES) {
-                probeCommand(capability, "0100".equals(capability) ? 9000 : 3500, raw);
-            }
-            probeCommand("0902", 6000, raw);
-            probeCommand("03", 3500, raw);
-        }
-
-        // The protocol sweep above leaves the adapter on the last probe (ATSP8), which is
-        // the wrong CAN protocol for this car. Restore auto-detect so the live-data and
-        // Volt PID probes below run on the vehicle's real protocol instead of CAN ERROR.
-        appendProbeLine(raw, "volt-discovery", "restore auto protocol for live + Volt probes");
-        probeCommand("ATSP0", 1800, raw);
-        probeCommand("0100", 9000, raw);
-
-        appendProbeLine(raw, "standard-diagnostics", "generic DTC and freeze-frame probes");
-        probeCommand("03", 3500, raw);
-        probeCommand("07", 3500, raw);
-        probeCommand("0A", 3500, raw);
-        probeCommand("0200", 3500, raw);
-        probeCommand("0202", 3500, raw);
-        probeCommand("0204", 3200, raw);
-        probeCommand("0205", 3200, raw);
-        probeCommand("020C", 3200, raw);
-        probeCommand("020D", 3200, raw);
-        probeCommand("0211", 3200, raw);
-        probeCommand("0242", 3200, raw);
-
-        for (String probe : ObdProbes.LIVE_PROBES) {
-            probeCommand(probe, 3200, raw);
-        }
-
-        appendProbeLine(raw, "volt-discovery", "ATSH7E4 battery and charger probes");
-        probeCommand("ATSH7E4", 1800, raw);
-        for (String probe : ObdProbes.VOLT_7E4_PROBES) {
-            probeCommand(probe, 4200, raw);
-        }
-        appendProbeLine(raw, "volt-discovery", "ATSH7E1 pack voltage and current probes");
-        probeCommand("ATSH7E1", 1800, raw);
-        for (String probe : ObdProbes.VOLT_7E1_PROBES) {
-            probeCommand(probe, 4200, raw);
-        }
-        probeCommand("ATSH7DF", 1800, raw);
-
-        JSONObject sample = new JSONObject();
-        try {
-            sample.put("source", "scan");
-            sample.put("connected", true);
-            sample.put("adapter", service.activeName);
-            sample.put("updatedAt", System.currentTimeMillis());
-            appendLocation(sample);
-            sample.put("raw", tail(raw.toString(), 7200));
-        } catch (JSONException ignored) {
-            // Local values are safe.
-        }
-        service.broadcastTelemetry(sample);
-        service.broadcastStatus("scan-complete",
-                "Diagnostic scan complete. You can disconnect and bring the phone back for the log.",
-                false);
-        service.updateNotification("Scan complete for " + service.activeName);
     }
 
     // Throws IOException when the adapter socket has broken so the caller can reconnect.
@@ -367,8 +351,8 @@ final class ObdPollingEngine {
             } else if (chargeTransitionHint) {
                 sample.put("speedRejectedKph", 255);
                 sample.put("chargeTransitionHint", true);
-                service.recorder.logEvent("speed_rejected", "speedKph", "255",
-                        "reason", "charge_transition_hint");
+                service.recorder.logEvent(
+                        "speed_rejected", "speedKph", "255", "reason", "charge_transition_hint");
             }
             String rpmRaw = sendRecoverableCommand("010C", 1500);
             raw = appendRaw(raw, "010C", rpmRaw);
@@ -430,12 +414,17 @@ final class ObdPollingEngine {
             sample.put("connected", true);
             sample.put("adapter", service.activeName);
             sample.put("sampleCount", sampleCount);
-            sample.put("sessionMs", Math.max(0, System.currentTimeMillis() - service.sessionStartedAtMs));
+            sample.put(
+                    "sessionMs",
+                    Math.max(0, System.currentTimeMillis() - service.sessionStartedAtMs));
             sample.put("supportedPids", supportedPidsSummary);
-            sample.put("vehicleState",
+            sample.put(
+                    "vehicleState",
                     classifyVehicleState(voltage, acceptedSpeed, rpm, load, chargeTransitionHint));
-            sample.put("vehicleStateConfidence",
-                    classifyVehicleStateConfidence(voltage, acceptedSpeed, rpm, chargeTransitionHint));
+            sample.put(
+                    "vehicleStateConfidence",
+                    classifyVehicleStateConfidence(
+                            voltage, acceptedSpeed, rpm, chargeTransitionHint));
             sample.put("updatedAt", System.currentTimeMillis());
             appendSessionHealth(sample);
             appendLocation(sample);
@@ -447,7 +436,7 @@ final class ObdPollingEngine {
         return sample;
     }
 
-    private void appendLocation(JSONObject sample) throws JSONException {
+    void appendLocation(JSONObject sample) throws JSONException {
         FilteredLocation location =
                 service.locationTracker == null ? null : service.locationTracker.getLastLocation();
         if (location == null) {
@@ -481,7 +470,7 @@ final class ObdPollingEngine {
         }
     }
 
-    private void appendSessionHealth(JSONObject sample) throws JSONException {
+    void appendSessionHealth(JSONObject sample) throws JSONException {
         synchronized (service.ioLock) {
             long now = sample.optLong("updatedAt", System.currentTimeMillis());
             long gapMs = lastSampleAtMs > 0L ? Math.max(0L, now - lastSampleAtMs) : 0L;
@@ -491,8 +480,12 @@ final class ObdPollingEngine {
                 long expectedGapMs = "demo".equals(service.recorder.activeMode()) ? 3500L : 6000L;
                 if (gapMs > expectedGapMs) {
                     sampleGapCount += 1;
-                    service.recorder.logEvent("sample_gap", "gapMs", String.valueOf(gapMs),
-                            "mode", service.recorder.activeMode());
+                    service.recorder.logEvent(
+                            "sample_gap",
+                            "gapMs",
+                            String.valueOf(gapMs),
+                            "mode",
+                            service.recorder.activeMode());
                 }
             }
             lastSampleAtMs = now;
@@ -508,17 +501,15 @@ final class ObdPollingEngine {
         }
     }
 
-    private String probeCommand(String command, long timeoutMs, StringBuilder raw) throws IOException {
-        String response = sendRecoverableCommand(command, timeoutMs);
-        appendProbeLine(raw, command, summarizeForStorage(command, response));
-        return response;
-    }
-
-    private String sendRecoverableCommand(String command, long timeoutMs) throws IOException {
+    String sendRecoverableCommand(String command, long timeoutMs) throws IOException {
         String response = sendCommand(command, timeoutMs);
         if (!hasElmPrompt(response)) {
-            service.recorder.logEvent("command_no_prompt_recovery", "command", command,
-                    "response", ObdProtocol.summarize(response));
+            service.recorder.logEvent(
+                    "command_no_prompt_recovery",
+                    "command",
+                    command,
+                    "response",
+                    ObdProtocol.summarize(response));
             sendEscape(700);
         }
         return response;
@@ -528,8 +519,8 @@ final class ObdPollingEngine {
         synchronized (service.ioLock) {
             long startedAt = System.currentTimeMillis();
             String rawResponse = connection.transact(command, timeoutMs, service.running::get);
-            service.recorder.logCommand(command, timeoutMs,
-                    System.currentTimeMillis() - startedAt, rawResponse);
+            service.recorder.logCommand(
+                    command, timeoutMs, System.currentTimeMillis() - startedAt, rawResponse);
             return rawResponse;
         }
     }

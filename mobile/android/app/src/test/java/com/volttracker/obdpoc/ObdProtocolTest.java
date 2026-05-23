@@ -7,16 +7,14 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.volttracker.obdpoc.ObdProtocol.ParsedPidValue;
-
+import java.util.List;
 import org.junit.Test;
 
-import java.util.List;
-
 /**
- * Decode tests for {@link ObdProtocol}. Hex responses are real captures from the test
- * vehicle (sessions 7 and 8 of the on-phone database) plus synthesised mode-22 frames
- * built from the community decode formulas. These run on the JVM with no device, so a
- * wrong PID or formula fails here instead of on a wasted car trip.
+ * Decode tests for {@link ObdProtocol}. Hex responses are real captures from the test vehicle
+ * (sessions 7 and 8 of the on-phone database) plus synthesised mode-22 frames built from the
+ * community decode formulas. These run on the JVM with no device, so a wrong PID or formula fails
+ * here instead of on a wasted car trip.
  */
 public class ObdProtocolTest {
 
@@ -255,7 +253,8 @@ public class ObdProtocolTest {
     public void cleanSupportedPidsStripsElmSearchingNoise() {
         // The ELM prints "SEARCHING..." glued onto the first 4100 frame while it
         // auto-detects the protocol; only the capability frames belong in the field.
-        assertEquals("4100BE7FB813 410080000001",
+        assertEquals(
+                "4100BE7FB813 410080000001",
                 ObdProtocol.cleanSupportedPids("SEARCHING...4100BE7FB813\r410080000001\r>"));
         assertEquals("4100BE7FB813", ObdProtocol.cleanSupportedPids("4100BE7FB813\r>"));
         assertEquals("", ObdProtocol.cleanSupportedPids("SEARCHING...\r>"));
@@ -265,8 +264,7 @@ public class ObdProtocolTest {
     @Test
     public void storedDiagnosticTroubleCodesDecode() {
         List<ObdProtocol.DiagnosticTroubleCode> codes =
-                ObdProtocol.parseDiagnosticTroubleCodes("03",
-                        "7E8 06 43 01 33 25 A2 00 00\r>", "");
+                ObdProtocol.parseDiagnosticTroubleCodes("03", "7E8 06 43 01 33 25 A2 00 00\r>", "");
 
         assertEquals(2, codes.size());
         assertEquals("P0133", codes.get(0).code);
@@ -280,9 +278,8 @@ public class ObdProtocolTest {
     @Test
     public void multilineDiagnosticTroubleCodesDecodeContinuationFrames() {
         List<ObdProtocol.DiagnosticTroubleCode> codes =
-                ObdProtocol.parseDiagnosticTroubleCodes("03",
-                        "7E8 10 08 43 01 33 25 A2\r7E8 21 C0 73 00 00 00 00\r>",
-                        "");
+                ObdProtocol.parseDiagnosticTroubleCodes(
+                        "03", "7E8 10 08 43 01 33 25 A2\r7E8 21 C0 73 00 00 00 00\r>", "");
 
         assertEquals(3, codes.size());
         assertEquals("P0133", codes.get(0).code);
@@ -293,9 +290,8 @@ public class ObdProtocolTest {
     @Test
     public void multilineDiagnosticTroubleCodesSkipNonContinuationFrames() {
         List<ObdProtocol.DiagnosticTroubleCode> codes =
-                ObdProtocol.parseDiagnosticTroubleCodes("03",
-                        "7E8 10 06 43 01 33 00 00\r7E8 7F 03 11 00 00 00 00\r>",
-                        "");
+                ObdProtocol.parseDiagnosticTroubleCodes(
+                        "03", "7E8 10 06 43 01 33 00 00\r7E8 7F 03 11 00 00 00 00\r>", "");
 
         assertEquals(1, codes.size());
         assertEquals("P0133", codes.get(0).code);

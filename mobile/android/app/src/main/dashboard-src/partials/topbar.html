@@ -1,24 +1,26 @@
-  <header class="topbar">
-    <div class="top-main">
-      <div>
-        <div id="screenKicker" class="kicker">Volt Tracker Android</div>
-        <h1 id="screenTitle">Drive</h1>
-      </div>
-      <div id="stateBadge" class="badge" data-state="idle"><span class="dot"></span><span id="stateText">idle</span></div>
+<header class="topbar">
+  <div class="top-main">
+    <div>
+      <div id="screenKicker" class="kicker">Volt Tracker Android</div>
+      <h1 id="screenTitle">Drive</h1>
     </div>
-    <div class="mobile-controls demo-only" hidden>
-      <div class="mode-toggle" aria-label="Propulsion state">
-        <button type="button" data-mode="ev" class="is-active">EV</button>
-        <button type="button" data-mode="gas">GAS</button>
-      </div>
-      <label class="drive-chip">
-        <span class="kicker">Drive</span>
-        <select id="driveModeSelect">
-          <option value="normal">Normal</option>
-          <option value="sport">Sport</option>
-          <option value="mountain">Mountain</option>
-          <option value="hold">Hold</option>
-        </select>
-      </label>
+    <div id="stateBadge" class="badge" data-state="idle">
+      <span class="dot"></span><span id="stateText">idle</span>
     </div>
-  </header>
+  </div>
+  <div class="mobile-controls demo-only" hidden>
+    <div class="mode-toggle" aria-label="Propulsion state">
+      <button type="button" data-mode="ev" class="is-active">EV</button>
+      <button type="button" data-mode="gas">GAS</button>
+    </div>
+    <label class="drive-chip">
+      <span class="kicker">Drive</span>
+      <select id="driveModeSelect">
+        <option value="normal">Normal</option>
+        <option value="sport">Sport</option>
+        <option value="mountain">Mountain</option>
+        <option value="hold">Hold</option>
+      </select>
+    </label>
+  </div>
+</header>

@@ -1,0 +1,64 @@
+// Fake of the `VoltTrackerAndroid` JS bridge that the WebView normally gets
+// from `MainActivity#addJavascriptInterface`. Each method here mirrors a
+// `@JavascriptInterface` method on `VoltBridge.java`. Keep this list in sync
+// with that file — if Java adds or renames a method, update both places.
+//
+// Return values default to JSON strings (the real bridge returns Strings),
+// or `undefined` for void methods. Test code can override any method with
+// `vi.fn()` to assert how the dashboard JS calls in.
+export function createVoltBridgeFixture(overrides = {}) {
+  const stub = (returnValue) => () => returnValue;
+  const voidStub = () => undefined;
+  const base = {
+    // String returners (real bridge returns JSON-encoded Strings).
+    listDevices: stub('[]'),
+    getLastDevice: stub('{}'),
+    getDeviceHistory: stub('[]'),
+    getStorageSummary: stub('{}'),
+    exportDebugBundle: stub('{"ok":true,"path":"/tmp/debug"}'),
+    getTrips: stub('[]'),
+    getInsights: stub('{}'),
+
+    // void methods that hand work off to MainActivity.
+    requestPermissions: voidStub,
+    refreshDevices: voidStub,
+    connect: voidStub,
+    scan: voidStub,
+    shareBackup: voidStub,
+    restoreBackup: voidStub,
+    clearStoredData: voidStub,
+    rememberDevice: voidStub,
+    connectLast: voidStub,
+    scanLast: voidStub,
+    demo: voidStub,
+    disconnect: voidStub,
+    logClientError: voidStub,
+  };
+  return { ...base, ...overrides };
+}
+
+// Names of every method the real VoltBridge.java exposes via
+// @JavascriptInterface. The ABI test cross-references this list with what
+// VoltBridge.java actually advertises.
+export const VOLT_BRIDGE_METHODS = Object.freeze([
+  'listDevices',
+  'requestPermissions',
+  'refreshDevices',
+  'connect',
+  'scan',
+  'getLastDevice',
+  'getDeviceHistory',
+  'getStorageSummary',
+  'exportDebugBundle',
+  'shareBackup',
+  'restoreBackup',
+  'getTrips',
+  'getInsights',
+  'clearStoredData',
+  'rememberDevice',
+  'connectLast',
+  'scanLast',
+  'demo',
+  'disconnect',
+  'logClientError',
+]);

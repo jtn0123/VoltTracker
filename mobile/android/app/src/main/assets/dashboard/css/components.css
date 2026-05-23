@@ -788,3 +788,12 @@
     font-size: 13px;
     white-space: nowrap;
   }
+
+  /* C6: live-tile stale indicator. Applied by telemetry.js when no fresh OBD
+     sample has arrived in the last ~3 s — fades the readout to half opacity so
+     the user can tell the BT/adapter link has gone quiet without reading the
+     status badge. */
+  .stale {
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+  }

@@ -1,32 +1,31 @@
 package com.volttracker.obdpoc.data;
 
+import static com.volttracker.obdpoc.data.ObdStoreSupport.USEFUL_TELEMETRY_WHERE;
+import static com.volttracker.obdpoc.data.ObdStoreSupport.averageSampleIntervalMs;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.boundedLimit;
+import static com.volttracker.obdpoc.data.ObdStoreSupport.boundsFor;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.clean;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.countRows;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.countRowsWhere;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.distanceMeters;
-import static com.volttracker.obdpoc.data.ObdStoreSupport.boundsFor;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.getRecentSessions;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.maxIntForSession;
-import static com.volttracker.obdpoc.data.ObdStoreSupport.averageSampleIntervalMs;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableDouble;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableInt;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.parseObject;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.reverse;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.sessionToJson;
-import static com.volttracker.obdpoc.data.ObdStoreSupport.USEFUL_TELEMETRY_WHERE;
 
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
- * Trip, route and per-session review projections, all derived on read from telemetry and
- * GPS samples already on disk. Split out of {@link ObdLocalStore} to keep each file under
- * 500 lines; {@link ObdStoreReports} composes this class for the storage summary.
+ * Trip, route and per-session review projections, all derived on read from telemetry and GPS
+ * samples already on disk. Split out of {@link ObdLocalStore} to keep each file under 500 lines;
+ * {@link ObdStoreReports} composes this class for the storage summary.
  */
 final class ObdStoreTrips {
 
@@ -39,15 +38,15 @@ final class ObdStoreTrips {
     // ---- trips & insights ----------------------------------------------------------
 
     /**
-     * Real trip list, one entry per logged OBD driving session. Distance, duration and
-     * speeds are computed on read; no separate trip table is required. Demo and scan
-     * sessions are excluded.
+     * Real trip list, one entry per logged OBD driving session. Distance, duration and speeds are
+     * computed on read; no separate trip table is required. Demo and scan sessions are excluded.
      */
     JSONArray tripsJson(int limit) {
         JSONArray payload = new JSONArray();
         SQLiteDatabase db = helper.getReadableDatabase();
         try {
-            for (ObdSessionRecord session : getRecentSessions(db, Math.max(1, Math.min(limit, 100)))) {
+            for (ObdSessionRecord session :
+                    getRecentSessions(db, Math.max(1, Math.min(limit, 100)))) {
                 if (!ObdLocalStore.MODE_OBD.equals(session.mode)) {
                     continue;
                 }
@@ -63,9 +62,12 @@ final class ObdStoreTrips {
     }
 
     private JSONObject tripJson(SQLiteDatabase db, ObdSessionRecord session) throws JSONException {
-        long usefulSamples = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
-                new String[]{String.valueOf(session.id)});
+        long usefulSamples =
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
+                        new String[] {String.valueOf(session.id)});
         if (usefulSamples <= 0) {
             // A session with no useful telemetry was a failed connection, not a trip.
             return null;
@@ -90,10 +92,13 @@ final class ObdStoreTrips {
     }
 
     private static double avgMovingSpeedKph(SQLiteDatabase db, long sessionId) {
-        try (Cursor cursor = db.rawQuery(
-                "SELECT AVG(speed_kph) FROM " + VoltTrackerDb.TABLE_TELEMETRY
-                        + " WHERE session_id = ? AND speed_kph > 0 AND " + USEFUL_TELEMETRY_WHERE,
-                new String[]{String.valueOf(sessionId)})) {
+        try (Cursor cursor =
+                db.rawQuery(
+                        "SELECT AVG(speed_kph) FROM "
+                                + VoltTrackerDb.TABLE_TELEMETRY
+                                + " WHERE session_id = ? AND speed_kph > 0 AND "
+                                + USEFUL_TELEMETRY_WHERE,
+                        new String[] {String.valueOf(sessionId)})) {
             return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getDouble(0) : 0d;
         }
     }
@@ -138,8 +143,10 @@ final class ObdStoreTrips {
             payload.put("firstTripAtMs", firstAt);
             payload.put("lastTripAtMs", lastAt);
             payload.put("sessionCount", countRows(db, VoltTrackerDb.TABLE_SESSIONS));
-            payload.put("sampleCount", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                    USEFUL_TELEMETRY_WHERE, null));
+            payload.put(
+                    "sampleCount",
+                    countRowsWhere(
+                            db, VoltTrackerDb.TABLE_TELEMETRY, USEFUL_TELEMETRY_WHERE, null));
             payload.put("locationSampleCount", countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES));
         } catch (JSONException ignored) {
             // Local numeric/string values are safe.
@@ -157,13 +164,24 @@ final class ObdStoreTrips {
 
     ObdSessionRecord latestReviewableSession(SQLiteDatabase db) {
         for (ObdSessionRecord session : getRecentSessions(db, 20)) {
-            long usefulTelemetry = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                    "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
-                    new String[]{String.valueOf(session.id)});
-            long pidRows = countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
-                    "session_id = ?", new String[]{String.valueOf(session.id)});
-            long locationRows = countRowsWhere(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES,
-                    "session_id = ?", new String[]{String.valueOf(session.id)});
+            long usefulTelemetry =
+                    countRowsWhere(
+                            db,
+                            VoltTrackerDb.TABLE_TELEMETRY,
+                            "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
+                            new String[] {String.valueOf(session.id)});
+            long pidRows =
+                    countRowsWhere(
+                            db,
+                            VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                            "session_id = ?",
+                            new String[] {String.valueOf(session.id)});
+            long locationRows =
+                    countRowsWhere(
+                            db,
+                            VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                            "session_id = ?",
+                            new String[] {String.valueOf(session.id)});
             if (usefulTelemetry > 0 || pidRows > 0 || locationRows > 0) {
                 return session;
             }
@@ -176,31 +194,65 @@ final class ObdStoreTrips {
     JSONObject sessionReview(SQLiteDatabase db, ObdSessionRecord session) throws JSONException {
         JSONObject payload = new JSONObject();
         payload.put("session", sessionToJson(session));
-        payload.put("pidObservationCount", countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
-                "session_id = ?", new String[]{String.valueOf(session.id)}));
-        payload.put("locationSampleCount", countRowsWhere(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES,
-                "session_id = ?", new String[]{String.valueOf(session.id)}));
-        payload.put("eventCount", countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
-                "session_id = ?", new String[]{String.valueOf(session.id)}));
-        payload.put("parsedPidCount", countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
-                "session_id = ? AND (value_text IS NOT NULL AND value_text != '')",
-                new String[]{String.valueOf(session.id)}));
-        payload.put("unknownPidCount", countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
-                "session_id = ? AND (value_text IS NULL OR value_text = '')",
-                new String[]{String.valueOf(session.id)}));
-        long usefulTelemetry = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
-                new String[]{String.valueOf(session.id)});
+        payload.put(
+                "pidObservationCount",
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                        "session_id = ?",
+                        new String[] {String.valueOf(session.id)}));
+        payload.put(
+                "locationSampleCount",
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                        "session_id = ?",
+                        new String[] {String.valueOf(session.id)}));
+        payload.put(
+                "eventCount",
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_EVENTS,
+                        "session_id = ?",
+                        new String[] {String.valueOf(session.id)}));
+        payload.put(
+                "parsedPidCount",
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                        "session_id = ? AND (value_text IS NOT NULL AND value_text != '')",
+                        new String[] {String.valueOf(session.id)}));
+        payload.put(
+                "unknownPidCount",
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                        "session_id = ? AND (value_text IS NULL OR value_text = '')",
+                        new String[] {String.valueOf(session.id)}));
+        long usefulTelemetry =
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
+                        new String[] {String.valueOf(session.id)});
         payload.put("usefulTelemetryCount", usefulTelemetry);
         payload.put("emptyTelemetryCount", Math.max(0L, session.sampleCount - usefulTelemetry));
         payload.put("maxSpeedKph", maxIntForSession(db, "speed_kph", session.id));
         payload.put("avgSampleIntervalMs", averageSampleIntervalMs(db, session.id));
-        payload.put("backgroundSampleCount", countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND app_foreground = 0",
-                new String[]{String.valueOf(session.id)}));
-        payload.put("sampleGapEventCount", countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
-                "session_id = ? AND detail = ?",
-                new String[]{String.valueOf(session.id), "sample_gap"}));
+        payload.put(
+                "backgroundSampleCount",
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        "session_id = ? AND app_foreground = 0",
+                        new String[] {String.valueOf(session.id)}));
+        payload.put(
+                "sampleGapEventCount",
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_EVENTS,
+                        "session_id = ? AND detail = ?",
+                        new String[] {String.valueOf(session.id), "sample_gap"}));
         payload.put("latestHealth", latestHealthJson(db, session.id));
         payload.put("stateCounts", stateCountsJson(db, session.id));
         payload.put("timeline", recentEventsJson(db, session.id, 20));
@@ -211,18 +263,28 @@ final class ObdStoreTrips {
         return payload;
     }
 
-    private static JSONObject latestHealthJson(SQLiteDatabase db, long sessionId) throws JSONException {
-        try (Cursor cursor = db.query(
-                VoltTrackerDb.TABLE_TELEMETRY, new String[]{"json"},
-                "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
-                new String[]{String.valueOf(sessionId)}, null, null, "captured_at_ms DESC", "1")) {
+    private static JSONObject latestHealthJson(SQLiteDatabase db, long sessionId)
+            throws JSONException {
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        new String[] {"json"},
+                        "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
+                        new String[] {String.valueOf(sessionId)},
+                        null,
+                        null,
+                        "captured_at_ms DESC",
+                        "1")) {
             if (!cursor.moveToFirst()) {
                 return new JSONObject();
             }
-            JSONObject rawJson = parseObject(cursor.getString(cursor.getColumnIndexOrThrow("json")));
+            JSONObject rawJson =
+                    parseObject(cursor.getString(cursor.getColumnIndexOrThrow("json")));
             JSONObject payload = new JSONObject();
             payload.put("appForeground", rawJson.optBoolean("appForeground", true));
-            payload.put("foregroundServiceActive", rawJson.optBoolean("foregroundServiceActive", false));
+            payload.put(
+                    "foregroundServiceActive",
+                    rawJson.optBoolean("foregroundServiceActive", false));
             payload.put("backgroundSampleCount", rawJson.optInt("backgroundSampleCount", 0));
             payload.put("sampleGapCount", rawJson.optInt("sampleGapCount", 0));
             payload.put("lastSampleGapMs", rawJson.optLong("lastSampleGapMs", 0L));
@@ -231,13 +293,17 @@ final class ObdStoreTrips {
         }
     }
 
-    private static JSONObject stateCountsJson(SQLiteDatabase db, long sessionId) throws JSONException {
+    private static JSONObject stateCountsJson(SQLiteDatabase db, long sessionId)
+            throws JSONException {
         JSONObject payload = new JSONObject();
-        try (Cursor cursor = db.rawQuery(
-                "SELECT vehicle_state, COUNT(*) FROM " + VoltTrackerDb.TABLE_TELEMETRY
-                        + " WHERE session_id = ? AND " + USEFUL_TELEMETRY_WHERE
-                        + " GROUP BY vehicle_state",
-                new String[]{String.valueOf(sessionId)})) {
+        try (Cursor cursor =
+                db.rawQuery(
+                        "SELECT vehicle_state, COUNT(*) FROM "
+                                + VoltTrackerDb.TABLE_TELEMETRY
+                                + " WHERE session_id = ? AND "
+                                + USEFUL_TELEMETRY_WHERE
+                                + " GROUP BY vehicle_state",
+                        new String[] {String.valueOf(sessionId)})) {
             while (cursor.moveToNext()) {
                 String state = clean(cursor.getString(0));
                 payload.put(state.isEmpty() ? "unknown" : state, cursor.getLong(1));
@@ -246,68 +312,117 @@ final class ObdStoreTrips {
         return payload;
     }
 
-    private static JSONArray sessionWarningsJson(SQLiteDatabase db, long sessionId) throws JSONException {
+    private static JSONArray sessionWarningsJson(SQLiteDatabase db, long sessionId)
+            throws JSONException {
         JSONArray payload = new JSONArray();
-        long chargeHints = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND charge_transition_hint = 1",
-                new String[]{String.valueOf(sessionId)});
-        long speedRejected = countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
-                "session_id = ? AND detail = ?",
-                new String[]{String.valueOf(sessionId), "speed_rejected"});
-        long gpsSamples = countRowsWhere(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES,
-                "session_id = ?", new String[]{String.valueOf(sessionId)});
-        long unknownPids = countRowsWhere(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS,
-                "session_id = ? AND (value_text IS NULL OR value_text = '')",
-                new String[]{String.valueOf(sessionId)});
-        long sampleGaps = countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
-                "session_id = ? AND detail = ?",
-                new String[]{String.valueOf(sessionId), "sample_gap"});
-        long backgroundEvents = countRowsWhere(db, VoltTrackerDb.TABLE_EVENTS,
-                "session_id = ? AND (detail = ? OR detail = ?)",
-                new String[]{String.valueOf(sessionId), "app_backgrounded", "app_foregrounded"});
-        long emptyTelemetry = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND NOT " + USEFUL_TELEMETRY_WHERE,
-                new String[]{String.valueOf(sessionId)});
-        long movingWithZeroRpm = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND speed_kph > 0 AND rpm = 0 AND " + USEFUL_TELEMETRY_WHERE,
-                new String[]{String.valueOf(sessionId)});
-        long powerRows = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND power_kw IS NOT NULL AND " + USEFUL_TELEMETRY_WHERE,
-                new String[]{String.valueOf(sessionId)});
+        long chargeHints =
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        "session_id = ? AND charge_transition_hint = 1",
+                        new String[] {String.valueOf(sessionId)});
+        long speedRejected =
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_EVENTS,
+                        "session_id = ? AND detail = ?",
+                        new String[] {String.valueOf(sessionId), "speed_rejected"});
+        long gpsSamples =
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                        "session_id = ?",
+                        new String[] {String.valueOf(sessionId)});
+        long unknownPids =
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                        "session_id = ? AND (value_text IS NULL OR value_text = '')",
+                        new String[] {String.valueOf(sessionId)});
+        long sampleGaps =
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_EVENTS,
+                        "session_id = ? AND detail = ?",
+                        new String[] {String.valueOf(sessionId), "sample_gap"});
+        long backgroundEvents =
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_EVENTS,
+                        "session_id = ? AND (detail = ? OR detail = ?)",
+                        new String[] {
+                            String.valueOf(sessionId), "app_backgrounded", "app_foregrounded"
+                        });
+        long emptyTelemetry =
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        "session_id = ? AND NOT " + USEFUL_TELEMETRY_WHERE,
+                        new String[] {String.valueOf(sessionId)});
+        long movingWithZeroRpm =
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        "session_id = ? AND speed_kph > 0 AND rpm = 0 AND "
+                                + USEFUL_TELEMETRY_WHERE,
+                        new String[] {String.valueOf(sessionId)});
+        long powerRows =
+                countRowsWhere(
+                        db,
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        "session_id = ? AND power_kw IS NOT NULL AND " + USEFUL_TELEMETRY_WHERE,
+                        new String[] {String.valueOf(sessionId)});
         if (chargeHints > 0 || speedRejected > 0) {
-            payload.put(warning("charge-speed-hint",
-                    "Rejected 255 km/h speed frame seen. Treat it as a charging/transition clue, not vehicle speed.",
-                    Math.max(chargeHints, speedRejected)));
+            payload.put(
+                    warning(
+                            "charge-speed-hint",
+                            "Rejected 255 km/h speed frame seen. Treat it as a charging/transition clue, not vehicle speed.",
+                            Math.max(chargeHints, speedRejected)));
         }
         if (gpsSamples == 0) {
             payload.put(warning("gps-missing", "No GPS samples were stored for this session.", 0));
         }
         if (unknownPids > 0) {
-            payload.put(warning("pid-unparsed",
-                    "Some PID responses are stored but not parsed yet.", unknownPids));
+            payload.put(
+                    warning(
+                            "pid-unparsed",
+                            "Some PID responses are stored but not parsed yet.",
+                            unknownPids));
         }
         if (sampleGaps > 0) {
-            payload.put(warning("sample-gap",
-                    "Logging had one or more long sample gaps while the session was active.", sampleGaps));
+            payload.put(
+                    warning(
+                            "sample-gap",
+                            "Logging had one or more long sample gaps while the session was active.",
+                            sampleGaps));
         }
         if (backgroundEvents > 0) {
-            payload.put(warning("background-tested",
-                    "App foreground/background transitions were captured for this session.", backgroundEvents));
+            payload.put(
+                    warning(
+                            "background-tested",
+                            "App foreground/background transitions were captured for this session.",
+                            backgroundEvents));
         }
         if (emptyTelemetry > 0) {
-            payload.put(warning("empty-telemetry",
-                    "This older session contains empty telemetry rows from a broken adapter pipe. Product summaries now ignore them.",
-                    emptyTelemetry));
+            payload.put(
+                    warning(
+                            "empty-telemetry",
+                            "This older session contains empty telemetry rows from a broken adapter pipe. Product summaries now ignore them.",
+                            emptyTelemetry));
         }
         if (movingWithZeroRpm > 0) {
-            payload.put(warning("rpm-zero-moving",
-                    "Vehicle speed was observed while standard engine RPM stayed at 0. Validate engine-running behavior with Scan.",
-                    movingWithZeroRpm));
+            payload.put(
+                    warning(
+                            "rpm-zero-moving",
+                            "Vehicle speed was observed while standard engine RPM stayed at 0. Validate engine-running behavior with Scan.",
+                            movingWithZeroRpm));
         }
         if (powerRows == 0) {
-            payload.put(warning("power-pid-missing",
-                    "No real power/kW rows are stored yet. Pack or charger power needs validated Volt-specific PIDs.",
-                    0));
+            payload.put(
+                    warning(
+                            "power-pid-missing",
+                            "No real power/kW rows are stored yet. Pack or charger power needs validated Volt-specific PIDs.",
+                            0));
         }
         return payload;
     }
@@ -320,13 +435,21 @@ final class ObdStoreTrips {
         return item;
     }
 
-    private static JSONArray recentEventsJson(SQLiteDatabase db, long sessionId, int limit) throws JSONException {
+    private static JSONArray recentEventsJson(SQLiteDatabase db, long sessionId, int limit)
+            throws JSONException {
         JSONArray payload = new JSONArray();
-        try (Cursor cursor = db.query(
-                VoltTrackerDb.TABLE_EVENTS,
-                new String[]{"occurred_at_ms", "kind", "state", "detail", "blocked", "payload"},
-                "session_id = ?", new String[]{String.valueOf(sessionId)},
-                null, null, "occurred_at_ms DESC", boundedLimit(limit))) {
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_EVENTS,
+                        new String[] {
+                            "occurred_at_ms", "kind", "state", "detail", "blocked", "payload"
+                        },
+                        "session_id = ?",
+                        new String[] {String.valueOf(sessionId)},
+                        null,
+                        null,
+                        "occurred_at_ms DESC",
+                        boundedLimit(limit))) {
             while (cursor.moveToNext()) {
                 JSONObject item = new JSONObject();
                 item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("occurred_at_ms")));
@@ -334,35 +457,57 @@ final class ObdStoreTrips {
                 item.put("state", clean(cursor.getString(cursor.getColumnIndexOrThrow("state"))));
                 item.put("detail", clean(cursor.getString(cursor.getColumnIndexOrThrow("detail"))));
                 item.put("blocked", cursor.getInt(cursor.getColumnIndexOrThrow("blocked")) != 0);
-                item.put("payload", parseObject(cursor.getString(cursor.getColumnIndexOrThrow("payload"))));
+                item.put(
+                        "payload",
+                        parseObject(cursor.getString(cursor.getColumnIndexOrThrow("payload"))));
                 payload.put(item);
             }
         }
         return reverse(payload);
     }
 
-    private static JSONArray recentPidFramesJson(SQLiteDatabase db, long sessionId, int limit) throws JSONException {
+    private static JSONArray recentPidFramesJson(SQLiteDatabase db, long sessionId, int limit)
+            throws JSONException {
         JSONArray payload = new JSONArray();
-        try (Cursor cursor = db.query(
-                VoltTrackerDb.TABLE_PID_OBSERVATIONS,
-                new String[]{
-                        "observed_at_ms", "command", "header", "pid", "name", "value_text",
-                        "value_numeric", "unit", "raw_response", "json"
-                },
-                "session_id = ?", new String[]{String.valueOf(sessionId)},
-                null, null, "observed_at_ms DESC", boundedLimit(limit))) {
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                        new String[] {
+                            "observed_at_ms",
+                            "command",
+                            "header",
+                            "pid",
+                            "name",
+                            "value_text",
+                            "value_numeric",
+                            "unit",
+                            "raw_response",
+                            "json"
+                        },
+                        "session_id = ?",
+                        new String[] {String.valueOf(sessionId)},
+                        null,
+                        null,
+                        "observed_at_ms DESC",
+                        boundedLimit(limit))) {
             while (cursor.moveToNext()) {
                 JSONObject item = new JSONObject();
-                String valueText = clean(cursor.getString(cursor.getColumnIndexOrThrow("value_text")));
-                JSONObject rawJson = parseObject(cursor.getString(cursor.getColumnIndexOrThrow("json")));
+                String valueText =
+                        clean(cursor.getString(cursor.getColumnIndexOrThrow("value_text")));
+                JSONObject rawJson =
+                        parseObject(cursor.getString(cursor.getColumnIndexOrThrow("json")));
                 item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("observed_at_ms")));
-                item.put("command", clean(cursor.getString(cursor.getColumnIndexOrThrow("command"))));
+                item.put(
+                        "command",
+                        clean(cursor.getString(cursor.getColumnIndexOrThrow("command"))));
                 item.put("header", clean(cursor.getString(cursor.getColumnIndexOrThrow("header"))));
                 item.put("pid", clean(cursor.getString(cursor.getColumnIndexOrThrow("pid"))));
                 item.put("name", clean(cursor.getString(cursor.getColumnIndexOrThrow("name"))));
                 item.put("valueText", valueText);
                 item.put("unit", clean(cursor.getString(cursor.getColumnIndexOrThrow("unit"))));
-                item.put("rawResponse", clean(cursor.getString(cursor.getColumnIndexOrThrow("raw_response"))));
+                item.put(
+                        "rawResponse",
+                        clean(cursor.getString(cursor.getColumnIndexOrThrow("raw_response"))));
                 item.put("durationMs", rawJson.optLong("durationMs", 0L));
                 item.put("gotPrompt", rawJson.optBoolean("gotPrompt", false));
                 item.put("parsed", !valueText.isEmpty());
@@ -372,20 +517,28 @@ final class ObdStoreTrips {
         return payload;
     }
 
-    private static JSONArray recentSpeedTraceJson(SQLiteDatabase db, long sessionId, int limit) throws JSONException {
+    private static JSONArray recentSpeedTraceJson(SQLiteDatabase db, long sessionId, int limit)
+            throws JSONException {
         JSONArray payload = new JSONArray();
-        try (Cursor cursor = db.query(
-                VoltTrackerDb.TABLE_TELEMETRY,
-                new String[]{"captured_at_ms", "speed_kph", "vehicle_state", "json"},
-                "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
-                new String[]{String.valueOf(sessionId)},
-                null, null, "captured_at_ms DESC", boundedLimit(limit))) {
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        new String[] {"captured_at_ms", "speed_kph", "vehicle_state", "json"},
+                        "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
+                        new String[] {String.valueOf(sessionId)},
+                        null,
+                        null,
+                        "captured_at_ms DESC",
+                        boundedLimit(limit))) {
             while (cursor.moveToNext()) {
                 JSONObject item = new JSONObject();
-                JSONObject rawJson = parseObject(cursor.getString(cursor.getColumnIndexOrThrow("json")));
+                JSONObject rawJson =
+                        parseObject(cursor.getString(cursor.getColumnIndexOrThrow("json")));
                 item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
                 item.put("speedKph", nullableInt(cursor, "speed_kph"));
-                item.put("state", clean(cursor.getString(cursor.getColumnIndexOrThrow("vehicle_state"))));
+                item.put(
+                        "state",
+                        clean(cursor.getString(cursor.getColumnIndexOrThrow("vehicle_state"))));
                 item.put("chargeTransitionHint", rawJson.optBoolean("chargeTransitionHint", false));
                 item.put("speedRejectedKph", rawJson.optInt("speedRejectedKph", 0));
                 payload.put(item);
@@ -396,7 +549,8 @@ final class ObdStoreTrips {
 
     // ---- routes --------------------------------------------------------------------
 
-    JSONObject routeForSession(SQLiteDatabase db, ObdSessionRecord session, int limit) throws JSONException {
+    JSONObject routeForSession(SQLiteDatabase db, ObdSessionRecord session, int limit)
+            throws JSONException {
         JSONObject payload = new JSONObject();
         JSONArray points = routePointsForSessionJson(db, session.id, limit);
         payload.put("session", sessionToJson(session));
@@ -407,7 +561,8 @@ final class ObdStoreTrips {
         return payload;
     }
 
-    JSONArray recentRoutes(SQLiteDatabase db, int sessionLimit, int pointLimit) throws JSONException {
+    JSONArray recentRoutes(SQLiteDatabase db, int sessionLimit, int pointLimit)
+            throws JSONException {
         JSONArray payload = new JSONArray();
         for (ObdSessionRecord session : getRecentSessions(db, sessionLimit)) {
             JSONArray points = routePointsForSessionJson(db, session.id, pointLimit);
@@ -425,13 +580,26 @@ final class ObdStoreTrips {
         return payload;
     }
 
-    private static JSONArray routePointsForSessionJson(SQLiteDatabase db, long sessionId, int limit) throws JSONException {
+    private static JSONArray routePointsForSessionJson(SQLiteDatabase db, long sessionId, int limit)
+            throws JSONException {
         JSONArray points = new JSONArray();
-        try (Cursor cursor = db.query(
-                VoltTrackerDb.TABLE_LOCATION_SAMPLES,
-                new String[]{"captured_at_ms", "latitude", "longitude", "accuracy_m", "speed_mps", "bearing_deg"},
-                "session_id = ?", new String[]{String.valueOf(sessionId)},
-                null, null, "captured_at_ms DESC", boundedLimit(limit))) {
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                        new String[] {
+                            "captured_at_ms",
+                            "latitude",
+                            "longitude",
+                            "accuracy_m",
+                            "speed_mps",
+                            "bearing_deg"
+                        },
+                        "session_id = ?",
+                        new String[] {String.valueOf(sessionId)},
+                        null,
+                        null,
+                        "captured_at_ms DESC",
+                        boundedLimit(limit))) {
             while (cursor.moveToNext()) {
                 JSONObject item = new JSONObject();
                 item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
@@ -444,15 +612,27 @@ final class ObdStoreTrips {
             }
         }
         if (points.length() == 0) {
-            try (Cursor cursor = db.query(
-                    VoltTrackerDb.TABLE_TELEMETRY,
-                    new String[]{"captured_at_ms", "latitude", "longitude", "accuracy_m", "gps_speed_mps", "bearing_deg"},
-                    "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL",
-                    new String[]{String.valueOf(sessionId)},
-                    null, null, "captured_at_ms DESC", boundedLimit(limit))) {
+            try (Cursor cursor =
+                    db.query(
+                            VoltTrackerDb.TABLE_TELEMETRY,
+                            new String[] {
+                                "captured_at_ms",
+                                "latitude",
+                                "longitude",
+                                "accuracy_m",
+                                "gps_speed_mps",
+                                "bearing_deg"
+                            },
+                            "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL",
+                            new String[] {String.valueOf(sessionId)},
+                            null,
+                            null,
+                            "captured_at_ms DESC",
+                            boundedLimit(limit))) {
                 while (cursor.moveToNext()) {
                     JSONObject item = new JSONObject();
-                    item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
+                    item.put(
+                            "atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
                     item.put("lat", cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")));
                     item.put("lng", cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")));
                     item.put("accuracyM", nullableDouble(cursor, "accuracy_m"));

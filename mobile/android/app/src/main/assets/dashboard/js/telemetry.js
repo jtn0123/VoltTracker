@@ -1,3 +1,23 @@
+(function () {
+  "use strict";
+
+  const VD = window.VoltDashboard;
+  const state = VD.state;
+  const bridge = VD.bridge;
+  const el = VD.el;
+
+  // C6: live-tile element ids that should pulse with a `.stale` class when the
+  // adapter stops sending fresh samples (>3s since lastSampleAt). Kept in one
+  // place so partials and CSS stay in sync.
+  const LIVE_TILE_IDS = [
+    "speedValue", "speedKph", "rpmValue", "voltageValue", "coolantValue",
+    "loadValue", "throttleValue", "gpsValue", "gpsDetail", "gpsMetricValue",
+    "gpsMetricSub", "updatedValue", "socValue", "rangeValue", "packTempValue",
+    "driveSocValue", "drivePackTempValue", "powerValue"
+  ];
+  // C6: how long (ms) since the last accepted sample before we mark tiles stale.
+  const STALE_THRESHOLD_MS = 3000;
+
   function average(values) {
     return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
   }
@@ -18,13 +38,13 @@
   }
 
   function setStatus(payload) {
-    const status = parsePayload(payload, {});
+    const status = VD.parsePayload(payload, {});
     state.status = status;
     const badge = el("stateBadge");
     const next = status.state || "idle";
     badge.dataset.state = next;
-    setText("stateText", next);
-    setText("statusCopy", status.detail || "Ready.");
+    VD.setText("stateText", next);
+    VD.setText("statusCopy", status.detail || "Ready.");
     if (status.lastAddress) state.lastDevice = { address: status.lastAddress, name: status.lastName || "" };
     renderOperationalState();
     updateDiagnostics();
@@ -32,18 +52,19 @@
   }
 
   function setAppState(payload) {
-    state.appState = parsePayload(payload, {});
+    state.appState = VD.parsePayload(payload, {});
     const nextTelemetry = state.appState.latestTelemetry || {};
     if (shouldAcceptTelemetry(nextTelemetry)) {
       state.telemetry = { ...state.telemetry, ...nextTelemetry };
+      state.lastSampleAt = Date.now();
     } else if (!isActiveStatus()) {
       resetTelemetry();
     }
     if (state.appState.storage) {
       state.storage = state.appState.storage;
-      updateStorageUi();
-      renderRealV2Ui();
-      renderMap();
+      VD.updateStorageUi();
+      VD.renderRealV2Ui();
+      VD.renderMap();
     }
     renderOperationalState();
     updateLiveUi();
@@ -79,6 +100,8 @@
       raw: ""
     };
     state.speedHistory = [];
+    state.lastSampleAt = 0;
+    applyStaleIndicator();
   }
 
   function renderOperationalState() {
@@ -95,12 +118,12 @@
     const sessionState = session.state || status.state || "idle";
     const samples = Number(session.sampleCount || state.telemetry.sampleCount || 0);
 
-    setText("adapterSummary", adapterName);
-    setText("appStateSummary", status.detail || session.detail || (remembered ? "Ready to resume the remembered adapter." : "Pick a paired adapter to start logging."));
-    setText("loggingState", connected ? (samples ? `${samples} samples` : sessionState) : "idle");
-    setText("gpsState", gps.state || (state.telemetry.latitude ? "locked" : "waiting"));
-    setText("dataSourceState", state.demoActive ? "demo" : "real");
-    setText("dbState", dbRowCount(storage) ? `${dbRowCount(storage)} rows` : "ready");
+    VD.setText("adapterSummary", adapterName);
+    VD.setText("appStateSummary", status.detail || session.detail || (remembered ? "Ready to resume the remembered adapter." : "Pick a paired adapter to start logging."));
+    VD.setText("loggingState", connected ? (samples ? `${samples} samples` : sessionState) : "idle");
+    VD.setText("gpsState", gps.state || (state.telemetry.latitude ? "locked" : "waiting"));
+    VD.setText("dataSourceState", state.demoActive ? "demo" : "real");
+    VD.setText("dbState", dbRowCount(storage) ? `${dbRowCount(storage)} rows` : "ready");
 
     const primary = el("connectBtn");
     if (!primary) return;
@@ -137,7 +160,7 @@
 
   function getLastDevice() {
     if (bridge && typeof bridge.getLastDevice === "function") {
-      state.lastDevice = parsePayload(bridge.getLastDevice(), state.lastDevice || {});
+      state.lastDevice = VD.parsePayload(bridge.getLastDevice(), state.lastDevice || {});
     }
     return state.lastDevice || {};
   }
@@ -198,59 +221,88 @@
     };
   }
 
+  // C1: stash the latest sample; defer the heavy renders (updateLiveUi,
+  // drawTrace, renderOperationalState, updateValidationUi) to the next animation
+  // frame so a high-rate OBD source can't cause render thrash.
   function updateTelemetry(payload) {
-    const sample = parsePayload(payload, {});
+    const sample = VD.parsePayload(payload, {});
     const source = String(sample.source || "").toLowerCase();
     const isDemoSample = source.includes("demo");
-    if (isDemoSample && !state.demoActive) setDemoActive(true);
+    if (isDemoSample && !state.demoActive) VD.setDemoActive(true);
     if (sample.source && !isDemoSample && state.demoActive) {
-      clearDemoTelemetry();
-      setDemoActive(false);
+      VD.clearDemoTelemetry();
+      VD.setDemoActive(false);
     }
     state.telemetry = { ...state.telemetry, ...sample };
+    state.lastSampleAt = Date.now();
     const kph = Number(sample.speedKph);
     if (Number.isFinite(kph)) {
       state.speedHistory.push(kph);
       while (state.speedHistory.length > 48) state.speedHistory.shift();
     }
+    scheduleRender();
+  }
+
+  function scheduleRender() {
+    if (state.rafPending) return;
+    state.rafPending = window.requestAnimationFrame(() => {
+      state.rafPending = 0;
+      flushRender();
+    });
+  }
+
+  function flushRender() {
+    // updateLiveUi() already calls renderOperationalState() + updateValidationUi()
+    // (see below), so the rAF burst is just these two — keep them in lockstep with
+    // the tail of updateLiveUi() if either ever needs to call something new.
     updateLiveUi();
     drawTrace();
-    renderOperationalState();
-    updateValidationUi();
+  }
+
+  // C6: toggle the `.stale` class on each live tile when no new sample has
+  // arrived for STALE_THRESHOLD_MS. Called from updateLiveUi every render and
+  // from a 1Hz tick so the indicator appears even without new samples.
+  function applyStaleIndicator() {
+    const last = Number(state.lastSampleAt || 0);
+    const isStale = last > 0 ? Date.now() - last > STALE_THRESHOLD_MS : true;
+    LIVE_TILE_IDS.forEach((id) => {
+      const node = el(id);
+      if (node) node.classList.toggle("stale", isStale);
+    });
   }
 
   function updateLiveUi() {
     const t = state.telemetry;
     const kph = Number(t.speedKph);
     const mph = Number.isFinite(kph) ? Math.round(kph * 0.621371) : null;
-    setText("speedValue", mph);
-    setText("speedKph", Number.isFinite(kph) ? `${Math.round(kph)} km/h` : "-- km/h");
-    setText("rpmValue", t.rpm ? `${t.rpm}` : "--");
-    setText("voltageValue", t.voltage ? `${Number(t.voltage).toFixed(1)}V` : "--");
-    setText("coolantValue", t.coolantC != null ? `${t.coolantC} deg C` : "--");
-    setText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
-    setText("throttleValue", t.throttlePct != null ? `${t.throttlePct}%` : "--");
+    VD.setText("speedValue", mph);
+    VD.setText("speedKph", Number.isFinite(kph) ? `${Math.round(kph)} km/h` : "-- km/h");
+    VD.setText("rpmValue", t.rpm ? `${t.rpm}` : "--");
+    VD.setText("voltageValue", t.voltage ? `${Number(t.voltage).toFixed(1)}V` : "--");
+    VD.setText("coolantValue", t.coolantC != null ? `${t.coolantC} deg C` : "--");
+    VD.setText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
+    VD.setText("throttleValue", t.throttlePct != null ? `${t.throttlePct}%` : "--");
     const lat = Number(t.latitude);
     const lon = Number(t.longitude);
     const acc = Number(t.accuracyM);
-    setText("gpsValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
-    setText("gpsDetail", Number.isFinite(acc) ? `${Math.round(acc)}m accuracy` : "location trace");
-    setText("gpsMetricValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
-    setText("gpsMetricSub", Number.isFinite(acc)
+    VD.setText("gpsValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
+    VD.setText("gpsDetail", Number.isFinite(acc) ? `${Math.round(acc)}m accuracy` : "location trace");
+    VD.setText("gpsMetricValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
+    VD.setText("gpsMetricSub", Number.isFinite(acc)
       ? `${Math.round(acc)}m accuracy - ${t.locationAgeMs ? formatShortDuration(Number(t.locationAgeMs)) + " old" : "fresh"}`
       : "waiting for location samples");
-    setText("updatedValue", t.updatedAt ? "now" : "waiting");
-    setText("rawFrames", t.raw || "Waiting for telemetry...");
+    VD.setText("updatedValue", t.updatedAt ? "now" : "waiting");
+    VD.setText("rawFrames", t.raw || "Waiting for telemetry...");
     const soc = t.soc == null || t.soc === "" ? NaN : Number(t.soc);
-    setText("socValue", Number.isFinite(soc) ? `${soc.toFixed(1)}%` : "--");
-    setText("rangeValue", "--");
+    VD.setText("socValue", Number.isFinite(soc) ? `${soc.toFixed(1)}%` : "--");
+    VD.setText("rangeValue", "--");
     const batteryTemp = t.batteryTemp == null || t.batteryTemp === "" ? NaN : Number(t.batteryTemp);
-    setText("packTempValue", Number.isFinite(batteryTemp) ? `${batteryTemp.toFixed(1)} deg C` : "--");
-    setText("driveSocValue", Number.isFinite(soc) ? `${Math.round(soc)}%` : "--");
-    setMeter("driveSocMeter", Number.isFinite(soc) ? soc : 0);
-    setText("drivePackTempValue", Number.isFinite(batteryTemp) ? `${Math.round(batteryTemp)} deg C` : "--");
+    VD.setText("packTempValue", Number.isFinite(batteryTemp) ? `${batteryTemp.toFixed(1)} deg C` : "--");
+    VD.setText("driveSocValue", Number.isFinite(soc) ? `${Math.round(soc)}%` : "--");
+    VD.setMeter("driveSocMeter", Number.isFinite(soc) ? soc : 0);
+    VD.setText("drivePackTempValue", Number.isFinite(batteryTemp) ? `${Math.round(batteryTemp)} deg C` : "--");
     const power = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
-    setText("powerValue", Number.isFinite(power) ? `${power.toFixed(1)} kW` : "--");
+    VD.setText("powerValue", Number.isFinite(power) ? `${power.toFixed(1)} kW` : "--");
     const powerState = !Number.isFinite(power) ? "coast"
       : power < -0.5 ? "regen"
       : power > 0.5 ? "drive"
@@ -267,22 +319,23 @@
       fill.style.left = Number.isFinite(power) && power < 0 ? (50 - pct) + "%" : "50%";
       fill.classList.toggle("is-regen", powerState === "regen");
     }
-    setMeter("loadMeter", t.loadPct);
+    VD.setMeter("loadMeter", t.loadPct);
     renderOperationalState();
     updateDiagnostics();
     updateValidationUi();
+    applyStaleIndicator();
   }
 
   function updateDiagnostics() {
     const t = state.telemetry || {};
     const status = state.status || {};
     const samples = Number(t.sampleCount || 0);
-    setText("diagState", status.detail || (t.updatedAt ? "Live OBD data received." : "Waiting for adapter"));
-    setText("diagSamples", samples ? `${samples} samples` : "0 samples");
-    setText("diagAdapter", t.adapter || status.adapter || "OBD adapter");
-    setText("diagVehicleState", t.vehicleState || "unknown");
-    setText("diagSession", t.sessionMs ? formatDuration(t.sessionMs) : "--");
-    setText("diagSupported", t.supportedPids ? summarizePidLine(t.supportedPids) : "unknown");
+    VD.setText("diagState", status.detail || (t.updatedAt ? "Live OBD data received." : "Waiting for adapter"));
+    VD.setText("diagSamples", samples ? `${samples} samples` : "0 samples");
+    VD.setText("diagAdapter", t.adapter || status.adapter || "OBD adapter");
+    VD.setText("diagVehicleState", t.vehicleState || "unknown");
+    VD.setText("diagSession", t.sessionMs ? formatDuration(t.sessionMs) : "--");
+    VD.setText("diagSupported", t.supportedPids ? summarizePidLine(t.supportedPids) : "unknown");
   }
 
   function updateValidationUi() {
@@ -347,7 +400,7 @@
       foregroundService ? (appForeground ? "armed" : "active") : "manual"
     );
     const okCount = document.querySelectorAll(".validation-row[data-tone='ok']").length;
-    setText("validationSummary", okCount ? `${okCount}/5 ok` : "waiting");
+    VD.setText("validationSummary", okCount ? `${okCount}/5 ok` : "waiting");
   }
 
   function setValidationRow(id, tone, label, detail, value) {
@@ -422,3 +475,41 @@
     ctx.stroke();
     ctx.shadowBlur = 0;
   }
+
+  // C6: a 1Hz heartbeat so the .stale class is applied even when no new sample
+  // arrives (and removed promptly once one does). Cheap; touches a handful of
+  // DOM nodes.
+  setInterval(applyStaleIndicator, 1000);
+
+  Object.assign(VD, {
+    average,
+    formatDistance,
+    escapeHtml,
+    setStatus,
+    setAppState,
+    shouldAcceptTelemetry,
+    isActiveStatus,
+    resetTelemetry,
+    renderOperationalState,
+    dbRowCount,
+    getLastDevice,
+    relativeTime,
+    formatWhen,
+    formatBytes,
+    formatShortDuration,
+    selectDevice,
+    getSelectedDevice,
+    updateTelemetry,
+    scheduleRender,
+    flushRender,
+    applyStaleIndicator,
+    updateLiveUi,
+    updateDiagnostics,
+    updateValidationUi,
+    setValidationRow,
+    formatAge,
+    summarizePidLine,
+    formatDuration,
+    drawTrace
+  });
+})();

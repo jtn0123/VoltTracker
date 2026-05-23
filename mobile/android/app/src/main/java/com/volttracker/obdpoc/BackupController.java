@@ -3,19 +3,16 @@ package com.volttracker.obdpoc;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
-
 import androidx.core.content.FileProvider;
-
 import com.volttracker.obdpoc.data.ObdLocalStore;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 
 /**
- * Drives the backup/restore user flows for {@link MainActivity}: the share-sheet hand-off,
- * the file-picker launch, and swapping the live database for a restored one. The low-level
- * file IO lives in {@link DataBackup}; this class owns the Activity-facing orchestration.
+ * Drives the backup/restore user flows for {@link MainActivity}: the share-sheet hand-off, the
+ * file-picker launch, and swapping the live database for a restored one. The low-level file IO
+ * lives in {@link DataBackup}; this class owns the Activity-facing orchestration.
  */
 final class BackupController {
 
@@ -35,34 +32,48 @@ final class BackupController {
     // so the user can save it anywhere (cloud, PC) — no server involved.
     void launchShare() {
         activity.publishStatus("ready", "Preparing data backup...", false);
-        executor.execute(() -> {
-            final File backup = dataBackup.buildBackupFile(activity.localStore);
-            activity.runOnUiThread(() -> {
-                if (backup == null) {
-                    activity.publishStatus("blocked", "Could not create the backup file.", true);
-                    return;
-                }
-                try {
-                    Uri uri = FileProvider.getUriForFile(
-                            activity, activity.getPackageName() + ".fileprovider", backup);
-                    Intent share = new Intent(Intent.ACTION_SEND);
-                    share.setType("application/octet-stream");
-                    share.putExtra(Intent.EXTRA_STREAM, uri);
-                    share.putExtra(Intent.EXTRA_SUBJECT, backup.getName());
-                    share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    activity.startActivity(Intent.createChooser(share, "Back up Volt Tracker data"));
-                    activity.publishStatus("ready", "Backup ready - choose where to save it.", false);
-                } catch (RuntimeException ex) {
-                    activity.publishStatus("blocked", "Could not open the share sheet.", true);
-                }
-            });
-        });
+        executor.execute(
+                () -> {
+                    final File backup = dataBackup.buildBackupFile(activity.localStore);
+                    activity.runOnUiThread(
+                            () -> {
+                                if (backup == null) {
+                                    activity.publishStatus(
+                                            "blocked", "Could not create the backup file.", true);
+                                    return;
+                                }
+                                try {
+                                    Uri uri =
+                                            FileProvider.getUriForFile(
+                                                    activity,
+                                                    activity.getPackageName() + ".fileprovider",
+                                                    backup);
+                                    Intent share = new Intent(Intent.ACTION_SEND);
+                                    share.setType("application/octet-stream");
+                                    share.putExtra(Intent.EXTRA_STREAM, uri);
+                                    share.putExtra(Intent.EXTRA_SUBJECT, backup.getName());
+                                    share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                    activity.startActivity(
+                                            Intent.createChooser(
+                                                    share, "Back up Volt Tracker data"));
+                                    activity.publishStatus(
+                                            "ready",
+                                            "Backup ready - choose where to save it.",
+                                            false);
+                                } catch (RuntimeException ex) {
+                                    activity.publishStatus(
+                                            "blocked", "Could not open the share sheet.", true);
+                                }
+                            });
+                });
     }
 
     /** Handles the SAF result for {@link #REQUEST_RESTORE}; a no-op for other requests. */
     void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQUEST_RESTORE && resultCode == Activity.RESULT_OK
-                && data != null && data.getData() != null) {
+        if (requestCode == REQUEST_RESTORE
+                && resultCode == Activity.RESULT_OK
+                && data != null
+                && data.getData() != null) {
             restoreFromUri(data.getData());
         }
     }
@@ -86,19 +97,26 @@ final class BackupController {
 
     private void restoreFromUri(Uri uri) {
         activity.publishStatus("ready", "Restoring backup...", false);
-        executor.execute(() -> {
-            final boolean ok = applyRestore(uri);
-            activity.runOnUiThread(() -> {
-                if (ok) {
-                    activity.publishDeviceList();
-                    activity.publishStorageSummary();
-                    activity.publishStatus("ready", "Backup restored - reconnect to resume logging.", false);
-                } else {
-                    activity.publishStatus("blocked",
-                            "Restore failed - that file is not a valid Volt Tracker backup.", true);
-                }
-            });
-        });
+        executor.execute(
+                () -> {
+                    final boolean ok = applyRestore(uri);
+                    activity.runOnUiThread(
+                            () -> {
+                                if (ok) {
+                                    activity.publishDeviceList();
+                                    activity.publishStorageSummary();
+                                    activity.publishStatus(
+                                            "ready",
+                                            "Backup restored - reconnect to resume logging.",
+                                            false);
+                                } else {
+                                    activity.publishStatus(
+                                            "blocked",
+                                            "Restore failed - that file is not a valid Volt Tracker backup.",
+                                            true);
+                                }
+                            });
+                });
     }
 
     // Replaces the on-device database with a user-picked backup file. The file is staged
@@ -109,7 +127,8 @@ final class BackupController {
             return false;
         }
         try {
-            File dbFile = activity.localStore == null ? null : activity.localStore.getDatabaseFile();
+            File dbFile =
+                    activity.localStore == null ? null : activity.localStore.getDatabaseFile();
             if (dbFile == null) {
                 return false;
             }

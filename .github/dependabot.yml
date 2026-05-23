@@ -1,15 +1,22 @@
+# Active project is the Android app at mobile/android/. The deprecated Flask
+# receiver in archive/ is intentionally not monitored.
 version: 2
 updates:
-  - package-ecosystem: "pip"
-    directory: "/"
+  - package-ecosystem: "gradle"
+    directory: "/mobile/android"
     schedule:
       interval: "weekly"
+    groups:
+      androidx:
+        patterns:
+          - "androidx.*"
+      test-deps:
+        patterns:
+          - "junit:*"
+          - "org.json:*"
+          - "org.robolectric:*"
   - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "docker"
-    directory: "/"
+    directory: "/mobile/android/dashboard-tests"
     schedule:
       interval: "weekly"
   - package-ecosystem: "github-actions"

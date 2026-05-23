@@ -5,12 +5,11 @@ import static org.junit.Assert.assertEquals;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
 import org.junit.Test;
 
 /**
- * Tests the pure route-distance math behind the Trips and Insights aggregates.
- * One degree of latitude is ~111.195 km for the 6371 km earth radius used by the store.
+ * Tests the pure route-distance math behind the Trips and Insights aggregates. One degree of
+ * latitude is ~111.195 km for the 6371 km earth radius used by the store.
  */
 public class ObdLocalStoreTest {
 
@@ -33,10 +32,7 @@ public class ObdLocalStoreTest {
 
     @Test
     public void routeDistanceSumsConsecutiveLegs() throws JSONException {
-        JSONArray points = points(
-                point(0, 0),
-                point(0, 1),
-                point(1, 1));
+        JSONArray points = points(point(0, 0), point(0, 1), point(1, 1));
         // Leg 1: (0,0)->(0,1) and leg 2: (0,1)->(1,1), each ~one degree.
         assertEquals(ONE_DEGREE_METERS * 2, ObdStoreSupport.distanceMeters(points), 5.0);
     }

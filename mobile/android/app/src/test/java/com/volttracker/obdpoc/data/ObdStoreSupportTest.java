@@ -7,12 +7,11 @@ import static org.junit.Assert.assertTrue;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
 import org.junit.Test;
 
 /**
- * Pure-JVM tests for the stateless helpers extracted into {@link ObdStoreSupport}.
- * Splitting them out of {@code ObdLocalStore} is what makes this coverage possible.
+ * Pure-JVM tests for the stateless helpers extracted into {@link ObdStoreSupport}. Splitting them
+ * out of {@code ObdLocalStore} is what makes this coverage possible.
  */
 public class ObdStoreSupportTest {
 

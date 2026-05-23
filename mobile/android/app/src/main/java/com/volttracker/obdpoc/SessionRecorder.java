@@ -1,33 +1,30 @@
 package com.volttracker.obdpoc;
 
-import com.volttracker.obdpoc.data.ObdLocalStore;
-import com.volttracker.obdpoc.location.FilteredLocation;
-
 import static com.volttracker.obdpoc.ObdElmDecode.finishStatusFor;
 import static com.volttracker.obdpoc.ObdElmDecode.nameForCommand;
 import static com.volttracker.obdpoc.ObdElmDecode.pidForCommand;
 import static com.volttracker.obdpoc.ObdElmDecode.safeMessage;
 import static com.volttracker.obdpoc.ObdElmDecode.summarizeForStorage;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
+import com.volttracker.obdpoc.data.ObdLocalStore;
+import com.volttracker.obdpoc.location.FilteredLocation;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * Owns the per-session diagnostic record: the {@code .jsonl} field log, the SQLite
- * session/telemetry/event/PID rows, and the database session lifecycle. Extracted from
- * {@link ObdService} so the recording concern is isolated from the OBD polling loop.
+ * session/telemetry/event/PID rows, and the database session lifecycle. Extracted from {@link
+ * ObdService} so the recording concern is isolated from the OBD polling loop.
  *
- * <p>Recording is diagnostic-only and never interrupts polling — database writes run on
- * a dedicated executor and swallow their own failures. The synchronized methods share
- * the {@code lock} monitor with {@code ObdService}'s command IO so session teardown
- * cannot race a command in flight.
+ * <p>Recording is diagnostic-only and never interrupts polling — database writes run on a dedicated
+ * executor and swallow their own failures. The synchronized methods share the {@code lock} monitor
+ * with {@code ObdService}'s command IO so session teardown cannot race a command in flight.
  */
 final class SessionRecorder {
 
@@ -78,12 +75,28 @@ final class SessionRecorder {
                 activeMode = mode == null ? "" : mode;
                 activeAdapterName = adapterName == null ? "" : adapterName;
                 activeAddress = address == null ? "" : address;
-                activeSessionId = localStore == null ? 0L : localStore.startSession(
-                        activeMode, activeAddress, activeAdapterName, startedAtMs);
-                logEvent("session_start", "mode", mode, "adapter", adapterName,
-                        "address", activeAddress);
+                activeSessionId =
+                        localStore == null
+                                ? 0L
+                                : localStore.startSession(
+                                        activeMode, activeAddress, activeAdapterName, startedAtMs);
+                logEvent(
+                        "session_start",
+                        "mode",
+                        mode,
+                        "adapter",
+                        adapterName,
+                        "address",
+                        activeAddress);
             } catch (RuntimeException ex) {
                 activeSessionId = 0L;
+                android.util.Log.w(MainActivity.TAG, "SessionRecorder.startSession failed", ex);
+                logEvent(
+                        "session_start_error",
+                        "reason",
+                        ex.getClass().getSimpleName(),
+                        "message",
+                        String.valueOf(ex.getMessage()));
             }
         }
     }
@@ -102,10 +115,18 @@ final class SessionRecorder {
             if (closingSessionId > 0 && localStore != null) {
                 try {
                     String status = finishStatusFor(state);
-                    localStore.finishSession(closingSessionId, status,
-                            System.currentTimeMillis(), supportedPids);
-                    localStore.recordAdapterSummary(closingAddress, closingAdapterName,
-                            closingMode, closingSessionId, status, sampleCount, supportedPids,
+                    // Single transaction: marks the session ended AND upserts the adapter
+                    // summary atomically, so a crash between the two writes can't leave the
+                    // session row out of sync with the adapter-history row.
+                    localStore.finalizeSession(
+                            closingSessionId,
+                            status,
+                            System.currentTimeMillis(),
+                            supportedPids,
+                            closingAddress,
+                            closingAdapterName,
+                            closingMode,
+                            sampleCount,
                             detail);
                 } catch (RuntimeException ignored) {
                     // Field logging must keep working even if DB persistence has a bad day.
@@ -204,22 +225,26 @@ final class SessionRecorder {
     // poll), so the trace keeps recording across reconnects and idle OBD periods.
     void persistLocation(FilteredLocation location) {
         final long sessionId = activeSessionId;
-        if (sessionId <= 0 || localStore == null || location == null
+        if (sessionId <= 0
+                || localStore == null
+                || location == null
                 || ObdLocalStore.MODE_DEMO.equals(activeMode)) {
             return;
         }
-        persistAsync(() -> localStore.recordLocationSample(
-                sessionId,
-                location.fixTimeMs,
-                location.provider,
-                location.latitude,
-                location.longitude,
-                location.accuracyM,
-                location.altitudeM,
-                location.speedMps,
-                location.bearingDeg,
-                location.locationAgeMs,
-                location.elapsedRealtimeNanos));
+        persistAsync(
+                () ->
+                        localStore.recordLocationSample(
+                                sessionId,
+                                location.fixTimeMs,
+                                location.provider,
+                                location.latitude,
+                                location.longitude,
+                                location.accuracyM,
+                                location.altitudeM,
+                                location.speedMps,
+                                location.bearingDeg,
+                                location.locationAgeMs,
+                                location.elapsedRealtimeNanos));
     }
 
     /** Runs {@code task} on the recording executor — off the OBD poll and main threads. */
@@ -240,11 +265,12 @@ final class SessionRecorder {
     private boolean shouldThrottleStatus(String state, String detail, boolean blocked) {
         synchronized (lock) {
             long now = System.currentTimeMillis();
-            String key = (state == null ? "" : state)
-                    + "|"
-                    + (detail == null ? "" : detail)
-                    + "|"
-                    + blocked;
+            String key =
+                    (state == null ? "" : state)
+                            + "|"
+                            + (detail == null ? "" : detail)
+                            + "|"
+                            + blocked;
             if (key.equals(lastPersistedStatusKey) && now - lastPersistedStatusAtMs < 5000L) {
                 return true;
             }
@@ -259,12 +285,23 @@ final class SessionRecorder {
         if (sessionId <= 0 || payload == null || localStore == null) {
             return;
         }
-        persistAsync(() -> {
-            String detail = payload.optString("detail",
-                    payload.optString("message",
-                            payload.optString("event", payload.optString("command", ""))));
-            localStore.recordEvent(sessionId, type, payload.optString("state", ""), detail, false, payload);
-        });
+        persistAsync(
+                () -> {
+                    String detail =
+                            payload.optString(
+                                    "detail",
+                                    payload.optString(
+                                            "message",
+                                            payload.optString(
+                                                    "event", payload.optString("command", ""))));
+                    localStore.recordEvent(
+                            sessionId,
+                            type,
+                            payload.optString("state", ""),
+                            detail,
+                            false,
+                            payload);
+                });
     }
 
     private void persistPidObservation(
@@ -273,8 +310,7 @@ final class SessionRecorder {
             long observedAtMs,
             long timeoutMs,
             long durationMs,
-            String response
-    ) {
+            String response) {
         final long sessionId = activeSessionId;
         if (sessionId <= 0 || localStore == null) {
             return;
@@ -284,42 +320,41 @@ final class SessionRecorder {
         ObdProtocol.ParsedPidValue parsed = ObdProtocol.parseKnownValue(safeCommand, response);
         List<ObdProtocol.DiagnosticTroubleCode> diagnosticCodes =
                 ObdProtocol.parseDiagnosticTroubleCodes(safeCommand, response, header);
-        persistAsync(() -> {
-            JSONObject payload = new JSONObject();
-            try {
-                payload.put("observedAtMs", observedAtMs);
-                payload.put("command", safeCommand);
-                payload.put("header", header == null ? "" : header);
-                payload.put("pid", pidForCommand(safeCommand));
-                payload.put("name", parsed == null ? nameForCommand(safeCommand) : parsed.name);
-                if (parsed != null) {
-                    payload.put("valueText", parsed.valueText);
-                    if (parsed.valueNumeric != null) {
-                        payload.put("valueNumeric", parsed.valueNumeric.doubleValue());
+        persistAsync(
+                () -> {
+                    JSONObject payload = new JSONObject();
+                    try {
+                        payload.put("observedAtMs", observedAtMs);
+                        payload.put("command", safeCommand);
+                        payload.put("header", header == null ? "" : header);
+                        payload.put("pid", pidForCommand(safeCommand));
+                        payload.put(
+                                "name", parsed == null ? nameForCommand(safeCommand) : parsed.name);
+                        if (parsed != null) {
+                            payload.put("valueText", parsed.valueText);
+                            if (parsed.valueNumeric != null) {
+                                payload.put("valueNumeric", parsed.valueNumeric.doubleValue());
+                            }
+                            payload.put("unit", parsed.unit);
+                        }
+                        payload.put("rawRequest", safeCommand);
+                        payload.put("rawResponse", summary);
+                        payload.put("gotPrompt", response != null && response.indexOf('>') >= 0);
+                        payload.put("timeoutMs", timeoutMs);
+                        payload.put("durationMs", durationMs);
+                    } catch (JSONException ignored) {
+                        // Local values are safe.
                     }
-                    payload.put("unit", parsed.unit);
-                }
-                payload.put("rawRequest", safeCommand);
-                payload.put("rawResponse", summary);
-                payload.put("gotPrompt", response != null && response.indexOf('>') >= 0);
-                payload.put("timeoutMs", timeoutMs);
-                payload.put("durationMs", durationMs);
-            } catch (JSONException ignored) {
-                // Local values are safe.
-            }
-            localStore.recordPidObservation(sessionId, payload, observedAtMs);
-            for (ObdProtocol.DiagnosticTroubleCode code : diagnosticCodes) {
-                localStore.recordDiagnosticCode(sessionId,
-                        diagnosticCodeJson(code, observedAtMs, safeCommand));
-            }
-        });
+                    localStore.recordPidObservation(sessionId, payload, observedAtMs);
+                    for (ObdProtocol.DiagnosticTroubleCode code : diagnosticCodes) {
+                        localStore.recordDiagnosticCode(
+                                sessionId, diagnosticCodeJson(code, observedAtMs, safeCommand));
+                    }
+                });
     }
 
     private static JSONObject diagnosticCodeJson(
-            ObdProtocol.DiagnosticTroubleCode code,
-            long observedAtMs,
-            String command
-    ) {
+            ObdProtocol.DiagnosticTroubleCode code, long observedAtMs, String command) {
         JSONObject payload = new JSONObject();
         try {
             payload.put("seenAtMs", observedAtMs);
@@ -340,13 +375,14 @@ final class SessionRecorder {
 
     private void persistAsync(Runnable task) {
         try {
-            databaseExecutor.execute(() -> {
-                try {
-                    task.run();
-                } catch (RuntimeException ignored) {
-                    // Persistence is diagnostic; never interrupt OBD polling for it.
-                }
-            });
+            databaseExecutor.execute(
+                    () -> {
+                        try {
+                            task.run();
+                        } catch (RuntimeException ignored) {
+                            // Persistence is diagnostic; never interrupt OBD polling for it.
+                        }
+                    });
         } catch (RejectedExecutionException ignored) {
         }
     }

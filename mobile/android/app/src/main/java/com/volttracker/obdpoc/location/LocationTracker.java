@@ -1,8 +1,8 @@
 package com.volttracker.obdpoc.location;
 
 /**
- * Abstraction over a GPS source. Keeps route logging independent of the OBD connection and
- * lets a fused-provider implementation be swapped in later without touching callers.
+ * Abstraction over a GPS source. Keeps route logging independent of the OBD connection and lets a
+ * fused-provider implementation be swapped in later without touching callers.
  */
 public interface LocationTracker {
 
@@ -11,7 +11,9 @@ public interface LocationTracker {
         void onLocation(FilteredLocation location);
     }
 
-    /** Begins delivering accepted fixes to {@code listener}. A no-op without location permission. */
+    /**
+     * Begins delivering accepted fixes to {@code listener}. A no-op without location permission.
+     */
     void start(Listener listener);
 
     /** Stops delivery and releases the underlying provider. */

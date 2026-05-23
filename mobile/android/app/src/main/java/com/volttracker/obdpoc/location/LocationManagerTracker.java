@@ -11,9 +11,9 @@ import android.os.Bundle;
 
 /**
  * {@link LocationTracker} backed by the platform {@link LocationManager}. Every raw fix runs
- * through {@link LocationFilter}; only accepted fixes reach the listener and
- * {@link #getLastLocation()}. Because fixes arrive on the provider's own callbacks (~1 Hz),
- * route logging no longer depends on the OBD poll cadence.
+ * through {@link LocationFilter}; only accepted fixes reach the listener and {@link
+ * #getLastLocation()}. Because fixes arrive on the provider's own callbacks (~1 Hz), route logging
+ * no longer depends on the OBD poll cadence.
  */
 public final class LocationManagerTracker implements LocationTracker {
 
@@ -23,27 +23,26 @@ public final class LocationManagerTracker implements LocationTracker {
     private Listener listener;
     private volatile FilteredLocation lastAccepted;
 
-    private final LocationListener locationListener = new LocationListener() {
-        @Override
-        public void onLocationChanged(Location location) {
-            if (location != null) {
-                handleFix(location);
-            }
-        }
+    private final LocationListener locationListener =
+            new LocationListener() {
+                @Override
+                public void onLocationChanged(Location location) {
+                    if (location != null) {
+                        handleFix(location);
+                    }
+                }
 
-        @Override
-        public void onProviderDisabled(String provider) {
-        }
+                @Override
+                public void onProviderDisabled(String provider) {}
 
-        @Override
-        public void onProviderEnabled(String provider) {
-        }
+                @Override
+                public void onProviderEnabled(String provider) {}
 
-        @Override
-        public void onStatusChanged(String provider, int status, Bundle extras) {
-            // Deprecated but still required on older API levels.
-        }
-    };
+                @Override
+                public void onStatusChanged(String provider, int status, Bundle extras) {
+                    // Deprecated but still required on older API levels.
+                }
+            };
 
     public LocationManagerTracker(Context context) {
         this.context = context.getApplicationContext();
@@ -101,24 +100,38 @@ public final class LocationManagerTracker implements LocationTracker {
         long now = System.currentTimeMillis();
         float accuracy = location.hasAccuracy() ? location.getAccuracy() : -1f;
         long fixTime = location.getTime();
-        LocationFilter.Decision decision = filter.evaluate(
-                location.getLatitude(), location.getLongitude(),
-                accuracy, fixTime, location.getProvider(), now);
+        LocationFilter.Decision decision =
+                filter.evaluate(
+                        location.getLatitude(),
+                        location.getLongitude(),
+                        accuracy,
+                        fixTime,
+                        location.getProvider(),
+                        now);
         if (decision != LocationFilter.Decision.ACCEPT) {
             return;
         }
         long effectiveFix = fixTime > 0L ? fixTime : now;
-        FilteredLocation accepted = new FilteredLocation(
-                round6(location.getLatitude()),
-                round6(location.getLongitude()),
-                location.hasAccuracy() ? Double.valueOf(round1(location.getAccuracy())) : null,
-                location.hasAltitude() ? Double.valueOf(round1(location.getAltitude())) : null,
-                location.hasSpeed() ? Double.valueOf(round1(location.getSpeed())) : null,
-                location.hasBearing() ? Double.valueOf(round1(location.getBearing())) : null,
-                effectiveFix,
-                Math.max(0L, now - effectiveFix),
-                location.getElapsedRealtimeNanos() != 0L ? location.getElapsedRealtimeNanos() : null,
-                location.getProvider());
+        FilteredLocation accepted =
+                new FilteredLocation(
+                        round6(location.getLatitude()),
+                        round6(location.getLongitude()),
+                        location.hasAccuracy()
+                                ? Double.valueOf(round1(location.getAccuracy()))
+                                : null,
+                        location.hasAltitude()
+                                ? Double.valueOf(round1(location.getAltitude()))
+                                : null,
+                        location.hasSpeed() ? Double.valueOf(round1(location.getSpeed())) : null,
+                        location.hasBearing()
+                                ? Double.valueOf(round1(location.getBearing()))
+                                : null,
+                        effectiveFix,
+                        Math.max(0L, now - effectiveFix),
+                        location.getElapsedRealtimeNanos() != 0L
+                                ? location.getElapsedRealtimeNanos()
+                                : null,
+                        location.getProvider());
         lastAccepted = accepted;
         Listener current = listener;
         if (current != null) {
@@ -127,8 +140,10 @@ public final class LocationManagerTracker implements LocationTracker {
     }
 
     private boolean hasLocationPermission() {
-        return context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                || context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        return context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                        == PackageManager.PERMISSION_GRANTED
+                || context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        == PackageManager.PERMISSION_GRANTED;
     }
 
     private static double round6(double value) {

@@ -1,5 +1,20 @@
-  const bridge = window.VoltTrackerAndroid || null;
-  const el = (id) => document.getElementById(id);
+// Initializes the VoltDashboard namespace shared by every dashboard JS file. Each
+// of the 5 files is wrapped in its own IIFE; cross-file calls go through
+// `window.VoltDashboard` (aliased locally as `VD`). `window.VoltTrackerAndroid`
+// (the Android->WebView bridge) and `window.VoltTrackerNative` (the WebView<-Android
+// callback surface) are preserved exactly as-is — those names are part of the ABI.
+(function () {
+  "use strict";
+
+  const VD = (window.VoltDashboard = window.VoltDashboard || {});
+  VD.bridge = window.VoltTrackerAndroid || null;
+  VD.el = (id) => document.getElementById(id);
+  // Top-level abort controller for window-level error/rejection listeners, so the
+  // C2 reset hook can tear them down with the rest of the actions.js listeners.
+  VD.errorController = new AbortController();
+
+  const bridge = VD.bridge;
+  const el = VD.el;
 
   function reportClientError(label, detail) {
     const message = String(detail || label || "Unknown error");
@@ -19,7 +34,7 @@
   window.addEventListener("error", (event) => {
     const stack = event && event.error && event.error.stack;
     reportClientError("window.error", stack || (event && event.message) || "Script error");
-  });
+  }, { signal: VD.errorController.signal });
 
   window.addEventListener("unhandledrejection", (event) => {
     const reason = event && event.reason;
@@ -27,7 +42,7 @@
       "unhandledrejection",
       (reason && reason.stack) || String(reason || "Unhandled promise rejection")
     );
-  });
+  }, { signal: VD.errorController.signal });
 
   (function bindErrorBannerDismiss() {
     const dismiss = el("errorBannerDismiss");
@@ -35,7 +50,7 @@
       dismiss.addEventListener("click", () => {
         const node = el("errorBanner");
         if (node) node.hidden = true;
-      });
+      }, { signal: VD.errorController.signal });
     }
   })();
 
@@ -63,6 +78,7 @@
       { kind: "good", icon: "EV", title: "Tahoe trip MPG within 4% of route avg", body: "Apr 28's 184 mile roundtrip hit 41.7 MPG for that elevation profile." }
     ]
   };
+  VD.data = data;
 
   const state = {
     view: "drive",
@@ -81,6 +97,11 @@
     selectedMapSessionId: null,
     status: {},
     speedHistory: [],
+    // Tracked by telemetry.js for the C6 BT-disconnected stale-data indicator.
+    lastSampleAt: 0,
+    // C1: latest telemetry render is throttled via requestAnimationFrame; this
+    // is the rAF id, cleared once the scheduled render runs.
+    rafPending: 0,
     telemetry: {
       speedKph: null,
       rpm: null,
@@ -95,6 +116,7 @@
       raw: ""
     }
   };
+  VD.state = state;
 
   const realViewMeta = {
     drive: ["Volt Tracker Android", "Drive"],
@@ -133,7 +155,7 @@
     if (view !== "map" && state.mapFull) {
       state.mapFull = false;
       document.body.classList.remove("map-full-active");
-      renderMap();
+      VD.renderMap();
     }
     document.querySelectorAll(".view").forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
     document.querySelectorAll("[data-nav]").forEach((node) => {
@@ -145,9 +167,9 @@
         node.removeAttribute("aria-current");
       }
     });
-    if (view === "trips") loadTrips();
-    else if (view === "insights") loadInsights();
-    else if (view === "map") renderMap();
+    if (view === "trips") VD.loadTrips();
+    else if (view === "insights") VD.loadInsights();
+    else if (view === "map") VD.renderMap();
     updateViewHeading();
     window.scrollTo({ top: 0, behavior: "auto" });
   }
@@ -188,16 +210,16 @@
       button.textContent = next ? "Demo on" : (button.dataset.demoLabel || "Demo");
       button.classList.toggle("is-active", next);
     });
-    if (detail) setStatus({ state: next ? "demo" : "ready", detail });
+    if (detail) VD.setStatus({ state: next ? "demo" : "ready", detail });
     if (!changed) return;
     updateViewHeading();
     renderTrips();
     renderSessions();
     renderInsights();
-    updateLiveUi();
-    drawTrace();
-    loadTrips();
-    loadInsights();
+    VD.updateLiveUi();
+    VD.drawTrace();
+    VD.loadTrips();
+    VD.loadInsights();
   }
 
   function clearDemoTelemetry() {
@@ -223,23 +245,39 @@
     const home = el("homeTrips");
     const list = el("tripList");
     if (!state.demoActive) {
-      home.innerHTML = "";
-      list.innerHTML = "";
+      home.replaceChildren();
+      list.replaceChildren();
       return;
     }
-    const makeRow = (trip) => `
-      <button type="button" class="trip-row" data-trip-id="${trip.id}" data-mode="${trip.mode}">
-        <span class="trip-dot"></span>
-        <span><strong>${trip.label}</strong><small>${trip.date} - ${trip.miles} mi - ${trip.mins}m</small></span>
-        <b>${trip.efficiency}</b>
-      </button>`;
-    home.innerHTML = data.trips.slice(0, 5).map(makeRow).join("");
+    home.replaceChildren(...data.trips.slice(0, 5).map(buildTripRow));
     const filtered = data.trips.filter((trip) => state.tripFilter === "all" || trip.mode === state.tripFilter);
-    list.innerHTML = filtered.map(makeRow).join("");
+    list.replaceChildren(...filtered.map(buildTripRow));
     document.querySelectorAll("[data-trip-id]").forEach((button) => {
       button.addEventListener("click", () => selectTrip(Number(button.dataset.tripId)));
     });
     selectTrip(state.selectedTripId);
+  }
+
+  // C4: build a demo-trip row via DOM APIs instead of innerHTML += template
+  // literals, so user-provided fields never get re-interpreted as markup.
+  function buildTripRow(trip) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "trip-row";
+    button.dataset.tripId = String(trip.id);
+    button.dataset.mode = trip.mode;
+    const dot = document.createElement("span");
+    dot.className = "trip-dot";
+    const center = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = trip.label;
+    const small = document.createElement("small");
+    small.textContent = `${trip.date} - ${trip.miles} mi - ${trip.mins}m`;
+    center.append(strong, small);
+    const right = document.createElement("b");
+    right.textContent = trip.efficiency;
+    button.append(dot, center, right);
+    return button;
   }
 
   function selectTrip(id) {
@@ -255,20 +293,38 @@
     const bars = el("hourBars");
     const list = el("sessionList");
     if (!state.demoActive) {
-      bars.innerHTML = "";
-      list.innerHTML = "";
+      bars.replaceChildren();
+      list.replaceChildren();
       return;
     }
-    bars.innerHTML = data.hourly.map((height, index) => {
+    bars.replaceChildren(...data.hourly.map((height, index) => {
       const off = index >= 21 || index < 6;
-      return `<span class="${off ? "is-offpeak" : ""}" style="height:${height}%"></span>`;
-    }).join("");
-    list.innerHTML = data.sessions.map((s) => `
-      <button type="button" class="session-row">
-        <span class="session-badge">${s.type}</span>
-        <span><strong>${s.location}</strong><small>${s.date} - SOC ${s.soc}%</small></span>
-        <b>${s.kwh} kWh<br>${s.cost}</b>
-      </button>`).join("");
+      const span = document.createElement("span");
+      if (off) span.className = "is-offpeak";
+      span.style.height = height + "%";
+      return span;
+    }));
+    list.replaceChildren(...data.sessions.map(buildSessionRow));
+  }
+
+  function buildSessionRow(s) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "session-row";
+    const badge = document.createElement("span");
+    badge.className = "session-badge";
+    badge.textContent = s.type;
+    const center = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = s.location;
+    const small = document.createElement("small");
+    small.textContent = `${s.date} - SOC ${s.soc}%`;
+    center.append(strong, small);
+    const right = document.createElement("b");
+    // Original markup was `${kwh} kWh<br>${cost}`; reproduce via a real <br>.
+    right.append(document.createTextNode(`${s.kwh} kWh`), document.createElement("br"), document.createTextNode(s.cost));
+    button.append(badge, center, right);
+    return button;
   }
 
   function renderInsights() {
@@ -276,36 +332,49 @@
     const list = el("insightList");
     const cells = el("cellGrid");
     if (!state.demoActive) {
-      home.innerHTML = "";
-      list.innerHTML = "";
-      cells.innerHTML = "";
+      home.replaceChildren();
+      list.replaceChildren();
+      cells.replaceChildren();
       return;
     }
-    const insightMarkup = data.insights.map((item) => `
-      <article class="panel insight ${item.kind === "warn" ? "warn" : ""}">
-        <span class="insight-icon">${item.icon}</span>
-        <span><strong>${item.title}</strong><p>${item.body}</p></span>
-      </article>`).join("");
-    home.innerHTML = data.insights.slice(0, 3).map((item) => `
-      <article class="insight ${item.kind === "warn" ? "warn" : ""}">
-        <span class="insight-icon">${item.icon}</span>
-        <span><strong>${item.title}</strong><p>${item.body}</p></span>
-      </article>`).join("");
-    list.innerHTML = insightMarkup;
-    cells.innerHTML = Array.from({ length: 96 }).map((_, i) => {
+    list.replaceChildren(...data.insights.map((item) => buildInsightArticle(item, true)));
+    home.replaceChildren(...data.insights.slice(0, 3).map((item) => buildInsightArticle(item, false)));
+    cells.replaceChildren(...Array.from({ length: 96 }).map((_, i) => {
       const watch = i + 1 === 47;
       const c = watch ? 0.8 : 0.16 + ((i * 13 + 5) % 9) / 14;
-      return `<span class="cell ${watch ? "is-watch" : ""}" style="--c:${c}"></span>`;
-    }).join("");
+      const span = document.createElement("span");
+      span.className = "cell" + (watch ? " is-watch" : "");
+      span.style.setProperty("--c", c);
+      return span;
+    }));
+  }
+
+  function buildInsightArticle(item, includePanelClass) {
+    const article = document.createElement("article");
+    article.className = (includePanelClass ? "panel insight" : "insight") + (item.kind === "warn" ? " warn" : "");
+    const icon = document.createElement("span");
+    icon.className = "insight-icon";
+    icon.textContent = item.icon;
+    const body = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = item.title;
+    const p = document.createElement("p");
+    p.textContent = item.body;
+    body.append(strong, p);
+    article.append(icon, body);
+    return article;
   }
 
   function setDevices(payload) {
     const devices = parsePayload(payload, []);
     const select = el("deviceSelect");
-    const preferred = getLastDevice();
+    const preferred = VD.getLastDevice();
     select.innerHTML = "";
     if (!devices.length) {
-      select.innerHTML = '<option value="">No paired adapters found</option>';
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "No paired adapters found";
+      select.append(opt);
       return;
     }
     devices.forEach((device) => {
@@ -329,24 +398,57 @@
     state.deviceHistory = Array.isArray(parsed) ? parsed : [];
     const card = el("historyCard");
     const list = el("historyList");
-    list.innerHTML = "";
+    list.replaceChildren();
     card.hidden = state.deviceHistory.length === 0;
     if (!state.deviceHistory.length) return;
     const savedCount = state.deviceHistory.filter((device) => !device.candidate).length;
     setText("historyHint", savedCount ? "tap to select" : "paired candidate");
-    list.innerHTML = state.deviceHistory.map((device, index) => {
-      const meta = device.candidate ? "paired candidate" : relativeTime(device.lastSeen);
-      const count = device.candidate ? "new" : (device.connectCount ? `${device.connectCount}x` : "");
-      return `<button type="button" class="history-row" data-history-index="${index}">
-        <span><strong>${escapeHtml(device.name || "OBD adapter")}</strong><small>${escapeHtml(device.address || "unknown")} - ${escapeHtml(meta)}</small></span>
-        <b>${escapeHtml(count)}</b>
-      </button>`;
-    }).join("");
+    list.replaceChildren(...state.deviceHistory.map((device, index) => buildHistoryRow(device, index)));
     document.querySelectorAll("[data-history-index]").forEach((button) => {
       button.addEventListener("click", () => {
         const device = state.deviceHistory[Number(button.dataset.historyIndex)];
-        selectDevice(device.address, device.name || "OBD adapter");
-        setStatus({ state: "ready", detail: `Selected ${device.name || device.address}.` });
+        VD.selectDevice(device.address, device.name || "OBD adapter");
+        VD.setStatus({ state: "ready", detail: `Selected ${device.name || device.address}.` });
       });
     });
   }
+
+  function buildHistoryRow(device, index) {
+    const meta = device.candidate ? "paired candidate" : VD.relativeTime(device.lastSeen);
+    const count = device.candidate ? "new" : (device.connectCount ? `${device.connectCount}x` : "");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "history-row";
+    button.dataset.historyIndex = String(index);
+    const center = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = device.name || "OBD adapter";
+    const small = document.createElement("small");
+    small.textContent = `${device.address || "unknown"} - ${meta}`;
+    center.append(strong, small);
+    const right = document.createElement("b");
+    right.textContent = count;
+    button.append(center, right);
+    return button;
+  }
+
+  Object.assign(VD, {
+    reportClientError,
+    parsePayload,
+    setText,
+    setMeter,
+    setView,
+    updateViewHeading,
+    setMode,
+    setDemoActive,
+    clearDemoTelemetry,
+    renderTrips,
+    selectTrip,
+    renderSessions,
+    renderInsights,
+    setDevices,
+    setHistory,
+    realViewMeta,
+    demoViewMeta
+  });
+})();

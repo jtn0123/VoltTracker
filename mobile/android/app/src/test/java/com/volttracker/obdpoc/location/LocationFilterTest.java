@@ -3,7 +3,6 @@ package com.volttracker.obdpoc.location;
 import static org.junit.Assert.assertEquals;
 
 import com.volttracker.obdpoc.location.LocationFilter.Decision;
-
 import org.junit.Test;
 
 /** Exercises every accept/reject rule in {@link LocationFilter}. */
@@ -49,7 +48,8 @@ public class LocationFilterTest {
         LocationFilter f = new LocationFilter();
         assertEquals(Decision.ACCEPT, f.evaluate(LAT, LNG, 5f, T0, "gps", T0));
         // ~5.5 km away one second later: ~5500 m/s
-        assertEquals(Decision.REJECT_JUMP,
+        assertEquals(
+                Decision.REJECT_JUMP,
                 f.evaluate(LAT + 0.05, LNG, 5f, T0 + 1_000L, "gps", T0 + 1_000L));
     }
 
@@ -58,7 +58,8 @@ public class LocationFilterTest {
         LocationFilter f = new LocationFilter();
         f.evaluate(LAT, LNG, 5f, T0, "gps", T0);
         // ~30 m in one second is a plausible 30 m/s
-        assertEquals(Decision.ACCEPT,
+        assertEquals(
+                Decision.ACCEPT,
                 f.evaluate(LAT + 0.00027, LNG, 5f, T0 + 1_000L, "gps", T0 + 1_000L));
     }
 
@@ -67,7 +68,8 @@ public class LocationFilterTest {
         LocationFilter f = new LocationFilter();
         f.evaluate(LAT, LNG, 5f, T0, "gps", T0);
         // 5.5 km but two minutes later: ~46 m/s, plausible
-        assertEquals(Decision.ACCEPT,
+        assertEquals(
+                Decision.ACCEPT,
                 f.evaluate(LAT + 0.05, LNG, 5f, T0 + 120_000L, "gps", T0 + 120_000L));
     }
 
@@ -75,7 +77,8 @@ public class LocationFilterTest {
     public void networkFixIsSuppressedWhileGpsIsFresh() {
         LocationFilter f = new LocationFilter();
         f.evaluate(LAT, LNG, 5f, T0, "gps", T0);
-        assertEquals(Decision.REJECT_PROVIDER,
+        assertEquals(
+                Decision.REJECT_PROVIDER,
                 f.evaluate(LAT, LNG, 30f, T0 + 5_000L, "network", T0 + 5_000L));
     }
 
@@ -84,8 +87,8 @@ public class LocationFilterTest {
         LocationFilter f = new LocationFilter();
         f.evaluate(LAT, LNG, 5f, T0, "gps", T0);
         // 20 s later with no fresh GPS, the network fix fills the gap
-        assertEquals(Decision.ACCEPT,
-                f.evaluate(LAT, LNG, 30f, T0 + 20_000L, "network", T0 + 20_000L));
+        assertEquals(
+                Decision.ACCEPT, f.evaluate(LAT, LNG, 30f, T0 + 20_000L, "network", T0 + 20_000L));
     }
 
     @Test
@@ -130,8 +133,8 @@ public class LocationFilterTest {
         f.reset();
         // after reset there is no reference point, so a far fix is treated as a fresh
         // first fix rather than an impossible jump from the previous session
-        assertEquals(Decision.ACCEPT,
-                f.evaluate(LAT + 0.05, LNG, 5f, T0 + 1_000L, "gps", T0 + 1_000L));
+        assertEquals(
+                Decision.ACCEPT, f.evaluate(LAT + 0.05, LNG, 5f, T0 + 1_000L, "gps", T0 + 1_000L));
     }
 
     @Test
@@ -139,11 +142,13 @@ public class LocationFilterTest {
         LocationFilter f = new LocationFilter();
         f.evaluate(LAT, LNG, 5f, T0, "gps", T0);
         // an outlier ~5.5 km away is rejected as a jump
-        assertEquals(Decision.REJECT_JUMP,
+        assertEquals(
+                Decision.REJECT_JUMP,
                 f.evaluate(LAT + 0.05, LNG, 5f, T0 + 1_000L, "gps", T0 + 1_000L));
         // the next real fix near the original point is still accepted: the rejected
         // outlier did not replace the reference point
-        assertEquals(Decision.ACCEPT,
+        assertEquals(
+                Decision.ACCEPT,
                 f.evaluate(LAT + 0.0002, LNG, 5f, T0 + 2_000L, "gps", T0 + 2_000L));
     }
 
@@ -153,7 +158,8 @@ public class LocationFilterTest {
         // a "fused" fix is treated as GPS-grade, not network
         assertEquals(Decision.ACCEPT, f.evaluate(LAT, LNG, 5f, T0, "fused", T0));
         // so a coarse network fix shortly after is still suppressed
-        assertEquals(Decision.REJECT_PROVIDER,
+        assertEquals(
+                Decision.REJECT_PROVIDER,
                 f.evaluate(LAT, LNG, 30f, T0 + 5_000L, "network", T0 + 5_000L));
     }
 }

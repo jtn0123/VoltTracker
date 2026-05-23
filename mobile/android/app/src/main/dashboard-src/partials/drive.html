@@ -1,259 +1,317 @@
-  <section id="view-drive" class="view is-active" data-view="drive">
-    <section class="hero">
-      <article class="panel live-card">
-        <div class="live-head">
-          <span class="kicker">Vehicle speed</span>
-          <span class="rate-chip"><span class="rate-dot"></span>4 Hz</span>
+<section id="view-drive" class="view is-active" data-view="drive">
+  <section class="hero">
+    <article class="panel live-card">
+      <div class="live-head">
+        <span class="kicker">Vehicle speed</span>
+        <span class="rate-chip"><span class="rate-dot"></span>4 Hz</span>
+      </div>
+      <div class="speed-row">
+        <div id="speedValue" class="speed-value">--</div>
+        <div class="speed-units">
+          <span class="speed-unit-main">MPH</span>
+          <span id="speedKph" class="speed-unit-sub">-- km/h</span>
         </div>
-        <div class="speed-row">
-          <div id="speedValue" class="speed-value">--</div>
-          <div class="speed-units">
-            <span class="speed-unit-main">MPH</span>
-            <span id="speedKph" class="speed-unit-sub">-- km/h</span>
+      </div>
+      <div class="power-block">
+        <div class="power-head">
+          <div class="power-label">
+            <span class="kicker">Power</span>
+            <strong id="powerValue">--</strong>
+          </div>
+          <span id="powerDetail" class="power-state" data-state="coast"
+            >coast</span
+          >
+        </div>
+        <div class="power-meter">
+          <span class="power-zero"></span>
+          <span id="powerFill" class="power-fill"></span>
+        </div>
+        <div class="power-scale">
+          <span>-80</span><span>0</span><span>+80</span>
+        </div>
+      </div>
+    </article>
+
+    <article class="panel battery-strip">
+      <div class="battery-head">
+        <div>
+          <div class="kicker">HV Battery</div>
+          <div class="battery-soc">
+            <strong id="driveSocValue">--</strong>
+            <span class="battery-soc-sub">state of charge</span>
           </div>
         </div>
-        <div class="power-block">
-          <div class="power-head">
-            <div class="power-label">
-              <span class="kicker">Power</span>
-              <strong id="powerValue">--</strong>
-            </div>
-            <span id="powerDetail" class="power-state" data-state="coast">coast</span>
-          </div>
-          <div class="power-meter">
-            <span class="power-zero"></span>
-            <span id="powerFill" class="power-fill"></span>
-          </div>
-          <div class="power-scale"><span>-80</span><span>0</span><span>+80</span></div>
+        <div class="battery-temp">
+          <div class="kicker">Pack temp</div>
+          <strong id="drivePackTempValue">--</strong>
         </div>
-      </article>
-
-      <article class="panel battery-strip">
-        <div class="battery-head">
-          <div>
-            <div class="kicker">HV Battery</div>
-            <div class="battery-soc">
-              <strong id="driveSocValue">--</strong>
-              <span class="battery-soc-sub">state of charge</span>
-            </div>
-          </div>
-          <div class="battery-temp">
-            <div class="kicker">Pack temp</div>
-            <strong id="drivePackTempValue">--</strong>
-          </div>
-        </div>
-        <div class="meter battery-meter"><span id="driveSocMeter"></span></div>
-      </article>
-
-      <div class="mini-grid">
-        <article class="panel mini">
-          <div class="kicker">RPM</div>
-          <strong id="rpmValue">--</strong>
-          <small>engine speed</small>
-        </article>
-        <article class="panel mini">
-          <div class="kicker">Voltage</div>
-          <strong id="voltageValue">--</strong>
-          <small>adapter reported</small>
-        </article>
-        <article class="panel mini">
-          <div class="kicker">Coolant</div>
-          <strong id="coolantValue">--</strong>
-          <small>mode 01 05</small>
-        </article>
-        <article class="panel mini">
-          <div class="kicker">Throttle</div>
-          <strong id="throttleValue">--</strong>
-          <small>mode 01 11</small>
-        </article>
-        <article class="panel mini is-wide">
-          <div class="kicker">GPS</div>
-          <strong id="gpsValue">--</strong>
-          <small id="gpsDetail">location trace</small>
-        </article>
       </div>
-    </section>
-
-    <article class="panel connect-card">
-      <div class="connection-head">
-        <div>
-          <div class="kicker">Adapter</div>
-          <strong id="adapterSummary">No adapter selected</strong>
-          <small id="appStateSummary">Pick a paired OBD adapter to start logging.</small>
-        </div>
-        <button id="connectBtn" type="button" class="primary primary-action">Connect</button>
-      </div>
-      <div class="state-grid" aria-label="Live app state">
-        <div><span>Logging</span><strong id="loggingState">idle</strong></div>
-        <div><span>GPS</span><strong id="gpsState">waiting</strong></div>
-        <div><span>DB</span><strong id="dbState">ready</strong></div>
-        <div><span>Source</span><strong id="dataSourceState">real</strong></div>
-      </div>
-      <div class="control-row">
-        <select id="deviceSelect"><option value="">No paired adapters found</option></select>
-        <button id="refreshBtn" type="button">Refresh</button>
-      </div>
-      <details class="secondary-tools">
-        <summary>Tools and diagnostics</summary>
-        <div class="button-grid">
-          <button id="permissionBtn" type="button">Permissions</button>
-          <button id="lastBtn" type="button">Last</button>
-          <button id="scanBtn" type="button" class="scan">Scan</button>
-          <button id="disconnectBtn" type="button" class="danger">Stop</button>
-        </div>
-      </details>
-      <p id="statusCopy" class="status-copy">Pick a paired OBD adapter to start logging.</p>
-      <div id="demoBanner" class="demo-banner" hidden>
-        <span>
-          <strong>Demo preview is running</strong>
-          <small>Preview data is isolated from real OBD history.</small>
-        </span>
-        <button id="demoStopBtn" type="button" class="demo-stop">Stop demo</button>
-      </div>
+      <div class="meter battery-meter"><span id="driveSocMeter"></span></div>
     </article>
 
-    <article class="panel ratio-card demo-only" hidden>
-      <div id="evRing" class="ring" style="--v:78"><strong id="evRatioValue">78%</strong></div>
-      <div class="ratio-stats">
-        <div><span>Electric miles</span><b>36,064</b></div>
-        <div><span>Gas miles</span><b>2,348</b></div>
-        <div><span>$ / mile YTD</span><b>$0.087</b></div>
-        <div><span>Est. saved</span><b>$1,840</b></div>
+    <div class="mini-grid">
+      <article class="panel mini">
+        <div class="kicker">RPM</div>
+        <strong id="rpmValue">--</strong>
+        <small>engine speed</small>
+      </article>
+      <article class="panel mini">
+        <div class="kicker">Voltage</div>
+        <strong id="voltageValue">--</strong>
+        <small>adapter reported</small>
+      </article>
+      <article class="panel mini">
+        <div class="kicker">Coolant</div>
+        <strong id="coolantValue">--</strong>
+        <small>mode 01 05</small>
+      </article>
+      <article class="panel mini">
+        <div class="kicker">Throttle</div>
+        <strong id="throttleValue">--</strong>
+        <small>mode 01 11</small>
+      </article>
+      <article class="panel mini is-wide">
+        <div class="kicker">GPS</div>
+        <strong id="gpsValue">--</strong>
+        <small id="gpsDetail">location trace</small>
+      </article>
+    </div>
+  </section>
+
+  <article class="panel connect-card">
+    <div class="connection-head">
+      <div>
+        <div class="kicker">Adapter</div>
+        <strong id="adapterSummary">No adapter selected</strong>
+        <small id="appStateSummary"
+          >Pick a paired OBD adapter to start logging.</small
+        >
       </div>
+      <button id="connectBtn" type="button" class="primary primary-action">
+        Connect
+      </button>
+    </div>
+    <div class="state-grid" aria-label="Live app state">
+      <div><span>Logging</span><strong id="loggingState">idle</strong></div>
+      <div><span>GPS</span><strong id="gpsState">waiting</strong></div>
+      <div><span>DB</span><strong id="dbState">ready</strong></div>
+      <div><span>Source</span><strong id="dataSourceState">real</strong></div>
+    </div>
+    <div class="control-row">
+      <select id="deviceSelect">
+        <option value="">No paired adapters found</option>
+      </select>
+      <button id="refreshBtn" type="button">Refresh</button>
+    </div>
+    <details class="secondary-tools">
+      <summary>Tools and diagnostics</summary>
+      <div class="button-grid">
+        <button id="permissionBtn" type="button">Permissions</button>
+        <button id="lastBtn" type="button">Last</button>
+        <button id="scanBtn" type="button" class="scan">Scan</button>
+        <button id="disconnectBtn" type="button" class="danger">Stop</button>
+      </div>
+    </details>
+    <p id="statusCopy" class="status-copy">
+      Pick a paired OBD adapter to start logging.
+    </p>
+    <div id="demoBanner" class="demo-banner" hidden>
+      <span>
+        <strong>Demo preview is running</strong>
+        <small>Preview data is isolated from real OBD history.</small>
+      </span>
+      <button id="demoStopBtn" type="button" class="demo-stop">
+        Stop demo
+      </button>
+    </div>
+  </article>
+
+  <article class="panel ratio-card demo-only" hidden>
+    <div id="evRing" class="ring" style="--v: 78">
+      <strong id="evRatioValue">78%</strong>
+    </div>
+    <div class="ratio-stats">
+      <div><span>Electric miles</span><b>36,064</b></div>
+      <div><span>Gas miles</span><b>2,348</b></div>
+      <div><span>$ / mile YTD</span><b>$0.087</b></div>
+      <div><span>Est. saved</span><b>$1,840</b></div>
+    </div>
+  </article>
+
+  <section class="drive-signal-grid">
+    <article class="panel metric">
+      <header><span>Load</span><span>01 04</span></header>
+      <strong id="loadValue">--</strong>
+      <div class="meter"><span id="loadMeter"></span></div>
     </article>
-
-    <section class="drive-signal-grid">
-      <article class="panel metric">
-        <header><span>Load</span><span>01 04</span></header>
-        <strong id="loadValue">--</strong>
-        <div class="meter"><span id="loadMeter"></span></div>
-      </article>
-      <article class="panel metric">
-        <header><span>GPS</span><span>route</span></header>
-        <strong id="gpsMetricValue">--</strong>
-        <small id="gpsMetricSub">waiting for location samples</small>
-      </article>
-    </section>
-
-    <section class="summary-grid">
-      <article class="panel metric demo-only" hidden>
-        <header><span>Pack</span><span>Health</span></header>
-        <strong>91.3%</strong>
-        <div class="meter"><span style="width:91%"></span></div>
-      </article>
-      <article class="panel metric demo-only" hidden>
-        <header><span>Tank MPG</span><span>30d</span></header>
-        <strong>44.1</strong>
-        <small>312 mi since Apr 23</small>
-      </article>
-      <article class="panel metric demo-only" hidden>
-        <header><span>Electric</span><span>mi/kWh</span></header>
-        <strong>4.2</strong>
-        <small>241 Wh/mi best in March</small>
-      </article>
-    </section>
-
-    <article class="panel status-card demo-only" hidden>
-      <div class="status-head">
-        <div>
-          <div class="kicker">Parked - Garage</div>
-          <h3>Sparky - <span id="socValue">--</span> SOC</h3>
-        </div>
-        <button type="button" class="link-btn" data-nav-jump="settings">adapter</button>
-      </div>
-      <div class="status-meta">
-        <div><span>Range</span><strong id="rangeValue">--</strong></div>
-        <div><span>Fuel</span><strong>64%</strong></div>
-        <div><span>Pack</span><strong id="packTempValue">--</strong></div>
-        <div><span>Odo</span><strong>49,328</strong></div>
-      </div>
-    </article>
-
-    <article class="panel status-card">
-      <div class="status-head">
-        <div>
-          <div class="kicker">OBD session</div>
-          <h3 id="diagState">Waiting for adapter</h3>
-        </div>
-        <span class="badge"><span class="dot"></span><span id="diagSamples">0 samples</span></span>
-      </div>
-      <div class="status-meta">
-        <div><span>Adapter</span><strong id="diagAdapter">--</strong></div>
-        <div><span>Vehicle</span><strong id="diagVehicleState">--</strong></div>
-        <div><span>Runtime</span><strong id="diagSession">--</strong></div>
-        <div><span>PIDs</span><strong id="diagSupported">--</strong></div>
-      </div>
-    </article>
-
-    <article class="panel validation-card">
-      <div class="card-head">
-        <div>
-          <span class="kicker">Test confidence</span>
-          <h3>Live validation</h3>
-        </div>
-        <span class="badge"><span class="dot"></span><span id="validationSummary">waiting</span></span>
-      </div>
-      <div class="validation-list">
-        <div id="validateObd" class="validation-row" data-tone="warn"><span><strong>OBD stream</strong><small>Waiting for adapter samples</small></span><b>idle</b></div>
-        <div id="validateGps" class="validation-row" data-tone="warn"><span><strong>GPS trace</strong><small>Waiting for location samples</small></span><b>idle</b></div>
-        <div id="validateDb" class="validation-row" data-tone="warn"><span><strong>Database writes</strong><small>Waiting for stored rows</small></span><b>ready</b></div>
-        <div id="validateParser" class="validation-row" data-tone="warn"><span><strong>PID parsing</strong><small>Waiting for parsed values</small></span><b>unknown</b></div>
-        <div id="validateBackground" class="validation-row" data-tone="warn"><span><strong>Background test</strong><small>Minimize the app during a drive to validate gaps</small></span><b>manual</b></div>
-      </div>
-    </article>
-
-    <article class="panel trace-card">
-      <div class="card-head">
-        <div>
-          <div class="kicker">Last 24 seconds</div>
-          <h3>Speed trace</h3>
-        </div>
-        <span class="badge"><span class="dot"></span><span id="updatedValue">waiting</span></span>
-      </div>
-      <canvas id="speedCanvas"></canvas>
-    </article>
-
-    <section class="real-overview-grid non-demo-only">
-      <article class="panel metric">
-        <header><span>GPS distance</span><span>real</span></header>
-        <strong id="overviewDistance">--</strong>
-        <small id="overviewDistanceSub">waiting for route samples</small>
-      </article>
-      <article class="panel metric">
-        <header><span>Max speed</span><span>session</span></header>
-        <strong id="overviewMaxSpeed">--</strong>
-        <small>from accepted OBD speed</small>
-      </article>
-      <article class="panel metric">
-        <header><span>Battery</span><span>latest</span></header>
-        <strong id="overviewBattery">--</strong>
-        <small id="overviewBatterySub">SOC/power once observed</small>
-      </article>
-      <article class="panel metric">
-        <header><span>Charge</span><span>hints</span></header>
-        <strong id="overviewChargeHints">0</strong>
-        <small>possible plugged-in transitions</small>
-      </article>
-    </section>
-
-    <article class="panel list-card demo-only" hidden>
-      <header>
-        <span class="kicker">Recent trips</span>
-        <button type="button" class="link-btn" data-nav-jump="trips">view all</button>
-      </header>
-      <div id="homeTrips"></div>
-    </article>
-
-    <article class="panel list-card demo-only" hidden>
-      <header>
-        <span class="kicker">Insights - 5 new</span>
-        <button type="button" class="link-btn" data-nav-jump="insights">see all</button>
-      </header>
-      <div id="homeInsights" class="insight-list"></div>
-    </article>
-    <article id="appEmptyState" class="panel empty-state non-demo-only">
-      <span class="kicker">App data</span>
-      <h3>No trip, charging, or insight history captured on this phone yet.</h3>
-      <p>Use Connect or Scan for real OBD telemetry. Preview screens are tucked away in Diagnostics so test drives stay focused on real data.</p>
+    <article class="panel metric">
+      <header><span>GPS</span><span>route</span></header>
+      <strong id="gpsMetricValue">--</strong>
+      <small id="gpsMetricSub">waiting for location samples</small>
     </article>
   </section>
+
+  <section class="summary-grid">
+    <article class="panel metric demo-only" hidden>
+      <header><span>Pack</span><span>Health</span></header>
+      <strong>91.3%</strong>
+      <div class="meter"><span style="width: 91%"></span></div>
+    </article>
+    <article class="panel metric demo-only" hidden>
+      <header><span>Tank MPG</span><span>30d</span></header>
+      <strong>44.1</strong>
+      <small>312 mi since Apr 23</small>
+    </article>
+    <article class="panel metric demo-only" hidden>
+      <header><span>Electric</span><span>mi/kWh</span></header>
+      <strong>4.2</strong>
+      <small>241 Wh/mi best in March</small>
+    </article>
+  </section>
+
+  <article class="panel status-card demo-only" hidden>
+    <div class="status-head">
+      <div>
+        <div class="kicker">Parked - Garage</div>
+        <h3>Sparky - <span id="socValue">--</span> SOC</h3>
+      </div>
+      <button type="button" class="link-btn" data-nav-jump="settings">
+        adapter
+      </button>
+    </div>
+    <div class="status-meta">
+      <div><span>Range</span><strong id="rangeValue">--</strong></div>
+      <div><span>Fuel</span><strong>64%</strong></div>
+      <div><span>Pack</span><strong id="packTempValue">--</strong></div>
+      <div><span>Odo</span><strong>49,328</strong></div>
+    </div>
+  </article>
+
+  <article class="panel status-card">
+    <div class="status-head">
+      <div>
+        <div class="kicker">OBD session</div>
+        <h3 id="diagState">Waiting for adapter</h3>
+      </div>
+      <span class="badge"
+        ><span class="dot"></span><span id="diagSamples">0 samples</span></span
+      >
+    </div>
+    <div class="status-meta">
+      <div><span>Adapter</span><strong id="diagAdapter">--</strong></div>
+      <div><span>Vehicle</span><strong id="diagVehicleState">--</strong></div>
+      <div><span>Runtime</span><strong id="diagSession">--</strong></div>
+      <div><span>PIDs</span><strong id="diagSupported">--</strong></div>
+    </div>
+  </article>
+
+  <article class="panel validation-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Test confidence</span>
+        <h3>Live validation</h3>
+      </div>
+      <span class="badge"
+        ><span class="dot"></span
+        ><span id="validationSummary">waiting</span></span
+      >
+    </div>
+    <div class="validation-list">
+      <div id="validateObd" class="validation-row" data-tone="warn">
+        <span
+          ><strong>OBD stream</strong
+          ><small>Waiting for adapter samples</small></span
+        ><b>idle</b>
+      </div>
+      <div id="validateGps" class="validation-row" data-tone="warn">
+        <span
+          ><strong>GPS trace</strong
+          ><small>Waiting for location samples</small></span
+        ><b>idle</b>
+      </div>
+      <div id="validateDb" class="validation-row" data-tone="warn">
+        <span
+          ><strong>Database writes</strong
+          ><small>Waiting for stored rows</small></span
+        ><b>ready</b>
+      </div>
+      <div id="validateParser" class="validation-row" data-tone="warn">
+        <span
+          ><strong>PID parsing</strong
+          ><small>Waiting for parsed values</small></span
+        ><b>unknown</b>
+      </div>
+      <div id="validateBackground" class="validation-row" data-tone="warn">
+        <span
+          ><strong>Background test</strong
+          ><small>Minimize the app during a drive to validate gaps</small></span
+        ><b>manual</b>
+      </div>
+    </div>
+  </article>
+
+  <article class="panel trace-card">
+    <div class="card-head">
+      <div>
+        <div class="kicker">Last 24 seconds</div>
+        <h3>Speed trace</h3>
+      </div>
+      <span class="badge"
+        ><span class="dot"></span><span id="updatedValue">waiting</span></span
+      >
+    </div>
+    <!-- The numeric speed is already announced via #speedValue above; the trace is decorative. -->
+    <canvas id="speedCanvas" aria-hidden="true" role="presentation"></canvas>
+  </article>
+
+  <section class="real-overview-grid non-demo-only">
+    <article class="panel metric">
+      <header><span>GPS distance</span><span>real</span></header>
+      <strong id="overviewDistance">--</strong>
+      <small id="overviewDistanceSub">waiting for route samples</small>
+    </article>
+    <article class="panel metric">
+      <header><span>Max speed</span><span>session</span></header>
+      <strong id="overviewMaxSpeed">--</strong>
+      <small>from accepted OBD speed</small>
+    </article>
+    <article class="panel metric">
+      <header><span>Battery</span><span>latest</span></header>
+      <strong id="overviewBattery">--</strong>
+      <small id="overviewBatterySub">SOC/power once observed</small>
+    </article>
+    <article class="panel metric">
+      <header><span>Charge</span><span>hints</span></header>
+      <strong id="overviewChargeHints">0</strong>
+      <small>possible plugged-in transitions</small>
+    </article>
+  </section>
+
+  <article class="panel list-card demo-only" hidden>
+    <header>
+      <span class="kicker">Recent trips</span>
+      <button type="button" class="link-btn" data-nav-jump="trips">
+        view all
+      </button>
+    </header>
+    <div id="homeTrips"></div>
+  </article>
+
+  <article class="panel list-card demo-only" hidden>
+    <header>
+      <span class="kicker">Insights - 5 new</span>
+      <button type="button" class="link-btn" data-nav-jump="insights">
+        see all
+      </button>
+    </header>
+    <div id="homeInsights" class="insight-list"></div>
+  </article>
+  <article id="appEmptyState" class="panel empty-state non-demo-only">
+    <span class="kicker">App data</span>
+    <h3>No trip, charging, or insight history captured on this phone yet.</h3>
+    <p>
+      Use Connect or Scan for real OBD telemetry. Preview screens are tucked
+      away in Diagnostics so test drives stay focused on real data.
+    </p>
+  </article>
+</section>

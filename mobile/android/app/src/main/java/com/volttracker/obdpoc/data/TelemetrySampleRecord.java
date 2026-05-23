@@ -41,8 +41,7 @@ public final class TelemetrySampleRecord {
             int sampleNumber,
             long sessionMs,
             String raw,
-            String json
-    ) {
+            String json) {
         this.id = id;
         this.sessionId = sessionId;
         this.capturedAtMs = capturedAtMs;

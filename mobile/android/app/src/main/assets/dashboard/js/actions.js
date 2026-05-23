@@ -1,16 +1,46 @@
+/*
+ * actions.js — wiring + lifecycle.
+ *
+ * C2 listener-discipline pattern
+ * ------------------------------
+ * Every addEventListener registered from this file is passed
+ * `{ signal: controller.signal }` so a single `controller.abort()` tears every
+ * one of them down at once — no per-listener bookkeeping, no leaked closures
+ * if the dashboard is re-bootstrapped. Use `VoltDashboard.actions.resetListeners()`
+ * to abort the current set and re-bind from scratch (the bind step is
+ * idempotent and safe to call repeatedly).
+ *
+ * The window-level `error` and `unhandledrejection` listeners in core.js share
+ * the same pattern via `VoltDashboard.errorController`; reset there too if you
+ * ever need to tear everything down.
+ */
+(function () {
+  "use strict";
+
+  const VD = window.VoltDashboard;
+  const state = VD.state;
+  const bridge = VD.bridge;
+  const el = VD.el;
+  const data = VD.data;
+
+  // C2: AbortController for every listener bound below. resetListeners() aborts
+  // the current set and rebinds — useful for hot-reloading WebView content or
+  // for tests that swap fixtures between runs.
+  let controller = new AbortController();
+
   function refreshDevices() {
     if (!bridge) {
-      setStatus({ state: "demo", detail: "Android bridge is not available in this browser preview." });
+      VD.setStatus({ state: "demo", detail: "Android bridge is not available in this browser preview." });
       return;
     }
-    setDevices(bridge.listDevices());
-    if (typeof bridge.getDeviceHistory === "function") setHistory(bridge.getDeviceHistory());
+    VD.setDevices(bridge.listDevices());
+    if (typeof bridge.getDeviceHistory === "function") VD.setHistory(bridge.getDeviceHistory());
   }
 
   function connectSelected(scan) {
-    const selected = getSelectedDevice();
+    const selected = VD.getSelectedDevice();
     if (!selected) {
-      setStatus({ state: "blocked", detail: "Pick a paired or remembered OBD adapter first." });
+      VD.setStatus({ state: "blocked", detail: "Pick a paired or remembered OBD adapter first." });
       return;
     }
     if (!bridge) return;
@@ -36,7 +66,7 @@
   }
 
   function startDemo() {
-    setDemoActive(true, "Demo preview is running.");
+    VD.setDemoActive(true, "Demo preview is running.");
     if (bridge) bridge.demo();
     else runBrowserDemo();
   }
@@ -44,26 +74,26 @@
   function stopDemo() {
     window.clearInterval(window.__voltDemoTimer);
     if (bridge && state.demoActive) bridge.disconnect();
-    clearDemoTelemetry();
-    setDemoActive(false);
-    updateLiveUi();
-    drawTrace();
-    setStatus({ state: "idle", detail: "Demo stopped. Real data and captured history will appear here." });
+    VD.clearDemoTelemetry();
+    VD.setDemoActive(false);
+    VD.updateLiveUi();
+    VD.drawTrace();
+    VD.setStatus({ state: "idle", detail: "Demo stopped. Real data and captured history will appear here." });
   }
 
   function stopAll() {
     window.clearInterval(window.__voltDemoTimer);
     if (bridge) bridge.disconnect();
-    clearDemoTelemetry();
-    setDemoActive(false);
-    updateLiveUi();
-    drawTrace();
-    setStatus({ state: "idle", detail: "Stopped." });
+    VD.clearDemoTelemetry();
+    VD.setDemoActive(false);
+    VD.updateLiveUi();
+    VD.drawTrace();
+    VD.setStatus({ state: "idle", detail: "Stopped." });
   }
 
   function refreshStorage() {
     if (bridge && typeof bridge.getStorageSummary === "function") {
-      setStorage(bridge.getStorageSummary());
+      VD.setStorage(bridge.getStorageSummary());
     }
   }
 
@@ -77,7 +107,17 @@
 
   function shareBackup() {
     if (!bridge || typeof bridge.shareBackup !== "function") {
-      setStatus({ state: "blocked", detail: "Backup is only available inside the Android app." });
+      VD.setStatus({ state: "blocked", detail: "Backup is only available inside the Android app." });
+      return;
+    }
+    // The backup contains every GPS sample and raw OBD response from this phone.
+    // Confirm before handing it to the share sheet so a stray tap can't leak PII.
+    var ok = window.confirm(
+      "Backup includes your GPS routes, every OBD sample, and adapter history.\n\n" +
+      "Share only with people you trust. Continue?"
+    );
+    if (!ok) {
+      VD.setStatus({ state: "ready", detail: "Backup cancelled." });
       return;
     }
     bridge.shareBackup();
@@ -85,7 +125,7 @@
 
   function restoreBackup() {
     if (!bridge || typeof bridge.restoreBackup !== "function") {
-      setStatus({ state: "blocked", detail: "Restore is only available inside the Android app." });
+      VD.setStatus({ state: "blocked", detail: "Restore is only available inside the Android app." });
       return;
     }
     if (!window.confirm("Restore will REPLACE all data on this phone with the backup file. Continue?")) {
@@ -96,24 +136,24 @@
 
   function exportDebugBundle() {
     if (!bridge || typeof bridge.exportDebugBundle !== "function") {
-      setStatus({ state: "blocked", detail: "Debug export is only available inside the Android app." });
+      VD.setStatus({ state: "blocked", detail: "Debug export is only available inside the Android app." });
       return;
     }
-    const result = parsePayload(bridge.exportDebugBundle(), {});
+    const result = VD.parsePayload(bridge.exportDebugBundle(), {});
     if (result.ok) {
-      setStatus({ state: "ready", detail: `Debug summary exported: ${result.path || "app files"}.` });
+      VD.setStatus({ state: "ready", detail: `Debug summary exported: ${result.path || "app files"}.` });
     } else {
-      setStatus({ state: "blocked", detail: result.error || "Debug export failed." });
+      VD.setStatus({ state: "blocked", detail: result.error || "Debug export failed." });
     }
   }
 
   function runBrowserDemo() {
     let t = 0;
-    setStatus({ state: "connected", detail: "Browser-only demo is running." });
+    VD.setStatus({ state: "connected", detail: "Browser-only demo is running." });
     window.clearInterval(window.__voltDemoTimer);
     window.__voltDemoTimer = window.setInterval(() => {
       t += 1;
-      updateTelemetry({
+      VD.updateTelemetry({
         source: "demo",
         connected: true,
         sampleCount: t,
@@ -135,84 +175,148 @@
     }, 1000);
   }
 
-  document.querySelectorAll("[data-nav]").forEach((button) => {
-    button.addEventListener("click", () => setView(button.dataset.nav));
-  });
-  document.querySelectorAll("[data-nav-jump]").forEach((button) => {
-    button.addEventListener("click", () => setView(button.dataset.navJump));
-  });
-  document.querySelectorAll("[data-mode]").forEach((button) => {
-    button.addEventListener("click", () => setMode(button.dataset.mode));
-  });
-  document.querySelectorAll("[data-action]").forEach((button) => {
-    button.addEventListener("click", () => handleAction(button.dataset.action));
-  });
-  document.querySelectorAll("[data-map-layer]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.mapLayer = button.dataset.mapLayer;
-      renderMap();
+  // C1: window resize handler is debounced to 100ms — drawTrace recomputes canvas
+  // backing-store size, which is genuinely expensive to do on every resize event
+  // from a runaway WebView layout pass.
+  let resizeTimer = 0;
+  function debouncedResize() {
+    if (resizeTimer) window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(() => {
+      resizeTimer = 0;
+      VD.drawTrace();
+    }, 100);
+  }
+
+  function bindListeners() {
+    const opts = { signal: controller.signal };
+
+    document.querySelectorAll("[data-nav]").forEach((button) => {
+      button.addEventListener("click", () => VD.setView(button.dataset.nav), opts);
     });
-  });
-  el("mapSessionList").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-map-session]");
-    if (!button) return;
-    state.selectedMapSessionId = button.dataset.mapSession;
-    renderMap();
-  });
-  el("mapFullBtn").addEventListener("click", () => {
-    state.mapFull = !state.mapFull;
-    renderMap();
-  });
-  document.addEventListener("click", (event) => {
-    const tripButton = event.target.closest("[data-trip-map]");
-    if (!tripButton) return;
-    const id = tripButton.dataset.tripMap;
-    const trip = (state.trips || []).find((t) => String(t.id) === String(id));
-    if (trip && trip.hasRoute) {
-      state.selectedMapSessionId = id;
-      setView("map");
-    } else {
-      setStatus({ state: "ready", detail: "This trip has no stored GPS route." });
-    }
-  });
-  el("permissionBtn").addEventListener("click", () => handleAction("permissions"));
-  el("refreshBtn").addEventListener("click", () => handleAction("refresh"));
-  el("lastBtn").addEventListener("click", () => handleAction("last"));
-  el("scanBtn").addEventListener("click", () => handleAction("scan"));
-  el("connectBtn").addEventListener("click", () => handleAction(el("connectBtn").dataset.primaryAction || "connect"));
-  el("disconnectBtn").addEventListener("click", () => handleAction("stop"));
-  el("demoStopBtn").addEventListener("click", stopDemo);
-  el("driveModeSelect").addEventListener("change", (event) => {
-    setStatus({ state: "ready", detail: `Drive mode set to ${event.target.value}.` });
-  });
-  el("tripTabs").addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-filter]");
-    if (!button) return;
-    state.tripFilter = button.dataset.filter;
-    document.querySelectorAll("#tripTabs button").forEach((node) => node.classList.toggle("is-active", node === button));
-    renderTrips();
-  });
-  el("addChargeBtn").addEventListener("click", () => {
-    data.sessions.unshift({ date: "Today - 21:10", type: "L2", kwh: 10.8, soc: "31->90", location: "Home", cost: "$1.30" });
-    renderSessions();
-    setStatus({ state: "ready", detail: "Charging session staged locally." });
+    document.querySelectorAll("[data-nav-jump]").forEach((button) => {
+      button.addEventListener("click", () => VD.setView(button.dataset.navJump), opts);
+    });
+    document.querySelectorAll("[data-mode]").forEach((button) => {
+      button.addEventListener("click", () => VD.setMode(button.dataset.mode), opts);
+    });
+    document.querySelectorAll("[data-action]").forEach((button) => {
+      button.addEventListener("click", () => handleAction(button.dataset.action), opts);
+    });
+    document.querySelectorAll("[data-map-layer]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.mapLayer = button.dataset.mapLayer;
+        VD.renderMap();
+      }, opts);
+    });
+    el("mapSessionList").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-map-session]");
+      if (!button) return;
+      state.selectedMapSessionId = button.dataset.mapSession;
+      VD.renderMap();
+    }, opts);
+    el("mapFullBtn").addEventListener("click", () => {
+      state.mapFull = !state.mapFull;
+      VD.renderMap();
+    }, opts);
+    document.addEventListener("click", (event) => {
+      const tripButton = event.target.closest("[data-trip-map]");
+      if (!tripButton) return;
+      const id = tripButton.dataset.tripMap;
+      const trip = (state.trips || []).find((t) => String(t.id) === String(id));
+      if (trip && trip.hasRoute) {
+        state.selectedMapSessionId = id;
+        VD.setView("map");
+      } else {
+        VD.setStatus({ state: "ready", detail: "This trip has no stored GPS route." });
+      }
+    }, opts);
+    el("permissionBtn").addEventListener("click", () => handleAction("permissions"), opts);
+    el("refreshBtn").addEventListener("click", () => handleAction("refresh"), opts);
+    el("lastBtn").addEventListener("click", () => handleAction("last"), opts);
+    el("scanBtn").addEventListener("click", () => handleAction("scan"), opts);
+    el("connectBtn").addEventListener("click", () => handleAction(el("connectBtn").dataset.primaryAction || "connect"), opts);
+    el("disconnectBtn").addEventListener("click", () => handleAction("stop"), opts);
+    el("demoStopBtn").addEventListener("click", stopDemo, opts);
+    el("driveModeSelect").addEventListener("change", (event) => {
+      VD.setStatus({ state: "ready", detail: `Drive mode set to ${event.target.value}.` });
+    }, opts);
+    el("tripTabs").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-filter]");
+      if (!button) return;
+      state.tripFilter = button.dataset.filter;
+      document.querySelectorAll("#tripTabs button").forEach((node) => node.classList.toggle("is-active", node === button));
+      VD.renderTrips();
+    }, opts);
+    el("addChargeBtn").addEventListener("click", () => {
+      data.sessions.unshift({ date: "Today - 21:10", type: "L2", kwh: 10.8, soc: "31->90", location: "Home", cost: "$1.30" });
+      VD.renderSessions();
+      VD.setStatus({ state: "ready", detail: "Charging session staged locally." });
+    }, opts);
+    window.addEventListener("resize", debouncedResize, opts);
+  }
+
+  // C2: reset hook. Aborts every listener bound by bindListeners() (and the
+  // window-level handlers in core.js if you also reset VD.errorController) and
+  // re-arms them with a fresh AbortController.
+  function resetListeners() {
+    controller.abort();
+    controller = new AbortController();
+    bindListeners();
+  }
+
+  VD.actions = {
+    refreshDevices,
+    connectSelected,
+    handleAction,
+    startDemo,
+    stopDemo,
+    stopAll,
+    refreshStorage,
+    clearStorage,
+    shareBackup,
+    restoreBackup,
+    exportDebugBundle,
+    runBrowserDemo,
+    resetListeners
+  };
+  Object.assign(VD, {
+    refreshDevices,
+    connectSelected,
+    handleAction,
+    startDemo,
+    stopDemo,
+    stopAll,
+    refreshStorage,
+    clearStorage,
+    shareBackup,
+    restoreBackup,
+    exportDebugBundle,
+    runBrowserDemo
   });
 
-  window.VoltTrackerNative = { setDevices, setHistory, setStatus, setStorage, setAppState, updateTelemetry };
+  // Android side calls into VoltTrackerNative.* on the WebView — this surface
+  // is the ABI and must keep its exact shape.
+  window.VoltTrackerNative = {
+    setDevices: VD.setDevices,
+    setHistory: VD.setHistory,
+    setStatus: VD.setStatus,
+    setStorage: VD.setStorage,
+    setAppState: VD.setAppState,
+    updateTelemetry: VD.updateTelemetry
+  };
 
-  setDemoActive(false);
-  renderOperationalState();
-  updateLiveUi();
-  renderRealV2Ui();
-  renderMap();
-  loadTrips();
-  loadInsights();
-  drawTrace();
+  bindListeners();
+  VD.setDemoActive(false);
+  VD.renderOperationalState();
+  VD.updateLiveUi();
+  VD.renderRealV2Ui();
+  VD.renderMap();
+  VD.loadTrips();
+  VD.loadInsights();
+  VD.drawTrace();
   refreshDevices();
   refreshStorage();
-  if (!bridge) loadSampleData();
-  window.addEventListener("resize", () => {
-    drawTrace();
-  });
+  if (!bridge) VD.loadSampleData();
   requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
   setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 200);
+})();

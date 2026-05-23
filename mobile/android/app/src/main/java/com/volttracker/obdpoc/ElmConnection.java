@@ -2,7 +2,6 @@ package com.volttracker.obdpoc;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -11,9 +10,9 @@ import java.util.UUID;
 import java.util.function.BooleanSupplier;
 
 /**
- * Owns the Bluetooth RFCOMM socket to the ELM327 adapter and the low-level command IO.
- * Extracted from {@link ObdService} so socket/stream handling is isolated and the
- * {@link #transact} read loop is unit-testable against in-memory streams.
+ * Owns the Bluetooth RFCOMM socket to the ELM327 adapter and the low-level command IO. Extracted
+ * from {@link ObdService} so socket/stream handling is isolated and the {@link #transact} read loop
+ * is unit-testable against in-memory streams.
  */
 final class ElmConnection {
 
@@ -21,8 +20,7 @@ final class ElmConnection {
     private InputStream input;
     private OutputStream output;
 
-    ElmConnection() {
-    }
+    ElmConnection() {}
 
     /** Test constructor: drives {@link #transact}/{@link #sendEscape} against in-memory streams. */
     ElmConnection(InputStream input, OutputStream output) {
@@ -35,23 +33,25 @@ final class ElmConnection {
     }
 
     /**
-     * Opens an RFCOMM socket to {@code device}. {@link BluetoothSocket#connect()} has no
-     * timeout and can block indefinitely on a dead adapter, so a daemon watchdog closes
-     * the socket after {@code connectTimeoutMs}, which makes the blocked connect throw
-     * IOException and lets the normal failure path take over.
+     * Opens an RFCOMM socket to {@code device}. {@link BluetoothSocket#connect()} has no timeout
+     * and can block indefinitely on a dead adapter, so a daemon watchdog closes the socket after
+     * {@code connectTimeoutMs}, which makes the blocked connect throw IOException and lets the
+     * normal failure path take over.
      */
     void open(BluetoothDevice device, UUID uuid, long connectTimeoutMs) throws IOException {
         BluetoothSocket pendingSocket = device.createRfcommSocketToServiceRecord(uuid);
         socket = pendingSocket;
-        Thread watchdog = new Thread(() -> {
-            sleep(connectTimeoutMs);
-            if (!pendingSocket.isConnected()) {
-                try {
-                    pendingSocket.close();
-                } catch (IOException ignored) {
-                }
-            }
-        });
+        Thread watchdog =
+                new Thread(
+                        () -> {
+                            sleep(connectTimeoutMs);
+                            if (!pendingSocket.isConnected()) {
+                                try {
+                                    pendingSocket.close();
+                                } catch (IOException ignored) {
+                                }
+                            }
+                        });
         watchdog.setDaemon(true);
         watchdog.start();
         try {
@@ -64,12 +64,13 @@ final class ElmConnection {
     }
 
     /**
-     * Writes {@code command} and reads the reply until the ELM '>' prompt, the timeout,
-     * or {@code keepWaiting} going false. Returns the raw response (possibly partial).
+     * Writes {@code command} and reads the reply until the ELM '>' prompt, the timeout, or {@code
+     * keepWaiting} going false. Returns the raw response (possibly partial).
      *
      * @throws IOException if the stream is not open or the socket has broken
      */
-    String transact(String command, long timeoutMs, BooleanSupplier keepWaiting) throws IOException {
+    String transact(String command, long timeoutMs, BooleanSupplier keepWaiting)
+            throws IOException {
         if (output == null || input == null) {
             throw new IOException("Adapter stream is not open");
         }

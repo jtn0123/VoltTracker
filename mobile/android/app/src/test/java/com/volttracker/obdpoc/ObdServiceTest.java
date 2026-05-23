@@ -5,15 +5,13 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.volttracker.obdpoc.data.ObdLocalStore;
-
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
 /**
- * Tests the pure decision logic in {@link ObdService} — vehicle-state classification,
- * command parsing, and connection-error mapping. The connection/polling/threading code
- * is integration-level and not covered here.
+ * Tests the pure decision logic in {@link ObdService} — vehicle-state classification, command
+ * parsing, and connection-error mapping. The connection/polling/threading code is integration-level
+ * and not covered here.
  */
 public class ObdServiceTest {
 
@@ -21,71 +19,64 @@ public class ObdServiceTest {
 
     @Test
     public void parkedWhenStationaryEngineOffNoCharge() {
-        assertEquals("parked",
-                ObdElmDecode.classifyVehicleState(12.0f, 0, 0f, 0, false));
+        assertEquals("parked", ObdElmDecode.classifyVehicleState(12.0f, 0, 0f, 0, false));
     }
 
     @Test
     public void readyParkedWhenDcDcConverterIsUp() {
         // Voltage >= 13.0 with the car stationary and engine off means the car is "Ready".
-        assertEquals("ready-parked",
-                ObdElmDecode.classifyVehicleState(14.0f, 0, 0f, 0, false));
+        assertEquals("ready-parked", ObdElmDecode.classifyVehicleState(14.0f, 0, 0f, 0, false));
     }
 
     @Test
     public void pluggedOrChargingWhenChargeHintSet() {
-        assertEquals("plugged-or-charging",
-                ObdElmDecode.classifyVehicleState(12.0f, 0, 0f, 0, true));
+        assertEquals(
+                "plugged-or-charging", ObdElmDecode.classifyVehicleState(12.0f, 0, 0f, 0, true));
     }
 
     @Test
     public void awakeParkedWhenStationaryWithLoad() {
-        assertEquals("awake-parked",
-                ObdElmDecode.classifyVehicleState(12.0f, 0, 0f, 30, false));
+        assertEquals("awake-parked", ObdElmDecode.classifyVehicleState(12.0f, 0, 0f, 30, false));
     }
 
     @Test
     public void drivingEvWhenMovingWithEngineOff() {
-        assertEquals("driving-ev",
-                ObdElmDecode.classifyVehicleState(13.5f, 60, 0f, 20, false));
+        assertEquals("driving-ev", ObdElmDecode.classifyVehicleState(13.5f, 60, 0f, 20, false));
     }
 
     @Test
     public void drivingGasWhenMovingWithEngineRunning() {
-        assertEquals("driving-gas",
-                ObdElmDecode.classifyVehicleState(13.5f, 60, 1500f, 20, false));
+        assertEquals("driving-gas", ObdElmDecode.classifyVehicleState(13.5f, 60, 1500f, 20, false));
     }
 
     @Test
     public void engineIdleWhenStationaryWithEngineRunning() {
-        assertEquals("engine-idle",
-                ObdElmDecode.classifyVehicleState(13.5f, 0, 900f, 20, false));
+        assertEquals("engine-idle", ObdElmDecode.classifyVehicleState(13.5f, 0, 900f, 20, false));
     }
 
     // ---- classifyVehicleStateConfidence --------------------------------------------
 
     @Test
     public void confidenceInferredWhenChargeHint() {
-        assertEquals("inferred",
-                ObdElmDecode.classifyVehicleStateConfidence(null, null, null, true));
+        assertEquals(
+                "inferred", ObdElmDecode.classifyVehicleStateConfidence(null, null, null, true));
     }
 
     @Test
     public void confidenceObservedWhenAllSignalsPresent() {
-        assertEquals("observed",
-                ObdElmDecode.classifyVehicleStateConfidence(12.0f, 0, 0f, false));
+        assertEquals("observed", ObdElmDecode.classifyVehicleStateConfidence(12.0f, 0, 0f, false));
     }
 
     @Test
     public void confidencePartialWhenSomeSignalsPresent() {
-        assertEquals("partial",
-                ObdElmDecode.classifyVehicleStateConfidence(12.0f, null, null, false));
+        assertEquals(
+                "partial", ObdElmDecode.classifyVehicleStateConfidence(12.0f, null, null, false));
     }
 
     @Test
     public void confidenceUnknownWhenNoSignals() {
-        assertEquals("unknown",
-                ObdElmDecode.classifyVehicleStateConfidence(null, null, null, false));
+        assertEquals(
+                "unknown", ObdElmDecode.classifyVehicleStateConfidence(null, null, null, false));
     }
 
     // ---- command parsing -----------------------------------------------------------
@@ -133,7 +124,8 @@ public class ObdServiceTest {
         // Connect again before the link came up — never reached the adapter, so it must
         // not be recorded as "complete". It was, because "complete" was the catch-all.
         assertEquals(ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor("connecting"));
-        assertEquals(ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor("initializing"));
+        assertEquals(
+                ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor("initializing"));
         assertEquals(ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor("active"));
         assertEquals(ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor(""));
         assertEquals(ObdLocalStore.STATUS_DISCONNECTED, ObdElmDecode.finishStatusFor(null));
@@ -143,20 +135,24 @@ public class ObdServiceTest {
 
     @Test
     public void friendlyMessageForSerialFailure() {
-        assertTrue(ObdElmDecode.friendlyConnectionMessage(new IOException("read failed"))
-                .contains("Adapter serial channel"));
+        assertTrue(
+                ObdElmDecode.friendlyConnectionMessage(new IOException("read failed"))
+                        .contains("Adapter serial channel"));
     }
 
     @Test
     public void friendlyMessageForPermissionFailure() {
-        assertTrue(ObdElmDecode.friendlyConnectionMessage(new IOException("permission denied"))
-                .toLowerCase().contains("permission"));
+        assertTrue(
+                ObdElmDecode.friendlyConnectionMessage(new IOException("permission denied"))
+                        .toLowerCase()
+                        .contains("permission"));
     }
 
     @Test
     public void friendlyMessageFallsBackToRawMessage() {
-        assertTrue(ObdElmDecode.friendlyConnectionMessage(new IOException("weird glitch"))
-                .contains("weird glitch"));
+        assertTrue(
+                ObdElmDecode.friendlyConnectionMessage(new IOException("weird glitch"))
+                        .contains("weird glitch"));
     }
 
     // ---- summarizeForStorage (VIN redaction) ---------------------------------------
@@ -213,7 +209,8 @@ public class ObdServiceTest {
         // The first connect has no link to "drop"; it should retry faster than a
         // mid-session reconnect so a transient RFCOMM glitch recovers quickly.
         for (int attempt = 1; attempt <= ObdProbes.MAX_RECONNECT_ATTEMPTS; attempt++) {
-            assertTrue("attempt " + attempt,
+            assertTrue(
+                    "attempt " + attempt,
                     ObdElmDecode.initialConnectBackoffMs(attempt)
                             <= ObdElmDecode.reconnectBackoffMs(attempt));
         }

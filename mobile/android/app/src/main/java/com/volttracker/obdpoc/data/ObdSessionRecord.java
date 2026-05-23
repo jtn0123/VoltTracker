@@ -22,8 +22,7 @@ public final class ObdSessionRecord {
             String status,
             String supportedPids,
             int sampleCount,
-            long lastEventAtMs
-    ) {
+            long lastEventAtMs) {
         this.id = id;
         this.mode = nonNull(mode);
         this.adapterAddress = nonNull(adapterAddress);

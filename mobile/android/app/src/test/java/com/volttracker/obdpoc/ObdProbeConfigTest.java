@@ -4,14 +4,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import com.volttracker.obdpoc.ObdProtocol.ParsedPidValue;
-
 import org.junit.Test;
 
 /**
- * Guards the probe lists in {@link ObdProbes} against the class of bug that has cost
- * real car-test trips: a malformed PID string, or a PID added to a probe array with no
- * matching decoder. Each probe the app sends is checked for shape and, for the Volt
- * mode-22 PIDs, that {@link ObdProtocol} actually decodes it.
+ * Guards the probe lists in {@link ObdProbes} against the class of bug that has cost real car-test
+ * trips: a malformed PID string, or a PID added to a probe array with no matching decoder. Each
+ * probe the app sends is checked for shape and, for the Volt mode-22 PIDs, that {@link ObdProtocol}
+ * actually decodes it.
  */
 public class ObdProbeConfigTest {
 
@@ -38,7 +37,8 @@ public class ObdProbeConfigTest {
     @Test
     public void liveProbesAreAtCommandsOrModeOnePids() {
         for (String probe : ObdProbes.LIVE_PROBES) {
-            assertTrue("malformed live probe: " + probe,
+            assertTrue(
+                    "malformed live probe: " + probe,
                     probe.matches("^AT[A-Z0-9]+$") || probe.matches("^01[0-9A-F]{2}$"));
         }
     }
@@ -61,8 +61,11 @@ public class ObdProbeConfigTest {
     public void correctedPackVoltagePidIsConfigured() {
         // Regression marker: HV pack voltage is 222429 (signed/64). 222885 is MGA motor
         // voltage and was used by mistake in an earlier pass.
-        assertTrue("HV pack voltage PID 222429 missing", contains(ObdProbes.VOLT_7E1_PROBES, "222429"));
-        assertTrue("standard SOC PID 015B missing from live probes",
+        assertTrue(
+                "HV pack voltage PID 222429 missing",
+                contains(ObdProbes.VOLT_7E1_PROBES, "222429"));
+        assertTrue(
+                "standard SOC PID 015B missing from live probes",
                 contains(ObdProbes.LIVE_PROBES, "015B"));
     }
 
