@@ -97,3 +97,38 @@ jobs:
             total=$(find js css -type f \( -name "*.js" -o -name "*.css" \) ! -path "*/lib/*" -exec cat {} + | wc -c | tr -d ' ')
             echo "| **total (excl lib/)** | **$total** |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-debug-release:
+    # Rolling debug build of main, surfaced as a permanent download URL:
+    # https://github.com/jtn0123/VoltTracker/releases/tag/latest-debug
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: volttracker-debug-apk
+          path: artifact
+      - name: Stage APKs (stable + commit-tagged filenames)
+        run: |
+          mkdir -p release
+          cp artifact/app-debug.apk release/app-debug.apk
+          cp artifact/app-debug.apk "release/volttracker-debug-${GITHUB_SHA::7}.apk"
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: latest-debug
+          name: Latest debug build (main)
+          body: |
+            Rolling debug build of `main`. Updates on every push.
+
+            - Commit: ${{ github.sha }}
+
+            The APK is signed with the standard Android debug key. To install:
+            grant "Install unknown apps" to your browser or file manager, then
+            tap `app-debug.apk` below.
+          files: release/*.apk
+          prerelease: true
+          make_latest: 'false'
+          target_commitish: ${{ github.sha }}
