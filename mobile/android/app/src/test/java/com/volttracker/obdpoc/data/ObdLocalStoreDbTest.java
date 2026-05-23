@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.data;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -113,11 +114,57 @@ public class ObdLocalStoreDbTest {
     public void clearAllDataEmptiesTheDatabase() throws Exception {
         long id = store.startSession("obd", "00:11", "Adapter");
         store.recordTelemetry(id, sample(40, 1500, 32.70, -117.10, 1000));
+        store.recordDiagnosticCode(id, diagnosticCode("P25A2", "stored", 1000));
         store.clearAllData();
 
         JSONObject summary = store.getStorageSummary();
         assertEquals(0, summary.optInt("sessionCount"));
         assertEquals(0L, summary.optLong("sampleCount"));
+        assertEquals(0L, summary.optLong("diagnosticCodeCount"));
+    }
+
+    @Test
+    public void diagnosticCodesTrackFirstAndLastSeen() throws Exception {
+        long id = store.startSession("scan", "00:11", "Adapter");
+        store.recordDiagnosticCode(id, diagnosticCode("P25A2", "stored", 1000));
+        long nextId = store.startSession("scan", "00:11", "Adapter");
+        store.recordDiagnosticCode(nextId, diagnosticCode("P25A2", "stored", 2000));
+        store.recordDiagnosticCode(nextId, diagnosticCode("U0073", "pending", 2000));
+
+        JSONObject summary = store.getStorageSummary();
+        assertEquals(2L, summary.optLong("diagnosticCodeCount"));
+        JSONObject statusCounts = summary.getJSONObject("diagnosticCodeStatusCounts");
+        assertEquals(1L, statusCounts.optLong("stored"));
+        assertEquals(1L, statusCounts.optLong("pending"));
+        JSONArray codes = summary.getJSONArray("latestDiagnosticCodes");
+        assertEquals(2, codes.length());
+        JSONObject code = null;
+        for (int i = 0; i < codes.length(); i++) {
+            JSONObject candidate = codes.getJSONObject(i);
+            if ("P25A2".equals(candidate.optString("dtc"))) {
+                code = candidate;
+                break;
+            }
+        }
+        assertNotNull(code);
+        assertEquals("P25A2", code.optString("dtc"));
+        assertEquals("stored", code.optString("status"));
+        assertEquals(1000L, code.optLong("firstSeenMs"));
+        assertEquals(2000L, code.optLong("lastSeenMs"));
+        assertEquals(2L, code.optLong("seenCount"));
+    }
+
+    @Test
+    public void diagnosticCodesDoNotDoubleCountWithinOneScan() throws Exception {
+        long id = store.startSession("scan", "00:11", "Adapter");
+        store.recordDiagnosticCode(id, diagnosticCode("U0073", "stored", 1000));
+        store.recordDiagnosticCode(id, diagnosticCode("U0073", "stored", 1200));
+
+        JSONObject code = store.getStorageSummary()
+                .getJSONArray("latestDiagnosticCodes").getJSONObject(0);
+        assertEquals("U0073", code.optString("dtc"));
+        assertEquals(1L, code.optLong("seenCount"));
+        assertEquals(1200L, code.optLong("lastSeenMs"));
     }
 
     // ---- GPS route building (the data the map renders) -----------------------------
@@ -125,6 +172,18 @@ public class ObdLocalStoreDbTest {
     private void locationSample(long sessionId, long atMs, double lat, double lng, Double accuracyM) {
         store.recordLocationSample(
                 sessionId, atMs, "gps", lat, lng, accuracyM, null, null, null, null, null);
+    }
+
+    private static JSONObject diagnosticCode(String dtc, String status, long seenAtMs) throws Exception {
+        JSONObject code = new JSONObject();
+        code.put("dtc", dtc);
+        code.put("status", status);
+        code.put("statusLabel", "Stored/current");
+        code.put("moduleKey", "generic-obd");
+        code.put("moduleName", "ECM / powertrain (generic OBD-II)");
+        code.put("seenAtMs", seenAtMs);
+        code.put("rawResponse", "43 25 A2 00 00");
+        return code;
     }
 
     @Test

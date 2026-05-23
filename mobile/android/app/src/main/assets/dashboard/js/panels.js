@@ -15,6 +15,7 @@
     const samples = Number(storage.sampleCount || 0);
     const events = Number(storage.eventCount || 0);
     const pidRows = Number(storage.pidObservationCount || 0);
+    const dtcRows = Number(storage.diagnosticCodeCount || 0);
     const locationRows = Number(storage.locationSampleCount || 0);
     const tripRows = Number(storage.tripSegmentCount || 0);
     const chargeRows = Number(storage.chargeSessionCount || 0);
@@ -24,6 +25,7 @@
     setText("dbSampleCount", samples);
     setText("dbEventCount", events);
     setText("dbPidCount", pidRows);
+    setText("dbDtcCount", dtcRows);
     setText("dbLocationCount", locationRows);
     setText("dbTripCount", tripRows);
     setText("dbChargeCount", chargeRows);
@@ -36,6 +38,7 @@
     setText("dbSummaryTitle", sessions ? `${samples} samples - ${formatWhen(last)}` : "No stored sessions yet");
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     const list = el("dbSessionList");
+    updateDiagnosticCodeUi();
     if (!recent.length) {
       list.innerHTML = '<p class="status-copy">Connect or scan to create local SQLite rows. Preview data stays isolated in the sandbox.</p>';
       updateReviewUi();
@@ -51,6 +54,55 @@
       </button>
     `).join("");
     updateReviewUi();
+  }
+
+  function updateDiagnosticCodeUi() {
+    const storage = state.storage || {};
+    const codes = Array.isArray(storage.latestDiagnosticCodes) ? storage.latestDiagnosticCodes : [];
+    const list = el("dtcList");
+    const summaryCounts = storage.diagnosticCodeStatusCounts || {};
+    const statusCounts = Object.keys(summaryCounts).length ? summaryCounts : codes.reduce((counts, code) => {
+      const key = String(code.status || "stored").toLowerCase();
+      counts[key] = (counts[key] || 0) + 1;
+      return counts;
+    }, {});
+    const totalCodes = Number(storage.diagnosticCodeCount ?? codes.length);
+    const storedOrCurrent = Number(statusCounts.stored || 0) + Number(statusCounts.current || 0);
+    const latestSeen = codes.reduce((latest, code) => Math.max(latest, Number(code.lastSeenMs || 0)), 0);
+    setText("dtcTitle", totalCodes ? `${totalCodes} code${totalCodes === 1 ? "" : "s"} saved` : "No car-code scan yet");
+    setText("dtcReportBadge", totalCodes ? "evidence saved" : "ready");
+    setText("dtcTotalCount", totalCodes);
+    setText("dtcStoredCount", storedOrCurrent);
+    setText("dtcPendingCount", Number(statusCounts.pending || 0));
+    setText("dtcPermanentCount", Number(statusCounts.permanent || 0));
+    setText("dtcFreezeCount", Number(statusCounts["freeze-frame"] || 0));
+    setText("dtcLastSeen", latestSeen ? formatWhen(latestSeen) : "--");
+    if (!list) return;
+    if (!codes.length) {
+      list.innerHTML = `
+        <article class="dtc-empty-state">
+          <strong>No saved code evidence</strong>
+          <small>Current, pending, permanent, and freeze-frame results will appear here after a scan.</small>
+        </article>
+      `;
+      return;
+    }
+    list.innerHTML = codes.map((code) => `
+      <article class="dtc-item" data-status="${escapeHtml(code.status || "stored")}">
+        <span class="dtc-code-block">
+          <b class="dtc-code">${escapeHtml(code.dtc || "--")}</b>
+          <small>${escapeHtml(code.statusLabel || code.status || "stored")}</small>
+        </span>
+        <span class="dtc-module-block">
+          <strong>${escapeHtml(code.moduleName || "generic OBD-II")}</strong>
+          <small>${code.header ? `header ${escapeHtml(code.header)} - ` : ""}first ${formatWhen(code.firstSeenMs)} - last ${formatWhen(code.lastSeenMs)}</small>
+        </span>
+        <span class="dtc-repeat-block">
+          <b>${Number(code.seenCount || 0)}x</b>
+          <small>seen</small>
+        </span>
+      </article>
+    `).join("");
   }
 
   function updateReviewUi() {

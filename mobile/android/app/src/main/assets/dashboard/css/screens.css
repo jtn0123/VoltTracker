@@ -592,5 +592,10 @@
     .primary-action { width: 100%; }
     .ring { margin-inline: auto; }
     .drive-signal-grid { grid-template-columns: 1fr; }
+    .dtc-action-row { grid-template-columns: 1fr; }
+    .dtc-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .dtc-item { grid-template-columns: 1fr; }
+    .dtc-repeat-block b,
+    .dtc-repeat-block small { text-align: left; }
     .bottom-nav button span { font-size: 10px; }
   }

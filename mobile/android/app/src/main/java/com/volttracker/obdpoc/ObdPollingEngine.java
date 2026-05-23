@@ -269,7 +269,7 @@ final class ObdPollingEngine {
 
     private void runDiagnosticScan() throws IOException {
         service.broadcastStatus("scanning",
-                "Running protocol, PID, VIN, DTC, and live-data probes...", false);
+                "Running protocol, DTC, freeze-frame, VIN, and live-data probes...", false);
         service.updateNotification("Scanning " + service.activeName);
 
         StringBuilder raw = new StringBuilder();
@@ -294,6 +294,19 @@ final class ObdPollingEngine {
         appendProbeLine(raw, "volt-discovery", "restore auto protocol for live + Volt probes");
         probeCommand("ATSP0", 1800, raw);
         probeCommand("0100", 9000, raw);
+
+        appendProbeLine(raw, "standard-diagnostics", "generic DTC and freeze-frame probes");
+        probeCommand("03", 3500, raw);
+        probeCommand("07", 3500, raw);
+        probeCommand("0A", 3500, raw);
+        probeCommand("0200", 3500, raw);
+        probeCommand("0202", 3500, raw);
+        probeCommand("0204", 3200, raw);
+        probeCommand("0205", 3200, raw);
+        probeCommand("020C", 3200, raw);
+        probeCommand("020D", 3200, raw);
+        probeCommand("0211", 3200, raw);
+        probeCommand("0242", 3200, raw);
 
         for (String probe : ObdProbes.LIVE_PROBES) {
             probeCommand(probe, 3200, raw);

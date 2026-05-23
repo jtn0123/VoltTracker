@@ -124,6 +124,8 @@ final class ObdStoreReports {
             payload.put("eventCount", countRows(db, VoltTrackerDb.TABLE_EVENTS));
             payload.put("adapterCount", countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY));
             payload.put("pidObservationCount", countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS));
+            payload.put("diagnosticCodeCount", countRows(db, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES));
+            payload.put("diagnosticCodeStatusCounts", diagnosticCodeStatusCountsJson(db));
             payload.put("locationSampleCount", countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES));
             payload.put("vehicleCount", countRows(db, VoltTrackerDb.TABLE_VEHICLES));
             payload.put("fieldCapabilityCount", countRows(db, VoltTrackerDb.TABLE_FIELD_CAPABILITIES));
@@ -144,6 +146,7 @@ final class ObdStoreReports {
             }
             payload.put("recentSessions", recentSessionsJson(6));
             payload.put("adapters", adapterHistoryJson(6));
+            payload.put("latestDiagnosticCodes", latestDiagnosticCodesJson(db, 12));
             ObdSessionRecord reviewSession = trips.latestReviewableSession(db);
             payload.put("latestReview", reviewSession == null ? new JSONObject() : trips.sessionReview(db, reviewSession));
             payload.put("latestRoute", reviewSession == null ? new JSONObject() : trips.routeForSession(db, reviewSession, 240));
@@ -209,6 +212,59 @@ final class ObdStoreReports {
                 // Local fields are safe.
             }
             payload.put(item);
+        }
+        return payload;
+    }
+
+    private static JSONArray latestDiagnosticCodesJson(SQLiteDatabase db, int limit) {
+        JSONArray payload = new JSONArray();
+        try (Cursor cursor = db.query(
+                VoltTrackerDb.TABLE_DIAGNOSTIC_CODES,
+                new String[]{"_id", "dtc", "status", "status_label", "module_key",
+                        "module_name", "header", "first_seen_ms", "last_seen_ms",
+                        "seen_count", "last_session_id", "raw_response"},
+                null, null, null, null, "last_seen_ms DESC", boundedLimit(limit))) {
+            while (cursor.moveToNext()) {
+                JSONObject item = new JSONObject();
+                try {
+                    item.put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
+                    item.put("dtc", clean(cursor.getString(cursor.getColumnIndexOrThrow("dtc"))));
+                    item.put("status", clean(cursor.getString(cursor.getColumnIndexOrThrow("status"))));
+                    item.put("statusLabel", clean(cursor.getString(cursor.getColumnIndexOrThrow("status_label"))));
+                    item.put("moduleKey", clean(cursor.getString(cursor.getColumnIndexOrThrow("module_key"))));
+                    item.put("moduleName", clean(cursor.getString(cursor.getColumnIndexOrThrow("module_name"))));
+                    item.put("header", clean(cursor.getString(cursor.getColumnIndexOrThrow("header"))));
+                    item.put("firstSeenMs", cursor.getLong(cursor.getColumnIndexOrThrow("first_seen_ms")));
+                    item.put("lastSeenMs", cursor.getLong(cursor.getColumnIndexOrThrow("last_seen_ms")));
+                    item.put("seenCount", cursor.getLong(cursor.getColumnIndexOrThrow("seen_count")));
+                    item.put("lastSessionId", nullableLong(cursor, "last_session_id"));
+                    item.put("rawResponse", clean(cursor.getString(cursor.getColumnIndexOrThrow("raw_response"))));
+                } catch (JSONException ignored) {
+                    // Local fields are safe.
+                }
+                payload.put(item);
+            }
+        }
+        return payload;
+    }
+
+    private static JSONObject diagnosticCodeStatusCountsJson(SQLiteDatabase db) {
+        JSONObject payload = new JSONObject();
+        try (Cursor cursor = db.rawQuery(
+                "SELECT status, COUNT(*) AS count FROM " + VoltTrackerDb.TABLE_DIAGNOSTIC_CODES
+                        + " GROUP BY status",
+                null)) {
+            while (cursor.moveToNext()) {
+                String key = clean(cursor.getString(cursor.getColumnIndexOrThrow("status")));
+                if (key.isEmpty()) {
+                    key = "stored";
+                }
+                try {
+                    payload.put(key, cursor.getLong(cursor.getColumnIndexOrThrow("count")));
+                } catch (JSONException ignored) {
+                    // Local fields are safe.
+                }
+            }
         }
         return payload;
     }

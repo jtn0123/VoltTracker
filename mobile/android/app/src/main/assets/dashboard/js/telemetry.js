@@ -123,6 +123,7 @@
       "sampleCount",
       "eventCount",
       "pidObservationCount",
+      "diagnosticCodeCount",
       "locationSampleCount",
       "tripSegmentCount",
       "chargeSessionCount",

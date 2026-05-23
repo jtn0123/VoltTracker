@@ -10,6 +10,8 @@ import com.volttracker.obdpoc.ObdProtocol.ParsedPidValue;
 
 import org.junit.Test;
 
+import java.util.List;
+
 /**
  * Decode tests for {@link ObdProtocol}. Hex responses are real captures from the test
  * vehicle (sessions 7 and 8 of the on-phone database) plus synthesised mode-22 frames
@@ -258,6 +260,78 @@ public class ObdProtocolTest {
         assertEquals("4100BE7FB813", ObdProtocol.cleanSupportedPids("4100BE7FB813\r>"));
         assertEquals("", ObdProtocol.cleanSupportedPids("SEARCHING...\r>"));
         assertEquals("", ObdProtocol.cleanSupportedPids(null));
+    }
+
+    @Test
+    public void storedDiagnosticTroubleCodesDecode() {
+        List<ObdProtocol.DiagnosticTroubleCode> codes =
+                ObdProtocol.parseDiagnosticTroubleCodes("03",
+                        "7E8 06 43 01 33 25 A2 00 00\r>", "");
+
+        assertEquals(2, codes.size());
+        assertEquals("P0133", codes.get(0).code);
+        assertEquals("P25A2", codes.get(1).code);
+        assertEquals("stored", codes.get(0).status);
+        assertEquals("Stored/current", codes.get(0).statusLabel);
+        assertEquals("generic-obd", codes.get(0).moduleKey);
+        assertEquals("ECM / powertrain (generic OBD-II)", codes.get(0).moduleName);
+    }
+
+    @Test
+    public void multilineDiagnosticTroubleCodesDecodeContinuationFrames() {
+        List<ObdProtocol.DiagnosticTroubleCode> codes =
+                ObdProtocol.parseDiagnosticTroubleCodes("03",
+                        "7E8 10 08 43 01 33 25 A2\r7E8 21 C0 73 00 00 00 00\r>",
+                        "");
+
+        assertEquals(3, codes.size());
+        assertEquals("P0133", codes.get(0).code);
+        assertEquals("P25A2", codes.get(1).code);
+        assertEquals("U0073", codes.get(2).code);
+    }
+
+    @Test
+    public void multilineDiagnosticTroubleCodesSkipNonContinuationFrames() {
+        List<ObdProtocol.DiagnosticTroubleCode> codes =
+                ObdProtocol.parseDiagnosticTroubleCodes("03",
+                        "7E8 10 06 43 01 33 00 00\r7E8 7F 03 11 00 00 00 00\r>",
+                        "");
+
+        assertEquals(1, codes.size());
+        assertEquals("P0133", codes.get(0).code);
+    }
+
+    @Test
+    public void pendingAndPermanentDiagnosticStatusesDecode() {
+        List<ObdProtocol.DiagnosticTroubleCode> pending =
+                ObdProtocol.parseDiagnosticTroubleCodes("07", "47 C0 73 00 00", "7DF");
+        assertEquals(1, pending.size());
+        assertEquals("U0073", pending.get(0).code);
+        assertEquals("pending", pending.get(0).status);
+
+        List<ObdProtocol.DiagnosticTroubleCode> permanent =
+                ObdProtocol.parseDiagnosticTroubleCodes("0A", "4A 25 A2 00 00", "7E0");
+        assertEquals(1, permanent.size());
+        assertEquals("P25A2", permanent.get(0).code);
+        assertEquals("permanent", permanent.get(0).status);
+        assertEquals("header-7E0", permanent.get(0).moduleKey);
+    }
+
+    @Test
+    public void freezeFrameDiagnosticCodeDecodes() {
+        List<ObdProtocol.DiagnosticTroubleCode> codes =
+                ObdProtocol.parseDiagnosticTroubleCodes("0202", "42 02 01 33", "");
+
+        assertEquals(1, codes.size());
+        assertEquals("P0133", codes.get(0).code);
+        assertEquals("freeze-frame", codes.get(0).status);
+    }
+
+    @Test
+    public void zeroAndNoDataDiagnosticResponsesYieldNoCodes() {
+        assertTrue(ObdProtocol.parseDiagnosticTroubleCodes("03", "43 00 00 00 00", "").isEmpty());
+        assertTrue(ObdProtocol.parseDiagnosticTroubleCodes("03", "NO DATA", "").isEmpty());
+        assertTrue(ObdProtocol.parseDiagnosticTroubleCodes("010C", "410C1880", "").isEmpty());
     }
 
     @Test

@@ -505,9 +505,88 @@
     letter-spacing: 0.04em;
   }
 
+  .diagnostic-report-card {
+    padding: 14px;
+    border-color: rgba(255,122,69,0.2);
+  }
+
+  .diagnostic-report-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .diagnostic-report-head h3 {
+    margin-top: 3px;
+  }
+
+  .dtc-action-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .dtc-action-row button {
+    min-width: 0;
+  }
+
+  .dtc-action-row .scan {
+    border-color: transparent;
+    background: var(--volt);
+    color: #190a04;
+    font-weight: 800;
+    box-shadow: 0 12px 28px rgba(255,122,69,0.18);
+  }
+
+  .dtc-action-row button:not(.scan) {
+    color: var(--muted);
+  }
+
+  .dtc-status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .dtc-status-grid div {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.045);
+  }
+
+  .dtc-status-grid div:first-child {
+    border-color: rgba(255,122,69,0.18);
+    background: rgba(255,122,69,0.08);
+  }
+
+  .dtc-status-grid span {
+    display: block;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .dtc-status-grid strong {
+    display: block;
+    margin-top: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 20px;
+  }
+
   .warning-list,
   .timeline-list,
   .pid-frame-list,
+  .dtc-list,
   .real-insight-list {
     display: grid;
     gap: 8px;
@@ -517,6 +596,7 @@
   .warning-item,
   .timeline-item,
   .pid-frame-item,
+  .dtc-item,
   .real-insight-item {
     min-width: 0;
     padding: 10px;
@@ -537,6 +617,44 @@
     gap: 9px;
   }
 
+  .dtc-item {
+    display: grid;
+    grid-template-columns: minmax(78px, auto) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .dtc-empty-state {
+    padding: 12px;
+    border: 1px dashed rgba(255,255,255,0.16);
+    border-radius: 13px;
+    background: rgba(0,0,0,0.16);
+  }
+
+  .dtc-empty-state strong,
+  .dtc-empty-state small {
+    display: block;
+  }
+
+  .dtc-empty-state small {
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .dtc-item[data-status="pending"] {
+    border-color: rgba(255,184,74,0.24);
+  }
+
+  .dtc-item[data-status="permanent"] {
+    border-color: rgba(255,107,95,0.3);
+  }
+
+  .dtc-item[data-status="freeze-frame"] {
+    border-color: rgba(164,140,255,0.28);
+  }
+
   .timeline-item {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -555,6 +673,7 @@
   }
 
   .pid-frame-item strong,
+  .dtc-item strong,
   .timeline-item strong,
   .warning-item strong,
   .real-insight-item strong {
@@ -564,6 +683,7 @@
   }
 
   .pid-frame-item small,
+  .dtc-item small,
   .timeline-item small,
   .warning-item small,
   .real-insight-item small {
@@ -579,6 +699,57 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11px;
     white-space: nowrap;
+  }
+
+  .dtc-item b {
+    display: block;
+    color: var(--text);
+    font-size: 13px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .dtc-code-block,
+  .dtc-module-block,
+  .dtc-repeat-block {
+    min-width: 0;
+  }
+
+  .dtc-code {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0 10px;
+    border-radius: 10px;
+    background: rgba(255,122,69,0.13);
+    color: var(--volt);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 16px;
+    letter-spacing: 0.03em;
+  }
+
+  .dtc-item[data-status="pending"] .dtc-code {
+    background: rgba(255,184,74,0.13);
+    color: var(--warn);
+  }
+
+  .dtc-item[data-status="permanent"] .dtc-code {
+    background: rgba(255,107,95,0.14);
+    color: #ffc0bb;
+  }
+
+  .dtc-item[data-status="freeze-frame"] .dtc-code {
+    background: rgba(164,140,255,0.14);
+    color: var(--mixed);
+  }
+
+  .dtc-code-block b {
+    text-align: left;
+  }
+
+  .dtc-repeat-block b,
+  .dtc-repeat-block small {
+    text-align: right;
   }
 
   .trip-dot {

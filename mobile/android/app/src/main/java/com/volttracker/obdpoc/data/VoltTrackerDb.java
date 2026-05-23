@@ -6,13 +6,14 @@ import android.database.sqlite.SQLiteOpenHelper;
 
 final class VoltTrackerDb extends SQLiteOpenHelper {
     static final String DATABASE_NAME = "volttracker_obd_poc.db";
-    static final int DATABASE_VERSION = 5;
+    static final int DATABASE_VERSION = 6;
 
     static final String TABLE_SESSIONS = "obd_sessions";
     static final String TABLE_TELEMETRY = "telemetry_samples";
     static final String TABLE_EVENTS = "status_events";
     static final String TABLE_ADAPTER_HISTORY = "adapter_history";
     static final String TABLE_PID_OBSERVATIONS = "pid_observations";
+    static final String TABLE_DIAGNOSTIC_CODES = "diagnostic_codes";
     static final String TABLE_LOCATION_SAMPLES = "location_samples";
     static final String TABLE_VEHICLES = "vehicles";
     static final String TABLE_FIELD_CAPABILITIES = "field_capabilities";
@@ -152,6 +153,10 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
             db.execSQL("UPDATE " + TABLE_TELEMETRY + " SET app_foreground = 1"
                     + " WHERE app_foreground IS NULL");
         }
+        if (oldVersion < 6) {
+            createDiagnosticTables(db);
+            createDiagnosticIndexes(db);
+        }
     }
 
     private static void createObservationTables(SQLiteDatabase db) {
@@ -188,6 +193,7 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                 + "json TEXT NOT NULL,"
                 + "FOREIGN KEY(session_id) REFERENCES " + TABLE_SESSIONS + "(_id) ON DELETE CASCADE"
                 + ")");
+        createDiagnosticTables(db);
     }
 
     private static void createObservationIndexes(SQLiteDatabase db) {
@@ -197,6 +203,33 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                 + TABLE_PID_OBSERVATIONS + "(command, header, observed_at_ms DESC)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_location_samples_session_time ON "
                 + TABLE_LOCATION_SAMPLES + "(session_id, captured_at_ms DESC)");
+        createDiagnosticIndexes(db);
+    }
+
+    private static void createDiagnosticTables(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS " + TABLE_DIAGNOSTIC_CODES + " ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "dtc TEXT NOT NULL,"
+                + "status TEXT NOT NULL,"
+                + "status_label TEXT,"
+                + "module_key TEXT NOT NULL,"
+                + "module_name TEXT,"
+                + "header TEXT,"
+                + "first_seen_ms INTEGER NOT NULL,"
+                + "last_seen_ms INTEGER NOT NULL,"
+                + "seen_count INTEGER NOT NULL DEFAULT 1,"
+                + "last_session_id INTEGER,"
+                + "raw_response TEXT,"
+                + "json TEXT NOT NULL,"
+                + "UNIQUE(module_key, dtc, status)"
+                + ")");
+    }
+
+    private static void createDiagnosticIndexes(SQLiteDatabase db) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_diagnostic_codes_last_seen ON "
+                + TABLE_DIAGNOSTIC_CODES + "(last_seen_ms DESC)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_diagnostic_codes_lookup ON "
+                + TABLE_DIAGNOSTIC_CODES + "(module_key, dtc, status)");
     }
 
     private static void createRoadmapTables(SQLiteDatabase db) {

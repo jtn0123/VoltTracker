@@ -491,6 +491,31 @@
     </article>
   </section>
   <section id="view-insights" class="view" data-view="insights">
+    <article class="panel diagnostic-report-card non-demo-only">
+      <header class="diagnostic-report-head">
+        <div>
+          <span class="kicker">Check engine</span>
+          <h3 id="dtcTitle">No car-code scan yet</h3>
+        </div>
+        <span id="dtcReportBadge" class="session-badge">ready</span>
+      </header>
+      <div class="dtc-action-row">
+        <button type="button" data-action="scan" class="scan">Scan car codes</button>
+        <button type="button" data-nav-jump="settings">Debug logs</button>
+      </div>
+      <div class="dtc-status-grid">
+        <div><span>Codes</span><strong id="dtcTotalCount">0</strong></div>
+        <div><span>Current/stored</span><strong id="dtcStoredCount">0</strong></div>
+        <div><span>Pending</span><strong id="dtcPendingCount">0</strong></div>
+        <div><span>Permanent</span><strong id="dtcPermanentCount">0</strong></div>
+        <div><span>Freeze-frame</span><strong id="dtcFreezeCount">0</strong></div>
+        <div><span>Last seen</span><strong id="dtcLastSeen">--</strong></div>
+      </div>
+      <div id="dtcList" class="dtc-list">
+        <p class="status-copy">Current, pending, permanent, and freeze-frame results will appear here after a scan.</p>
+      </div>
+    </article>
+
     <article id="insightsEmptyState" class="panel empty-state non-demo-only">
       <span class="kicker">Insights</span>
       <h2>Waiting for enough real data.</h2>
@@ -632,6 +657,7 @@
         <div><span>Samples</span><strong id="dbSampleCount">0</strong></div>
         <div><span>Events</span><strong id="dbEventCount">0</strong></div>
         <div><span>PIDs</span><strong id="dbPidCount">0</strong></div>
+        <div><span>DTCs</span><strong id="dbDtcCount">0</strong></div>
         <div><span>GPS</span><strong id="dbLocationCount">0</strong></div>
         <div><span>Trips</span><strong id="dbTripCount">0</strong></div>
         <div><span>Charge</span><strong id="dbChargeCount">0</strong></div>

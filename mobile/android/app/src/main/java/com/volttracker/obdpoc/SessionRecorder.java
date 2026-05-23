@@ -12,6 +12,7 @@ import static com.volttracker.obdpoc.ObdElmDecode.summarizeForStorage;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -281,6 +282,8 @@ final class SessionRecorder {
         String safeCommand = command == null ? "" : command.trim().toUpperCase(Locale.US);
         String summary = summarizeForStorage(safeCommand, response);
         ObdProtocol.ParsedPidValue parsed = ObdProtocol.parseKnownValue(safeCommand, response);
+        List<ObdProtocol.DiagnosticTroubleCode> diagnosticCodes =
+                ObdProtocol.parseDiagnosticTroubleCodes(safeCommand, response, header);
         persistAsync(() -> {
             JSONObject payload = new JSONObject();
             try {
@@ -305,7 +308,34 @@ final class SessionRecorder {
                 // Local values are safe.
             }
             localStore.recordPidObservation(sessionId, payload, observedAtMs);
+            for (ObdProtocol.DiagnosticTroubleCode code : diagnosticCodes) {
+                localStore.recordDiagnosticCode(sessionId,
+                        diagnosticCodeJson(code, observedAtMs, safeCommand));
+            }
         });
+    }
+
+    private static JSONObject diagnosticCodeJson(
+            ObdProtocol.DiagnosticTroubleCode code,
+            long observedAtMs,
+            String command
+    ) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("seenAtMs", observedAtMs);
+            payload.put("observedAtMs", observedAtMs);
+            payload.put("command", command == null ? "" : command);
+            payload.put("dtc", code.code);
+            payload.put("status", code.status);
+            payload.put("statusLabel", code.statusLabel);
+            payload.put("moduleKey", code.moduleKey);
+            payload.put("moduleName", code.moduleName);
+            payload.put("header", code.header);
+            payload.put("rawResponse", code.rawResponse);
+        } catch (JSONException ignored) {
+            // Local values are safe.
+        }
+        return payload;
     }
 
     private void persistAsync(Runnable task) {

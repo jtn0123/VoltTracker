@@ -28,6 +28,7 @@ import org.json.JSONObject;
 import java.io.Closeable;
 import java.io.File;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * On-device SQLite store for OBD sessions, telemetry, GPS, events and adapter history.
@@ -219,6 +220,70 @@ public final class ObdLocalStore implements Closeable {
             // Local numeric/string values are safe.
         }
         return recordPidObservation(sessionId, payload, observedAtMs);
+    }
+
+    public long recordDiagnosticCode(long sessionId, JSONObject diagnosticCode) {
+        JSONObject safeCode = diagnosticCode == null ? new JSONObject() : diagnosticCode;
+        long seenAtMs = optTimestamp(safeCode, "seenAtMs",
+                optTimestamp(safeCode, "observedAtMs", System.currentTimeMillis()));
+        SQLiteDatabase db = helper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            String dtc = clean(safeCode.optString("dtc", safeCode.optString("code", "")))
+                    .toUpperCase(Locale.US);
+            String status = clean(safeCode.optString("status", "stored"));
+            String moduleKey = clean(safeCode.optString("moduleKey", "generic-obd"));
+            if (dtc.isEmpty()) {
+                return -1L;
+            }
+
+            long existingId = -1L;
+            long firstSeenMs = seenAtMs;
+            long seenCount = 0L;
+            long lastSessionId = -1L;
+            try (Cursor cursor = db.query(
+                    VoltTrackerDb.TABLE_DIAGNOSTIC_CODES,
+                    new String[]{"_id", "first_seen_ms", "seen_count", "last_session_id"},
+                    "module_key = ? AND dtc = ? AND status = ?",
+                    new String[]{moduleKey, dtc, status}, null, null, null)) {
+                if (cursor.moveToFirst()) {
+                    existingId = cursor.getLong(cursor.getColumnIndexOrThrow("_id"));
+                    firstSeenMs = cursor.getLong(cursor.getColumnIndexOrThrow("first_seen_ms"));
+                    seenCount = cursor.getLong(cursor.getColumnIndexOrThrow("seen_count"));
+                    lastSessionId = cursor.getLong(cursor.getColumnIndexOrThrow("last_session_id"));
+                }
+            }
+
+            ContentValues values = new ContentValues();
+            values.put("dtc", dtc);
+            values.put("status", status);
+            values.put("status_label", clean(safeCode.optString("statusLabel", status)));
+            values.put("module_key", moduleKey);
+            values.put("module_name", clean(safeCode.optString("moduleName", "")));
+            values.put("header", clean(safeCode.optString("header", "")));
+            values.put("first_seen_ms", firstSeenMs);
+            values.put("last_seen_ms", seenAtMs);
+            long nextSeenCount = lastSessionId == sessionId ? seenCount : seenCount + 1L;
+            values.put("seen_count", Math.max(1L, nextSeenCount));
+            values.put("last_session_id", sessionId);
+            values.put("raw_response", clean(safeCode.optString("rawResponse",
+                    safeCode.optString("raw", ""))));
+            values.put("json", safeCode.toString());
+
+            long id;
+            if (existingId > 0) {
+                db.update(VoltTrackerDb.TABLE_DIAGNOSTIC_CODES, values, "_id = ?",
+                        new String[]{String.valueOf(existingId)});
+                id = existingId;
+            } else {
+                id = db.insertOrThrow(VoltTrackerDb.TABLE_DIAGNOSTIC_CODES, null, values);
+            }
+            updateSessionLastEvent(db, sessionId, seenAtMs);
+            db.setTransactionSuccessful();
+            return id;
+        } finally {
+            db.endTransaction();
+        }
     }
 
     public long recordLocationSample(long sessionId, JSONObject sample) {
@@ -428,6 +493,7 @@ public final class ObdLocalStore implements Closeable {
             db.delete(VoltTrackerDb.TABLE_TRIP_SEGMENTS, null, null);
             db.delete(VoltTrackerDb.TABLE_FIELD_CAPABILITIES, null, null);
             db.delete(VoltTrackerDb.TABLE_LOCATION_SAMPLES, null, null);
+            db.delete(VoltTrackerDb.TABLE_DIAGNOSTIC_CODES, null, null);
             db.delete(VoltTrackerDb.TABLE_PID_OBSERVATIONS, null, null);
             db.delete(VoltTrackerDb.TABLE_EVENTS, null, null);
             db.delete(VoltTrackerDb.TABLE_TELEMETRY, null, null);

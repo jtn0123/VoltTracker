@@ -1,6 +1,10 @@
 package com.volttracker.obdpoc;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 final class ObdProtocol {
     private ObdProtocol() {
@@ -17,6 +21,34 @@ final class ObdProtocol {
             this.valueText = valueText == null ? "" : valueText;
             this.valueNumeric = valueNumeric;
             this.unit = unit == null ? "" : unit;
+        }
+    }
+
+    static final class DiagnosticTroubleCode {
+        final String code;
+        final String status;
+        final String statusLabel;
+        final String moduleKey;
+        final String moduleName;
+        final String header;
+        final String rawResponse;
+
+        DiagnosticTroubleCode(
+                String code,
+                String status,
+                String statusLabel,
+                String moduleKey,
+                String moduleName,
+                String header,
+                String rawResponse
+        ) {
+            this.code = code == null ? "" : code;
+            this.status = status == null ? "" : status;
+            this.statusLabel = statusLabel == null ? "" : statusLabel;
+            this.moduleKey = moduleKey == null ? "" : moduleKey;
+            this.moduleName = moduleName == null ? "" : moduleName;
+            this.header = header == null ? "" : header;
+            this.rawResponse = rawResponse == null ? "" : rawResponse;
         }
     }
 
@@ -184,6 +216,58 @@ final class ObdProtocol {
         return null;
     }
 
+    static List<DiagnosticTroubleCode> parseDiagnosticTroubleCodes(
+            String command,
+            String response,
+            String header
+    ) {
+        List<DiagnosticTroubleCode> codes = new ArrayList<>();
+        String marker = positiveDtcMarker(command);
+        if (marker == null || response == null) {
+            return codes;
+        }
+        String cleanHeader = cleanHeader(header);
+        String moduleKey = cleanHeader.isEmpty() || "7DF".equals(cleanHeader)
+                ? "generic-obd"
+                : "header-" + cleanHeader;
+        String moduleName = "generic-obd".equals(moduleKey)
+                ? "ECM / powertrain (generic OBD-II)"
+                : "OBD module header " + cleanHeader;
+        String status = dtcStatusForCommand(command);
+        String statusLabel = dtcStatusLabel(status);
+        String raw = summarize(response);
+        Set<String> seen = new HashSet<>();
+        boolean collectingMultiFrame = false;
+        for (String line : response.split("[\\r\\n]+")) {
+            String hex = line.toUpperCase(Locale.US).replaceAll("[^0-9A-F]", "");
+            int index = hex.indexOf(marker);
+            if (index < 0 && collectingMultiFrame) {
+                String continuation = continuationPayload(hex);
+                if (!continuation.isEmpty()) {
+                    parseDiagnosticPayload(continuation, status, statusLabel, moduleKey,
+                            moduleName, cleanHeader, raw, seen, codes);
+                }
+                continue;
+            }
+            while (index >= 0) {
+                String payload = hex.substring(index + marker.length());
+                parseDiagnosticPayload(payload, status, statusLabel, moduleKey, moduleName,
+                        cleanHeader, raw, seen, codes);
+                collectingMultiFrame = true;
+                index = hex.indexOf(marker, index + marker.length());
+            }
+        }
+        if (codes.isEmpty()) {
+            String hex = response.toUpperCase(Locale.US).replaceAll("[^0-9A-F]", "");
+            int index = hex.indexOf(marker);
+            if (index >= 0) {
+                parseDiagnosticPayload(hex.substring(index + marker.length()), status, statusLabel,
+                        moduleKey, moduleName, cleanHeader, raw, seen, codes);
+            }
+        }
+        return codes;
+    }
+
     /**
      * HV pack power in kW from the Volt mode-22 pack-voltage (222429) and pack-current
      * (222414) responses. Discharge current is decoded as positive, so discharge power
@@ -219,6 +303,142 @@ final class ObdProtocol {
             bytes[i] = Integer.parseInt(hex.substring(offset, offset + 2), 16);
         }
         return bytes;
+    }
+
+    private static String positiveDtcMarker(String command) {
+        String cleanCommand = command == null ? "" : command.trim().toUpperCase(Locale.US);
+        if ("03".equals(cleanCommand)) {
+            return "43";
+        }
+        if ("07".equals(cleanCommand)) {
+            return "47";
+        }
+        if ("0A".equals(cleanCommand)) {
+            return "4A";
+        }
+        if ("0202".equals(cleanCommand)) {
+            return "4202";
+        }
+        return null;
+    }
+
+    private static String dtcStatusForCommand(String command) {
+        String cleanCommand = command == null ? "" : command.trim().toUpperCase(Locale.US);
+        if ("07".equals(cleanCommand)) {
+            return "pending";
+        }
+        if ("0A".equals(cleanCommand)) {
+            return "permanent";
+        }
+        if ("0202".equals(cleanCommand)) {
+            return "freeze-frame";
+        }
+        return "stored";
+    }
+
+    private static String dtcStatusLabel(String status) {
+        if ("pending".equals(status)) {
+            return "Pending";
+        }
+        if ("permanent".equals(status)) {
+            return "Permanent";
+        }
+        if ("freeze-frame".equals(status)) {
+            return "Freeze frame";
+        }
+        return "Stored/current";
+    }
+
+    private static String cleanHeader(String header) {
+        return header == null ? "" : header.trim().toUpperCase(Locale.US).replaceAll("[^0-9A-F]", "");
+    }
+
+    private static String continuationPayload(String hex) {
+        if (hex == null || hex.length() < 4) {
+            return "";
+        }
+        int pciOffset = isLikelyExtendedCanFrame(hex) ? 8 : isLikelyStandardCanFrame(hex) ? 3 : 0;
+        if (hex.length() < pciOffset + 2) {
+            return "";
+        }
+        try {
+            int firstDataByte = Integer.parseInt(hex.substring(pciOffset, pciOffset + 2), 16);
+            if ((firstDataByte & 0xF0) != 0x20) {
+                return "";
+            }
+        } catch (NumberFormatException ignored) {
+            return "";
+        }
+        if (hex.length() >= 10 && hex.startsWith("18")) {
+            return hex.substring(10);
+        }
+        if (hex.length() >= 5 && hex.startsWith("7")) {
+            return hex.substring(5);
+        }
+        if (hex.length() >= 2) {
+            try {
+                int firstByte = Integer.parseInt(hex.substring(0, 2), 16);
+                if (firstByte >= 0x21 && firstByte <= 0x2F) {
+                    return hex.substring(2);
+                }
+            } catch (NumberFormatException ignored) {
+                return "";
+            }
+        }
+        return "";
+    }
+
+    private static boolean isLikelyExtendedCanFrame(String hex) {
+        return hex.length() >= 10 && hex.startsWith("18");
+    }
+
+    private static boolean isLikelyStandardCanFrame(String hex) {
+        return hex.length() >= 5 && hex.startsWith("7");
+    }
+
+    private static void parseDiagnosticPayload(
+            String payload,
+            String status,
+            String statusLabel,
+            String moduleKey,
+            String moduleName,
+            String header,
+            String rawResponse,
+            Set<String> seen,
+            List<DiagnosticTroubleCode> output
+    ) {
+        if (payload == null) {
+            return;
+        }
+        int limit = payload.length() - (payload.length() % 4);
+        for (int i = 0; i + 3 < limit; i += 4) {
+            int first;
+            int second;
+            try {
+                first = Integer.parseInt(payload.substring(i, i + 2), 16);
+                second = Integer.parseInt(payload.substring(i + 2, i + 4), 16);
+            } catch (NumberFormatException ex) {
+                return;
+            }
+            if (first == 0 && second == 0) {
+                continue;
+            }
+            String code = decodeDtc(first, second);
+            String key = moduleKey + "|" + status + "|" + code;
+            if (seen.add(key)) {
+                output.add(new DiagnosticTroubleCode(
+                        code, status, statusLabel, moduleKey, moduleName, header, rawResponse));
+            }
+        }
+    }
+
+    private static String decodeDtc(int first, int second) {
+        char family = "PCBU".charAt((first >> 6) & 0x03);
+        int digit1 = (first >> 4) & 0x03;
+        int digit2 = first & 0x0F;
+        int digit3 = (second >> 4) & 0x0F;
+        int digit4 = second & 0x0F;
+        return String.format(Locale.US, "%c%d%X%X%X", family, digit1, digit2, digit3, digit4);
     }
 
     // First data byte after the mode-22 positive-response marker, scaled: byte * scale + offset.

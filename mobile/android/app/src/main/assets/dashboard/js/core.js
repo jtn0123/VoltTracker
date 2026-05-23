@@ -101,7 +101,7 @@
     trips: ["Logged drives", "Trips"],
     map: ["GPS route", "Map"],
     charge: ["Real charging", "Charge"],
-    insights: ["Database summaries", "Insights"],
+    insights: ["Vehicle health", "Insights"],
     settings: ["OBD bridge", "Diagnostics"]
   };
 
