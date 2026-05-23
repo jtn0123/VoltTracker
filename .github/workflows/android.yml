@@ -35,10 +35,19 @@ jobs:
         run: ./gradlew --no-daemon :app:spotlessCheck
       - name: Android Lint
         run: ./gradlew --no-daemon :app:lintDebug
+      - name: Assemble debug APK
+        run: ./gradlew --no-daemon :app:assembleDebug
       - name: JaCoCo coverage report
         run: ./gradlew --no-daemon :app:jacocoTestReport
       - name: Verify coverage thresholds
         run: ./gradlew --no-daemon :app:jacocoTestCoverageVerification
+      - name: Upload debug APK
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: volttracker-debug-apk
+          path: mobile/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

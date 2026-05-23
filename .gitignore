@@ -68,4 +68,7 @@ mobile/android/docs/db-pulls/
 keystore.properties
 *.jks
 *.keystore
-.claude/
+.claude/*
+!.claude/hooks/
+!.claude/settings.json
+.claude/settings.local.json

@@ -23,15 +23,15 @@ spotless {
 }
 
 android {
-    namespace "com.volttracker.obdpoc"
-    compileSdk 36
+    namespace = "com.volttracker.obdpoc"
+    compileSdk = 36
 
     defaultConfig {
-        applicationId "com.volttracker.obdpoc"
-        minSdk 23
-        targetSdk 36
-        versionCode 1
-        versionName "0.1.0"
+        applicationId = "com.volttracker.obdpoc"
+        minSdk = 23
+        targetSdk = 36
+        versionCode = 1
+        versionName = "0.1.0"
     }
 
     // Release signing activates only when mobile/android/keystore.properties exists
@@ -51,26 +51,26 @@ android {
                 if (!keystore.exists()) {
                     throw new GradleException("keystore.properties storeFile not found: " + keystore)
                 }
-                storeFile keystore
-                storePassword props.getProperty("storePassword")
-                keyAlias props.getProperty("keyAlias")
-                keyPassword props.getProperty("keyPassword")
+                storeFile = keystore
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
             }
         }
     }
 
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled = false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             if (rootProject.file("keystore.properties").exists()) {
-                signingConfig signingConfigs.release
+                signingConfig = signingConfigs.release
             }
         }
     }
 
     buildFeatures {
-        buildConfig true
+        buildConfig = true
     }
 
     testOptions {
