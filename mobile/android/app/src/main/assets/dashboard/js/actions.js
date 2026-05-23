@@ -251,12 +251,17 @@
         VD.renderMap();
       }, opts);
     });
-    el("mapSessionList").addEventListener("click", (event) => {
+    const onSessionClick = (event) => {
       const button = event.target.closest("[data-map-session]");
       if (!button) return;
       state.selectedMapSessionId = button.dataset.mapSession;
       VD.renderMap();
-    }, opts);
+    };
+    el("mapSessionList").addEventListener("click", onSessionClick, opts);
+    // The new drive-chip strip uses the same [data-map-session] attribute, so
+    // share the handler. Without this, tapping a chip did nothing.
+    const chips = el("mapDriveChips");
+    if (chips) chips.addEventListener("click", onSessionClick, opts);
     el("mapFullBtn").addEventListener("click", () => {
       state.mapFull = !state.mapFull;
       VD.renderMap();

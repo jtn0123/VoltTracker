@@ -558,6 +558,8 @@ final class ObdStoreTrips {
         payload.put("pointCount", points.length());
         payload.put("distanceMeters", distanceMeters(points));
         payload.put("bounds", boundsFor(points));
+        payload.put("socTrack", socTrackForSessionJson(db, session.id, limit));
+        payload.put("powerTrack", powerTrackForSessionJson(db, session.id, limit));
         return payload;
     }
 
@@ -575,6 +577,8 @@ final class ObdStoreTrips {
             route.put("pointCount", points.length());
             route.put("distanceMeters", distanceMeters(points));
             route.put("bounds", boundsFor(points));
+            route.put("socTrack", socTrackForSessionJson(db, session.id, pointLimit));
+            route.put("powerTrack", powerTrackForSessionJson(db, session.id, pointLimit));
             payload.put(route);
         }
         return payload;
@@ -592,7 +596,8 @@ final class ObdStoreTrips {
                             "longitude",
                             "accuracy_m",
                             "speed_mps",
-                            "bearing_deg"
+                            "bearing_deg",
+                            "altitude_m"
                         },
                         "session_id = ?",
                         new String[] {String.valueOf(sessionId)},
@@ -608,6 +613,7 @@ final class ObdStoreTrips {
                 item.put("accuracyM", nullableDouble(cursor, "accuracy_m"));
                 item.put("speedMps", nullableDouble(cursor, "speed_mps"));
                 item.put("bearingDeg", nullableDouble(cursor, "bearing_deg"));
+                item.put("altM", nullableDouble(cursor, "altitude_m"));
                 points.put(item);
             }
         }
@@ -621,7 +627,8 @@ final class ObdStoreTrips {
                                 "longitude",
                                 "accuracy_m",
                                 "gps_speed_mps",
-                                "bearing_deg"
+                                "bearing_deg",
+                                "soc"
                             },
                             "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL",
                             new String[] {String.valueOf(sessionId)},
@@ -638,10 +645,66 @@ final class ObdStoreTrips {
                     item.put("accuracyM", nullableDouble(cursor, "accuracy_m"));
                     item.put("speedMps", nullableDouble(cursor, "gps_speed_mps"));
                     item.put("bearingDeg", nullableDouble(cursor, "bearing_deg"));
+                    item.put("soc", nullableDouble(cursor, "soc"));
                     points.put(item);
                 }
             }
         }
         return reverse(points);
+    }
+
+    /**
+     * SOC samples for a session, ascending by time. Queries DESC + limit (same window as the route
+     * points) then reverses, so the track and the route stay aligned to the latest samples for
+     * sessions that exceed the bounded limit.
+     */
+    private static JSONArray socTrackForSessionJson(SQLiteDatabase db, long sessionId, int limit)
+            throws JSONException {
+        JSONArray track = new JSONArray();
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        new String[] {"captured_at_ms", "soc"},
+                        "session_id = ? AND soc IS NOT NULL",
+                        new String[] {String.valueOf(sessionId)},
+                        null,
+                        null,
+                        "captured_at_ms DESC",
+                        boundedLimit(limit))) {
+            while (cursor.moveToNext()) {
+                JSONObject item = new JSONObject();
+                item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
+                item.put("soc", cursor.getDouble(cursor.getColumnIndexOrThrow("soc")));
+                track.put(item);
+            }
+        }
+        return reverse(track);
+    }
+
+    /**
+     * Power-kW samples for a session, ascending by time. DESC + limit then reverse — same pattern
+     * as the route points so the windows align for long sessions.
+     */
+    private static JSONArray powerTrackForSessionJson(SQLiteDatabase db, long sessionId, int limit)
+            throws JSONException {
+        JSONArray track = new JSONArray();
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        new String[] {"captured_at_ms", "power_kw"},
+                        "session_id = ? AND power_kw IS NOT NULL",
+                        new String[] {String.valueOf(sessionId)},
+                        null,
+                        null,
+                        "captured_at_ms DESC",
+                        boundedLimit(limit))) {
+            while (cursor.moveToNext()) {
+                JSONObject item = new JSONObject();
+                item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
+                item.put("powerKw", cursor.getDouble(cursor.getColumnIndexOrThrow("power_kw")));
+                track.put(item);
+            }
+        }
+        return reverse(track);
     }
 }

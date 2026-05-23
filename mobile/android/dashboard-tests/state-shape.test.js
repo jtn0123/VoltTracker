@@ -79,7 +79,9 @@ describe('window.VoltDashboard.state shape', () => {
     expect(state.mode).toBe('ev');
     expect(state.tripFilter).toBe('all');
     expect(state.demoActive).toBe(false);
-    expect(state.mapLayer).toBe('routes');
+    // Default layer is "eff" so the route opens already colored by efficiency;
+    // the user can still tap Routes / Heat / Stops in the layer tabs.
+    expect(state.mapLayer).toBe('eff');
     expect(state.mapFull).toBe(false);
     // lastSampleAt is the C6 stale-tile clock; it starts at 0 so the first
     // tick reports stale until a real sample arrives.

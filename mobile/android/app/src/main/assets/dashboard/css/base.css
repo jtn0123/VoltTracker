@@ -440,6 +440,20 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .demo-link {
+    display: block;
+    margin-top: 8px;
+    padding: 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.055);
+    color: var(--text);
+    text-align: center;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 650;
+  }
+
   .primary {
     border-color: transparent;
     background: var(--volt);

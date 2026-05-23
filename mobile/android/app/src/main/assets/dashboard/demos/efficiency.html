@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<!--
+  DEMO PAGE — efficiency / speed / elevation scrubber concepts. Not part of the
+  shipped dashboard; serve standalone (e.g. /demos/efficiency.html) to compare
+  designs. Data is synthetic: real GPS geometry from the sample route + a modeled
+  elevation profile + a Volt energy model (grade-driven power / regen / SOC).
+  Pick a direction, then we wire the chosen one into the real Map tab.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VoltTracker — efficiency scrubber demos</title>
+<link rel="stylesheet" href="../lib/leaflet/leaflet.css">
+<script src="../lib/leaflet/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #07080c; --panel: #171820; --panel-2: #20222c; --panel-3: #101117;
+    --line: rgba(255,255,255,0.1); --line-strong: rgba(255,255,255,0.16);
+    --text: #f5f3ec; --muted: #aaaab4; --soft: #747582;
+    --volt: #ff7a45; --ev: #b8e63b; --ok: #35e6a0;
+    --warn: #ffb84a; --bad: #ff6b5f; --soc: #a48cff; --pwr: #5cc8ff;
+    --terrain: #8b94ad;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background:
+      radial-gradient(680px 430px at 68% -90px, rgba(255,122,69,0.14), transparent 62%),
+      linear-gradient(180deg, #12131a 0%, var(--bg) 52%);
+    color: var(--text);
+    font-family: Inter, Roboto, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: 16px 12px 40px;
+  }
+  .app { width: min(720px, 100%); margin: 0 auto; }
+  .kicker {
+    color: var(--soft); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; font-weight: 760; letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  h1 { margin: 4px 0 2px; font-size: 23px; letter-spacing: -0.02em; }
+  .lede { margin: 0 0 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .backlink {
+    display: inline-block; margin-bottom: 10px; color: var(--muted);
+    font-size: 13px; font-weight: 650; text-decoration: none;
+  }
+
+  .switch {
+    display: flex; gap: 3px; padding: 4px; margin-bottom: 12px;
+    border: 1px solid var(--line-strong); border-radius: 999px;
+    background: rgba(16,18,22,0.85); overflow-x: auto;
+  }
+  .switch button {
+    flex: 1; min-height: 38px; white-space: nowrap; padding: 0 6px;
+    border: 0; border-radius: 999px; background: transparent; color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10.5px; font-weight: 760; letter-spacing: 0.02em; text-transform: uppercase;
+    cursor: pointer;
+  }
+  .switch button.on { background: var(--volt); color: #190a04; }
+
+  /* drive picker */
+  .picker-label { margin: 2px 2px 6px; }
+  .drives { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; }
+  .drive {
+    flex: 0 0 auto; min-width: 124px; padding: 9px 12px; text-align: left;
+    border: 1px solid var(--line-strong); border-radius: 14px;
+    background: rgba(16,18,22,0.85); color: var(--text); cursor: pointer;
+  }
+  .drive.on { border-color: var(--volt); background: rgba(255,122,69,0.13); }
+  .drive .dl { font-size: 13px; font-weight: 750; }
+  .drive .dd {
+    font-family: ui-monospace, monospace; font-size: 10px; color: var(--soft);
+    margin-left: 6px; font-weight: 600;
+  }
+  .drive .dm {
+    display: flex; align-items: center; gap: 6px; margin-top: 5px;
+    font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted);
+  }
+  .drive .dm b { color: var(--text); font-weight: 700; }
+  .drive .dm u { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+  .panel {
+    border: 1px solid var(--line); border-radius: 18px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), transparent 46%), rgba(20,20,27,0.92);
+    box-shadow: 0 18px 48px rgba(0,0,0,0.34);
+    overflow: hidden; margin-bottom: 12px;
+  }
+  .variant { display: none; }
+  .variant.on { display: block; }
+  .vnote {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 11px 14px; color: var(--muted); font-size: 12px; line-height: 1.5;
+  }
+  .vnote b { color: var(--text); font-weight: 700; }
+
+  .mapbox { position: relative; }
+  .leaflet-container { background: #0a0b10; }
+  .leaflet-control-attribution { background: rgba(9,10,14,0.78) !important; color: rgba(245,243,236,0.4) !important; }
+  .leaflet-control-attribution a { color: rgba(245,243,236,0.6) !important; }
+
+  .chart { position: relative; touch-action: none; cursor: ew-resize; user-select: none; }
+  .chart svg { display: block; width: 100%; }
+  .cursor {
+    position: absolute; top: 0; bottom: 0; width: 0;
+    border-left: 1.5px solid rgba(245,243,236,0.85);
+    box-shadow: 0 0 8px rgba(0,0,0,0.7); pointer-events: none;
+  }
+  .cursor::before {
+    content: ""; position: absolute; top: -3px; left: -4px;
+    width: 7px; height: 7px; border-radius: 50%; background: var(--text);
+  }
+
+  .readout { display: grid; grid-template-columns: repeat(6, 1fr); border-top: 1px solid var(--line); }
+  .readout div { padding: 9px 4px; min-width: 0; }
+  .readout div + div { border-left: 1px solid var(--line); }
+  .readout .kicker { font-size: 8.5px; letter-spacing: 0.03em; }
+  .readout strong {
+    display: block; margin-top: 3px; font-size: 14px; font-variant-numeric: tabular-nums;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .readout u { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+  .toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+  .toolbar .kicker { flex: 1; }
+  .btn {
+    min-height: 34px; padding: 0 13px; border: 1px solid var(--line-strong);
+    border-radius: 999px; background: rgba(255,255,255,0.05); color: var(--text);
+    font-size: 12px; font-weight: 650; cursor: pointer;
+  }
+  .btn.accent { background: var(--volt); color: #190a04; border-color: transparent; font-weight: 800; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px 14px; padding: 10px 14px;
+    border-top: 1px solid var(--line);
+    font-family: ui-monospace, monospace; font-size: 10.5px; color: var(--muted);
+  }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .legend i { width: 14px; height: 4px; border-radius: 2px; }
+
+  .floatchip {
+    position: absolute; left: 12px; bottom: 12px; z-index: 600;
+    padding: 9px 13px; border-radius: 14px;
+    background: rgba(8,9,13,0.86); border: 1px solid var(--line-strong);
+    backdrop-filter: blur(14px); pointer-events: none;
+  }
+  .floatchip .big { font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .floatchip .sub { font-family: ui-monospace, monospace; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+
+  .headline { padding: 14px 16px 4px; }
+  .headline h2 { margin: 4px 0 0; font-size: 18px; letter-spacing: -0.01em; }
+  .headline h2 b { color: var(--ev); }
+  .statrow { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); margin-top: 10px; }
+  .statrow div { padding: 11px 12px; }
+  .statrow div + div { border-left: 1px solid var(--line); }
+  .statrow strong { display: block; margin-top: 4px; font-size: 18px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <a href="../index.html" class="backlink">&#8592; Back to dashboard</a>
+  <span class="kicker">VoltTracker · concept</span>
+  <h1>Efficiency, speed &amp; elevation — scrubber demos</h1>
+  <p class="lede">Four takes on exploring a drive. Drag across any chart, or tap the map,
+    to scrub. Data is synthetic — real GPS geometry + a modeled elevation profile + a
+    grade-driven Volt energy model.</p>
+
+  <div class="switch" id="switch">
+    <button type="button" data-v="1" class="on">1 Combo</button>
+    <button type="button" data-v="2">2 Stack</button>
+    <button type="button" data-v="3">3 Map-first</button>
+    <button type="button" data-v="4">4 Scatter</button>
+  </div>
+
+  <div class="kicker picker-label">Drive</div>
+  <div class="drives" id="drives"></div>
+
+  <!-- V1 -->
+  <section class="variant on" id="v1">
+    <div class="panel">
+      <div class="mapbox"><div id="map1" style="height:288px"></div></div>
+      <div class="toolbar">
+        <span class="kicker">Speed · efficiency · elevation</span>
+        <button type="button" class="btn accent" data-play="1">▶ Play</button>
+      </div>
+      <div class="chart" id="chart1"><div class="cursor"></div></div>
+      <div class="readout" id="read1"></div>
+      <div class="legend">
+        <span><i style="background:var(--volt)"></i>speed</span>
+        <span><i style="background:var(--ev)"></i>efficiency</span>
+        <span><i style="background:var(--terrain)"></i>elevation</span>
+        <span><i style="background:rgba(164,140,255,.5)"></i>engine running</span>
+      </div>
+    </div>
+    <div class="panel"><p class="vnote"><span><b>Combo strip.</b> Terrain silhouette as the
+      ground; speed and efficiency ride on top as lines. Watch efficiency climb on the
+      downhills. Smallest footprint — drops straight under the map in the existing Map
+      tab.</span></p></div>
+  </section>
+
+  <!-- V2 -->
+  <section class="variant" id="v2">
+    <div class="panel">
+      <div class="mapbox"><div id="map2" style="height:226px"></div></div>
+      <div class="toolbar">
+        <span class="kicker">Speed · elevation · power · battery</span>
+        <button type="button" class="btn accent" data-play="2">▶ Play</button>
+      </div>
+      <div class="chart" id="chart2a"><div class="cursor"></div></div>
+      <div class="chart" id="chart2b"><div class="cursor"></div></div>
+      <div class="chart" id="chart2c"><div class="cursor"></div></div>
+      <div class="chart" id="chart2d"><div class="cursor"></div></div>
+      <div class="readout" id="read2"></div>
+    </div>
+    <div class="panel"><p class="vnote"><span><b>Instrument stack.</b> Four thin tracks —
+      speed, elevation, power (regen dips below zero), battery — sharing one cursor.
+      Most data-dense; reads like a gauge cluster. Best as a Trips → detail
+      drill-down.</span></p></div>
+  </section>
+
+  <!-- V3 -->
+  <section class="variant" id="v3">
+    <div class="panel">
+      <div class="mapbox">
+        <div id="map3" style="height:418px"></div>
+        <div class="floatchip" id="chip3"><div class="big">—</div><div class="sub">—</div></div>
+      </div>
+      <div class="toolbar">
+        <span class="kicker">Route colored by efficiency · terrain below</span>
+        <button type="button" class="btn accent" data-play="3">▶ Play</button>
+      </div>
+      <div class="chart" id="chart3"><div class="cursor"></div></div>
+      <div class="legend">
+        <span><i style="background:var(--ev)"></i>great</span>
+        <span><i style="background:var(--warn)"></i>average</span>
+        <span><i style="background:var(--bad)"></i>poor</span>
+        <span><i style="background:#8a8a96"></i>engine</span>
+        <span><i style="background:var(--terrain)"></i>elevation</span>
+      </div>
+    </div>
+    <div class="panel"><p class="vnote"><span><b>Map-first.</b> The route carries the story —
+      colored green→red by efficiency. The scrub track is the terrain profile; the
+      readout floats as a glass chip. Most visual, least busy.</span></p></div>
+  </section>
+
+  <!-- V4 -->
+  <section class="variant" id="v4">
+    <div class="panel">
+      <div class="headline">
+        <span class="kicker">Insights · all drives · efficiency vs speed</span>
+        <h2 id="v4head">—</h2>
+      </div>
+      <div class="chart" id="chart4" style="cursor:default"></div>
+      <div class="legend">
+        <span><i style="background:var(--pwr)"></i>downhill</span>
+        <span><i style="background:var(--ev)"></i>flat</span>
+        <span><i style="background:var(--bad)"></i>uphill</span>
+      </div>
+      <div class="statrow" id="v4stats"></div>
+    </div>
+    <div class="panel"><p class="vnote"><span><b>Insights scatter.</b> Pools every sample
+      from <i>all</i> drives — efficiency vs speed, each dot colored by grade. The
+      efficient outliers are blue (downhill); the trend curve shows the real sweet spot.
+      Belongs in the Insights tab — the drive picker doesn't apply here.</span></p></div>
+  </section>
+</div>
+
+<script>
+"use strict";
+(function () {
+  // ---- real ~23 mi sample route geometry: [secondsFromStart, lat, lng] ----
+  const SAMPLE_ROUTE = [[0,32.80131,-116.9513],[29,32.80324,-116.95098],[58,32.80344,-116.95173],[86,32.80321,-116.95898],[112,32.80314,-116.96924],[139,32.79793,-116.97686],[167,32.78853,-116.97791],[194,32.78066,-116.9825],[220,32.77918,-116.99186],[247,32.77833,-117.00258],[273,32.77462,-117.01211],[299,32.77102,-117.02164],[326,32.77389,-117.03147],[352,32.77268,-117.04105],[378,32.77609,-117.0498],[405,32.77837,-117.05984],[431,32.77939,-117.06921],[457,32.7801,-117.07931],[483,32.78089,-117.0893],[511,32.77943,-117.09954],[537,32.77872,-117.10943],[563,32.77788,-117.1194],[590,32.77325,-117.12789],[616,32.77062,-117.13732],[642,32.76709,-117.14734],[669,32.7644,-117.15821],[695,32.76095,-117.16827],[721,32.75943,-117.17893],[748,32.76013,-117.18982],[774,32.76021,-117.19997],[800,32.75575,-117.20492],[826,32.75121,-117.20511],[852,32.74743,-117.2089],[878,32.74532,-117.21175],[905,32.74297,-117.21367],[934,32.73984,-117.21632],[961,32.73651,-117.21916],[989,32.73247,-117.22261],[1017,32.72903,-117.22553],[1045,32.7292,-117.22551],[1074,32.72893,-117.22561],[1103,32.72679,-117.22744],[1130,32.72613,-117.228],[1158,32.72348,-117.23026],[1188,32.72314,-117.23053],[1217,32.72154,-117.23188],[1245,32.7204,-117.23277],[1273,32.71904,-117.23456],[1301,32.71875,-117.23497],[1329,32.71858,-117.2352],[1358,32.71839,-117.23547],[1386,32.71828,-117.23569],[1415,32.71818,-117.2357],[1444,32.71791,-117.23587],[1473,32.71751,-117.23595],[1501,32.71704,-117.23612],[1530,32.71623,-117.23621],[1557,32.71601,-117.23646],[1585,32.71559,-117.23663],[1613,32.71527,-117.23675],[1640,32.71482,-117.23691],[1667,32.71444,-117.23707],[1693,32.71383,-117.23737],[1721,32.71325,-117.23766],[1747,32.71302,-117.23772],[1773,32.71254,-117.23785],[1801,32.71167,-117.2381],[1829,32.71131,-117.23819],[1857,32.71064,-117.23836],[1885,32.71034,-117.23846],[1913,32.70995,-117.23854],[1941,32.70949,-117.23866],[1971,32.70894,-117.2388],[1999,32.70801,-117.23906],[2027,32.70724,-117.23926],[2056,32.70754,-117.23883],[2085,32.70661,-117.23928],[2112,32.70621,-117.23918],[2140,32.70603,-117.2382],[2168,32.70531,-117.23915],[2194,32.705,-117.23913],[2221,32.70452,-117.23904],[2249,32.70137,-117.23966],[2276,32.69781,-117.24032],[2303,32.69418,-117.24076],[2331,32.69063,-117.23976],[2360,32.68805,-117.23964],[2389,32.68648,-117.23939],[2417,32.6851,-117.23849],[2445,32.68422,-117.23824],[2474,32.68409,-117.23972],[2503,32.68402,-117.23975],[2529,32.68412,-117.2397]];
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function haversine(la1, lo1, la2, lo2) {
+    const R = 6371000, dLa = (la2 - la1) * Math.PI / 180, dLo = (lo2 - lo1) * Math.PI / 180;
+    const a = Math.sin(dLa / 2) ** 2 +
+      Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) * Math.sin(dLo / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  // ---- master route + modeled elevation (El Cajon ~150 m down to the coast) ----
+  const MASTER = (function () {
+    const pts = SAMPLE_ROUTE.map(([t, lat, lng]) => ({ t: t, lat: lat, lng: lng }));
+    let dm = 0; pts[0].distM = 0;
+    for (let i = 1; i < pts.length; i++) {
+      dm += haversine(pts[i - 1].lat, pts[i - 1].lng, pts[i].lat, pts[i].lng);
+      pts[i].distM = dm;
+    }
+    pts.forEach((p) => {
+      const f = p.distM / dm;                              // 0 = El Cajon, 1 = coast
+      const base = 150 - 142 * f;                          // overall descent
+      const hill = 70 * Math.exp(-Math.pow((f - 0.46) / 0.085, 2));  // a climb mid-route
+      const roll = 7 * Math.sin(f * 19);                   // gentle rolling terrain
+      p.elev = base + hill + roll;                         // metres
+    });
+    return pts;
+  })();
+
+  // ---- build one drive (a slice of MASTER) into a full per-sample dataset ----
+  function buildDrive(slice, opt) {
+    const rng = mulberry32(opt.seed);
+    const n = slice.length;
+    const d = slice.map((s) => ({ lat: s.lat, lng: s.lng, elev: s.elev }));
+    let tt = 0; d[0].t = 0; d[0].distM = 0;
+    for (let i = 1; i < n; i++) {
+      const dtRaw = Math.max(1, slice[i].t - slice[i - 1].t);
+      tt += dtRaw * opt.timeScale;
+      d[i].t = tt;
+      d[i].distM = d[i - 1].distM + haversine(d[i - 1].lat, d[i - 1].lng, d[i].lat, d[i].lng);
+    }
+    d[0].vRaw = 0;
+    for (let i = 1; i < n; i++) {
+      d[i].vRaw = haversine(d[i - 1].lat, d[i - 1].lng, d[i].lat, d[i].lng) /
+        Math.max(1, d[i].t - d[i - 1].t);
+    }
+    d[0].vRaw = n > 1 ? d[1].vRaw : 0;
+    for (let i = 0; i < n; i++) {           // smooth GPS speed
+      let s = 0, c = 0;
+      for (let k = -2; k <= 2; k++) { const j = i + k; if (j >= 0 && j < n) { s += d[j].vRaw; c++; } }
+      d[i].v = s / c;
+    }
+    for (let i = 0; i < n; i++) {           // grade from elevation
+      if (i === 0) { d[i].grade = 0; continue; }
+      const horiz = Math.max(6, haversine(d[i - 1].lat, d[i - 1].lng, d[i].lat, d[i].lng));
+      d[i].grade = clamp((d[i].elev - d[i - 1].elev) / horiz, -0.13, 0.13);
+    }
+    const mass = 1720, g = 9.81, Crr = 0.011, kAero = 0.5 * 1.2 * 0.28 * 2.2;
+    let cumWh = 0;
+    for (let i = 0; i < n; i++) {
+      const dt = i > 0 ? Math.max(1, d[i].t - d[i - 1].t) : 1;
+      const a = i > 0 ? (d[i].v - d[i - 1].v) / dt : 0;
+      const v = d[i].v;
+      const fTot = Crr * mass * g + kAero * v * v + mass * g * d[i].grade + mass * a;
+      let pW = fTot * v;
+      pW = pW > 0 ? pW / 0.86 : pW * 0.55;   // drivetrain loss / regen capture
+      pW += opt.accW + (rng() - 0.5) * 240;  // accessory load + sensor noise
+      let kW = clamp(pW / 1000, -30, 80);
+      if (v < 0.5) kW = opt.accW / 1000;
+      d[i].kW = kW;
+      cumWh += kW * 1000 * dt / 3600;
+      d[i].cumWh = cumWh;
+    }
+    for (let i = 0; i < n; i++) {
+      const soc = Math.max(17, opt.startSoc - 100 * (d[i].cumWh / 1000) / 14);
+      d[i].soc = soc;
+      d[i].mode = soc <= 20.5 ? "gas" : "ev";
+      const mph = d[i].v * 2.23694;
+      d[i].mph = mph;
+      d[i].distMi = d[i].distM / 1609.34;
+      d[i].whmiInst = mph > 4 ? d[i].kW * 1000 / mph : NaN;
+    }
+    const winAvg = (i, half) => {
+      let s = 0, c = 0;
+      for (let k = -half; k <= half; k++) {
+        const j = i + k;
+        if (j >= 0 && j < n && isFinite(d[j].whmiInst)) { s += d[j].whmiInst; c++; }
+      }
+      return c ? s / c : 260;
+    };
+    for (let i = 0; i < n; i++) {
+      d[i].whmi = Math.max(60, winAvg(i, 8));            // wide window: calm trend line
+      d[i].mikwh = clamp(1000 / d[i].whmi, 0.8, 6.5);
+      d[i].mikwhRaw = clamp(1000 / Math.max(55, winAvg(i, 2)), 0.6, 7.6);  // light window: scatter spread
+    }
+    const totalM = d[n - 1].distM || 1;
+    for (let i = 0; i < n; i++) d[i].frac = d[i].distM / totalM;
+    const gasIdx = d.findIndex((p) => p.mode === "gas");
+    const evPts = d.filter((p) => p.mode === "ev" && p.mph > 6);
+    const elevs = d.map((p) => p.elev);
+    return {
+      data: d, label: opt.label, date: opt.date,
+      totalMi: d[n - 1].distMi,
+      maxMph: Math.max.apply(null, d.map((p) => p.mph)),
+      gasFrac: gasIdx < 0 ? 1 : d[gasIdx].frac,
+      evEnd: gasIdx < 0 ? n : gasIdx + 1,
+      avgEff: evPts.length ? evPts.reduce((s, p) => s + p.mikwh, 0) / evPts.length : 0,
+      evPct: Math.round(100 * d.filter((p) => p.mode === "ev").length / n),
+      elevMin: Math.min.apply(null, elevs),
+      elevMax: Math.max.apply(null, elevs)
+    };
+  }
+
+  const DRIVES = [
+    buildDrive(MASTER.slice(0, 91),  { label: "Today",     date: "7:48 AM",  timeScale: 1.00, accW: 340, startSoc: 88, seed: 101 }),
+    buildDrive(MASTER.slice(20, 57), { label: "Yesterday", date: "5:30 PM",  timeScale: 1.00, accW: 760, startSoc: 27, seed: 202 }),
+    buildDrive(MASTER.slice(6, 43),  { label: "Sat",       date: "9:15 AM",  timeScale: 0.90, accW: 400, startSoc: 73, seed: 303 }),
+    buildDrive(MASTER.slice(58, 91), { label: "Tue",       date: "12:40 PM", timeScale: 1.22, accW: 360, startSoc: 52, seed: 404 })
+  ];
+  let current = 0;
+  const D = () => DRIVES[current];
+
+  function effColor(mikwh, mode) {
+    if (mode === "gas") return "#8a8a96";
+    if (mikwh >= 4) return "#b8e63b";
+    if (mikwh >= 2.7) return "#ffb84a";
+    return "#ff6b5f";
+  }
+  function gradeColor(g) {
+    if (g <= -0.006) return "#5cc8ff";
+    if (g >= 0.006) return "#ff6b5f";
+    return "#b8e63b";
+  }
+  function fmtGrade(g) {
+    const ar = g <= -0.004 ? "↓" : (g >= 0.004 ? "↑" : "·");
+    return ar + Math.abs(g * 100).toFixed(0) + "%";
+  }
+  function sampleAt(frac) {
+    const d = D().data, m = d.length;
+    frac = clamp(frac, 0, 1);
+    let i = 0;
+    while (i < m - 1 && d[i + 1].frac < frac) i++;
+    const a = d[i], b = d[Math.min(m - 1, i + 1)];
+    const span = (b.frac - a.frac) || 1;
+    const t = clamp((frac - a.frac) / span, 0, 1);
+    const near = t < 0.5 ? a : b;
+    return {
+      lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t,
+      mph: near.mph, kW: near.kW, soc: near.soc, mikwh: near.mikwh,
+      mode: near.mode, grade: near.grade, elev: near.elev,
+      distMi: frac * D().totalMi
+    };
+  }
+
+  // ---- SVG helpers (rendered at real pixel width) ----
+  function yOf(v, lo, hi, h, padT, padB) {
+    return padT + (1 - (v - lo) / (hi - lo)) * (h - padT - padB);
+  }
+  function linePts(arr, key, lo, hi, w, h, padT, padB) {
+    return arr.map((p, i) => {
+      return (i ? "L" : "M") + (p.frac * w).toFixed(1) + " " +
+        yOf(p[key], lo, hi, h, padT, padB).toFixed(1);
+    }).join(" ");
+  }
+  function gasRect(w, h) {
+    if (D().gasFrac >= 1) return "";
+    const x = D().gasFrac * w;
+    return '<rect x="' + x.toFixed(1) + '" y="0" width="' + (w - x).toFixed(1) +
+      '" height="' + h + '" fill="rgba(164,140,255,0.13)"/>';
+  }
+  function svg(w, h, inner) {
+    return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' + inner + '</svg>';
+  }
+  function trackLabel(s) {
+    return '<text x="8" y="14" fill="#8b8c98" font-size="9" font-weight="700" ' +
+      'font-family="ui-monospace,monospace" letter-spacing="0.08em">' + s + '</text>';
+  }
+  // a terrain area for the elevation profile
+  function terrainArea(w, h, padT, padB) {
+    const dr = D(), pad = (dr.elevMax - dr.elevMin) * 0.12 + 4;
+    const lo = dr.elevMin - pad, hi = dr.elevMax + pad;
+    const line = linePts(dr.data, "elev", lo, hi, w, h, padT, padB);
+    return { line: line, area: line + " L" + w + " " + (h - padB) + " L0 " + (h - padB) + " Z" };
+  }
+
+  // chart 1 — terrain ground + speed line + efficiency line
+  function drawCombo(w) {
+    const dr = D(), h = 150, padT = 12, padB = 10;
+    const t = terrainArea(w, h, padT + 40, padB);   // terrain compressed into lower band
+    const speed = linePts(dr.data, "mph", 0, dr.maxMph * 1.1, w, h, padT, padB);
+    const eff = linePts(dr.data.slice(0, dr.evEnd), "mikwh", 0, 7, w, h, padT, padB);
+    return svg(w, h,
+      gasRect(w, h) +
+      '<path d="' + t.area + '" fill="rgba(139,148,173,0.16)"/>' +
+      '<path d="' + t.line + '" fill="none" stroke="rgba(139,148,173,0.5)" stroke-width="1.3"/>' +
+      '<path d="' + speed + '" fill="none" stroke="#ff7a45" stroke-width="2.2"/>' +
+      '<path d="' + eff + '" fill="none" stroke="#b8e63b" stroke-width="2.4" stroke-linejoin="round"/>');
+  }
+
+  // chart 2 — one stacked track
+  function drawTrack(w, key, lo, hi, color, fill, zero, label, terrain) {
+    const h = 58, padT = 9, padB = 9;
+    let inner = gasRect(w, h);
+    if (terrain) {
+      const t = terrainArea(w, h, padT, padB);
+      inner += '<path d="' + t.area + '" fill="' + fill + '"/>' +
+        '<path d="' + t.line + '" fill="none" stroke="' + color + '" stroke-width="1.8"/>';
+    } else {
+      if (zero) {
+        const zy = yOf(0, lo, hi, h, padT, padB);
+        inner += '<line x1="0" y1="' + zy.toFixed(1) + '" x2="' + w + '" y2="' + zy.toFixed(1) +
+          '" stroke="rgba(245,243,236,0.22)" stroke-width="1" stroke-dasharray="3 3"/>';
+      }
+      const base = zero ? yOf(0, lo, hi, h, padT, padB) : (h - padB);
+      const line = linePts(D().data, key, lo, hi, w, h, padT, padB);
+      inner += '<path d="' + line + " L" + w + " " + base + " L0 " + base + ' Z" fill="' + fill + '"/>' +
+        '<path d="' + line + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round"/>';
+    }
+    return svg(w, h, inner + trackLabel(label));
+  }
+
+  // chart 3 — thin terrain scrub strip
+  function drawStrip(w) {
+    const h = 50, padT = 8, padB = 7;
+    const t = terrainArea(w, h, padT, padB);
+    return svg(w, h,
+      gasRect(w, h) +
+      '<path d="' + t.area + '" fill="rgba(139,148,173,0.2)"/>' +
+      '<path d="' + t.line + '" fill="none" stroke="rgba(139,148,173,0.7)" stroke-width="1.5"/>' +
+      trackLabel("ELEVATION"));
+  }
+
+  // chart 4 — efficiency vs speed scatter, pooled across all drives, colored by grade
+  function drawScatter(w) {
+    const h = 290, padL = 40, padR = 12, padT = 14, padB = 30;
+    const xOf = (mph) => padL + (mph / 75) * (w - padL - padR);
+    const yS = (e) => padT + (1 - e / 8) * (h - padT - padB);
+    let inner = "";
+    for (let gx = 0; gx <= 75; gx += 15) {
+      inner += '<line x1="' + xOf(gx) + '" y1="' + padT + '" x2="' + xOf(gx) + '" y2="' +
+        (h - padB) + '" stroke="rgba(255,255,255,0.06)"/>' +
+        '<text x="' + xOf(gx) + '" y="' + (h - padB + 16) + '" fill="#747582" font-size="9" ' +
+        'font-family="ui-monospace,monospace" text-anchor="middle">' + gx + '</text>';
+    }
+    for (let gy = 0; gy <= 8; gy += 2) {
+      inner += '<line x1="' + padL + '" y1="' + yS(gy) + '" x2="' + (w - padR) + '" y2="' +
+        yS(gy) + '" stroke="rgba(255,255,255,0.06)"/>' +
+        '<text x="' + (padL - 6) + '" y="' + (yS(gy) + 3) + '" fill="#747582" font-size="9" ' +
+        'font-family="ui-monospace,monospace" text-anchor="end">' + gy + '</text>';
+    }
+    const bins = [];
+    DRIVES.forEach((dr) => dr.data.forEach((p) => {
+      if (p.mph < 10 || p.mode === "gas") return;
+      inner += '<circle cx="' + xOf(p.mph).toFixed(1) + '" cy="' + yS(p.mikwhRaw).toFixed(1) +
+        '" r="3.2" fill="' + gradeColor(p.grade) + '" fill-opacity="0.5"/>';
+      const b = Math.floor(p.mph / 10);
+      (bins[b] = bins[b] || []).push(p.mikwhRaw);
+    }));
+    let trend = "", best = { e: 0, mph: 0 }, started = false;
+    bins.forEach((arr, b) => {
+      if (!arr || arr.length < 4) return;
+      const mph = b * 10 + 5, e = arr.reduce((s, x) => s + x, 0) / arr.length;
+      trend += (started ? "L" : "M") + xOf(mph).toFixed(1) + " " + yS(e).toFixed(1) + " ";
+      started = true;
+      if (e > best.e) best = { e: e, mph: mph };
+    });
+    inner += '<path d="' + trend + '" fill="none" stroke="#ff7a45" stroke-width="2.5" ' +
+      'stroke-linejoin="round"/>' +
+      '<text x="' + (w - padR) + '" y="' + (h - 4) + '" fill="#747582" font-size="9" ' +
+      'font-family="ui-monospace,monospace" text-anchor="end">speed (mph) →</text>';
+    return { svg: svg(w, h, inner), best: best };
+  }
+
+  // ---- readout chips ----
+  function chip(k, v, dot) {
+    return '<div><span class="kicker">' + k + '</span><strong>' +
+      (dot ? '<u style="background:' + dot + '"></u> ' : "") + v + '</strong></div>';
+  }
+  function fillReadout(elId, s) {
+    document.getElementById(elId).innerHTML =
+      chip("Dist mi", s.distMi.toFixed(1)) +
+      chip("Speed", Math.round(s.mph)) +
+      chip("Grade", fmtGrade(s.grade)) +
+      chip("mi/kWh", s.mode === "gas" ? "gas" : s.mikwh.toFixed(1),
+        effColor(s.mikwh, s.mode)) +
+      chip("Power kW", s.kW.toFixed(1)) +
+      chip("Batt", Math.round(s.soc) + "%", "#a48cff");
+  }
+
+  // ---- Leaflet map ----
+  function makeMap(id) {
+    // setView is required: an unviewed map isn't "loaded", so adding vector
+    // layers throws before drawRoute's fitBounds runs. fitBounds overrides this.
+    const map = L.map(id, { zoomControl: false, attributionControl: true })
+      .setView([32.74, -117.12], 10);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      { subdomains: "abcd", maxZoom: 19, attribution: "&copy; OpenStreetMap, &copy; CARTO" }).addTo(map);
+    const routeLayer = L.layerGroup().addTo(map);
+    const marker = L.circleMarker([0, 0],
+      { radius: 8, color: "#fff", weight: 3, fillColor: "#ff7a45", fillOpacity: 1 }).addTo(map);
+    const mo = { map: map, routeLayer: routeLayer, marker: marker };
+    map.on("click", (e) => {
+      const d = D().data;
+      let bi = 0, bd = Infinity;
+      d.forEach((p, i) => {
+        const dd = (p.lat - e.latlng.lat) ** 2 + (p.lng - e.latlng.lng) ** 2;
+        if (dd < bd) { bd = dd; bi = i; }
+      });
+      setScrub(d[bi].frac);
+    });
+    return mo;
+  }
+  function drawRoute(mo) {
+    const d = D().data, ll = d.map((p) => [p.lat, p.lng]);
+    mo.routeLayer.clearLayers();
+    for (let i = 1; i < d.length; i++) {
+      L.polyline([ll[i - 1], ll[i]],
+        { color: effColor(d[i].mikwh, d[i].mode), weight: 4.5, opacity: 0.95 }).addTo(mo.routeLayer);
+    }
+    L.circleMarker(ll[0], { radius: 5, color: "#fff", weight: 2, fillColor: "#b8e63b", fillOpacity: 1 }).addTo(mo.routeLayer);
+    L.circleMarker(ll[ll.length - 1], { radius: 5, color: "#fff", weight: 2, fillColor: "#ff6b5f", fillOpacity: 1 }).addTo(mo.routeLayer);
+    mo.map.fitBounds(L.latLngBounds(ll), { padding: [26, 26] });
+    mo.marker.setLatLng(ll[0]).bringToFront();
+  }
+
+  // ---- variants ----
+  const V = {};
+
+  function buildV1() {
+    const mo = makeMap("map1");
+    V[1] = {
+      map: mo, charts: [chartRef("chart1")],
+      render() { paint(this.charts[0], drawCombo(this.charts[0].el.clientWidth)); },
+      setCursor(frac) {
+        const s = sampleAt(frac);
+        this.map.marker.setLatLng([s.lat, s.lng]);
+        this.charts[0].cur.style.left = (frac * 100) + "%";
+        fillReadout("read1", s);
+      }
+    };
+  }
+  function buildV2() {
+    const mo = makeMap("map2");
+    V[2] = {
+      map: mo,
+      charts: ["chart2a", "chart2b", "chart2c", "chart2d"].map(chartRef),
+      render() {
+        const w = this.charts[0].el.clientWidth, dr = D();
+        paint(this.charts[0], drawTrack(w, "mph", 0, dr.maxMph * 1.1, "#ff7a45", "rgba(255,122,69,0.16)", false, "SPEED MPH", false));
+        paint(this.charts[1], drawTrack(w, "elev", 0, 0, "rgba(139,148,173,0.85)", "rgba(139,148,173,0.18)", false, "ELEVATION", true));
+        paint(this.charts[2], drawTrack(w, "kW", -30, 80, "#5cc8ff", "rgba(92,200,255,0.16)", true, "POWER KW", false));
+        paint(this.charts[3], drawTrack(w, "soc", 10, 95, "#a48cff", "rgba(164,140,255,0.16)", false, "BATTERY %", false));
+      },
+      setCursor(frac) {
+        const s = sampleAt(frac);
+        this.map.marker.setLatLng([s.lat, s.lng]);
+        this.charts.forEach((c) => { c.cur.style.left = (frac * 100) + "%"; });
+        fillReadout("read2", s);
+      }
+    };
+  }
+  function buildV3() {
+    const mo = makeMap("map3");
+    V[3] = {
+      map: mo, charts: [chartRef("chart3")],
+      render() { paint(this.charts[0], drawStrip(this.charts[0].el.clientWidth)); },
+      setCursor(frac) {
+        const s = sampleAt(frac);
+        this.map.marker.setLatLng([s.lat, s.lng]);
+        this.charts[0].cur.style.left = (frac * 100) + "%";
+        const chip = document.getElementById("chip3");
+        const eff = s.mode === "gas" ? "engine" : s.mikwh.toFixed(1) + " mi/kWh";
+        chip.querySelector(".big").textContent = Math.round(s.mph) + " mph";
+        chip.querySelector(".sub").textContent =
+          s.distMi.toFixed(1) + " mi · " + eff + " · " + fmtGrade(s.grade) +
+          " · " + Math.round(s.soc) + "%";
+      }
+    };
+  }
+  function buildV4() {
+    V[4] = {
+      charts: [chartRef("chart4")],
+      render() {
+        const r = drawScatter(this.charts[0].el.clientWidth);
+        paint(this.charts[0], r.svg);
+        document.getElementById("v4head").innerHTML =
+          "Most efficient around <b>" + Math.round(r.best.mph) + " mph</b> — about " +
+          r.best.e.toFixed(1) + " mi/kWh across all drives.";
+        const hwy = [], down = [];
+        DRIVES.forEach((dr) => dr.data.forEach((p) => {
+          if (p.mode === "gas" || p.mph < 10) return;
+          if (p.mph > 55) hwy.push(p.mikwh);
+          if (p.grade <= -0.012) down.push(p.mikwh);
+        }));
+        const avg = (a) => a.length ? (a.reduce((s, x) => s + x, 0) / a.length).toFixed(1) : "—";
+        document.getElementById("v4stats").innerHTML =
+          '<div><span class="kicker">Sweet spot</span><strong>' + Math.round(r.best.mph) + ' mph</strong></div>' +
+          '<div><span class="kicker">Highway avg</span><strong>' + avg(hwy) + ' mi/kWh</strong></div>' +
+          '<div><span class="kicker">Downhill avg</span><strong>' + avg(down) + ' mi/kWh</strong></div>';
+      },
+      setCursor() {}
+    };
+  }
+  const BUILDERS = { 1: buildV1, 2: buildV2, 3: buildV3, 4: buildV4 };
+
+  function chartRef(id) {
+    const el = document.getElementById(id);
+    return { el: el, cur: el.querySelector(".cursor") };
+  }
+  function paint(c, markup) {
+    const old = c.el.querySelector("svg");
+    if (old) old.remove();
+    c.el.insertAdjacentHTML("afterbegin", markup);
+  }
+
+  let active = 0, anim = null;
+
+  function setScrub(frac) {
+    const v = V[active];
+    if (!v) return;
+    v.frac = clamp(frac, 0, 1);
+    v.setCursor(v.frac);
+  }
+  function bindChart(c) {
+    if (!c.cur) return;
+    const move = (ev) => {
+      const r = c.el.getBoundingClientRect();
+      setScrub((ev.clientX - r.left) / r.width);
+    };
+    c.el.addEventListener("pointerdown", (ev) => { c.el.setPointerCapture(ev.pointerId); move(ev); });
+    c.el.addEventListener("pointermove", (ev) => { if (ev.buttons) move(ev); });
+  }
+  function refresh() {
+    const v = V[active];
+    requestAnimationFrame(() => {
+      if (v.map) { v.map.map.invalidateSize(); drawRoute(v.map); }
+      v.render();
+      setScrub(v.frac == null ? 0.5 : v.frac);
+    });
+  }
+  function activate(n) {
+    if (anim) { cancelAnimationFrame(anim); anim = null; }
+    active = n;
+    document.querySelectorAll(".variant").forEach((s) => s.classList.remove("on"));
+    document.querySelectorAll(".switch button").forEach((b) => b.classList.toggle("on", +b.dataset.v === n));
+    document.getElementById("v" + n).classList.add("on");
+    if (!V[n]) { BUILDERS[n](); V[n].charts.forEach(bindChart); }
+    refresh();
+  }
+  function setDrive(i) {
+    if (anim) { cancelAnimationFrame(anim); anim = null; }
+    current = i;
+    renderPicker();
+    if (V[active]) { V[active].frac = 0; refresh(); }
+  }
+  function play(n) {
+    if (n !== active) return;
+    if (anim) { cancelAnimationFrame(anim); anim = null; return; }
+    const t0 = performance.now(), dur = 11000;
+    const step = (now) => {
+      const f = (now - t0) / dur;
+      if (f >= 1) { setScrub(1); anim = null; return; }
+      setScrub(f);
+      anim = requestAnimationFrame(step);
+    };
+    anim = requestAnimationFrame(step);
+  }
+
+  function renderPicker() {
+    document.getElementById("drives").innerHTML = DRIVES.map((dr, i) => {
+      return '<button class="drive ' + (i === current ? "on" : "") + '" data-d="' + i + '">' +
+        '<span class="dl">' + dr.label + '</span><span class="dd">' + dr.date + '</span>' +
+        '<span class="dm"><b>' + dr.totalMi.toFixed(1) + ' mi</b> · ' +
+        '<u style="background:' + effColor(dr.avgEff, "ev") + '"></u>' +
+        dr.avgEff.toFixed(1) + ' mi/kWh</span></button>';
+    }).join("");
+  }
+
+  document.getElementById("switch").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (b) activate(+b.dataset.v);
+  });
+  document.getElementById("drives").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (b) setDrive(+b.dataset.d);
+  });
+  document.querySelectorAll("[data-play]").forEach((b) => {
+    b.addEventListener("click", () => play(+b.dataset.play));
+  });
+  let rt = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(rt);
+    rt = setTimeout(() => { if (V[active]) { V[active].render(); setScrub(V[active].frac || 0); } }, 150);
+  });
+
+  renderPicker();
+  activate(1);
+})();
+</script>
+</body>
+</html>

@@ -7,7 +7,31 @@
   const el = VD.el;
 
   function setStorage(payload) {
-    state.storage = VD.parsePayload(payload, {});
+    const parsed = VD.parsePayload(payload, {});
+    const newRoutes =
+      parsed && Array.isArray(parsed.recentRoutes) ? parsed.recentRoutes : [];
+    // First-launch fallback: until the user has logged a real OBD drive,
+    // populate the Map tab with the synthetic sample drive so the scrubber,
+    // efficiency-colored route, drive picker, and Insights scatter all show
+    // a populated UI instead of an empty state.
+    //
+    // The bridge re-pushes storage on every refresh, so we also protect the
+    // loaded sample against subsequent empty pushes — otherwise the next
+    // publishStorageSummary call wipes the sample back to empty. Real data
+    // (newRoutes.length > 0) always wins and clears the flag.
+    if (newRoutes.length > 0) {
+      state._mapSampleLoaded = false;
+    } else if (state._mapSampleLoaded) {
+      // We're already showing the sample, incoming payload has no real
+      // routes — preserve the sample.
+      return;
+    }
+    state.storage = parsed;
+    if (!state._mapSampleLoaded && newRoutes.length === 0 && typeof VD.loadSampleData === "function") {
+      state._mapSampleLoaded = true;
+      VD.loadSampleData();
+      return;
+    }
     updateStorageUi();
     updateReviewUi();
     renderRealV2Ui();
@@ -497,6 +521,7 @@
       state.insights = VD.parsePayload(bridge.getInsights(), {});
     }
     renderInsightStats();
+    renderInsightScatter();
   }
 
   function renderInsightStats() {
@@ -509,6 +534,206 @@
     VD.setText("insightLongest", Number(insights.longestTripMeters) > 0 ? VD.formatDistance(Number(insights.longestTripMeters)) : "--");
     VD.setText("insightGpsTrips", trips ? `${Number(insights.gpsTripCount || 0)}/${trips}` : "--");
   }
+
+  // ----- Efficiency vs Speed scatter (Insights tab) -------------------------
+  // Pools per-point efficiency from every recent route. Efficiency is derived
+  // by time-joining the route's `powerTrack` onto its points and computing
+  // mi/kWh with a +/-8-sample window. The card stays hidden until enough
+  // samples carry derived eff (which depends on the OBD loop having captured
+  // battery current via the Volt 7E1 PIDs).
+
+  const haversineMetersJsLocal = (lat1, lng1, lat2, lng2) => {
+    const r = 6371000;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) ** 2;
+    return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  function enrichRouteEff(route) {
+    if (!route || route._effDone) return;
+    route._effDone = true;
+    const pts = route.points || [];
+    const track = (route.powerTrack || []).filter((s) =>
+      Number.isFinite(Number(s.powerKw))
+    );
+    if (pts.length < 2 || track.length < 2) return;
+    const powerAt = (atMs) => {
+      if (atMs <= track[0].atMs) return Number(track[0].powerKw);
+      const last = track[track.length - 1];
+      if (atMs >= last.atMs) return Number(last.powerKw);
+      for (let i = 1; i < track.length; i += 1) {
+        if (track[i].atMs >= atMs) {
+          const a = track[i - 1];
+          const b = track[i];
+          const t = (atMs - a.atMs) / ((b.atMs - a.atMs) || 1);
+          return Number(a.powerKw) + (Number(b.powerKw) - Number(a.powerKw)) * t;
+        }
+      }
+      return Number(last.powerKw);
+    };
+    const mphArr = pts.map((p, i) => {
+      let mps = Number(p.speedMps);
+      if (!Number.isFinite(mps) || mps < 0) {
+        const a = pts[Math.max(0, i - 1)];
+        const b = pts[Math.min(pts.length - 1, i + 1)];
+        const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
+        mps = haversineMetersJsLocal(a.lat, a.lng, b.lat, b.lng) / dt;
+      }
+      return Math.max(0, mps) * 2.2369363;
+    });
+    const whmiInst = pts.map((p, i) => {
+      if (mphArr[i] <= 4) return NaN;
+      const kW = powerAt(Number(p.atMs));
+      if (!Number.isFinite(kW)) return NaN;
+      return (kW * 1000) / mphArr[i];
+    });
+    for (let i = 0; i < pts.length; i += 1) {
+      let s = 0;
+      let c = 0;
+      for (let k = -8; k <= 8; k += 1) {
+        const j = i + k;
+        if (j >= 0 && j < pts.length && Number.isFinite(whmiInst[j])) {
+          s += whmiInst[j];
+          c += 1;
+        }
+      }
+      if (!c) {
+        pts[i].eff = null;
+        continue;
+      }
+      const whmi = Math.max(60, s / c);
+      pts[i].eff = Math.max(0.8, Math.min(6.5, 1000 / whmi));
+    }
+  }
+
+  function renderInsightScatter() {
+    const card = el("effScatterCard");
+    const chart = el("effScatter");
+    const head = el("effScatterHead");
+    const statsEl = el("effScatterStats");
+    if (!card || !chart) return;
+    const routes =
+      state.storage && Array.isArray(state.storage.recentRoutes)
+        ? state.storage.recentRoutes
+        : [];
+    const pool = [];
+    routes.forEach((route) => {
+      enrichRouteEff(route);
+      const pts = (route && route.points) || [];
+      for (let i = 0; i < pts.length; i += 1) {
+        const eff = Number(pts[i].eff);
+        if (!Number.isFinite(eff)) continue;
+        let mps = Number(pts[i].speedMps);
+        if (!Number.isFinite(mps) || mps < 0) {
+          const a = pts[Math.max(0, i - 1)];
+          const b = pts[Math.min(pts.length - 1, i + 1)];
+          const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
+          mps = haversineMetersJsLocal(a.lat, a.lng, b.lat, b.lng) / dt;
+        }
+        const mph = Math.max(0, mps) * 2.2369363;
+        if (mph < 10) continue;
+        let grade = 0;
+        if (
+          i > 0 &&
+          Number.isFinite(Number(pts[i - 1].altM)) &&
+          Number.isFinite(Number(pts[i].altM))
+        ) {
+          const horiz = Math.max(
+            8,
+            haversineMetersJsLocal(
+              pts[i - 1].lat,
+              pts[i - 1].lng,
+              pts[i].lat,
+              pts[i].lng
+            )
+          );
+          grade = Math.max(
+            -0.13,
+            Math.min(0.13, (Number(pts[i].altM) - Number(pts[i - 1].altM)) / horiz)
+          );
+        }
+        pool.push({ mph, eff, grade });
+      }
+    });
+    if (pool.length < 6) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    const w = Math.max(300, chart.clientWidth || 360);
+    const h = 280;
+    const padL = 38;
+    const padR = 12;
+    const padT = 14;
+    const padB = 28;
+    const xOf = (mph) => padL + (mph / 75) * (w - padL - padR);
+    const yS = (e) => padT + (1 - e / 7) * (h - padT - padB);
+    const gColor = (g) =>
+      g <= -0.006 ? "#5cc8ff" : g >= 0.006 ? "#ff6b5f" : "#b8e63b";
+    let inner = "";
+    for (let gx = 0; gx <= 75; gx += 15) {
+      inner +=
+        `<line x1="${xOf(gx)}" y1="${padT}" x2="${xOf(gx)}" y2="${h - padB}" stroke="rgba(255,255,255,0.06)"/>` +
+        `<text x="${xOf(gx)}" y="${h - padB + 15}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="middle">${gx}</text>`;
+    }
+    for (let gy = 0; gy <= 7; gy += 1) {
+      inner +=
+        `<line x1="${padL}" y1="${yS(gy)}" x2="${w - padR}" y2="${yS(gy)}" stroke="rgba(255,255,255,0.06)"/>` +
+        `<text x="${padL - 6}" y="${yS(gy) + 3}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">${gy}</text>`;
+    }
+    const bins = [];
+    pool.forEach((p) => {
+      inner += `<circle cx="${xOf(p.mph).toFixed(1)}" cy="${yS(p.eff).toFixed(1)}" r="3.2" fill="${gColor(p.grade)}" fill-opacity="0.5"/>`;
+      const b = Math.floor(p.mph / 10);
+      (bins[b] = bins[b] || []).push(p.eff);
+    });
+    let trend = "";
+    let best = { e: 0, mph: 0 };
+    let started = false;
+    bins.forEach((arr, b) => {
+      if (!arr || arr.length < 3) return;
+      const mph = b * 10 + 5;
+      const e = arr.reduce((s, x) => s + x, 0) / arr.length;
+      trend += `${started ? "L" : "M"}${xOf(mph).toFixed(1)} ${yS(e).toFixed(1)} `;
+      started = true;
+      if (e > best.e) best = { e: e, mph: mph };
+    });
+    inner +=
+      `<path d="${trend}" fill="none" stroke="#ff7a45" stroke-width="2.5" stroke-linejoin="round"/>` +
+      `<text x="${w - padR}" y="${h - 4}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">speed (mph) -></text>`;
+    chart.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${inner}</svg>`;
+    if (head) {
+      head.innerHTML =
+        best.e > 0
+          ? `Most efficient around <b style="color:#b8e63b">${Math.round(best.mph)} mph</b> - about ${best.e.toFixed(1)} mi/kWh.`
+          : "Pooling samples across every logged drive.";
+    }
+    if (statsEl) {
+      const hwy = pool.filter((p) => p.mph > 55).map((p) => p.eff);
+      const down = pool.filter((p) => p.grade <= -0.012).map((p) => p.eff);
+      const avg = (a) =>
+        a.length ? (a.reduce((s, x) => s + x, 0) / a.length).toFixed(1) : "--";
+      statsEl.innerHTML =
+        `<div><span class="kicker">Samples</span><strong>${pool.length}</strong></div>` +
+        `<div><span class="kicker">Highway avg</span><strong>${avg(hwy)} mi/kWh</strong></div>` +
+        `<div><span class="kicker">Downhill avg</span><strong>${avg(down)} mi/kWh</strong></div>`;
+    }
+  }
+
+  // Re-render the scatter on viewport resize (SVG sized in real pixels).
+  let scatterResizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(scatterResizeTimer);
+    scatterResizeTimer = setTimeout(() => {
+      const card = el("effScatterCard");
+      if (card && !card.hidden) renderInsightScatter();
+    }, 160);
+  });
 
   Object.assign(VD, {
     setStorage,
@@ -524,6 +749,8 @@
     renderRealTrips,
     renderTripRow,
     loadInsights,
-    renderInsightStats
+    renderInsightStats,
+    renderInsightScatter,
+    enrichRouteEff
   });
 })();

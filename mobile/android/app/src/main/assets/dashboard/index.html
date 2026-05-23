@@ -462,18 +462,19 @@
   </section>
 </section>
 <section id="view-map" class="view" data-view="map">
+  <div
+    id="mapDriveChips"
+    class="map-drive-chips"
+    aria-label="Pick a logged drive"
+  ></div>
+
   <article id="mapCard" class="panel map-card">
-    <div id="mapFrame" class="map-frame" data-layer="routes">
+    <div id="mapFrame" class="map-frame" data-layer="eff">
       <div id="mapLeaflet" class="map-canvas"></div>
 
       <div class="map-overlay-top">
         <div class="map-layer-tabs" role="tablist" aria-label="Map layer">
-          <button
-            type="button"
-            data-map-layer="routes"
-            class="is-active"
-            aria-selected="true"
-          >
+          <button type="button" data-map-layer="routes" aria-selected="false">
             Routes
           </button>
           <button type="button" data-map-layer="heat" aria-selected="false">
@@ -482,6 +483,14 @@
           <button type="button" data-map-layer="stops" aria-selected="false">
             Stops
           </button>
+          <button
+            type="button"
+            data-map-layer="eff"
+            class="is-active"
+            aria-selected="true"
+          >
+            Eff
+          </button>
         </div>
         <div class="map-top-right">
           <button
@@ -489,10 +498,11 @@
             type="button"
             class="map-full-btn"
             aria-pressed="false"
+            aria-label="Toggle full-screen map"
+            title="Full map"
           >
-            Full map
+            &#x26F6;
           </button>
-          <div class="map-compass" aria-hidden="true">N</div>
         </div>
       </div>
 
@@ -502,6 +512,13 @@
         <span><i style="background: #7ee06a"></i>fast</span>
       </div>
 
+      <div class="map-legend map-legend-eff" aria-hidden="true">
+        <span><i style="background: #b8e63b"></i>great</span>
+        <span><i style="background: #ffb84a"></i>avg</span>
+        <span><i style="background: #ff6b5f"></i>poor</span>
+        <span><i style="background: #6a6a72"></i>no data</span>
+      </div>
+
       <div id="mapEmpty" class="map-empty">
         <span
           ><strong>No GPS route yet</strong> Start a logged drive with location
@@ -509,35 +526,52 @@
           samples.</span
         >
       </div>
-
-      <div class="map-sheet">
-        <div class="map-sheet-head">
-          <div>
-            <span class="kicker" id="mapKicker">GPS map</span>
-            <h2 id="mapTitle">No route recorded yet</h2>
-          </div>
-          <span class="badge"
-            ><span class="dot"></span
-            ><span id="mapPointBadge">0 pts</span></span
-          >
-        </div>
-        <div class="map-sheet-stats">
-          <div>
-            <span class="kicker">Distance</span
-            ><strong id="mapDistance">--</strong>
-          </div>
-          <div>
-            <span class="kicker">Duration</span
-            ><strong id="mapDuration">--</strong>
-          </div>
-          <div>
-            <span class="kicker">Avg &plusmn;</span
-            ><strong id="mapAccuracy">--</strong>
-          </div>
-        </div>
-      </div>
     </div>
   </article>
+
+  <div class="map-sheet">
+    <div class="map-sheet-head">
+      <div>
+        <span class="kicker" id="mapKicker">GPS map</span>
+        <h2 id="mapTitle">No route recorded yet</h2>
+      </div>
+      <span class="badge"
+        ><span class="dot"></span><span id="mapPointBadge">0 pts</span></span
+      >
+    </div>
+    <div class="map-sheet-stats">
+      <div>
+        <span class="kicker">Distance</span><strong id="mapDistance">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Duration</span><strong id="mapDuration">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Avg mph</span><strong id="mapAvgMph">--</strong>
+      </div>
+    </div>
+  </div>
+
+  <div id="scrubber" class="scrubber panel" hidden>
+    <div class="scrub-chart" id="scrubChart">
+      <div class="scrub-cursor" id="scrubCursor"></div>
+    </div>
+    <div class="scrub-readout" id="scrubReadout"></div>
+    <div id="scrubStack" class="scrub-stack" hidden></div>
+    <div class="scrub-toolbar">
+      <button type="button" class="scrub-btn" id="scrubPlay">
+        &#9654; Play
+      </button>
+      <button
+        type="button"
+        class="scrub-btn"
+        id="scrubToggle"
+        aria-expanded="false"
+      >
+        Details
+      </button>
+    </div>
+  </div>
 
   <section class="map-layout">
     <article class="panel list-card">
@@ -701,6 +735,26 @@
     </div>
   </article>
 
+  <article
+    class="panel non-demo-only eff-scatter-card"
+    id="effScatterCard"
+    hidden
+  >
+    <header>
+      <div>
+        <span class="kicker">Efficiency vs speed - all drives</span>
+        <h3 id="effScatterHead">Pooling samples across every logged drive.</h3>
+      </div>
+    </header>
+    <div class="eff-scatter" id="effScatter"></div>
+    <div class="eff-scatter-legend">
+      <span><i style="background: #5cc8ff"></i>downhill</span>
+      <span><i style="background: #b8e63b"></i>flat</span>
+      <span><i style="background: #ff6b5f"></i>uphill</span>
+    </div>
+    <div class="eff-scatter-stats" id="effScatterStats"></div>
+  </article>
+
   <article class="panel list-card non-demo-only">
     <header>
       <span class="kicker">Maintenance</span>
@@ -776,6 +830,9 @@
         Stop demo
       </button>
     </div>
+    <a class="demo-link" href="demos/efficiency.html"
+      >&#9658; Efficiency &amp; scrubber demos</a
+    >
   </details>
 
   <article id="historyCard" class="panel list-card" hidden>
@@ -1004,6 +1061,7 @@
     <script src="js/core.js"></script>
     <script src="js/panels.js"></script>
     <script src="js/map.js"></script>
+    <script src="js/scrubber.js"></script>
     <script src="js/telemetry.js"></script>
     <script src="js/actions.js"></script>
   </body>

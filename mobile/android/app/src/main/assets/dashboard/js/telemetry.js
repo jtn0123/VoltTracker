@@ -61,10 +61,10 @@
       resetTelemetry();
     }
     if (state.appState.storage) {
-      state.storage = state.appState.storage;
-      VD.updateStorageUi();
-      VD.renderRealV2Ui();
-      VD.renderMap();
+      // Route through setStorage so the sample-data fallback / preserve
+      // logic (in panels.js) applies here too — otherwise a later
+      // appState push with empty storage wipes the sample we just loaded.
+      VD.setStorage(state.appState.storage);
     }
     renderOperationalState();
     updateLiveUi();

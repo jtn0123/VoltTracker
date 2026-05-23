@@ -246,7 +246,11 @@
     color: rgba(245,243,236,0.82);
   }
 
-  .map-frame[data-layer="heat"] .map-legend {
+  .map-frame[data-layer="heat"] .map-legend:not(.map-legend-eff) {
+    display: flex;
+  }
+
+  .map-frame[data-layer="eff"] .map-legend-eff {
     display: flex;
   }
 
@@ -265,7 +269,7 @@
   .map-empty {
     position: absolute;
     z-index: 1100;
-    inset: 0 0 156px;
+    inset: 0;
     display: grid;
     place-items: center;
     padding: 20px;
@@ -282,17 +286,12 @@
   }
 
   .map-sheet {
-    position: absolute;
-    z-index: 1200;
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-    padding: 14px 16px;
-    border: 1px solid var(--line-strong);
-    border-radius: 18px;
-    background: rgba(16,18,22,0.92);
-    backdrop-filter: blur(20px);
-    box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.05), transparent 50%),
+      rgba(20,20,27,0.92);
   }
 
   .map-sheet-head {
@@ -598,4 +597,279 @@
     .dtc-repeat-block b,
     .dtc-repeat-block small { text-align: left; }
     .bottom-nav button span { font-size: 10px; }
+  }
+
+  .eff-scatter-card { padding: 14px 16px; }
+  .eff-scatter-card header { margin-bottom: 6px; }
+  .eff-scatter-card header h3 { margin: 4px 0 0; font-size: 16px; letter-spacing: -0.01em; }
+  .eff-scatter { margin-top: 6px; cursor: default; }
+  .eff-scatter svg { display: block; width: 100%; }
+  .eff-scatter-legend {
+    display: flex; gap: 12px; padding-top: 8px;
+    font-family: ui-monospace, monospace; font-size: 10.5px; color: var(--muted);
+  }
+  .eff-scatter-legend span { display: flex; align-items: center; gap: 5px; }
+  .eff-scatter-legend i { width: 14px; height: 4px; border-radius: 2px; }
+  .eff-scatter-stats {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line);
+  }
+  .eff-scatter-stats div { padding: 0 8px; }
+  .eff-scatter-stats div + div { border-left: 1px solid var(--line); }
+  .eff-scatter-stats strong {
+    display: block; margin-top: 3px; font-size: 15px; font-variant-numeric: tabular-nums;
+  }
+
+  .scrubber {
+    padding: 12px 14px;
+  }
+
+  .scrub-chart,
+  .scrub-track {
+    position: relative;
+    touch-action: none;
+    cursor: ew-resize;
+    user-select: none;
+  }
+
+  .scrub-chart svg,
+  .scrub-track svg {
+    display: block;
+    width: 100%;
+  }
+
+  .scrub-cursor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 1.5px solid rgba(245, 243, 236, 0.85);
+    pointer-events: none;
+  }
+
+  .scrub-cursor::before {
+    content: "";
+    position: absolute;
+    top: -3px;
+    left: -4px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text);
+  }
+
+  .scrub-readout {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    margin-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+
+  .scrub-readout div {
+    padding: 8px 4px;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .scrub-readout div + div {
+    border-left: 1px solid var(--line);
+  }
+
+  .scrub-readout .kicker {
+    font-size: 8.5px;
+    letter-spacing: 0.03em;
+  }
+
+  /* Monospace + tabular-nums so digits, signs, and the +/− glyphs all share
+     the same advance width. Stops the value from twitching as you scrub. */
+  .scrub-readout strong {
+    display: block;
+    margin-top: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .scrub-readout .scrub-dim strong {
+    color: var(--soft);
+  }
+
+  .scrub-stack {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+  }
+
+  .scrub-toggle {
+    margin-top: 10px;
+    min-height: 34px;
+    padding: 0 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+
+  .map-drive-chips {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 2px 2px 4px;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    scroll-padding-left: 2px;
+    scrollbar-width: none;
+  }
+
+  .map-drive-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Right-edge fade when there are more chips offscreen, so users can tell
+     the strip is scrollable. The :has check keeps it off when there's only
+     one chip and nothing to scroll. */
+  .map-drive-chips:has(.map-drive-chip + .map-drive-chip + .map-drive-chip) {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+
+  .map-drive-chip {
+    flex: 0 0 auto;
+    min-width: 134px;
+    padding: 10px 13px;
+    text-align: left;
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    background: rgba(16, 18, 22, 0.85);
+    color: var(--text);
+    cursor: pointer;
+    scroll-snap-align: start;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  }
+
+  .map-drive-chip:hover,
+  .map-drive-chip:focus-visible {
+    border-color: rgba(255, 122, 69, 0.55);
+  }
+
+  .map-drive-chip.is-active {
+    border-color: var(--volt);
+    background: rgba(255, 122, 69, 0.18);
+    box-shadow: 0 6px 14px rgba(255, 122, 69, 0.18);
+  }
+
+  .map-drive-chip.is-active .dl {
+    color: #ffd9c4;
+  }
+
+  .map-drive-chip .dl {
+    display: block;
+    font-size: 13px;
+    font-weight: 750;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .map-drive-chip .dm {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .map-drive-chip .dm b {
+    color: var(--text);
+    font-weight: 700;
+  }
+
+  .map-drive-chip .dm u {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .scrub-toolbar {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .scrub-btn {
+    flex: 1;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+
+  .scrub-btn:first-child {
+    background: var(--volt);
+    color: #190a04;
+    border-color: transparent;
+    font-weight: 800;
+  }
+
+  .map-sheet-head h2 {
+    margin-top: 1px;
+    font-size: 15px;
+  }
+
+  .map-sheet-stats {
+    margin-top: 9px;
+    padding-top: 9px;
+  }
+
+  .map-sheet-stats strong {
+    margin-top: 3px;
+    font-size: 17px;
+  }
+
+  /* Leaflet popup that opens when the user taps the scrub marker. */
+  .leaflet-popup.scrub-popup .leaflet-popup-content-wrapper {
+    padding: 8px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: rgba(8, 9, 13, 0.92);
+    backdrop-filter: blur(12px);
+    color: var(--text);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+  }
+  .leaflet-popup.scrub-popup .leaflet-popup-content {
+    margin: 0;
+    line-height: 1.25;
+  }
+  .leaflet-popup.scrub-popup .leaflet-popup-tip {
+    background: rgba(8, 9, 13, 0.92);
+    border: 1px solid var(--line-strong);
+    box-shadow: none;
+  }
+  .scrub-popup-body { text-align: center; min-width: 96px; }
+  .scrub-popup-big {
+    font-size: 15px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--text);
+  }
+  .scrub-popup-sub {
+    margin-top: 2px;
+    font-family: ui-monospace, monospace;
+    font-size: 10.5px;
+    color: var(--muted);
   }

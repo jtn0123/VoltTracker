@@ -109,7 +109,7 @@
     insights: {},
     appState: {},
     demoActive: false,
-    mapLayer: "routes",
+    mapLayer: "eff",
     mapFull: false,
     selectedMapSessionId: null,
     status: {},
