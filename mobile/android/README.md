@@ -75,6 +75,22 @@ The debug APK will be at:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### Pre-commit hooks (optional)
+
+Run Spotless locally before each commit so format failures surface before CI:
+
+```sh
+brew install lefthook && lefthook install
+```
+
+### Outdated dependency report
+
+List outdated direct and transitive dependencies (advisory; nothing fails):
+
+```sh
+./gradlew dependencyUpdates -Drevision=release
+```
+
 ## Install On A Phone
 
 1. Pair your OBD adapter in Android Bluetooth settings.

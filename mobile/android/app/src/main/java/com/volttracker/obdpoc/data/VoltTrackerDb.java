@@ -10,7 +10,7 @@ import java.util.Set;
 
 final class VoltTrackerDb extends SQLiteOpenHelper {
     static final String DATABASE_NAME = "volttracker_obd_poc.db";
-    static final int DATABASE_VERSION = 6;
+    static final int DATABASE_VERSION = 7;
 
     static final String TABLE_SESSIONS = "obd_sessions";
     static final String TABLE_TELEMETRY = "telemetry_samples";
@@ -52,7 +52,16 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                                     TABLE_EXPORTS)));
 
     VoltTrackerDb(Context context) {
-        super(context.getApplicationContext(), DATABASE_NAME, null, DATABASE_VERSION);
+        this(context, DATABASE_NAME);
+    }
+
+    /**
+     * Test-only constructor that lets a migration test point at an isolated DB file (so the test
+     * doesn't trample the default production DB and isn't affected by leftover state from a prior
+     * test run).
+     */
+    VoltTrackerDb(Context context, String databaseName) {
+        super(context.getApplicationContext(), databaseName, null, DATABASE_VERSION);
     }
 
     @Override
@@ -170,6 +179,7 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
         createObservationIndexes(db);
         createRoadmapTables(db);
         createRoadmapIndexes(db);
+        createPruneIndexes(db);
     }
 
     @Override
@@ -221,6 +231,9 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
         if (oldVersion < 6) {
             createDiagnosticTables(db);
             createDiagnosticIndexes(db);
+        }
+        if (oldVersion < 7) {
+            createPruneIndexes(db);
         }
     }
 
@@ -307,6 +320,31 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                         + "json TEXT NOT NULL,"
                         + "UNIQUE(module_key, dtc, status)"
                         + ")");
+    }
+
+    /**
+     * Time-only indexes used by {@link ObdStoreMaintenance#pruneRawDataOlderThan(int)}. The
+     * composite {@code (session_id, captured_at_ms)} indexes can't help the prune deletes because
+     * those queries don't constrain {@code session_id}, so without these the daily prune does a
+     * full table scan across telemetry / location / events / pid observations. Added in schema v7.
+     */
+    private static void createPruneIndexes(SQLiteDatabase db) {
+        db.execSQL(
+                "CREATE INDEX IF NOT EXISTS idx_telemetry_captured_at ON "
+                        + TABLE_TELEMETRY
+                        + "(captured_at_ms)");
+        db.execSQL(
+                "CREATE INDEX IF NOT EXISTS idx_location_samples_captured_at ON "
+                        + TABLE_LOCATION_SAMPLES
+                        + "(captured_at_ms)");
+        db.execSQL(
+                "CREATE INDEX IF NOT EXISTS idx_events_occurred_at ON "
+                        + TABLE_EVENTS
+                        + "(occurred_at_ms)");
+        db.execSQL(
+                "CREATE INDEX IF NOT EXISTS idx_pid_observations_observed_at ON "
+                        + TABLE_PID_OBSERVATIONS
+                        + "(observed_at_ms)");
     }
 
     private static void createDiagnosticIndexes(SQLiteDatabase db) {

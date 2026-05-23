@@ -1,0 +1,15 @@
+[versions]
+androidx-core = "1.13.1"
+junit = "4.13.2"
+json = "20240303"
+robolectric = "4.14.1"
+spotless = "6.25.0"
+
+[libraries]
+androidx-core = { module = "androidx.core:core", version.ref = "androidx-core" }
+junit = { module = "junit:junit", version.ref = "junit" }
+json = { module = "org.json:json", version.ref = "json" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+
+[plugins]
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }

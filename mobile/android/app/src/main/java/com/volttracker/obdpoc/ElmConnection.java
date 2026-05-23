@@ -13,19 +13,42 @@ import java.util.function.BooleanSupplier;
  * Owns the Bluetooth RFCOMM socket to the ELM327 adapter and the low-level command IO. Extracted
  * from {@link ObdService} so socket/stream handling is isolated and the {@link #transact} read loop
  * is unit-testable against in-memory streams.
+ *
+ * <p>Not {@code final}: {@code ObdPollingEngineTest} subclasses this to script adapter responses
+ * (overriding {@link #open}, {@link #transact}, {@link #sendEscape}, {@link #close}) so the
+ * polling-engine state machine can be exercised without a real RFCOMM socket.
  */
-final class ElmConnection {
+class ElmConnection {
+
+    /**
+     * Indirected wall clock — tests inject a synthetic clock so {@link #transact}'s deadline check
+     * is deterministic rather than asserting on wall time (CI-flaky). Defined as a package-private
+     * interface rather than {@code java.util.function.LongSupplier} so we don't need API 24 / core
+     * library desugaring (minSdk is 23).
+     */
+    interface Clock {
+        long nowMs();
+    }
 
     private BluetoothSocket socket;
     private InputStream input;
     private OutputStream output;
+    private final Clock clock;
 
-    ElmConnection() {}
+    ElmConnection() {
+        this.clock = System::currentTimeMillis;
+    }
 
     /** Test constructor: drives {@link #transact}/{@link #sendEscape} against in-memory streams. */
     ElmConnection(InputStream input, OutputStream output) {
+        this(input, output, System::currentTimeMillis);
+    }
+
+    /** Test constructor: in-memory streams + injected clock for deterministic timeout tests. */
+    ElmConnection(InputStream input, OutputStream output, Clock clock) {
         this.input = input;
         this.output = output;
+        this.clock = clock;
     }
 
     boolean isOpen() {
@@ -79,9 +102,9 @@ final class ElmConnection {
         output.flush();
 
         StringBuilder response = new StringBuilder();
-        long deadline = System.currentTimeMillis() + timeoutMs;
+        long deadline = clock.nowMs() + timeoutMs;
         byte[] buffer = new byte[128];
-        while (System.currentTimeMillis() < deadline && keepWaiting.getAsBoolean()) {
+        while (clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
             int available = input.available();
             if (available > 0) {
                 int read = input.read(buffer, 0, Math.min(buffer.length, available));

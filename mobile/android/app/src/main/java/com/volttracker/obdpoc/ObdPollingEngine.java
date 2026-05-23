@@ -1,8 +1,6 @@
 package com.volttracker.obdpoc;
 
 import static com.volttracker.obdpoc.ObdElmDecode.appendRaw;
-import static com.volttracker.obdpoc.ObdElmDecode.classifyVehicleState;
-import static com.volttracker.obdpoc.ObdElmDecode.classifyVehicleStateConfidence;
 import static com.volttracker.obdpoc.ObdElmDecode.friendlyConnectionMessage;
 import static com.volttracker.obdpoc.ObdElmDecode.hasElmPrompt;
 import static com.volttracker.obdpoc.ObdElmDecode.initialConnectBackoffMs;
@@ -14,8 +12,13 @@ import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.util.Log;
+import com.volttracker.obdpoc.classify.ClassifierInput;
+import com.volttracker.obdpoc.classify.ClassifierResult;
+import com.volttracker.obdpoc.classify.VehicleStateClassifier;
 import com.volttracker.obdpoc.location.FilteredLocation;
 import java.io.IOException;
+import java.util.Map;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -27,11 +30,17 @@ import org.json.JSONObject;
  * {@link #incrementSampleCount}). Command IO is serialized on {@code ObdService.ioLock} so a
  * reconnect cannot race a session stop; connection parameters and probe lists live in {@link
  * ObdProbes}.
+ *
+ * <p>Not {@code final}: {@code ObdPollingEngineTest} subclasses this to override {@link
+ * #isBluetoothReady} and {@link #openBluetoothSocket} so the connect / poll / reconnect state
+ * machine can be exercised without a real {@code BluetoothAdapter}.
  */
-final class ObdPollingEngine {
+class ObdPollingEngine {
 
     private final ObdService service;
-    private final ElmConnection connection = new ElmConnection();
+    // Non-final so tests can swap in a fake via setConnectionForTest(). Production code
+    // never reassigns this — the constructor's initializer is the only real assignment.
+    private ElmConnection connection = new ElmConnection();
     private final SpeedPlausibilityFilter speedFilter = new SpeedPlausibilityFilter();
     private final DemoPollingLoop demoLoop;
     private final DiagnosticScanRunner scanRunner;
@@ -78,6 +87,15 @@ final class ObdPollingEngine {
     }
 
     /**
+     * Test seam: lets {@code ObdPollingEngineTest} substitute a fake {@link ElmConnection} that
+     * scripts adapter responses instead of opening a real RFCOMM socket. Not called from
+     * production.
+     */
+    void setConnectionForTest(ElmConnection replacement) {
+        this.connection = replacement;
+    }
+
+    /**
      * Drives the BT-adapter session state machine for the lifetime of one session.
      *
      * <p>Two failure modes are tracked separately:
@@ -119,8 +137,7 @@ final class ObdPollingEngine {
             return;
         }
 
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        if (adapter == null || !adapter.isEnabled()) {
+        if (!isBluetoothReady()) {
             service.broadcastStatus("error", "Bluetooth is off or unavailable.", true);
             service.closeSessionLog();
             return;
@@ -133,8 +150,9 @@ final class ObdPollingEngine {
         try {
             while (service.running.get()) {
                 try {
-                    connectAndInitialize(adapter, address);
+                    connectAndInitialize(address);
                     everConnected = true;
+                    OBDLog.event("ObdPollingEngine", "connect", Map.of("name", service.activeName));
                     if (scanMode) {
                         scanRunner.run();
                         return;
@@ -149,6 +167,12 @@ final class ObdPollingEngine {
                     return; // running went false: a clean stop
                 } catch (IOException ex) {
                     closeSocket();
+                    if (everConnected) {
+                        OBDLog.event(
+                                "ObdPollingEngine",
+                                "disconnect",
+                                Map.of("reason", safeMessage(ex)));
+                    }
                     if (!service.running.get()) {
                         return;
                     }
@@ -188,6 +212,8 @@ final class ObdPollingEngine {
                             everConnected
                                     ? reconnectBackoffMs(attempt)
                                     : initialConnectBackoffMs(attempt);
+                    OBDLog.event(
+                            "ObdPollingEngine", "reconnect_attempt", Map.of("attempt", attempt));
                     service.recorder.logEvent(
                             "reconnect",
                             "attempt",
@@ -229,9 +255,39 @@ final class ObdPollingEngine {
     }
 
     @SuppressLint("MissingPermission")
-    private void connectAndInitialize(BluetoothAdapter adapter, String address) throws IOException {
+    private void connectAndInitialize(String address) throws IOException {
         service.broadcastStatus(
                 "connecting", "Opening serial connection to " + service.activeName + "...", false);
+        service.recorder.logEvent(
+                "bluetooth_socket_open",
+                "address",
+                address,
+                "uuid",
+                ObdProbes.ELM327_SPP_UUID.toString());
+        openBluetoothSocket(address);
+        service.recorder.logEvent("bluetooth_socket_connected", "address", address);
+        service.broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false);
+        initializeElm327();
+    }
+
+    /**
+     * Test seam: returns true when the Bluetooth adapter is present and enabled. Production
+     * resolves the system {@link BluetoothAdapter}; tests override to bypass the adapter entirely.
+     */
+    @SuppressLint("MissingPermission")
+    boolean isBluetoothReady() {
+        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        return adapter != null && adapter.isEnabled();
+    }
+
+    /**
+     * Test seam: resolves the remote device and opens the RFCOMM socket. Pulled out of {@link
+     * #connectAndInitialize} so tests can override the BT-specific bit while still exercising the
+     * surrounding init / poll / reconnect logic.
+     */
+    @SuppressLint("MissingPermission")
+    void openBluetoothSocket(String address) throws IOException {
+        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
         if (service.hasBluetoothScanPermission()) {
             adapter.cancelDiscovery();
         } else {
@@ -239,16 +295,7 @@ final class ObdPollingEngine {
                     "cancel_discovery_skipped", "reason", "missing BLUETOOTH_SCAN");
         }
         BluetoothDevice device = adapter.getRemoteDevice(address);
-        service.recorder.logEvent(
-                "bluetooth_socket_open",
-                "address",
-                address,
-                "uuid",
-                ObdProbes.ELM327_SPP_UUID.toString());
         connection.open(device, ObdProbes.ELM327_SPP_UUID, ObdProbes.CONNECT_TIMEOUT_MS);
-        service.recorder.logEvent("bluetooth_socket_connected", "address", address);
-        service.broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false);
-        initializeElm327();
     }
 
     // Polls until the session is stopped (returns) or the socket breaks (throws IOException,
@@ -324,6 +371,7 @@ final class ObdPollingEngine {
                 sendCommand("ATSP0", 1400);
             }
         }
+        OBDLog.event("ObdPollingEngine", "protocol_init", Map.of("ok", true));
     }
 
     // Throws IOException when the adapter socket has broken so the caller can reconnect.
@@ -418,13 +466,23 @@ final class ObdPollingEngine {
                     "sessionMs",
                     Math.max(0, System.currentTimeMillis() - service.sessionStartedAtMs));
             sample.put("supportedPids", supportedPidsSummary);
-            sample.put(
-                    "vehicleState",
-                    classifyVehicleState(voltage, acceptedSpeed, rpm, load, chargeTransitionHint));
-            sample.put(
-                    "vehicleStateConfidence",
-                    classifyVehicleStateConfidence(
-                            voltage, acceptedSpeed, rpm, chargeTransitionHint));
+            ObdProtocol.ParsedPidValue packCurrent =
+                    ObdProtocol.parseKnownValue("222414", packCurrentRaw);
+            Double packCurrentA = packCurrent == null ? null : packCurrent.valueNumeric;
+            Boolean engineRunningHint = rpm == null ? null : (rpm > 200f);
+            ClassifierResult classified =
+                    VehicleStateClassifier.classify(
+                            new ClassifierInput(
+                                    acceptedSpeed == null ? null : acceptedSpeed.doubleValue(),
+                                    rpm == null ? null : Math.round(rpm),
+                                    voltage == null ? null : voltage.doubleValue(),
+                                    packCurrentA,
+                                    chargeTransitionHint ? Boolean.TRUE : null,
+                                    engineRunningHint,
+                                    System.currentTimeMillis()));
+            sample.put("vehicleState", classified.state.asPayloadKey());
+            sample.put("vehicleStateConfidence", classified.confidence.asPayloadKey());
+            sample.put("vehicleStateReasons", new JSONArray(classified.reasons));
             sample.put("updatedAt", System.currentTimeMillis());
             appendSessionHealth(sample);
             appendLocation(sample);

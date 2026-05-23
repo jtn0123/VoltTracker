@@ -238,7 +238,12 @@
     const kph = Number(sample.speedKph);
     if (Number.isFinite(kph)) {
       state.speedHistory.push(kph);
-      while (state.speedHistory.length > 48) state.speedHistory.shift();
+      // G2: fixed 48-sample window (~12 s at 4 Hz). shift() is O(n) on a JS
+      // array but n=48 makes the cost negligible (~µs); a circular buffer
+      // would be cleaner but requires changes to every reader. Revisit if
+      // speed of render becomes a hot path. `if` (not `while`) is correct
+      // because we push exactly one sample per call.
+      if (state.speedHistory.length > 48) state.speedHistory.shift();
     }
     scheduleRender();
   }
@@ -262,12 +267,27 @@
   // C6: toggle the `.stale` class on each live tile when no new sample has
   // arrived for STALE_THRESHOLD_MS. Called from updateLiveUi every render and
   // from a 1Hz tick so the indicator appears even without new samples.
+  // C3: also append a screen-reader-only "(stale)" span so the aria-live
+  // wrappers around the tile clusters announce when readings have gone quiet.
   function applyStaleIndicator() {
     const last = Number(state.lastSampleAt || 0);
     const isStale = last > 0 ? Date.now() - last > STALE_THRESHOLD_MS : true;
     LIVE_TILE_IDS.forEach((id) => {
       const node = el(id);
-      if (node) node.classList.toggle("stale", isStale);
+      if (!node) return;
+      node.classList.toggle("stale", isStale);
+      const existing = node.querySelector(":scope > span.visually-hidden[data-stale-marker]");
+      if (isStale) {
+        if (!existing) {
+          const marker = document.createElement("span");
+          marker.className = "visually-hidden";
+          marker.dataset.staleMarker = "1";
+          marker.textContent = " (stale)";
+          node.append(marker);
+        }
+      } else if (existing) {
+        existing.remove();
+      }
     });
   }
 
@@ -328,12 +348,18 @@
 
   function updateDiagnostics() {
     const t = state.telemetry || {};
+    const app = state.appState || {};
+    const vehicle = app.vehicle || {};
     const status = state.status || {};
     const samples = Number(t.sampleCount || 0);
+    // A1: the Android classifier writes vehicle.state on the app-state payload as
+    // the source of truth; fall back to the telemetry-level mirror only if a
+    // bridge call hasn't delivered the app-state payload yet.
+    const vehicleState = vehicle.state || t.vehicleState || "unknown";
     VD.setText("diagState", status.detail || (t.updatedAt ? "Live OBD data received." : "Waiting for adapter"));
     VD.setText("diagSamples", samples ? `${samples} samples` : "0 samples");
     VD.setText("diagAdapter", t.adapter || status.adapter || "OBD adapter");
-    VD.setText("diagVehicleState", t.vehicleState || "unknown");
+    VD.setText("diagVehicleState", vehicleState);
     VD.setText("diagSession", t.sessionMs ? formatDuration(t.sessionMs) : "--");
     VD.setText("diagSupported", t.supportedPids ? summarizePidLine(t.supportedPids) : "unknown");
   }
@@ -354,8 +380,13 @@
     const hasFreshSample = samples > 0 && Number.isFinite(ageMs) && ageMs < 10000;
     const hasAnySample = samples > 0 || pidRows > 0;
     const hasGps = locationRows > 0 || gps.state === "locked" || (Number.isFinite(Number(t.latitude)) && Number.isFinite(Number(t.longitude)));
-    const confidence = String((app.vehicle || {}).confidence || t.vehicleStateConfidence || "").toLowerCase();
-    const hasParsed = Boolean(t.vehicleState || t.soc != null || t.voltage != null || t.rpm != null || t.speedKph != null);
+    // A1: read the classifier output (state + confidence) from app.vehicle.*; the
+    // telemetry-level fields are kept as a fallback for the first frame, but the
+    // JS no longer derives any of these values.
+    const vehicle = app.vehicle || {};
+    const vehicleState = vehicle.state || t.vehicleState || "";
+    const confidence = String(vehicle.confidence || t.vehicleStateConfidence || "").toLowerCase();
+    const hasParsed = Boolean(vehicleState || t.soc != null || t.voltage != null || t.rpm != null || t.speedKph != null);
     const isBackgroundCandidate = hasAnySample && (status === "connected" || status === "scan-complete" || status === "scanning");
     const backgroundSamples = Number(lifecycle.backgroundSampleCount || t.backgroundSampleCount || 0);
     const gapCount = Number(lifecycle.sampleGapCount || t.sampleGapCount || 0);
@@ -383,11 +414,13 @@
       dbRows > 0 ? `${dbRows} rows saved on device` : "Waiting for stored rows",
       dbRows ? "writing" : "ready"
     );
+    // A1: "weak" replaces the legacy "inferred" tone — both mean "soft signal only".
+    const lowConfidence = confidence === "inferred" || confidence === "weak" || confidence === "unknown";
     setValidationRow(
       "validateParser",
-      hasParsed ? (confidence === "inferred" ? "warn" : "ok") : "warn",
+      hasParsed ? (lowConfidence ? "warn" : "ok") : "warn",
       "PID parsing",
-      hasParsed ? `${t.vehicleState || "telemetry"} ${confidence ? "- " + confidence : ""}` : "Waiting for parsed values",
+      hasParsed ? `${vehicleState || "telemetry"} ${confidence ? "- " + confidence : ""}` : "Waiting for parsed values",
       hasParsed ? "active" : "unknown"
     );
     setValidationRow(

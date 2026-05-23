@@ -14,14 +14,10 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.ViewGroup;
-import android.webkit.ConsoleMessage;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import androidx.core.content.ContextCompat;
 import com.volttracker.obdpoc.data.ObdLocalStore;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.json.JSONException;
@@ -43,6 +39,7 @@ public class MainActivity extends Activity {
     private JSONObject lastStorage = new JSONObject();
     // Off-UI-thread worker for heavy DB work (storage summary, clearAllData, etc).
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
+    private final BroadcastReceiverGroup broadcastReceivers = new BroadcastReceiverGroup();
 
     /** Submits {@code task} to the background executor used for heavy DB work. */
     void runOnBackground(Runnable task) {
@@ -59,14 +56,14 @@ public class MainActivity extends Activity {
                         json = "{}";
                     }
                     if (ObdService.BROADCAST_TELEMETRY.equals(action)) {
-                        lastTelemetry = parseJson(json);
+                        lastTelemetry = MainActivityUtils.parseJson(json);
                         callDashboard(
                                 "window.VoltTrackerNative.updateTelemetry("
                                         + JSONObject.quote(json)
                                         + ")");
                         publishAppState();
                     } else if (ObdService.BROADCAST_STATUS.equals(action)) {
-                        lastStatus = parseJson(json);
+                        lastStatus = MainActivityUtils.parseJson(json);
                         callDashboard(
                                 "window.VoltTrackerNative.setStatus("
                                         + JSONObject.quote(json)
@@ -77,7 +74,6 @@ public class MainActivity extends Activity {
                 }
             };
 
-    @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -116,67 +112,26 @@ public class MainActivity extends Activity {
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(webView);
 
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(false);
-        settings.setAllowContentAccess(false);
-        settings.setTextZoom(100);
-        settings.setBuiltInZoomControls(false);
-        settings.setDisplayZoomControls(false);
-        settings.setUseWideViewPort(false);
-        settings.setLoadWithOverviewMode(false);
-        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
-
-        webView.setWebChromeClient(
-                new WebChromeClient() {
-                    @Override
-                    public boolean onConsoleMessage(ConsoleMessage message) {
-                        if (message != null
-                                && message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
-                            Log.e(
-                                    TAG,
-                                    "dashboard console: "
-                                            + message.message()
-                                            + " ("
-                                            + message.sourceId()
-                                            + ":"
-                                            + message.lineNumber()
-                                            + ")");
-                        }
-                        return true;
-                    }
-                });
-        webView.setWebViewClient(
-                new WebViewClient() {
-                    @Override
-                    public void onPageFinished(WebView view, String url) {
-                        pageReady = true;
-                        publishDeviceList();
-                        publishStorageSummary();
-                        publishAppState();
-                        publishStatus(
-                                "ready", "Pick a paired OBD adapter to start logging.", false);
-                    }
-                });
-        webView.addJavascriptInterface(new VoltBridge(this), "VoltTrackerAndroid");
-        webView.loadUrl("file:///android_asset/dashboard/index.html");
+        WebViewBootstrap.configure(webView, new VoltBridge(this), this::onDashboardReady);
 
         permissionGate.ensureGranted();
     }
 
-    @SuppressLint("UnspecifiedRegisterReceiverFlag")
+    private void onDashboardReady() {
+        pageReady = true;
+        publishDeviceList();
+        publishStorageSummary();
+        publishAppState();
+        publishStatus("ready", "Pick a paired OBD adapter to start logging.", false);
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
         IntentFilter filter = new IntentFilter();
         filter.addAction(ObdService.BROADCAST_TELEMETRY);
         filter.addAction(ObdService.BROADCAST_STATUS);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(obdReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(obdReceiver, filter);
-        }
+        broadcastReceivers.register(this, obdReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
         publishDeviceList();
         publishStorageSummary();
         publishAppState();
@@ -187,11 +142,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         reportAppVisibility(false);
         super.onPause();
-        try {
-            unregisterReceiver(obdReceiver);
-        } catch (IllegalArgumentException ignored) {
-            // Receiver can already be unregistered if Android tears down the Activity quickly.
-        }
+        broadcastReceivers.unregisterAll(this);
     }
 
     @Override
@@ -315,7 +266,11 @@ public class MainActivity extends Activity {
         } catch (RuntimeException ex) {
             // Preferences remain the source of truth for adapter recall if DB storage fails.
             // Use redactAddress so device identifiers don't end up in logcat in clear text.
-            Log.w(TAG, "recordAdapterSummary failed for " + redactAddress(cleanAddress), ex);
+            Log.w(
+                    TAG,
+                    "recordAdapterSummary failed for "
+                            + MainActivityUtils.redactAddress(cleanAddress),
+                    ex);
         }
         publishDeviceList();
         publishStorageSummary();
@@ -356,7 +311,7 @@ public class MainActivity extends Activity {
                     final String storage = getStorageSummaryJson();
                     runOnUiThread(
                             () -> {
-                                lastStorage = parseJson(storage);
+                                lastStorage = MainActivityUtils.parseJson(storage);
                                 callDashboard(
                                         "window.VoltTrackerNative.setStorage("
                                                 + JSONObject.quote(storage)
@@ -409,7 +364,8 @@ public class MainActivity extends Activity {
 
     /** True while an OBD logging session is connecting or active. */
     boolean isLoggingActive() {
-        return isConnectedState(lastStatus == null ? "" : lastStatus.optString("state", ""));
+        return MainActivityUtils.isConnectedState(
+                lastStatus == null ? "" : lastStatus.optString("state", ""));
     }
 
     private void publishAppState() {
@@ -430,41 +386,6 @@ public class MainActivity extends Activity {
                 lastTelemetry,
                 lastStatus,
                 lastStorage);
-    }
-
-    static JSONObject parseJson(String json) {
-        try {
-            return json == null || json.trim().isEmpty() ? new JSONObject() : new JSONObject(json);
-        } catch (JSONException ex) {
-            return new JSONObject();
-        }
-    }
-
-    static boolean isConnectedState(String state) {
-        String clean = state == null ? "" : state.toLowerCase(Locale.US);
-        return clean.equals("connected")
-                || clean.equals("connecting")
-                || clean.equals("initializing")
-                || clean.equals("scanning")
-                || clean.equals("scan-complete")
-                || clean.equals("demo");
-    }
-
-    static String coalesce(String first, String second, String third) {
-        if (first != null && !first.trim().isEmpty()) {
-            return first;
-        }
-        if (second != null && !second.trim().isEmpty()) {
-            return second;
-        }
-        return third == null ? "" : third;
-    }
-
-    static String redactAddress(String address) {
-        if (address == null || address.length() < 5) {
-            return "";
-        }
-        return "..." + address.substring(address.length() - 5);
     }
 
     private String appVersionName() {

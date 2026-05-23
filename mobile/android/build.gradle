@@ -1,4 +1,13 @@
 plugins {
     id "com.android.application" version "8.13.1" apply false
     id "com.diffplug.spotless" version "6.25.0" apply false
+    id "com.github.ben-manes.versions" version "0.51.0"
+}
+
+tasks.named("dependencyUpdates").configure {
+    rejectVersionIf {
+        ["alpha", "beta", "rc", "cr", "m", "preview", "b", "ea"].any { qualifier ->
+            it.candidate.version ==~ /(?i).*[.-]${qualifier}[.\d-+]*/
+        }
+    }
 }

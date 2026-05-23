@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -38,13 +39,14 @@ final class AppStateJson {
             JSONObject adapter = new JSONObject();
             adapter.put(
                     "name",
-                    MainActivity.coalesce(
+                    MainActivityUtils.coalesce(
                             telemetry.optString("adapter", ""),
                             status.optString("adapter", ""),
                             lastName));
-            adapter.put("address", MainActivity.redactAddress(lastAddress));
+            adapter.put("address", MainActivityUtils.redactAddress(lastAddress));
             adapter.put("remembered", lastAddress != null && !lastAddress.trim().isEmpty());
-            adapter.put("connected", MainActivity.isConnectedState(status.optString("state", "")));
+            adapter.put(
+                    "connected", MainActivityUtils.isConnectedState(status.optString("state", "")));
             payload.put("adapter", adapter);
 
             JSONObject session = new JSONObject();
@@ -65,6 +67,10 @@ final class AppStateJson {
                     telemetry.optString(
                             "vehicleStateConfidence",
                             telemetry.has("vehicleState") ? "observed" : "unknown"));
+            // Forward classifier reasons when present so the dashboard can explain *why*
+            // the state was picked. Missing/empty array is fine — the JS renders no tags.
+            JSONArray reasons = telemetry.optJSONArray("vehicleStateReasons");
+            vehicle.put("reasons", reasons == null ? new JSONArray() : reasons);
             vehicle.put("vinStored", false);
             payload.put("vehicle", vehicle);
 

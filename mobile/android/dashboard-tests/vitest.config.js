@@ -9,5 +9,6 @@ export default {
     environment: 'jsdom',
     globals: false,
     include: ['**/*.test.js'],
+    reporters: [['default', { summary: false }]],
   },
 };

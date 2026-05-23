@@ -114,41 +114,6 @@ final class ObdElmDecode {
         return Math.min(3000L, 500L * attempt);
     }
 
-    static String classifyVehicleState(
-            Float voltage, Integer speed, Float rpm, Integer load, boolean chargeTransitionHint) {
-        boolean stationary = speed == null || speed == 0;
-        boolean engineOff = rpm == null || rpm < 80;
-        boolean dcDcActive = voltage != null && voltage >= 13.0f;
-        boolean hasLoad = load != null && load > 0;
-        if (stationary && engineOff && chargeTransitionHint) {
-            return "plugged-or-charging";
-        }
-        if (stationary && engineOff && dcDcActive) {
-            return "ready-parked";
-        }
-        if (stationary && engineOff) {
-            return hasLoad ? "awake-parked" : "parked";
-        }
-        if (!engineOff) {
-            return stationary ? "engine-idle" : "driving-gas";
-        }
-        return "driving-ev";
-    }
-
-    static String classifyVehicleStateConfidence(
-            Float voltage, Integer speed, Float rpm, boolean chargeTransitionHint) {
-        if (chargeTransitionHint) {
-            return "inferred";
-        }
-        if (voltage != null && speed != null && rpm != null) {
-            return "observed";
-        }
-        if (voltage != null || speed != null || rpm != null) {
-            return "partial";
-        }
-        return "unknown";
-    }
-
     static String finishStatusFor(String state) {
         if ("error".equals(state) || "blocked".equals(state)) {
             return ObdLocalStore.STATUS_ERROR;

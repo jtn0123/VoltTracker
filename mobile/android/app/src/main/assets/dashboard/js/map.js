@@ -24,13 +24,36 @@
       maxZoom: 19,
       attribution: "&copy; OpenStreetMap, &copy; CARTO"
     });
-    let tileErrorLogged = false;
+    // C6: track tile errors and swap to the plain OSM basemap if CARTO is
+    // unreachable (DNS block, CDN outage, regional restriction). Log only the
+    // first couple to avoid spamming when the whole basemap is down.
+    let tileErrorCount = 0;
+    let fallbackActivated = false;
     tiles.on("tileerror", (event) => {
-      if (tileErrorLogged) return;
-      tileErrorLogged = true;
+      tileErrorCount += 1;
       const src = (event && event.tile && event.tile.src) || "unknown";
-      if (bridge && typeof bridge.logClientError === "function") {
-        bridge.logClientError("map.tileerror", "Basemap tile failed: " + src);
+      if (tileErrorCount <= 2) {
+        if (bridge && typeof bridge.logClientError === "function") {
+          bridge.logClientError("map.tileerror", "Basemap tile failed: " + src);
+        }
+      }
+      if (tileErrorCount > 5 && !fallbackActivated) {
+        fallbackActivated = true;
+        try {
+          mapInstance.removeLayer(tiles);
+          const fallback = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "© OpenStreetMap",
+            maxZoom: 19
+          });
+          fallback.addTo(mapInstance);
+          if (bridge && typeof bridge.logClientError === "function") {
+            bridge.logClientError("map.fallback", "Switched to OSM basemap after tile errors");
+          }
+        } catch (err) {
+          if (bridge && typeof bridge.logClientError === "function") {
+            bridge.logClientError("map.fallback_failed", String(err));
+          }
+        }
       }
     });
     tiles.addTo(mapInstance);

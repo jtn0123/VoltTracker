@@ -9,6 +9,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Test;
 
 /** Drives {@link ElmConnection#transact} against in-memory streams — no Bluetooth needed. */
@@ -29,15 +31,28 @@ public class ElmConnectionTest {
 
     @Test
     public void transactReturnsImmediatelyWhenKeepWaitingIsFalse() throws IOException {
+        // Synthetic clock: starts at 0 and never advances. The loop has a 10 000 ms timeout,
+        // but keepWaiting==false should short-circuit on the very first iteration, so we expect
+        // the clock to be sampled at most twice (deadline computation + first loop check) and
+        // the call to return immediately without spinning to the timeout.
+        AtomicLong now = new AtomicLong(0L);
+        AtomicInteger clockReads = new AtomicInteger();
+        ElmConnection.Clock clock =
+                () -> {
+                    clockReads.incrementAndGet();
+                    return now.get();
+                };
         ElmConnection connection =
                 new ElmConnection(
-                        new ByteArrayInputStream(new byte[0]), new ByteArrayOutputStream());
+                        new ByteArrayInputStream(new byte[0]), new ByteArrayOutputStream(), clock);
 
-        long start = System.currentTimeMillis();
         String response = connection.transact("010C", 10_000L, () -> false);
 
         assertEquals("", response);
-        assertTrue("must not block on the timeout", System.currentTimeMillis() - start < 1_000L);
+        assertEquals(
+                "transact should read the clock exactly twice (deadline + first loop test)",
+                2,
+                clockReads.get());
     }
 
     @Test

@@ -28,6 +28,37 @@
   // for tests that swap fixtures between runs.
   let controller = new AbortController();
 
+  // C4: lightweight in-flight guard for bridge-triggering buttons. The Android
+  // bridge calls are sync-fire-and-forget so we can't await completion; a short
+  // 600ms cooldown is enough to swallow accidental double-taps without making
+  // the button feel sticky on real-device latency.
+  function withBusy(button, fn) {
+    // Programmatic callers (no button, e.g. future keyboard shortcut or test)
+    // should still execute the action; we just can't paint a busy state.
+    if (!button) return fn();
+    if (button.dataset.busy === "1") return;
+    button.dataset.busy = "1";
+    button.disabled = true;
+    button.classList.add("busy");
+    const release = () => {
+      button.dataset.busy = "0";
+      button.disabled = false;
+      button.classList.remove("busy");
+    };
+    try {
+      const result = fn();
+      // Most bridge calls are sync-fire-and-forget. The next setStatus() callback
+      // from the bridge implicitly indicates completion, but we don't have a hook
+      // into that here. Release after a short delay to allow rapid re-press but
+      // suppress immediate double-tap.
+      setTimeout(release, 600);
+      return result;
+    } catch (err) {
+      release();
+      throw err;
+    }
+  }
+
   function refreshDevices() {
     if (!bridge) {
       VD.setStatus({ state: "demo", detail: "Android bridge is not available in this browser preview." });
@@ -37,29 +68,33 @@
     if (typeof bridge.getDeviceHistory === "function") VD.setHistory(bridge.getDeviceHistory());
   }
 
-  function connectSelected(scan) {
+  function connectSelected(scan, button) {
     const selected = VD.getSelectedDevice();
     if (!selected) {
       VD.setStatus({ state: "blocked", detail: "Pick a paired or remembered OBD adapter first." });
       return;
     }
     if (!bridge) return;
-    bridge.rememberDevice(selected.address, selected.name);
-    if (scan && typeof bridge.scan === "function") bridge.scan(selected.address, selected.name);
-    else bridge.connect(selected.address, selected.name);
+    // C4: guard the bridge call so a quick double-tap doesn't issue two
+    // overlapping connect/scan invocations against the adapter.
+    withBusy(button, () => {
+      bridge.rememberDevice(selected.address, selected.name);
+      if (scan && typeof bridge.scan === "function") bridge.scan(selected.address, selected.name);
+      else bridge.connect(selected.address, selected.name);
+    });
   }
 
-  function handleAction(action) {
+  function handleAction(action, button) {
     if (action === "permissions") bridge && bridge.requestPermissions();
     if (action === "refresh") bridge && bridge.refreshDevices();
     if (action === "refreshStorage") refreshStorage();
-    if (action === "clearStorage") clearStorage();
+    if (action === "clearStorage") clearStorage(button);
     if (action === "exportDebug") exportDebugBundle();
-    if (action === "backup") shareBackup();
-    if (action === "restore") restoreBackup();
+    if (action === "backup") shareBackup(button);
+    if (action === "restore") restoreBackup(button);
     if (action === "last") bridge && bridge.connectLast();
-    if (action === "scan") connectSelected(true);
-    if (action === "connect") connectSelected(false);
+    if (action === "scan") connectSelected(true, button);
+    if (action === "connect") connectSelected(false, button);
     if (action === "demo") startDemo();
     if (action === "stopDemo") stopDemo();
     if (action === "stop") stopAll();
@@ -97,15 +132,19 @@
     }
   }
 
-  function clearStorage() {
+  function clearStorage(button) {
     if (!bridge || typeof bridge.clearStoredData !== "function") return;
     const confirmed = window.confirm("Clear local OBD sessions, samples, and debug events from this phone?");
     if (!confirmed) return;
-    bridge.clearStoredData();
-    setTimeout(refreshStorage, 250);
+    // C4: guard the bridge call against accidental re-issue while the storage
+    // wipe is still propagating.
+    withBusy(button, () => {
+      bridge.clearStoredData();
+      setTimeout(refreshStorage, 250);
+    });
   }
 
-  function shareBackup() {
+  function shareBackup(button) {
     if (!bridge || typeof bridge.shareBackup !== "function") {
       VD.setStatus({ state: "blocked", detail: "Backup is only available inside the Android app." });
       return;
@@ -120,10 +159,12 @@
       VD.setStatus({ state: "ready", detail: "Backup cancelled." });
       return;
     }
-    bridge.shareBackup();
+    // C4: guard the bridge call so a quick double-tap doesn't open two
+    // share sheets.
+    withBusy(button, () => bridge.shareBackup());
   }
 
-  function restoreBackup() {
+  function restoreBackup(button) {
     if (!bridge || typeof bridge.restoreBackup !== "function") {
       VD.setStatus({ state: "blocked", detail: "Restore is only available inside the Android app." });
       return;
@@ -131,7 +172,9 @@
     if (!window.confirm("Restore will REPLACE all data on this phone with the backup file. Continue?")) {
       return;
     }
-    bridge.restoreBackup();
+    // C4: guard the bridge call so a quick double-tap doesn't launch two
+    // file pickers.
+    withBusy(button, () => bridge.restoreBackup());
   }
 
   function exportDebugBundle() {
@@ -200,7 +243,7 @@
       button.addEventListener("click", () => VD.setMode(button.dataset.mode), opts);
     });
     document.querySelectorAll("[data-action]").forEach((button) => {
-      button.addEventListener("click", () => handleAction(button.dataset.action), opts);
+      button.addEventListener("click", (event) => handleAction(button.dataset.action, event.currentTarget), opts);
     });
     document.querySelectorAll("[data-map-layer]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -233,8 +276,8 @@
     el("permissionBtn").addEventListener("click", () => handleAction("permissions"), opts);
     el("refreshBtn").addEventListener("click", () => handleAction("refresh"), opts);
     el("lastBtn").addEventListener("click", () => handleAction("last"), opts);
-    el("scanBtn").addEventListener("click", () => handleAction("scan"), opts);
-    el("connectBtn").addEventListener("click", () => handleAction(el("connectBtn").dataset.primaryAction || "connect"), opts);
+    el("scanBtn").addEventListener("click", (event) => handleAction("scan", event.currentTarget), opts);
+    el("connectBtn").addEventListener("click", (event) => handleAction(el("connectBtn").dataset.primaryAction || "connect", event.currentTarget), opts);
     el("disconnectBtn").addEventListener("click", () => handleAction("stop"), opts);
     el("demoStopBtn").addEventListener("click", stopDemo, opts);
     el("driveModeSelect").addEventListener("change", (event) => {

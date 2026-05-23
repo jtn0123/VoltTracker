@@ -6,14 +6,23 @@ import static com.volttracker.obdpoc.ObdElmDecode.pidForCommand;
 import static com.volttracker.obdpoc.ObdElmDecode.safeMessage;
 import static com.volttracker.obdpoc.ObdElmDecode.summarizeForStorage;
 
+import android.util.Log;
 import com.volttracker.obdpoc.data.ObdLocalStore;
 import com.volttracker.obdpoc.location.FilteredLocation;
+import com.volttracker.obdpoc.materialize.ChargeSession;
+import com.volttracker.obdpoc.materialize.ChargeSessionMaterializer;
+import com.volttracker.obdpoc.materialize.MaterializerInput;
+import com.volttracker.obdpoc.materialize.Trip;
+import com.volttracker.obdpoc.materialize.TripMaterializer;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -30,10 +39,17 @@ final class SessionRecorder {
 
     private final Object lock;
     private final ObdSessionLog sessionLog;
-    private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor();
+    // telemetryExecutor: high-volume telemetry/event/observation writes. Failures are
+    // intentionally swallowed — these rows are diagnostic-only, never block OBD polling.
+    private final ExecutorService telemetryExecutor = Executors.newSingleThreadExecutor();
+    // lifecycleExecutor: session lifecycle writes (closeSession / finalizeSession).
+    // Failures are surfaced via Log.e AND a persist_failure status_events row, so a
+    // failed finalize cannot silently leave a session marked active forever.
+    private final ExecutorService lifecycleExecutor = Executors.newSingleThreadExecutor();
     private ObdLocalStore localStore;
 
     private long activeSessionId;
+    private long activeStartedAtMs;
     private String activeMode = "";
     private String activeAdapterName = "";
     private String activeAddress = "";
@@ -75,6 +91,7 @@ final class SessionRecorder {
                 activeMode = mode == null ? "" : mode;
                 activeAdapterName = adapterName == null ? "" : adapterName;
                 activeAddress = address == null ? "" : address;
+                activeStartedAtMs = startedAtMs;
                 activeSessionId =
                         localStore == null
                                 ? 0L
@@ -105,6 +122,7 @@ final class SessionRecorder {
     void closeSession(String state, String detail, String supportedPids, int sampleCount) {
         synchronized (lock) {
             long closingSessionId = activeSessionId;
+            long closingStartedAtMs = activeStartedAtMs;
             String closingMode = activeMode;
             String closingAdapterName = activeAdapterName;
             String closingAddress = activeAddress;
@@ -113,30 +131,86 @@ final class SessionRecorder {
             }
             sessionLog.close();
             if (closingSessionId > 0 && localStore != null) {
-                try {
-                    String status = finishStatusFor(state);
-                    // Single transaction: marks the session ended AND upserts the adapter
-                    // summary atomically, so a crash between the two writes can't leave the
-                    // session row out of sync with the adapter-history row.
-                    localStore.finalizeSession(
-                            closingSessionId,
-                            status,
-                            System.currentTimeMillis(),
-                            supportedPids,
-                            closingAddress,
-                            closingAdapterName,
-                            closingMode,
-                            sampleCount,
-                            detail);
-                } catch (RuntimeException ignored) {
-                    // Field logging must keep working even if DB persistence has a bad day.
-                }
+                final ObdLocalStore store = localStore;
+                final String status = finishStatusFor(state);
+                final long endedAtMs = System.currentTimeMillis();
+                // Single transaction: marks the session ended AND upserts the adapter
+                // summary atomically, so a crash between the two writes can't leave the
+                // session row out of sync with the adapter-history row. Lifecycle writes
+                // run on lifecycleExecutor so a failure is observable (Log.e + status_events
+                // persist_failure row) rather than silently swallowed.
+                //
+                // Before finalize, we drain telemetryExecutor — the two executors don't share
+                // ordering, so a finalize submitted right after a burst of telemetry writes
+                // could otherwise run before they land. Materializers read those rows back, so
+                // a race here would yield "trips" that are missing the last few seconds of
+                // telemetry.
+                lifecycleAsync(
+                        () -> {
+                            awaitTelemetryDrain();
+                            store.finalizeSession(
+                                    closingSessionId,
+                                    status,
+                                    endedAtMs,
+                                    supportedPids,
+                                    closingAddress,
+                                    closingAdapterName,
+                                    closingMode,
+                                    sampleCount,
+                                    detail);
+                            materializeIfEnabled(
+                                    store,
+                                    closingSessionId,
+                                    closingStartedAtMs,
+                                    endedAtMs,
+                                    closingMode);
+                        },
+                        closingSessionId,
+                        "finalizeSession");
             }
             activeSessionId = 0L;
+            activeStartedAtMs = 0L;
             activeMode = "";
             activeAdapterName = "";
             activeAddress = "";
             currentHeader = "";
+        }
+    }
+
+    /**
+     * Runs the trip / charge-session materializers on the just-closed session and persists their
+     * output. Demo sessions are skipped — demo telemetry is intentionally never written, so any
+     * "trip" derived from it would be empty anyway. A failure here records a {@code
+     * materialize_failure} status event but does not propagate: the session is already finalized
+     * and we don't want to retry a derivation that will keep failing for the same reason.
+     */
+    private void materializeIfEnabled(
+            ObdLocalStore store, long sessionId, long startedAtMs, long closedAtMs, String mode) {
+        if (!BuildFlags.MATERIALIZE_SESSIONS) {
+            return;
+        }
+        if (ObdLocalStore.MODE_DEMO.equals(mode)) {
+            return;
+        }
+        try {
+            MaterializerInput input = new MaterializerInput(sessionId, startedAtMs, closedAtMs);
+            List<Trip> tripList = TripMaterializer.materialize(input, store);
+            store.persistTrips(sessionId, tripList);
+            List<ChargeSession> chargeSessions =
+                    ChargeSessionMaterializer.materialize(input, store);
+            store.persistChargeSessions(sessionId, chargeSessions);
+        } catch (RuntimeException ex) {
+            Log.w(MainActivity.TAG, "session materialization failed", ex);
+            try {
+                store.recordStatus(
+                        sessionId,
+                        "materialize_failure",
+                        ex.getClass().getSimpleName(),
+                        false,
+                        null);
+            } catch (RuntimeException ignored) {
+                // Persisting the failure event is best-effort.
+            }
         }
     }
 
@@ -252,11 +326,17 @@ final class SessionRecorder {
         persistAsync(task);
     }
 
-    /** Drains pending database writes and shuts the recording executor down. */
+    /** Drains pending database writes and shuts both recording executors down. */
     void shutdown() {
-        databaseExecutor.shutdown();
+        telemetryExecutor.shutdown();
+        lifecycleExecutor.shutdown();
         try {
-            databaseExecutor.awaitTermination(2, TimeUnit.SECONDS);
+            telemetryExecutor.awaitTermination(2, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
+        try {
+            lifecycleExecutor.awaitTermination(2, TimeUnit.SECONDS);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }
@@ -375,7 +455,7 @@ final class SessionRecorder {
 
     private void persistAsync(Runnable task) {
         try {
-            databaseExecutor.execute(
+            telemetryExecutor.execute(
                     () -> {
                         try {
                             task.run();
@@ -384,6 +464,81 @@ final class SessionRecorder {
                         }
                     });
         } catch (RejectedExecutionException ignored) {
+        }
+    }
+
+    // Lifecycle writes (session finalize) get visibility on failure: a Log.e plus a
+    // best-effort status_events row with kind=persist_failure so the next launch can see
+    // that the session was supposed to be finalized but wasn't.
+    //
+    // If the lifecycle executor itself rejects the task (e.g. shutdown raced with a final
+    // close), we fall back to a synchronous in-thread run: dropping the finalize silently
+    // would leave the session row marked active forever.
+    private void lifecycleAsync(Runnable task, long sessionId, String op) {
+        try {
+            lifecycleExecutor.execute(
+                    () -> {
+                        try {
+                            task.run();
+                        } catch (RuntimeException ex) {
+                            Log.e(MainActivity.TAG, "session lifecycle persist failed", ex);
+                            recordPersistFailure(sessionId, op, ex);
+                        }
+                    });
+        } catch (RejectedExecutionException ex) {
+            Log.e(MainActivity.TAG, "lifecycle executor rejected " + op + "; running inline", ex);
+            try {
+                task.run();
+            } catch (RuntimeException inner) {
+                Log.e(MainActivity.TAG, "inline lifecycle fallback failed for " + op, inner);
+                recordPersistFailure(sessionId, op, inner);
+            }
+        }
+    }
+
+    /**
+     * Submits a no-op to {@link #telemetryExecutor} and waits up to two seconds for it to run.
+     * Because the executor is single-threaded with FIFO ordering, by the time our marker task runs
+     * every previously-submitted telemetry write has already finished. Used before
+     * finalize/materialize so those code paths see the full session in the database.
+     */
+    private void awaitTelemetryDrain() {
+        try {
+            Future<?> marker = telemetryExecutor.submit(() -> {});
+            marker.get(2, TimeUnit.SECONDS);
+        } catch (RejectedExecutionException ex) {
+            // Executor already shut down — nothing left to drain.
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException ex) {
+            Log.w(MainActivity.TAG, "telemetry drain marker failed", ex.getCause());
+        } catch (TimeoutException ex) {
+            Log.w(
+                    MainActivity.TAG,
+                    "telemetry drain timed out after 2s; proceeding with finalize",
+                    ex);
+        }
+    }
+
+    // Best-effort: this itself can throw if the database is the source of the trouble,
+    // so we catch and log without escalating.
+    private void recordPersistFailure(long sessionId, String op, RuntimeException cause) {
+        if (localStore == null) {
+            return;
+        }
+        try {
+            JSONObject payload = new JSONObject();
+            try {
+                payload.put("op", op);
+                payload.put("exception", cause.getClass().getName());
+                payload.put("message", safeMessage(cause));
+                payload.put("updatedAt", System.currentTimeMillis());
+            } catch (JSONException ignored) {
+                // Local values are safe.
+            }
+            localStore.recordEvent(sessionId, "persist_failure", "", op, true, payload);
+        } catch (RuntimeException ex) {
+            Log.e(MainActivity.TAG, "recording persist_failure also failed", ex);
         }
     }
 

@@ -1,0 +1,20 @@
+# Install: brew install lefthook && lefthook install
+# Run manually: lefthook run pre-commit
+
+pre-commit:
+  parallel: true
+  commands:
+    spotless-java:
+      glob: "mobile/android/app/src/**/*.java"
+      run: cd mobile/android && ./gradlew --no-daemon :app:spotlessJavaCheck
+      stage_fixed: false
+    spotless-dashboard:
+      glob: "mobile/android/app/src/main/{assets/dashboard,dashboard-src}/**/*.{js,css,html}"
+      run: cd mobile/android && ./gradlew --no-daemon :app:spotlessDashboardCheck
+      stage_fixed: false
+
+# Optional pre-push (uncomment to enable full test suite before push)
+# pre-push:
+#   commands:
+#     unit-tests:
+#       run: cd mobile/android && ./gradlew --no-daemon :app:testDebugUnitTest

@@ -98,12 +98,12 @@ apply from: "jacoco.gradle"
 
 dependencies {
     // FileProvider, for handing the data-backup file to the Android share sheet.
-    implementation "androidx.core:core:1.13.1"
-    testImplementation "junit:junit:4.13.2"
+    implementation libs.androidx.core
+    testImplementation libs.junit
     // Real org.json implementation; the android.jar stub returns no-op defaults in unit tests.
-    testImplementation "org.json:json:20240303"
+    testImplementation libs.json
     // Robolectric runs the real Android SQLite layer on the JVM for ObdLocalStore tests.
-    testImplementation "org.robolectric:robolectric:4.14.1"
+    testImplementation libs.robolectric
 }
 
 // Assembles the shipped dashboard index.html from the per-screen partials in

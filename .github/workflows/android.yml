@@ -70,3 +70,21 @@ jobs:
         run: npm ci
       - name: Run dashboard JS smoke tests
         run: npm test
+      - name: Report dashboard bundle size
+        if: always()
+        working-directory: mobile/android/app/src/main/assets/dashboard
+        run: |
+          {
+            echo "## Dashboard bundle size"
+            echo ""
+            echo "| Path | Bytes |"
+            echo "|------|-------|"
+            for f in js/*.js css/*.css; do
+              if [ -f "$f" ]; then
+                size=$(wc -c < "$f" | tr -d ' ')
+                echo "| $f | $size |"
+              fi
+            done
+            total=$(find js css -type f \( -name "*.js" -o -name "*.css" \) ! -path "*/lib/*" -exec cat {} + | wc -c | tr -d ' ')
+            echo "| **total (excl lib/)** | **$total** |"
+          } >> "$GITHUB_STEP_SUMMARY"

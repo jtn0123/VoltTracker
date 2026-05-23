@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
 import androidx.core.content.FileProvider;
@@ -31,6 +32,44 @@ final class BackupController {
     // Produces a complete on-device data backup and hands it to the Android share sheet
     // so the user can save it anywhere (cloud, PC) — no server involved.
     void launchShare() {
+        // Explicit PII disclosure before any file is built: the user needs to know what
+        // they're about to hand to the share sheet (and from there, potentially to a third
+        // party). The list mirrors what DataBackup.buildBackupFile actually exports.
+        showShareDisclosure(this::performBackupAndShare);
+    }
+
+    // Visible for tests / future toggles; kept package-private.
+    String shareDisclosureMessage() {
+        return "This backup contains:\n"
+                + "• OBD session logs and telemetry\n"
+                + "• GPS coordinates from your trips\n"
+                + "• Bluetooth adapter address\n"
+                + "• Redacted VIN (if your car shared one)\n"
+                + "\n"
+                + "Only share with people you trust.";
+    }
+
+    private void showShareDisclosure(Runnable onConfirmed) {
+        try {
+            new AlertDialog.Builder(activity)
+                    .setTitle("Share Volt Tracker backup")
+                    .setMessage(shareDisclosureMessage())
+                    .setPositiveButton("Share anyway", (dialog, which) -> onConfirmed.run())
+                    .setNegativeButton(
+                            "Cancel",
+                            (dialog, which) ->
+                                    activity.publishStatus("ready", "Backup cancelled.", false))
+                    .setOnCancelListener(
+                            dialog -> activity.publishStatus("ready", "Backup cancelled.", false))
+                    .show();
+        } catch (RuntimeException ex) {
+            // If we cannot even display the disclosure (e.g. activity finishing), do NOT
+            // silently fall through to sharing — refuse and surface the failure.
+            activity.publishStatus("blocked", "Could not show the backup disclosure.", true);
+        }
+    }
+
+    private void performBackupAndShare() {
         activity.publishStatus("ready", "Preparing data backup...", false);
         executor.execute(
                 () -> {

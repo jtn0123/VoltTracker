@@ -1,6 +1,8 @@
 <section id="view-drive" class="view is-active" data-view="drive">
   <section class="hero">
-    <article class="panel live-card">
+    <!-- C3: speed+power cluster announces value changes politely so screen
+         readers see "stale" / unit changes without barging into other UI. -->
+    <article class="panel live-card" aria-live="polite" aria-atomic="false">
       <div class="live-head">
         <span class="kicker">Vehicle speed</span>
         <span class="rate-chip"><span class="rate-dot"></span>4 Hz</span>
@@ -32,7 +34,8 @@
       </div>
     </article>
 
-    <article class="panel battery-strip">
+    <!-- C3: SOC + pack temp cluster as a separate live region. -->
+    <article class="panel battery-strip" aria-live="polite" aria-atomic="false">
       <div class="battery-head">
         <div>
           <div class="kicker">HV Battery</div>
@@ -187,7 +190,9 @@
     </div>
   </article>
 
-  <article class="panel status-card">
+  <!-- C3: live diagnostic counters (sample count, runtime, etc.) announced
+       politely so screen readers track OBD progress without barging. -->
+  <article class="panel status-card" aria-live="polite">
     <div class="status-head">
       <div>
         <div class="kicker">OBD session</div>

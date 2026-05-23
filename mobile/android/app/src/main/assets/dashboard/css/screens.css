@@ -19,7 +19,7 @@
 
   .detail-grid {
     display: grid;
-    gap: 12px;
+    gap: var(--space-md);
   }
 
   .route-card {
@@ -63,7 +63,7 @@
 
   .map-layout {
     display: grid;
-    gap: 12px;
+    gap: var(--space-md);
   }
 
   .map-card {
@@ -94,7 +94,7 @@
 
   .map-frame {
     position: relative;
-    height: 520px;
+    height: var(--map-height);
     border-radius: 18px;
     overflow: hidden;
     background: #0a0b10;

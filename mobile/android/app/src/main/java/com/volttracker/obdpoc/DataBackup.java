@@ -37,8 +37,8 @@ final class DataBackup {
         JSONObject payload = new JSONObject();
         try {
             payload.put("createdAtMs", System.currentTimeMillis());
-            payload.put("appState", MainActivity.parseJson(appStateJson));
-            payload.put("storage", MainActivity.parseJson(storageJson));
+            payload.put("appState", MainActivityUtils.parseJson(appStateJson));
+            payload.put("storage", MainActivityUtils.parseJson(storageJson));
             File dir = new File(context.getExternalFilesDir(null), "exports");
             if (!dir.exists() && !dir.mkdirs()) {
                 payload.put("ok", false);

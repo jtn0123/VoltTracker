@@ -26,7 +26,7 @@
 
   .hero {
     display: grid;
-    gap: 12px;
+    gap: var(--space-md);
   }
 
   .live-card {
@@ -796,4 +796,12 @@
   .stale {
     opacity: 0.5;
     transition: opacity 0.3s ease;
+  }
+
+  /* C4: in-flight indicator for bridge-triggering buttons. Combined with
+     `disabled`, this also blocks taps via pointer-events so a quick double-tap
+     can't slip through a CSS-only feedback layer. */
+  button.busy {
+    opacity: 0.55;
+    pointer-events: none;
   }

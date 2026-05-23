@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -60,6 +61,52 @@ public class AppStateJsonTest {
         assertEquals("locked", payload.getJSONObject("gps").getString("state"));
         assertEquals("driving", payload.getJSONObject("vehicle").getString("state"));
         assertEquals("observed", payload.getJSONObject("vehicle").getString("confidence"));
+    }
+
+    @Test
+    public void buildForwardsClassifierReasonsArray() throws JSONException {
+        // A1: vehicle.reasons mirrors the classifier output so the dashboard can
+        // explain *why* a state was picked without re-running the rules in JS.
+        JSONObject telemetry = new JSONObject();
+        telemetry.put("vehicleState", "driving_ev");
+        telemetry.put("vehicleStateConfidence", "observed");
+        telemetry.put("vehicleStateReasons", new JSONArray().put("moving").put("engine_quiet"));
+
+        JSONObject payload =
+                new JSONObject(
+                        AppStateJson.build(
+                                "1.0",
+                                true,
+                                true,
+                                true,
+                                "",
+                                "",
+                                telemetry,
+                                new JSONObject(),
+                                new JSONObject()));
+
+        JSONArray reasons = payload.getJSONObject("vehicle").getJSONArray("reasons");
+        assertEquals(2, reasons.length());
+        assertEquals("moving", reasons.getString(0));
+        assertEquals("engine_quiet", reasons.getString(1));
+    }
+
+    @Test
+    public void buildEmitsEmptyReasonsArrayWhenAbsent() throws JSONException {
+        JSONObject payload =
+                new JSONObject(
+                        AppStateJson.build(
+                                "1.0",
+                                false,
+                                false,
+                                false,
+                                "",
+                                "",
+                                new JSONObject(),
+                                new JSONObject(),
+                                new JSONObject()));
+
+        assertEquals(0, payload.getJSONObject("vehicle").getJSONArray("reasons").length());
     }
 
     @Test

@@ -16,6 +16,12 @@
   const bridge = VD.bridge;
   const el = VD.el;
 
+  // C2: per-render AbortControllers so the listeners attached inside renderTrips()
+  // and setHistory() don't accumulate across re-renders. Each render aborts the
+  // previous batch before binding the new one.
+  let tripsListController = null;
+  let historyController = null;
+
   function reportClientError(label, detail) {
     const message = String(detail || label || "Unknown error");
     try {
@@ -42,6 +48,17 @@
       "unhandledrejection",
       (reason && reason.stack) || String(reason || "Unhandled promise rejection")
     );
+  }, { signal: VD.errorController.signal });
+
+  // E2: forward CSP violations to the Android logger so blocked inline scripts,
+  // disallowed sources, or accidental eval show up in adb logcat without
+  // surfacing through the user-facing error banner.
+  document.addEventListener("securitypolicyviolation", (event) => {
+    try {
+      const directive = (event && event.violatedDirective) || "?";
+      const blocked = (event && event.blockedURI) || "?";
+      bridge?.logClientError?.("csp.violation", directive + " " + blocked);
+    } catch (_err) { /* logClientError best-effort */ }
   }, { signal: VD.errorController.signal });
 
   (function bindErrorBannerDismiss() {
@@ -242,6 +259,10 @@
   }
 
   function renderTrips() {
+    // C2: abort any listeners attached by the previous render so they don't
+    // leak when the trip list is rebuilt.
+    tripsListController?.abort();
+    tripsListController = new AbortController();
     const home = el("homeTrips");
     const list = el("tripList");
     if (!state.demoActive) {
@@ -253,7 +274,7 @@
     const filtered = data.trips.filter((trip) => state.tripFilter === "all" || trip.mode === state.tripFilter);
     list.replaceChildren(...filtered.map(buildTripRow));
     document.querySelectorAll("[data-trip-id]").forEach((button) => {
-      button.addEventListener("click", () => selectTrip(Number(button.dataset.tripId)));
+      button.addEventListener("click", () => selectTrip(Number(button.dataset.tripId)), { signal: tripsListController.signal });
     });
     selectTrip(state.selectedTripId);
   }
@@ -394,6 +415,10 @@
   }
 
   function setHistory(payload) {
+    // C2: abort any listeners attached by the previous render so they don't
+    // leak when the history list is rebuilt.
+    historyController?.abort();
+    historyController = new AbortController();
     const parsed = parsePayload(payload, []);
     state.deviceHistory = Array.isArray(parsed) ? parsed : [];
     const card = el("historyCard");
@@ -409,7 +434,7 @@
         const device = state.deviceHistory[Number(button.dataset.historyIndex)];
         VD.selectDevice(device.address, device.name || "OBD adapter");
         VD.setStatus({ state: "ready", detail: `Selected ${device.name || device.address}.` });
-      });
+      }, { signal: historyController.signal });
     });
   }
 

@@ -18,10 +18,16 @@ tasks.register("jacocoTestReport", JacocoReport) {
     executionData.setFrom(fileTree(dir: project.layout.buildDirectory.get(), includes: ["jacoco/testDebugUnitTest.exec"]))
 }
 
-// Coverage floors are BASELINES, not goals. They prevent regression from the
-// current numbers (project-wide LINE ~48%, data package LINE ~76% at the time
-// these were set). Raise them as the test suite improves; do not lower without
-// discussion.
+// Coverage floors are RATCHETING regression baselines, not goals. Bump them up
+// when the suite improves; never lower without discussion in the PR description.
+//
+// History:
+//   2026-05-22 (round 1): project LINE 0.43, data/ LINE 0.70 (set after the
+//   first 38-item grade-codebase pass; actual was ~48% project / ~76% data).
+//   2026-05-22 (round 2, D4): project LINE 0.71, data/ LINE 0.89. Set after the
+//   second pass added engine, recorder, backup round-trip, materializer, and
+//   query-plan tests. Actual at the time: 73.7% project / 91.9% data. Each
+//   floor is `actual − 2 pts` to absorb minor refactor churn.
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
     dependsOn "jacocoTestReport"
     def fileFilter = ["**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*"]
@@ -34,10 +40,10 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
         rule {
             element = "PACKAGE"
             includes = ["com.volttracker.obdpoc.data"]
-            limit { counter = "LINE"; minimum = 0.70 }
+            limit { counter = "LINE"; minimum = 0.89 }
         }
         rule {
-            limit { counter = "LINE"; minimum = 0.43 }
+            limit { counter = "LINE"; minimum = 0.71 }
         }
     }
 }
