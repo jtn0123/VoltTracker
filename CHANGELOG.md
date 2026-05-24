@@ -1,6 +1,46 @@
 # CHANGELOG
 
 
+## v0.2.0 (2026-05-24)
+
+### Features
+
+- **release**: Sign tagged APKs with keystore decoded from CI secrets
+  ([#129](https://github.com/jtn0123/VoltTracker/pull/129),
+  [`a360c53`](https://github.com/jtn0123/VoltTracker/commit/a360c53a7ffe2bb2502f906a2165d1430a01479d))
+
+Tagged releases now ship app-release.apk (signed) instead of app-release-unsigned.apk. Decodes a
+  PKCS12 keystore from ANDROID_KEYSTORE_BASE64 and writes a keystore.properties that
+  mobile/android/app/build.gradle:55-76's existing signingConfigs.release block picks up
+  automatically. No build.gradle changes needed — signed-when-present-else-unsigned was already its
+  contract.
+
+Three details worth flagging:
+
+* The decode step exits 0 (rather than failing) when secrets aren't set, and the Stage APKs step
+  detects whether app-release.apk or app-release-unsigned.apk landed. This means a future
+  keystore-rotation outage degrades gracefully to unsigned APKs rather than red-crossing every
+  release run.
+
+* sanity-checks the keystore with `keytool -list` before assemble, using the decoded password. Wrong
+  password / corrupt keystore fails fast rather than producing a broken signed APK.
+
+* deletes app/release.keystore and keystore.properties in a final `if: always()` step. The runner is
+  ephemeral so this is mostly symbolic, but it keeps secrets out of any post-job workspace archive.
+
+Verified locally: ./gradlew :app:assembleRelease produces app-release.apk, apksigner reports v1 + v2
+  schemes verified, signer DN matches the keystore CN.
+
+Secrets required (set out-of-band): ANDROID_KEYSTORE_BASE64 # base64 of release.keystore
+  ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD # same as store password for
+  PKCS12
+
+The keystore + passwords are the user's to back up — losing them means no future signed APK can be
+  installed as an upgrade to one already distributed under this key.
+
+Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+
 ## v0.1.1 (2026-05-24)
 
 ### Bug Fixes
