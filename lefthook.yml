@@ -12,6 +12,19 @@ pre-commit:
       glob: "mobile/android/app/src/main/{assets/dashboard,dashboard-src}/**/*.{js,css,html}"
       run: cd mobile/android && ./gradlew --no-daemon :app:spotlessDashboardCheck
       stage_fixed: false
+    # I1: catch undefined globals, redeclared names, and unreachable code locally before
+    # they ride to CI. Spotless handles formatting; this catches semantic issues Spotless
+    # can't see. Skipped if dashboard-tests/node_modules is missing so first-time clones
+    # don't break commits — run `npm --prefix mobile/android/dashboard-tests install` once.
+    lint-dashboard-js:
+      glob: "mobile/android/app/src/main/assets/dashboard/js/**/*.js"
+      run: |
+        if [ -d mobile/android/dashboard-tests/node_modules ]; then
+          npm --prefix mobile/android/dashboard-tests run lint
+        else
+          echo "skipping eslint: run 'npm --prefix mobile/android/dashboard-tests install' to enable"
+        fi
+      stage_fixed: false
 
 # Optional pre-push (uncomment to enable full test suite before push)
 # pre-push:

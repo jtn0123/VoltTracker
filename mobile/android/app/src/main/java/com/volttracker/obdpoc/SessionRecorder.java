@@ -18,9 +18,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.json.JSONException;
@@ -37,15 +39,49 @@ import org.json.JSONObject;
  */
 final class SessionRecorder {
 
+    // Telemetry queue cap: 2000 entries × ~200 bytes/row ≈ ~400 KB worst-case backlog.
+    // Generous for normal driving (1 Hz × 30 minutes = 1800 rows) yet bounded so a stalled
+    // SQLite writer cannot grow the process heap during long scan-mode sessions or under
+    // battery-saver-induced I/O lag. On overflow we keep the most recent telemetry and drop
+    // the oldest queued row — telemetry loss is acceptable here; OOM is not.
+    static final int TELEMETRY_QUEUE_CAPACITY = 2000;
+    // Lifecycle queue cap: very small (lifecycle events fire a handful of times per session
+    // — startSession / closeSession / finalizeSession). If we ever overflow this, the existing
+    // inline-run fallback at lifecycleAsync handles the RejectedExecutionException.
+    static final int LIFECYCLE_QUEUE_CAPACITY = 64;
+
     private final Object lock;
     private final ObdSessionLog sessionLog;
     // telemetryExecutor: high-volume telemetry/event/observation writes. Failures are
     // intentionally swallowed — these rows are diagnostic-only, never block OBD polling.
-    private final ExecutorService telemetryExecutor = Executors.newSingleThreadExecutor();
+    // DiscardOldestUnlessShutdown: under sustained backpressure during normal operation,
+    // drop the oldest queued telemetry rather than block the poll thread or grow the queue
+    // without bound. AFTER shutdown, behave like AbortPolicy so awaitTelemetryDrain's
+    // RejectedExecutionException catch path runs immediately instead of waiting 2s for a
+    // marker that will never be processed. Without the shutdown-aware branch, shutdown ↔
+    // lifecycle ordering races on a 2s timeout and finalize can be skipped.
+    private final ExecutorService telemetryExecutor =
+            new ThreadPoolExecutor(
+                    1,
+                    1,
+                    0L,
+                    TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<>(TELEMETRY_QUEUE_CAPACITY),
+                    new DiscardOldestUnlessShutdownPolicy());
     // lifecycleExecutor: session lifecycle writes (closeSession / finalizeSession).
     // Failures are surfaced via Log.e AND a persist_failure status_events row, so a
     // failed finalize cannot silently leave a session marked active forever.
-    private final ExecutorService lifecycleExecutor = Executors.newSingleThreadExecutor();
+    // AbortPolicy: lifecycle drops are NOT acceptable — the inline-run fallback at
+    // lifecycleAsync catches RejectedExecutionException and runs the task on the
+    // caller thread instead, so the finalize still lands.
+    private final ExecutorService lifecycleExecutor =
+            new ThreadPoolExecutor(
+                    1,
+                    1,
+                    0L,
+                    TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<>(LIFECYCLE_QUEUE_CAPACITY),
+                    new ThreadPoolExecutor.AbortPolicy());
     private ObdLocalStore localStore;
 
     private long activeSessionId;
@@ -56,6 +92,20 @@ final class SessionRecorder {
     private String currentHeader = "";
     private String lastPersistedStatusKey = "";
     private long lastPersistedStatusAtMs;
+
+    // Custom telemetry rejection handler: DiscardOldestPolicy semantics in normal operation,
+    // AbortPolicy semantics post-shutdown. See the telemetryExecutor comment for why.
+    private static final class DiscardOldestUnlessShutdownPolicy
+            implements RejectedExecutionHandler {
+        @Override
+        public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+            if (executor.isShutdown()) {
+                throw new RejectedExecutionException("telemetry executor shut down");
+            }
+            executor.getQueue().poll();
+            executor.execute(r);
+        }
+    }
 
     SessionRecorder(Object lock, ObdSessionLog sessionLog, ObdLocalStore localStore) {
         this.lock = lock;
@@ -507,7 +557,17 @@ final class SessionRecorder {
             Future<?> marker = telemetryExecutor.submit(() -> {});
             marker.get(2, TimeUnit.SECONDS);
         } catch (RejectedExecutionException ex) {
-            // Executor already shut down — nothing left to drain.
+            // Submit was rejected because the executor entered shutdown. That tells us OUR
+            // marker won't run — it does NOT tell us the previously-queued telemetry tasks
+            // have finished. shutdown() is orderly: already-queued tasks continue executing
+            // until the worker drains them. So we explicitly wait for termination (which
+            // returns immediately if the executor has already terminated) before letting
+            // finalize/materialize read from the database.
+            try {
+                telemetryExecutor.awaitTermination(2, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         } catch (ExecutionException ex) {

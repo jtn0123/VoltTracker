@@ -3,6 +3,7 @@ package com.volttracker.obdpoc.data;
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.util.Log;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -185,56 +186,164 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 2) {
-            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN latitude REAL");
-            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN longitude REAL");
-            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN accuracy_m REAL");
-            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN gps_speed_mps REAL");
-            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN bearing_deg REAL");
-            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN location_age_ms INTEGER");
+            runMigrationStep(
+                    db,
+                    oldVersion,
+                    2,
+                    "telemetry-gps-columns",
+                    target -> {
+                        target.execSQL(
+                                "ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN latitude REAL");
+                        target.execSQL(
+                                "ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN longitude REAL");
+                        target.execSQL(
+                                "ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN accuracy_m REAL");
+                        target.execSQL(
+                                "ALTER TABLE "
+                                        + TABLE_TELEMETRY
+                                        + " ADD COLUMN gps_speed_mps REAL");
+                        target.execSQL(
+                                "ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN bearing_deg REAL");
+                        target.execSQL(
+                                "ALTER TABLE "
+                                        + TABLE_TELEMETRY
+                                        + " ADD COLUMN location_age_ms INTEGER");
+                    });
         }
         if (oldVersion < 3) {
-            createObservationTables(db);
-            createObservationIndexes(db);
+            runMigrationStep(
+                    db,
+                    oldVersion,
+                    3,
+                    "observation-tables-and-indexes",
+                    target -> {
+                        createObservationTables(target);
+                        createObservationIndexes(target);
+                    });
         }
         if (oldVersion < 4) {
-            createRoadmapTables(db);
-            createRoadmapIndexes(db);
+            runMigrationStep(
+                    db,
+                    oldVersion,
+                    4,
+                    "roadmap-tables-and-indexes",
+                    target -> {
+                        createRoadmapTables(target);
+                        createRoadmapIndexes(target);
+                    });
         }
         if (oldVersion < 5) {
-            db.execSQL(
-                    "ALTER TABLE "
-                            + TABLE_TELEMETRY
-                            + " ADD COLUMN charge_transition_hint INTEGER");
-            db.execSQL("ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN app_foreground INTEGER");
-            // Backfill existing rows from their stored JSON so the new columns are not NULL.
-            db.execSQL(
-                    "UPDATE "
-                            + TABLE_TELEMETRY
-                            + " SET charge_transition_hint = 1"
-                            + " WHERE charge_transition_hint IS NULL AND json LIKE '%chargeTransitionHint%'");
-            db.execSQL(
-                    "UPDATE "
-                            + TABLE_TELEMETRY
-                            + " SET charge_transition_hint = 0"
-                            + " WHERE charge_transition_hint IS NULL");
-            db.execSQL(
-                    "UPDATE "
-                            + TABLE_TELEMETRY
-                            + " SET app_foreground = 0"
-                            + " WHERE app_foreground IS NULL AND json LIKE '%\"appForeground\":false%'");
-            db.execSQL(
-                    "UPDATE "
-                            + TABLE_TELEMETRY
-                            + " SET app_foreground = 1"
-                            + " WHERE app_foreground IS NULL");
+            runMigrationStep(
+                    db,
+                    oldVersion,
+                    5,
+                    "charge-transition-and-foreground-columns-with-backfill",
+                    target -> {
+                        target.execSQL(
+                                "ALTER TABLE "
+                                        + TABLE_TELEMETRY
+                                        + " ADD COLUMN charge_transition_hint INTEGER");
+                        target.execSQL(
+                                "ALTER TABLE "
+                                        + TABLE_TELEMETRY
+                                        + " ADD COLUMN app_foreground INTEGER");
+                        // Backfill existing rows from their stored JSON so the new columns are
+                        // not NULL.
+                        target.execSQL(
+                                "UPDATE "
+                                        + TABLE_TELEMETRY
+                                        + " SET charge_transition_hint = 1"
+                                        + " WHERE charge_transition_hint IS NULL"
+                                        + " AND json LIKE '%chargeTransitionHint%'");
+                        target.execSQL(
+                                "UPDATE "
+                                        + TABLE_TELEMETRY
+                                        + " SET charge_transition_hint = 0"
+                                        + " WHERE charge_transition_hint IS NULL");
+                        target.execSQL(
+                                "UPDATE "
+                                        + TABLE_TELEMETRY
+                                        + " SET app_foreground = 0"
+                                        + " WHERE app_foreground IS NULL"
+                                        + " AND json LIKE '%\"appForeground\":false%'");
+                        target.execSQL(
+                                "UPDATE "
+                                        + TABLE_TELEMETRY
+                                        + " SET app_foreground = 1"
+                                        + " WHERE app_foreground IS NULL");
+                    });
         }
         if (oldVersion < 6) {
-            createDiagnosticTables(db);
-            createDiagnosticIndexes(db);
+            runMigrationStep(
+                    db,
+                    oldVersion,
+                    6,
+                    "diagnostic-tables-and-indexes",
+                    target -> {
+                        createDiagnosticTables(target);
+                        createDiagnosticIndexes(target);
+                    });
         }
         if (oldVersion < 7) {
-            createPruneIndexes(db);
+            runMigrationStep(
+                    db, oldVersion, 7, "prune-by-time-indexes", VoltTrackerDb::createPruneIndexes);
         }
+    }
+
+    /**
+     * Runs a single migration step inside a database transaction.
+     *
+     * <p>If {@code step} throws, the transaction is not marked successful and SQLite rolls back
+     * every change made by this step — so a half-applied schema cannot stick. The original
+     * exception is rethrown after a logged event so Android's {@link SQLiteOpenHelper} treats the
+     * upgrade as failed (the next launch retries from the same {@code oldVersion}). Without this
+     * wrapper, a failing ALTER mid-step leaves the DB at {@code oldVersion} but with some columns
+     * already added — re-running the migration then fails with "duplicate column", silently masking
+     * the original failure.
+     */
+    // Package-private so VoltTrackerDbMigrationTest can verify rollback semantics directly.
+    static void runMigrationStep(
+            SQLiteDatabase db,
+            int oldVersion,
+            int targetVersion,
+            String label,
+            MigrationStep step) {
+        Log.i(
+                "VoltTrackerDb",
+                "migrating v" + oldVersion + "->v" + targetVersion + " (" + label + ") starting");
+        db.beginTransaction();
+        try {
+            step.apply(db);
+            db.setTransactionSuccessful();
+            Log.i(
+                    "VoltTrackerDb",
+                    "migrating v"
+                            + oldVersion
+                            + "->v"
+                            + targetVersion
+                            + " ("
+                            + label
+                            + ") committed");
+        } catch (RuntimeException ex) {
+            Log.e(
+                    "VoltTrackerDb",
+                    "migrating v"
+                            + oldVersion
+                            + "->v"
+                            + targetVersion
+                            + " ("
+                            + label
+                            + ") FAILED — rolling back",
+                    ex);
+            throw ex;
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    @FunctionalInterface
+    interface MigrationStep {
+        void apply(SQLiteDatabase db);
     }
 
     private static void createObservationTables(SQLiteDatabase db) {

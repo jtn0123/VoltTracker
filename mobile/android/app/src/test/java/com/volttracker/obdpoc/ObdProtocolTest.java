@@ -339,4 +339,106 @@ public class ObdProtocolTest {
         assertNull(ObdProtocol.parseCoolantC("4105"));
         assertNull(ObdProtocol.parseKnownValue("222429", "622429"));
     }
+
+    // ---- B1: bounds-safety regression matrix ---------------------------------------
+    //
+    // Pin every public parser against the failure shapes weak-Bluetooth connections actually
+    // produce: null, empty, 1-byte fragments, hex-prefix-only, garbage interleaved with the
+    // real marker. The expectation is uniform — return null (or empty list / empty array),
+    // never throw. If any future change removes a bounds check in mode01Bytes / voltByteValue
+    // / voltWordValue / mode22Payload, this test fires.
+
+    private static final String[] BAD_INPUTS =
+            new String[] {
+                null,
+                "",
+                " ",
+                ">",
+                "\r\n>",
+                "Z",
+                "ZZ",
+                "?",
+                "??",
+                "STOPPED",
+                "NO DATA",
+                "SEARCHING...",
+                "BUS INIT: ...ERROR",
+                "41",
+                "4",
+                "410",
+                "62",
+                "622",
+                "62F"
+            };
+
+    @Test
+    public void mode01ParsersRejectMalformedResponses() {
+        for (String input : BAD_INPUTS) {
+            assertNull("speed must reject: " + input, ObdProtocol.parseSpeedKph(input));
+            assertNull("rpm must reject: " + input, ObdProtocol.parseRpm(input));
+            assertNull("coolant must reject: " + input, ObdProtocol.parseCoolantC(input));
+            assertNull("load must reject: " + input, ObdProtocol.parseEngineLoadPct(input));
+            assertNull("throttle must reject: " + input, ObdProtocol.parseThrottlePct(input));
+            assertNull("soc must reject: " + input, ObdProtocol.parseStateOfChargePct(input));
+            assertFalse(
+                    "speed-sentinel must reject: " + input, ObdProtocol.hasMaxSpeedSentinel(input));
+        }
+    }
+
+    @Test
+    public void voltageParserRejectsMalformedResponses() {
+        for (String input : BAD_INPUTS) {
+            assertNull("voltage must reject: " + input, ObdProtocol.parseVoltage(input));
+        }
+        // Letter V present but no digits — must not throw on the empty substring.
+        assertNull(ObdProtocol.parseVoltage("V"));
+        assertNull(ObdProtocol.parseVoltage(">V"));
+    }
+
+    @Test
+    public void mode22ParsersRejectMalformedResponses() {
+        // Per-PID via parseKnownValue: every command should reject every bad input cleanly.
+        String[] mode22Commands = {
+            "222429", "222414", "22434F", "224368", "224369", "22436B", "22436C", "224373", "22437D"
+        };
+        for (String command : mode22Commands) {
+            for (String input : BAD_INPUTS) {
+                assertNull(
+                        command + " must reject: " + input,
+                        ObdProtocol.parseKnownValue(command, input));
+            }
+            // Marker present but no data bytes after it.
+            String markerOnly = "62" + command.substring(2);
+            assertNull(
+                    command + " must reject marker-only: " + markerOnly,
+                    ObdProtocol.parseKnownValue(command, markerOnly));
+        }
+    }
+
+    @Test
+    public void packPowerHandlesMissingOrMalformedHalves() {
+        // Pack power needs BOTH voltage and current — any malformed input must yield null,
+        // never NaN, never a divide-by-zero, never a crash.
+        assertNull(ObdProtocol.parsePackPowerKw(null, null));
+        assertNull(ObdProtocol.parsePackPowerKw("", ""));
+        assertNull(ObdProtocol.parsePackPowerKw("62242900FF", null));
+        assertNull(ObdProtocol.parsePackPowerKw(null, "62241400FF"));
+        assertNull(ObdProtocol.parsePackPowerKw("62242900FF", "garbage"));
+        assertNull(ObdProtocol.parsePackPowerKw("62", "62"));
+    }
+
+    @Test
+    public void diagnosticTroubleCodeParserRejectsMalformedResponses() {
+        for (String input : BAD_INPUTS) {
+            assertTrue(
+                    "mode 03 must reject: " + input,
+                    ObdProtocol.parseDiagnosticTroubleCodes("03", input, "7DF").isEmpty());
+            assertTrue(
+                    "mode 07 must reject: " + input,
+                    ObdProtocol.parseDiagnosticTroubleCodes("07", input, "").isEmpty());
+        }
+        // Marker present but no payload after — must not throw on empty substring math.
+        assertTrue(ObdProtocol.parseDiagnosticTroubleCodes("03", "43", "").isEmpty());
+        assertTrue(ObdProtocol.parseDiagnosticTroubleCodes("03", "43 0", "").isEmpty());
+    }
 }

@@ -251,18 +251,19 @@
         VD.renderMap();
       }, opts);
     });
+    // C1: bind through bindListenerGuarded so a renamed partial ID logs a warn + skips
+    // rather than throwing and aborting every binding below it.
     const onSessionClick = (event) => {
       const button = event.target.closest("[data-map-session]");
       if (!button) return;
       state.selectedMapSessionId = button.dataset.mapSession;
       VD.renderMap();
     };
-    el("mapSessionList").addEventListener("click", onSessionClick, opts);
+    VD.bindListenerGuarded("mapSessionList", "click", onSessionClick, opts);
     // The new drive-chip strip uses the same [data-map-session] attribute, so
     // share the handler. Without this, tapping a chip did nothing.
-    const chips = el("mapDriveChips");
-    if (chips) chips.addEventListener("click", onSessionClick, opts);
-    el("mapFullBtn").addEventListener("click", () => {
+    VD.bindListenerGuarded("mapDriveChips", "click", onSessionClick, opts);
+    VD.bindListenerGuarded("mapFullBtn", "click", () => {
       state.mapFull = !state.mapFull;
       VD.renderMap();
     }, opts);
@@ -278,24 +279,28 @@
         VD.setStatus({ state: "ready", detail: "This trip has no stored GPS route." });
       }
     }, opts);
-    el("permissionBtn").addEventListener("click", () => handleAction("permissions"), opts);
-    el("refreshBtn").addEventListener("click", () => handleAction("refresh"), opts);
-    el("lastBtn").addEventListener("click", () => handleAction("last"), opts);
-    el("scanBtn").addEventListener("click", (event) => handleAction("scan", event.currentTarget), opts);
-    el("connectBtn").addEventListener("click", (event) => handleAction(el("connectBtn").dataset.primaryAction || "connect", event.currentTarget), opts);
-    el("disconnectBtn").addEventListener("click", () => handleAction("stop"), opts);
-    el("demoStopBtn").addEventListener("click", stopDemo, opts);
-    el("driveModeSelect").addEventListener("change", (event) => {
+    VD.bindListenerGuarded("permissionBtn", "click", () => handleAction("permissions"), opts);
+    VD.bindListenerGuarded("refreshBtn", "click", () => handleAction("refresh"), opts);
+    VD.bindListenerGuarded("lastBtn", "click", () => handleAction("last"), opts);
+    VD.bindListenerGuarded("scanBtn", "click", (event) => handleAction("scan", event.currentTarget), opts);
+    VD.bindListenerGuarded("connectBtn", "click", (event) => {
+      const btn = el("connectBtn");
+      const action = (btn && btn.dataset.primaryAction) || "connect";
+      handleAction(action, event.currentTarget);
+    }, opts);
+    VD.bindListenerGuarded("disconnectBtn", "click", () => handleAction("stop"), opts);
+    VD.bindListenerGuarded("demoStopBtn", "click", stopDemo, opts);
+    VD.bindListenerGuarded("driveModeSelect", "change", (event) => {
       VD.setStatus({ state: "ready", detail: `Drive mode set to ${event.target.value}.` });
     }, opts);
-    el("tripTabs").addEventListener("click", (event) => {
+    VD.bindListenerGuarded("tripTabs", "click", (event) => {
       const button = event.target.closest("button[data-filter]");
       if (!button) return;
       state.tripFilter = button.dataset.filter;
       document.querySelectorAll("#tripTabs button").forEach((node) => node.classList.toggle("is-active", node === button));
       VD.renderTrips();
     }, opts);
-    el("addChargeBtn").addEventListener("click", () => {
+    VD.bindListenerGuarded("addChargeBtn", "click", () => {
       data.sessions.unshift({ date: "Today - 21:10", type: "L2", kwh: 10.8, soc: "31->90", location: "Home", cost: "$1.30" });
       VD.renderSessions();
       VD.setStatus({ state: "ready", detail: "Charging session staged locally." });

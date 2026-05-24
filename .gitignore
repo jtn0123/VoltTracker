@@ -64,6 +64,9 @@ backups/
 # Android OBD debug artifacts (large on-phone DB pulls, route-extraction scratch)
 mobile/android/docs/db-pulls/
 
+# Dashboard Vitest coverage output (D4)
+mobile/android/dashboard-tests/coverage/
+
 # Android release signing — never commit keystores or their passwords
 keystore.properties
 *.jks

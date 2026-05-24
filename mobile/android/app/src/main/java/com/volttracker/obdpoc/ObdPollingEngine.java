@@ -1,6 +1,5 @@
 package com.volttracker.obdpoc;
 
-import static com.volttracker.obdpoc.ObdElmDecode.appendRaw;
 import static com.volttracker.obdpoc.ObdElmDecode.friendlyConnectionMessage;
 import static com.volttracker.obdpoc.ObdElmDecode.hasElmPrompt;
 import static com.volttracker.obdpoc.ObdElmDecode.initialConnectBackoffMs;
@@ -12,11 +11,16 @@ import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.util.Log;
+import com.volttracker.obdpoc.PidSchedule.Header;
+import com.volttracker.obdpoc.PidSchedule.PidSpec;
 import com.volttracker.obdpoc.classify.ClassifierInput;
 import com.volttracker.obdpoc.classify.ClassifierResult;
 import com.volttracker.obdpoc.classify.VehicleStateClassifier;
 import com.volttracker.obdpoc.location.FilteredLocation;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -52,6 +56,14 @@ class ObdPollingEngine {
     private long lastSampleGapMs;
     private long maxSampleGapMs;
 
+    // B6 — staggered polling state. cycleNum drives PidSchedule.dueOnCycle(); the maps
+    // carry forward the most recent raw response (and wall-clock time it was taken) for
+    // every PID so cycles that don't re-poll a slow PID can still emit its last-known value
+    // and a *StaleMs companion. Reset at the start of every session.
+    private int cycleNum;
+    private final Map<String, String> lastRawByCommand = new HashMap<>();
+    private final Map<String, Long> lastPolledAtMsByCommand = new HashMap<>();
+
     ObdPollingEngine(ObdService service) {
         this.service = service;
         this.demoLoop = new DemoPollingLoop(service, this);
@@ -64,6 +76,9 @@ class ObdPollingEngine {
         resetSessionHealth();
         speedFilter.reset();
         supportedPidsSummary = supportedPidsSeed;
+        cycleNum = 0;
+        lastRawByCommand.clear();
+        lastPolledAtMsByCommand.clear();
     }
 
     int sampleCount() {
@@ -377,76 +392,84 @@ class ObdPollingEngine {
     // Throws IOException when the adapter socket has broken so the caller can reconnect.
     private JSONObject readObdSample() throws IOException {
         JSONObject sample = new JSONObject();
-        String raw = "";
+        StringBuilder rawThisCycle = new StringBuilder();
         try {
-            String voltageRaw = sendRecoverableCommand("ATRV", 1500);
-            raw = appendRaw(raw, "ATRV", voltageRaw);
+            // B6: poll only the PIDs due on this cycle, grouped by ATSH header so we only
+            // pay the 7E4 switch cost when batteryTemp is actually being read. The first
+            // cycle (cycleNum == 0) intentionally polls every spec so the dashboard has a
+            // complete baseline within one cycle instead of phasing in over ~10 seconds.
+            boolean isInitialCycle = (cycleNum == 0);
+            List<PidSpec> due =
+                    isInitialCycle ? PidSchedule.SPECS : PidSchedule.dueOnCycle(cycleNum);
+            runScheduledPolls(due, rawThisCycle);
+            cycleNum += 1;
+
+            // Every parse below reads the carry-forward last-known raw. That way cycles that
+            // skip a slow PID still emit its last value (and a *StaleMs companion below) and
+            // the dashboard sees a complete sample with no flicker.
+            String voltageRaw = lastRawByCommand.get("ATRV");
             Float voltage = ObdProtocol.parseVoltage(voltageRaw);
             if (voltage != null) {
                 sample.put("voltage", voltage);
             }
-            String speedRaw = sendRecoverableCommand("010D", 1500);
-            raw = appendRaw(raw, "010D", speedRaw);
+
+            String speedRaw = lastRawByCommand.get("010D");
             Integer speed = ObdProtocol.parseSpeedKph(speedRaw);
-            boolean chargeTransitionHint = ObdProtocol.hasMaxSpeedSentinel(speedRaw);
+            // The speed sentinel (0xFF) is the Volt's "charging" hint. We only re-evaluate the
+            // charge-transition hint / speed filter when this cycle actually polled speed —
+            // otherwise we'd double-count old samples as "rejected" every cycle.
+            boolean polledSpeedThisCycle = !isInitialCycle ? wasPolledThisCycle(due, "010D") : true;
+            boolean chargeTransitionHint =
+                    polledSpeedThisCycle && ObdProtocol.hasMaxSpeedSentinel(speedRaw);
             Integer acceptedSpeed = null;
-            if (speed != null && speedFilter.accept(speed, System.currentTimeMillis())) {
+            if (polledSpeedThisCycle) {
+                if (speed != null && speedFilter.accept(speed, System.currentTimeMillis())) {
+                    sample.put("speedKph", speed);
+                    acceptedSpeed = speed;
+                } else if (speed != null) {
+                    sample.put("speedRejectedKph", speed);
+                    service.recorder.logEvent("speed_rejected", "speedKph", String.valueOf(speed));
+                } else if (chargeTransitionHint) {
+                    sample.put("speedRejectedKph", 255);
+                    sample.put("chargeTransitionHint", true);
+                    service.recorder.logEvent(
+                            "speed_rejected",
+                            "speedKph",
+                            "255",
+                            "reason",
+                            "charge_transition_hint");
+                }
+            } else if (speed != null) {
+                // Carry-forward path: re-emit the last accepted speed without re-running the
+                // filter (it's time-sensitive) so the dashboard keeps showing the last value.
                 sample.put("speedKph", speed);
                 acceptedSpeed = speed;
-            } else if (speed != null) {
-                sample.put("speedRejectedKph", speed);
-                service.recorder.logEvent("speed_rejected", "speedKph", String.valueOf(speed));
-            } else if (chargeTransitionHint) {
-                sample.put("speedRejectedKph", 255);
-                sample.put("chargeTransitionHint", true);
-                service.recorder.logEvent(
-                        "speed_rejected", "speedKph", "255", "reason", "charge_transition_hint");
             }
-            String rpmRaw = sendRecoverableCommand("010C", 1500);
-            raw = appendRaw(raw, "010C", rpmRaw);
-            Float rpm = ObdProtocol.parseRpm(rpmRaw);
+
+            Float rpm = ObdProtocol.parseRpm(lastRawByCommand.get("010C"));
             if (rpm != null) {
                 sample.put("rpm", Math.round(rpm));
             }
-            String coolantRaw = sendRecoverableCommand("0105", 1500);
-            raw = appendRaw(raw, "0105", coolantRaw);
-            Integer coolant = ObdProtocol.parseCoolantC(coolantRaw);
+            Integer coolant = ObdProtocol.parseCoolantC(lastRawByCommand.get("0105"));
             if (coolant != null) {
                 sample.put("coolantC", coolant);
             }
-            String loadRaw = sendRecoverableCommand("0104", 1500);
-            raw = appendRaw(raw, "0104", loadRaw);
-            Integer load = ObdProtocol.parseEngineLoadPct(loadRaw);
+            Integer load = ObdProtocol.parseEngineLoadPct(lastRawByCommand.get("0104"));
             if (load != null) {
                 sample.put("loadPct", load);
             }
-            String throttleRaw = sendRecoverableCommand("0111", 1500);
-            raw = appendRaw(raw, "0111", throttleRaw);
-            Integer throttle = ObdProtocol.parseThrottlePct(throttleRaw);
+            Integer throttle = ObdProtocol.parseThrottlePct(lastRawByCommand.get("0111"));
             if (throttle != null) {
                 sample.put("throttlePct", throttle);
             }
-            String socRaw = sendRecoverableCommand("015B", 1500);
-            raw = appendRaw(raw, "015B", socRaw);
-            Integer soc = ObdProtocol.parseStateOfChargePct(socRaw);
+            Integer soc = ObdProtocol.parseStateOfChargePct(lastRawByCommand.get("015B"));
             if (soc != null) {
                 sample.put("soc", soc);
             }
 
-            // Volt HV pack metrics (battery temp, pack power) live on dedicated ECUs
-            // reached via ATSH headers — see ObdProbes.VOLT_7E1_PROBES / VOLT_7E4_PROBES.
-            // Restore the functional header (7DF) afterwards so the next cycle's mode-01
-            // PIDs still broadcast to every ECU. A thrown IOException ends the poll and
-            // the reconnect re-runs initializeElm327 (ATSP0), so the header self-heals.
-            sendCommand("ATSH7E1", 1500);
-            String packVoltageRaw = sendRecoverableCommand("222429", 1500);
-            raw = appendRaw(raw, "222429", packVoltageRaw);
-            String packCurrentRaw = sendRecoverableCommand("222414", 1500);
-            raw = appendRaw(raw, "222414", packCurrentRaw);
-            sendCommand("ATSH7E4", 1500);
-            String batteryTempRaw = sendRecoverableCommand("22434F", 1500);
-            raw = appendRaw(raw, "22434F", batteryTempRaw);
-            sendCommand("ATSH7DF", 1500);
+            String packVoltageRaw = lastRawByCommand.get("222429");
+            String packCurrentRaw = lastRawByCommand.get("222414");
+            String batteryTempRaw = lastRawByCommand.get("22434F");
             ObdProtocol.ParsedPidValue batteryTemp =
                     ObdProtocol.parseKnownValue("22434F", batteryTempRaw);
             if (batteryTemp != null && batteryTemp.valueNumeric != null) {
@@ -457,14 +480,22 @@ class ObdPollingEngine {
                 sample.put("powerKw", round1(powerKw));
             }
 
+            // B6: per-PID staleness companion fields. Only emit for slow PIDs (period > 1)
+            // since Tier 1 PIDs are always fresh on every cycle. Dashboard may ignore these
+            // (and most rendering does) — they exist so a future stale-tile UI can show
+            // "value last updated N seconds ago" without flicker between polls.
+            long now = System.currentTimeMillis();
+            putStaleMsIfTracked(sample, "voltageStaleMs", "ATRV", now);
+            putStaleMsIfTracked(sample, "socStaleMs", "015B", now);
+            putStaleMsIfTracked(sample, "coolantCStaleMs", "0105", now);
+            putStaleMsIfTracked(sample, "batteryTempStaleMs", "22434F", now);
+
             sampleCount += 1;
             sample.put("source", "obd");
             sample.put("connected", true);
             sample.put("adapter", service.activeName);
             sample.put("sampleCount", sampleCount);
-            sample.put(
-                    "sessionMs",
-                    Math.max(0, System.currentTimeMillis() - service.sessionStartedAtMs));
+            sample.put("sessionMs", Math.max(0, now - service.sessionStartedAtMs));
             sample.put("supportedPids", supportedPidsSummary);
             ObdProtocol.ParsedPidValue packCurrent =
                     ObdProtocol.parseKnownValue("222414", packCurrentRaw);
@@ -479,14 +510,14 @@ class ObdPollingEngine {
                                     packCurrentA,
                                     chargeTransitionHint ? Boolean.TRUE : null,
                                     engineRunningHint,
-                                    System.currentTimeMillis()));
+                                    now));
             sample.put("vehicleState", classified.state.asPayloadKey());
             sample.put("vehicleStateConfidence", classified.confidence.asPayloadKey());
             sample.put("vehicleStateReasons", new JSONArray(classified.reasons));
-            sample.put("updatedAt", System.currentTimeMillis());
+            sample.put("updatedAt", now);
             appendSessionHealth(sample);
             appendLocation(sample);
-            sample.put("raw", raw.trim());
+            sample.put("raw", rawThisCycle.toString().trim());
         } catch (JSONException ex) {
             // Local numeric values are safe; an encoding error is non-fatal, keep polling.
             service.recorder.logError("sample_encoding_error", ex);
@@ -526,6 +557,84 @@ class ObdPollingEngine {
             lastSampleGapMs = 0L;
             maxSampleGapMs = 0L;
         }
+    }
+
+    /**
+     * Issues every PID read due on this cycle, grouped by ATSH header so we don't pay an
+     * unnecessary header switch for headers that have nothing due. Captures the wire transcript
+     * into {@code rawThisCycle} and updates the carry-forward maps. Throws {@link IOException} only
+     * if the underlying socket breaks — non-fatal "no prompt" or empty-response cases are absorbed
+     * by {@link #sendRecoverableCommand}.
+     */
+    private void runScheduledPolls(List<PidSpec> due, StringBuilder rawThisCycle)
+            throws IOException {
+        if (due.isEmpty()) {
+            return;
+        }
+        boolean switchedHeader = false;
+        Header lastHeaderSet = Header.BROADCAST;
+        for (Header header : Header.values()) {
+            List<PidSpec> headerSpecs = filterByHeader(due, header);
+            if (headerSpecs.isEmpty()) {
+                continue;
+            }
+            if (header != Header.BROADCAST && header != lastHeaderSet) {
+                sendCommand(header.atCommand, 1500);
+                switchedHeader = true;
+                lastHeaderSet = header;
+            }
+            for (PidSpec spec : headerSpecs) {
+                String response = sendRecoverableCommand(spec.command, 1500);
+                appendRawTo(rawThisCycle, spec.command, response);
+                lastRawByCommand.put(spec.command, response);
+                lastPolledAtMsByCommand.put(spec.command, System.currentTimeMillis());
+            }
+        }
+        // Restore the broadcast header only if we actually changed it — most cycles only
+        // touch BROADCAST + 7E1, so the restore lands once. The init path runs ATSP0 on
+        // reconnect, so a half-restored header self-heals on the next reconnect.
+        if (switchedHeader) {
+            sendCommand(PidSchedule.RESTORE_BROADCAST_HEADER_COMMAND, 1500);
+        }
+    }
+
+    private static List<PidSpec> filterByHeader(List<PidSpec> specs, Header header) {
+        List<PidSpec> out = new ArrayList<>();
+        for (PidSpec spec : specs) {
+            if (spec.header == header) {
+                out.add(spec);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * True if the given command appears in {@code due}. Used so the speed/sentinel logic only fires
+     * on cycles that actually polled speed; carry-forward cycles use the last-accepted-speed path
+     * without re-running the time-sensitive filter.
+     */
+    private static boolean wasPolledThisCycle(List<PidSpec> due, String command) {
+        for (PidSpec spec : due) {
+            if (command.equals(spec.command)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void putStaleMsIfTracked(JSONObject sample, String key, String command, long now)
+            throws JSONException {
+        Long polledAtMs = lastPolledAtMsByCommand.get(command);
+        if (polledAtMs != null) {
+            sample.put(key, Math.max(0L, now - polledAtMs));
+        }
+    }
+
+    private static void appendRawTo(StringBuilder buf, String command, String response) {
+        if (buf.length() > 0) {
+            buf.append(' ');
+        }
+        buf.append('[').append(command).append("] ").append(ObdProtocol.summarize(response));
     }
 
     void appendSessionHealth(JSONObject sample) throws JSONException {

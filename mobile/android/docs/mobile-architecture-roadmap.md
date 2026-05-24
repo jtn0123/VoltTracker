@@ -12,9 +12,9 @@ The UI should not mix real data, demo data, and future/placeholder data. Demo re
 
 ## Current Progress
 
-Last updated: 2026-05-20
+Last updated: 2026-05-23
 
-Current Android database schema: v4
+Current Android database schema: v7
 
 Completed:
 
@@ -29,21 +29,27 @@ Completed:
 - VIN redaction for raw scan/log output.
 - Initial typed parser layer for standard OBD values, adapter voltage, Volt SOC/capacity/odometer commands, sampled cell-voltage commands, and charging transition hints.
 - Database status counts surfaced in Diagnostics.
+- **Vehicle-state classifier** with EV / GAS / CHARGING / PLUGGED / IDLE / UNKNOWN labels and a confidence grade, derived from speed, RPM, adapter voltage, pack current, and charge-transition hints (see `classify/`). Confidence is published on every telemetry sample.
+- **Trip and charge-session materializers** that run on session close behind `BuildFlags.MATERIALIZE_ON_CLOSE` (see `materialize/`). Outputs land in `trip_segments` and `charge_sessions` and are query-backed for Trips and Charge screens.
+- **OBD-II DTC scanning and history** (PR #106): on-demand scan, persisted in `diagnostic_codes`, surfaced in Diagnostics.
+- **Schema v5** added `charge_transition_hint` and `app_foreground` columns to `telemetry_samples` (with backfill from existing JSON).
+- **Schema v6** added the diagnostic-code tables and indexes.
+- **Schema v7** added prune-by-time indexes (`idx_telemetry_captured_at`, `idx_location_samples_captured_at`, `idx_events_occurred_at`, `idx_pid_observations_observed_at`) so retention sweeps stay index-bound on large databases.
+- Query-plan regression test (`QueryPlanIndexTest`) that seeds 50 sessions, runs `ANALYZE`, and asserts `SEARCH USING INDEX` on every hot query in `ObdStoreReports` and `ObdStoreTrips`.
+- Migration regression test (`VoltTrackerDbMigrationTest`) that round-trips every schema version.
+- Backup round-trip test (`BackupRoundTripTest`) covering the full export/import cycle.
+- GPS decoupling: location tracking now runs independently of the OBD adapter with auto-reconnect and outlier filtering (PR #96).
+- **Tiered/staggered PID polling** (`PidSchedule.java`): drive-critical PIDs (speed, RPM, throttle, load, pack V, pack I) poll every cycle (~1.7s); medium-rate PIDs (ATRV, SOC) every 4 cycles (~7s) on staggered phases; slow PIDs (coolant temp, HV battery temp) every 10 cycles (~17s) on staggered phases. Carry-forward of last-known raw responses means every sample still contains every key. `ATSH 7E4` header switch only fires on the rare cycle where battery temp is due. Per-cycle ELM transactions: 13 → 8 baseline (~30% reduction); cycle-time spent on slow PIDs no longer bounds speed/RPM refresh. Tracked as B6 in `.claude/grade-report.md`.
 
 In progress:
 
-- Real-car validation of exact Volt PID response formats and units.
-- Mapping parsed PID values into battery, cell, charge, vehicle-state, and capability tables.
-- Turning stored GPS/PID observations into trip and charge-session records.
+- Long-run background logging tests for reconnect, GPS, screen-off, and app-minimized behavior.
 - Replacing remaining placeholder product views with database-backed empty, loading, and real-data states.
 
 Remaining:
 
 - Exportable diagnostic bundles with explicit privacy controls for VIN and location.
-- Long-run background logging tests for reconnect, GPS, screen-off, and app-minimized behavior.
-- Query-backed Trips, Charge, Map, and Insights screens.
-- Confidence labels for every derived classifier so weak inference is visible.
-- Migration tests and fixture-backed parser tests for every PID we decide to support.
+- Mode-01 multi-PID batching so drive-critical values (speed, RPM, load, throttle) read in a single ELM transaction instead of four — theoretical floor ~2.5 Hz vs today's ~1 Hz. Tracked as B7 in `.claude/grade-report.md`.
 
 ## UI/UX Model
 
@@ -98,7 +104,7 @@ Suggested shape:
 {
   "app": {
     "version": "0.1.0",
-    "schemaVersion": 4
+    "schemaVersion": 7
   },
   "permissions": {
     "bluetooth": true,
@@ -196,7 +202,7 @@ Base tables:
 - `status_events`
 - `adapter_history`
 
-Roadmap tables now present in schema v4:
+Roadmap tables present in schema v7:
 
 - `vehicles`: one row per car, with VIN redacted or hashed by default.
 - `pid_observations`: every command/response pair with command, header, raw response, parsed value, parser version, and error state.
@@ -212,9 +218,10 @@ Remaining database work:
 
 - Populate `vehicles` from verified identity signals without storing a full VIN by default.
 - Populate `field_capabilities` from scan results and parser confidence.
-- Materialize `trip_segments` and `charge_sessions` from observation windows.
 - Persist parsed pack and cell values into `battery_snapshots` and `cell_snapshots`.
 - Track diagnostic exports in `exports` once the export bundle format is defined.
+
+Done in PR #118 (round 2): `trip_segments` and `charge_sessions` materialization from observation windows.
 
 ### Raw-to-Useful Pipeline
 
@@ -240,14 +247,19 @@ Done:
 4. Add `pid_observations` and `location_samples`.
 5. Add schema v4 roadmap tables.
 6. Add the first parser layer for standard OBD, selected Volt commands, cell-voltage samples, and charge-transition hints.
+7. Add vehicle-state classifier and confidence labels (PR #118).
+8. Add trip and charge-session materializers gated by `BuildFlags.MATERIALIZE_ON_CLOSE` (PR #118).
+9. Add OBD-II DTC scanning, persistence, and history (PR #106).
+10. Add migration tests, query-plan tests, backup round-trip tests (PR #118).
+11. Ratchet JaCoCo coverage floors (project=71%, data=89%) and dashboard JS smoke suite to CI gates.
 
 Next:
 
 1. Validate parser output against the newest field logs from the car.
 2. Save parsed battery, cell, capability, and vehicle-state facts into normalized tables.
-3. Build trip and charge-session materializers from stored PID and GPS samples.
-4. Wire Trips, Charge, Map, and Insights to database queries.
-5. Add export/privacy controls and migration/parser tests.
+3. Wire Trips, Charge, Map, and Insights to database queries (materializers in place; UI binding remaining).
+4. Add export/privacy controls.
+5. Mode-01 multi-PID batching for sub-second drive-critical refresh (B7 in `.claude/grade-report.md`).
 
 ## Near-Term Definition Of Done
 
@@ -261,6 +273,6 @@ Done:
 
 Still open:
 
-- Charge/driving state classifiers need to be stored with confidence after real-log validation.
-- Trips, Charge, Map, and Insights still need full database-backed product states.
-- Parser and migration tests need to be added around the Android database layer.
+- Real-car validation of the parser/classifier output against the newest field logs.
+- Trips, Charge, Map, and Insights screens need to read from the materialized tables end-to-end (data layer is in place; UI binding is the gap).
+- Mode-01 multi-PID batching so the drive-critical refresh rate can reach ~2.5 Hz (B7).

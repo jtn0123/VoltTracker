@@ -18,6 +18,7 @@ import android.webkit.WebView;
 import android.widget.FrameLayout;
 import androidx.core.content.ContextCompat;
 import com.volttracker.obdpoc.data.ObdLocalStore;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.json.JSONException;
@@ -26,6 +27,24 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     static final String TAG = "VoltTracker";
     private static final String PREFS = "volt_obd_prefs";
+
+    /**
+     * Whitelist of dashboard entry-point functions {@link #callDashboard} may invoke.
+     *
+     * <p>Keeping this closed-set + the {@link JSONObject#quote} of the payload makes
+     * `evaluateJavascript` structurally incapable of running arbitrary JS even if a caller later
+     * passes attacker-controlled input by mistake — the worst a malformed function name does is
+     * trigger a no-op + warn log.
+     */
+    private static final Set<String> ALLOWED_DASHBOARD_FUNCTIONS =
+            Set.of(
+                    "updateTelemetry",
+                    "setStatus",
+                    "setDevices",
+                    "setHistory",
+                    "setStorage",
+                    "setAppState");
+
     private WebView webView;
     private boolean pageReady;
     private SharedPreferences prefs;
@@ -57,17 +76,11 @@ public class MainActivity extends Activity {
                     }
                     if (ObdService.BROADCAST_TELEMETRY.equals(action)) {
                         lastTelemetry = MainActivityUtils.parseJson(json);
-                        callDashboard(
-                                "window.VoltTrackerNative.updateTelemetry("
-                                        + JSONObject.quote(json)
-                                        + ")");
+                        callDashboard("updateTelemetry", json);
                         publishAppState();
                     } else if (ObdService.BROADCAST_STATUS.equals(action)) {
                         lastStatus = MainActivityUtils.parseJson(json);
-                        callDashboard(
-                                "window.VoltTrackerNative.setStatus("
-                                        + JSONObject.quote(json)
-                                        + ")");
+                        callDashboard("setStatus", json);
                         publishStorageSummary();
                         publishAppState();
                     }
@@ -174,14 +187,8 @@ public class MainActivity extends Activity {
     }
 
     void publishDeviceList() {
-        callDashboard(
-                "window.VoltTrackerNative.setDevices("
-                        + JSONObject.quote(deviceCatalog.getBondedDevicesJson())
-                        + ")");
-        callDashboard(
-                "window.VoltTrackerNative.setHistory("
-                        + JSONObject.quote(deviceCatalog.getDeviceHistoryJson())
-                        + ")");
+        callDashboard("setDevices", deviceCatalog.getBondedDevicesJson());
+        callDashboard("setHistory", deviceCatalog.getDeviceHistoryJson());
     }
 
     void publishStatus(String state, String detail, boolean blocked) {
@@ -196,8 +203,7 @@ public class MainActivity extends Activity {
         } catch (JSONException ignored) {
             // Values are local literals.
         }
-        callDashboard(
-                "window.VoltTrackerNative.setStatus(" + JSONObject.quote(payload.toString()) + ")");
+        callDashboard("setStatus", payload.toString());
         lastStatus = payload;
         publishAppState();
     }
@@ -297,11 +303,48 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void callDashboard(String script) {
-        if (!pageReady || webView == null) {
+    /**
+     * Invokes {@code window.VoltTrackerNative.<functionName>(<jsonPayload>)} on the WebView UI
+     * thread.
+     *
+     * <p>The function name must be in {@link #ALLOWED_DASHBOARD_FUNCTIONS} — unknown names are
+     * dropped with a warn log rather than executed. The JSON payload is passed as a quoted JS
+     * string literal via {@link JSONObject#quote}, so the dashboard receives a single string
+     * argument and parses it (matching the existing dashboard ABI). The combination makes it
+     * structurally impossible for a caller to inject arbitrary JavaScript.
+     *
+     * <p>The WebView reference is captured at call time and re-checked inside the UI-thread
+     * runnable: if {@link #onDestroy} ran (or replaced the view) in between, the deferred call is a
+     * safe no-op rather than a {@code NullPointerException} on a destroyed view.
+     */
+    private void callDashboard(String functionName, String jsonPayload) {
+        if (!ALLOWED_DASHBOARD_FUNCTIONS.contains(functionName)) {
+            Log.w(TAG, "callDashboard: refused unknown function name: " + functionName);
             return;
         }
-        runOnUiThread(() -> webView.evaluateJavascript(script + ";", null));
+        final WebView wv = this.webView;
+        if (!pageReady || wv == null) {
+            return;
+        }
+        final String script =
+                "window.VoltTrackerNative."
+                        + functionName
+                        + "("
+                        + JSONObject.quote(jsonPayload == null ? "{}" : jsonPayload)
+                        + ");";
+        runOnUiThread(
+                () -> {
+                    // Re-check every tear-down signal inside the runnable. The identity check
+                    // catches view replacement; the lifecycle checks catch Activity destruction
+                    // where this.webView still points to the same instance (we don't null it in
+                    // onDestroy). pageReady catches the brief window after Activity start but
+                    // before the WebView's onPageFinished. Without ALL of these, evaluateJavascript
+                    // can fire against a torn-down WebView and crash on some Android builds.
+                    if (isFinishing() || isDestroyed() || !pageReady || wv != this.webView) {
+                        return;
+                    }
+                    wv.evaluateJavascript(script, null);
+                });
     }
 
     void publishStorageSummary() {
@@ -312,10 +355,7 @@ public class MainActivity extends Activity {
                     runOnUiThread(
                             () -> {
                                 lastStorage = MainActivityUtils.parseJson(storage);
-                                callDashboard(
-                                        "window.VoltTrackerNative.setStorage("
-                                                + JSONObject.quote(storage)
-                                                + ")");
+                                callDashboard("setStorage", storage);
                             });
                 });
     }
@@ -369,10 +409,7 @@ public class MainActivity extends Activity {
     }
 
     private void publishAppState() {
-        callDashboard(
-                "window.VoltTrackerNative.setAppState("
-                        + JSONObject.quote(getAppStateJson())
-                        + ")");
+        callDashboard("setAppState", getAppStateJson());
     }
 
     String getAppStateJson() {

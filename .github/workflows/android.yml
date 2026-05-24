@@ -77,8 +77,22 @@ jobs:
           node-version: '20'
       - name: Install dashboard test deps
         run: npm ci
-      - name: Run dashboard JS smoke tests
-        run: npm test
+      - name: Lint dashboard JS
+        # I1: ESLint catches undefined globals / redeclared names / unreachable code
+        # that Spotless (formatting-only) does not. Fails the job on any lint error.
+        run: npm run lint
+      - name: Run dashboard JS smoke tests with coverage gate
+        # D4: --coverage runs the same suites under v8 instrumentation and fails the
+        # job if coverage drops below the floor declared in vitest.config.js. The
+        # floor mirrors the JaCoCo ratchet pattern — never lower it, only raise it.
+        run: npm run test:coverage
+      - name: Upload dashboard coverage report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dashboard-coverage
+          path: mobile/android/dashboard-tests/coverage/
+          if-no-files-found: ignore
       - name: Report dashboard bundle size
         if: always()
         working-directory: mobile/android/app/src/main/assets/dashboard

@@ -1,7 +1,10 @@
 package com.volttracker.obdpoc.data;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import android.content.Context;
 import android.database.Cursor;
@@ -119,6 +122,85 @@ public class VoltTrackerDbMigrationTest {
                 db.rawQuery("SELECT name FROM sqlite_master WHERE type='index'", null)) {
             while (cursor.moveToNext()) {
                 names.add(cursor.getString(0));
+            }
+        }
+        return names;
+    }
+
+    /**
+     * B2 regression: when a migration step throws partway through, the whole step must roll back,
+     * leaving the database at the prior version with NO partial changes applied. Without the
+     * transaction wrapper a half-applied ALTER would stick and the next launch would retry the
+     * whole migration, hitting "duplicate column" and masking the original failure.
+     */
+    @Test
+    public void failingMigrationStep_rollsBackPartialChanges() {
+        Context context = RuntimeEnvironment.getApplication();
+        String name = "volttracker_migration_rollback.db";
+        context.deleteDatabase(name);
+
+        // Open a clean database at v1 with a single throwaway table we can ALTER below.
+        SQLiteOpenHelper bareHelper =
+                new SQLiteOpenHelper(context.getApplicationContext(), name, null, 1) {
+                    @Override
+                    public void onCreate(SQLiteDatabase db) {
+                        db.execSQL(
+                                "CREATE TABLE rollback_probe ("
+                                        + "_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                                        + " value TEXT)");
+                    }
+
+                    @Override
+                    public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+                        /* unused */
+                    }
+                };
+        SQLiteDatabase db = bareHelper.getWritableDatabase();
+        Set<String> startingColumns = readColumnNames(db, "rollback_probe");
+        assertEquals(2, startingColumns.size()); // _id + value
+
+        try {
+            VoltTrackerDb.runMigrationStep(
+                    db,
+                    1,
+                    2,
+                    "rollback-probe",
+                    target -> {
+                        // First ALTER succeeds — would commit if not wrapped in a transaction.
+                        target.execSQL("ALTER TABLE rollback_probe ADD COLUMN added_first TEXT");
+                        // Second ALTER throws — invalid SQL forces the whole step to roll back.
+                        target.execSQL(
+                                "ALTER TABLE rollback_probe ADD COLUMN ??? syntactically invalid");
+                        fail("Expected the malformed ALTER to throw");
+                    });
+            fail("runMigrationStep should have rethrown the SQLite exception");
+        } catch (RuntimeException expected) {
+            // Expected — the wrapper rethrows after rolling back so SQLiteOpenHelper knows the
+            // upgrade failed.
+            assertNotNull(expected);
+        }
+
+        Set<String> columnsAfter = readColumnNames(db, "rollback_probe");
+        assertEquals(
+                "Migration step that failed must roll back every change, including the ALTER"
+                        + " that ran before the failure.\nExpected only the original columns,"
+                        + " got: "
+                        + columnsAfter,
+                startingColumns,
+                columnsAfter);
+        assertFalse(
+                "added_first column must NOT survive the failed migration",
+                columnsAfter.contains("added_first"));
+
+        bareHelper.close();
+        context.deleteDatabase(name);
+    }
+
+    private static Set<String> readColumnNames(SQLiteDatabase db, String table) {
+        Set<String> names = new HashSet<>();
+        try (Cursor cursor = db.rawQuery("PRAGMA table_info(" + table + ")", null)) {
+            while (cursor.moveToNext()) {
+                names.add(cursor.getString(1));
             }
         }
         return names;

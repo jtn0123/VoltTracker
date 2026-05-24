@@ -9,6 +9,36 @@
   const VD = (window.VoltDashboard = window.VoltDashboard || {});
   VD.bridge = window.VoltTrackerAndroid || null;
   VD.el = (id) => document.getElementById(id);
+
+  // C1: bindListenerGuarded — attaches a listener but warns + skips if the element ID is
+  // missing instead of throwing. The dashboard is assembled from partials at build time, so
+  // a renamed/removed ID inside a partial would otherwise crash `bindListeners()` mid-way,
+  // leaving every binding AFTER the missing one unwired with no surface signal. The warn is
+  // piped through logClientError (window.error handler picks it up) so the regression is
+  // visible in dev/test rather than silently swallowed.
+  VD.bindListenerGuarded = function bindListenerGuarded(id, event, handler, opts) {
+    const node = document.getElementById(id);
+    if (!node) {
+      const message =
+        "listener bind skipped: missing #" + id + " (event=" + event + ")";
+      try {
+        if (typeof console !== "undefined" && console && console.warn) {
+          console.warn(message);
+        }
+      } catch (ignored) {}
+      try {
+        if (
+          window.VoltTrackerAndroid &&
+          typeof window.VoltTrackerAndroid.logClientError === "function"
+        ) {
+          window.VoltTrackerAndroid.logClientError("bindListenerGuarded", message);
+        }
+      } catch (ignored) {}
+      return false;
+    }
+    node.addEventListener(event, handler, opts);
+    return true;
+  };
   // Top-level abort controller for window-level error/rejection listeners, so the
   // C2 reset hook can tear them down with the rest of the actions.js listeners.
   VD.errorController = new AbortController();
