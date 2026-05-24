@@ -116,6 +116,77 @@ public class VoltTrackerDbMigrationTest {
         context.deleteDatabase(name);
     }
 
+    @Test
+    public void upgradeFromV7_addsHvPackColumns() {
+        // The v7→v8 migration adds pack_voltage and pack_current_a to telemetry_samples so
+        // the trip materializer can integrate V·I for energy_kwh and the dashboard can show
+        // the real HV pack readings instead of the aux 12V battery.
+        Context context = RuntimeEnvironment.getApplication();
+        String name = "volttracker_migration_v7_v8.db";
+        context.deleteDatabase(name);
+
+        // Pre-seed a minimal v7 schema with the telemetry_samples columns the v7 install
+        // already had — this is a focused regression test, not a full schema replay.
+        SQLiteOpenHelper v7Helper =
+                new SQLiteOpenHelper(context.getApplicationContext(), name, null, 7) {
+                    @Override
+                    public void onCreate(SQLiteDatabase db) {
+                        db.execSQL(
+                                "CREATE TABLE "
+                                        + VoltTrackerDb.TABLE_SESSIONS
+                                        + " (_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                                        + " mode TEXT NOT NULL, adapter_address TEXT,"
+                                        + " adapter_name TEXT, started_at_ms INTEGER NOT NULL,"
+                                        + " ended_at_ms INTEGER, status TEXT NOT NULL,"
+                                        + " supported_pids TEXT,"
+                                        + " sample_count INTEGER NOT NULL DEFAULT 0,"
+                                        + " last_event_at_ms INTEGER,"
+                                        + " created_at_ms INTEGER NOT NULL)");
+                        db.execSQL(
+                                "CREATE TABLE "
+                                        + VoltTrackerDb.TABLE_TELEMETRY
+                                        + " (_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                                        + " session_id INTEGER NOT NULL,"
+                                        + " captured_at_ms INTEGER NOT NULL,"
+                                        + " voltage REAL, power_kw REAL,"
+                                        + " json TEXT NOT NULL)");
+                    }
+
+                    @Override
+                    public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+                        /* unused */
+                    }
+                };
+        SQLiteDatabase v7Db = v7Helper.getWritableDatabase();
+        Set<String> beforeColumns = readColumnNames(v7Db, VoltTrackerDb.TABLE_TELEMETRY);
+        assertFalse(
+                "v7 schema must not pre-contain pack_voltage",
+                beforeColumns.contains("pack_voltage"));
+        assertFalse(
+                "v7 schema must not pre-contain pack_current_a",
+                beforeColumns.contains("pack_current_a"));
+        v7Helper.close();
+
+        // Open the real helper at the current version; that runs onUpgrade(7, 8).
+        newHelper = new VoltTrackerDb(context, name);
+        SQLiteDatabase newDb = newHelper.getWritableDatabase();
+        assertEquals(
+                "Reopened DB should be at the current schema version after onUpgrade.",
+                VoltTrackerDb.DATABASE_VERSION,
+                newDb.getVersion());
+        Set<String> afterColumns = readColumnNames(newDb, VoltTrackerDb.TABLE_TELEMETRY);
+        assertTrue(
+                "After v7→v8 upgrade, pack_voltage must exist. Got: " + afterColumns,
+                afterColumns.contains("pack_voltage"));
+        assertTrue(
+                "After v7→v8 upgrade, pack_current_a must exist. Got: " + afterColumns,
+                afterColumns.contains("pack_current_a"));
+
+        newHelper.close();
+        newHelper = null;
+        context.deleteDatabase(name);
+    }
+
     private static Set<String> readIndexNames(SQLiteDatabase db) {
         Set<String> names = new HashSet<>();
         try (Cursor cursor =

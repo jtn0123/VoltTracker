@@ -247,6 +247,37 @@
     background: var(--ev);
   }
 
+  /* Three-up live readout under the SOC meter for the HV traction pack
+     (pack voltage / current / power). Reuses the .scrub-readout grid look so
+     it visually clusters with the other live-data tiles, but stays scoped to
+     the battery-strip card. tabular-nums keeps the sign-prefixed values from
+     jittering as the values update at 4 Hz. */
+  .battery-pack-readout {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .battery-pack-readout > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .battery-pack-readout .kicker {
+    color: var(--soft);
+  }
+
+  .battery-pack-readout strong {
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
   .mini-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

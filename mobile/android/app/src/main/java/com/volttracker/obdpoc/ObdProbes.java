@@ -20,7 +20,8 @@ final class ObdProbes {
     // 015B is the standard mode-01 hybrid-battery SOC PID; it answers on the normal bus
     // with no ATSH header, so it is probed alongside the other live-data PIDs.
     static final String[] LIVE_PROBES = {
-        "ATRV", "010D", "010C", "0105", "0104", "0111", "015B", "0142", "011F", "012F", "015C"
+        "ATRV", "010D", "010C", "0105", "0104", "0111", "0149", "015B", "0142", "011F", "012F",
+        "015C"
     };
     // Community-validated Chevy Volt mode-22 PIDs (Volt PID community sheet, see
     // docs/volt-pids-community-sheet.csv). ATSH selects the controller before each group;

@@ -86,6 +86,17 @@ final class ObdProtocol {
         return bytes == null ? null : Math.round(bytes[0] * 100f / 255f);
     }
 
+    /**
+     * PID 0x49 — Accelerator pedal position D. On a Chevy Volt the standard throttle PID (0x11) is
+     * the ICE throttle-body angle and returns a constant placeholder, so 0x49 (the drive-by-wire
+     * pedal position) is the field the dashboard actually wants. Formula is the same single-byte
+     * {@code A * 100 / 255}.
+     */
+    static Integer parseAccelPedalPct(String response) {
+        int[] bytes = mode01Bytes(response, "49", 1);
+        return bytes == null ? null : Math.round(bytes[0] * 100f / 255f);
+    }
+
     static Integer parseStateOfChargePct(String response) {
         int[] bytes = mode01Bytes(response, "5B", 1);
         return bytes == null ? null : Math.round(bytes[0] * 100f / 255f);
@@ -171,6 +182,12 @@ final class ObdProtocol {
             return throttle == null
                     ? null
                     : value("throttle position", throttle.doubleValue(), "%", 0);
+        }
+        if ("0149".equals(cleanCommand)) {
+            Integer pedal = parseAccelPedalPct(response);
+            return pedal == null
+                    ? null
+                    : value("accelerator pedal position", pedal.doubleValue(), "%", 0);
         }
         if ("015B".equals(cleanCommand)) {
             Integer soc = parseStateOfChargePct(response);
@@ -289,6 +306,58 @@ final class ObdProtocol {
             }
         }
         return codes;
+    }
+
+    /**
+     * Extracts a 17-character VIN from a Mode 09 PID 02 response. The response is a multi-frame
+     * ISO-TP transfer of the form {@code 49 02 01 W M I V D S V D S V D S V I S X X X X}, where the
+     * {@code 49 02 01} is the positive response + PID + frame-counter, and the next 17 ASCII
+     * characters are the VIN. Returns {@code null} if the marker isn't found or the 17 characters
+     * aren't all valid VIN chars (alphanumeric, no I/O/Q to avoid ambiguity).
+     *
+     * <p>Both the standard single-line ELM transcript and multi-line responses are tolerated by
+     * stripping every non-hex character and concatenating before parsing.
+     */
+    static String parseVin(String response) {
+        if (response == null) {
+            return null;
+        }
+        String hex = response.toUpperCase(Locale.US).replaceAll("[^0-9A-F]", "");
+        // Marker for the positive-response + PID 02 + first frame-counter byte.
+        int index = hex.indexOf("490201");
+        if (index < 0) {
+            // Some adapters strip the frame-counter byte; tolerate the bare 4902 marker too.
+            index = hex.indexOf("4902");
+            if (index < 0) {
+                return null;
+            }
+            index += 4;
+        } else {
+            index += 6;
+        }
+        if (index + 34 > hex.length()) {
+            return null;
+        }
+        StringBuilder vin = new StringBuilder(17);
+        for (int i = 0; i < 17; i++) {
+            int byteOffset = index + i * 2;
+            int value;
+            try {
+                value = Integer.parseInt(hex.substring(byteOffset, byteOffset + 2), 16);
+            } catch (NumberFormatException ex) {
+                return null;
+            }
+            char c = (char) value;
+            // Valid VIN chars exclude I/O/Q to avoid confusion with 1/0; SAE J853.
+            boolean validVinChar =
+                    (c >= 'A' && c <= 'Z' && c != 'I' && c != 'O' && c != 'Q')
+                            || (c >= '0' && c <= '9');
+            if (!validVinChar) {
+                return null;
+            }
+            vin.append(c);
+        }
+        return vin.toString();
     }
 
     /**

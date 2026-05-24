@@ -18,7 +18,7 @@ import java.util.List;
  * instead of having "heavy" cycles every Nth iteration:
  *
  * <pre>
- *   Tier 1 (period 1)  — speed, RPM, throttle, load, pack V, pack I        polled every cycle
+ *   Tier 1 (period 1)  — speed, RPM, throttle, load, pedal, pack V, pack I polled every cycle
  *   Tier 2 (period 4)  — ATRV adapter voltage, SOC                         polled every ~4 cycles
  *   Tier 3 (period 10) — coolant temp, HV battery temp                     polled every ~10 cycles
  * </pre>
@@ -104,7 +104,13 @@ final class PidSchedule {
         specs.add(new PidSpec("010D", Header.BROADCAST, 1, 0)); // vehicle speed
         specs.add(new PidSpec("010C", Header.BROADCAST, 1, 0)); // engine RPM
         specs.add(new PidSpec("0104", Header.BROADCAST, 1, 0)); // engine load
-        specs.add(new PidSpec("0111", Header.BROADCAST, 1, 0)); // throttle position
+        specs.add(
+                new PidSpec(
+                        "0111", Header.BROADCAST, 1, 0)); // throttle position (ICE throttle body)
+        // 0149 is the drive-by-wire accelerator pedal — the Volt returns a constant for 0111
+        // because that PID is the ICE throttle body angle, not the pedal. We poll both and
+        // prefer 0149 in the dashboard rendering when it's responding.
+        specs.add(new PidSpec("0149", Header.BROADCAST, 1, 0)); // accelerator pedal position D
         specs.add(new PidSpec("222429", Header.HV_PACK_7E1, 1, 0)); // HV pack voltage
         specs.add(new PidSpec("222414", Header.HV_PACK_7E1, 1, 0)); // HV pack current
 

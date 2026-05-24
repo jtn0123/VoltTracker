@@ -29,6 +29,19 @@ public final class TripMaterializer {
 
         /** At this sample count or more the trip is considered to have a renderable route. */
         static final int HAS_ROUTE_SAMPLE_COUNT = 5;
+
+        /**
+         * Avg speed below this is classified as {@link Trip#CLASSIFICATION_CITY}. Tuned against the
+         * typical US urban surface-street average (≈40 kph including stops) with a small cushion to
+         * absorb noise.
+         */
+        static final double CITY_AVG_SPEED_KPH = 50.0;
+
+        /**
+         * Avg speed above this is classified as {@link Trip#CLASSIFICATION_HIGHWAY}. Anything
+         * between {@link #CITY_AVG_SPEED_KPH} and this is {@code mixed}.
+         */
+        static final double HIGHWAY_AVG_SPEED_KPH = 80.0;
     }
 
     /** Splits the session's location samples into zero or more trips and returns them. */
@@ -95,6 +108,10 @@ public final class TripMaterializer {
                         ? Confidence.OBSERVED
                         : Confidence.WEAK;
         boolean hasRoute = window.size() >= Tunables.HAS_ROUTE_SAMPLE_COUNT;
+        double avgSpeedKph =
+                durationMs > 0L ? (distance / 1000.0) / (durationMs / 3_600_000.0) : 0.0;
+        String classification = classify(avgSpeedKph);
+        Double energyKwh = integrateEnergyKwh(telemetry, startedAtMs, endedAtMs);
         return new Trip(
                 startedAtMs,
                 endedAtMs,
@@ -103,7 +120,74 @@ public final class TripMaterializer {
                 maxSpeedKph,
                 window.size(),
                 hasRoute,
-                confidence);
+                confidence,
+                classification,
+                energyKwh);
+    }
+
+    /**
+     * Buckets the trip's average speed into a human-readable regime label. Boundaries are tuned
+     * against the typical US driving mix (see {@link Tunables}); a trip with no usable speed at all
+     * falls back to {@link Trip#CLASSIFICATION_UNKNOWN}.
+     */
+    static String classify(double avgSpeedKph) {
+        if (!(avgSpeedKph > 0.0)) {
+            return Trip.CLASSIFICATION_UNKNOWN;
+        }
+        if (avgSpeedKph < Tunables.CITY_AVG_SPEED_KPH) {
+            return Trip.CLASSIFICATION_CITY;
+        }
+        if (avgSpeedKph >= Tunables.HIGHWAY_AVG_SPEED_KPH) {
+            return Trip.CLASSIFICATION_HIGHWAY;
+        }
+        return Trip.CLASSIFICATION_MIXED;
+    }
+
+    /**
+     * Trapezoidal integration of instantaneous pack power (V × I, in W) over time, returned in kWh.
+     * Prefers {@link TelemetrySample#powerKw} when present (already kW) and falls back to computing
+     * it from {@code packVoltage * packCurrentA / 1000}. Returns {@code null} when fewer than two
+     * samples in the window carry power data — a single point can't form an area.
+     */
+    private static Double integrateEnergyKwh(
+            List<TelemetrySample> telemetry, long startMs, long endMs) {
+        if (telemetry == null || telemetry.isEmpty()) {
+            return null;
+        }
+        Double prevPowerKw = null;
+        Long prevAtMs = null;
+        double energyKwh = 0.0;
+        int integrated = 0;
+        for (TelemetrySample sample : telemetry) {
+            if (sample.capturedAtMs < startMs || sample.capturedAtMs > endMs) {
+                continue;
+            }
+            Double powerKw = samplePowerKw(sample);
+            if (powerKw == null) {
+                continue;
+            }
+            if (prevPowerKw != null && prevAtMs != null) {
+                double hours = (sample.capturedAtMs - prevAtMs) / 3_600_000.0;
+                if (hours > 0.0) {
+                    // Trapezoidal: average the two kW endpoints over the interval.
+                    energyKwh += ((prevPowerKw + powerKw) / 2.0) * hours;
+                    integrated += 1;
+                }
+            }
+            prevPowerKw = powerKw;
+            prevAtMs = sample.capturedAtMs;
+        }
+        return integrated == 0 ? null : energyKwh;
+    }
+
+    private static Double samplePowerKw(TelemetrySample sample) {
+        if (sample.powerKw != null) {
+            return sample.powerKw;
+        }
+        if (sample.packVoltage != null && sample.packCurrentA != null) {
+            return sample.packVoltage * sample.packCurrentA / 1000.0;
+        }
+        return null;
     }
 
     private static double maxSpeedInWindow(

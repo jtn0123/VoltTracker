@@ -200,10 +200,77 @@ final class ObdStoreReports {
             payload.put("overview", overviewJson(db));
             payload.put("chargeSummary", chargeSummaryJson(db));
             payload.put("batterySummary", batterySummaryJson(db));
+            payload.put("latestVehicle", latestVehicleJson(db));
         } catch (JSONException ignored) {
             // Local numeric/string values are safe.
         }
         return payload;
+    }
+
+    /**
+     * Most-recently-seen vehicle row exposed to the dashboard so the "Vehicle identity" panel can
+     * fill in once a Scan has populated {@code vehicles}. Returns an empty object when no row
+     * exists yet — the panel JS treats absent fields as "--". We deliberately surface the redacted
+     * VIN suffix (last 4 chars) only; the SHA-256 hash stays inside the DB.
+     */
+    private JSONObject latestVehicleJson(SQLiteDatabase db) {
+        JSONObject result = new JSONObject();
+        try (android.database.Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_VEHICLES,
+                        new String[] {
+                            "_id",
+                            "display_name",
+                            "make",
+                            "model",
+                            "model_year",
+                            "vin_redacted",
+                            "first_seen_ms",
+                            "last_seen_ms"
+                        },
+                        null,
+                        null,
+                        null,
+                        null,
+                        "last_seen_ms DESC",
+                        "1")) {
+            if (!cursor.moveToFirst()) {
+                return result;
+            }
+            try {
+                String displayName = cursor.getString(cursor.getColumnIndexOrThrow("display_name"));
+                String make = cursor.getString(cursor.getColumnIndexOrThrow("make"));
+                String model = cursor.getString(cursor.getColumnIndexOrThrow("model"));
+                String vinRedacted = cursor.getString(cursor.getColumnIndexOrThrow("vin_redacted"));
+                int yearIndex = cursor.getColumnIndexOrThrow("model_year");
+                if (displayName != null) {
+                    result.put("name", displayName);
+                }
+                if (make != null) {
+                    result.put("make", make);
+                }
+                if (model != null) {
+                    result.put("model", model);
+                }
+                if (vinRedacted != null && !vinRedacted.isEmpty()) {
+                    // "VIN …XXXX" — enough to recognise the car without exposing the full ID.
+                    result.put("vin", "…" + vinRedacted);
+                }
+                if (!cursor.isNull(yearIndex)) {
+                    result.put("year", cursor.getInt(yearIndex));
+                    result.put("modelYear", cursor.getInt(yearIndex));
+                }
+                result.put("vehicleId", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
+                result.put(
+                        "firstSeenMs",
+                        cursor.getLong(cursor.getColumnIndexOrThrow("first_seen_ms")));
+                result.put(
+                        "lastSeenMs", cursor.getLong(cursor.getColumnIndexOrThrow("last_seen_ms")));
+            } catch (JSONException ignored) {
+                // Local values are safe.
+            }
+        }
+        return result;
     }
 
     JSONArray recentSessionsJson(int limit) {

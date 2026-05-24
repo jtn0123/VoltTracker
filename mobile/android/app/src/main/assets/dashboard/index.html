@@ -114,7 +114,9 @@
       </div>
     </article>
 
-    <!-- C3: SOC + pack temp cluster as a separate live region. -->
+    <!-- C3: SOC + pack temp cluster as a separate live region. The HV-pack sub-row
+         under the SOC meter surfaces the raw 300+ V traction-pack readings polled
+         from mode-22 PIDs 222429 / 222414 (instead of just the powerKw aggregate). -->
     <article class="panel battery-strip" aria-live="polite" aria-atomic="false">
       <div class="battery-head">
         <div>
@@ -130,6 +132,20 @@
         </div>
       </div>
       <div class="meter battery-meter"><span id="driveSocMeter"></span></div>
+      <div class="battery-pack-readout" aria-label="HV pack live readings">
+        <div>
+          <span class="kicker">Pack V</span>
+          <strong id="drivePackVoltage">--</strong>
+        </div>
+        <div>
+          <span class="kicker">Pack A</span>
+          <strong id="drivePackCurrent">--</strong>
+        </div>
+        <div>
+          <span class="kicker">Pack kW</span>
+          <strong id="drivePackPower">--</strong>
+        </div>
+      </div>
     </article>
 
     <!-- Live readout — same .scrub-readout pattern as the Map scrubber: 6
@@ -146,7 +162,9 @@
         <strong id="rpmValue">--</strong>
       </div>
       <div>
-        <span class="kicker" style="color: #8b94ad">Volts</span>
+        <!-- This is ATRV (12V auxiliary battery, ~12-14 V) — NOT the HV traction
+             pack. The 300+ V pack reading lives in the HV Battery panel above. -->
+        <span class="kicker" style="color: #8b94ad">Aux 12V</span>
         <strong id="voltageValue">--</strong>
       </div>
       <div>
@@ -154,6 +172,9 @@
         <strong id="coolantValue">--</strong>
       </div>
       <div>
+        <!-- Sourced from PID 0149 (drive-by-wire accelerator pedal) when the
+             vehicle supports it; falls back to 0111 (ICE throttle body) for
+             vehicles where 0149 isn't responding. -->
         <span class="kicker" style="color: #b8e63b">Throttle</span>
         <strong id="throttleValue">--</strong>
       </div>

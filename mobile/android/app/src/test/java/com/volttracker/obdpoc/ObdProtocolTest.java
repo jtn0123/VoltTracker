@@ -62,6 +62,52 @@ public class ObdProtocolTest {
     }
 
     @Test
+    public void accelPedalDecodesPercent() {
+        // 0x49 (accelerator pedal position D) uses the same A * 100 / 255 formula as the
+        // legacy throttle PID. 414980 -> round(0x80 * 100 / 255) = 50 %.
+        assertEquals(Integer.valueOf(50), ObdProtocol.parseAccelPedalPct("414980"));
+        assertEquals(Integer.valueOf(0), ObdProtocol.parseAccelPedalPct("414900"));
+        assertEquals(Integer.valueOf(100), ObdProtocol.parseAccelPedalPct("4149FF"));
+
+        // Also reachable via the unified parseKnownValue dispatcher.
+        ParsedPidValue parsed = ObdProtocol.parseKnownValue("0149", "414980");
+        assertNotNull(parsed);
+        assertEquals("accelerator pedal position", parsed.name);
+        assertEquals(50.0, parsed.valueNumeric, 0.01);
+        assertEquals("%", parsed.unit);
+    }
+
+    @Test
+    public void vinParsesFromMode09Response() {
+        // ASCII "1G1ZD5ST8JF202020" — a synthetic Volt-ish VIN. Encoded as the mode-09 PID 02
+        // positive-response prefix (490201) followed by 17 ASCII hex bytes.
+        StringBuilder hex = new StringBuilder("490201");
+        String vin = "1G1ZD5ST8JF202020";
+        for (char c : vin.toCharArray()) {
+            hex.append(String.format("%02X", (int) c));
+        }
+        assertEquals(vin, ObdProtocol.parseVin(hex.toString()));
+        // Tolerate the bare 4902 prefix used by adapters that strip the frame-counter byte.
+        StringBuilder hex2 = new StringBuilder("4902");
+        for (char c : vin.toCharArray()) {
+            hex2.append(String.format("%02X", (int) c));
+        }
+        assertEquals(vin, ObdProtocol.parseVin(hex2.toString()));
+    }
+
+    @Test
+    public void vinRejectsInvalidCharacters() {
+        // Embed an "I" (forbidden under SAE J853) in the middle — parser must reject the run.
+        StringBuilder hex = new StringBuilder("490201");
+        for (char c : "1G1ZD5STIJF202020".toCharArray()) {
+            hex.append(String.format("%02X", (int) c));
+        }
+        assertNull(ObdProtocol.parseVin(hex.toString()));
+        assertNull(ObdProtocol.parseVin("NO SO ABCD"));
+        assertNull(ObdProtocol.parseVin(null));
+    }
+
+    @Test
     public void stateOfChargeDecodesPercent() {
         // 015B uses A * 100 / 255 (community sheet, mode-01 PID 5B).
         assertEquals(Integer.valueOf(0), ObdProtocol.parseStateOfChargePct("415B00"));

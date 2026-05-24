@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.materialize;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
@@ -124,6 +125,39 @@ public class TripMaterializerTest {
         assertEquals(92.0, trip.maxSpeedKph, 0.001);
     }
 
+    @Test
+    public void energyKwhIntegratesOverWindow() {
+        // Twelve location samples 30s apart so the trip materializes; the energy integral
+        // is driven entirely off the telemetry's powerKw points. Constant 10 kW over 6 min
+        // = 1.0 kWh.
+        StubData data = new StubData();
+        for (int i = 0; i < 13; i++) {
+            data.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 32.7 + i * 0.002, -117.1));
+        }
+        for (int i = 0; i < 13; i++) {
+            data.telemetry.add(telWithPower(T_BASE + i * 30 * ONE_SECOND_MS, 60.0, 10.0));
+        }
+
+        Trip trip = TripMaterializer.materialize(input(data), data).get(0);
+
+        assertNotNull(
+                "energy_kwh should be populated when pack power is available", trip.energyKwh);
+        // 13 samples 30s apart = 12 intervals * 30s = 360s = 0.1 h, * 10 kW = 1.0 kWh.
+        assertEquals(1.0, trip.energyKwh, 0.001);
+    }
+
+    @Test
+    public void classificationFromAverageSpeed() {
+        // ~20 kph avg → city.
+        assertEquals(Trip.CLASSIFICATION_CITY, TripMaterializer.classify(20.0));
+        // 50–80 kph → mixed.
+        assertEquals(Trip.CLASSIFICATION_MIXED, TripMaterializer.classify(65.0));
+        // ≥80 kph → highway.
+        assertEquals(Trip.CLASSIFICATION_HIGHWAY, TripMaterializer.classify(95.0));
+        // Zero or negative → unknown.
+        assertEquals(Trip.CLASSIFICATION_UNKNOWN, TripMaterializer.classify(0.0));
+    }
+
     // ---- helpers ------------------------------------------------------------------
 
     private static MaterializerInput input(StubData data) {
@@ -141,6 +175,11 @@ public class TripMaterializerTest {
 
     private static TelemetrySample tel(long atMs, double speedKph) {
         return new TelemetrySample(atMs, speedKph, 1500, 12.4, null, null);
+    }
+
+    private static TelemetrySample telWithPower(long atMs, double speedKph, double powerKw) {
+        // 8-arg constructor lets us provide powerKw directly so the energy integration runs.
+        return new TelemetrySample(atMs, speedKph, 1500, 12.4, 360.0, 0.0, powerKw, null);
     }
 
     static final class StubData implements MaterializerData {

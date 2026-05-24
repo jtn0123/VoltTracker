@@ -113,6 +113,37 @@ public class ChargeSessionMaterializerTest {
     }
 
     @Test
+    public void negativePackCurrentBeatsAuxVoltage_andYieldsObservedConfidence() {
+        // Pack current flowing INTO the pack (negative under the Volt sign convention) at
+        // stationary speed is the high-confidence "really plugged in" signal — it should
+        // override the noisier aux voltage and report OBSERVED confidence (not WEAK).
+        StubData data = new StubData();
+        for (int i = 0; i <= 10; i++) {
+            data.telemetry.add(telWithPackCurrent(T_BASE + i * ONE_MINUTE_MS, 0.0, -25.0));
+        }
+
+        List<ChargeSession> sessions = ChargeSessionMaterializer.materialize(input(), data);
+
+        assertEquals(1, sessions.size());
+        assertEquals(Confidence.OBSERVED, sessions.get(0).confidence);
+    }
+
+    @Test
+    public void positivePackCurrentSuppressesAuxVoltageFalsePositive() {
+        // Aux voltage is up (14.4 V) AND speed is zero — the legacy heuristic would call
+        // this "plugged". But pack current is positive (discharging via DC-DC into the
+        // 12V battery, or simply at rest) so pack current overrides and rejects the window.
+        StubData data = new StubData();
+        for (int i = 0; i < 20; i++) {
+            data.telemetry.add(telFull(T_BASE + i * ONE_MINUTE_MS, 0.0, 14.4, +5.0));
+        }
+
+        List<ChargeSession> sessions = ChargeSessionMaterializer.materialize(input(), data);
+
+        assertEquals(0, sessions.size());
+    }
+
+    @Test
     public void nullSpeedKphIsNotTreatedAsPlugged() {
         // Adapter voltage above the threshold but speedKph unknown (null). Conservative behaviour
         // per the materializer Javadoc: do NOT infer plugged when motion data is missing — the
@@ -140,6 +171,18 @@ public class ChargeSessionMaterializerTest {
 
     private static TelemetrySample telWithNullSpeed(long atMs, double voltage) {
         return new TelemetrySample(atMs, null, 0, voltage, null, null);
+    }
+
+    private static TelemetrySample telWithPackCurrent(
+            long atMs, double speedKph, double packCurrentA) {
+        // adapterVoltage left null so this test isolates the pack-current path.
+        return new TelemetrySample(atMs, speedKph, 0, null, null, packCurrentA, null, null);
+    }
+
+    private static TelemetrySample telFull(
+            long atMs, double speedKph, double adapterVoltage, double packCurrentA) {
+        return new TelemetrySample(
+                atMs, speedKph, 0, adapterVoltage, null, packCurrentA, null, null);
     }
 
     static final class StubData implements MaterializerData {

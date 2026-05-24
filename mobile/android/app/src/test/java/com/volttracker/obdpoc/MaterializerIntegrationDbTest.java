@@ -76,9 +76,13 @@ public class MaterializerIntegrationDbTest {
                     null,
                     null);
         }
-        // Telemetry rows during the drive — voltage low, speed high.
+        // Telemetry rows during the drive — voltage low. Speed picked to match the GPS-derived
+        // value (5 m/s ≈ 18 kph above) so the classification driver (avg distance/duration off
+        // the location samples) and the OBD speedKph column tell the same story; the classifier
+        // does not read OBD speed, but matching values keeps future maintainers from second-
+        // guessing which source drives the assertion below.
         for (int i = 0; i < 12; i++) {
-            store.recordTelemetry(sessionId, telemetry(T_BASE + i * 30 * 1_000L, 45, 1500, 12.3));
+            store.recordTelemetry(sessionId, telemetry(T_BASE + i * 30 * 1_000L, 20, 1500, 12.3));
         }
 
         // Then a charge window: 10 minutes of high-voltage stationary telemetry.
@@ -129,7 +133,11 @@ public class MaterializerIntegrationDbTest {
             assertTrue(cursor.moveToFirst());
             assertEquals(T_BASE, cursor.getLong(0));
             assertTrue(cursor.getDouble(2) > 100.0);
-            assertEquals("OBSERVED", cursor.getString(5));
+            // confidence (col 4) is the score of the materializer's certainty (OBSERVED → 0.8);
+            // classification (col 5) is the driving-regime label. The seed window covers
+            // ≈1.8 km over 5.5 min ⇒ avg ≈ 20 kph, which buckets to "city".
+            assertEquals(0.8, cursor.getDouble(4), 0.001);
+            assertEquals(Trip.CLASSIFICATION_CITY, cursor.getString(5));
             assertEquals(1, cursor.getInt(6));
         }
 

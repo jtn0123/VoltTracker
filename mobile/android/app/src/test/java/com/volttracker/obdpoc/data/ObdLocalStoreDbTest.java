@@ -409,6 +409,68 @@ public class ObdLocalStoreDbTest {
         assertEquals(0L, after.endedAtMs);
     }
 
+    // ---- VIN → vehicles upsert (covers upsertVehicleFromVin + storageSummary.latestVehicle) ---
+
+    @Test
+    public void upsertVehicleFromVinWritesRedactedRowAndShowsInStorageSummary() {
+        // Synthetic Volt-ish VIN. WMI "1G1" maps to Chevrolet; position-10 char 'J'
+        // decodes to year 2018 in the current 30-year window.
+        long id = store.upsertVehicleFromVin("1G1ZD5ST8JF202020");
+
+        assertTrue("upsert should return a positive row id", id > 0);
+        // vehicleCount on the storage summary picks up the new row.
+        assertEquals(1L, store.getStorageSummary().optLong("vehicleCount"));
+
+        // latestVehicleJson surfaces the redacted form (last 4 chars only) + the
+        // WMI-derived make / position-10 year — never the full VIN.
+        JSONObject latest = store.getStorageSummary().optJSONObject("latestVehicle");
+        assertNotNull(latest);
+        assertEquals("Chevrolet", latest.optString("make"));
+        assertEquals("Chevrolet", latest.optString("name"));
+        assertEquals(2018, latest.optInt("year"));
+        assertEquals(2018, latest.optInt("modelYear"));
+        assertEquals("…2020", latest.optString("vin"));
+        assertTrue(latest.optLong("vehicleId") > 0);
+    }
+
+    @Test
+    public void upsertVehicleFromVinIsIdempotentOnTheVinHash() {
+        long firstId = store.upsertVehicleFromVin("1G1ZD5ST8JF202020");
+        long secondId = store.upsertVehicleFromVin("1G1ZD5ST8JF202020");
+
+        // Same VIN → same hash → updates the existing row in place rather than inserting.
+        assertEquals(firstId, secondId);
+        assertEquals(1L, store.getStorageSummary().optLong("vehicleCount"));
+    }
+
+    @Test
+    public void upsertVehicleFromVinRejectsWrongLength() {
+        assertEquals(0L, store.upsertVehicleFromVin(null));
+        assertEquals(0L, store.upsertVehicleFromVin("TOOSHORT"));
+        assertEquals(0L, store.upsertVehicleFromVin("ALSO_WAY_TOO_LONG_FOR_A_VIN"));
+        assertEquals(0L, store.getStorageSummary().optLong("vehicleCount"));
+    }
+
+    @Test
+    public void upsertVehicleFromVinWithUnknownWmiOmitsTheMakeField() {
+        // "ZZZ" is not in the WMI lookup; make/display_name stay NULL.
+        long id = store.upsertVehicleFromVin("ZZZ12345678901234");
+        assertTrue(id > 0);
+        JSONObject latest = store.getStorageSummary().optJSONObject("latestVehicle");
+        assertNotNull(latest);
+        assertEquals("", latest.optString("make"));
+        // VIN suffix still surfaces even without manufacturer mapping.
+        assertEquals("…1234", latest.optString("vin"));
+    }
+
+    @Test
+    public void storageSummaryLatestVehicleIsEmptyWhenNoVehiclesRecorded() {
+        // No upsert called → vehicles table is empty → latestVehicleJson returns {}.
+        JSONObject latest = store.getStorageSummary().optJSONObject("latestVehicle");
+        assertNotNull(latest);
+        assertEquals(0, latest.length());
+    }
+
     private static AdapterHistoryRecord adapterFor(
             java.util.List<AdapterHistoryRecord> records, String address) {
         for (AdapterHistoryRecord record : records) {

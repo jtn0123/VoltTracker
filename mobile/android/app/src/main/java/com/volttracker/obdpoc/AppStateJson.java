@@ -71,7 +71,20 @@ final class AppStateJson {
             // the state was picked. Missing/empty array is fine — the JS renders no tags.
             JSONArray reasons = telemetry.optJSONArray("vehicleStateReasons");
             vehicle.put("reasons", reasons == null ? new JSONArray() : reasons);
-            vehicle.put("vinStored", false);
+            // Identity fields populated from the vehicles table when a Scan has captured a VIN.
+            // The dashboard's renderVehicleUi() reads vehicle.name / make / model / year / vin
+            // and falls back to "--" when any field is absent.
+            JSONObject latestVehicle =
+                    storage == null ? null : storage.optJSONObject("latestVehicle");
+            boolean hasVehicleRow = latestVehicle != null && latestVehicle.length() > 0;
+            vehicle.put("vinStored", hasVehicleRow);
+            if (hasVehicleRow) {
+                java.util.Iterator<String> keys = latestVehicle.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    vehicle.put(key, latestVehicle.opt(key));
+                }
+            }
             payload.put("vehicle", vehicle);
 
             JSONObject gps = new JSONObject();

@@ -55,20 +55,22 @@ final class ObdStatementCache implements Closeable {
                     + "soc," // 11
                     + "battery_temp," // 12
                     + "power_kw," // 13
-                    + "latitude," // 14
-                    + "longitude," // 15
-                    + "accuracy_m," // 16
-                    + "gps_speed_mps," // 17
-                    + "bearing_deg," // 18
-                    + "location_age_ms," // 19
-                    + "sample_number," // 20
-                    + "session_ms," // 21
-                    + "charge_transition_hint," // 22
-                    + "app_foreground," // 23
-                    + "raw," // 24
-                    + "json" // 25
+                    + "pack_voltage," // 14
+                    + "pack_current_a," // 15
+                    + "latitude," // 16
+                    + "longitude," // 17
+                    + "accuracy_m," // 18
+                    + "gps_speed_mps," // 19
+                    + "bearing_deg," // 20
+                    + "location_age_ms," // 21
+                    + "sample_number," // 22
+                    + "session_ms," // 23
+                    + "charge_transition_hint," // 24
+                    + "app_foreground," // 25
+                    + "raw," // 26
+                    + "json" // 27
                     + ") VALUES ("
-                    + "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                    + "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
     private SQLiteStatement telemetryInsertStmt;
 
@@ -112,18 +114,20 @@ final class ObdStatementCache implements Closeable {
         bindOptionalDouble(stmt, 11, sample, "soc");
         bindOptionalDouble(stmt, 12, sample, "batteryTemp");
         bindOptionalDouble(stmt, 13, sample, "powerKw");
-        bindOptionalDouble(stmt, 14, sample, "latitude");
-        bindOptionalDouble(stmt, 15, sample, "longitude");
-        bindOptionalDouble(stmt, 16, sample, "accuracyM");
-        bindOptionalDouble(stmt, 17, sample, "gpsSpeedMps");
-        bindOptionalDouble(stmt, 18, sample, "bearingDeg");
-        bindOptionalLong(stmt, 19, sample, "locationAgeMs");
-        bindOptionalInt(stmt, 20, sample, "sampleCount");
-        bindOptionalLong(stmt, 21, sample, "sessionMs");
-        bindOptionalBool(stmt, 22, sample, "chargeTransitionHint");
-        bindOptionalBool(stmt, 23, sample, "appForeground");
-        stmt.bindString(24, clean(sample.optString("raw", "")));
-        stmt.bindString(25, sample.toString());
+        bindOptionalDouble(stmt, 14, sample, "packVoltage");
+        bindOptionalDouble(stmt, 15, sample, "packCurrentA");
+        bindOptionalDouble(stmt, 16, sample, "latitude");
+        bindOptionalDouble(stmt, 17, sample, "longitude");
+        bindOptionalDouble(stmt, 18, sample, "accuracyM");
+        bindOptionalDouble(stmt, 19, sample, "gpsSpeedMps");
+        bindOptionalDouble(stmt, 20, sample, "bearingDeg");
+        bindOptionalLong(stmt, 21, sample, "locationAgeMs");
+        bindOptionalInt(stmt, 22, sample, "sampleCount");
+        bindOptionalLong(stmt, 23, sample, "sessionMs");
+        bindOptionalBool(stmt, 24, sample, "chargeTransitionHint");
+        bindOptionalBool(stmt, 25, sample, "appForeground");
+        stmt.bindString(26, clean(sample.optString("raw", "")));
+        stmt.bindString(27, sample.toString());
     }
 
     private static void bindOptionalInt(

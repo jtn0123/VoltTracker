@@ -75,6 +75,9 @@ final class ObdElmDecode {
         if ("0111".equals(clean)) {
             return "throttle position";
         }
+        if ("0149".equals(clean)) {
+            return "accelerator pedal position";
+        }
         if ("0902".equals(clean)) {
             return "vin";
         }

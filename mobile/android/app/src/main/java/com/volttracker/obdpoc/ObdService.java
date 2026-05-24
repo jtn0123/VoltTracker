@@ -45,7 +45,11 @@ public class ObdService extends Service {
     final Object ioLock = new Object();
     final AtomicBoolean running = new AtomicBoolean(false);
     private Future<?> activeTask;
-    private ObdLocalStore localStore;
+    // Package-private so DiagnosticScanRunner can persist VIN-derived vehicle rows by
+    // calling recorder.runAsync(() -> localStore.upsertVehicleFromVin(...)) — the runAsync
+    // dispatch keeps the SQLite write off the OBD IO thread and onto the recording executor.
+    // All other callers go through SessionRecorder's dedicated write methods.
+    ObdLocalStore localStore;
     SessionRecorder recorder;
     private ObdPollingEngine engine;
     private ObdNotifications notifications;

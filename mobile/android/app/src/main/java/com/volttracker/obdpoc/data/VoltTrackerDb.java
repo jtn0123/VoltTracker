@@ -11,7 +11,7 @@ import java.util.Set;
 
 final class VoltTrackerDb extends SQLiteOpenHelper {
     static final String DATABASE_NAME = "volttracker_obd_poc.db";
-    static final int DATABASE_VERSION = 7;
+    static final int DATABASE_VERSION = 8;
 
     static final String TABLE_SESSIONS = "obd_sessions";
     static final String TABLE_TELEMETRY = "telemetry_samples";
@@ -108,6 +108,8 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                         + "soc REAL,"
                         + "battery_temp REAL,"
                         + "power_kw REAL,"
+                        + "pack_voltage REAL,"
+                        + "pack_current_a REAL,"
                         + "latitude REAL,"
                         + "longitude REAL,"
                         + "accuracy_m REAL,"
@@ -287,6 +289,26 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
         if (oldVersion < 7) {
             runMigrationStep(
                     db, oldVersion, 7, "prune-by-time-indexes", VoltTrackerDb::createPruneIndexes);
+        }
+        if (oldVersion < 8) {
+            runMigrationStep(
+                    db,
+                    oldVersion,
+                    8,
+                    "telemetry-hv-pack-columns",
+                    target -> {
+                        // Raw HV pack voltage (V) and current (A, discharge positive) so the
+                        // trip materializer can integrate V·I for energy_kwh and the dashboard
+                        // can show the real EV pack readings instead of the aux 12V battery.
+                        // Older rows leave these NULL; no backfill is possible because the prior
+                        // sample JSON only stored the computed power_kw, not its inputs.
+                        target.execSQL(
+                                "ALTER TABLE " + TABLE_TELEMETRY + " ADD COLUMN pack_voltage REAL");
+                        target.execSQL(
+                                "ALTER TABLE "
+                                        + TABLE_TELEMETRY
+                                        + " ADD COLUMN pack_current_a REAL");
+                    });
         }
     }
 

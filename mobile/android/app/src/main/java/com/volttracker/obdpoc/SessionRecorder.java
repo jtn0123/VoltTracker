@@ -316,9 +316,18 @@ final class SessionRecorder {
     void logJson(String type, JSONObject payload) {
         synchronized (lock) {
             sessionLog.write(type, payload);
-            if (!"telemetry".equals(type) && !"status".equals(type)) {
-                persistEvent(type, payload);
+            if ("telemetry".equals(type) || "status".equals(type)) {
+                // These types have their own dedicated write paths (recordTelemetry /
+                // recordStatus); the generic event row would be a duplicate.
+                return;
             }
+            if ("command".equals(type) && !BuildFlags.TRACE_COMMANDS_TO_STATUS_EVENTS) {
+                // pid_observations + the .jsonl file already capture every OBD command; the
+                // status_events copy is gated off to keep the table from bloating at ≈8 rows/s
+                // during normal polling. Flip the build flag on to debug a decode regression.
+                return;
+            }
+            persistEvent(type, payload);
         }
     }
 

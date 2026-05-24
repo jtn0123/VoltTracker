@@ -43,12 +43,16 @@ final class DiagnosticScanRunner {
         probeCommand("ATDPN", 1800, raw);
         probeCommand("ATRV", 1800, raw);
 
+        String vinResponse = null;
         for (String protocol : ObdProbes.PROTOCOL_PROBES) {
             probeCommand(protocol, 1800, raw);
             for (String capability : ObdProbes.CAPABILITY_PROBES) {
                 probeCommand(capability, "0100".equals(capability) ? 9000 : 3500, raw);
             }
-            probeCommand("0902", 6000, raw);
+            String thisVin = probeCommand("0902", 6000, raw);
+            if (vinResponse == null && ObdProtocol.parseVin(thisVin) != null) {
+                vinResponse = thisVin;
+            }
             probeCommand("03", 3500, raw);
         }
 
@@ -87,6 +91,19 @@ final class DiagnosticScanRunner {
             probeCommand(probe, 4200, raw);
         }
         probeCommand("ATSH7DF", 1800, raw);
+
+        // If any 0902 frame in the sweep yielded a parseable VIN, write the vehicle row off
+        // the recorder thread so the vehicle-identity panel lights up on the next dashboard
+        // refresh. We persist the redacted form only (last 4 chars + SHA-256 hash); see
+        // ObdLocalStore.upsertVehicleFromVin for the redaction policy. Capture the store
+        // reference at submit time so we don't NPE if the service is torn down mid-flight.
+        if (vinResponse != null) {
+            final String vin = ObdProtocol.parseVin(vinResponse);
+            final com.volttracker.obdpoc.data.ObdLocalStore store = service.localStore;
+            if (vin != null && store != null) {
+                service.recorder.runAsync(() -> store.upsertVehicleFromVin(vin));
+            }
+        }
 
         JSONObject sample = new JSONObject();
         try {

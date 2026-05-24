@@ -458,9 +458,21 @@ class ObdPollingEngine {
             if (load != null) {
                 sample.put("loadPct", load);
             }
-            Integer throttle = ObdProtocol.parseThrottlePct(lastRawByCommand.get("0111"));
-            if (throttle != null) {
-                sample.put("throttlePct", throttle);
+            // Prefer the drive-by-wire accelerator pedal (0149) over the legacy ICE throttle
+            // body (0111). On a Chevy Volt 0111 returns a constant ~33% because the engine's
+            // throttle body isn't user-actuated — the real pedal position lives behind 0149.
+            // Fall back to 0111 only when 0149 hasn't responded (older vehicles or unsupported
+            // by the ECM), so users without the Volt-specific PID still see *something*.
+            Integer pedal = ObdProtocol.parseAccelPedalPct(lastRawByCommand.get("0149"));
+            if (pedal != null) {
+                sample.put("throttlePct", pedal);
+                sample.put("throttleSource", "accelPedal");
+            } else {
+                Integer throttle = ObdProtocol.parseThrottlePct(lastRawByCommand.get("0111"));
+                if (throttle != null) {
+                    sample.put("throttlePct", throttle);
+                    sample.put("throttleSource", "iceThrottleBody");
+                }
             }
             Integer soc = ObdProtocol.parseStateOfChargePct(lastRawByCommand.get("015B"));
             if (soc != null) {
@@ -475,6 +487,12 @@ class ObdPollingEngine {
             if (batteryTemp != null && batteryTemp.valueNumeric != null) {
                 sample.put("batteryTemp", round1(batteryTemp.valueNumeric));
             }
+            ObdProtocol.ParsedPidValue packVoltage =
+                    ObdProtocol.parseKnownValue("222429", packVoltageRaw);
+            if (packVoltage != null && packVoltage.valueNumeric != null) {
+                sample.put("packVoltage", round1(packVoltage.valueNumeric));
+            }
+            // packCurrent is parsed below as part of the vehicle-state classifier inputs.
             Double powerKw = ObdProtocol.parsePackPowerKw(packVoltageRaw, packCurrentRaw);
             if (powerKw != null) {
                 sample.put("powerKw", round1(powerKw));
@@ -500,6 +518,9 @@ class ObdPollingEngine {
             ObdProtocol.ParsedPidValue packCurrent =
                     ObdProtocol.parseKnownValue("222414", packCurrentRaw);
             Double packCurrentA = packCurrent == null ? null : packCurrent.valueNumeric;
+            if (packCurrentA != null) {
+                sample.put("packCurrentA", round1(packCurrentA));
+            }
             Boolean engineRunningHint = rpm == null ? null : (rpm > 200f);
             ClassifierResult classified =
                     VehicleStateClassifier.classify(

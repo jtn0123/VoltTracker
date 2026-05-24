@@ -13,7 +13,7 @@
     "speedValue", "speedKph", "rpmValue", "voltageValue", "coolantValue",
     "loadValue", "throttleValue", "gpsValue", "updatedValue", "socValue",
     "rangeValue", "packTempValue", "driveSocValue", "drivePackTempValue",
-    "powerValue"
+    "powerValue", "drivePackVoltage", "drivePackCurrent", "drivePackPower"
   ];
   // C6: how long (ms) since the last accepted sample before we mark tiles stale.
   const STALE_THRESHOLD_MS = 3000;
@@ -349,6 +349,8 @@
     VD.setText("speedValue", mph);
     VD.setText("speedKph", Number.isFinite(kph) ? `${Math.round(kph)} km/h` : "-- km/h");
     VD.setText("rpmValue", t.rpm ? `${t.rpm}` : "--");
+    // voltageValue is the aux 12V (ATRV from the ELM adapter), labelled accordingly
+    // in the partial. The HV traction-pack voltage is rendered via drivePackVoltage below.
     VD.setText("voltageValue", t.voltage ? `${Number(t.voltage).toFixed(1)} V` : "--");
     VD.setText("coolantValue", t.coolantC != null ? `${t.coolantC} °C` : "--");
     VD.setText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
@@ -372,6 +374,22 @@
     VD.setText("drivePackTempValue", Number.isFinite(batteryTemp) ? `${Math.round(batteryTemp)} °C` : "--");
     const power = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
     VD.setText("powerValue", Number.isFinite(power) ? `${power.toFixed(1)} kW` : "--");
+    // HV traction-pack live readings (mode-22 PIDs 222429 / 222414). When the
+    // adapter hasn't responded yet these fall back to "--" exactly like the rest of
+    // the live readout.
+    const packV = t.packVoltage == null || t.packVoltage === "" ? NaN : Number(t.packVoltage);
+    VD.setText("drivePackVoltage", Number.isFinite(packV) ? `${packV.toFixed(1)} V` : "--");
+    const packA = t.packCurrentA == null || t.packCurrentA === "" ? NaN : Number(t.packCurrentA);
+    // Sign convention: discharge is positive (Volt mode-22 222414), so "+" means
+    // current flowing OUT of the pack (driving), "-" means INTO it (regen / charging).
+    VD.setText(
+      "drivePackCurrent",
+      Number.isFinite(packA) ? `${packA >= 0 ? "+" : ""}${packA.toFixed(1)} A` : "--"
+    );
+    VD.setText(
+      "drivePackPower",
+      Number.isFinite(power) ? `${power >= 0 ? "+" : ""}${power.toFixed(1)} kW` : "--"
+    );
     const powerState = !Number.isFinite(power) ? "coast"
       : power < -0.5 ? "regen"
       : power > 0.5 ? "drive"

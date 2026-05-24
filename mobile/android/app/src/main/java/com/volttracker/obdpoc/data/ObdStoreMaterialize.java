@@ -98,7 +98,14 @@ final class ObdStoreMaterialize {
                 db.query(
                         VoltTrackerDb.TABLE_TELEMETRY,
                         new String[] {
-                            "captured_at_ms", "speed_kph", "rpm", "voltage", "soc", "power_kw"
+                            "captured_at_ms",
+                            "speed_kph",
+                            "rpm",
+                            "voltage",
+                            "pack_voltage",
+                            "pack_current_a",
+                            "power_kw",
+                            "soc"
                         },
                         "session_id = ?",
                         new String[] {String.valueOf(sessionId)},
@@ -113,9 +120,9 @@ final class ObdStoreMaterialize {
                                 speed == null ? null : speed.doubleValue(),
                                 nullableInt(cursor, "rpm"),
                                 nullableDouble(cursor, "voltage"),
-                                // pack_current_a is not a column on telemetry_samples today;
-                                // materializers fall back to the voltage heuristic.
-                                null,
+                                nullableDouble(cursor, "pack_voltage"),
+                                nullableDouble(cursor, "pack_current_a"),
+                                nullableDouble(cursor, "power_kw"),
                                 nullableDouble(cursor, "soc")));
             }
         }
@@ -145,8 +152,14 @@ final class ObdStoreMaterialize {
                             "avg_speed_kph",
                             (trip.distanceMeters / 1000.0) / (trip.durationMs / 3_600_000.0));
                 }
-                values.put("classification", trip.confidence.name());
+                // classification is the driving regime ("city"/"highway"/"mixed"/"unknown").
+                // confidence is how sure the materializer is the trip is real (0..1 score).
+                // Earlier code stored Confidence.name() in both fields — that bug is fixed here.
+                values.put("classification", trip.classification);
                 values.put("confidence", trip.confidence.asScore());
+                if (trip.energyKwh != null) {
+                    values.put("energy_kwh", trip.energyKwh);
+                }
                 values.put("created_at_ms", createdAt);
                 db.insertOrThrow(VoltTrackerDb.TABLE_TRIP_SEGMENTS, null, values);
             }
