@@ -1,4 +1,15 @@
 [tool.semantic_release]
+# This repo is an Android app, not a Python project. The only reason
+# pyproject.toml exists is to host the python-semantic-release config — see
+# .github/workflows/release.yml. PSR's preferred config location is pyproject.
+#
+# IMPORTANT: comments inside this table survive PSR's version bumps; comments
+# at the top of the file ABOVE the first table get eaten on rewrite, which is
+# why this preamble lives here instead.
+#
+# Source of truth for the released version is the `version` key below. The
+# build_command keeps the plaintext VERSION file (read by build.gradle) in
+# sync on every bump.
 version = "0.1.0"
 # Self-anchor on this same key so PSR rewrites it on every bump.
 version_toml = [
@@ -15,12 +26,18 @@ build_command = "printf '%s\\n' \"$NEW_VERSION\" > VERSION"
 # version bump. Listing it does NOT make it a downloadable release asset —
 # release.yml strips build-only files from the GitHub release listing.
 assets = ["VERSION"]
+# Treat any commit on a 0.x version as eligible for minor bumps. Without
+# this, PSR's default behavior under 0.x is to clamp `feat:` to patch-level
+# bumps (so 0.1.0 → 0.1.1 instead of 0.1.0 → 0.2.0). We want feat: to mean
+# minor even before 1.0.
+major_on_zero = true
+allow_zero_version = true
 
 [tool.semantic_release.commit_parser_options]
 # Conventional Commits → bump mapping. feat=minor, fix/perf=patch, BREAKING=major.
 # Other types (chore, docs, ci, refactor, style, test, build, revert) do NOT
-# bump — the release workflow loudly surfaces those no-release runs so silent
-# skips don't pile up.
+# bump — release.yml loudly surfaces those no-release runs so silent skips
+# don't pile up.
 allowed_tags = [
   "feat", "fix", "perf",
   "refactor", "docs", "style", "test", "build", "ci", "chore", "revert",
