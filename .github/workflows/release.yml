@@ -150,12 +150,46 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Assemble release APK (unsigned)
-        # No keystore.properties in CI → app/build.gradle's signingConfigs
-        # block leaves release unsigned. That's intentional for now: tagged
-        # releases ship app-release-unsigned.apk and users either side-load
-        # via adb or wait for a signed build. Wiring a keystore secret is a
-        # future change.
+      - name: Decode release keystore from secrets
+        # Recreates the keystore + keystore.properties that
+        # mobile/android/app/build.gradle's signingConfigs.release block looks
+        # for. If any secret is missing, the build still succeeds — it just
+        # falls back to producing app-release-unsigned.apk. The "Stage APKs"
+        # step below detects which file was produced and adjusts.
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 not set — release APK will be unsigned."
+            exit 0
+          fi
+          # storeFile in keystore.properties is resolved relative to the
+          # :app project's directory, not rootProject — so the path is just
+          # "release.keystore" and the actual file lives at app/release.keystore.
+          # Don't echo the base64 (it would land in the run log); use --decode
+          # from a heredoc instead.
+          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > app/release.keystore
+          cat > keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=${KEYSTORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+          # Sanity-check the keystore decoded into a real PKCS12 file.
+          # keytool exits non-zero if the password is wrong or the file is
+          # corrupt — fail fast rather than producing a broken APK.
+          keytool -list -keystore app/release.keystore \
+            -storepass "${KEYSTORE_PASSWORD}" >/dev/null
+          echo "Keystore decoded; release build will be signed."
+
+      - name: Assemble release APK
+        # When keystore.properties exists (previous step decoded it from
+        # secrets), this produces a signed app-release.apk. Without the
+        # secrets, it falls back to app-release-unsigned.apk and downstream
+        # steps adapt — see Stage APKs.
         env:
           # versionCode wants a monotonic integer — release.yml's run number
           # is separate from android.yml's, but debug and release sign
@@ -169,21 +203,36 @@ jobs:
       - name: Stage APKs (stable + version-tagged filenames)
         run: |
           mkdir -p release
-          # AGP names the output app-release-unsigned.apk when no signing
-          # config is wired. If a keystore is added later, this filename
-          # will become app-release.apk — adjust both paths together.
-          SRC="app/build/outputs/apk/release/app-release-unsigned.apk"
           TAG="${{ needs.release.outputs.tag }}"
-          cp "${SRC}" "release/app-release-unsigned.apk"
-          cp "${SRC}" "release/volttracker-${TAG}-unsigned.apk"
+          # When signing is wired AGP outputs app-release.apk; when not,
+          # app-release-unsigned.apk. Detect which one landed so the workflow
+          # keeps working through a future keystore-rotation outage.
+          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            SRC="app/build/outputs/apk/release/app-release.apk"
+            STABLE="app-release.apk"
+            VERSIONED="volttracker-${TAG}.apk"
+          else
+            SRC="app/build/outputs/apk/release/app-release-unsigned.apk"
+            STABLE="app-release-unsigned.apk"
+            VERSIONED="volttracker-${TAG}-unsigned.apk"
+          fi
+          cp "${SRC}" "release/${STABLE}"
+          cp "${SRC}" "release/${VERSIONED}"
+          echo "Staged: ${STABLE} + ${VERSIONED}"
 
       - name: Attach APK to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ needs.release.outputs.tag }}"
-          gh release upload "${TAG}" \
-            release/app-release-unsigned.apk \
-            release/volttracker-${TAG}-unsigned.apk \
+          gh release upload "${TAG}" release/*.apk \
             --repo "${{ github.repository }}" \
             --clobber
+
+      - name: Remove keystore artifacts from runner
+        # Belt-and-braces cleanup. The runner is ephemeral so this is mostly
+        # symbolic, but it keeps the keystore + plaintext password out of any
+        # post-job step that might archive the workspace.
+        if: always()
+        run: |
+          rm -f app/release.keystore keystore.properties
