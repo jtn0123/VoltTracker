@@ -1,36 +1,4 @@
 <section id="view-insights" class="view" data-view="insights">
-  <article class="panel diagnostic-report-card non-demo-only">
-    <header class="diagnostic-report-head">
-      <div>
-        <span class="kicker">Check engine</span>
-        <h3 id="dtcTitle">No car-code scan yet</h3>
-      </div>
-      <span id="dtcReportBadge" class="session-badge">ready</span>
-    </header>
-    <div class="dtc-action-row">
-      <button type="button" data-action="scan" class="scan">
-        Scan car codes
-      </button>
-      <button type="button" data-nav-jump="settings">Debug logs</button>
-    </div>
-    <div class="dtc-status-grid">
-      <div><span>Codes</span><strong id="dtcTotalCount">0</strong></div>
-      <div>
-        <span>Current/stored</span><strong id="dtcStoredCount">0</strong>
-      </div>
-      <div><span>Pending</span><strong id="dtcPendingCount">0</strong></div>
-      <div><span>Permanent</span><strong id="dtcPermanentCount">0</strong></div>
-      <div><span>Freeze-frame</span><strong id="dtcFreezeCount">0</strong></div>
-      <div><span>Last seen</span><strong id="dtcLastSeen">--</strong></div>
-    </div>
-    <div id="dtcList" class="dtc-list">
-      <p class="status-copy">
-        Current, pending, permanent, and freeze-frame results will appear here
-        after a scan.
-      </p>
-    </div>
-  </article>
-
   <article id="insightsEmptyState" class="panel empty-state non-demo-only">
     <span class="kicker">Insights</span>
     <h2>Waiting for enough real data.</h2>
@@ -39,7 +7,8 @@
       monthly insights need stored history before they should appear here.
     </p>
   </article>
-  <article class="panel ratio-card non-demo-only">
+
+  <article class="panel ratio-card insights-hero non-demo-only">
     <div id="realPackRing" class="ring" style="--v: 0">
       <strong id="realPackValue">--</strong>
     </div>
@@ -53,55 +22,114 @@
     </div>
   </article>
 
-  <article class="panel non-demo-only" id="insightStatsCard">
-    <header>
+  <div class="map-sheet insights-sheet non-demo-only">
+    <div class="map-sheet-head">
       <div>
         <span class="kicker">Lifetime totals</span>
-        <h3>From your logged drives</h3>
+        <h2>From your logged drives</h2>
       </div>
-    </header>
-    <div class="state-grid" aria-label="Lifetime driving totals">
-      <div><span>Trips</span><strong id="insightTripCount">--</strong></div>
-      <div>
-        <span>Distance</span><strong id="insightTotalDistance">--</strong>
-      </div>
-      <div>
-        <span>Drive time</span><strong id="insightDriveTime">--</strong>
-      </div>
-      <div><span>Top speed</span><strong id="insightTopSpeed">--</strong></div>
-      <div>
-        <span>Longest trip</span><strong id="insightLongest">--</strong>
-      </div>
-      <div><span>GPS trips</span><strong id="insightGpsTrips">--</strong></div>
+      <span class="badge"
+        ><span class="dot"></span
+        ><span><span id="insightTripCount">--</span> trips</span></span
+      >
     </div>
-  </article>
-
-  <article
-    class="panel non-demo-only eff-scatter-card"
-    id="effScatterCard"
-    hidden
-  >
-    <header>
+    <div class="map-sheet-stats">
       <div>
-        <span class="kicker">Efficiency vs speed - all drives</span>
-        <h3 id="effScatterHead">Pooling samples across every logged drive.</h3>
+        <span class="kicker">Distance</span
+        ><strong id="insightTotalDistance">--</strong>
       </div>
-    </header>
-    <div class="eff-scatter" id="effScatter"></div>
-    <div class="eff-scatter-legend">
-      <span><i style="background: #5cc8ff"></i>downhill</span>
-      <span><i style="background: #b8e63b"></i>flat</span>
-      <span><i style="background: #ff6b5f"></i>uphill</span>
+      <div>
+        <span class="kicker">Drive time</span
+        ><strong id="insightDriveTime">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Top speed</span
+        ><strong id="insightTopSpeed">--</strong>
+      </div>
     </div>
-    <div class="eff-scatter-stats" id="effScatterStats"></div>
-  </article>
+  </div>
 
-  <article class="panel list-card non-demo-only">
-    <header>
-      <span class="kicker">Maintenance</span>
-    </header>
-    <div id="maintenanceList" class="maintenance-list"></div>
-  </article>
+  <section class="map-layout">
+    <article class="panel diagnostic-report-card non-demo-only">
+      <header class="diagnostic-report-head">
+        <div>
+          <span class="kicker">Check engine</span>
+          <h3 id="dtcTitle">No car-code scan yet</h3>
+        </div>
+        <span id="dtcReportBadge" class="session-badge">ready</span>
+      </header>
+      <div class="dtc-action-row">
+        <button type="button" data-action="scan" class="scan">
+          Scan car codes
+        </button>
+        <button type="button" data-nav-jump="settings">Debug logs</button>
+      </div>
+      <div class="dtc-status-grid">
+        <div><span>Codes</span><strong id="dtcTotalCount">0</strong></div>
+        <div>
+          <span>Current/stored</span><strong id="dtcStoredCount">0</strong>
+        </div>
+        <div><span>Pending</span><strong id="dtcPendingCount">0</strong></div>
+        <div>
+          <span>Permanent</span><strong id="dtcPermanentCount">0</strong>
+        </div>
+        <div>
+          <span>Freeze-frame</span><strong id="dtcFreezeCount">0</strong>
+        </div>
+        <div><span>Last seen</span><strong id="dtcLastSeen">--</strong></div>
+      </div>
+      <div id="dtcList" class="dtc-list">
+        <p class="status-copy">
+          Current, pending, permanent, and freeze-frame results will appear here
+          after a scan.
+        </p>
+      </div>
+    </article>
+
+    <article class="panel non-demo-only" id="insightStatsCard">
+      <header>
+        <span class="kicker">More lifetime stats</span>
+      </header>
+      <div class="state-grid" aria-label="Additional lifetime totals">
+        <div>
+          <span>Longest trip</span><strong id="insightLongest">--</strong>
+        </div>
+        <div>
+          <span>GPS trips</span><strong id="insightGpsTrips">--</strong>
+        </div>
+      </div>
+    </article>
+
+    <article
+      class="panel non-demo-only eff-scatter-card"
+      id="effScatterCard"
+      hidden
+    >
+      <header>
+        <div>
+          <span class="kicker">Efficiency vs speed - all drives</span>
+          <h3 id="effScatterHead">
+            Pooling samples across every logged drive.
+          </h3>
+        </div>
+      </header>
+      <div class="eff-scatter" id="effScatter"></div>
+      <div class="eff-scatter-legend">
+        <span><i style="background: #5cc8ff"></i>downhill</span>
+        <span><i style="background: #b8e63b"></i>flat</span>
+        <span><i style="background: #ff6b5f"></i>uphill</span>
+      </div>
+      <div class="eff-scatter-stats" id="effScatterStats"></div>
+    </article>
+
+    <article class="panel list-card non-demo-only">
+      <header>
+        <span class="kicker">Maintenance</span>
+      </header>
+      <div id="maintenanceList" class="maintenance-list"></div>
+    </article>
+  </section>
+
   <article class="panel ratio-card demo-only" hidden>
     <div class="ring" style="--v: 91"><strong>91%</strong></div>
     <div>
