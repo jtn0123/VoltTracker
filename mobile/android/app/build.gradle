@@ -22,6 +22,22 @@ spotless {
     }
 }
 
+// Version derivation — see /VERSION and /pyproject.toml at repo root.
+//
+// versionName is the released semver from VERSION + a short commit SHA so the
+// in-app About string ("0.1.0-9bda397") tells you exactly which build you're
+// running. python-semantic-release rewrites VERSION on every bumpable PR
+// merge — see .github/workflows/release.yml.
+//
+// versionCode comes from GITHUB_RUN_NUMBER on CI so the Play-style integer
+// version is monotonic per workflow. Local dev builds fall back to 1, which
+// is fine because debug and release APKs sign differently and Android treats
+// them as separate apps regardless.
+def repoVersionFile = file("$rootDir/../../VERSION")
+def repoVersionName = repoVersionFile.exists() ? repoVersionFile.text.trim() : "0.0.0"
+def repoVersionSuffix = (System.getenv("GITHUB_SHA")?.take(7)) ?: "dev"
+def repoVersionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
+
 android {
     namespace = "com.volttracker.obdpoc"
     compileSdk = 36
@@ -30,8 +46,8 @@ android {
         applicationId = "com.volttracker.obdpoc"
         minSdk = 23
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = repoVersionCode
+        versionName = "${repoVersionName}-${repoVersionSuffix}"
     }
 
     // Release signing activates only when mobile/android/keystore.properties exists

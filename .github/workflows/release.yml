@@ -1,0 +1,189 @@
+name: Release
+
+# Conventional-commits-driven release pipeline modeled on jtn0123/InkyPi.
+#
+# On every push to main, python-semantic-release inspects commits since the
+# last tag. If any commit subject starts with `feat:` (minor), `fix:`/`perf:`
+# (patch), or carries a `BREAKING CHANGE:` footer (major), it bumps the
+# version in pyproject.toml + VERSION, tags `vX.Y.Z`, and cuts a GitHub
+# Release. Chore/docs/ci/refactor/style/test/build/revert PRs do NOT bump —
+# the "no release cut" step below surfaces those skips loudly so a streak of
+# unreleased PRs doesn't go silently unnoticed.
+#
+# The rolling `latest-debug` release published from android.yml continues to
+# update on every main push regardless of whether a tagged release was cut.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.repository == 'jtn0123/VoltTracker'
+    outputs:
+      released: ${{ steps.resolve_tag.outputs.released }}
+      tag: ${{ steps.resolve_tag.outputs.tag }}
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # python-semantic-release needs the full history to walk commits
+          # since the last tag and decide the bump type.
+          fetch-depth: 0
+          # We push the version-bump commit + tag back, so the default
+          # `GITHUB_TOKEN` credential needs to persist on the checkout.
+          # Auto-triggered re-runs are not a risk: GitHub Actions does not
+          # trigger workflows from pushes made using the default GITHUB_TOKEN.
+          persist-credentials: true
+
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.11"
+
+      - name: Install python-semantic-release
+        run: pip install python-semantic-release==9.21.1
+
+      - name: Semantic Release — version & publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          semantic-release version
+          semantic-release publish
+
+      - name: Resolve released tag
+        id: resolve_tag
+        run: |
+          TAG=$(
+            git tag --points-at HEAD \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$' \
+              | sort -V \
+              | tail -n1 \
+              || true
+          )
+          if [ -n "${TAG}" ]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "Release tag: ${TAG}"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "No new release tag on this run."
+          fi
+
+      - name: Warn loudly if no release was cut
+        if: steps.resolve_tag.outputs.released != 'true'
+        run: |
+          # python-semantic-release exits 0 even when the merged commit
+          # doesn't match a bumpable conventional-commits type. Without a
+          # surface like this, a streak of non-bumping PRs (chore/docs/ci)
+          # silently piles up — InkyPi hit this with 5 unreleased PRs in a
+          # row before adding the warning.
+          SUBJECT=$(git log -1 --pretty=%s)
+          {
+            echo "## No release cut"
+            echo ""
+            echo "\`semantic-release version\` found no bumpable commits since"
+            echo "the last tag. Most recent commit subject:"
+            echo ""
+            echo "    ${SUBJECT}"
+            echo ""
+            echo "If this merge included user-facing changes, the PR title"
+            echo "probably didn't use a conventional-commits type that"
+            echo "triggers a bump (\`feat:\`, \`fix:\`, \`perf:\`, or a"
+            echo "\`BREAKING CHANGE:\` footer)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Workflow command bodies must URL-encode %, CR, and LF so subjects
+          # like "bump coverage to 90%" don't render garbled in the annotation.
+          ESCAPED=${SUBJECT//%/%25}
+          ESCAPED=${ESCAPED//$'\r'/%0D}
+          ESCAPED=${ESCAPED//$'\n'/%0A}
+          echo "::warning title=No release cut::semantic-release skipped this commit; subject: ${ESCAPED}"
+          # Non-failing on purpose — chore/docs/ci PRs legitimately skip
+          # release, so we only surface the info rather than failing the run.
+
+      - name: Strip build-only files from GitHub release
+        if: steps.resolve_tag.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # `VERSION` is listed in pyproject.toml's [tool.semantic_release]
+          # assets so PSR commits it alongside the bump, but the same config
+          # uploads it as a release download. Users don't install VERSION —
+          # it lives in the repo — so drop it from the release listing.
+          TAG="${{ steps.resolve_tag.outputs.tag }}"
+          for asset in VERSION; do
+            if gh release view "${TAG}" --repo "${{ github.repository }}" \
+                 --json assets --jq '.assets[].name' \
+                 | grep -Fxq "${asset}"; then
+              gh release delete-asset "${TAG}" "${asset}" \
+                --repo "${{ github.repository }}" --yes
+              echo "Removed ${asset} from release ${TAG}"
+            fi
+          done
+
+  build-release-apk:
+    name: Build and attach release APK
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: mobile/android
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Check out the tagged commit, not whatever HEAD is now — keeps the
+          # APK byte-for-byte tied to the release tag.
+          ref: ${{ needs.release.outputs.tag }}
+          persist-credentials: false
+
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Assemble release APK (unsigned)
+        # No keystore.properties in CI → app/build.gradle's signingConfigs
+        # block leaves release unsigned. That's intentional for now: tagged
+        # releases ship app-release-unsigned.apk and users either side-load
+        # via adb or wait for a signed build. Wiring a keystore secret is a
+        # future change.
+        env:
+          # versionCode wants a monotonic integer — release.yml's run number
+          # is separate from android.yml's, but debug and release sign
+          # differently so Android treats them as separate apps anyway.
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Stage APKs (stable + version-tagged filenames)
+        run: |
+          mkdir -p release
+          # AGP names the output app-release-unsigned.apk when no signing
+          # config is wired. If a keystore is added later, this filename
+          # will become app-release.apk — adjust both paths together.
+          SRC="app/build/outputs/apk/release/app-release-unsigned.apk"
+          TAG="${{ needs.release.outputs.tag }}"
+          cp "${SRC}" "release/app-release-unsigned.apk"
+          cp "${SRC}" "release/volttracker-${TAG}-unsigned.apk"
+
+      - name: Attach APK to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.release.outputs.tag }}"
+          gh release upload "${TAG}" \
+            release/app-release-unsigned.apk \
+            release/volttracker-${TAG}-unsigned.apk \
+            --repo "${{ github.repository }}" \
+            --clobber
