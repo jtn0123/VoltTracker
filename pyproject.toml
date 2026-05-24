@@ -1,13 +1,3 @@
-# This repo is an Android app, not a Python project. The only reason
-# pyproject.toml exists is to host the python-semantic-release config — see
-# .github/workflows/release.yml. PSR's preferred config location is pyproject,
-# and using it keeps us aligned with the InkyPi pattern (jtn0123/InkyPi) which
-# this versioning setup was modeled on.
-#
-# Source of truth for the released version is the `version` key below.
-# build_command keeps the plaintext `VERSION` file (read by build.gradle) in
-# sync on every release bump.
-
 [tool.semantic_release]
 version = "0.1.0"
 # Self-anchor on this same key so PSR rewrites it on every bump.
