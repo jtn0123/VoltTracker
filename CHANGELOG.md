@@ -1,6 +1,106 @@
 # CHANGELOG
 
 
+## v0.2.1 (2026-05-24)
+
+### Bug Fixes
+
+- **obd**: Accel-pedal PID, raw HV pack columns, real trip energy & classification, smarter charge
+  detection ([#130](https://github.com/jtn0123/VoltTracker/pull/130),
+  [`c23bf9a`](https://github.com/jtn0123/VoltTracker/commit/c23bf9abcafcb168a1e76ca52750abe9fe00c888))
+
+* fix(obd): pedal-pos PID, raw HV pack columns, real trip energy/classification, smarter charge
+  detection
+
+Diagnosed from session 9 on the real device that several telemetry fields were stuck or misleading
+  despite a healthy OBD link:
+
+- throttle_pct pinned to 33% for the entire trip (550/550 samples) - engine load_pct stuck at 0 -
+  "Volts" tile on the Drive screen was the aux 12V battery, not the HV pack -
+  trip_segments.energy_kwh always NULL - trip_segments.classification mis-populated with the
+  Confidence enum name - a single 12V swing produced a false-positive charge_sessions row -
+  status_events table bloated with ~8 command-trace rows/s - vehicles table never populated
+
+Root cause for the stuck values was using the Mode-01 PIDs that the Volt's ICE-throttle-body returns
+  a constant for. Real driver intent is on PID 0x49 (drive-by-wire accelerator pedal), and the HV
+  pack readings on mode-22 222429/222414 were captured to pid_observations but never flowed into
+  telemetry_samples as their own columns.
+
+Schema migration v7 → v8 adds telemetry_samples.pack_voltage / pack_current_a so: - the Drive
+  dashboard can show real HV-pack V/I/kW instead of the aux 12V - the trip materializer can
+  integrate V·I → energy_kwh - the charge materializer can gate on actual charging current (negative
+  under the Volt sign convention) and reject the aux-voltage false positives
+
+Other behavior changes: - ObdPollingEngine prefers PID 0149 over 0111 for throttle, with fallback
+  for vehicles that don't expose 0149 - DiagnosticScanRunner captures the first parseable VIN from
+  0902, hashes it (SHA-256), and upserts a vehicles row with last-4 redaction + WMI-derived make +
+  position-10 year - TripMaterializer.classification now buckets avg speed into
+  city/highway/mixed/unknown instead of stuffing the Confidence enum name into the column -
+  ChargeSessionMaterializer uses pack current as the primary signal and only falls back to aux
+  voltage when pack current isn't populated; a positive pack current explicitly vetoes the
+  aux-voltage path so alternator-charging-the-12V no longer materializes as a "charge session" -
+  BuildFlags.TRACE_COMMANDS_TO_STATUS_EVENTS (default false) gates the per-command rows; the .jsonl
+  session log and pid_observations table still capture everything - AppStateJson surfaces the latest
+  vehicle row so the dashboard's vehicle-identity panel fills in after a Scan
+
+Tests: all 257 unit tests pass, including 7 new ones covering 0149 decode, VIN parsing and
+  rejection, the v7→v8 migration, pack-current charge gating in both directions, energy integration,
+  and the new classification buckets.
+
+Verified end-to-end: ./gradlew :app:assembleDebug builds the debug APK and the dashboard preview
+  renders the new HV Pack readout plus the relabeled Aux 12V tile.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+* style: apply spotless formatting
+
+Pure formatting changes from ./gradlew :app:spotlessApply — line wrapping in javadoc comments and
+  one long assignment. No behavior changes.
+
+* test(data): cover upsertVehicleFromVin + latestVehicle storage projection
+
+CI jacocoTestCoverageVerification was failing — the new VIN/vehicles helpers in ObdLocalStore
+  (upsertVehicleFromVin, sha256Hex, guessMakeFromWmi, decodeModelYear) plus
+  ObdStoreReports.latestVehicleJson dropped the com.volttracker.obdpoc.data package from 0.89 →
+  0.85, below the 0.89 minimum.
+
+Adds five Robolectric tests against the real SQLite store: -
+  upsertVehicleFromVinWritesRedactedRowAndShowsInStorageSummary – proves WMI → "Chevrolet", VIN char
+  'J' → 2018, only the last-4 suffix surfaces (never the full VIN) -
+  upsertVehicleFromVinIsIdempotentOnTheVinHash – second call with the same VIN updates in place,
+  vehicleCount stays 1 - upsertVehicleFromVinRejectsWrongLength – null / too-short / too-long all
+  return 0L and write nothing - upsertVehicleFromVinWithUnknownWmiOmitsTheMakeField – unrecognised
+  WMI leaves make/display_name NULL but VIN suffix still surfaces -
+  storageSummaryLatestVehicleIsEmptyWhenNoVehiclesRecorded – empty vehicles table → latestVehicle is
+  {}, not missing
+
+Coverage now 0.909 (1517/1669 lines covered), passing the 0.89 gate locally.
+
+* fix(review): pack-tile stale coverage, comment polish, test data alignment
+
+Addresses 4 actionable review comments from CodeRabbit:
+
+- telemetry.js: add drivePackVoltage / drivePackCurrent / drivePackPower to LIVE_TILE_IDS so the new
+  HV-pack tiles get the same stale indicator as the rest of the live readout. Verified in browser
+  preview: all three tiles now render "-- (stale)" instead of staying fresh-styled when no samples
+  arrive. - ObdService.java: clarify the package-private localStore comment to make the
+  recorder.runAsync(...) dispatch explicit (it's what keeps the write off the OBD IO thread); names
+  the actual upsertVehicleFromVin call. - MaterializerIntegrationDbTest: align the OBD telemetry
+  speedKph seed (45 → 20) with the GPS-derived ~18 kph the trip uses for classification, so the test
+  data tells one consistent story; classification logic is unchanged. - ObdProtocolTest: drop the
+  dead `response` local in vinParsesFromMode09Response that PMD flagged as UnusedLocalVariable.
+
+The remaining 7 review comments were Spotless violations against commit 12c2ffc that were already
+  resolved by the ./gradlew spotlessApply commit (62dfda7); no further action needed for those.
+
+Verified locally: spotlessCheck, testDebugUnitTest, and jacocoTestCoverageVerification all BUILD
+  SUCCESSFUL.
+
+---------
+
+Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+
 ## v0.2.0 (2026-05-24)
 
 ### Features
