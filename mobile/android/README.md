@@ -65,7 +65,13 @@ Scan and verify the captured responses before promoting any of them to the live 
 
 From this directory:
 
+```sh
+# macOS / Linux
+./gradlew :app:assembleDebug
+```
+
 ```powershell
+# Windows
 .\gradlew.bat :app:assembleDebug
 ```
 
@@ -98,14 +104,21 @@ List outdated direct and transitive dependencies (advisory; nothing fails):
 3. Plug in the phone and accept the USB debugging prompt.
 4. Run:
 
+```sh
+# macOS / Linux
+adb devices
+./gradlew :app:installDebug
+```
+
 ```powershell
+# Windows
 adb devices
 .\gradlew.bat :app:installDebug
 ```
 
 Optional phone mirroring:
 
-```powershell
+```sh
 scrcpy
 ```
 

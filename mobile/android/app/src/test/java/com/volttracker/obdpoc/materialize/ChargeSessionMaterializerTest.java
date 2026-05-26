@@ -144,6 +144,38 @@ public class ChargeSessionMaterializerTest {
     }
 
     @Test
+    public void singleTelemetrySampleProducesEmpty() {
+        // One plugged sample — zero duration, must be rejected (mirrors round-5 D1).
+        StubData data = new StubData();
+        data.telemetry.add(tel(T_BASE, 14.2, 0.0));
+
+        assertEquals(0, ChargeSessionMaterializer.materialize(input(), data).size());
+    }
+
+    @Test
+    public void allZeroVoltageProducesEmpty() {
+        // A long run of low aux voltage with no pack-current signal — never "plugged".
+        StubData data = new StubData();
+        for (int i = 0; i < 30; i++) {
+            data.telemetry.add(tel(T_BASE + i * ONE_MINUTE_MS, 0.0, 0.0));
+        }
+
+        assertEquals(0, ChargeSessionMaterializer.materialize(input(), data).size());
+    }
+
+    @Test
+    public void allNullVoltageProducesEmpty() {
+        // Adapter dropped voltage column entirely (probe failed) AND no pack-current samples.
+        // The materializer must NOT manufacture a charge session out of pure absence.
+        StubData data = new StubData();
+        for (int i = 0; i < 30; i++) {
+            data.telemetry.add(telWithNullVoltage(T_BASE + i * ONE_MINUTE_MS, 0.0));
+        }
+
+        assertEquals(0, ChargeSessionMaterializer.materialize(input(), data).size());
+    }
+
+    @Test
     public void nullSpeedKphIsNotTreatedAsPlugged() {
         // Adapter voltage above the threshold but speedKph unknown (null). Conservative behaviour
         // per the materializer Javadoc: do NOT infer plugged when motion data is missing — the
@@ -171,6 +203,10 @@ public class ChargeSessionMaterializerTest {
 
     private static TelemetrySample telWithNullSpeed(long atMs, double voltage) {
         return new TelemetrySample(atMs, null, 0, voltage, null, null);
+    }
+
+    private static TelemetrySample telWithNullVoltage(long atMs, double speedKph) {
+        return new TelemetrySample(atMs, speedKph, 0, null, null, null);
     }
 
     private static TelemetrySample telWithPackCurrent(

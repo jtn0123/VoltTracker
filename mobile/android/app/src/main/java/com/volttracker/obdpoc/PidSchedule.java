@@ -59,6 +59,23 @@ final class PidSchedule {
     static final String RESTORE_BROADCAST_HEADER_COMMAND = "ATSH7DF";
 
     /**
+     * B7: Tier-1 broadcast Mode-01 PIDs that get batched into a single request when the adapter
+     * supports it. Listing both the full command strings (so the engine can match against {@link
+     * PidSpec#command}) and the bare PID hex (so {@link ObdProtocol#buildMode01MultiCommand} can
+     * assemble the batched request) avoids substring slicing in two places.
+     *
+     * <p>Order matters: the ELM327 reply includes frames in the same order the PIDs were requested,
+     * but each parser searches for its own {@code "41XX"} marker so the order is only a wire-format
+     * detail — the dashboard never sees it.
+     */
+    static final List<String> MODE_01_BATCH_COMMANDS =
+            Collections.unmodifiableList(
+                    new ArrayList<>(List.of("010D", "010C", "0104", "0111", "0149")));
+
+    static final List<String> MODE_01_BATCH_PIDS_HEX =
+            Collections.unmodifiableList(new ArrayList<>(List.of("0D", "0C", "04", "11", "49")));
+
+    /**
      * Polling spec for a single PID. {@code periodCycles == 1} means "every cycle"; higher values
      * stagger this PID across cycles. {@code phaseOffset} picks which slot inside that period this
      * PID lands on, so two slow PIDs of the same period can be spread out instead of stacking on

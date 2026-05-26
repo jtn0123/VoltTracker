@@ -68,22 +68,25 @@ const REQUIRED_DOM = `
   <div id="dataSourceState"></div>
   <div id="dbState"></div>
 
-  <!-- Live telemetry tiles (LIVE_TILE_IDS in telemetry.js). -->
-  <div id="speedValue"></div>
-  <div id="speedKph"></div>
-  <div id="rpmValue"></div>
-  <div id="voltageValue"></div>
-  <div id="coolantValue"></div>
-  <div id="loadValue"></div>
-  <div id="throttleValue"></div>
-  <div id="gpsValue"></div>
-  <div id="updatedValue"></div>
-  <div id="socValue"></div>
-  <div id="rangeValue"></div>
-  <div id="packTempValue"></div>
-  <div id="driveSocValue"></div>
-  <div id="drivePackTempValue"></div>
-  <div id="powerValue"></div>
+  <!-- Live telemetry tiles. Source of truth is the data-live-tile attribute
+       on the partial element; telemetry.js derives its LIVE_TILE_IDS from it.
+       Mirror the production attribute here so the stale-indicator test
+       exercises the same code path it does in the WebView. -->
+  <div id="speedValue" data-live-tile="true"></div>
+  <div id="speedKph" data-live-tile="true"></div>
+  <div id="rpmValue" data-live-tile="true"></div>
+  <div id="voltageValue" data-live-tile="true"></div>
+  <div id="coolantValue" data-live-tile="true"></div>
+  <div id="loadValue" data-live-tile="true"></div>
+  <div id="throttleValue" data-live-tile="true"></div>
+  <div id="gpsValue" data-live-tile="true"></div>
+  <div id="updatedValue" data-live-tile="true"></div>
+  <div id="socValue" data-live-tile="true"></div>
+  <div id="rangeValue" data-live-tile="true"></div>
+  <div id="packTempValue" data-live-tile="true"></div>
+  <div id="driveSocValue" data-live-tile="true"></div>
+  <div id="drivePackTempValue" data-live-tile="true"></div>
+  <div id="powerValue" data-live-tile="true"></div>
 
   <div id="rawFrames"></div>
   <div id="powerDetail"></div>
@@ -257,8 +260,17 @@ function installCanvasShim() {
  * setInterval/setTimeout the bootstrap registers and clear them on the next
  * call so the previous run's stale-indicator poll (and any other recurring
  * timer the scripts wire up) doesn't leak into the next test.
+ *
+ * Opts:
+ *   `bridge` — custom VoltBridge fixture (defaults to createVoltBridgeFixture())
+ *   `extras` — additional JS files (filename relative to dashboard/js/) to
+ *              eval AFTER the standard 5-file bundle. Use for tests that need
+ *              drive.js / scrubber.js / troubleshooter.js etc.
+ *   `extraDom` — HTML appended to REQUIRED_DOM. Use for tests that need
+ *                additional fixture nodes (chart hosts, etc.) without losing
+ *                the bootstrap-required tiles.
  */
-export function loadDashboard({ bridge } = {}) {
+export function loadDashboard({ bridge, extras, extraDom } = {}) {
   clearOwnedTimers();
   installCanvasShim();
   installScrollShim();
@@ -266,7 +278,7 @@ export function loadDashboard({ bridge } = {}) {
   // The Android side exposes the bridge as `window.VoltTrackerAndroid` before
   // the dashboard's scripts run, so do the same here.
   window.VoltTrackerAndroid = bridgeImpl;
-  document.body.innerHTML = REQUIRED_DOM;
+  document.body.innerHTML = REQUIRED_DOM + (extraDom ?? '');
 
   const nativeSetInterval = window.setInterval.bind(window);
   const nativeSetTimeout = window.setTimeout.bind(window);
@@ -282,7 +294,8 @@ export function loadDashboard({ bridge } = {}) {
   };
 
   try {
-    for (const file of DASHBOARD_JS_FILES) {
+    const allFiles = [...DASHBOARD_JS_FILES, ...(extras ?? [])];
+    for (const file of allFiles) {
       const source = readFileSync(resolve(DASHBOARD_JS_DIR, file), 'utf8');
       // `new Function` runs the script in the global scope of the current
       // realm (jsdom's window), which is the same shape a <script> tag would

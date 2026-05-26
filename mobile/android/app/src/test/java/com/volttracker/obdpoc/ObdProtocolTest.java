@@ -487,4 +487,56 @@ public class ObdProtocolTest {
         assertTrue(ObdProtocol.parseDiagnosticTroubleCodes("03", "43", "").isEmpty());
         assertTrue(ObdProtocol.parseDiagnosticTroubleCodes("03", "43 0", "").isEmpty());
     }
+
+    // ---- B7 Mode-01 multi-PID helpers -----------------------------------------------
+
+    @Test
+    public void buildMode01MultiCommand_concatenatesPidHexAfterModeByte() {
+        assertEquals(
+                "010D0C041149 — 5 PIDs in a single Mode-01 round-trip",
+                "010D0C041149",
+                ObdProtocol.buildMode01MultiCommand(List.of("0D", "0C", "04", "11", "49")));
+        assertEquals(
+                "uppercases hex on the way in",
+                "010D0C",
+                ObdProtocol.buildMode01MultiCommand(List.of("0d", "0c")));
+    }
+
+    @Test
+    public void responseContainsAllMode01Pids_acceptsConcatenatedFrames() {
+        // Real-shape ELM327 response to "010D0C": 41 0D 50 (speed=80 kph) + 41 0C 0B B8 (RPM=750).
+        String response = "41 0D 50 41 0C 0B B8\r\r>";
+        assertTrue(ObdProtocol.responseContainsAllMode01Pids(response, List.of("0D", "0C")));
+    }
+
+    @Test
+    public void responseContainsAllMode01Pids_missingPidReturnsFalse() {
+        // Adapter only answered with 410D; 410C marker absent → batching must fall back.
+        String response = "41 0D 50\r\r>";
+        assertFalse(ObdProtocol.responseContainsAllMode01Pids(response, List.of("0D", "0C")));
+    }
+
+    @Test
+    public void responseContainsAllMode01Pids_emptyOrNullInputsAreFalse() {
+        assertFalse(ObdProtocol.responseContainsAllMode01Pids(null, List.of("0D")));
+        assertFalse(ObdProtocol.responseContainsAllMode01Pids("41 0D 50", List.of()));
+    }
+
+    @Test
+    public void existingParsersHandleConcatenatedMultiPidResponse() {
+        // The whole point of B7 is that the same multi-PID response can be stuffed into
+        // every batched command's lastRawByCommand entry and each per-PID parser picks out
+        // its own bytes via the existing indexOf("41XX") lookup. Pin that here so a refactor
+        // can't silently break the rendering path.
+        String response = "41 0D 50 41 0C 0B B8 41 04 80 41 11 33 41 49 7F\r\r>";
+        assertEquals(Integer.valueOf(80), ObdProtocol.parseSpeedKph(response));
+        // 0BB8 / 4 = 750.0 RPM.
+        assertEquals(Float.valueOf(750f), ObdProtocol.parseRpm(response));
+        // 0x80 = 128; 128 * 100 / 255 ≈ 50%.
+        assertEquals(Integer.valueOf(50), ObdProtocol.parseEngineLoadPct(response));
+        // 0x33 = 51; 51 * 100 / 255 = 20%.
+        assertEquals(Integer.valueOf(20), ObdProtocol.parseThrottlePct(response));
+        // 0x7F = 127; 127 * 100 / 255 ≈ 50%.
+        assertEquals(Integer.valueOf(50), ObdProtocol.parseAccelPedalPct(response));
+    }
 }

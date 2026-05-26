@@ -175,4 +175,47 @@ public class PidScheduleTest {
         }
         return count;
     }
+
+    // ---- B7 Mode-01 multi-PID batch constants ---------------------------------------
+
+    @org.junit.Test
+    public void mode01BatchCommands_matchEveryPidHexInTheSameOrder() {
+        // The two parallel lists must stay in lockstep: same length, and the PID hex must
+        // be the last 2 chars of each batch command. A future addition that breaks this
+        // would corrupt the batched read.
+        assertEquals(
+                PidSchedule.MODE_01_BATCH_COMMANDS.size(),
+                PidSchedule.MODE_01_BATCH_PIDS_HEX.size());
+        for (int i = 0; i < PidSchedule.MODE_01_BATCH_COMMANDS.size(); i++) {
+            String command = PidSchedule.MODE_01_BATCH_COMMANDS.get(i);
+            String pidHex = PidSchedule.MODE_01_BATCH_PIDS_HEX.get(i);
+            assertEquals(
+                    "batch command " + command + " must end in PID hex " + pidHex,
+                    pidHex,
+                    command.substring(2));
+            assertEquals("01", command.substring(0, 2));
+        }
+    }
+
+    @org.junit.Test
+    public void mode01BatchCommands_areAllTier1BroadcastSpecs() {
+        // Batched PIDs must all be period=1, broadcast header — otherwise the engine's
+        // "all batch commands are due" predicate would never fire and the optimization
+        // wouldn't engage.
+        for (String command : PidSchedule.MODE_01_BATCH_COMMANDS) {
+            PidSchedule.PidSpec spec = null;
+            for (PidSchedule.PidSpec candidate : PidSchedule.SPECS) {
+                if (command.equals(candidate.command)) {
+                    spec = candidate;
+                    break;
+                }
+            }
+            assertNotNull("batch command " + command + " missing from SPECS", spec);
+            assertEquals("batch command " + command + " must be period=1", 1, spec.periodCycles);
+            assertEquals(
+                    "batch command " + command + " must be broadcast header",
+                    PidSchedule.Header.BROADCAST,
+                    spec.header);
+        }
+    }
 }

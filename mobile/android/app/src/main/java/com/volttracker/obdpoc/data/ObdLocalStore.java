@@ -33,7 +33,7 @@ import org.json.JSONObject;
  * payload construction lives in {@link ObdStoreSnapshots}, maintenance lives in {@link
  * ObdStoreMaintenance}, and stateless helpers are in {@link ObdStoreSupport}.
  */
-public class ObdLocalStore implements Closeable, MaterializerData {
+public class ObdLocalStore implements Closeable, MaterializerData, ObdSessionStore, ObdQueryStore {
     public static final String MODE_OBD = "obd";
     public static final String MODE_SCAN = "scan";
     public static final String MODE_DEMO = "demo";

@@ -7,13 +7,14 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
     <!--
-  Content-Security-Policy: the dashboard ships entirely from app assets and only
-  fetches map tiles from the CARTO CDN. Inline styles are required because the
+  Content-Security-Policy: the dashboard ships entirely from app assets and fetches
+  map tiles from the CARTO CDN, with a fallback to OpenStreetMap when CARTO is
+  unreachable (see map.js error handler). Inline styles are required because the
   bundled Leaflet CSS sets style attrs on injected tiles. No remote scripts ever.
 -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.basemaps.cartocdn.com; frame-ancestors 'none'; base-uri 'none'; form-action 'none';"
+      content="default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; frame-ancestors 'none'; base-uri 'none'; form-action 'none';"
     />
     <title>Volt Tracker OBD</title>
     <link rel="stylesheet" href="lib/leaflet/leaflet.css" />
@@ -200,6 +201,42 @@
           ></div>
         </div>
       </li>
+
+      <li
+        class="troubleshooter-step"
+        data-step="stale-telemetry"
+        id="troubleshooterStepStale"
+        hidden
+      >
+        <button
+          type="button"
+          class="troubleshooter-step-head"
+          aria-expanded="false"
+          aria-controls="troubleshooterStepStaleBody"
+        >
+          <span class="troubleshooter-step-number">4</span>
+          <span class="troubleshooter-step-title"
+            >Telemetry isn't refreshing</span
+          >
+          <span class="troubleshooter-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div
+          id="troubleshooterStepStaleBody"
+          class="troubleshooter-step-body"
+          hidden
+        >
+          <p>
+            One or more slow-tier PIDs haven't refreshed in a while. This
+            usually means your adapter doesn't support Chevy Volt mode-22 PIDs
+            (<code>222429</code>, <code>222414</code>, <code>22434F</code>).
+          </p>
+          <ul
+            id="troubleshooterStaleList"
+            class="troubleshooter-stale-list"
+            aria-label="Stale telemetry fields"
+          ></ul>
+        </div>
+      </li>
     </ol>
 
     <footer class="troubleshooter-foot">
@@ -296,10 +333,12 @@
         <span class="rate-chip"><span class="rate-dot"></span>4 Hz</span>
       </div>
       <div class="speed-row">
-        <div id="speedValue" class="speed-value">--</div>
+        <div id="speedValue" class="speed-value" data-live-tile="true">--</div>
         <div class="speed-units">
           <span class="speed-unit-main">MPH</span>
-          <span id="speedKph" class="speed-unit-sub">-- km/h</span>
+          <span id="speedKph" class="speed-unit-sub" data-live-tile="true"
+            >-- km/h</span
+          >
         </div>
       </div>
 
@@ -318,7 +357,7 @@
         <div class="power-head">
           <div class="power-label">
             <span class="kicker">Power</span>
-            <strong id="powerValue">--</strong>
+            <strong id="powerValue" data-live-tile="true">--</strong>
           </div>
           <span id="powerDetail" class="power-state" data-state="coast"
             >coast</span
@@ -342,28 +381,28 @@
         <div>
           <div class="kicker">HV Battery</div>
           <div class="battery-soc">
-            <strong id="driveSocValue">--</strong>
+            <strong id="driveSocValue" data-live-tile="true">--</strong>
             <span class="battery-soc-sub">state of charge</span>
           </div>
         </div>
         <div class="battery-temp">
           <div class="kicker">Pack temp</div>
-          <strong id="drivePackTempValue">--</strong>
+          <strong id="drivePackTempValue" data-live-tile="true">--</strong>
         </div>
       </div>
       <div class="meter battery-meter"><span id="driveSocMeter"></span></div>
       <div class="battery-pack-readout" aria-label="HV pack live readings">
         <div>
           <span class="kicker">Pack V</span>
-          <strong id="drivePackVoltage">--</strong>
+          <strong id="drivePackVoltage" data-live-tile="true">--</strong>
         </div>
         <div>
           <span class="kicker">Pack A</span>
-          <strong id="drivePackCurrent">--</strong>
+          <strong id="drivePackCurrent" data-live-tile="true">--</strong>
         </div>
         <div>
           <span class="kicker">Pack kW</span>
-          <strong id="drivePackPower">--</strong>
+          <strong id="drivePackPower" data-live-tile="true">--</strong>
         </div>
       </div>
     </article>
@@ -379,32 +418,32 @@
     >
       <div>
         <span class="kicker" style="color: #ff7a45">RPM</span>
-        <strong id="rpmValue">--</strong>
+        <strong id="rpmValue" data-live-tile="true">--</strong>
       </div>
       <div>
         <!-- This is ATRV (12V auxiliary battery, ~12-14 V) — NOT the HV traction
              pack. The 300+ V pack reading lives in the HV Battery panel above. -->
         <span class="kicker" style="color: #8b94ad">Aux 12V</span>
-        <strong id="voltageValue">--</strong>
+        <strong id="voltageValue" data-live-tile="true">--</strong>
       </div>
       <div>
         <span class="kicker" style="color: #ffb84a">Coolant</span>
-        <strong id="coolantValue">--</strong>
+        <strong id="coolantValue" data-live-tile="true">--</strong>
       </div>
       <div>
         <!-- Sourced from PID 0149 (drive-by-wire accelerator pedal) when the
              vehicle supports it; falls back to 0111 (ICE throttle body) for
              vehicles where 0149 isn't responding. -->
         <span class="kicker" style="color: #b8e63b">Throttle</span>
-        <strong id="throttleValue">--</strong>
+        <strong id="throttleValue" data-live-tile="true">--</strong>
       </div>
       <div>
         <span class="kicker" style="color: #b8e63b">Load</span>
-        <strong id="loadValue">--</strong>
+        <strong id="loadValue" data-live-tile="true">--</strong>
       </div>
       <div>
         <span class="kicker" style="color: #a48cff">GPS</span>
-        <strong id="gpsValue">--</strong>
+        <strong id="gpsValue" data-live-tile="true">--</strong>
       </div>
     </div>
 
@@ -522,16 +561,24 @@
     <div class="status-head">
       <div>
         <div class="kicker">Parked - Garage</div>
-        <h3>Sparky - <span id="socValue">--</span> SOC</h3>
+        <h3>
+          Sparky - <span id="socValue" data-live-tile="true">--</span> SOC
+        </h3>
       </div>
       <button type="button" class="link-btn" data-nav-jump="settings">
         adapter
       </button>
     </div>
     <div class="status-meta">
-      <div><span>Range</span><strong id="rangeValue">--</strong></div>
+      <div>
+        <span>Range</span
+        ><strong id="rangeValue" data-live-tile="true">--</strong>
+      </div>
       <div><span>Fuel</span><strong>64%</strong></div>
-      <div><span>Pack</span><strong id="packTempValue">--</strong></div>
+      <div>
+        <span>Pack</span
+        ><strong id="packTempValue" data-live-tile="true">--</strong>
+      </div>
       <div><span>Odo</span><strong>49,328</strong></div>
     </div>
   </article>

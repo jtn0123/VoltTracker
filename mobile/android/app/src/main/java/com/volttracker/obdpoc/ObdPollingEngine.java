@@ -85,6 +85,12 @@ class ObdPollingEngine {
     private final Map<String, String> lastRawByCommand = new HashMap<>();
     private final Map<String, Long> lastPolledAtMsByCommand = new HashMap<>();
 
+    // B7 — Mode-01 multi-PID batching state. Set by probeMode01Batch() once per session
+    // after init. When true, runScheduledPolls collapses the 5 Tier-1 broadcast Mode-01
+    // round-trips into a single batched command (~5x fewer ELM round-trips per cycle,
+    // measurable as a Hz bump in the live speed/RPM/pedal tiles).
+    private boolean mode01BatchSupported = false;
+
     ObdPollingEngine(ObdService service) {
         this.service = service;
         this.demoLoop = new DemoPollingLoop(service, this);
@@ -100,6 +106,9 @@ class ObdPollingEngine {
         cycleNum = 0;
         lastRawByCommand.clear();
         lastPolledAtMsByCommand.clear();
+        // B7: re-probe per session — the adapter could have been swapped without an
+        // app restart, and probe is cheap (one round-trip we'd be doing anyway).
+        mode01BatchSupported = false;
     }
 
     int sampleCount() {
@@ -584,7 +593,37 @@ class ObdPollingEngine {
             }
         }
         OBDLog.event("ObdPollingEngine", "protocol_init", Map.of("ok", true));
+        probeMode01Batch();
         service.maybeRunVoltageProbe(this);
+    }
+
+    /**
+     * B7: probe whether the adapter accepts a Mode-01 multi-PID request. Sends {@code 010D0C}
+     * (speed + RPM in one shot) and checks the response contains both {@code 410D} and {@code 410C}
+     * markers. ELM327 v1.4+ supports this; many cheap clones don't. Result is cached in {@link
+     * #mode01BatchSupported}; subsequent {@code runScheduledPolls} cycles read the flag and batch
+     * all 5 Tier-1 broadcast Mode-01 PIDs into one command when set.
+     *
+     * <p>Always safe to call: a failed probe leaves the flag false (the existing per-PID path runs
+     * unchanged). Logs the result so field-test logs can confirm which path is active.
+     */
+    private void probeMode01Batch() {
+        try {
+            String probeResponse = sendCommand("010D0C", 1500);
+            boolean ok =
+                    ObdProtocol.responseContainsAllMode01Pids(probeResponse, List.of("0D", "0C"));
+            mode01BatchSupported = ok;
+            service.recorder.logEvent(
+                    "mode01_batch_probe",
+                    "supported",
+                    String.valueOf(ok),
+                    "response",
+                    ObdProtocol.summarize(probeResponse));
+        } catch (IOException ex) {
+            mode01BatchSupported = false;
+            service.recorder.logEvent(
+                    "mode01_batch_probe_failed", "error", String.valueOf(ex.getMessage()));
+        }
     }
 
     /**
@@ -800,6 +839,11 @@ class ObdPollingEngine {
         if (due.isEmpty()) {
             return;
         }
+        // B7: when the adapter supports Mode-01 multi-PID AND every batchable Tier-1 PID is due
+        // this cycle (the common case — they're all period=1), collapse them into a single
+        // round-trip. The same response is stashed for all 5 commands; the existing parsers
+        // each search for their own "41XX" marker so the rendering path stays unchanged.
+        boolean batchedTier1 = tryBatchTier1Mode01(due, rawThisCycle);
         boolean switchedHeader = false;
         Header lastHeaderSet = Header.BROADCAST;
         for (Header header : Header.values()) {
@@ -813,6 +857,12 @@ class ObdPollingEngine {
                 lastHeaderSet = header;
             }
             for (PidSpec spec : headerSpecs) {
+                if (batchedTier1
+                        && header == Header.BROADCAST
+                        && PidSchedule.MODE_01_BATCH_COMMANDS.contains(spec.command)) {
+                    // Already filled by the batched read; skip the per-PID round-trip.
+                    continue;
+                }
                 String response = sendRecoverableCommand(spec.command, 1500);
                 appendRawTo(rawThisCycle, spec.command, response);
                 lastRawByCommand.put(spec.command, response);
@@ -825,6 +875,59 @@ class ObdPollingEngine {
         if (switchedHeader) {
             sendCommand(PidSchedule.RESTORE_BROADCAST_HEADER_COMMAND, 1500);
         }
+    }
+
+    /**
+     * B7: if the adapter supports multi-PID and every batchable Tier-1 broadcast Mode-01 PID is due
+     * this cycle, send one batched command and stuff the response into every batched PID's {@code
+     * lastRawByCommand} entry. Returns true when the batch fired (and the per-PID loop should skip
+     * those commands), false otherwise.
+     *
+     * <p>Defensive: if the adapter's response doesn't contain every requested PID marker, drops
+     * back to per-PID polling for this cycle and disables batching for the rest of the session.
+     */
+    private boolean tryBatchTier1Mode01(List<PidSpec> due, StringBuilder rawThisCycle)
+            throws IOException {
+        if (!mode01BatchSupported) {
+            return false;
+        }
+        for (String batchCommand : PidSchedule.MODE_01_BATCH_COMMANDS) {
+            if (!commandDueOnBroadcast(due, batchCommand)) {
+                return false;
+            }
+        }
+        String batched = ObdProtocol.buildMode01MultiCommand(PidSchedule.MODE_01_BATCH_PIDS_HEX);
+        String response = sendRecoverableCommand(batched, 1500);
+        if (!ObdProtocol.responseContainsAllMode01Pids(
+                response, PidSchedule.MODE_01_BATCH_PIDS_HEX)) {
+            // The adapter answered but skipped some PIDs — likely a clone advertising support it
+            // doesn't fully have. Disable for the rest of the session and let the per-PID loop
+            // handle this cycle.
+            mode01BatchSupported = false;
+            service.recorder.logEvent(
+                    "mode01_batch_disabled",
+                    "reason",
+                    "incomplete_response",
+                    "response",
+                    ObdProtocol.summarize(response));
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        appendRawTo(rawThisCycle, batched, response);
+        for (String command : PidSchedule.MODE_01_BATCH_COMMANDS) {
+            lastRawByCommand.put(command, response);
+            lastPolledAtMsByCommand.put(command, now);
+        }
+        return true;
+    }
+
+    private static boolean commandDueOnBroadcast(List<PidSpec> due, String command) {
+        for (PidSpec spec : due) {
+            if (spec.header == Header.BROADCAST && command.equals(spec.command)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static List<PidSpec> filterByHeader(List<PidSpec> specs, Header header) {

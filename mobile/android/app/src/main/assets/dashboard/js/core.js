@@ -197,7 +197,7 @@
   function parsePayload(payload, fallback) {
     if (!payload) return fallback;
     try { return typeof payload === "string" ? JSON.parse(payload) : payload; }
-    catch (err) { return fallback; }
+    catch (_err) { return fallback; }
   }
 
   function setText(id, value) {

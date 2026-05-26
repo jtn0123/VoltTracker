@@ -132,6 +132,42 @@
           ></div>
         </div>
       </li>
+
+      <li
+        class="troubleshooter-step"
+        data-step="stale-telemetry"
+        id="troubleshooterStepStale"
+        hidden
+      >
+        <button
+          type="button"
+          class="troubleshooter-step-head"
+          aria-expanded="false"
+          aria-controls="troubleshooterStepStaleBody"
+        >
+          <span class="troubleshooter-step-number">4</span>
+          <span class="troubleshooter-step-title"
+            >Telemetry isn't refreshing</span
+          >
+          <span class="troubleshooter-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div
+          id="troubleshooterStepStaleBody"
+          class="troubleshooter-step-body"
+          hidden
+        >
+          <p>
+            One or more slow-tier PIDs haven't refreshed in a while. This
+            usually means your adapter doesn't support Chevy Volt mode-22 PIDs
+            (<code>222429</code>, <code>222414</code>, <code>22434F</code>).
+          </p>
+          <ul
+            id="troubleshooterStaleList"
+            class="troubleshooter-stale-list"
+            aria-label="Stale telemetry fields"
+          ></ul>
+        </div>
+      </li>
     </ol>
 
     <footer class="troubleshooter-foot">

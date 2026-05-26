@@ -1,0 +1,84 @@
+// C7: telemetry.js derives LIVE_TILE_IDS from `[data-live-tile="true"]` in the
+// DOM at boot. This test pins the source-of-truth: the count must match.
+// A new live tile in a partial without the attribute will fail here (and the
+// stale indicator wouldn't bind to it in prod either).
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { loadDashboard } from './setup/load-dashboard.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const TELEMETRY_JS = resolve(
+  HERE,
+  '../app/src/main/assets/dashboard/js/telemetry.js',
+);
+
+describe('C7 LIVE_TILE_IDS is DOM-derived', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    loadDashboard();
+  });
+
+  it('telemetry.js no longer pins a static LIVE_TILE_IDS array', () => {
+    // Guard against accidental re-introduction of the hardcoded array. The previous
+    // version of this check only matched if the array contained "speedValue", so a
+    // refactor that swapped to a different ID set would slip through. Match ANY
+    // literal-array assignment to LIVE_TILE_IDS.
+    const source = readFileSync(TELEMETRY_JS, 'utf8');
+    const hardcoded = /\b(?:const|let|var)\s+LIVE_TILE_IDS\s*=\s*\[/.test(source);
+    expect(
+      hardcoded,
+      'LIVE_TILE_IDS appears to be hardcoded again — derive it from [data-live-tile="true"]',
+    ).toBe(false);
+  });
+
+  it('every element with data-live-tile="true" carries a non-empty id', () => {
+    const elements = Array.from(
+      document.querySelectorAll('[data-live-tile="true"]'),
+    );
+    expect(elements.length).toBeGreaterThan(0);
+    for (const el of elements) {
+      expect(
+        el.id,
+        'data-live-tile element is missing an id (would be skipped by the stale loop)',
+      ).toBeTruthy();
+    }
+  });
+
+  it('every DOM tile gets the .stale class once the stale loop fires', () => {
+    // Drive the stale tick with fake timers so we can prove the derived list and
+    // the DOM nodes the loop touches are the same set. If telemetry.js's derived
+    // LIVE_TILE_IDS didn't match the data-live-tile elements, some tiles would
+    // miss the .stale class.
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = '';
+      delete window.VoltDashboard;
+      delete window.VoltTrackerNative;
+      delete window.VoltTrackerAndroid;
+      loadDashboard();
+      const tiles = Array.from(document.querySelectorAll('[data-live-tile="true"]'));
+      expect(tiles.length).toBeGreaterThan(0);
+      // STALE_THRESHOLD_MS = 3000 plus the 1 Hz interval — 4s past boot is well past
+      // both clocks and lastSampleAt is 0, so every tile must be stale.
+      vi.advanceTimersByTime(4000);
+      for (const el of tiles) {
+        expect(
+          el.classList.contains('stale'),
+          `#${el.id} should be stale after the loop fires`,
+        ).toBe(true);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+});

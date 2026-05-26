@@ -364,7 +364,7 @@
     const charge = storage.chargeSummary || {};
     const route = VD.selectedMapRoute(storage);
     const hasRows = VD.dbRowCount(storage) > 0;
-    const hasRoute = Number(route.pointCount || 0) >= 2;
+    const _hasRoute = Number(route.pointCount || 0) >= 2;
     const hasCharge = Number(charge.chargeSessionCount || charge.chargingHintCount || 0) > 0;
     const latest = battery.latestBatterySnapshot && Object.keys(battery.latestBatterySnapshot).length
       ? battery.latestBatterySnapshot

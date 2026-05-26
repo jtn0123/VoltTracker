@@ -147,6 +147,142 @@ public class TripMaterializerTest {
     }
 
     @Test
+    public void singleLocationSampleProducesNoTrip() {
+        // A single sample can't form a segment — no distance, no duration.
+        StubData data = new StubData();
+        data.locations.add(loc(T_BASE, 32.700000, -117.100000));
+
+        List<Trip> trips = TripMaterializer.materialize(input(data), data);
+
+        assertEquals(0, trips.size());
+    }
+
+    @Test
+    public void allZeroSpeedStationaryFixesProduceNoTrip() {
+        // Six samples covering ~150s but all at the same coordinates — zero distance,
+        // below MIN_DISTANCE_METERS. Conservative behavior: drop, don't fabricate.
+        StubData data = new StubData();
+        for (int i = 0; i < 6; i++) {
+            data.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 32.700000, -117.100000));
+        }
+        // Telemetry also reports zero speed throughout.
+        for (int i = 0; i < 6; i++) {
+            data.telemetry.add(tel(T_BASE + i * 30 * ONE_SECOND_MS, 0.0));
+        }
+
+        List<Trip> trips = TripMaterializer.materialize(input(data), data);
+
+        assertEquals(0, trips.size());
+    }
+
+    @Test
+    public void allNullPowerYieldsTripWithoutEnergy() {
+        // A real trip with no usable power data anywhere — energyKwh stays null
+        // (we don't fabricate; an absent integral is "unknown", not zero).
+        StubData data = new StubData();
+        for (int i = 0; i < 6; i++) {
+            data.locations.add(
+                    loc(T_BASE + i * 30 * ONE_SECOND_MS, 32.700000 + i * 0.002, -117.100000));
+        }
+        // Telemetry has no power columns populated.
+        for (int i = 0; i < 6; i++) {
+            data.telemetry.add(tel(T_BASE + i * 30 * ONE_SECOND_MS, 40.0));
+        }
+
+        List<Trip> trips = TripMaterializer.materialize(input(data), data);
+
+        assertEquals(1, trips.size());
+        assertEquals(
+                "energy_kwh stays null when no power samples are available",
+                null,
+                trips.get(0).energyKwh);
+    }
+
+    @Test
+    public void uniformlySampledRunOverCapSplitsBalancedInsteadOfPeelingPrefixes() {
+        // Regression: with `if (gap > largestGap)` ties preserve splitIndex=1, so a
+        // uniformly-sampled long run would recursively peel single-sample prefixes that
+        // buildTrip drops (size < 2), leaking the entire body of the trip into thin air.
+        // The fix (midpoint-preferring tie-break) must produce multiple cap-obeying trips.
+        StubData data = new StubData();
+        long sampleInterval = 5_000L;
+        // 18 hours of perfectly uniform samples — every gap is exactly sampleInterval.
+        int count = (int) ((18L * 60L * 60_000L) / sampleInterval); // 12_960 samples
+        double startLat = 32.700000;
+        for (int i = 0; i < count; i++) {
+            data.locations.add(
+                    loc(T_BASE + i * sampleInterval, startLat + i * 0.00001, -117.100000));
+        }
+
+        List<Trip> trips = TripMaterializer.materialize(input(data), data);
+
+        assertTrue(
+                "uniform 18h run must split into multiple trips (got " + trips.size() + ")",
+                trips.size() >= 2);
+        for (Trip trip : trips) {
+            assertTrue(
+                    "trip duration " + trip.durationMs + " exceeds MAX_TRIP_DURATION_MS",
+                    trip.durationMs <= 12L * 60L * 60_000L);
+        }
+        // Sum of trip durations should be close to the full 18h span (within one
+        // sampleInterval per split — the splitting drops the boundary edge gap, not the
+        // sample). With ~2 splits and 5s intervals, the gap is < 1% of total — assert >95%.
+        long totalSpan = (long) (count - 1) * sampleInterval;
+        long materializedMs = 0L;
+        for (Trip trip : trips) {
+            materializedMs += trip.durationMs;
+        }
+        assertTrue(
+                "materialized "
+                        + materializedMs
+                        + "ms of "
+                        + totalSpan
+                        + "ms should cover >95% (prevents single-sample-peel leak)",
+                materializedMs * 100 > totalSpan * 95);
+    }
+
+    @Test
+    public void runOverMaxTripDurationSplitsAtLargestGap() {
+        // Build a single continuous run that exceeds MAX_TRIP_DURATION_MS (12h).
+        // Use 5-second samples (well under MAX_GAP_MS so it stays one window in the
+        // first pass), with a single deliberately-larger 4-minute gap in the middle.
+        StubData data = new StubData();
+        long sampleInterval = 5_000L;
+        // Half a day of samples on each side of the larger gap.
+        long firstHalfStart = T_BASE;
+        int firstHalfCount = (int) ((6L * 60L * 60_000L) / sampleInterval); // 4320 samples
+        double startLat = 32.700000;
+        for (int i = 0; i < firstHalfCount; i++) {
+            data.locations.add(
+                    loc(firstHalfStart + i * sampleInterval, startLat + i * 0.00001, -117.100000));
+        }
+        long largerGap = 4L * 60_000L;
+        long secondHalfStart =
+                firstHalfStart + firstHalfCount * sampleInterval - sampleInterval + largerGap;
+        int secondHalfCount = (int) ((7L * 60L * 60_000L) / sampleInterval); // 5040 samples
+        double secondStartLat = startLat + firstHalfCount * 0.00001 + 0.01;
+        for (int i = 0; i < secondHalfCount; i++) {
+            data.locations.add(
+                    loc(
+                            secondHalfStart + i * sampleInterval,
+                            secondStartLat + i * 0.00001,
+                            -117.100000));
+        }
+
+        List<Trip> trips = TripMaterializer.materialize(input(data), data);
+
+        assertTrue(
+                "13h continuous run must split into at least 2 trips at the largest gap",
+                trips.size() >= 2);
+        // Every trip must obey the cap.
+        for (Trip trip : trips) {
+            assertTrue(
+                    "trip duration " + trip.durationMs + " exceeds MAX_TRIP_DURATION_MS",
+                    trip.durationMs <= 12L * 60L * 60_000L);
+        }
+    }
+
+    @Test
     public void classificationFromAverageSpeed() {
         // ~20 kph avg → city.
         assertEquals(Trip.CLASSIFICATION_CITY, TripMaterializer.classify(20.0));

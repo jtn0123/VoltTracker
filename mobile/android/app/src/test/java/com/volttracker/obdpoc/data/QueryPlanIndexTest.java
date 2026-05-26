@@ -147,6 +147,39 @@ public class QueryPlanIndexTest {
         assertUsesIndex(sql, new String[0], "idx_adapter_history_seen");
     }
 
+    // ---- materializer reads (oldest-first, session-scoped) ---------------------------
+
+    @Test
+    public void materializerTelemetryRead_usesSessionTimeIndex() {
+        // ObdStoreMaterialize.readTelemetrySamples shape: oldest-first, no LIMIT.
+        String sql =
+                "SELECT captured_at_ms, speed_kph, rpm, voltage, pack_voltage, pack_current_a,"
+                        + " power_kw, soc FROM "
+                        + VoltTrackerDb.TABLE_TELEMETRY
+                        + " WHERE session_id = ? ORDER BY captured_at_ms ASC";
+        assertUsesIndex(sql, new String[] {"1"}, "idx_telemetry_session_time");
+    }
+
+    @Test
+    public void materializerLocationRead_usesSessionTimeIndex() {
+        // ObdStoreMaterialize.readLocationSamples shape.
+        String sql =
+                "SELECT captured_at_ms, latitude, longitude, speed_mps, accuracy_m FROM "
+                        + VoltTrackerDb.TABLE_LOCATION_SAMPLES
+                        + " WHERE session_id = ? ORDER BY captured_at_ms ASC";
+        assertUsesIndex(sql, new String[] {"1"}, "idx_location_samples_session_time");
+    }
+
+    @Test
+    public void materializerPidRead_usesSessionTimeIndex() {
+        // ObdStoreMaterialize.readPidObservations shape.
+        String sql =
+                "SELECT observed_at_ms, command, header, raw_response, value_numeric FROM "
+                        + VoltTrackerDb.TABLE_PID_OBSERVATIONS
+                        + " WHERE session_id = ? ORDER BY observed_at_ms ASC";
+        assertUsesIndex(sql, new String[] {"1"}, "idx_pid_observations_session_time");
+    }
+
     // ---- prune-by-time deletes (background maintenance) ------------------------------
 
     @Test

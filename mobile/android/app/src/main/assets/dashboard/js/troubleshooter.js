@@ -36,6 +36,17 @@
   const FAILED_SESSION_OPEN_THRESHOLD = 2;
   const RETRY_OPEN_THRESHOLD = 3;
 
+  // B8: which slow-tier PID staleness fields the polling engine emits, and the
+  // user-facing label for each. Threshold is the same 4s used elsewhere for
+  // "the adapter has stopped answering this PID."
+  const STALE_THRESHOLD_MS = 4000;
+  const STALE_FIELDS = [
+    { key: "voltageStaleMs", label: "Adapter voltage (ATRV)" },
+    { key: "socStaleMs", label: "HV battery SOC" },
+    { key: "coolantCStaleMs", label: "Coolant temperature" },
+    { key: "batteryTempStaleMs", label: "HV pack temperature" }
+  ];
+
   // C1 — map FailureClass.name() to user-facing copy. Keys MUST match the
   // string values produced by FailureClass.java; unknown / missing falls
   // through to the generic message.
@@ -73,7 +84,10 @@
     retriesThisBurst: 0,
     autoOpened: false,
     forgetMode: false,
-    lastSessionState: ""
+    lastSessionState: "",
+    // Latest telemetry payload — captured by the observer so the stale step
+    // can re-render on open even if the telemetry stream is quiescent.
+    lastTelemetry: null
   };
 
   function modal() { return el("troubleshooterModal"); }
@@ -89,6 +103,7 @@
     node.hidden = false;
     renderForRetry();
     renderCompeting((state.status || {}).competingApps);
+    renderStaleTelemetry(state.troubleshooter.lastTelemetry);
     refreshStuckBondSuggestion();
     try {
       if (bridge && typeof bridge.logClientError === "function" && reason) {
@@ -246,6 +261,58 @@
     });
     row.append(label, button);
     return row;
+  }
+
+  // B8: render the "telemetry isn't refreshing" step from the latest telemetry
+  // payload. Shows one <li> per slow-tier PID whose *StaleMs field exceeds
+  // STALE_THRESHOLD_MS. Hidden entirely when no field is stale or when the
+  // adapter hasn't started reporting staleness yet.
+  function renderStaleTelemetry(payload) {
+    const stepNode = el("troubleshooterStepStale");
+    const listNode = el("troubleshooterStaleList");
+    if (!stepNode || !listNode) return;
+    const stale = pickStaleFields(payload);
+    if (!stale.length) {
+      stepNode.hidden = true;
+      listNode.replaceChildren();
+      return;
+    }
+    stepNode.hidden = false;
+    listNode.replaceChildren(...stale.map(buildStaleRow));
+  }
+
+  function pickStaleFields(payload) {
+    if (!payload || typeof payload !== "object") return [];
+    const out = [];
+    STALE_FIELDS.forEach((field) => {
+      const value = Number(payload[field.key]);
+      if (Number.isFinite(value) && value > STALE_THRESHOLD_MS) {
+        out.push({ label: field.label, staleMs: value });
+      }
+    });
+    return out;
+  }
+
+  function buildStaleRow(entry) {
+    const row = document.createElement("li");
+    row.className = "troubleshooter-stale-row";
+    const label = document.createElement("span");
+    label.className = "troubleshooter-stale-label";
+    label.textContent = entry.label;
+    const age = document.createElement("span");
+    age.className = "troubleshooter-stale-age";
+    const seconds = Math.round(entry.staleMs / 1000);
+    age.textContent = "last update " + seconds + "s ago";
+    row.append(label, age);
+    return row;
+  }
+
+  function noteTelemetry(payload) {
+    if (!payload || typeof payload !== "object") return;
+    state.troubleshooter.lastTelemetry = payload;
+    if (isOpen()) {
+      renderStaleTelemetry(payload);
+    }
   }
 
   // A8: switch the primary action when the last 3 sessions all failed.
@@ -426,6 +493,33 @@
     }
   }
 
+  // B8: same pattern as installStatusObserver but for the telemetry stream. The
+  // *StaleMs fields ride on every telemetry payload, so we just need to read
+  // them out and refresh the step. Observer must never break the underlying
+  // updateTelemetry call.
+  function installTelemetryObserver() {
+    const wrap = (prior) =>
+      function (payload) {
+        let result;
+        if (typeof prior === "function") {
+          result = prior(payload);
+        }
+        try {
+          const parsed = VD.parsePayload(payload, {});
+          noteTelemetry(parsed);
+        } catch (ignored) {}
+        return result;
+      };
+    if (typeof VD.updateTelemetry === "function") {
+      VD.updateTelemetry = wrap(VD.updateTelemetry);
+    }
+    if (window.VoltTrackerNative) {
+      window.VoltTrackerNative.updateTelemetry = wrap(
+        window.VoltTrackerNative.updateTelemetry
+      );
+    }
+  }
+
   // Bind once on DOM ready (the partial is included at build time so the
   // nodes exist before this file runs).
   bindStepToggles();
@@ -433,16 +527,22 @@
   bindPrimary();
   bindHelpAffordance();
   installStatusObserver();
+  installTelemetryObserver();
 
   VD.troubleshooter = {
     open: show,
     close,
     isOpen,
     noteStatus,
+    noteTelemetry,
     renderCompeting,
+    renderStaleTelemetry,
+    pickStaleFields,
     parsePackageCsv,
     refreshStuckBondSuggestion,
     renderErrorBannerCopy,
-    FAILURE_CLASS_COPY
+    FAILURE_CLASS_COPY,
+    STALE_FIELDS,
+    STALE_THRESHOLD_MS
   };
 })();

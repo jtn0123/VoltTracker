@@ -18,6 +18,14 @@ public final class TripMaterializer {
         /** Two samples farther apart than this end the current trip window. */
         static final long MAX_GAP_MS = 5L * 60_000L;
 
+        /**
+         * Hard upper bound on a single trip window. Protects against pathological
+         * sparse-but-continuous sessions becoming multi-day "trips" with a fictitious integrated
+         * energy number. If a window exceeds this, it's split at its largest internal gap (the
+         * splitting is recursive so very long runs decompose cleanly).
+         */
+        static final long MAX_TRIP_DURATION_MS = 12L * 60L * 60_000L;
+
         /** Below this distance, the window is not a real trip. */
         static final double MIN_DISTANCE_METERS = 100.0;
 
@@ -61,22 +69,65 @@ public final class TripMaterializer {
             if (!window.isEmpty()) {
                 long gap = sample.capturedAtMs - window.get(window.size() - 1).capturedAtMs;
                 if (gap > Tunables.MAX_GAP_MS) {
-                    Trip trip = buildTrip(window, telemetry);
-                    if (trip != null) {
-                        result.add(trip);
-                    }
+                    appendTripsCapped(result, window, telemetry);
                     window = new ArrayList<>();
                 }
             }
             window.add(sample);
         }
         if (!window.isEmpty()) {
+            appendTripsCapped(result, window, telemetry);
+        }
+        return result;
+    }
+
+    /**
+     * Adds zero or one trip per recursion. If the window exceeds {@link
+     * Tunables#MAX_TRIP_DURATION_MS}, splits at the largest internal gap and recurses on both
+     * halves so the cap holds even for long sparse-but-continuous runs.
+     */
+    private static void appendTripsCapped(
+            List<Trip> result, List<LocationSample> window, List<TelemetrySample> telemetry) {
+        if (window.size() < 2) {
+            return;
+        }
+        long duration = window.get(window.size() - 1).capturedAtMs - window.get(0).capturedAtMs;
+        if (duration <= Tunables.MAX_TRIP_DURATION_MS) {
             Trip trip = buildTrip(window, telemetry);
             if (trip != null) {
                 result.add(trip);
             }
+            return;
         }
-        return result;
+        // Find the largest internal gap; on ties, prefer the candidate closest to the midpoint
+        // so uniformly-sampled long runs split into balanced halves rather than peeling
+        // single-sample prefixes off the front (which buildTrip would then drop on the
+        // size < 2 check, leaking the entire body of the trip).
+        int splitIndex = -1;
+        long largestGap = -1L;
+        int midpoint = window.size() / 2;
+        for (int i = 1; i < window.size(); i++) {
+            long gap = window.get(i).capturedAtMs - window.get(i - 1).capturedAtMs;
+            boolean tieBreakWin =
+                    gap == largestGap
+                            && (splitIndex < 0
+                                    || Math.abs(i - midpoint) < Math.abs(splitIndex - midpoint));
+            if (gap > largestGap || tieBreakWin) {
+                largestGap = gap;
+                splitIndex = i;
+            }
+        }
+        if (splitIndex <= 0) {
+            // No internal gap to split on (every sample at the same ms) — accept as one trip.
+            Trip trip = buildTrip(window, telemetry);
+            if (trip != null) {
+                result.add(trip);
+            }
+            return;
+        }
+        appendTripsCapped(result, new ArrayList<>(window.subList(0, splitIndex)), telemetry);
+        appendTripsCapped(
+                result, new ArrayList<>(window.subList(splitIndex, window.size())), telemetry);
     }
 
     private static Trip buildTrip(List<LocationSample> window, List<TelemetrySample> telemetry) {

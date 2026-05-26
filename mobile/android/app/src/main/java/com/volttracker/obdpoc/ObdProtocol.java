@@ -102,6 +102,71 @@ final class ObdProtocol {
         return bytes == null ? null : Math.round(bytes[0] * 100f / 255f);
     }
 
+    /**
+     * Build an ELM327 Mode-01 multi-PID command from a list of PID hex strings (e.g. {@code
+     * ["0D","0C","04"]} → {@code "010D0C04"}). ELM327 v1.4+ accepts up to 6 PIDs in a single
+     * Mode-01 request and replies with the concatenated frames in one response.
+     *
+     * <p>B7: collapses the per-cycle Tier-1 PID set from 5 round-trips into 1 when the adapter
+     * supports it. Falls back to per-PID polling when {@link #responseContainsAllMode01Pids}
+     * reports the probe response doesn't include every requested PID.
+     */
+    static String buildMode01MultiCommand(List<String> pidHex) {
+        StringBuilder sb = new StringBuilder("01");
+        for (String pid : pidHex) {
+            sb.append(pid.toUpperCase(Locale.US));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * True iff {@code response} contains a {@code 41XX} marker for every PID in {@code pidHex}.
+     * Used to verify the adapter actually returned all requested PIDs in a multi-PID response —
+     * some clones silently drop unknown PIDs, so a missing marker means we must fall back to
+     * per-PID polling.
+     */
+    static boolean responseContainsAllMode01Pids(String response, List<String> pidHex) {
+        if (response == null || pidHex == null || pidHex.isEmpty()) {
+            return false;
+        }
+        String hex = response.toUpperCase(Locale.US).replaceAll("[^0-9A-F]", "");
+        // Walk PIDs in order and only allow the next marker to be found AFTER the previous
+        // PID's data bytes. Without this, a data byte of 0x41 followed by a PID byte from
+        // the requested list (e.g. response contains 41 0D 41 0C ... where the second 41 0C
+        // is the legitimate marker but a partial response might have 41 0D ?? 41 0C where ??
+        // happens to look like an early marker for a different PID) could falsely accept a
+        // response missing the actual frame.
+        int cursor = 0;
+        for (String pid : pidHex) {
+            String cleanPid = pid == null ? "" : pid.toUpperCase(Locale.US);
+            String marker = "41" + cleanPid;
+            int index = hex.indexOf(marker, cursor);
+            if (index < 0) {
+                return false;
+            }
+            int expectedBytes = mode01PayloadBytes(cleanPid);
+            int dataStart = index + marker.length();
+            if (hex.length() < dataStart + expectedBytes * 2) {
+                return false;
+            }
+            cursor = dataStart + expectedBytes * 2;
+        }
+        return true;
+    }
+
+    /**
+     * Expected payload byte count for the Mode-01 PIDs that participate in B7 batching. Used by
+     * {@link #responseContainsAllMode01Pids} to advance the cursor past each PID's data bytes so a
+     * subsequent {@code 41XX} match can't accidentally land inside another PID's payload.
+     */
+    private static int mode01PayloadBytes(String pidHex) {
+        if ("0C".equals(pidHex)) {
+            return 2; // engine RPM is 2 bytes (A*256 + B)
+        }
+        // Every other PID in MODE_01_BATCH_PIDS_HEX (0D, 04, 11, 49) is a single byte.
+        return 1;
+    }
+
     static Float parseVoltage(String response) {
         if (response == null) {
             return null;

@@ -7,13 +7,14 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
     <!--
-  Content-Security-Policy: the dashboard ships entirely from app assets and only
-  fetches map tiles from the CARTO CDN. Inline styles are required because the
+  Content-Security-Policy: the dashboard ships entirely from app assets and fetches
+  map tiles from the CARTO CDN, with a fallback to OpenStreetMap when CARTO is
+  unreachable (see map.js error handler). Inline styles are required because the
   bundled Leaflet CSS sets style attrs on injected tiles. No remote scripts ever.
 -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.basemaps.cartocdn.com; frame-ancestors 'none'; base-uri 'none'; form-action 'none';"
+      content="default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; frame-ancestors 'none'; base-uri 'none'; form-action 'none';"
     />
     <title>Volt Tracker OBD</title>
     <link rel="stylesheet" href="lib/leaflet/leaflet.css" />

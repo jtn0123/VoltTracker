@@ -7,14 +7,16 @@
   const el = VD.el;
 
   // C6: live-tile element ids that should pulse with a `.stale` class when the
-  // adapter stops sending fresh samples (>3s since lastSampleAt). Kept in one
-  // place so partials and CSS stay in sync.
-  const LIVE_TILE_IDS = [
-    "speedValue", "speedKph", "rpmValue", "voltageValue", "coolantValue",
-    "loadValue", "throttleValue", "gpsValue", "updatedValue", "socValue",
-    "rangeValue", "packTempValue", "driveSocValue", "drivePackTempValue",
-    "powerValue", "drivePackVoltage", "drivePackCurrent", "drivePackPower"
-  ];
+  // adapter stops sending fresh samples (>3s since lastSampleAt). Derived at
+  // boot from `[data-live-tile="true"]` so adding a tile to a partial is the
+  // only change needed — no parallel JS edit. Tiles whose id is missing from
+  // the assembled DOM are silently skipped by the stale loop, so a partial
+  // that disappears won't throw.
+  const LIVE_TILE_IDS = Array.from(
+    document.querySelectorAll('[data-live-tile="true"]')
+  )
+    .map((el) => el.id)
+    .filter(Boolean);
   // C6: how long (ms) since the last accepted sample before we mark tiles stale.
   const STALE_THRESHOLD_MS = 3000;
 
@@ -357,7 +359,7 @@
     VD.setText("throttleValue", t.throttlePct != null ? `${t.throttlePct}%` : "--");
     const lat = Number(t.latitude);
     const lon = Number(t.longitude);
-    const acc = Number(t.accuracyM);
+    const _acc = Number(t.accuracyM);
     VD.setText("gpsValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
     // gpsDetail / gpsMetricValue / gpsMetricSub all disappeared with the old
     // .mini-grid + .drive-signal-grid; the GPS chip in .live-readout now
