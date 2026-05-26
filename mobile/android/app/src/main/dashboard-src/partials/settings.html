@@ -144,6 +144,17 @@
     >
       Clear stored debug data
     </button>
+    <!-- Bucket 4b: C7 shortcut. Mirrors the Connection-tools "Send diagnostics"
+         button so users in the storage panel can share logs without scrolling
+         back up. Both buttons funnel into VoltTrackerAndroid.shareDiagnostics(). -->
+    <button
+      type="button"
+      id="sendDiagnosticsSettingsBtn"
+      data-action="send-diagnostics"
+      style="margin-top: 8px; width: 100%"
+    >
+      Send diagnostics bundle
+    </button>
   </article>
 
   <article class="panel raw">

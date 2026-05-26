@@ -1,0 +1,212 @@
+/*
+ * Owner: Bucket 4b.
+ * Styles for the last-connected badge (C2), adapter-health pill (C8),
+ * test-connection / send-diagnostics buttons (C5/C7), low-voltage hint (C9),
+ * and notify-when-ready toggle (C10). Selectors are namespaced under
+ * .connection-status / .connection-tools so they cannot collide with
+ * troubleshooter.css or the shared components.css.
+ */
+
+/* ---- Topbar: last-connected badge + adapter-health pill (C2 / C8) ---- */
+
+.connection-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.connection-status__badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-height: 40px;
+}
+
+.connection-status__badge:focus-visible {
+  outline: 2px solid rgba(126, 224, 106, 0.7);
+  outline-offset: 2px;
+}
+
+.connection-status__badge[data-state="success"] {
+  border-color: rgba(126, 224, 106, 0.35);
+}
+
+.connection-status__badge[data-state="failed"] {
+  border-color: rgba(255, 107, 95, 0.4);
+}
+
+.connection-status__badge .kicker {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.connection-status__badge strong {
+  font-size: 13px;
+  line-height: 1.1;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-status__badge small {
+  font-size: 11px;
+  opacity: 0.65;
+  line-height: 1;
+}
+
+.connection-status__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  color: inherit;
+}
+
+.connection-status__pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6a6a72;
+  flex-shrink: 0;
+}
+
+.connection-status__pill[data-tone="good"] {
+  border-color: rgba(126, 224, 106, 0.4);
+  color: #b8e63b;
+}
+.connection-status__pill[data-tone="good"] .connection-status__pill-dot {
+  background: #7ee06a;
+}
+
+.connection-status__pill[data-tone="warn"] {
+  border-color: rgba(255, 184, 74, 0.45);
+  color: #ffb84a;
+}
+.connection-status__pill[data-tone="warn"] .connection-status__pill-dot {
+  background: #ffb84a;
+}
+
+.connection-status__pill[data-tone="bad"] {
+  border-color: rgba(255, 107, 95, 0.45);
+  color: #ff8a85;
+}
+.connection-status__pill[data-tone="bad"] .connection-status__pill-dot {
+  background: #ff6b5f;
+}
+
+/* ---- Diag-tab proactive tools panel (C5 / C7 / C9 / C10) ---- */
+
+.connection-tools {
+  /* Inherits .view + .is-active toggling from base.css. Stacks the panel after
+     the existing settings panels on the Diag tab. */
+}
+
+.connection-tools__panel {
+  display: grid;
+  gap: 12px;
+}
+
+.connection-tools__head h3 {
+  margin: 4px 0 0;
+  font-size: 16px;
+}
+
+.connection-tools__hint {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 184, 74, 0.4);
+  background: rgba(255, 184, 74, 0.08);
+  color: #ffd28a;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.connection-tools__hint[data-tone="bad"] {
+  border-color: rgba(255, 107, 95, 0.45);
+  background: rgba(255, 107, 95, 0.1);
+  color: #ff8a85;
+}
+
+.connection-tools__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 380px) {
+  .connection-tools__actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.connection-tools__btn {
+  min-height: 40px;
+  border-radius: 10px;
+}
+
+.connection-tools__btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.connection-tools__notify {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.connection-tools__notify legend {
+  padding: 0 6px;
+}
+
+.connection-tools__notify-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.connection-tools__notify-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.connection-tools__notify-mins {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.connection-tools__notify-mins select {
+  padding: 4px 6px;
+}
+
+.connection-tools__notify-toggle input[type="checkbox"]:disabled,
+.connection-tools__notify-mins select:disabled {
+  opacity: 0.55;
+}

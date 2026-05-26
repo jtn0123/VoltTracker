@@ -14,7 +14,27 @@
     <!-- Map basemap tiles only; all OBD/GPS data stays on-device. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Bucket 4a (C4) — used by MainActivity.forceStopPackage to terminate competing
+         BT-OBD apps (Voltage, Torque, …) at the user's request from the troubleshooter. This
+         is a normal-tier permission (no runtime grant) and only affects packages the user
+         explicitly picks; we don't kill apps unprompted. -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="true" />
+
+    <!-- Bucket 2 (C4) — on Android 11+ getInstalledApplications only returns packages the
+         caller can "see". We list every BT-OBD app the detector watches for by name so the
+         "force-stop competing app" UX surfaces without us needing the Play-Store-restricted
+         QUERY_ALL_PACKAGES permission. Keep this list in sync with CompetingAppDetector.java. -->
+    <queries>
+        <package android:name="io.tripovan.voltage" />
+        <package android:name="com.gretio.obd" />
+        <package android:name="org.prowl.torque" />
+        <package android:name="org.prowl.torquefree" />
+        <package android:name="org.prowl.torqueusb" />
+        <package android:name="com.pnn.obdcardoctor" />
+        <package android:name="com.ovz.carscanner" />
+        <package android:name="com.outils.obd2" />
+    </queries>
 
     <application
         android:allowBackup="false"

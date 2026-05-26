@@ -52,6 +52,12 @@ final class SessionRecorder {
 
     private final Object lock;
     private final ObdSessionLog sessionLog;
+    // Bucket 3: appended-to on session start/end so the dashboard can render last-connected /
+    // adapter-health pills without parsing every per-session JSONL. Null in legacy tests.
+    private final SessionSummaryStore summaryStore;
+    // Bucket 3: snapshot source for the system_snapshot event emitted at session start.
+    // Held as a Context-bearing Supplier so unit tests can wire it as null.
+    private final SystemSnapshotSource snapshotSource;
     // telemetryExecutor: high-volume telemetry/event/observation writes. Failures are
     // intentionally swallowed — these rows are diagnostic-only, never block OBD polling.
     // DiscardOldestUnlessShutdown: under sustained backpressure during normal operation,
@@ -108,9 +114,25 @@ final class SessionRecorder {
     }
 
     SessionRecorder(Object lock, ObdSessionLog sessionLog, ObdLocalStore localStore) {
+        this(lock, sessionLog, localStore, null, null);
+    }
+
+    SessionRecorder(
+            Object lock,
+            ObdSessionLog sessionLog,
+            ObdLocalStore localStore,
+            SessionSummaryStore summaryStore,
+            SystemSnapshotSource snapshotSource) {
         this.lock = lock;
         this.sessionLog = sessionLog;
         this.localStore = localStore;
+        this.summaryStore = summaryStore;
+        this.snapshotSource = snapshotSource;
+    }
+
+    /** Snapshot supplier so {@link ObdService} can hand the {@link android.content.Context} in. */
+    interface SystemSnapshotSource {
+        JSONObject collect();
     }
 
     long activeSessionId() {
@@ -155,6 +177,26 @@ final class SessionRecorder {
                         adapterName,
                         "address",
                         activeAddress);
+                // Bucket 3: rollup row + diagnostic snapshot stamped at start. These are optional
+                // observability hooks — a failure here must not abort the core session start,
+                // since the .jsonl session row above is the source of truth for the run.
+                if (summaryStore != null) {
+                    try {
+                        summaryStore.recordStart(startedAtMs, activeAdapterName, activeAddress);
+                    } catch (RuntimeException ex) {
+                        android.util.Log.w(MainActivity.TAG, "summaryStore.recordStart failed", ex);
+                    }
+                }
+                if (snapshotSource != null) {
+                    try {
+                        JSONObject snapshot = snapshotSource.collect();
+                        if (snapshot != null) {
+                            logJson("system_snapshot", snapshot);
+                        }
+                    } catch (RuntimeException ex) {
+                        android.util.Log.w(MainActivity.TAG, "system_snapshot capture failed", ex);
+                    }
+                }
             } catch (RuntimeException ex) {
                 activeSessionId = 0L;
                 android.util.Log.w(MainActivity.TAG, "SessionRecorder.startSession failed", ex);
@@ -170,6 +212,21 @@ final class SessionRecorder {
 
     /** Finishes the database session row and closes the {@code .jsonl} log. */
     void closeSession(String state, String detail, String supportedPids, int sampleCount) {
+        closeSession(state, detail, supportedPids, sampleCount, null);
+    }
+
+    /**
+     * Same as {@link #closeSession(String, String, String, int)} but accepts the fine-grained
+     * {@link FailureClass} from {@link ObdService#lastFailureClass()} so the session summary row
+     * carries Bucket 1's classifier output (e.g. {@code instant_drop}) instead of the coarse state
+     * string ({@code "error"}).
+     */
+    void closeSession(
+            String state,
+            String detail,
+            String supportedPids,
+            int sampleCount,
+            FailureClass sessionFailureClass) {
         synchronized (lock) {
             long closingSessionId = activeSessionId;
             long closingStartedAtMs = activeStartedAtMs;
@@ -178,6 +235,18 @@ final class SessionRecorder {
             String closingAddress = activeAddress;
             if (sessionLog.isOpen()) {
                 logEvent("session_end");
+                // Bucket 3: append a summary row for the dashboard's last-connected pill.
+                if (summaryStore != null) {
+                    try {
+                        summaryStore.recordEnd(
+                                System.currentTimeMillis(),
+                                outcomeFor(state, sampleCount),
+                                sampleCount,
+                                failureClassFor(state, sessionFailureClass));
+                    } catch (RuntimeException ex) {
+                        android.util.Log.w(MainActivity.TAG, "summaryStore.recordEnd failed", ex);
+                    }
+                }
             }
             sessionLog.close();
             if (closingSessionId > 0 && localStore != null) {
@@ -315,7 +384,14 @@ final class SessionRecorder {
 
     void logJson(String type, JSONObject payload) {
         synchronized (lock) {
-            sessionLog.write(type, payload);
+            // Bucket 3 (A9): error rows fsync to disk so a process death between the JSON
+            // appearing in the log and the OS flushing the page cache can't lose the most
+            // diagnostic line the file would have had.
+            if ("error".equals(type)) {
+                sessionLog.writeDurable(type, payload);
+            } else {
+                sessionLog.write(type, payload);
+            }
             if ("telemetry".equals(type) || "status".equals(type)) {
                 // These types have their own dedicated write paths (recordTelemetry /
                 // recordStatus); the generic event row would be a duplicate.
@@ -609,6 +685,40 @@ final class SessionRecorder {
         } catch (RuntimeException ex) {
             Log.e(MainActivity.TAG, "recording persist_failure also failed", ex);
         }
+    }
+
+    // Bucket 3 (B8): the rollup file groups every session into one of three buckets so the
+    // dashboard can render its health pill without re-deriving on the JS side.
+    private static String outcomeFor(String state, int sampleCount) {
+        if ("blocked".equals(state) || "error".equals(state)) {
+            return SessionSummary.OUTCOME_FAILED;
+        }
+        if ("connected".equals(state)
+                || "scanning".equals(state)
+                || "scan-complete".equals(state)
+                || sampleCount > 0) {
+            return SessionSummary.OUTCOME_SUCCESS;
+        }
+        return SessionSummary.OUTCOME_ABORTED;
+    }
+
+    // Failure class is only meaningful for a failed session. When ObdService threads in the
+    // service-level lastFailureClass via the 5-arg closeSession overload, we record its
+    // wireName() (e.g. "instant_drop") so the dashboard's adapter-health pill can distinguish
+    // wedged-adapter from car-asleep retroactively. Falls back to the coarse state string for
+    // legacy callers / tests that use the 4-arg closeSession.
+    private static String failureClassFor(String state, FailureClass sessionFailureClass) {
+        if (sessionFailureClass != null) {
+            return sessionFailureClass.wireName();
+        }
+        return failureClassFor(state);
+    }
+
+    private static String failureClassFor(String state) {
+        if ("blocked".equals(state) || "error".equals(state)) {
+            return state;
+        }
+        return null;
     }
 
     private void updateHeaderState(String command) {

@@ -447,6 +447,14 @@ public class ObdPollingEngineTest {
         }
 
         @Override
+        WakeNudgeResult wakeNudge(long toleranceMs) {
+            // The fake doesn't run a real RFCOMM stream, so the wake-nudge probe has nothing to
+            // read. Pretend the adapter answered immediately so the engine progresses straight
+            // into initializeElm327() and the connect / poll / reconnect logic under test runs.
+            return new WakeNudgeResult(0L, true);
+        }
+
+        @Override
         String transact(String command, long timeoutMs, BooleanSupplier keepWaiting)
                 throws IOException {
             commandLog.add(command);

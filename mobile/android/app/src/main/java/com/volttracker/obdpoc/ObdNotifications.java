@@ -15,7 +15,9 @@ import android.os.Build;
 final class ObdNotifications {
 
     static final int NOTIFICATION_ID = 4207;
-    private static final String CHANNEL_ID = "volt_obd_connection";
+    // Package-visible so MainActivity (Bucket 4b's adapter-ready notification path) can post on
+    // the same channel without us having to expose a builder method just for that one call site.
+    static final String CHANNEL_ID = "volt_obd_connection";
 
     private final Context context;
 
@@ -24,15 +26,26 @@ final class ObdNotifications {
     }
 
     void createChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+        ensureChannel(context);
+    }
+
+    /**
+     * Idempotent channel creation usable from any {@link Context}. Both {@link ObdService} (at
+     * service onCreate) and {@link MainActivity} (at activity onCreate, so the Bucket 4b
+     * adapter-ready notification can land before the foreground service has ever run) call this.
+     */
+    static void ensureChannel(Context ctx) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || ctx == null) {
             return;
         }
         NotificationChannel channel =
                 new NotificationChannel(
                         CHANNEL_ID, "OBD connection", NotificationManager.IMPORTANCE_LOW);
         channel.setDescription("Shows while Volt Tracker is connected to an OBD adapter.");
-        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        NotificationManager manager = ctx.getSystemService(NotificationManager.class);
         if (manager != null) {
+            // createNotificationChannel is documented as a no-op when the channel already exists
+            // with the same id, so repeat calls from MainActivity/ObdService cost nothing.
             manager.createNotificationChannel(channel);
         }
     }

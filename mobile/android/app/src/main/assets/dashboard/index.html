@@ -21,14 +21,205 @@
     <link rel="stylesheet" href="css/base.css" />
     <link rel="stylesheet" href="css/components.css" />
     <link rel="stylesheet" href="css/screens.css" />
+    <!-- Bucket 4a owns troubleshooter.css; Bucket 4b owns status-tools.css. -->
+    <link rel="stylesheet" href="css/troubleshooter.css" />
+    <link rel="stylesheet" href="css/status-tools.css" />
   </head>
   <body>
+<!--
+  Connection error banner.
+
+  Bucket 4a wires three additional slots onto the existing banner:
+   - `errorBannerTitle` is rewritten with failure-class-specific copy (C1)
+     by panels.js when the status payload carries a `failureClass` field.
+   - `errorBannerHint` shows the action-oriented one-liner under the detail.
+   - `errorBannerActions` carries the in-flight retry "Cancel" button (C6)
+     and a "Get help" affordance that opens the troubleshooter modal.
+
+  Copy strings are NOT hardcoded in this partial. They are rendered into the
+  slots from JS based on the live `failureClass` value (one of
+  FailureClass.name() — see FailureClass.java).
+-->
 <div id="errorBanner" class="error-banner" role="alert" hidden>
   <span>
-    <strong>Dashboard error</strong>
+    <strong id="errorBannerTitle">Dashboard error</strong>
     <span id="errorBannerDetail" class="error-detail"></span>
+    <span id="errorBannerHint" class="error-copy-hint" hidden></span>
+    <span id="errorBannerActions" class="error-copy-actions" hidden>
+      <button
+        type="button"
+        id="errorBannerCancelRetry"
+        class="error-copy-action is-cancel"
+        hidden
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        id="errorBannerHelp"
+        class="error-copy-action"
+        hidden
+      >
+        Get help
+      </button>
+    </span>
   </span>
   <button id="errorBannerDismiss" type="button">Dismiss</button>
+</div>
+<!--
+  Bucket 4a — connection troubleshooter modal (C3/C4).
+
+  Markup-only stub. Display is driven entirely from troubleshooter.js, which
+  toggles `[hidden]` based on consecutive failed sessions / retry counts and
+  populates step-3 actions from the live `competingApps` field on the status
+  payload. Layout/colors live in css/troubleshooter.css.
+
+  Steps:
+    1) Wake the car (open a door, press brake).
+    2) Power-cycle the adapter (unplug for 10s, plug back in).
+    3) Stop competing apps (hidden until a competing app is detected).
+-->
+<div
+  id="troubleshooterModal"
+  class="troubleshooter"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="troubleshooterTitle"
+  hidden
+>
+  <div class="troubleshooter-backdrop" data-troubleshooter-dismiss></div>
+  <div class="troubleshooter-card" role="document">
+    <header class="troubleshooter-head">
+      <div>
+        <span class="troubleshooter-kicker">Connection help</span>
+        <h2 id="troubleshooterTitle" class="troubleshooter-title">
+          Adapter isn't connecting
+        </h2>
+      </div>
+      <button
+        type="button"
+        class="troubleshooter-close"
+        data-troubleshooter-dismiss
+        aria-label="Close troubleshooter"
+      >
+        ×
+      </button>
+    </header>
+
+    <p id="troubleshooterIntro" class="troubleshooter-intro">
+      Two attempts didn't connect. Walk through these one by one — most flaky
+      sessions are fixed by step 1 or 2.
+    </p>
+
+    <ol class="troubleshooter-steps">
+      <li class="troubleshooter-step" data-step="wake">
+        <button
+          type="button"
+          class="troubleshooter-step-head"
+          aria-expanded="true"
+          aria-controls="troubleshooterStepWakeBody"
+        >
+          <span class="troubleshooter-step-number">1</span>
+          <span class="troubleshooter-step-title">Wake the car</span>
+          <span class="troubleshooter-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div id="troubleshooterStepWakeBody" class="troubleshooter-step-body">
+          <p>
+            Open the driver's door, press the brake pedal, or tap the start
+            button without starting the engine. The OBD-II port goes to sleep
+            after a few minutes of inactivity and refuses connections until
+            something on the CAN bus wakes it.
+          </p>
+        </div>
+      </li>
+
+      <li class="troubleshooter-step" data-step="power">
+        <button
+          type="button"
+          class="troubleshooter-step-head"
+          aria-expanded="false"
+          aria-controls="troubleshooterStepPowerBody"
+        >
+          <span class="troubleshooter-step-number">2</span>
+          <span class="troubleshooter-step-title">Power-cycle the adapter</span>
+          <span class="troubleshooter-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div
+          id="troubleshooterStepPowerBody"
+          class="troubleshooter-step-body"
+          hidden
+        >
+          <p>
+            Pull the OBD adapter out of the port, count to ten, then plug it
+            back in firmly. Watch for the status LED to come back on.
+          </p>
+          <pre class="troubleshooter-diagram" aria-hidden="true">
+   ┌───────────┐
+   │ ◉  adapter│  ← pull out
+   └─────┬─────┘
+         │  wait 10s
+   ┌─────┴─────┐
+   │ ◉  adapter│  ← plug back in
+   └───────────┘
+          </pre>
+          <p class="troubleshooter-hint">
+            If the LED stays off after re-seating, the port may not be powered
+            until the car is in accessory mode.
+          </p>
+        </div>
+      </li>
+
+      <li
+        class="troubleshooter-step"
+        data-step="competing"
+        id="troubleshooterStepCompeting"
+        hidden
+      >
+        <button
+          type="button"
+          class="troubleshooter-step-head"
+          aria-expanded="false"
+          aria-controls="troubleshooterStepCompetingBody"
+        >
+          <span class="troubleshooter-step-number">3</span>
+          <span class="troubleshooter-step-title">Stop competing apps</span>
+          <span class="troubleshooter-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div
+          id="troubleshooterStepCompetingBody"
+          class="troubleshooter-step-body"
+          hidden
+        >
+          <p>
+            Another app on this phone is also talking to the OBD adapter. Only
+            one app can hold the Bluetooth serial channel at a time.
+          </p>
+          <div
+            id="troubleshooterCompetingList"
+            class="troubleshooter-competing-list"
+          ></div>
+        </div>
+      </li>
+    </ol>
+
+    <footer class="troubleshooter-foot">
+      <button
+        type="button"
+        id="troubleshooterPrimary"
+        class="troubleshooter-primary"
+        data-action="retry"
+      >
+        Try again
+      </button>
+      <button
+        type="button"
+        class="troubleshooter-secondary"
+        data-troubleshooter-dismiss
+      >
+        Close
+      </button>
+    </footer>
+  </div>
 </div>
     <main class="app">
 <header class="topbar">
@@ -39,6 +230,35 @@
     </div>
     <div id="stateBadge" class="badge" data-state="idle">
       <span class="dot"></span><span id="stateText">idle</span>
+    </div>
+  </div>
+  <!--
+    Bucket 4b: topbar-only surface for last-connected (C2) and adapter health (C8).
+    Hidden until connection-status.js has a session row or live-voltage signal to show.
+  -->
+  <div class="connection-status" aria-label="Adapter status summary">
+    <button
+      id="lastConnectedBadge"
+      type="button"
+      class="connection-status__badge"
+      data-state="unknown"
+      hidden
+      aria-label="Open last connected adapter"
+    >
+      <span class="kicker">Last connected</span>
+      <strong id="lastConnectedLabel">--</strong>
+      <small id="lastConnectedAt">--</small>
+    </button>
+    <div
+      id="adapterHealthPill"
+      class="connection-status__pill"
+      data-tone="unknown"
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      <span class="connection-status__pill-dot"></span>
+      <span id="adapterHealthLabel">Adapter health unknown</span>
     </div>
   </div>
   <div class="mobile-controls demo-only" hidden>
@@ -1017,6 +1237,17 @@
     >
       Clear stored debug data
     </button>
+    <!-- Bucket 4b: C7 shortcut. Mirrors the Connection-tools "Send diagnostics"
+         button so users in the storage panel can share logs without scrolling
+         back up. Both buttons funnel into VoltTrackerAndroid.shareDiagnostics(). -->
+    <button
+      type="button"
+      id="sendDiagnosticsSettingsBtn"
+      data-action="send-diagnostics"
+      style="margin-top: 8px; width: 100%"
+    >
+      Send diagnostics bundle
+    </button>
   </article>
 
   <article class="panel raw">
@@ -1059,6 +1290,97 @@
         <p class="status-copy">49,328 mi - 78% electric lifetime mix.</p>
       </div>
     </div>
+  </article>
+</section>
+<!--
+  Owner: Bucket 4b (status & proactive tools).
+  Hosts the proactive tools panel: test-connection button (C5), send-diagnostics
+  button (C7), low-voltage hint (C9), notify-when-ready toggle (C10). Lives at
+  the bottom of <main> but is declared as data-view="settings" so it surfaces
+  inside the Diag tab alongside the existing settings panels — no new nav entry
+  needed.
+-->
+<section
+  id="view-connection-tools"
+  class="view connection-tools"
+  data-view="settings"
+>
+  <article class="panel connection-tools__panel" id="connectionToolsPanel">
+    <header class="connection-tools__head">
+      <div>
+        <span class="kicker">Connection tools</span>
+        <h3>Proactive adapter checks</h3>
+      </div>
+    </header>
+
+    <!-- C9: low-voltage hint, populated from status.lastVoltage. Hidden until a
+         reading lands and only flips visible when the value is below ~12.2 V. -->
+    <p
+      id="lowVoltageHint"
+      class="connection-tools__hint"
+      data-tone="warn"
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      Battery voltage looks low. Start the engine before the next test.
+    </p>
+
+    <div class="connection-tools__actions">
+      <!-- C5: one-shot probe against the last-known adapter, surfaces via status. -->
+      <button
+        type="button"
+        id="testConnectionBtn"
+        class="connection-tools__btn primary"
+        data-action="test-connection"
+      >
+        Test connection
+      </button>
+      <!-- C7: diagnostics share. Bucket 3 wires the actual zip + share intent. -->
+      <button
+        type="button"
+        id="sendDiagnosticsBtn"
+        class="connection-tools__btn"
+        data-action="send-diagnostics"
+      >
+        Send diagnostics
+      </button>
+    </div>
+
+    <!-- C10: notify-when-ready toggle. Picks how long to keep probing in the
+         background; the bridge clamps the minutes to [1, 30] and we mirror that
+         in the UI. -->
+    <fieldset
+      class="connection-tools__notify"
+      aria-labelledby="notifyWhenReadyTitle"
+    >
+      <legend id="notifyWhenReadyTitle" class="kicker">
+        Notify when adapter is ready
+      </legend>
+      <div class="connection-tools__notify-row">
+        <label class="connection-tools__notify-toggle">
+          <input
+            id="notifyWhenReadyToggle"
+            type="checkbox"
+            data-action="notify-when-ready"
+          />
+          <span>Keep checking in the background</span>
+        </label>
+        <label class="connection-tools__notify-mins">
+          <span class="kicker">For</span>
+          <select id="notifyWhenReadyMinutes">
+            <option value="5">5 min</option>
+            <option value="10" selected>10 min</option>
+            <option value="15">15 min</option>
+            <option value="30">30 min</option>
+          </select>
+        </label>
+      </div>
+      <small id="notifyWhenReadyStatus" class="status-copy">
+        Probes the last-used adapter every 30s and posts a notification when it
+        responds.
+      </small>
+    </fieldset>
   </article>
 </section>
     </main>
@@ -1146,5 +1468,9 @@
     <script src="js/drive.js"></script>
     <script src="js/telemetry.js"></script>
     <script src="js/actions.js"></script>
+    <!-- Bucket 4a owns troubleshooter.js; Bucket 4b owns connection-status.js + connection-tools.js. -->
+    <script src="js/troubleshooter.js"></script>
+    <script src="js/connection-status.js"></script>
+    <script src="js/connection-tools.js"></script>
   </body>
 </html>

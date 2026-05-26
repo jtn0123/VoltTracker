@@ -75,3 +75,4 @@ keystore.properties
 !.claude/hooks/
 !.claude/settings.json
 .claude/settings.local.json
+local.properties

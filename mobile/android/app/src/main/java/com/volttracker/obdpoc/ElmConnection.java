@@ -30,6 +30,29 @@ class ElmConnection {
         long nowMs();
     }
 
+    /**
+     * Per-phase wall-clock timings (ms) for the last successful {@link #open} call. Field-readable
+     * so {@link ObdPollingEngine} can stamp these onto the {@code socket_open_result} event without
+     * needing a side-channel — A1/B3 in the connection-hardening plan.
+     *
+     * <p>{@link #firstReadMs} is populated by {@link #wakeNudge} (the first read after open) rather
+     * than by {@link #open} itself, because the OS rarely surfaces a wedged adapter until the first
+     * byte is requested; setting it during {@code wakeNudge} keeps the {@code first_read} label on
+     * the right operation. All three default to {@code -1} when not measured.
+     */
+    long rfcommConnectMs = -1L;
+
+    long getStreamsMs = -1L;
+    long firstReadMs = -1L;
+
+    /**
+     * Phase the most recent {@link #open}/{@link #wakeNudge} failure occurred in. Mirrors the
+     * {@code errorPhase} field on the {@code socket_open_result} event. One of {@code
+     * "rfcomm_connect"}, {@code "get_streams"}, {@code "first_read"}, or empty when the call
+     * succeeded.
+     */
+    String lastErrorPhase = "";
+
     private BluetoothSocket socket;
     private InputStream input;
     private OutputStream output;
@@ -62,6 +85,11 @@ class ElmConnection {
      * normal failure path take over.
      */
     void open(BluetoothDevice device, UUID uuid, long connectTimeoutMs) throws IOException {
+        rfcommConnectMs = -1L;
+        getStreamsMs = -1L;
+        firstReadMs = -1L;
+        lastErrorPhase = "";
+
         BluetoothSocket pendingSocket = device.createRfcommSocketToServiceRecord(uuid);
         socket = pendingSocket;
         Thread watchdog =
@@ -77,13 +105,82 @@ class ElmConnection {
                         });
         watchdog.setDaemon(true);
         watchdog.start();
+        long connectStart = clock.nowMs();
         try {
             pendingSocket.connect();
+            rfcommConnectMs = Math.max(0L, clock.nowMs() - connectStart);
+        } catch (IOException ex) {
+            rfcommConnectMs = Math.max(0L, clock.nowMs() - connectStart);
+            lastErrorPhase = "rfcomm_connect";
+            throw ex;
         } finally {
             watchdog.interrupt();
         }
-        input = socket.getInputStream();
-        output = socket.getOutputStream();
+        long streamsStart = clock.nowMs();
+        try {
+            input = socket.getInputStream();
+            output = socket.getOutputStream();
+            getStreamsMs = Math.max(0L, clock.nowMs() - streamsStart);
+        } catch (IOException ex) {
+            getStreamsMs = Math.max(0L, clock.nowMs() - streamsStart);
+            lastErrorPhase = "get_streams";
+            throw ex;
+        }
+    }
+
+    /** Result of a {@link #wakeNudge} call — recorded onto the {@code wake_nudge} JSONL event. */
+    static final class WakeNudgeResult {
+        final long durationMs;
+        final boolean gotResponse;
+
+        WakeNudgeResult(long durationMs, boolean gotResponse) {
+            this.durationMs = durationMs;
+            this.gotResponse = gotResponse;
+        }
+    }
+
+    /**
+     * Sends a single {@code \r} no-op and waits up to {@code toleranceMs} for any response byte.
+     * Some adapters (notably wedged OBDLink MX+ units) need a no-op to spin up before {@code ATZ}
+     * lands; on a healthy adapter this returns immediately with {@code gotResponse=true} and on a
+     * wedged adapter it returns with {@code gotResponse=false}, which the engine logs as a {@code
+     * wake_nudge} event for later triage.
+     *
+     * <p>Doubles as the {@code first_read} timing source: a failing {@link InputStream#available()}
+     * /{@link InputStream#read} surfaces the wedged-adapter symptom that motivated the bucket
+     * split. On {@link IOException} the call sets {@link #firstReadMs} + {@link #lastErrorPhase}
+     * and re-throws so the engine's failure path can classify it.
+     */
+    WakeNudgeResult wakeNudge(long toleranceMs) throws IOException {
+        if (output == null || input == null) {
+            throw new IOException("Adapter stream is not open");
+        }
+        long start = clock.nowMs();
+        boolean gotResponse = false;
+        try {
+            output.write((byte) '\r');
+            output.flush();
+            long deadline = start + Math.max(0L, toleranceMs);
+            byte[] buffer = new byte[64];
+            while (clock.nowMs() < deadline) {
+                int available = input.available();
+                if (available > 0) {
+                    int read = input.read(buffer, 0, Math.min(buffer.length, available));
+                    if (read > 0) {
+                        gotResponse = true;
+                        break;
+                    }
+                } else {
+                    sleep(20);
+                }
+            }
+            firstReadMs = Math.max(0L, clock.nowMs() - start);
+            return new WakeNudgeResult(firstReadMs, gotResponse);
+        } catch (IOException ex) {
+            firstReadMs = Math.max(0L, clock.nowMs() - start);
+            lastErrorPhase = "first_read";
+            throw ex;
+        }
     }
 
     /**

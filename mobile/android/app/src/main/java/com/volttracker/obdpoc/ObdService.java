@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 import com.volttracker.obdpoc.data.ObdLocalStore;
 import com.volttracker.obdpoc.location.LocationManagerTracker;
 import com.volttracker.obdpoc.location.LocationTracker;
@@ -34,6 +35,10 @@ public class ObdService extends Service {
             "com.volttracker.obdpoc.action.APP_FOREGROUND";
     public static final String ACTION_APP_BACKGROUND =
             "com.volttracker.obdpoc.action.APP_BACKGROUND";
+    // Bucket 4a (C6) — VoltBridge.cancelRetry() forwards through MainActivity
+    // as this intent so the service can flip {@link #cancelRetryRequested}
+    // without needing a bound-service handle on the Activity side.
+    public static final String ACTION_CANCEL_RETRY = "com.volttracker.obdpoc.action.CANCEL_RETRY";
     public static final String BROADCAST_TELEMETRY = "com.volttracker.obdpoc.broadcast.TELEMETRY";
     public static final String BROADCAST_STATUS = "com.volttracker.obdpoc.broadcast.STATUS";
     public static final String EXTRA_ADDRESS = "address";
@@ -54,12 +59,68 @@ public class ObdService extends Service {
     private ObdPollingEngine engine;
     private ObdNotifications notifications;
     LocationTracker locationTracker;
+    // Bucket 2 (Bluetooth observability). Public-package access lets ObdPollingEngine call the
+    // single pre-flight hook via service.bluetoothObservability.onPreConnect(address). The
+    // companion helpers (SDP, competing apps, voltage) hang off the same field cluster so all
+    // BT-observability state lives in one place on the service.
+    BluetoothStateReporter bluetoothObservability;
+    SdpProbe sdpProbe;
+    CompetingAppDetector competingAppDetector;
+    VoltageProbe voltageProbe;
     String activeName = "OBD adapter";
     long sessionStartedAtMs;
     private String lastSessionState = "";
     private String lastSessionDetail = "";
     volatile boolean appInForeground = true;
     volatile boolean foregroundServiceActive;
+    // Bucket 4a (C6) — Bucket 1's ObdPollingEngine reads this between connect
+    // attempts and bails out of the retry burst when true. Cleared at the
+    // start of each new connect/scan session so a stale request from a prior
+    // burst can't suppress a fresh user-initiated retry.
+    public volatile boolean cancelRetryRequested = false;
+
+    /**
+     * Bucket 4a (C6) entry-point used by VoltBridge.cancelRetry(). Bucket 1's engine reads {@link
+     * #cancelRetryRequested} on its retry loop.
+     */
+    public void requestCancelRetry() {
+        cancelRetryRequested = true;
+    }
+
+    // === SHARED CONTRACT (prep commit): per-session signals merged into every status broadcast.
+    // Bucket 1 writes lastFailureClass via setLastFailureClass / clears via clearLastFailureClass;
+    // Bucket 2 writes lastVoltage and competingAppsCsv. The dashboard (Buckets 4a/4b) reads them
+    // off the auto-merged status payload. Keeping them on the service means we don't thread them
+    // through every broadcastStatus() call site. Volatile so the engine-thread write is visible
+    // to the broadcast-thread read without needing the ioLock.
+    /** Last classified failure (Bucket 1). Cleared when a session ends or a connect succeeds. */
+    private volatile FailureClass lastFailureClass;
+
+    /** Most recent control-module voltage in volts (Bucket 2's voltage probe). Null until known. */
+    private volatile Double lastVoltage;
+
+    /** Other installed BT-serial apps detected this session (Bucket 2). Comma-joined for JSON. */
+    private volatile String competingAppsCsv;
+
+    // setLastFailureClass / clearLastFailureClass / lastFailureClass() are defined below near the
+    // engine hook helpers.
+
+    void setLastVoltage(double volts) {
+        this.lastVoltage = volts;
+    }
+
+    void setCompetingApps(String csv) {
+        this.competingAppsCsv = csv;
+    }
+
+    /** Read-side accessors so the bridge / tests can inspect current state. */
+    Double getLastVoltage() {
+        return lastVoltage;
+    }
+
+    String getCompetingAppsCsv() {
+        return competingAppsCsv;
+    }
 
     @Override
     public void onCreate() {
@@ -68,10 +129,37 @@ public class ObdService extends Service {
         locationTracker = new LocationManagerTracker(this);
         notifications = new ObdNotifications(this);
         notifications.createChannel();
+        // Bucket 3: rolling app log + summary store wired in alongside the per-session JSONL.
+        // The summary store is read by the JS bridge for the dashboard's last-connected pill;
+        // OBDLog.mirror tees every event/warn/error into the rolling log so the diagnostics
+        // share zip carries cross-session context for a future diagnosis.
+        RollingAppLog rollingAppLog = new RollingAppLog(new File(getFilesDir(), "app-log"));
+        OBDLog.mirror(rollingAppLog);
+        SessionSummaryStore summaryStore = SessionSummaryStore.getInstance(getFilesDir());
         recorder =
                 new SessionRecorder(
-                        ioLock, new ObdSessionLog(new File(getFilesDir(), "obd-logs")), localStore);
+                        ioLock,
+                        new ObdSessionLog(new File(getFilesDir(), "obd-logs")),
+                        localStore,
+                        summaryStore,
+                        () -> SystemSnapshot.collect(this, summaryStore));
         engine = new ObdPollingEngine(this);
+        // Bucket 2: instantiate observability helpers and start listening for OS-side BT events.
+        // The detector pass happens here too — competingApps surfaces on the very first status
+        // broadcast even if the user never tries to connect.
+        sdpProbe = new SdpProbe(this);
+        bluetoothObservability = new BluetoothStateReporter(this, sdpProbe);
+        voltageProbe = new VoltageProbe(this);
+        competingAppDetector =
+                new CompetingAppDetector(getPackageManager(), this, recorder, getPackageName());
+        if (hasBluetoothConnectPermission()) {
+            bluetoothObservability.register(this);
+        } else {
+            recorder.logEvent("bluetooth_reporter_skipped", "reason", "missing_bluetooth_connect");
+        }
+        // Run once at service start so the CSV is available for the first status broadcast; will
+        // be re-run inside the reporter when subsequent connect attempts keep failing.
+        competingAppDetector.refresh();
     }
 
     @Override
@@ -93,6 +181,18 @@ public class ObdService extends Service {
         }
         if (ACTION_APP_BACKGROUND.equals(action)) {
             recordAppVisibility(false);
+            if (!running.get()) {
+                stopSelf(startId);
+            }
+            return running.get() ? START_STICKY : START_NOT_STICKY;
+        }
+        if (ACTION_CANCEL_RETRY.equals(action)) {
+            // Bucket 4a (C6) — flip the flag the engine reads between
+            // connect attempts. If no session is running there's nothing to
+            // cancel, but we still acknowledge with a status broadcast so
+            // the dashboard hides the in-flight cancel button.
+            requestCancelRetry();
+            broadcastStatus("idle", "Retry cancelled.", false);
             if (!running.get()) {
                 stopSelf(startId);
             }
@@ -132,6 +232,9 @@ public class ObdService extends Service {
     @Override
     public void onDestroy() {
         stopCurrentSession("Service stopped.");
+        if (bluetoothObservability != null) {
+            bluetoothObservability.unregister(this);
+        }
         executor.shutdownNow();
         recorder.shutdown();
         if (localStore != null) {
@@ -141,8 +244,45 @@ public class ObdService extends Service {
         super.onDestroy();
     }
 
+    /**
+     * Bucket 2 hook: invoked from {@link ObdPollingEngine#initializeElm327()} right after the
+     * adapter answers a {@code 0100} prompt. Delegates to {@link VoltageProbe} via a {@link
+     * VoltageProbe.Sender} backed by the engine's one-shot transact helper, so the probe doesn't
+     * need to know how the engine owns its connection.
+     */
+    void maybeRunVoltageProbe(ObdPollingEngine engineRef) {
+        if (voltageProbe == null || engineRef == null) {
+            return;
+        }
+        voltageProbe.run(engineRef::transactOneShot);
+    }
+
     private void startObdSession(String address, boolean scanMode) {
         stopCurrentSession(null);
+        // Bucket 4a (C6): clear any stale cancel-retry flag so a user-initiated
+        // retry burst doesn't inherit a cancel from the previous session.
+        cancelRetryRequested = false;
+        // Bucket 2 (C4): re-scan for competing BT-OBD apps now — the user may have installed one
+        // (Voltage, Torque, …) since service onCreate, and we want the dashboard's force-stop
+        // button to surface for the *current* session, not a snapshot from process start.
+        //
+        // refresh() calls PackageManager.getInstalledApplications, which can take hundreds of
+        // milliseconds on devices with many apps and runs in-line with onStartCommand → ANR
+        // risk on the main thread. Offload to a one-shot worker so the engine startup below
+        // doesn't wait on the PM query.
+        final CompetingAppDetector detectorRef = competingAppDetector;
+        if (detectorRef != null) {
+            new Thread(
+                            () -> {
+                                try {
+                                    detectorRef.refresh();
+                                } catch (RuntimeException ex) {
+                                    Log.w(MainActivity.TAG, "competing-app refresh failed", ex);
+                                }
+                            },
+                            "competing-apps-refresh")
+                    .start();
+        }
         startForegroundSession((scanMode ? "Scanning " : "Connecting to ") + activeName);
         sessionStartedAtMs = System.currentTimeMillis();
         engine.beginSession("");
@@ -224,6 +364,17 @@ public class ObdService extends Service {
     }
 
     void broadcastStatus(String state, String detail, boolean blocked) {
+        broadcastStatus(state, detail, blocked, null);
+    }
+
+    /**
+     * Overload that accepts an extras JSON merged into the status payload. Bucket 1 uses this to
+     * attach {@code failureClass}; other callers can pass {@code null}. The service also auto-
+     * merges {@link #lastFailureClass}, {@link #lastVoltage}, and {@link #competingAppsCsv} so
+     * downstream dashboard code always sees the latest values without each call site needing to
+     * thread them through.
+     */
+    void broadcastStatus(String state, String detail, boolean blocked, JSONObject extras) {
         JSONObject payload = new JSONObject();
         try {
             payload.put("state", state);
@@ -234,6 +385,30 @@ public class ObdService extends Service {
             String logFileName = recorder.logFileName();
             if (logFileName != null) {
                 payload.put("logFile", logFileName);
+            }
+            // Auto-merged shared signals (set by Buckets 1 & 2 on the service).
+            FailureClass fc = lastFailureClass;
+            if (fc != null) {
+                // wireName() is the snake-case string Bucket 1's classifier also writes to JSONL
+                // events (failureClass), so the dashboard sees the same shape on both event lines
+                // and live status broadcasts.
+                payload.put("failureClass", fc.wireName());
+            }
+            Double v = lastVoltage;
+            if (v != null) {
+                payload.put("lastVoltage", v.doubleValue());
+            }
+            String csv = competingAppsCsv;
+            if (csv != null && !csv.isEmpty()) {
+                payload.put("competingApps", csv);
+            }
+            // Caller extras win — they override the auto-merged values if both are present.
+            if (extras != null) {
+                java.util.Iterator<String> keys = extras.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    payload.put(key, extras.get(key));
+                }
             }
         } catch (JSONException ignored) {
             // Local values are safe.
@@ -270,6 +445,28 @@ public class ObdService extends Service {
     void updateNotification(String text) {
         recorder.logEvent("notification", "text", text);
         notifications.post(text);
+    }
+
+    /**
+     * Engine hook: remember the most recent classified connect failure so other buckets can merge
+     * it into the next status broadcast as {@code lastFailureClass}. No-op if {@code fc} is null —
+     * callers should use {@link #clearLastFailureClass()} to explicitly reset.
+     */
+    void setLastFailureClass(FailureClass fc) {
+        if (fc == null) {
+            return;
+        }
+        lastFailureClass = fc;
+    }
+
+    /** Engine hook: invoked on a successful connect so a stale classification cannot linger. */
+    void clearLastFailureClass() {
+        lastFailureClass = null;
+    }
+
+    /** Read-side accessor for the last classified connect failure. Returns null when unset. */
+    FailureClass lastFailureClass() {
+        return lastFailureClass;
     }
 
     private void recordAppVisibility(boolean foreground) {
@@ -315,7 +512,16 @@ public class ObdService extends Service {
                     lastSessionState,
                     lastSessionDetail,
                     engine.supportedPidsSummary(),
-                    engine.sampleCount());
+                    engine.sampleCount(),
+                    // Pass Bucket 1's fine-grained class so the summary rollup records
+                    // "instant_drop" / "connect_timeout" / … instead of the coarse "error".
+                    lastFailureClass);
+            // Reset so a fresh session doesn't inherit the previous session's failure class
+            // through the auto-merge in broadcastStatus(). Bucket 1 also clears this on a
+            // successful connect, but if the service is started anew before a connect succeeds
+            // (e.g., ACTION_DISCONNECT, then user reconnects) the field would otherwise carry
+            // over into the new session's first status payload.
+            clearLastFailureClass();
             foregroundServiceActive = false;
         }
     }

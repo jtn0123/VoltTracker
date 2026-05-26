@@ -1,0 +1,155 @@
+<!--
+  Bucket 4a — connection troubleshooter modal (C3/C4).
+
+  Markup-only stub. Display is driven entirely from troubleshooter.js, which
+  toggles `[hidden]` based on consecutive failed sessions / retry counts and
+  populates step-3 actions from the live `competingApps` field on the status
+  payload. Layout/colors live in css/troubleshooter.css.
+
+  Steps:
+    1) Wake the car (open a door, press brake).
+    2) Power-cycle the adapter (unplug for 10s, plug back in).
+    3) Stop competing apps (hidden until a competing app is detected).
+-->
+<div
+  id="troubleshooterModal"
+  class="troubleshooter"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="troubleshooterTitle"
+  hidden
+>
+  <div class="troubleshooter-backdrop" data-troubleshooter-dismiss></div>
+  <div class="troubleshooter-card" role="document">
+    <header class="troubleshooter-head">
+      <div>
+        <span class="troubleshooter-kicker">Connection help</span>
+        <h2 id="troubleshooterTitle" class="troubleshooter-title">
+          Adapter isn't connecting
+        </h2>
+      </div>
+      <button
+        type="button"
+        class="troubleshooter-close"
+        data-troubleshooter-dismiss
+        aria-label="Close troubleshooter"
+      >
+        ×
+      </button>
+    </header>
+
+    <p id="troubleshooterIntro" class="troubleshooter-intro">
+      Two attempts didn't connect. Walk through these one by one — most flaky
+      sessions are fixed by step 1 or 2.
+    </p>
+
+    <ol class="troubleshooter-steps">
+      <li class="troubleshooter-step" data-step="wake">
+        <button
+          type="button"
+          class="troubleshooter-step-head"
+          aria-expanded="true"
+          aria-controls="troubleshooterStepWakeBody"
+        >
+          <span class="troubleshooter-step-number">1</span>
+          <span class="troubleshooter-step-title">Wake the car</span>
+          <span class="troubleshooter-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div id="troubleshooterStepWakeBody" class="troubleshooter-step-body">
+          <p>
+            Open the driver's door, press the brake pedal, or tap the start
+            button without starting the engine. The OBD-II port goes to sleep
+            after a few minutes of inactivity and refuses connections until
+            something on the CAN bus wakes it.
+          </p>
+        </div>
+      </li>
+
+      <li class="troubleshooter-step" data-step="power">
+        <button
+          type="button"
+          class="troubleshooter-step-head"
+          aria-expanded="false"
+          aria-controls="troubleshooterStepPowerBody"
+        >
+          <span class="troubleshooter-step-number">2</span>
+          <span class="troubleshooter-step-title">Power-cycle the adapter</span>
+          <span class="troubleshooter-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div
+          id="troubleshooterStepPowerBody"
+          class="troubleshooter-step-body"
+          hidden
+        >
+          <p>
+            Pull the OBD adapter out of the port, count to ten, then plug it
+            back in firmly. Watch for the status LED to come back on.
+          </p>
+          <pre class="troubleshooter-diagram" aria-hidden="true">
+   ┌───────────┐
+   │ ◉  adapter│  ← pull out
+   └─────┬─────┘
+         │  wait 10s
+   ┌─────┴─────┐
+   │ ◉  adapter│  ← plug back in
+   └───────────┘
+          </pre>
+          <p class="troubleshooter-hint">
+            If the LED stays off after re-seating, the port may not be powered
+            until the car is in accessory mode.
+          </p>
+        </div>
+      </li>
+
+      <li
+        class="troubleshooter-step"
+        data-step="competing"
+        id="troubleshooterStepCompeting"
+        hidden
+      >
+        <button
+          type="button"
+          class="troubleshooter-step-head"
+          aria-expanded="false"
+          aria-controls="troubleshooterStepCompetingBody"
+        >
+          <span class="troubleshooter-step-number">3</span>
+          <span class="troubleshooter-step-title">Stop competing apps</span>
+          <span class="troubleshooter-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div
+          id="troubleshooterStepCompetingBody"
+          class="troubleshooter-step-body"
+          hidden
+        >
+          <p>
+            Another app on this phone is also talking to the OBD adapter. Only
+            one app can hold the Bluetooth serial channel at a time.
+          </p>
+          <div
+            id="troubleshooterCompetingList"
+            class="troubleshooter-competing-list"
+          ></div>
+        </div>
+      </li>
+    </ol>
+
+    <footer class="troubleshooter-foot">
+      <button
+        type="button"
+        id="troubleshooterPrimary"
+        class="troubleshooter-primary"
+        data-action="retry"
+      >
+        Try again
+      </button>
+      <button
+        type="button"
+        class="troubleshooter-secondary"
+        data-troubleshooter-dismiss
+      >
+        Close
+      </button>
+    </footer>
+  </div>
+</div>

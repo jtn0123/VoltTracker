@@ -8,6 +8,35 @@
       <span class="dot"></span><span id="stateText">idle</span>
     </div>
   </div>
+  <!--
+    Bucket 4b: topbar-only surface for last-connected (C2) and adapter health (C8).
+    Hidden until connection-status.js has a session row or live-voltage signal to show.
+  -->
+  <div class="connection-status" aria-label="Adapter status summary">
+    <button
+      id="lastConnectedBadge"
+      type="button"
+      class="connection-status__badge"
+      data-state="unknown"
+      hidden
+      aria-label="Open last connected adapter"
+    >
+      <span class="kicker">Last connected</span>
+      <strong id="lastConnectedLabel">--</strong>
+      <small id="lastConnectedAt">--</small>
+    </button>
+    <div
+      id="adapterHealthPill"
+      class="connection-status__pill"
+      data-tone="unknown"
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      <span class="connection-status__pill-dot"></span>
+      <span id="adapterHealthLabel">Adapter health unknown</span>
+    </div>
+  </div>
   <div class="mobile-controls demo-only" hidden>
     <div class="mode-toggle" aria-label="Propulsion state">
       <button type="button" data-mode="ev" class="is-active">EV</button>

@@ -83,6 +83,10 @@ public class MainActivity extends Activity {
                         callDashboard("setStatus", json);
                         publishStorageSummary();
                         publishAppState();
+                        // Bucket 4b (C10): observe the same status broadcast feeding the
+                        // dashboard so the notify-when-ready schedule can wake the user as
+                        // soon as the adapter responds, then tear itself down.
+                        onAdapterStatusForReadyNotify(lastStatus.optString("state", ""));
                     }
                 }
             };
@@ -96,6 +100,11 @@ public class MainActivity extends Activity {
         backupController = new BackupController(this, dataBackup, backgroundExecutor);
         permissionGate = new PermissionGate(this);
         localStore = new ObdLocalStore(this);
+        // Bucket 4b: ensure the OBD notification channel exists before the adapter-ready
+        // notification path (onAdapterStatusForReadyNotify) might try to post — the user can
+        // enable notify-when-ready before ever starting a logging session, so we cannot rely
+        // on ObdService.onCreate having run first to register the channel.
+        ObdNotifications.ensureChannel(this);
         // Trim raw telemetry/location/event/PID rows older than the retention window
         // on every cold start. Cheap (indexed cutoff scan) and runs off the UI thread.
         backgroundExecutor.execute(
@@ -161,6 +170,16 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         backgroundExecutor.shutdownNow();
+        // Bucket 4b (C10): the periodic "notify when ready" tick and the test-connection
+        // auto-stop both posted Runnables to handlers on this Activity. If we don't drain them
+        // before destruction, they can fire on a destroyed Activity context (NPE on localStore /
+        // deviceCatalog) and queue more callbacks indefinitely. Drain both queues defensively.
+        if (adapterReadyHandler != null) {
+            adapterReadyHandler.removeCallbacksAndMessages(null);
+        }
+        if (testConnectionStopHandler != null) {
+            testConnectionStopHandler.removeCallbacksAndMessages(null);
+        }
         if (localStore != null) {
             localStore.close();
             localStore = null;
@@ -236,6 +255,15 @@ public class MainActivity extends Activity {
             return;
         }
 
+        // Bucket 4b: any pending test-connection auto-stop is now stale — the C10 schedule
+        // posts an 8 s stopObdService callback per probe, and if it fires DURING the connect
+        // we're about to start (manual user connect, or a re-issued probe), it would tear down
+        // the new session. startTestConnectionFromBridge posts its own fresh stop right after
+        // calling us, so clearing here is a no-op for that path.
+        if (testConnectionStopHandler != null) {
+            testConnectionStopHandler.removeCallbacksAndMessages(null);
+        }
+
         Intent service = new Intent(this, ObdService.class);
         service.setAction(action);
         if (address != null) {
@@ -291,6 +319,297 @@ public class MainActivity extends Activity {
         service.setAction(ObdService.ACTION_DISCONNECT);
         startService(service);
     }
+
+    // ===== Bucket 4a bridge helpers ==========================================
+    // Each helper is invoked from VoltBridge's BUCKET 4a region. Kept on the
+    // Activity (and not on ObdService) so they have an Activity context for
+    // startActivity / system service lookups without binding to the service.
+
+    /**
+     * Bucket 4a (C4) — force-stop a competing app surfaced via the `competingApps` status field.
+     * Uses {@link android.app.ActivityManager#killBackgroundProcesses(String)} — Android only acts
+     * on background-promotable apps but it is the right API to expose. Returns true if the package
+     * is installed (so the UI can surface the request honestly).
+     */
+    boolean forceStopPackageFromBridge(String packageName) {
+        if (packageName == null || packageName.isEmpty()) {
+            return false;
+        }
+        try {
+            // Confirm the package exists on this device before issuing the
+            // kill — surfaces "false" honestly when the user has uninstalled
+            // the competing app since the status payload was generated.
+            getPackageManager().getPackageInfo(packageName, 0);
+        } catch (PackageManager.NameNotFoundException notInstalled) {
+            return false;
+        }
+        try {
+            android.app.ActivityManager am =
+                    (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (am == null) {
+                return false;
+            }
+            am.killBackgroundProcesses(packageName);
+            Log.i(TAG, "forceStopPackage: requested kill of " + packageName);
+            return true;
+        } catch (SecurityException ex) {
+            Log.w(TAG, "forceStopPackage denied for " + packageName, ex);
+            return false;
+        }
+    }
+
+    /**
+     * Bucket 4a (C6) — forward a cancel request from the dashboard to the running ObdService so its
+     * polling engine can bail out of the retry burst. No-op if the service is not bound / running.
+     */
+    void cancelRetryFromBridge() {
+        // Send via Intent so we don't need a service binding; the service
+        // exposes a public flag setter that the engine reads.
+        Intent service = new Intent(this, ObdService.class);
+        service.setAction(ObdService.ACTION_CANCEL_RETRY);
+        try {
+            startService(service);
+        } catch (IllegalStateException ignored) {
+            // Service may have stopped between the JS click and the dispatch.
+        }
+    }
+
+    /**
+     * Bucket 4a (A8) — open Android Bluetooth settings so the user can forget the adapter and
+     * re-pair. Falls back to a status broadcast if the activity is unavailable on this device.
+     */
+    void openBluetoothSettingsFromBridge() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_BLUETOOTH_SETTINGS);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        } catch (Exception ex) {
+            Log.w(TAG, "openBluetoothSettings failed", ex);
+            publishStatus(
+                    "blocked",
+                    "Could not open Bluetooth settings. Open Android Settings > Bluetooth manually.",
+                    true);
+        }
+    }
+
+    // ===== end Bucket 4a bridge helpers ======================================
+
+    // ===== Bucket 4b bridge helpers ==========================================
+
+    /**
+     * Bucket 4b (C2, C8) — return the last {@code n} session summaries as a JSON array string,
+     * newest first. Reads Bucket 3's {@link SessionSummaryStore}; returns {@code "[]"} on any
+     * failure so the dashboard's last-connected badge / health pill code paths stay dormant instead
+     * of crashing.
+     */
+    String getRecentSessionsJson(int n) {
+        try {
+            if (n <= 0) {
+                return "[]";
+            }
+            SessionSummaryStore store = SessionSummaryStore.getInstance(getFilesDir());
+            java.util.List<SessionSummary> recent = store.getRecent(n);
+            org.json.JSONArray arr = new org.json.JSONArray();
+            for (SessionSummary s : recent) {
+                arr.put(s.toJson());
+            }
+            return arr.toString();
+        } catch (RuntimeException ex) {
+            Log.w(TAG, "getRecentSessionsJson failed", ex);
+            return "[]";
+        }
+    }
+
+    /**
+     * Bucket 4b (C7) — bundle recent diagnostics into a zip via Bucket 3's helper and launch the
+     * system share sheet. Errors surface as a status broadcast rather than throwing.
+     */
+    void shareDiagnosticsFromBridge() {
+        try {
+            Intent share = DiagnosticsShareIntent.buildIntent(this);
+            if (share == null) {
+                publishStatus(
+                        "blocked",
+                        "No diagnostics to share yet — connect once and try again.",
+                        true);
+                return;
+            }
+            startActivity(Intent.createChooser(share, "Share diagnostics"));
+        } catch (RuntimeException ex) {
+            Log.w(TAG, "shareDiagnostics failed", ex);
+            publishStatus("blocked", "Could not build the diagnostics share.", true);
+        }
+    }
+
+    /**
+     * Bucket 4b (C5) — start a one-shot probe session against the last-known adapter and schedule a
+     * stop after {@link #TEST_CONNECTION_DURATION_MS} so we exercise the connect/init path without
+     * committing to a full logging session.
+     */
+    void startTestConnectionFromBridge() {
+        JSONObject device = deviceCatalog.getLastOrCandidateDevice();
+        final String address = device.optString("address", "");
+        final String name = device.optString("name", "Test connection");
+        if (address.isEmpty()) {
+            publishStatus(
+                    "blocked",
+                    "No remembered adapter yet — pick one and Connect once first.",
+                    true);
+            return;
+        }
+        rememberDevice(address, name);
+        // Gate for onAdapterStatusForReadyNotify: the very next "connected" broadcast (within
+        // a reasonable window) belongs to this probe, so the schedule should fire its
+        // notification. Cleared by the auto-stop callback below or by an explicit cancel.
+        probeInFlight = true;
+        startObdService(ObdService.ACTION_CONNECT, address, name);
+        // Defer the stop onto the main looper so the connect kicks off first. Use a single
+        // long-lived Handler and clear any prior pending stop — without this, the C10 periodic
+        // tick (every 30 s) would accumulate one independent stop Runnable per probe with no way
+        // to cancel them, so a manual full-session connect started between probes could be torn
+        // down 8 s after the next tick.
+        if (testConnectionStopHandler == null) {
+            testConnectionStopHandler = new android.os.Handler(getMainLooper());
+        }
+        testConnectionStopHandler.removeCallbacksAndMessages(null);
+        testConnectionStopHandler.postDelayed(
+                () -> {
+                    probeInFlight = false;
+                    stopObdService();
+                },
+                TEST_CONNECTION_DURATION_MS);
+    }
+
+    /**
+     * Bucket 4b (C10) — periodic test-connection probe for {@code mins} minutes; the first status
+     * broadcast with {@code state == "connected"} during the window posts a notification and
+     * cancels the rest. {@code mins} is already clamped to [1, 30] by {@link
+     * VoltBridge#scheduleAdapterReadyNotify(int)}.
+     */
+    void scheduleAdapterReadyNotifyFromBridge(int mins) {
+        adapterReadyDeadlineMs = System.currentTimeMillis() + mins * 60_000L;
+        adapterReadyActive = true;
+        if (adapterReadyHandler == null) {
+            adapterReadyHandler = new android.os.Handler(getMainLooper());
+        }
+        // Reset any prior schedule and start fresh.
+        adapterReadyHandler.removeCallbacksAndMessages(null);
+        adapterReadyHandler.post(adapterReadyTick);
+    }
+
+    /**
+     * Bucket 4b (C10) — cancel a running notify-when-ready schedule. Called from the bridge when
+     * the user unchecks the toggle, and internally when the first successful probe lands or the
+     * deadline expires.
+     */
+    void cancelAdapterReadyNotifyFromBridge() {
+        adapterReadyActive = false;
+        adapterReadyDeadlineMs = 0L;
+        // Clear the probe-in-flight gate so a stale "connected" broadcast after a re-enable
+        // doesn't mis-fire the notification on a non-probe session.
+        probeInFlight = false;
+        if (adapterReadyHandler != null) {
+            adapterReadyHandler.removeCallbacksAndMessages(null);
+        }
+    }
+
+    /**
+     * Bucket 4b (C10) — called from the status-broadcast receiver. Fires the user-facing "adapter
+     * is ready" notification when a probe started by the notify-when-ready schedule reports {@code
+     * state == "connected"}, then tears down the schedule. Gated on {@link #probeInFlight} so a
+     * "connected" broadcast for an unrelated session (e.g. the user manually started one while the
+     * schedule happened to be active) does not fire the notification.
+     */
+    void onAdapterStatusForReadyNotify(String state) {
+        if (!adapterReadyActive || !probeInFlight) {
+            return;
+        }
+        if (!"connected".equals(state)) {
+            return;
+        }
+        // On API 33+ this notification needs runtime POST_NOTIFICATIONS permission. We don't
+        // demand it eagerly — if the user denied it, the schedule still works (it just won't
+        // notify), and the next time they enter the app the UI shows the connected state.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ContextCompat.checkSelfPermission(
+                                this, android.Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+            Log.i(TAG, "adapter-ready: POST_NOTIFICATIONS not granted, skipping notification");
+            cancelAdapterReadyNotifyFromBridge();
+            return;
+        }
+        try {
+            android.app.NotificationManager nm =
+                    (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) {
+                // Tap → open MainActivity. FLAG_IMMUTABLE is required on API 31+; we set it
+                // unconditionally to keep the PendingIntent simple across versions.
+                Intent open = new Intent(this, MainActivity.class);
+                open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                android.app.PendingIntent tap =
+                        android.app.PendingIntent.getActivity(
+                                this,
+                                0,
+                                open,
+                                android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                                        | android.app.PendingIntent.FLAG_IMMUTABLE);
+                // The (Context, channelId) Builder constructor is API 26+; the channel-less form
+                // is the only legal call on minSdk=23 devices. Mirror the same gate as
+                // ObdNotifications.build(...) so this notification path doesn't crash on KitKat
+                // -era Androids that we still support.
+                android.app.Notification.Builder b =
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                                ? new android.app.Notification.Builder(
+                                        this, ObdNotifications.CHANNEL_ID)
+                                : new android.app.Notification.Builder(this);
+                android.app.Notification n =
+                        b.setContentTitle("OBD adapter is responding")
+                                .setContentText("Tap to open VoltTracker and start logging.")
+                                .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
+                                .setContentIntent(tap)
+                                .setAutoCancel(true)
+                                .build();
+                nm.notify(ADAPTER_READY_NOTIFICATION_ID, n);
+            }
+        } catch (RuntimeException ex) {
+            Log.w(TAG, "adapter-ready notification failed", ex);
+        }
+        cancelAdapterReadyNotifyFromBridge();
+    }
+
+    private static final long TEST_CONNECTION_DURATION_MS = 8_000L;
+    private static final long ADAPTER_READY_INTERVAL_MS = 30_000L;
+    private static final int ADAPTER_READY_NOTIFICATION_ID = 4711;
+    private long adapterReadyDeadlineMs = 0L;
+    private volatile boolean adapterReadyActive = false;
+
+    /**
+     * Distinguishes a probe-driven "connected" status from a user-initiated session that just
+     * happens to be running while the C10 schedule is active. Set in {@link
+     * #startTestConnectionFromBridge}, cleared by the auto-stop callback or {@link
+     * #cancelAdapterReadyNotifyFromBridge}.
+     */
+    private volatile boolean probeInFlight = false;
+
+    private android.os.Handler adapterReadyHandler;
+    private android.os.Handler testConnectionStopHandler;
+    private final Runnable adapterReadyTick =
+            new Runnable() {
+                @Override
+                public void run() {
+                    if (!adapterReadyActive
+                            || System.currentTimeMillis() >= adapterReadyDeadlineMs) {
+                        adapterReadyActive = false;
+                        return;
+                    }
+                    startTestConnectionFromBridge();
+                    if (adapterReadyHandler != null && adapterReadyActive) {
+                        adapterReadyHandler.postDelayed(this, ADAPTER_READY_INTERVAL_MS);
+                    }
+                }
+            };
+
+    // ===== end Bucket 4b bridge helpers ======================================
 
     private void reportAppVisibility(boolean foreground) {
         Intent service = new Intent(this, ObdService.class);

@@ -753,4 +753,38 @@
     renderInsightScatter,
     enrichRouteEff
   });
+
+  // C6: retry-cancel button in the error banner. Wired here instead of in
+  // actions.js so the surgical addition stays inside the panels file the
+  // bucket owns. The button visibility is driven by troubleshooter.js based
+  // on the status state — this binding just forwards the click to the
+  // bridge.
+  (function bindRetryCancel() {
+    const btn = el("errorBannerCancelRetry");
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      // Only enter the "Cancelling…" UI state when the bridge actually has a cancelRetry
+      // method to call — otherwise the user sees a fake progress state for an action that
+      // never happened.
+      if (!(bridge && typeof bridge.cancelRetry === "function")) {
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = "Cancelling…";
+      try {
+        bridge.cancelRetry();
+      } catch (err) {
+        // Surface, but never throw from a click handler.
+        if (typeof bridge.logClientError === "function") {
+          bridge.logClientError("cancelRetry", String(err && err.message || err));
+        }
+      }
+      // Re-enable after a short window in case the engine keeps retrying
+      // (e.g. flag-cleared race) so the user can try again.
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = "Cancel";
+      }, 1500);
+    });
+  })();
 })();

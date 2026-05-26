@@ -51,7 +51,18 @@ public class VoltBridgeTest {
                             "scanLast",
                             "demo",
                             "disconnect",
-                            "logClientError"));
+                            "logClientError",
+                            // Bucket 4a — connection-troubleshooter bridge surface.
+                            "getRecentSessions",
+                            "forceStopPackage",
+                            "cancelRetry",
+                            "tryReconnectNow",
+                            "openBluetoothSettings",
+                            // Bucket 4b — status & proactive tools bridge surface.
+                            "shareDiagnostics",
+                            "startTestConnection",
+                            "scheduleAdapterReadyNotify",
+                            "cancelAdapterReadyNotify"));
 
     /**
      * Builds {@link MainActivity} via Robolectric and hands back its bridge — the real one wired

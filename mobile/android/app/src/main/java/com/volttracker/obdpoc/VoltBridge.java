@@ -217,4 +217,121 @@ public final class VoltBridge {
                         + "]: "
                         + safe(detail, MAX_DETAIL_LEN));
     }
+
+    // ============================================================================================
+    // === BUCKET 4a region — Error & troubleshooter UX                                          ===
+    // ============================================================================================
+
+    /**
+     * C4 — Force-stop a competing app surfaced in {@code competingApps}. Uses {@link
+     * android.app.ActivityManager#killBackgroundProcesses(String)}; Android limits this to
+     * background-promotable apps but it is the right API to expose, and we surface success/failure
+     * honestly via the return value (true if the package is installed, false otherwise).
+     */
+    @JavascriptInterface
+    public boolean forceStopPackage(String packageName) {
+        final String pkg = safe(packageName, MAX_NAME_LEN);
+        if (pkg.isEmpty()) {
+            return false;
+        }
+        return activity.forceStopPackageFromBridge(pkg);
+    }
+
+    /**
+     * C6 — Cancel an in-flight retry burst. Sets the {@code cancelRetryRequested} flag on {@link
+     * ObdService}; the engine reads it between connect attempts and bails out instead of issuing
+     * the next retry.
+     */
+    @JavascriptInterface
+    public void cancelRetry() {
+        activity.runOnUiThread(activity::cancelRetryFromBridge);
+    }
+
+    /**
+     * Troubleshooter primary action — re-issue ACTION_CONNECT with the last-known device. Mirrors
+     * {@link #connectLast()} but skips the "no remembered adapter" status string so the
+     * troubleshooter modal can show its own copy when there is no device on file yet.
+     */
+    @JavascriptInterface
+    public void tryReconnectNow() {
+        JSONObject device = activity.deviceCatalog.getLastOrCandidateDevice();
+        final String address = safe(device.optString("address", ""), MAX_ADDRESS_LEN);
+        final String name = safe(device.optString("name", ""), MAX_NAME_LEN);
+        activity.runOnUiThread(
+                () -> {
+                    if (address.isEmpty()) {
+                        activity.publishStatus(
+                                "blocked",
+                                "No remembered adapter yet. Pick one and try Connect.",
+                                true);
+                        return;
+                    }
+                    activity.rememberDevice(address, name);
+                    activity.startObdService(ObdService.ACTION_CONNECT, address, name);
+                });
+    }
+
+    /**
+     * A8 helper — open the system Bluetooth settings so the user can forget the adapter and
+     * re-pair. Delegated to MainActivity (a startActivity call needs the Activity context).
+     */
+    @JavascriptInterface
+    public void openBluetoothSettings() {
+        activity.runOnUiThread(activity::openBluetoothSettingsFromBridge);
+    }
+
+    // === END BUCKET 4a region ===================================================================
+
+    // ============================================================================================
+    // === BUCKET 4b region — Status & proactive tools                                           ===
+    // ============================================================================================
+
+    /**
+     * Returns the last {@code n} session summary rows as a JSON array string, newest first. Reads
+     * {@code files/obd-logs/sessions-summary.jsonl} via Bucket 3's {@code SessionSummaryStore}.
+     * Filled in by Bucket 4b.
+     */
+    @JavascriptInterface
+    public String getRecentSessions(int n) {
+        return activity.getRecentSessionsJson(n);
+    }
+
+    /**
+     * Bundles recent session JSONLs + rolling app log + summary into a zip and launches the system
+     * share sheet. Filled in by Bucket 4b.
+     */
+    @JavascriptInterface
+    public void shareDiagnostics() {
+        activity.runOnUiThread(activity::shareDiagnosticsFromBridge);
+    }
+
+    /**
+     * Runs a quick ATZ + 0100 + voltage probe against the last-known adapter, then disconnects.
+     * Surfaces results via the normal status broadcast pipeline. Filled in by Bucket 4b.
+     */
+    @JavascriptInterface
+    public void startTestConnection() {
+        activity.runOnUiThread(activity::startTestConnectionFromBridge);
+    }
+
+    /**
+     * Schedules test-connection probes every 30s for {@code mins} minutes (clamped to [1, 30]);
+     * posts a notification when the adapter first responds. Filled in by Bucket 4b.
+     */
+    @JavascriptInterface
+    public void scheduleAdapterReadyNotify(int mins) {
+        final int clamped = Math.max(1, Math.min(30, mins));
+        activity.runOnUiThread(() -> activity.scheduleAdapterReadyNotifyFromBridge(clamped));
+    }
+
+    /**
+     * Cancels a running notify-when-ready schedule. JS calls this when the user unchecks the toggle
+     * — without it the periodic probe keeps firing until its deadline regardless of UI state.
+     */
+    @JavascriptInterface
+    public void cancelAdapterReadyNotify() {
+        activity.runOnUiThread(activity::cancelAdapterReadyNotifyFromBridge);
+    }
+
+    // === END BUCKET 4b region ===================================================================
 }

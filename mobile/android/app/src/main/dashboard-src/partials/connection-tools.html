@@ -1,0 +1,91 @@
+<!--
+  Owner: Bucket 4b (status & proactive tools).
+  Hosts the proactive tools panel: test-connection button (C5), send-diagnostics
+  button (C7), low-voltage hint (C9), notify-when-ready toggle (C10). Lives at
+  the bottom of <main> but is declared as data-view="settings" so it surfaces
+  inside the Diag tab alongside the existing settings panels — no new nav entry
+  needed.
+-->
+<section
+  id="view-connection-tools"
+  class="view connection-tools"
+  data-view="settings"
+>
+  <article class="panel connection-tools__panel" id="connectionToolsPanel">
+    <header class="connection-tools__head">
+      <div>
+        <span class="kicker">Connection tools</span>
+        <h3>Proactive adapter checks</h3>
+      </div>
+    </header>
+
+    <!-- C9: low-voltage hint, populated from status.lastVoltage. Hidden until a
+         reading lands and only flips visible when the value is below ~12.2 V. -->
+    <p
+      id="lowVoltageHint"
+      class="connection-tools__hint"
+      data-tone="warn"
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      Battery voltage looks low. Start the engine before the next test.
+    </p>
+
+    <div class="connection-tools__actions">
+      <!-- C5: one-shot probe against the last-known adapter, surfaces via status. -->
+      <button
+        type="button"
+        id="testConnectionBtn"
+        class="connection-tools__btn primary"
+        data-action="test-connection"
+      >
+        Test connection
+      </button>
+      <!-- C7: diagnostics share. Bucket 3 wires the actual zip + share intent. -->
+      <button
+        type="button"
+        id="sendDiagnosticsBtn"
+        class="connection-tools__btn"
+        data-action="send-diagnostics"
+      >
+        Send diagnostics
+      </button>
+    </div>
+
+    <!-- C10: notify-when-ready toggle. Picks how long to keep probing in the
+         background; the bridge clamps the minutes to [1, 30] and we mirror that
+         in the UI. -->
+    <fieldset
+      class="connection-tools__notify"
+      aria-labelledby="notifyWhenReadyTitle"
+    >
+      <legend id="notifyWhenReadyTitle" class="kicker">
+        Notify when adapter is ready
+      </legend>
+      <div class="connection-tools__notify-row">
+        <label class="connection-tools__notify-toggle">
+          <input
+            id="notifyWhenReadyToggle"
+            type="checkbox"
+            data-action="notify-when-ready"
+          />
+          <span>Keep checking in the background</span>
+        </label>
+        <label class="connection-tools__notify-mins">
+          <span class="kicker">For</span>
+          <select id="notifyWhenReadyMinutes">
+            <option value="5">5 min</option>
+            <option value="10" selected>10 min</option>
+            <option value="15">15 min</option>
+            <option value="30">30 min</option>
+          </select>
+        </label>
+      </div>
+      <small id="notifyWhenReadyStatus" class="status-copy">
+        Probes the last-used adapter every 30s and posts a notification when it
+        responds.
+      </small>
+    </fieldset>
+  </article>
+</section>

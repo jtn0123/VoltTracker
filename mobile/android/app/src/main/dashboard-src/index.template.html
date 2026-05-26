@@ -21,9 +21,13 @@
     <link rel="stylesheet" href="css/base.css" />
     <link rel="stylesheet" href="css/components.css" />
     <link rel="stylesheet" href="css/screens.css" />
+    <!-- Bucket 4a owns troubleshooter.css; Bucket 4b owns status-tools.css. -->
+    <link rel="stylesheet" href="css/troubleshooter.css" />
+    <link rel="stylesheet" href="css/status-tools.css" />
   </head>
   <body>
     <!-- include: partials/error-banner.html -->
+    <!-- include: partials/troubleshooter.html -->
     <main class="app">
       <!-- include: partials/topbar.html -->
       <!-- include: partials/drive.html -->
@@ -32,6 +36,7 @@
       <!-- include: partials/charge.html -->
       <!-- include: partials/insights.html -->
       <!-- include: partials/settings.html -->
+      <!-- include: partials/connection-tools.html -->
     </main>
 
     <nav class="bottom-nav" aria-label="Main navigation">
@@ -117,5 +122,9 @@
     <script src="js/drive.js"></script>
     <script src="js/telemetry.js"></script>
     <script src="js/actions.js"></script>
+    <!-- Bucket 4a owns troubleshooter.js; Bucket 4b owns connection-status.js + connection-tools.js. -->
+    <script src="js/troubleshooter.js"></script>
+    <script src="js/connection-status.js"></script>
+    <script src="js/connection-tools.js"></script>
   </body>
 </html>

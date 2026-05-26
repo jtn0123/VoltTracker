@@ -41,6 +41,27 @@ import org.json.JSONObject;
  */
 class ObdPollingEngine {
 
+    /**
+     * A3 long-backoff schedule. Activated when two consecutive {@link FailureClass#INSTANT_DROP}s
+     * fire in &lt;500 ms each (the wedged-adapter signature). The default exponential ramp burns
+     * through all 6 retries in ~25 s; this gives the adapter ~20 s of quiet to recover before
+     * giving up — empirically the shortest interval that lets a wedged OBDLink MX+ recover without
+     * a power-cycle. Indexed by retry count after wedge detection trips: index 0 covers the first
+     * retry done in wedged mode (the third overall failed attempt), index 1 the fourth, and the
+     * fallback kicks in for attempt 5 / 6 so the loop still terminates.
+     */
+    static final long[] LONG_BACKOFFS_MS = {8_000L, 12_000L};
+
+    /**
+     * Max stack-frame characters captured into the {@code stackHead} field on reconnect /
+     * reconnect_exhausted events. Beyond ~1 KB the row stops being grep-friendly and starts costing
+     * real bytes in the JSONL.
+     */
+    private static final int STACK_HEAD_MAX_CHARS = 1000;
+
+    /** Number of frames pulled off the throwable when assembling {@code stackHead}. */
+    private static final int STACK_HEAD_FRAMES = 5;
+
     private final ObdService service;
     // Non-final so tests can swap in a fake via setConnectionForTest(). Production code
     // never reassigns this — the constructor's initializer is the only real assignment.
@@ -162,11 +183,41 @@ class ObdPollingEngine {
         // Distinguishes a never-established link from a mid-session drop: the wording
         // and backoff differ, since "reconnecting" makes no sense before a first connect.
         boolean everConnected = false;
+        // A3: track consecutive instant_drop attempts so the engine can switch into
+        // long-backoff mode after two failures in <500 ms each — the wedged-adapter signature.
+        int consecutiveInstantDrops = 0;
+        boolean wedgedMode = false;
         try {
             while (service.running.get()) {
+                // C6: honor a user cancel that arrived between attempts (or before the very first
+                // one) — without this check the engine could press on into another multi-second
+                // connectAndInitialize that the user has already asked us to abandon. The post-
+                // sleep check below catches cancels that arrive during the backoff; this one
+                // catches everything else.
+                if (service.cancelRetryRequested) {
+                    service.cancelRetryRequested = false;
+                    service.recorder.logEvent(
+                            "retry_cancelled_by_user",
+                            "attempt",
+                            String.valueOf(attempt),
+                            "everConnected",
+                            String.valueOf(everConnected),
+                            "phase",
+                            "pre_connect");
+                    service.broadcastStatus("idle", "Retry cancelled.", false);
+                    service.stopSelf();
+                    return;
+                }
+                long attemptStart = System.currentTimeMillis();
                 try {
                     connectAndInitialize(address);
                     everConnected = true;
+                    consecutiveInstantDrops = 0;
+                    wedgedMode = false;
+                    service.clearLastFailureClass();
+                    // C6: a successful connect clears any stale cancel-retry request so a fresh
+                    // user-initiated mid-session retry burst can proceed unhindered.
+                    service.cancelRetryRequested = false;
                     OBDLog.event("ObdPollingEngine", "connect", Map.of("name", service.activeName));
                     if (scanMode) {
                         scanRunner.run();
@@ -181,6 +232,8 @@ class ObdPollingEngine {
                     pollUntilStoppedOrBroken();
                     return; // running went false: a clean stop
                 } catch (IOException ex) {
+                    long attemptDurationMs =
+                            Math.max(0L, System.currentTimeMillis() - attemptStart);
                     closeSocket();
                     if (everConnected) {
                         OBDLog.event(
@@ -191,6 +244,29 @@ class ObdPollingEngine {
                     if (!service.running.get()) {
                         return;
                     }
+                    // Classify before any logging so the failure class can be stamped onto
+                    // every event in this catch block.
+                    String phase = connection.lastErrorPhase;
+                    if (phase == null || phase.isEmpty()) {
+                        phase = "post_connect";
+                    }
+                    FailureClass fc =
+                            ConnectionFailureClassifier.classify(
+                                    phase, attemptDurationMs, ex, isBluetoothReady());
+                    service.setLastFailureClass(fc);
+
+                    // Track instant_drop streak for A3's adaptive-backoff decision. Anything
+                    // other than an instant_drop breaks the streak so we don't trip the long
+                    // backoff on, say, alternating connect_timeout / instant_drop sequences.
+                    if (fc == FailureClass.INSTANT_DROP
+                            && attemptDurationMs
+                                    < ConnectionFailureClassifier.INSTANT_DROP_THRESHOLD_MS) {
+                        consecutiveInstantDrops += 1;
+                    } else {
+                        consecutiveInstantDrops = 0;
+                        wedgedMode = false;
+                    }
+
                     attempt += 1;
                     if (attempt > ObdProbes.MAX_RECONNECT_ATTEMPTS) {
                         // Catastrophic — also write to logcat so a post-crash bug report
@@ -204,6 +280,19 @@ class ObdPollingEngine {
                                         + " attempts",
                                 ex);
                         service.recorder.logError("reconnect_exhausted", ex);
+                        // B6: an additional structured event carries failureClass +
+                        // exceptionClass + stackHead so post-hoc triage doesn't depend on
+                        // the unstructured "error" row.
+                        service.recorder.logEvent(
+                                "reconnect_exhausted",
+                                "attempts",
+                                String.valueOf(ObdProbes.MAX_RECONNECT_ATTEMPTS),
+                                "failureClass",
+                                fc.wireName(),
+                                "exceptionClass",
+                                exceptionClassName(ex),
+                                "stackHead",
+                                stackHead(ex));
                         service.broadcastStatus(
                                 "error",
                                 everConnected
@@ -223,10 +312,24 @@ class ObdPollingEngine {
                         service.stopSelf();
                         return;
                     }
-                    long backoffMs =
-                            everConnected
-                                    ? reconnectBackoffMs(attempt)
-                                    : initialConnectBackoffMs(attempt);
+
+                    // A3: once we've seen two instant_drops in a row, switch to the long-backoff
+                    // schedule (8 s / 12 s for attempts 3+4 / 4+5). The default exponential
+                    // ramp would burn through attempts in ~25 s — barely a chance for the
+                    // adapter to recover from a wedge. Emit wedged_suspected once per streak.
+                    if (consecutiveInstantDrops >= 2 && !wedgedMode) {
+                        wedgedMode = true;
+                        service.recorder.logEvent(
+                                "wedged_suspected",
+                                "consecutiveInstantDrops",
+                                String.valueOf(consecutiveInstantDrops),
+                                "lastAttemptDurationMs",
+                                String.valueOf(attemptDurationMs),
+                                "failureClass",
+                                fc.wireName());
+                    }
+
+                    long backoffMs = computeBackoffMs(attempt, everConnected, wedgedMode);
                     OBDLog.event(
                             "ObdPollingEngine", "reconnect_attempt", Map.of("attempt", attempt));
                     service.recorder.logEvent(
@@ -238,7 +341,17 @@ class ObdPollingEngine {
                             "reason",
                             safeMessage(ex),
                             "everConnected",
-                            String.valueOf(everConnected));
+                            String.valueOf(everConnected),
+                            "failureClass",
+                            fc.wireName(),
+                            "exceptionClass",
+                            exceptionClassName(ex),
+                            "stackHead",
+                            stackHead(ex),
+                            "attemptDurationMs",
+                            String.valueOf(attemptDurationMs),
+                            "wedgedMode",
+                            String.valueOf(wedgedMode));
                     service.broadcastStatus(
                             "connecting",
                             everConnected
@@ -256,6 +369,20 @@ class ObdPollingEngine {
                                             + ")...",
                             false);
                     sleep(backoffMs);
+                    // C6: honor a user cancel that arrived during the backoff sleep — bail out of
+                    // the retry burst instead of pressing on through the remaining attempts.
+                    if (service.cancelRetryRequested) {
+                        service.cancelRetryRequested = false;
+                        service.recorder.logEvent(
+                                "retry_cancelled_by_user",
+                                "attempt",
+                                String.valueOf(attempt),
+                                "everConnected",
+                                String.valueOf(everConnected));
+                        service.broadcastStatus("idle", "Retry cancelled.", false);
+                        service.stopSelf();
+                        return;
+                    }
                 }
             }
         } catch (RuntimeException ex) {
@@ -273,16 +400,86 @@ class ObdPollingEngine {
     private void connectAndInitialize(String address) throws IOException {
         service.broadcastStatus(
                 "connecting", "Opening serial connection to " + service.activeName + "...", false);
+        // Bucket 2 hook: snapshot bond/SDP/adapter state right before the RFCOMM attempt so a
+        // failure later in this method can be correlated with the pre-flight signals.
+        if (service.bluetoothObservability != null) {
+            service.bluetoothObservability.onPreConnect(address);
+        }
+        // A1: socket_open_attempt fires BEFORE openBluetoothSocket so timing is comparable to
+        // the subsequent socket_open_result. The legacy "bluetooth_socket_open" event used to
+        // straddle both, which made it impossible to tell from a JSONL whether a failure
+        // happened during rfcomm connect, getStreams, or the first read.
         service.recorder.logEvent(
-                "bluetooth_socket_open",
+                "socket_open_attempt",
                 "address",
                 address,
                 "uuid",
                 ObdProbes.ELM327_SPP_UUID.toString());
-        openBluetoothSocket(address);
-        service.recorder.logEvent("bluetooth_socket_connected", "address", address);
+        long openStart = System.currentTimeMillis();
+        boolean openOk = false;
+        String openErrorPhase = "post_connect";
+        try {
+            openBluetoothSocket(address);
+            openOk = true;
+        } catch (IOException ex) {
+            // Prefer the phase the connection itself recorded (rfcomm_connect / get_streams);
+            // fall back to "post_connect" if the throw came from elsewhere in the open chain.
+            String phase = connection.lastErrorPhase;
+            openErrorPhase = (phase == null || phase.isEmpty()) ? "post_connect" : phase;
+            logSocketOpenResult(false, openStart, openErrorPhase);
+            throw ex;
+        }
+        // A4: wake-nudge. Send a single \r and tolerate up to 200 ms of silence. On a healthy
+        // adapter this returns gotResponse=true and ATZ lands cleanly; on a wedged adapter the
+        // exception bubbles up as a first_read failure, classified downstream.
+        try {
+            ElmConnection.WakeNudgeResult nudge = connection.wakeNudge(200L);
+            service.recorder.logEvent(
+                    "wake_nudge",
+                    "durationMs",
+                    String.valueOf(nudge.durationMs),
+                    "gotResponse",
+                    String.valueOf(nudge.gotResponse));
+        } catch (IOException ex) {
+            openOk = false;
+            openErrorPhase = "first_read";
+            service.recorder.logEvent(
+                    "wake_nudge",
+                    "durationMs",
+                    String.valueOf(connection.firstReadMs),
+                    "gotResponse",
+                    "false",
+                    "error",
+                    safeMessage(ex));
+            logSocketOpenResult(false, openStart, openErrorPhase);
+            throw ex;
+        }
+        logSocketOpenResult(openOk, openStart, openErrorPhase);
         service.broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false);
         initializeElm327();
+    }
+
+    /**
+     * Emits a {@code socket_open_result} with the timing buckets the connection collected. {@code
+     * errorPhase} is empty when {@code ok==true}; otherwise it identifies the phase the throw
+     * happened in.
+     */
+    private void logSocketOpenResult(boolean ok, long openStart, String errorPhase) {
+        long totalMs = Math.max(0L, System.currentTimeMillis() - openStart);
+        service.recorder.logEvent(
+                "socket_open_result",
+                "durationMs",
+                String.valueOf(totalMs),
+                "ok",
+                String.valueOf(ok),
+                "errorPhase",
+                ok ? "" : (errorPhase == null ? "post_connect" : errorPhase),
+                "rfcommConnectMs",
+                String.valueOf(connection.rfcommConnectMs),
+                "getStreamsMs",
+                String.valueOf(connection.getStreamsMs),
+                "firstReadMs",
+                String.valueOf(connection.firstReadMs));
     }
 
     /**
@@ -387,6 +584,17 @@ class ObdPollingEngine {
             }
         }
         OBDLog.event("ObdPollingEngine", "protocol_init", Map.of("ok", true));
+        service.maybeRunVoltageProbe(this);
+    }
+
+    /**
+     * Bucket 2 helper: a single-command IO round-trip exposed package-private so {@link
+     * VoltageProbe} can run its one-shot {@code 0142} probe without taking on the rest of the
+     * engine's connection state. Delegates to the same {@link #sendCommand} path the engine uses,
+     * so the {@code ioLock} synchronization and the {@code logCommand} accounting still apply.
+     */
+    String transactOneShot(String command, long timeoutMs) throws IOException {
+        return sendCommand(command, timeoutMs);
     }
 
     // Throws IOException when the adapter socket has broken so the caller can reconnect.
@@ -718,6 +926,75 @@ class ObdPollingEngine {
             connection.sendEscape(settleMs);
             service.recorder.logEvent("elm_escape_sent", "settleMs", String.valueOf(settleMs));
         }
+    }
+
+    /**
+     * Compute the backoff before the next reconnect attempt. In wedged mode (A3) the first two
+     * wedged-mode retries use {@link #LONG_BACKOFFS_MS}; everything else falls back to the existing
+     * exponential / initial curves so the retry math stays predictable for non-wedge failures.
+     *
+     * <p>Package-private (not private) so unit tests can drive the decision table directly without
+     * having to script a full Bluetooth stack.
+     */
+    static long computeBackoffMs(int attempt, boolean everConnected, boolean wedgedMode) {
+        if (wedgedMode) {
+            // attempt == 3 is the *third* failed connect overall; if the wedge tripped at
+            // attempt 2, this is the first wedge-mode retry → index 0 → 8 s.
+            int wedgeIndex = Math.max(0, attempt - 3);
+            if (wedgeIndex < LONG_BACKOFFS_MS.length) {
+                return LONG_BACKOFFS_MS[wedgeIndex];
+            }
+            // Falls through to the standard curve for the final retries so MAX_RECONNECT_ATTEMPTS
+            // still terminates the loop on schedule.
+        }
+        return everConnected ? reconnectBackoffMs(attempt) : initialConnectBackoffMs(attempt);
+    }
+
+    /**
+     * B6: short, grep-friendly fully-qualified class name for the exception that ended the attempt.
+     * Returns the simple name when {@code getName()} is empty (shouldn't happen for real exceptions
+     * but defensive against synthetic ones in tests).
+     */
+    static String exceptionClassName(Throwable ex) {
+        if (ex == null) {
+            return "";
+        }
+        String name = ex.getClass().getName();
+        if (name == null || name.isEmpty()) {
+            return ex.getClass().getSimpleName();
+        }
+        return name;
+    }
+
+    /**
+     * B6: render the first few stack frames of {@code ex} into a single newline-free string capped
+     * at {@link #STACK_HEAD_MAX_CHARS}. Frames are joined with {@code " | "} so the field stays
+     * readable in {@code jq}-style flat JSONL dumps. Returns the empty string for a null exception
+     * or one with no stack trace (which a JVM can elide under heavy load).
+     */
+    static String stackHead(Throwable ex) {
+        if (ex == null) {
+            return "";
+        }
+        StackTraceElement[] frames = ex.getStackTrace();
+        if (frames == null || frames.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        int frameLimit = Math.min(STACK_HEAD_FRAMES, frames.length);
+        for (int i = 0; i < frameLimit; i++) {
+            if (sb.length() > 0) {
+                sb.append(" | ");
+            }
+            sb.append(frames[i].toString());
+            if (sb.length() >= STACK_HEAD_MAX_CHARS) {
+                break;
+            }
+        }
+        if (sb.length() > STACK_HEAD_MAX_CHARS) {
+            sb.setLength(STACK_HEAD_MAX_CHARS);
+        }
+        return sb.toString();
     }
 
     private static void sleep(long millis) {

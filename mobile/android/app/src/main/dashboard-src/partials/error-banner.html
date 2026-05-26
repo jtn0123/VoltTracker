@@ -1,7 +1,40 @@
+<!--
+  Connection error banner.
+
+  Bucket 4a wires three additional slots onto the existing banner:
+   - `errorBannerTitle` is rewritten with failure-class-specific copy (C1)
+     by panels.js when the status payload carries a `failureClass` field.
+   - `errorBannerHint` shows the action-oriented one-liner under the detail.
+   - `errorBannerActions` carries the in-flight retry "Cancel" button (C6)
+     and a "Get help" affordance that opens the troubleshooter modal.
+
+  Copy strings are NOT hardcoded in this partial. They are rendered into the
+  slots from JS based on the live `failureClass` value (one of
+  FailureClass.name() — see FailureClass.java).
+-->
 <div id="errorBanner" class="error-banner" role="alert" hidden>
   <span>
-    <strong>Dashboard error</strong>
+    <strong id="errorBannerTitle">Dashboard error</strong>
     <span id="errorBannerDetail" class="error-detail"></span>
+    <span id="errorBannerHint" class="error-copy-hint" hidden></span>
+    <span id="errorBannerActions" class="error-copy-actions" hidden>
+      <button
+        type="button"
+        id="errorBannerCancelRetry"
+        class="error-copy-action is-cancel"
+        hidden
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        id="errorBannerHelp"
+        class="error-copy-action"
+        hidden
+      >
+        Get help
+      </button>
+    </span>
   </span>
   <button id="errorBannerDismiss" type="button">Dismiss</button>
 </div>
