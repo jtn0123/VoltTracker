@@ -584,127 +584,200 @@ final class ObdStoreTrips {
         return payload;
     }
 
+    // Long drives can capture thousands of GPS fixes; the dashboard's polyline renderer stays
+    // smooth around 500 points, so each track is downsampled evenly across the full session
+    // timespan rather than truncated to the latest 500.
+    private static final int MAX_TRACK_POINTS = 500;
+
     private static JSONArray routePointsForSessionJson(SQLiteDatabase db, long sessionId, int limit)
             throws JSONException {
-        JSONArray points = new JSONArray();
-        try (Cursor cursor =
-                db.query(
-                        VoltTrackerDb.TABLE_LOCATION_SAMPLES,
-                        new String[] {
-                            "captured_at_ms",
-                            "latitude",
-                            "longitude",
-                            "accuracy_m",
-                            "speed_mps",
-                            "bearing_deg",
-                            "altitude_m"
-                        },
-                        "session_id = ?",
-                        new String[] {String.valueOf(sessionId)},
-                        null,
-                        null,
-                        "captured_at_ms DESC",
-                        boundedLimit(limit))) {
-            while (cursor.moveToNext()) {
-                JSONObject item = new JSONObject();
-                item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
-                item.put("lat", cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")));
-                item.put("lng", cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")));
-                item.put("accuracyM", nullableDouble(cursor, "accuracy_m"));
-                item.put("speedMps", nullableDouble(cursor, "speed_mps"));
-                item.put("bearingDeg", nullableDouble(cursor, "bearing_deg"));
-                item.put("altM", nullableDouble(cursor, "altitude_m"));
-                points.put(item);
-            }
+        int target = Math.max(1, Math.min(limit, MAX_TRACK_POINTS));
+        String[] sessionArg = {String.valueOf(sessionId)};
+
+        long total =
+                countRowsWhere(
+                        db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, "session_id = ?", sessionArg);
+        if (total > 0) {
+            return downsampledRoutePoints(
+                    db,
+                    VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                    new String[] {
+                        "captured_at_ms",
+                        "latitude",
+                        "longitude",
+                        "accuracy_m",
+                        "speed_mps",
+                        "bearing_deg",
+                        "altitude_m"
+                    },
+                    "session_id = ?",
+                    sessionArg,
+                    total,
+                    target,
+                    /* fromLocationSamples= */ true);
         }
-        if (points.length() == 0) {
-            try (Cursor cursor =
-                    db.query(
-                            VoltTrackerDb.TABLE_TELEMETRY,
-                            new String[] {
-                                "captured_at_ms",
-                                "latitude",
-                                "longitude",
-                                "accuracy_m",
-                                "gps_speed_mps",
-                                "bearing_deg",
-                                "soc"
-                            },
-                            "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL",
-                            new String[] {String.valueOf(sessionId)},
-                            null,
-                            null,
-                            "captured_at_ms DESC",
-                            boundedLimit(limit))) {
-                while (cursor.moveToNext()) {
-                    JSONObject item = new JSONObject();
-                    item.put(
-                            "atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
-                    item.put("lat", cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")));
-                    item.put("lng", cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")));
-                    item.put("accuracyM", nullableDouble(cursor, "accuracy_m"));
-                    item.put("speedMps", nullableDouble(cursor, "gps_speed_mps"));
-                    item.put("bearingDeg", nullableDouble(cursor, "bearing_deg"));
-                    item.put("soc", nullableDouble(cursor, "soc"));
+        String telemetryWhere = "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL";
+        long telemetryTotal =
+                countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, telemetryWhere, sessionArg);
+        if (telemetryTotal == 0) {
+            return new JSONArray();
+        }
+        return downsampledRoutePoints(
+                db,
+                VoltTrackerDb.TABLE_TELEMETRY,
+                new String[] {
+                    "captured_at_ms",
+                    "latitude",
+                    "longitude",
+                    "accuracy_m",
+                    "gps_speed_mps",
+                    "bearing_deg",
+                    "soc"
+                },
+                telemetryWhere,
+                sessionArg,
+                telemetryTotal,
+                target,
+                /* fromLocationSamples= */ false);
+    }
+
+    private static JSONArray downsampledRoutePoints(
+            SQLiteDatabase db,
+            String table,
+            String[] columns,
+            String where,
+            String[] whereArgs,
+            long total,
+            int target,
+            boolean fromLocationSamples)
+            throws JSONException {
+        long stride = strideFor(total, target);
+        JSONArray points = new JSONArray();
+        JSONObject tail = null;
+        try (Cursor cursor =
+                db.query(table, columns, where, whereArgs, null, null, "captured_at_ms ASC")) {
+            long idx = 0;
+            while (cursor.moveToNext()) {
+                JSONObject item = buildRoutePointItem(cursor, fromLocationSamples);
+                if (cursor.isLast()) {
+                    // Reserved so the final fix always lands on the map, even when the stride
+                    // sweep has already filled the target-1 slots above.
+                    tail = item;
+                    break;
+                }
+                boolean strideKeep = total <= target || idx % stride == 0;
+                boolean withinCap = total <= target || points.length() < target - 1;
+                if (strideKeep && withinCap) {
                     points.put(item);
                 }
+                idx++;
             }
         }
-        return reverse(points);
+        if (tail != null) {
+            points.put(tail);
+        }
+        return points;
+    }
+
+    private static JSONObject buildRoutePointItem(Cursor cursor, boolean fromLocationSamples)
+            throws JSONException {
+        JSONObject item = new JSONObject();
+        item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
+        item.put("lat", cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")));
+        item.put("lng", cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")));
+        item.put("accuracyM", nullableDouble(cursor, "accuracy_m"));
+        item.put("bearingDeg", nullableDouble(cursor, "bearing_deg"));
+        if (fromLocationSamples) {
+            item.put("speedMps", nullableDouble(cursor, "speed_mps"));
+            item.put("altM", nullableDouble(cursor, "altitude_m"));
+        } else {
+            item.put("speedMps", nullableDouble(cursor, "gps_speed_mps"));
+            item.put("soc", nullableDouble(cursor, "soc"));
+        }
+        return item;
     }
 
     /**
-     * SOC samples for a session, ascending by time. Queries DESC + limit (same window as the route
-     * points) then reverses, so the track and the route stay aligned to the latest samples for
-     * sessions that exceed the bounded limit.
+     * SOC samples for a session, ascending by time, evenly downsampled across the whole session so
+     * the track lines up visually with the full route polyline (not just its tail).
      */
     private static JSONArray socTrackForSessionJson(SQLiteDatabase db, long sessionId, int limit)
             throws JSONException {
-        JSONArray track = new JSONArray();
-        try (Cursor cursor =
-                db.query(
-                        VoltTrackerDb.TABLE_TELEMETRY,
-                        new String[] {"captured_at_ms", "soc"},
-                        "session_id = ? AND soc IS NOT NULL",
-                        new String[] {String.valueOf(sessionId)},
-                        null,
-                        null,
-                        "captured_at_ms DESC",
-                        boundedLimit(limit))) {
-            while (cursor.moveToNext()) {
-                JSONObject item = new JSONObject();
-                item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
-                item.put("soc", cursor.getDouble(cursor.getColumnIndexOrThrow("soc")));
-                track.put(item);
-            }
-        }
-        return reverse(track);
+        return downsampledScalarTrack(
+                db,
+                sessionId,
+                "soc",
+                "session_id = ? AND soc IS NOT NULL",
+                "soc",
+                Math.max(1, Math.min(limit, MAX_TRACK_POINTS)));
     }
 
-    /**
-     * Power-kW samples for a session, ascending by time. DESC + limit then reverse — same pattern
-     * as the route points so the windows align for long sessions.
-     */
+    /** Power-kW samples for a session, downsampled the same way as the SOC and route tracks. */
     private static JSONArray powerTrackForSessionJson(SQLiteDatabase db, long sessionId, int limit)
             throws JSONException {
+        return downsampledScalarTrack(
+                db,
+                sessionId,
+                "power_kw",
+                "session_id = ? AND power_kw IS NOT NULL",
+                "powerKw",
+                Math.max(1, Math.min(limit, MAX_TRACK_POINTS)));
+    }
+
+    private static JSONArray downsampledScalarTrack(
+            SQLiteDatabase db,
+            long sessionId,
+            String column,
+            String where,
+            String jsonKey,
+            int target)
+            throws JSONException {
+        String[] args = {String.valueOf(sessionId)};
+        long total = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, where, args);
+        if (total == 0) {
+            return new JSONArray();
+        }
+        long stride = strideFor(total, target);
         JSONArray track = new JSONArray();
+        JSONObject tail = null;
         try (Cursor cursor =
                 db.query(
                         VoltTrackerDb.TABLE_TELEMETRY,
-                        new String[] {"captured_at_ms", "power_kw"},
-                        "session_id = ? AND power_kw IS NOT NULL",
-                        new String[] {String.valueOf(sessionId)},
+                        new String[] {"captured_at_ms", column},
+                        where,
+                        args,
                         null,
                         null,
-                        "captured_at_ms DESC",
-                        boundedLimit(limit))) {
+                        "captured_at_ms ASC")) {
+            long idx = 0;
             while (cursor.moveToNext()) {
                 JSONObject item = new JSONObject();
                 item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
-                item.put("powerKw", cursor.getDouble(cursor.getColumnIndexOrThrow("power_kw")));
-                track.put(item);
+                item.put(jsonKey, cursor.getDouble(cursor.getColumnIndexOrThrow(column)));
+                if (cursor.isLast()) {
+                    tail = item;
+                    break;
+                }
+                boolean strideKeep = total <= target || idx % stride == 0;
+                boolean withinCap = total <= target || track.length() < target - 1;
+                if (strideKeep && withinCap) {
+                    track.put(item);
+                }
+                idx++;
             }
         }
-        return reverse(track);
+        if (tail != null) {
+            track.put(tail);
+        }
+        return track;
+    }
+
+    private static long strideFor(long total, int target) {
+        if (total <= target || target <= 1) {
+            return 1L;
+        }
+        // The final row is always emitted separately as the "tail" sample, so distribute the
+        // remaining (target - 1) samples evenly across the first (total - 1) cursor positions.
+        return Math.max(1L, (total - 1L) / (long) (target - 1));
     }
 }

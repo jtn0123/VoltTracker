@@ -132,6 +132,8 @@
     VD.setText("gpsState", gps.state || (state.telemetry.latitude ? "locked" : "waiting"));
     VD.setText("dataSourceState", state.demoActive ? "demo" : "real");
     VD.setText("dbState", dbRowCount(storage) ? `${dbRowCount(storage)} rows` : "ready");
+    const appInfo = app.app || {};
+    VD.setText("appVersionFooter", appInfo.version ? `Volt Tracker v${appInfo.version}` : "Volt Tracker");
 
     const primary = el("connectBtn");
     if (!primary) return;

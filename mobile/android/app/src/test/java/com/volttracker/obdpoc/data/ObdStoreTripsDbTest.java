@@ -183,4 +183,68 @@ public class ObdStoreTripsDbTest {
         JSONArray trips = store.getTripsJson(1);
         assertEquals(1, trips.length());
     }
+
+    @Test
+    public void longSessionRouteIsDownsampledAcrossFullTimespan() throws Exception {
+        // Regression: before fix, a session with > 500 GPS samples only surfaced its last 500
+        // points on the dashboard map, hiding the beginning of every long drive.
+        long id = store.startSession("obd", "00:11", "Adapter");
+        int totalSamples = 2000;
+        long firstAtMs = 1000L;
+        long lastAtMs = firstAtMs + (totalSamples - 1L);
+        for (int i = 0; i < totalSamples; i++) {
+            double lat = 32.70 + (i * 0.00001);
+            double lng = -117.10 + (i * 0.00001);
+            store.recordTelemetry(id, gpsSample(40, lat, lng, firstAtMs + i));
+        }
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, lastAtMs + 1L, "");
+
+        JSONObject summary = store.getStorageSummary();
+        JSONArray routes = summary.optJSONArray("recentRoutes");
+        assertNotNull(routes);
+        assertEquals(1, routes.length());
+
+        JSONArray points = routes.getJSONObject(0).optJSONArray("points");
+        assertNotNull(points);
+        // Bounded — never more than the cap.
+        assertTrue(
+                "downsampled points must not exceed 500 (was " + points.length() + ")",
+                points.length() <= 500);
+        // Dense enough to render a meaningful polyline.
+        assertTrue(
+                "downsampled points must keep at least 100 samples (was " + points.length() + ")",
+                points.length() >= 100);
+
+        // Crucially: the first sample is the START of the drive, the last is the END — proving
+        // the renderer no longer truncates from one end.
+        long firstSampleMs = points.getJSONObject(0).optLong("atMs");
+        long lastSampleMs = points.getJSONObject(points.length() - 1).optLong("atMs");
+        assertEquals(
+                "downsampled route must include the very first GPS fix", firstAtMs, firstSampleMs);
+        assertEquals(
+                "downsampled route must include the very last GPS fix", lastAtMs, lastSampleMs);
+    }
+
+    @Test
+    public void shortSessionRouteReturnsEveryPoint() throws Exception {
+        // No downsampling when the session has fewer points than the cap — every fix lands on
+        // the map exactly once.
+        long id = store.startSession("obd", "00:11", "Adapter");
+        double[][] route = {
+            {32.70, -117.10},
+            {32.71, -117.10},
+            {32.72, -117.10},
+            {32.73, -117.10}
+        };
+        for (int i = 0; i < route.length; i++) {
+            store.recordTelemetry(id, gpsSample(40, route[i][0], route[i][1], 1000L + i));
+        }
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 5000L, "");
+
+        JSONObject summary = store.getStorageSummary();
+        JSONArray points =
+                summary.getJSONArray("recentRoutes").getJSONObject(0).getJSONArray("points");
+        assertEquals(
+                "every GPS fix in a short session must survive", route.length, points.length());
+    }
 }

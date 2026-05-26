@@ -4,7 +4,7 @@
     {
       "name": "dashboard",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "mobile/android/app/src/main/assets/dashboard"],
+      "runtimeArgs": ["-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", "mobile/android/app/src/main/assets/dashboard"],
       "port": 8765
     }
   ]
