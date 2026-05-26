@@ -1,6 +1,381 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-05-26)
+
+### Features
+
+- **obd**: Classify connection failures + observability + dashboard troubleshooter
+  ([#131](https://github.com/jtn0123/VoltTracker/pull/131),
+  [`fba1fb7`](https://github.com/jtn0123/VoltTracker/commit/fba1fb7b0d1a0305a151d887963cec4d94dfb641))
+
+* scaffold: connection-hardening mega-PR bucket contracts
+
+Prep commit for the 5-agent split that delivers A1-A9, B1-B10, C1-C10 from the connection-hardening
+  review. Lands the cross-bucket contracts so each agent can work in isolation against a stable
+  surface:
+
+- FailureClass enum (Bucket 1 produces; Buckets 3, 4a consume) - SessionSummary POJO (Bucket 3 owns
+  store; Bucket 4b reads via bridge) - ObdService.broadcastStatus(state, detail, blocked, extras)
+  overload that auto-merges lastFailureClass / lastVoltage / competingApps onto every status
+  payload, so callers don't have to thread them through - VoltBridge stubs in two fenced regions for
+  Buckets 4a and 4b - Empty owned files for each UI bucket: partials, css, js - file_paths.xml entry
+  for Bucket 3's diagnostics zip cache - docs/connect-hardening-buckets.md spelling out file
+  ownership rules
+
+No behavior change — the new fields are null/empty by default and the new JS files are no-op IIFEs.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+* obd: rolling app log, session summary store, diagnostics share, crash-safe flush
+
+Bucket 3 of the connection-hardening mega-PR — the logging plumbing so a future "why couldn't I
+  connect" takes one share intent and one zip, not three ADB pulls and a dumpsys correlation.
+
+A9 — ObdSessionLog.writeDurable() that fsyncs the underlying FD after flush. Routed via
+  SessionRecorder.logJson for "error" type rows only; routine telemetry stays on the buffered path
+  so the poll loop isn't blocked on disk on every sample.
+
+B1 — RollingAppLog at files/app-log/app.log with 7-day rotation (one rolled file, app.log.1).
+  Thread-safe, append-only, swallow-on-IOException so a full disk doesn't tear down the calling
+  thread.
+
+B2 — SystemSnapshot.collect(ctx, summaryStore) builds a JSONObject with Android SDK/release, device
+  model, app versionName/versionCode, BT adapter state, process uptime, and lastSuccessfulSessionMs
+  read from the summary store. Logged as a system_snapshot event on every session_start so a future
+  diagnosis sees the device's actual state without correlating other logs.
+
+B8 — SessionSummaryStore: append-only sessions-summary.jsonl at files/obd-logs/,
+  recordStart/recordEnd lifecycle, 100-session retention with head-truncate on overflow,
+  getRecent(n) newest-first. Process-wide singleton via getInstance(filesDir) — Bucket 4b reads via
+  VoltBridge.
+
+B9 — OBDLog gains warn()/error() and mirror(RollingAppLog) so the install hook in
+  ObdService.onCreate tees every event/warn/error to the rolling log. LogcatMirror is the explicit
+  wrapper for callers that prefer Log.x(tag, msg) ergonomics over the structured event() helper.
+
+B10 — DiagnosticsShareIntent.buildIntent(ctx): zips the most recent 5 per-session JSONLs + the live
+  & rolled app logs + sessions-summary.jsonl, hands the zip to FileProvider, returns an ACTION_SEND
+  intent ready for Intent.createChooser. Stale zips in cacheDir/diagnostics are cleared on each call
+  so the cache doesn't accumulate one per share.
+
+Wiring into existing files (kept surgical):
+
+SessionRecorder constructor — new overload that takes a SessionSummaryStore + a SystemSnapshotSource
+  supplier; the 3-arg constructor delegates with nulls so existing tests keep compiling.
+
+SessionRecorder.openSession — after the existing session_start event, calls summaryStore.recordStart
+  and logs the system_snapshot event.
+
+SessionRecorder.closeSession — after the existing session_end event, calls summaryStore.recordEnd
+  with an outcome derived from the lifecycle state and a coarse failureClass (Bucket 1's classifier
+  will write finer-grained values into the per-session log; the summary file uses the lifecycle
+  state for now).
+
+SessionRecorder.logJson — "error" rows go through writeDurable instead of write so the fsync lands
+  before the line could be lost to a crash.
+
+ObdService.onCreate — instantiates the rolling log, installs the OBDLog.mirror, builds the summary
+  store, and passes both into the SessionRecorder constructor. No other onCreate or service changes.
+
+Tests cover SessionSummaryStore roundtrip + retention + getRecent ordering; RollingAppLog write +
+  7-day rotation including overwrite-of-prior-rolled-file; DiagnosticsShareIntent zip contents +
+  5-file cap + stale cleanup (Robolectric for Context); ObdSessionLog writeDurable path;
+  SystemSnapshot key shape + lastSuccessfulSessionMs resolution; OBDLog mirror install/detach.
+
+308 of 309 unit tests pass. The one failure (VoltBridgeTest
+  .allExpectedBridgeMethodsExistAndAreAnnotated) is pre-existing on the scaffold commit — the
+  scaffold added 7 stub bridge methods that aren't yet in the test's EXPECTED_BRIDGE_METHODS set,
+  and Bucket 4a/4b will update it when they fill in the stubs.
+
+* obd: bluetooth observability — preflight, SDP, competing apps, voltage
+
+Adds the Bucket 2 helpers from the connection-hardening mega-PR split:
+
+- BluetoothStateReporter: receiver for ACL_DISCONNECTED, BOND_STATE_CHANGED, ACL_CONNECTED, UUID,
+  ADAPTER_STATE_CHANGED. Logs into the active session. - SdpProbe: refreshes UUID cache on second
+  consecutive failure via device.fetchUuidsWithSdp() + ACTION_UUID listener. - CompetingAppDetector:
+  enumerates installed BT-OBD apps at session start and calls service.setCompetingApps() so the
+  dashboard can surface 'force-stop' buttons. - VoltageProbe: emits control_module_voltage event
+  when Mode 01 PID 42 responses come through; calls service.setLastVoltage() so subsequent status
+  broadcasts include the field.
+
+Also adds bond+SDP snapshot logging on every connect attempt (event bond_sdp_snapshot) and
+  pre-flight check logging (event bluetooth_preflight).
+
+Committed by parent agent — Bucket 2 agent crashed with API socket error after completing the work
+  but before commit. Work was inspected and verified to compile (./gradlew
+  :app:compileDebugJavaWithJavac BUILD SUCCESSFUL). The agent's own unit tests all pass.
+
+* engine: classify connection failures + adaptive retry + timing
+
+Bucket 1 of the connection-hardening split. Implements the engine-side contract: failure
+  classification, adaptive retry on wedged-adapter signature, phased socket-open timing, and
+  wake-nudge probe.
+
+A1 — split bluetooth_socket_open into socket_open_attempt + socket_open_result {durationMs, ok,
+  errorPhase, rfcommConnectMs, getStreamsMs, firstReadMs} so post-hoc triage can tell connect /
+  get-streams / first-read failures apart.
+
+A2 — new ConnectionFailureClassifier maps IOException + phase + timing to a FailureClass:
+  instant_drop, connect_timeout, sdp_failure, bt_off, bond_lost, remote_refused, unknown. Each
+  classification is stamped on the engine's reconnect / reconnect_exhausted events and pushed to
+  ObdService.setLastFailureClass for the status broadcast.
+
+A3 — adaptive retry: two consecutive instant_drops <500 ms each flip the engine into long-backoff
+  mode (8 s, 12 s on attempts 3-4) and emit a wedged_suspected event. Standard exponential ramp
+  still terminates attempts 5-6 so MAX_RECONNECT_ATTEMPTS still applies.
+
+A4 — new ElmConnection.wakeNudge() sends a single \r with a 200 ms tolerance read before ATZ. Wedged
+  adapters surface the first-read failure here rather than during initializeElm327, which keeps the
+  errorPhase label on the right operation. Logged as wake_nudge.
+
+B3 — ElmConnection.open() records rfcommConnectMs + getStreamsMs; wakeNudge() records firstReadMs.
+  All three roll up into socket_open_result.
+
+B6 — reconnect / reconnect_exhausted payloads now carry exceptionClass + stackHead (first 5 frames,
+  1000 char cap) alongside the existing safeMessage(ex) so debugging doesn't depend on the
+  unstructured "error" row.
+
+Adds FailureClass enum and setLastFailureClass/clearLastFailureClass on ObdService (the spec said a
+  prep commit had wired these but they weren't present on this branch — added minimally so other
+  buckets can read them).
+
+Tests: ConnectionFailureClassifierTest (13) drives every heuristic branch on the host JVM.
+  ObdPollingEngineBackoffTest (11) is a decision-table test for computeBackoffMs + the
+  exception-fingerprint helpers, including the user's reproducer (two instant_drops -> 8 s backoff).
+  ObdPollingEngineTest's FakeElmConnection overrides wakeNudge() with a no-op so the existing
+  connect/poll/reconnect tests keep working.
+
+Build: ./gradlew :app:compileDebugJavaWithJavac :app:spotlessCheck :app:testDebugUnitTest — all
+  green, 294 tests pass, 0 failures.
+
+* ux: failure-class error copy, troubleshooter modal, retry-cancel button
+
+Bucket 4a — connection-hardening UX.
+
+JS / dashboard - New troubleshooter modal (`partials/troubleshooter.html`, `js/troubleshooter.js`,
+  `css/troubleshooter.css`) with three collapsible steps: wake the car, power-cycle the adapter,
+  stop competing apps. Step 3 stays hidden until the status payload carries a non-empty
+  `competingApps` CSV. - Auto-open the modal after 2 consecutive failed sessions or 3 retries within
+  a single session burst. - C1: render failure-class-specific copy into the existing error banner
+  for INSTANT_DROP, CONNECT_TIMEOUT, SDP_FAILURE, BT_OFF, BOND_LOST, REMOTE_REFUSED. Unknown /
+  missing falls through to the generic copy. All strings live in `troubleshooter.js`, not in the
+  partial. - C6: while a retry burst is in flight (`connecting` + detail contains "retrying"),
+  surface a Cancel button in the banner. Click forwards to `VoltTrackerAndroid.cancelRetry()`. Bound
+  via a surgical IIFE at the bottom of `panels.js`. - A8: when `getRecentSessions(3)` shows three
+  consecutive failures, the modal's primary action swaps to "Forget adapter & re-pair" which opens
+  Android Bluetooth settings. The Bucket 4b stub still returns `[]`, so the code path is dormant for
+  now.
+
+Android side - New BUCKET 4a region on `VoltBridge`: `getRecentSessions` (stub), `forceStopPackage`,
+  `cancelRetry`, `tryReconnectNow`, `openBluetoothSettings`. - `forceStopPackage` uses
+  ActivityManager#killBackgroundProcesses and returns true only when the package is actually
+  installed. - `cancelRetry` dispatches `ObdService.ACTION_CANCEL_RETRY` which flips a new `volatile
+  boolean cancelRetryRequested` flag on the service plus a `requestCancelRetry()` setter. Bucket 1's
+  polling engine reads the flag between retry attempts. Flag is cleared at the start of every new
+  connect/scan session so stale cancels don't suppress fresh retries. - New helpers on
+  `MainActivity`: `forceStopPackageFromBridge`, `cancelRetryFromBridge`,
+  `openBluetoothSettingsFromBridge`. - `VoltBridgeTest` ABI pin extended with the five new bridge
+  methods.
+
+Generated `assets/dashboard/index.html` regenerated via `generateDashboardHtml`.
+
+* ux: last-connected badge, adapter health, test connection, diagnostics share
+
+Bucket 4b — completes the connection-hardening dashboard. Implements the status & proactive tools
+  that consume the signals the earlier buckets emit:
+
+- C2 last-connected badge in the topbar — reads SessionSummaryStore via
+  VoltTrackerAndroid.getRecentSessions(1) and formats the most recent endMs as a relative time. - C5
+  test-connection mode — one-shot ATZ + 0100 + voltage probe against the last-known adapter;
+  MainActivity schedules a stopObdService after 8s so a probe does not commit to a full logging
+  session. - C7 send-diagnostics — invokes Bucket 3's DiagnosticsShareIntent and launches the system
+  chooser. Bound on both the new Diag-tab tools panel and the existing storage panel as a shortcut.
+  - C8 adapter health pill — green/amber/red badge driven by last 5 session outcomes. Tooltip lists
+  the raw outcome sequence. - C9 low-voltage hint — reads lastVoltage off every status broadcast;
+  warn tone at <12.5 V, bad tone at <12.2 V. - C10 notify-when-ready toggle — Handler.postDelayed
+  loop that re-runs the test-connection probe every 30s for up to 30 min and posts a notification on
+  first response.
+
+Adds the four bridge stubs (getRecentSessions, shareDiagnostics, startTestConnection,
+  scheduleAdapterReadyNotify) on MainActivity behind the BUCKET 4b region in VoltBridge, and extends
+  the VoltBridgeTest ABI pin so the dashboard surface stays locked.
+
+* fix: untrack repo-root local.properties
+
+Accidentally committed when Bucket 2's cherry-picked worktree wrote local.properties to the repo
+  root instead of mobile/android/ (where the existing .gitignore already covers it). Untrack +
+  extend the top-level .gitignore so future cherry-picks can't repeat the mistake.
+
+* polish: wire the 10 code-review findings end-to-end
+
+Code-review pass found that several visible features wired across the bucket split didn't actually
+  work end-to-end. This commit closes the loops.
+
+1. ObdPollingEngine now reads service.cancelRetryRequested after each backoff sleep and bails out of
+  the retry burst with a logged retry_cancelled_by_user event + 'idle: Retry cancelled.' broadcast.
+  The flag is also cleared on successful connect so a stale request doesn't suppress a fresh user
+  retry.
+
+2. MainActivity.onDestroy drains both adapterReadyHandler and the new testConnectionStopHandler so
+  pending Runnables can't fire on a destroyed Activity.
+
+3. New VoltBridge.cancelAdapterReadyNotify + MainActivity helper. The JS toggle's unchecked path now
+  calls it so probes stop immediately instead of running until the deadline.
+
+4. MainActivity.onAdapterStatusForReadyNotify observes the existing status broadcasts; the first
+  'connected' state during a notify schedule posts a system notification on the OBD channel and
+  tears the schedule down. Uses a stable ADAPTER_READY_NOTIFICATION_ID so re-firing replaces rather
+  than stacks.
+
+5. ObdService.startObdSession now refreshes the competing-app detector on every session start. Apps
+  installed after process start (e.g. the user grabs Voltage from Play Store between sessions) now
+  appear in the competingApps status field on the next attempt.
+
+6. startTestConnectionFromBridge reuses a single testConnectionStopHandler and removes pending
+  callbacks before posting the next stop, so the C10 periodic tick can't accumulate orphaned
+  stopObdService Runnables.
+
+7. troubleshooter.js refreshStuckBondSuggestion guards typeof VD.parsePayload and falls back to
+  JSON.parse + Array.isArray so the A8 stuck-bond flow survives a missing/renamed parsePayload
+  helper instead of silently degrading to the retry-only path.
+
+8. VoltageProbe lowers the plausibility floor from 4.0 V to 0.0 V so the C9 low-voltage hint can
+  actually fire on a dying 12 V battery (the case it was built for). VoltageProbeTest renamed
+  rejectsImplausiblyLowVoltage -> acceptsLowVoltageReadingForC9Hint and asserts 0.001 V is now
+  accepted.
+
+9. SessionRecorder.closeSession gains a 5-arg overload taking the FailureClass from
+  ObdService.lastFailureClass(). The session summary rollup now records Bucket 1's wireName()
+  (instant_drop / connect_timeout / sdp_failure / …) instead of the coarse 'error' string, so the
+  adapter-health pill (C8) and future trend analysis keep the fine-grained classification.
+
+10. VoltageProbe.DEFAULT_TIMEOUT_MS lowered from 2500 ms to 1000 ms. The probe still blocks the
+  engine thread synchronously by design, but cuts worst-case first-poll delay by 1.5 s.
+
+Bridge ABI pin (VoltBridgeTest) updated for the new cancelAdapterReady-Notify method.
+  ObdNotifications.CHANNEL_ID widened from private to package-visible so MainActivity can post on
+  the same notification channel without a builder dance.
+
+All 357 unit tests pass. assembleDebug succeeds.
+
+* polish 2: close 7 gaps from second code-review pass
+
+The second review found that several fixes from the first polish either left orphaned state behind
+  or introduced new bugs. This commit closes those gaps.
+
+1. MainActivity.startObdService now clears any pending stop on testConnectionStopHandler before
+  starting a fresh service. Without this, a 30 s notify-when-ready tick that fired a probe at t=0
+  would queue a stopObdService at t=8s; if the user manually started a real logging session at t=3s,
+  the orphaned probe-stop would tear the manual session down 5 s later.
+
+2. The C10 adapter-ready notification gains a PendingIntent that opens MainActivity. Tap on the
+  notification now actually launches the app instead of dismissing silently.
+
+3. Before posting the adapter-ready notification on API 33+, check POST_NOTIFICATIONS at runtime.
+  Without the permission the post() silently fails — now we log it and cancel the schedule so the
+  user isn't stuck in a 'checking…' loop forever.
+
+4. ObdNotifications.ensureChannel(Context) added as a static, idempotent helper called from both
+  ObdService.onCreate and MainActivity.onCreate. The channel exists by the time MainActivity tries
+  to post the adapter- ready notification even if the foreground service has never run yet (the user
+  could enable notify-when-ready on a cold start).
+
+5. New probeInFlight gate on the notify path. The earlier polish gated only on adapterReadyActive,
+  so a 'connected' broadcast for an unrelated user-initiated session that happened to land while the
+  schedule was active would fire the notification. Now the gate is set in
+  startTestConnectionFromBridge and cleared by the auto-stop or by
+  cancelAdapterReadyNotifyFromBridge, so the notification only fires for actual probe-driven
+  connections.
+
+6. ObdService.startObdSession offloads competingAppDetector.refresh() onto a one-shot worker thread.
+  The previous polish called it inline from onStartCommand → main thread →
+  PackageManager.getInstalledApps IPC, which on devices with many apps can ANR.
+
+7. ObdPollingEngine adds a cancelRetryRequested check at the top of the reconnect loop (in addition
+  to the existing post-sleep check), so a cancel that arrives during a slow connectAndInitialize
+  (which can block 5-10s on a wedged adapter) is honored on the very next iteration rather than
+  after the doomed attempt completes.
+
+* chore: spotless format + manifest permissions for forceStop + competing-app queries
+
+Pre-PR CI fixes:
+
+- spotlessApply across 8 files modified by the bucket polish commits; no semantic changes, just
+  gradle's preferred Java + HTML formatting. - AndroidManifest gains KILL_BACKGROUND_PROCESSES (used
+  by Bucket 4a's MainActivity.forceStopPackage to terminate competing BT-OBD apps from the
+  troubleshooter — Android Lint flagged this as MissingPermission). - AndroidManifest gains a
+  <queries> block listing the five known BT-OBD packages (Voltage, Torque variants, Gretio). Android
+  11+'s package visibility model would otherwise hide them from
+  PackageManager.getInstalledApplications, breaking Bucket 2's CompetingAppDetector — we'd rather
+  list specific packages than pull in the Play-Store-restricted QUERY_ALL_PACKAGES.
+
+All 357 unit tests pass, lint clean, spotless clean, dashboard tests 18/18 green, JaCoCo coverage
+  thresholds met.
+
+* fix(test): pin Robolectric @Config(sdk=34) on new BT-observability tests
+
+CI failed on unit-tests because BluetoothStateReporterTest and CompetingAppDetectorTest were missing
+  the @Config(sdk = 34) annotation that every other Robolectric test in this module carries. Project
+  targetSdk is 36 and Robolectric 4.x ships SDK 34 as its newest, so on Robolectric's CI environment
+  the test runner tried to load an SDK it doesn't have and threw UnsupportedOperationException at
+  DefaultSdkProvider.java:170 — preventing any tests in those two classes from running.
+
+Locally on a JDK 24 environment Robolectric's fallback behavior masked this. CI runs JDK 17 + a
+  cleaner Robolectric cache and hit it cleanly.
+
+Both tests now pass: BluetoothStateReporterTest 5/5, CompetingAppDetectorTest 9/9.
+
+* fix: address CodeRabbit review — API 23 crash, rotation anchor, manifest queries, lifecycle
+  isolation, +9 more
+
+Addresses 13 of 17 CodeRabbit findings on PR #131. The remaining 4 are nitpicks the team has
+  reviewed and intentionally skipped (intentional fallback copy, intentional log swallow,
+  partial-update defensive code, ABI signature pinning — name pin is sufficient for now).
+
+Critical: - MainActivity.onAdapterStatusForReadyNotify gates the Notification.Builder(Context,
+  channelId) constructor behind Build.O — it would crash on API 23–25 (minSdk=23) before this.
+  Mirrors the same gate already used in ObdNotifications.build().
+
+Major: - AndroidManifest <queries> block now includes com.pnn.obdcardoctor, com.ovz.carscanner,
+  com.outils.obd2 — without them Android 11+'s package visibility hid those apps from
+  getInstalledApplications and CompetingAppDetector's force-stop UX would silently miss them. -
+  BluetoothStateReporter.handleStatusBroadcast resets the failure streak whenever the incoming state
+  is NOT 'connecting + failureClass', not just on non-'connecting' states. The old branch left a
+  stale streak across 'connecting+failure → connecting+null → connecting+failure' sequences and
+  would fire a spurious SDP refresh on non-consecutive failures. - RollingAppLog rotation is now
+  anchored to a stable born-marker sidecar (files/app-log/app.log.born) instead of
+  liveFile.lastModified. Appending updates mtime, so under the old check an actively-used log would
+  never reach ROTATE_AGE_MS and rotation would never fire. Rotation tests now advance the simulated
+  clock instead of using setLastModified. - SessionRecorder wraps the optional summaryStore +
+  snapshotSource hooks (both at session start and session end) in local try/catch so a failure in
+  observability plumbing cannot interrupt the core .jsonl session row or database session lifecycle.
+  - ObdService.closeSessionLog now clears lastFailureClass after closeSession returns, so the next
+  session doesn't inherit a stale classification through the auto-merge in broadcastStatus(). -
+  docs/connect-hardening-buckets.md: failureClass wire format is fc.wireName() (snake_case
+  'instant_drop'), not fc.name() (uppercase).
+
+Minor: - connection-status.js low-voltage thresholds bumped to mirror
+  VehicleStateClassifier.LOW_BATTERY_VOLTS (12.7) — the previous 12.5 warn floor left a 12.5–12.7 V
+  gap where the backend flagged low but the UI hid the hint. - connection-tools.js writes the
+  clamped notify-when-ready minutes back into the input so the UI never shows 999 when the bridge
+  applied 30. - panels.js retry-cancel button no longer enters the 'Cancelling…' UI state when
+  bridge.cancelRetry is unavailable. - troubleshooter.js force-stop catch binding renamed err →
+  ignored to match the eslint allowed-unused-catch pattern (clears the dashboard lint warning). -
+  ObdSessionLogTest replaces Thread.sleep(2) with a deterministic wait-for-tick loop so reopen()
+  always sees a distinct currentTimeMillis on coarse-clock CI runners.
+
+New test: - BluetoothStateReporterTest gets a regression for the streak-reset fix.
+
+All 358 unit tests pass (+1 from the regression). 18/18 dashboard tests pass. Spotless + Android
+  Lint + JS lint all clean against baseline.
+
+---------
+
+Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+
 ## v0.2.1 (2026-05-24)
 
 ### Bug Fixes
