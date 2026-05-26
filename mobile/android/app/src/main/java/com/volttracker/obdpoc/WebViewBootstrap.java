@@ -47,17 +47,36 @@ final class WebViewBootstrap {
                 new WebChromeClient() {
                     @Override
                     public boolean onConsoleMessage(ConsoleMessage message) {
-                        if (message != null
-                                && message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
-                            Log.e(
-                                    MainActivity.TAG,
-                                    "dashboard console: "
-                                            + message.message()
-                                            + " ("
-                                            + message.sourceId()
-                                            + ":"
-                                            + message.lineNumber()
-                                            + ")");
+                        if (message == null) {
+                            return true;
+                        }
+                        // Log every level (not just ERROR) so dashboard JS warnings/info from
+                        // bindListenerGuarded() and friends actually surface in adb logcat.
+                        // Returning true suppresses the WebView's default chromium log line,
+                        // so this is the ONLY surface for non-error dashboard console output.
+                        String line =
+                                "dashboard console: "
+                                        + message.message()
+                                        + " ("
+                                        + message.sourceId()
+                                        + ":"
+                                        + message.lineNumber()
+                                        + ")";
+                        switch (message.messageLevel()) {
+                            case ERROR:
+                                Log.e(MainActivity.TAG, line);
+                                break;
+                            case WARNING:
+                                Log.w(MainActivity.TAG, line);
+                                break;
+                            case DEBUG:
+                                Log.d(MainActivity.TAG, line);
+                                break;
+                            case TIP:
+                            case LOG:
+                            default:
+                                Log.i(MainActivity.TAG, line);
+                                break;
                         }
                         return true;
                     }

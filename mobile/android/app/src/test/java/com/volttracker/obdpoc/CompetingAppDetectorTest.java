@@ -75,7 +75,11 @@ public class CompetingAppDetectorTest {
     }
 
     @Test
-    public void detectsByNameHintWhenNotOnAllowlist() {
+    public void doesNotDetectNonAllowlistedPackagesEvenIfTheirNamesSuggestObd() {
+        // Earlier versions ran a substring-match second pass for "obd"/"elm327"; that pass was
+        // dead on Android 11+ (getInstalledApplications only returns packages the manifest
+        // <queries> block lists) and has been removed. Non-allowlist packages stay invisible
+        // even when their names look OBD-flavored.
         CompetingAppDetector d =
                 withInstalled(
                         "com.volttracker.obdpoc",
@@ -83,15 +87,13 @@ public class CompetingAppDetectorTest {
                                 info("com.android.chrome"),
                                 info("com.example.someobdhelper"),
                                 info("net.fake.elm327scanner")));
-        List<String> detected = d.detect();
-        // Both should match by hint; preserve insertion order.
-        assertEquals(
-                Arrays.asList("com.example.someobdhelper", "net.fake.elm327scanner"), detected);
+        assertTrue(d.detect().isEmpty());
     }
 
     @Test
-    public void skipsOwnPackageEvenWhenNameMatchesHint() {
-        // The app's own package literally contains "obd" — must never appear in the CSV.
+    public void skipsOwnPackageEvenWhenItMatchesTheAllowlistPrefixCheck() {
+        // The app's own package literally contains "obd" — must never appear in the CSV even
+        // if a future allowlist entry collided with our package name.
         CompetingAppDetector d =
                 withInstalled(
                         "com.volttracker.obdpoc",
@@ -102,22 +104,20 @@ public class CompetingAppDetectorTest {
     }
 
     @Test
-    public void allowlistEntriesAppearBeforeHintMatches() {
+    public void allowlistEntriesAreReturnedInDeclarationOrder() {
         CompetingAppDetector d =
                 withInstalled(
                         "com.volttracker.obdpoc",
                         Arrays.asList(
-                                info("com.example.obdhelper"),
+                                info("com.example.obdhelper"), // not on allowlist — ignored
                                 info("io.tripovan.voltage"),
                                 info("org.prowl.torque")));
         List<String> detected = d.detect();
-        assertEquals(
-                Arrays.asList("io.tripovan.voltage", "org.prowl.torque", "com.example.obdhelper"),
-                detected);
+        assertEquals(Arrays.asList("io.tripovan.voltage", "org.prowl.torque"), detected);
     }
 
     @Test
-    public void ignoresPackagesWithoutObdSignal() {
+    public void ignoresPackagesNotOnAllowlist() {
         CompetingAppDetector d =
                 withInstalled(
                         "com.volttracker.obdpoc",
@@ -129,17 +129,15 @@ public class CompetingAppDetectorTest {
     }
 
     @Test
-    public void deduplicatesAcrossAllowlistAndHintPaths() {
-        // io.tripovan.voltage is on the allowlist; its name doesn't contain "obd" so the hint pass
-        // shouldn't add it again. Just confirms the LinkedHashSet de-duplication works.
+    public void allowlistMatchesAreUnique() {
+        // Trivial de-duplication coverage: an unrelated package alongside an allowlist entry
+        // returns exactly one detection.
         List<ApplicationInfo> installed = new ArrayList<>();
         installed.add(info("io.tripovan.voltage"));
         installed.add(info("org.fake.has-obd-in-name"));
         CompetingAppDetector d = withInstalled("com.volttracker.obdpoc", installed);
         List<String> detected = d.detect();
-        assertEquals(2, detected.size());
-        assertEquals("io.tripovan.voltage", detected.get(0));
-        assertEquals("org.fake.has-obd-in-name", detected.get(1));
+        assertEquals(Collections.singletonList("io.tripovan.voltage"), detected);
     }
 
     @Test

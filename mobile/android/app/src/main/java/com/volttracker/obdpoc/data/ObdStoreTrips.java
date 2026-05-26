@@ -10,8 +10,9 @@ import static com.volttracker.obdpoc.data.ObdStoreSupport.countRowsWhere;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.distanceMeters;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.getRecentSessions;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.maxIntForSession;
+import static com.volttracker.obdpoc.data.ObdStoreSupport.maxIntForSessionBoxed;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableDouble;
-import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableInt;
+import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableIntBoxed;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.parseObject;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.reverse;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.sessionToJson;
@@ -81,7 +82,12 @@ final class ObdStoreTrips {
         trip.put("endedAtMs", endedAtMs);
         trip.put("durationMs", durationMs);
         trip.put("distanceMeters", distanceMeters(points));
-        trip.put("maxSpeedKph", maxIntForSession(db, "speed_kph", session.id));
+        // Boxed so a trip with no accepted speed samples (e.g. all-sentinel charging session)
+        // projects as JSON null instead of 0, letting the dashboard render "--" instead of
+        // "0 mph". Numeric callers like insightsJson use optInt with a 0 default, so the
+        // existing math still degrades gracefully.
+        Integer maxSpeed = maxIntForSessionBoxed(db, "speed_kph", session.id);
+        trip.put("maxSpeedKph", maxSpeed == null ? JSONObject.NULL : maxSpeed);
         trip.put("avgMovingSpeedKph", avgMovingSpeedKph(db, session.id));
         trip.put("sampleCount", usefulSamples);
         trip.put("pointCount", points.length());
@@ -535,7 +541,10 @@ final class ObdStoreTrips {
                 JSONObject rawJson =
                         parseObject(cursor.getString(cursor.getColumnIndexOrThrow("json")));
                 item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
-                item.put("speedKph", nullableInt(cursor, "speed_kph"));
+                // Boxed so SQL NULL projects as JSON null (not 0) — see ObdStoreReports for
+                // context.
+                Integer boxedSpeed = nullableIntBoxed(cursor, "speed_kph");
+                item.put("speedKph", boxedSpeed == null ? JSONObject.NULL : boxedSpeed);
                 item.put(
                         "state",
                         clean(cursor.getString(cursor.getColumnIndexOrThrow("vehicle_state"))));

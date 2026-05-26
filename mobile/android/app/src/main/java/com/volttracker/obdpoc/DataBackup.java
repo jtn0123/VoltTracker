@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.UUID;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -97,7 +98,9 @@ final class DataBackup {
      * database. Returns the verified file (caller owns deleting it), or null.
      */
     File stageRestoreFile(Uri uri) {
-        File temp = new File(context.getCacheDir(), "restore-tmp.db");
+        // UUID-suffixed name so two concurrent restore picks (split-screen, share-sheet retry
+        // mid-stage) can't race for the same temp file.
+        File temp = new File(context.getCacheDir(), "restore-" + UUID.randomUUID() + ".db");
         try (InputStream in = context.getContentResolver().openInputStream(uri);
                 FileOutputStream out = new FileOutputStream(temp)) {
             if (in == null) {
@@ -126,8 +129,13 @@ final class DataBackup {
             return;
         }
         for (File file : existing) {
-            // Backups are transient hand-off copies; keep only the freshest one.
-            file.delete();
+            // Backups are transient hand-off copies; keep only the freshest one. Filter on the
+            // filename pattern so unrelated files that happen to land in this dir (e.g. anything
+            // a future feature might cache here) aren't blown away on every backup.
+            String name = file.getName();
+            if (name.startsWith("volttracker-backup-") && name.endsWith(".db")) {
+                file.delete();
+            }
         }
     }
 
@@ -173,6 +181,10 @@ final class DataBackup {
             while ((read = in.read(buffer)) > 0) {
                 out.write(buffer, 0, read);
             }
+            // fsync so a process death immediately after this copy can't leave a truncated
+            // file on disk. The next launch would otherwise treat the partial copy as the
+            // live DB and corrupt user data on the first migration / write.
+            out.getFD().sync();
         }
     }
 

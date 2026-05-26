@@ -157,13 +157,53 @@
     });
     if (!recorded.length) return null;
     const r = recorded[0];
-    const mi = Number(r.distanceM) / 1609.34;
+    const mi = Number(r.distanceMeters) / 1609.34;
     return {
       tone: "ok",
       label: "Last drive",
-      meta: [fmtChipDate(r.endedAtMs || r.startedAtMs), mi.toFixed(1) + " mi"],
+      meta: [
+        fmtChipDate(r.endedAtMs || r.startedAtMs),
+        Number.isFinite(mi) ? mi.toFixed(1) + " mi" : "--"
+      ],
       isLink: true
     };
+  }
+
+  // Build via DOM APIs (textContent) instead of innerHTML string-concat so the
+  // user-controlled Bluetooth `adapter.name` (which lands in `c.meta` via
+  // deriveLiveChip()) can never be reinterpreted as markup.
+  function buildDriveNowChip(c) {
+    const root = document.createElement(c.isLink ? "button" : "div");
+    root.className = "map-drive-chip drive-now-chip";
+    if (c.isLink) {
+      root.type = "button";
+      root.dataset.navJump = "map";
+    } else {
+      root.setAttribute("role", "status");
+      root.setAttribute("aria-live", "polite");
+    }
+    root.dataset.tone = c.tone;
+
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "dl";
+    labelSpan.appendChild(document.createElement("u"));
+    labelSpan.appendChild(document.createTextNode(c.label));
+
+    const metaSpan = document.createElement("span");
+    metaSpan.className = "dm";
+    c.meta.forEach((m, i) => {
+      if (i > 0) {
+        const sep = document.createElement("span");
+        sep.textContent = "·";
+        metaSpan.appendChild(sep);
+      }
+      const cell = document.createElement(i === 0 ? "b" : "span");
+      cell.textContent = String(m == null ? "" : m);
+      metaSpan.appendChild(cell);
+    });
+
+    root.append(labelSpan, metaSpan);
+    return root;
   }
 
   function renderDriveNowChips() {
@@ -173,39 +213,7 @@
     chips.push(deriveLiveChip());
     const last = deriveLastDriveChip();
     if (last) chips.push(last);
-
-    host.innerHTML = chips
-      .map((c) => {
-        const tag = c.isLink ? "button" : "div";
-        const type = c.isLink ? ' type="button"' : "";
-        const attrs = c.isLink
-          ? ' data-nav-jump="map"'
-          : ' role="status" aria-live="polite"';
-        const meta = c.meta
-          .map((m, i) => (i === 0 ? "<b>" + m + "</b>" : "<span>" + m + "</span>"))
-          .join("<span>·</span>");
-        return (
-          "<" +
-          tag +
-          ' class="map-drive-chip drive-now-chip"' +
-          type +
-          ' data-tone="' +
-          c.tone +
-          '"' +
-          attrs +
-          ">" +
-          '<span class="dl"><u></u>' +
-          c.label +
-          "</span>" +
-          '<span class="dm">' +
-          meta +
-          "</span>" +
-          "</" +
-          tag +
-          ">"
-        );
-      })
-      .join("");
+    host.replaceChildren(...chips.map(buildDriveNowChip));
   }
 
   // ----- live speed trace ---------------------------------------------------
@@ -214,7 +222,7 @@
   // We pad missing samples on the left so a fresh session doesn't squish the
   // last few samples into the rightmost pixel.
   function speedLinePath(samples, w, h, padT, padB) {
-    if (!samples.length) return "";
+    if (!samples.length) return { d: "", maxMph: 0 };
     const maxMph = Math.max(40, ...samples) * 1.1;
     const cap = Math.max(48, samples.length);
     const stride = w / Math.max(1, cap - 1);

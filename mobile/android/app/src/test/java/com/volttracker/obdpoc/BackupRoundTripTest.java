@@ -348,20 +348,27 @@ public class BackupRoundTripTest {
     }
 
     @Test
-    public void unrelatedFileCleanedUpOnBuildBackup() throws IOException {
-        // buildBackupFile clears the backups dir before each build — drop a sentinel into the dir
-        // ahead of time and confirm it doesn't survive the next build.
+    public void buildBackupClearsPreviousBackupButLeavesUnrelatedFiles() throws IOException {
+        // buildBackupFile must drop only its own previous output (`volttracker-backup-*.db`).
+        // Anything else dropped into the same dir by other code (or by a future feature) has to
+        // survive — without this filter we'd silently wipe unrelated caches every backup.
         File backupsDir = new File(context.getCacheDir(), "backups");
         assertTrue(backupsDir.mkdirs() || backupsDir.isDirectory());
-        File sentinel = new File(backupsDir, "leftover.db");
-        try (FileWriter writer = new FileWriter(sentinel)) {
-            writer.write("stale");
+        File priorBackup = new File(backupsDir, "volttracker-backup-19700101-000000.db");
+        try (FileWriter writer = new FileWriter(priorBackup)) {
+            writer.write("stale-backup");
         }
-        assertTrue(sentinel.exists());
+        File unrelated = new File(backupsDir, "leftover.db");
+        try (FileWriter writer = new FileWriter(unrelated)) {
+            writer.write("not-a-backup");
+        }
+        assertTrue(priorBackup.exists());
+        assertTrue(unrelated.exists());
 
         store.startSession("obd", "AA:BB:CC", "Adapter", 1_000L);
         File backup = dataBackup.buildBackupFile(store);
         assertNotNull(backup);
-        assertFalse("stale file should have been cleared", sentinel.exists());
+        assertFalse("prior backup should be cleared", priorBackup.exists());
+        assertTrue("unrelated file should NOT be cleared", unrelated.exists());
     }
 }

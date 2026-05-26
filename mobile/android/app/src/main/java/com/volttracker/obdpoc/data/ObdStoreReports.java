@@ -11,7 +11,8 @@ import static com.volttracker.obdpoc.data.ObdStoreSupport.getRecentSessions;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.maxDouble;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.maxInt;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableDouble;
-import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableInt;
+import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableDoubleBoxed;
+import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableIntBoxed;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableLong;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.parseObject;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.readAdapterHistory;
@@ -495,14 +496,24 @@ final class ObdStoreReports {
             item.put(
                     "vehicleState",
                     clean(cursor.getString(cursor.getColumnIndexOrThrow("vehicle_state"))));
-            item.put("speedKph", nullableInt(cursor, "speed_kph"));
-            item.put("rpm", nullableInt(cursor, "rpm"));
-            item.put("voltage", nullableDouble(cursor, "voltage"));
-            item.put("soc", nullableDouble(cursor, "soc"));
-            item.put("batteryTemp", nullableDouble(cursor, "battery_temp"));
-            item.put("powerKw", nullableDouble(cursor, "power_kw"));
+            // Boxed variants so SQL NULL projects as JSON null instead of 0/0.0 — the dashboard
+            // renders the latter as "0 km/h" / "0.0 V" etc., conflating "no data" with "real
+            // zero reading".
+            item.put("speedKph", boxedOrNull(nullableIntBoxed(cursor, "speed_kph")));
+            item.put("rpm", boxedOrNull(nullableIntBoxed(cursor, "rpm")));
+            item.put("voltage", boxedOrNull(nullableDoubleBoxed(cursor, "voltage")));
+            item.put("soc", boxedOrNull(nullableDoubleBoxed(cursor, "soc")));
+            item.put("batteryTemp", boxedOrNull(nullableDoubleBoxed(cursor, "battery_temp")));
+            item.put("powerKw", boxedOrNull(nullableDoubleBoxed(cursor, "power_kw")));
             return item;
         }
+    }
+
+    /**
+     * {@link JSONObject#put} stores boxed numbers natively; this helper just maps null → JSON null.
+     */
+    private static Object boxedOrNull(Number value) {
+        return value == null ? JSONObject.NULL : value;
     }
 
     private static JSONObject latestChargeSessionJson(SQLiteDatabase db) throws JSONException {

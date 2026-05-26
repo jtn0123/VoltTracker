@@ -32,6 +32,7 @@
         <package android:name="org.prowl.torquefree" />
         <package android:name="org.prowl.torqueusb" />
         <package android:name="com.pnn.obdcardoctor" />
+        <package android:name="com.pnn.obdcardoctor_full" />
         <package android:name="com.ovz.carscanner" />
         <package android:name="com.outils.obd2" />
     </queries>

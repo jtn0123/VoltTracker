@@ -19,8 +19,11 @@ public final class ClassifierInput {
     public final Double adapterVoltage;
 
     /**
-     * HV pack current in amps. Positive = charging into the pack (i.e. wall charger or strong
-     * regen), negative = discharging. Null if unknown.
+     * HV pack current in amps. Sign convention matches the rest of the codebase: discharge =
+     * positive (current flowing OUT of the pack, i.e. driving / accessory load), charge = negative
+     * (current flowing INTO the pack, i.e. wall charger or strong regen). Null if unknown. See the
+     * matching comments in {@code ChargeSessionMaterializer.isPluggedSample} and {@code
+     * telemetry.js drivePackCurrent}.
      */
     public final Double packCurrentA;
 

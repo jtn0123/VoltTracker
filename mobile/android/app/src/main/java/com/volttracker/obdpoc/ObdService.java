@@ -9,6 +9,7 @@ import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
+import androidx.core.app.ServiceCompat;
 import com.volttracker.obdpoc.data.ObdLocalStore;
 import com.volttracker.obdpoc.location.LocationManagerTracker;
 import com.volttracker.obdpoc.location.LocationTracker;
@@ -167,7 +168,9 @@ public class ObdService extends Service {
         String action = intent == null ? null : intent.getAction();
         if (ACTION_DISCONNECT.equals(action)) {
             stopCurrentSession("Disconnected.");
-            stopForeground(true);
+            // ServiceCompat dispatches to the int overload on API 24+ and to the deprecated
+            // boolean overload on minSdk=23 — without it lint fails with NewApi on the int call.
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);
             foregroundServiceActive = false;
             stopSelf();
             return START_NOT_STICKY;
@@ -427,19 +430,73 @@ public class ObdService extends Service {
         sendBroadcast(intent);
     }
 
+    /**
+     * Snapshot of the FGS type bits this service is currently registered with. We re-check on every
+     * foreground/background transition (see {@link #applyAppVisibility(boolean)}) so that a user
+     * revoking the LOCATION permission mid-session leads to a {@code startForeground} call that
+     * drops the {@code FOREGROUND_SERVICE_TYPE_LOCATION} bit — without this, Android 14+ can throw
+     * {@code SecurityException} the next time the system reconciles the FGS-type-restricted
+     * permission against the live service. Re-granting later does the opposite.
+     */
+    private int activeForegroundServiceType = 0;
+
     private void startForegroundSession(String text) {
         Notification notification = notifications.build(text);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            int serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
-            if (hasLocationPermission()) {
-                serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
-            }
+            int serviceType = currentForegroundServiceType();
             startForeground(ObdNotifications.NOTIFICATION_ID, notification, serviceType);
+            activeForegroundServiceType = serviceType;
             foregroundServiceActive = true;
             return;
         }
         startForeground(ObdNotifications.NOTIFICATION_ID, notification);
         foregroundServiceActive = true;
+    }
+
+    private int currentForegroundServiceType() {
+        int serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
+        if (hasLocationPermission()) {
+            serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
+        }
+        return serviceType;
+    }
+
+    /**
+     * Re-issue {@code startForeground} with the current set of granted permissions if the
+     * permission state has drifted since the session started. No-op when the service isn't running,
+     * when the platform is pre-Android 10 (no per-FGS-type contract), or when the computed type is
+     * unchanged.
+     */
+    private void reevaluateForegroundServiceType() {
+        if (!running.get() || !foregroundServiceActive) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return;
+        }
+        int desired = currentForegroundServiceType();
+        if (desired == activeForegroundServiceType) {
+            return;
+        }
+        Notification notification =
+                notifications.build(
+                        appInForeground
+                                ? "Logging while app is open"
+                                : "Background logging active");
+        try {
+            startForeground(ObdNotifications.NOTIFICATION_ID, notification, desired);
+            activeForegroundServiceType = desired;
+            recorder.logEvent(
+                    "foreground_service_type_changed",
+                    "type",
+                    Integer.toHexString(desired),
+                    "hasLocation",
+                    String.valueOf(hasLocationPermission()));
+        } catch (SecurityException ex) {
+            // startForeground can refuse a type-change if the corresponding runtime permission
+            // is missing AND the manifest doesn't declare it; log + keep going rather than crash.
+            Log.w(MainActivity.TAG, "reevaluateForegroundServiceType refused", ex);
+        }
     }
 
     void updateNotification(String text) {
@@ -490,6 +547,11 @@ public class ObdService extends Service {
             if (running.get()) {
                 updateNotification(
                         foreground ? "Logging while app is open" : "Background logging active");
+                // Permission state can change between foreground and background passes (the user
+                // may have revoked location from the system settings while we were backgrounded).
+                // Re-evaluate the FGS type so we don't stay registered with a bit we no longer
+                // have a runtime permission for.
+                reevaluateForegroundServiceType();
             }
         }
     }

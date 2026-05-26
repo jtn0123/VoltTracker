@@ -32,7 +32,11 @@ public final class VehicleStateClassifier {
         // Charging beats everything else: if the car is plugged in we are not "driving" no
         // matter what stray RPM/speed noise shows up.
         if (Boolean.TRUE.equals(in.pluggedHint)) {
-            if (in.packCurrentA != null && in.packCurrentA > CHARGING_CURRENT_A) {
+            // Sign convention is discharge-positive (see ClassifierInput.packCurrentA, and the
+            // matching comments in ChargeSessionMaterializer.isPluggedSample / telemetry.js).
+            // Current flowing INTO the pack — i.e. real charging — shows up as a NEGATIVE
+            // reading at or beyond CHARGING_CURRENT_A in magnitude.
+            if (in.packCurrentA != null && in.packCurrentA <= -CHARGING_CURRENT_A) {
                 reasons.add("plugged");
                 reasons.add("current_into_pack");
                 return new ClassifierResult(VehicleState.CHARGING, Confidence.CERTAIN, reasons);

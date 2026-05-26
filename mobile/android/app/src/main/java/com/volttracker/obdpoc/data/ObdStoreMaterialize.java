@@ -11,6 +11,8 @@ import com.volttracker.obdpoc.materialize.Trip;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * Read and write paths used exclusively by the session materializers. Split out of {@link
@@ -185,26 +187,42 @@ final class ObdStoreMaterialize {
                 values.put("charger_type", session.chargerType);
                 values.put("interrupted", session.interruptionCount > 0 ? 1 : 0);
                 values.put("confidence", session.confidence.asScore());
-                if (session.voltageStart != null) {
+                if (session.voltageStart != null && isFinite(session.voltageStart)) {
                     values.put("voltage", session.voltageStart);
+                }
+                // Populate the previously-unused dedicated columns so the dashboard's Charge
+                // tile shows real SOC delta / peak power / energy delivered instead of "--".
+                if (isFinite(session.startSoc)) {
+                    values.put("start_soc", session.startSoc);
+                }
+                if (isFinite(session.endSoc)) {
+                    values.put("end_soc", session.endSoc);
+                }
+                if (isFinite(session.peakPowerKw)) {
+                    values.put("power_kw", session.peakPowerKw);
+                }
+                if (isFinite(session.energyKwh)) {
+                    values.put("energy_kwh", session.energyKwh);
                 }
                 values.put("created_at_ms", createdAt);
                 // summary_json carries the data the schema has no dedicated column for
-                // (interruption count, voltage end, confidence label).
-                values.put(
-                        "summary_json",
-                        "{\"interruptionCount\":"
-                                + session.interruptionCount
-                                + ",\"confidence\":\""
-                                + session.confidence.name()
-                                + "\","
-                                + "\"voltageStart\":"
-                                + (session.voltageStart == null ? "null" : session.voltageStart)
-                                + ",\"voltageEnd\":"
-                                + (session.voltageEnd == null ? "null" : session.voltageEnd)
-                                + ",\"durationMs\":"
-                                + session.durationMs
-                                + "}");
+                // (interruption count, voltage end, confidence label). Built via JSONObject
+                // so NaN/Infinity values are dropped instead of emitted as the literal tokens
+                // "NaN"/"Infinity", which would make the row unparseable.
+                try {
+                    JSONObject summary = new JSONObject();
+                    summary.put("interruptionCount", session.interruptionCount);
+                    summary.put("confidence", session.confidence.name());
+                    putDoubleIfFinite(summary, "voltageStart", session.voltageStart);
+                    putDoubleIfFinite(summary, "voltageEnd", session.voltageEnd);
+                    summary.put("durationMs", session.durationMs);
+                    values.put("summary_json", summary.toString());
+                } catch (JSONException ex) {
+                    // String/long/enum-name puts are safe; this catch exists only because
+                    // JSONObject.put declares the checked exception. Fall back to an empty
+                    // object rather than skipping the insert entirely.
+                    values.put("summary_json", "{}");
+                }
                 db.insertOrThrow(VoltTrackerDb.TABLE_CHARGE_SESSIONS, null, values);
             }
             db.setTransactionSuccessful();
@@ -214,6 +232,19 @@ final class ObdStoreMaterialize {
     }
 
     // ---- helpers ------------------------------------------------------------------
+
+    private static boolean isFinite(Double value) {
+        return value != null && !value.isNaN() && !value.isInfinite();
+    }
+
+    private static void putDoubleIfFinite(JSONObject target, String key, Double value)
+            throws JSONException {
+        if (isFinite(value)) {
+            target.put(key, value.doubleValue());
+        } else {
+            target.put(key, JSONObject.NULL);
+        }
+    }
 
     private static Double nullableDouble(Cursor cursor, String column) {
         int index = cursor.getColumnIndexOrThrow(column);

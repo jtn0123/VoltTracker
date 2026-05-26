@@ -30,8 +30,17 @@ import org.json.JSONObject;
  */
 final class TroubleshooterBridge {
 
-    /** How long a single probe is allowed to run before the bridge auto-stops it. */
-    private static final long TEST_CONNECTION_DURATION_MS = 8_000L;
+    /**
+     * How long a single probe is allowed to run before the bridge auto-stops it.
+     *
+     * <p>{@code ObdPollingEngine.initializeElm327()} cumulatively budgets up to ~22 s in the worst
+     * case (ATZ + 7 short AT commands + two {@code 0100} attempts each with a 9 s timeout for the
+     * "no prompt" recovery path). An 8 s deadline used to tear the probe down mid-init, so the
+     * subsequent "connected" broadcast that {@link #onAdapterStatusForReadyNotify} listens for
+     * never arrived, and the C10 notify-when-ready schedule could not fire. 25 s gives the engine
+     * room to land on either "connected" or a real failure before we cut the session.
+     */
+    private static final long TEST_CONNECTION_DURATION_MS = 25_000L;
 
     /** Interval between repeated test-connection probes inside the notify-when-ready window. */
     private static final long ADAPTER_READY_INTERVAL_MS = 30_000L;

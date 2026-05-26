@@ -251,7 +251,7 @@
      (pack voltage / current / power). Reuses the .scrub-readout grid look so
      it visually clusters with the other live-data tiles, but stays scoped to
      the battery-strip card. tabular-nums keeps the sign-prefixed values from
-     jittering as the values update at 4 Hz. */
+     jittering as the values update. */
   .battery-pack-readout {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -36,12 +36,12 @@
       const original = btn.textContent;
       btn.textContent = "Probing…";
       safeCall("startTestConnection");
-      // Match the Android-side TEST_CONNECTION_DURATION_MS (8s) so the UI
+      // Match the Android-side TEST_CONNECTION_DURATION_MS (25s) so the UI
       // re-enables roughly when the service stops itself.
       setTimeout(() => {
         btn.disabled = false;
         btn.textContent = original;
-      }, 8_500);
+      }, 25_500);
     });
   }
 

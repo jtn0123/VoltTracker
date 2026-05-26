@@ -248,7 +248,7 @@
     const kph = Number(sample.speedKph);
     if (Number.isFinite(kph)) {
       state.speedHistory.push(kph);
-      // G2: fixed 48-sample window (~12 s at 4 Hz). shift() is O(n) on a JS
+      // G2: fixed 48-sample window. shift() is O(n) on a JS
       // array but n=48 makes the cost negligible (~µs); a circular buffer
       // would be cleaner but requires changes to every reader. Revisit if
       // speed of render becomes a hot path. `if` (not `while`) is correct
@@ -531,7 +531,7 @@
   }
 
   function summarizePidLine(value) {
-    const clean = String(value || "").replace(/SEARCHING\\.\\.\\./g, "").trim();
+    const clean = String(value || "").replace(/SEARCHING\.+/gi, "").trim();
     const match = clean.match(/4100[0-9A-F]+/i);
     return match ? "01-00 ok" : (clean ? "adapter ok" : "unknown");
   }

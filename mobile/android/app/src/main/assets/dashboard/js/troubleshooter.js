@@ -90,6 +90,13 @@
     lastTelemetry: null
   };
 
+  // C2 listener discipline: every addEventListener attached from this file
+  // passes { signal } so a single controller.abort() tears all bindings down.
+  // Without this, hot-reloading the WebView or re-running bootstrap would
+  // accumulate duplicate handlers across reloads.
+  const listenerController = new AbortController();
+  const LISTEN_OPTS = { signal: listenerController.signal };
+
   function modal() { return el("troubleshooterModal"); }
 
   function isOpen() {
@@ -132,7 +139,7 @@
         const id = head.getAttribute("aria-controls");
         const body = id ? document.getElementById(id) : null;
         if (body) body.hidden = expanded;
-      });
+      }, LISTEN_OPTS);
     });
   }
 
@@ -140,7 +147,7 @@
     const root = modal();
     if (!root) return;
     root.querySelectorAll("[data-troubleshooter-dismiss]").forEach((node) => {
-      node.addEventListener("click", close);
+      node.addEventListener("click", close, LISTEN_OPTS);
     });
   }
 
@@ -164,7 +171,7 @@
         bridge.connectLast();
         close();
       }
-    });
+    }, LISTEN_OPTS);
   }
 
   function openBluetoothSettings() {
@@ -258,7 +265,7 @@
           button.textContent = "Force-stop";
         }
       }
-    });
+    }, LISTEN_OPTS);
     row.append(label, button);
     return row;
   }
@@ -541,6 +548,7 @@
     parsePackageCsv,
     refreshStuckBondSuggestion,
     renderErrorBannerCopy,
+    resetListeners: () => listenerController.abort(),
     FAILURE_CLASS_COPY,
     STALE_FIELDS,
     STALE_THRESHOLD_MS

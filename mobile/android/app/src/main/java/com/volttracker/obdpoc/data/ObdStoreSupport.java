@@ -91,6 +91,17 @@ final class ObdStoreSupport {
         return cursor.isNull(index) ? 0 : cursor.getInt(index);
     }
 
+    /**
+     * Boxed variant of {@link #nullableInt} for JSON-projection paths. Returns {@code null} (which
+     * {@link org.json.JSONObject#put} preserves as JSON {@code null}) instead of {@code 0}, so the
+     * dashboard can distinguish "value not observed" from "value is zero" — important for columns
+     * like {@code speed_kph} where 0 km/h is a valid reading.
+     */
+    static Integer nullableIntBoxed(Cursor cursor, String column) {
+        int index = cursor.getColumnIndexOrThrow(column);
+        return cursor.isNull(index) ? null : cursor.getInt(index);
+    }
+
     static long nullableLong(Cursor cursor, String column) {
         int index = cursor.getColumnIndexOrThrow(column);
         return cursor.isNull(index) ? 0L : cursor.getLong(index);
@@ -99,6 +110,15 @@ final class ObdStoreSupport {
     static double nullableDouble(Cursor cursor, String column) {
         int index = cursor.getColumnIndexOrThrow(column);
         return cursor.isNull(index) ? 0d : cursor.getDouble(index);
+    }
+
+    /**
+     * Boxed counterpart of {@link #nullableDouble} for JSON-projection paths. See {@link
+     * #nullableIntBoxed}.
+     */
+    static Double nullableDoubleBoxed(Cursor cursor, String column) {
+        int index = cursor.getColumnIndexOrThrow(column);
+        return cursor.isNull(index) ? null : cursor.getDouble(index);
     }
 
     // ---- Cursor -> record mappers --------------------------------------------------
@@ -310,6 +330,17 @@ final class ObdStoreSupport {
     }
 
     static int maxIntForSession(SQLiteDatabase db, String column, long sessionId) {
+        Integer boxed = maxIntForSessionBoxed(db, column, sessionId);
+        return boxed == null ? 0 : boxed;
+    }
+
+    /**
+     * Boxed counterpart of {@link #maxIntForSession} for callers that need to distinguish "no
+     * useful rows" from "max value is 0". The primitive overload returns 0 in both cases, which the
+     * dashboard renders as "0 mph" — misleading when the session simply has no usable speed samples
+     * (e.g. the Volt's 0xFF sentinel suppresses speedKph during charge).
+     */
+    static Integer maxIntForSessionBoxed(SQLiteDatabase db, String column, long sessionId) {
         try (Cursor cursor =
                 db.rawQuery(
                         "SELECT MAX("
@@ -319,7 +350,7 @@ final class ObdStoreSupport {
                                 + " WHERE session_id = ? AND "
                                 + USEFUL_TELEMETRY_WHERE,
                         new String[] {String.valueOf(sessionId)})) {
-            return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getInt(0) : 0;
+            return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getInt(0) : null;
         }
     }
 
@@ -448,7 +479,16 @@ final class ObdStoreSupport {
         JSONObject previous = null;
         for (int i = 0; i < points.length(); i++) {
             JSONObject point = points.getJSONObject(i);
-            if (previous != null) {
+            // JSONObject.optDouble returns NaN for missing keys. Skipping the segment is much
+            // safer than summing NaN into `total` — once `total` goes NaN, `JSONObject.put` of
+            // the result throws JSONException, and the outer tripJson catch silently drops the
+            // entire trip. Callers today pre-filter NULL coordinates in SQL, but the defensive
+            // skip keeps the helper honest if a future caller forgets to.
+            if (!hasFiniteLatLng(point)) {
+                previous = point;
+                continue;
+            }
+            if (previous != null && hasFiniteLatLng(previous)) {
                 total +=
                         haversineMeters(
                                 previous.optDouble("lat"), previous.optDouble("lng"),
@@ -457,6 +497,12 @@ final class ObdStoreSupport {
             previous = point;
         }
         return total;
+    }
+
+    private static boolean hasFiniteLatLng(JSONObject point) {
+        double lat = point.optDouble("lat");
+        double lng = point.optDouble("lng");
+        return !Double.isNaN(lat) && !Double.isNaN(lng);
     }
 
     static JSONObject boundsFor(JSONArray points) throws JSONException {

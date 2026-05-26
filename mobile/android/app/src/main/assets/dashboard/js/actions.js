@@ -301,7 +301,13 @@
       VD.renderTrips();
     }, opts);
     VD.bindListenerGuarded("addChargeBtn", "click", () => {
-      data.sessions.unshift({ date: "Today - 21:10", type: "L2", kwh: 10.8, soc: "31->90", location: "Home", cost: "$1.30" });
+      // Stage the row on the demo-only sessions list (state.demoSessions) instead of
+      // mutating the static `data.sessions` seed. Without this, every "add" persists
+      // across demo toggles and reappears on the next demo session.
+      if (!Array.isArray(state.demoSessions)) {
+        state.demoSessions = data.sessions.slice();
+      }
+      state.demoSessions.unshift({ date: "Today - 21:10", type: "L2", kwh: 10.8, soc: "31->90", location: "Home", cost: "$1.30" });
       VD.renderSessions();
       VD.setStatus({ state: "ready", detail: "Charging session staged locally." });
     }, opts);

@@ -256,7 +256,12 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                                         + TABLE_TELEMETRY
                                         + " SET charge_transition_hint = 1"
                                         + " WHERE charge_transition_hint IS NULL"
-                                        + " AND json LIKE '%chargeTransitionHint%'");
+                                        // Match the typed JSON value so a hypothetical
+                                        // "chargeTransitionHint":false row cannot accidentally
+                                        // be backfilled as 1. Today the engine only ever writes
+                                        // true, but the substring-only match was brittle to
+                                        // any future change in either direction.
+                                        + " AND json LIKE '%\"chargeTransitionHint\":true%'");
                         target.execSQL(
                                 "UPDATE "
                                         + TABLE_TELEMETRY

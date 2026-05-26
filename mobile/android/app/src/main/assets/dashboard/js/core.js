@@ -285,6 +285,8 @@
   function clearDemoTelemetry() {
     const source = String(state.telemetry.source || "").toLowerCase();
     if (!source.includes("demo")) return;
+    // Drop any locally-staged demo rows so they don't reappear on the next demo toggle.
+    state.demoSessions = null;
     state.telemetry = {
       speedKph: null,
       rpm: null,
@@ -374,7 +376,8 @@
       span.style.height = height + "%";
       return span;
     }));
-    list.replaceChildren(...data.sessions.map(buildSessionRow));
+    const sessions = Array.isArray(state.demoSessions) ? state.demoSessions : data.sessions;
+    list.replaceChildren(...sessions.map(buildSessionRow));
   }
 
   function buildSessionRow(s) {

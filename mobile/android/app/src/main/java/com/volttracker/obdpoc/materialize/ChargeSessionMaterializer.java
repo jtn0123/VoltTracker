@@ -118,29 +118,42 @@ public final class ChargeSessionMaterializer {
     }
 
     /**
-     * Combines the primary pack-current signal with the legacy aux-voltage fallback. Treats unknown
-     * speed ({@code speedKph == null}) as <em>not stationary</em> and therefore not plugged: the
-     * car could be moving with current flowing through the pack (regen) or with a high alternator
-     * voltage on the aux line, and without a speed signal we cannot tell.
+     * Combines the primary pack-current signal with the legacy aux-voltage fallback.
+     *
+     * <p>Discharge is positive in this codebase, so real charging current is <em>negative</em>. A
+     * strong negative current (at or beyond {@link Tunables#CHARGING_PACK_CURRENT_A_THRESHOLD} in
+     * magnitude) is a high-confidence "the car is on a charger" signal — many amps cannot flow INTO
+     * the pack while the car is moving — so it overrides a missing or near-zero speed reading. This
+     * matters in practice because the Volt's 0xFF speed sentinel during a charge makes the {@code
+     * speed_kph} column NULL for most of the session; without the short-circuit we'd reject every
+     * charging sample on the sentinel-mode path.
+     *
+     * <p>For weaker signals (no pack current at all, or aux voltage only), we still require a valid
+     * stationary speed reading because the aux-voltage heuristic is too noisy to trust on its own.
      */
     private static PluggedReason isPluggedSample(TelemetrySample sample) {
         if (sample == null) {
             return PluggedReason.NOT_PLUGGED;
         }
-        if (sample.speedKph == null) {
+        boolean strongCharging =
+                sample.packCurrentA != null
+                        && sample.packCurrentA <= -Tunables.CHARGING_PACK_CURRENT_A_THRESHOLD;
+        boolean clearlyMoving =
+                sample.speedKph != null && sample.speedKph > Tunables.STATIONARY_SPEED_KPH;
+        if (clearlyMoving) {
             return PluggedReason.NOT_PLUGGED;
         }
-        if (sample.speedKph > Tunables.STATIONARY_SPEED_KPH) {
+        if (strongCharging) {
+            return PluggedReason.PACK_CURRENT;
+        }
+        if (sample.speedKph == null) {
+            // Without a strong pack-current signal AND without a speed reading, we cannot
+            // distinguish stationary-plugged from moving-with-regen — be conservative.
             return PluggedReason.NOT_PLUGGED;
         }
         if (sample.packCurrentA != null) {
-            // Discharge is positive in this codebase, so charging is negative current.
-            if (sample.packCurrentA <= -Tunables.CHARGING_PACK_CURRENT_A_THRESHOLD) {
-                return PluggedReason.PACK_CURRENT;
-            }
-            // We have a definitive pack-current reading and it does NOT indicate charging.
-            // Don't fall through to the voltage heuristic in that case — pack current
-            // overrides the noisier aux voltage signal.
+            // Definitive pack-current reading that does NOT indicate charging — overrides the
+            // noisier aux-voltage heuristic.
             return PluggedReason.NOT_PLUGGED;
         }
         if (sample.adapterVoltage != null
@@ -164,6 +177,10 @@ public final class ChargeSessionMaterializer {
         Double voltageStart = run.get(0).adapterVoltage;
         Double voltageEnd = run.get(run.size() - 1).adapterVoltage;
         Confidence confidence = usedPackCurrent ? Confidence.OBSERVED : Confidence.WEAK;
+        Double startSoc = firstFiniteSoc(run);
+        Double endSoc = lastFiniteSoc(run);
+        Double peakPowerKw = peakChargePowerKw(run);
+        Double energyKwh = integrateChargeEnergyKwh(run);
         return new ChargeSession(
                 startedAtMs,
                 endedAtMs,
@@ -172,6 +189,90 @@ public final class ChargeSessionMaterializer {
                 voltageEnd,
                 interruptions,
                 "unknown",
-                confidence);
+                confidence,
+                startSoc,
+                endSoc,
+                peakPowerKw,
+                energyKwh);
+    }
+
+    private static Double firstFiniteSoc(List<TelemetrySample> run) {
+        for (TelemetrySample s : run) {
+            if (s.socPct != null && !s.socPct.isNaN() && !s.socPct.isInfinite()) {
+                return s.socPct;
+            }
+        }
+        return null;
+    }
+
+    private static Double lastFiniteSoc(List<TelemetrySample> run) {
+        for (int i = run.size() - 1; i >= 0; i--) {
+            TelemetrySample s = run.get(i);
+            if (s.socPct != null && !s.socPct.isNaN() && !s.socPct.isInfinite()) {
+                return s.socPct;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Peak power INTO the pack during the window, in kW. Pack convention is discharge-positive, so
+     * charging power = {@code -(packVoltage * packCurrentA / 1000)}. Returns {@code null} when no
+     * sample in the run carried both values.
+     */
+    private static Double peakChargePowerKw(List<TelemetrySample> run) {
+        Double peak = null;
+        for (TelemetrySample s : run) {
+            if (s.packVoltage == null || s.packCurrentA == null) {
+                continue;
+            }
+            double kw = -(s.packVoltage * s.packCurrentA) / 1000.0;
+            if (Double.isNaN(kw) || Double.isInfinite(kw)) {
+                continue;
+            }
+            if (kw <= 0.0) {
+                continue;
+            }
+            if (peak == null || kw > peak) {
+                peak = kw;
+            }
+        }
+        return peak;
+    }
+
+    /**
+     * Trapezoidal integration of charging power across the run. Same sign convention as {@link
+     * #peakChargePowerKw}. Returns {@code null} when fewer than two samples in the window carry
+     * both pack values (a single point can't form an area).
+     */
+    private static Double integrateChargeEnergyKwh(List<TelemetrySample> run) {
+        Double prevKw = null;
+        Long prevMs = null;
+        double energyKwh = 0.0;
+        int integrated = 0;
+        for (TelemetrySample s : run) {
+            if (s.packVoltage == null || s.packCurrentA == null) {
+                continue;
+            }
+            double kw = -(s.packVoltage * s.packCurrentA) / 1000.0;
+            if (Double.isNaN(kw) || Double.isInfinite(kw)) {
+                continue;
+            }
+            // Clip negative (discharge) samples to 0 so a brief discharge dip inside an otherwise-
+            // plugged window doesn't subtract from the integrated charge total.
+            if (kw < 0.0) {
+                kw = 0.0;
+            }
+            if (prevKw != null && prevMs != null) {
+                double hours = (s.capturedAtMs - prevMs) / 3_600_000.0;
+                if (hours > 0.0) {
+                    energyKwh += ((prevKw + kw) / 2.0) * hours;
+                    integrated += 1;
+                }
+            }
+            prevKw = kw;
+            prevMs = s.capturedAtMs;
+        }
+        return integrated == 0 ? null : energyKwh;
     }
 }

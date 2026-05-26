@@ -95,7 +95,17 @@ class ElmConnection {
         Thread watchdog =
                 new Thread(
                         () -> {
-                            sleep(connectTimeoutMs);
+                            try {
+                                Thread.sleep(connectTimeoutMs);
+                            } catch (InterruptedException ignored) {
+                                // connect() finished (success or fast failure) and the finally
+                                // block interrupted us. Bail out immediately — never close the
+                                // socket on this path. Without this guard, BluetoothSocket
+                                // isConnected() is cache-flaky on some OEM stacks and can
+                                // briefly read false right after a real connect, which would
+                                // make the watchdog close the just-opened socket.
+                                return;
+                            }
                             if (!pendingSocket.isConnected()) {
                                 try {
                                     pendingSocket.close();

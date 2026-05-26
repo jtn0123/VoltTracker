@@ -31,13 +31,26 @@ public final class VoltBridge {
         this.activity = activity;
     }
 
-    /** Null-coalesces, trims, and bounds a bridge string argument. */
+    /**
+     * Null-coalesces, trims, and bounds a bridge string argument. {@link String#substring} cuts on
+     * UTF-16 code-unit boundaries, so a naive {@code substring(0, maxLen)} can split a surrogate
+     * pair and leave a lone high-surrogate that corrupts every downstream consumer (JSON
+     * serializer, SQLite UTF-8 conversion, logcat, share-sheet text). Back the cut up one position
+     * when it would land mid-pair.
+     */
     private static String safe(String value, int maxLen) {
         if (value == null) {
             return "";
         }
         String trimmed = value.trim();
-        return trimmed.length() <= maxLen ? trimmed : trimmed.substring(0, maxLen);
+        if (trimmed.length() <= maxLen) {
+            return trimmed;
+        }
+        int cut = maxLen;
+        if (cut > 0 && Character.isHighSurrogate(trimmed.charAt(cut - 1))) {
+            cut -= 1;
+        }
+        return trimmed.substring(0, cut);
     }
 
     @JavascriptInterface

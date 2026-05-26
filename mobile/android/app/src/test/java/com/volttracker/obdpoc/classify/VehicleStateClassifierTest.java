@@ -52,12 +52,24 @@ public class VehicleStateClassifierTest {
 
     @Test
     public void pluggedWithChargingCurrentIsCharging() {
+        // Discharge-positive convention (see ClassifierInput.packCurrentA javadoc): real
+        // charging current is NEGATIVE (flowing INTO the pack).
         ClassifierResult result =
-                VehicleStateClassifier.classify(input(0.0, 0, 12.6, 8.0, true, false));
+                VehicleStateClassifier.classify(input(0.0, 0, 12.6, -8.0, true, false));
         assertEquals(VehicleState.CHARGING, result.state);
         assertEquals(Confidence.CERTAIN, result.confidence);
         assertTrue(result.reasons.contains("plugged"));
         assertTrue(result.reasons.contains("current_into_pack"));
+    }
+
+    @Test
+    public void pluggedWhileDischargingIsJustPlugged() {
+        // V2L / accessory load with the car plugged in: positive current = discharging.
+        // Should NOT be classified as CHARGING.
+        ClassifierResult result =
+                VehicleStateClassifier.classify(input(0.0, 0, 12.6, 8.0, true, false));
+        assertEquals(VehicleState.PLUGGED, result.state);
+        assertEquals(Confidence.OBSERVED, result.confidence);
     }
 
     @Test

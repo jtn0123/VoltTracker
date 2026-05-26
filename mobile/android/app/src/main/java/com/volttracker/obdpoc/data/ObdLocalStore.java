@@ -288,6 +288,17 @@ public class ObdLocalStore implements Closeable, MaterializerData, ObdSessionSto
 
     public long recordLocationSample(long sessionId, JSONObject sample, long capturedAtMs) {
         JSONObject safeSample = sample == null ? new JSONObject() : sample;
+        // Reject samples missing lat/lng — without this, ObdStoreSnapshots.locationSampleValues
+        // would default both to 0.0, leaving a fake "Null Island" row off the African coast that
+        // would later show up on the map and pollute distance computations. Today's caller
+        // (LocationManagerTracker) always provides coordinates, but the early-return makes the
+        // helper safe to call from any future producer.
+        if (!safeSample.has("latitude")
+                || safeSample.isNull("latitude")
+                || !safeSample.has("longitude")
+                || safeSample.isNull("longitude")) {
+            return -1L;
+        }
         SQLiteDatabase db = helper.getWritableDatabase();
         db.beginTransaction();
         try {

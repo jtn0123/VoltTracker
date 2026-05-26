@@ -586,10 +586,17 @@
       }
       return Math.max(0, mps) * 2.2369363;
     });
+    // Drop regen samples (kW < 0) from the per-point efficiency average. Including them with
+    // the old `Math.max(60, s/c)` clamp folded every regen-dominant segment into the same
+    // upper-bound green color band as a high-efficiency cruise — visually identical and
+    // misleading. Tagging them as null instead leaves the regen segments grey (the
+    // mapEffColor `eff == null` branch in map.js), making downhill / regen runs visibly
+    // distinct from drive efficiency.
     const whmiInst = pts.map((p, i) => {
       if (mphArr[i] <= 4) return NaN;
       const kW = powerAt(Number(p.atMs));
       if (!Number.isFinite(kW)) return NaN;
+      if (kW <= 0) return NaN;
       return (kW * 1000) / mphArr[i];
     });
     for (let i = 0; i < pts.length; i += 1) {
@@ -606,7 +613,7 @@
         pts[i].eff = null;
         continue;
       }
-      const whmi = Math.max(60, s / c);
+      const whmi = s / c;
       pts[i].eff = Math.max(0.8, Math.min(6.5, 1000 / whmi));
     }
   }

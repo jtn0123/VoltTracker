@@ -42,9 +42,6 @@ class CompetingAppDetector {
                             "com.ovz.carscanner",
                             "com.outils.obd2"));
 
-    /** Substrings that flag a probable OBD-capable app even if it's not on the allowlist. */
-    private static final String[] NAME_HINTS = {"obd", "elm327"};
-
     private final PackageManager packageManager;
     private final ObdService service;
     private final SessionRecorder recorder;
@@ -89,8 +86,16 @@ class CompetingAppDetector {
 
     /**
      * Pure detection step — visible to tests so we can assert filtering without the side effects of
-     * {@link #refresh()}. Preserves insertion order: known packages first (in the allowlist order
-     * they were seen), then hint-matched packages in install order.
+     * {@link #refresh()}. Returns packages from {@link #KNOWN_OBD_PACKAGES} that are installed on
+     * the device, in declaration order so the CSV is stable.
+     *
+     * <p>An earlier version of this method also ran a second pass that scanned every installed app
+     * for {@code "obd"}/{@code "elm327"} substring matches. On API 30+ that pass was dead: without
+     * {@link android.Manifest.permission#QUERY_ALL_PACKAGES} (Play-Store-restricted), {@link
+     * PackageManager#getInstalledApplications(int)} only returns packages the manifest's {@code
+     * <queries>} block lists — which is the same set as {@link #KNOWN_OBD_PACKAGES}, so the second
+     * pass could never find anything the first pass had missed. Adding a new package to the
+     * detector therefore also requires adding a matching {@code <package>} entry in the manifest.
      */
     List<String> detect() {
         Set<String> ordered = new LinkedHashSet<>();
@@ -99,36 +104,18 @@ class CompetingAppDetector {
         if (installed == null) {
             return Collections.emptyList();
         }
-        // First pass: collect all installed package names (lower-cased) for the allowlist match.
         for (ApplicationInfo info : installed) {
             if (info == null || info.packageName == null) {
                 continue;
             }
             seen.add(info.packageName.toLowerCase(Locale.US));
         }
-        // Walk the allowlist in declaration order so the resulting CSV is stable.
         for (String known : KNOWN_OBD_PACKAGES) {
             if (known.equalsIgnoreCase(ownPackageName)) {
                 continue;
             }
             if (seen.contains(known)) {
                 ordered.add(known);
-            }
-        }
-        // Second pass: name-hint match (anything we haven't already captured).
-        for (ApplicationInfo info : installed) {
-            if (info == null || info.packageName == null) {
-                continue;
-            }
-            String pkg = info.packageName.toLowerCase(Locale.US);
-            if (pkg.equalsIgnoreCase(ownPackageName)) {
-                continue;
-            }
-            if (ordered.contains(pkg)) {
-                continue;
-            }
-            if (containsHint(pkg)) {
-                ordered.add(pkg);
             }
         }
         return new ArrayList<>(ordered);
@@ -150,14 +137,5 @@ class CompetingAppDetector {
             // that as "nothing found" rather than letting it crash session start.
             return Collections.emptyList();
         }
-    }
-
-    private static boolean containsHint(String pkg) {
-        for (String hint : NAME_HINTS) {
-            if (pkg.contains(hint)) {
-                return true;
-            }
-        }
-        return false;
     }
 }
