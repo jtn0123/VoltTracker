@@ -1,6 +1,116 @@
 # CHANGELOG
 
 
+## v0.4.1 (2026-05-26)
+
+### Bug Fixes
+
+- Address 28 dogfood-audit findings (charge materializer, classifier sign, dashboard XSS, ELM races,
+  …) ([#135](https://github.com/jtn0123/VoltTracker/pull/135),
+  [`f967e53`](https://github.com/jtn0123/VoltTracker/commit/f967e53f0a33709177b62f39442c6936e2cc1e14))
+
+* fix: address 28 dogfood-audit findings across dashboard, classifier, data layer, and service
+
+Sweep of bugs found by a code-audit pass on the Android app and bundled WebView dashboard.
+  Highest-impact items:
+
+* Dashboard regex for stripping ELM "SEARCHING..." was double-escaped and never matched real adapter
+  output (`/SEARCHING\\.\\.\\./g`). * `drive.js` "Last drive" chip read `r.distanceM` instead of
+  `r.distanceMeters` so the meta line permanently displayed "NaN mi". * `renderDriveNowChips`
+  interpolated user-controlled Bluetooth adapter names into `innerHTML`; rewritten to use DOM APIs /
+  textContent. * `VehicleStateClassifier` had a sign-inverted charging check (`packCurrentA >
+  CHARGING_CURRENT_A` against a discharge-positive convention), so the CHARGING state never fired
+  for real charging current. Updated alongside the matching JavaDoc on
+  `ClassifierInput.packCurrentA`. * `ChargeSessionMaterializer.isPluggedSample` rejected every
+  sample whose `speedKph` was NULL, which is the common case during the Volt's 0xFF speed sentinel.
+  Strong charging pack-current now overrides missing speed. *
+  `ObdStoreMaterialize.persistChargeSessions` built `summary_json` via string concatenation, which
+  would emit invalid JSON if any voltage was NaN/Inf. Replaced with `JSONObject` so NaN/Inf project
+  as `null`. The same materializer now also populates the previously-dead `start_soc / end_soc /
+  power_kw / energy_kwh` columns (peak charging kW + trapezoidal integration). *
+  `ObdStoreSupport.nullableInt` / `nullableDouble` returned primitive 0 for SQL NULL; the JSON
+  projections then surfaced "0 km/h" / "0.0 V" instead of "--" for unknown values. Added boxed
+  variants used by the dashboard-facing projections (`latestTelemetryJson`, `recentSpeedTraceJson`,
+  `tripJson`). * `WebChromeClient.onConsoleMessage` returned `true` for every level but only logged
+  ERROR — dashboard `console.log/warn/info/debug` was silently dropped. Now logs every level before
+  suppressing the default chromium output. * Drive partial advertised a hard-coded "4 Hz" rate-chip
+  while the polling engine sleeps 850 ms between cycles. Dropped the bogus claim from the HTML, JS
+  comment, and CSS comment. * `ObdService` re-evaluates the foreground-service-type bits on every
+  app-visibility transition so a mid-session location-permission revocation no longer leaves the
+  service registered with FOREGROUND_SERVICE_TYPE_LOCATION it no longer has runtime permission for.
+  * `ElmConnection` open-socket watchdog returns early on interrupt instead of falling through to
+  `BluetoothSocket.isConnected()` (cache-flaky on some OEMs and could close a healthy just-opened
+  socket). * `VoltBridge.safe()` truncation is now UTF-16-surrogate-aware. * Test-connection
+  auto-stop timeout 8 s → 25 s so the C10 notify-when-ready schedule sees the "connected" broadcast
+  on slow adapters that take ~22 s to finish initializing. * `CompetingAppDetector` second-pass
+  name-hint loop was dead code on API 30+ without QUERY_ALL_PACKAGES; removed and the allowlist-only
+  contract documented. Added missing `com.pnn.obdcardoctor_full` to manifest queries. * `DataBackup`
+  hardening: fsync after restore copy, UUID-suffixed stage-temp filename (no concurrent-pick race),
+  `clearOldBackups` only deletes `volttracker-backup-*.db` instead of every file in the dir. * `v5`
+  schema migration `LIKE '%chargeTransitionHint%'` substring tightened to match the typed `:true`
+  value. * Several smaller defensive fixes: NaN-skip in `distanceMeters`, early-return in
+  `recordLocationSample` for missing lat/lng (no more "Null Island" rows), `state.demoSessions`
+  isolation so demo charges don't bleed across toggles, troubleshooter listener-discipline
+  alignment, mixed-return-type cleanup in `drive.js speedLinePath`, regen samples excluded from the
+  per-segment efficiency average so regen segments render distinctly instead of as high-efficiency
+  green, and `stopForeground(true)` → `STOP_FOREGROUND_REMOVE`.
+
+All 390 unit tests pass after the fix batch. Three test updates were required:
+
+* `BackupRoundTripTest` `unrelatedFileCleanedUpOnBuildBackup` rewritten as
+  `buildBackupClearsPreviousBackupButLeavesUnrelatedFiles` — the old test encoded the destructive
+  `clearOldBackups` bug. * `VehicleStateClassifierTest pluggedWithChargingCurrentIsCharging` flipped
+  its sign assumption (+8.0 → -8.0) to match the discharge-positive convention; new
+  `pluggedWhileDischargingIsJustPlugged` covers V2L / accessory-load behavior. *
+  `CompetingAppDetectorTest` — 5 tests rewritten / renamed to assert the new allowlist-only contract
+  after the dead name-hint pass was removed.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+* style: apply spotless formatting to audit-fix files
+
+CI spotless check rejected the audit-fix commit for line-wrap / blank-line deltas in 8 files.
+  Auto-applied via `./gradlew spotlessApply`; no logic changes. `spotlessCheck` +
+  `testDebugUnitTest` both pass locally.
+
+* fix(service): use ServiceCompat.stopForeground to satisfy minSdk=23 lint
+
+The previous audit-fix commit replaced the deprecated `stopForeground(true)` with
+  `stopForeground(Service.STOP_FOREGROUND_REMOVE)`, but the int overload requires API 24 and the
+  project's minSdk is 23. CI's lint check failed with NewApi.
+
+`androidx.core.app.ServiceCompat.stopForeground(Service, int)` dispatches to the int overload on API
+  24+ and to the deprecated boolean overload on older devices, so the call site stays one line and
+  we still avoid the deprecation warning on modern Android.
+
+Verified locally with `spotlessCheck`, `lintDebug`, and `testDebugUnitTest` — all green.
+
+---------
+
+Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+### Continuous Integration
+
+- Rebuild rolling debug APK after each semantic-release bump
+  ([#134](https://github.com/jtn0123/VoltTracker/pull/134),
+  [`689293d`](https://github.com/jtn0123/VoltTracker/commit/689293d93d5930a0cf36a4c5f9d37d490bf7e82f))
+
+python-semantic-release pushes a bump commit (touching VERSION, pyproject.toml, CHANGELOG.md) on top
+  of the merge that triggered it. That bump commit doesn't touch any mobile/android/** files, so the
+  existing android.yml path filter skipped it — leaving the rolling latest-debug APK one release
+  behind the freshly cut release APK.
+
+Result: a v0.4.0 release APK shows "Volt Tracker v0.4.0-<sha>" in Settings, but the contemporaneous
+  latest-debug APK still shows "v0.3.0-<sha>" until the next mobile/android/** push happens to land.
+  Confusing when the two builds contain the same code.
+
+Add VERSION and pyproject.toml to android.yml's push paths so a bump triggers a fresh debug build
+  with the new versionName baked in. Also expose workflow_dispatch so we can backfill the missing
+  v0.4.0 debug build once this lands.
+
+Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+
 ## v0.4.0 (2026-05-26)
 
 ### Chores
