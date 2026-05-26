@@ -1,6 +1,268 @@
 # CHANGELOG
 
 
+## v0.4.0 (2026-05-26)
+
+### Chores
+
+- Execute round-6 grade-codebase items (B4 E2 G1 D1 H1 H2 C7 C8 C9 C10 B7 B8 H3 A2 A1)
+  ([#132](https://github.com/jtn0123/VoltTracker/pull/132),
+  [`05722e4`](https://github.com/jtn0123/VoltTracker/commit/05722e455e5dc6250e74353c17e5f55f475a567a))
+
+* chore: round-6 grade-codebase hygiene bundle (B4 E2 G1 D1 H1 H2 C9 C10 B8)
+
+Nine small items from the round-6 audit (.claude/grade-report.md) bundled into one commit because
+  they're all single-file edits that don't interact.
+
+B4 — TripMaterializer MAX_TRIP_DURATION_MS cap (12h). Splits long sparse runs at their largest
+  internal gap so they don't become multi-day "trips" with a fictitious integrated energy number.
+  Covered by the new runOverMaxTripDurationSplitsAtLargestGap test.
+
+E2 — Whitelist *.tile.openstreetmap.org in the dashboard CSP (img-src + connect-src). The OSM
+  fallback in map.js fires after 5 CARTO tile errors; it was previously CSP-blocked, leaving users
+  with a blank map and no signal.
+
+G1 — Extend QueryPlanIndexTest with three materializer read cases (readTelemetrySamples,
+  readLocationSamples, readPidObservations). Pins that the materializer's session-scoped reads stay
+  index-backed.
+
+D1 — Extreme-input cases for TripMaterializerTest (single-sample, all-zero-speed stationary,
+  all-null-power) and ChargeSessionMaterializerTest (single-sample, all-zero-voltage,
+  all-null-voltage). Pins conservative behavior at the points where users would otherwise see false
+  positives.
+
+H1 — Split README build/install snippets by OS so a macOS or Linux dev no longer copies the .bat
+  command.
+
+H2 — Add mobile/android/CONTRIBUTING.md with the day-in-the-life dev loop: clean build, lint with
+  HTML report, install-and-start, dashboard tests, the partial-edit-then-generateDashboardHtml rule,
+  and lefthook install.
+
+C9 — Prefix four ESLint unused-vars with _ (core.js:200 err, map.js:392 SAMPLE_ROUTE_START_MS,
+  panels.js:367 hasRoute, telemetry.js:358 acc). npm run lint is now warning-clean.
+
+C10 — Add data-live-tile="true" to the three HV-pack tiles in drive.html so the stale-class CSS that
+  targets [data-live-tile][data-stale] binds to them.
+
+B8 — Wire the *StaleMs telemetry fields into the troubleshooter modal as a new step ("Telemetry
+  isn't refreshing"). One row per slow-tier PID whose *StaleMs exceeds 4s. Closes a
+  dead-bytes-on-the-bridge path by giving the fields a user-visible consumer.
+
+Verification: ./gradlew :app:testDebugUnitTest passes (358 -> 368 tests). npm test in
+  dashboard-tests/ passes (18 tests, no regression). npm run lint emits zero warnings.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+* test(dashboard): round-6 live-tile cluster (C7 + C8/D3)
+
+C7 — Derive LIVE_TILE_IDS from the DOM at boot. telemetry.js now reads every [data-live-tile="true"]
+  element instead of pinning a hardcoded array, so a new tile only requires the partial edit. The 14
+  remaining tiles in drive.html gained the attribute (the 3 HV-pack tiles got it in cluster 1).
+  updatedValue was retired from the static list since it doesn't exist in any partial — the
+  DOM-derive surfaces this naturally.
+
+C8 / D3 — Two new Vitest files cover the largest untested dashboard JS:
+
+drive.test.js (6 tests) — Drive-tab live polish: - exports are present on VD - idle chip when no
+  adapter / no demo - demo chip when state.demoActive - recording chip when adapter.connected -
+  drawLiveSpeedTrace shows placeholder when speedHistory is empty - resize handler debounces to a
+  single render
+
+scrubber.test.js (5 tests) — Map scrubber: - public surface present on VD - scrubAtLatLng is a no-op
+  for empty routes - renderScrubber hides the panel for <2 points - renderScrubber reveals the panel
+  for 2+ points - hideScrubber clears scrubData and re-hides
+
+Loader change: load-dashboard.js gains an `extras` option (extra JS files to eval after the standard
+  5-file bundle) and an `extraDom` option (HTML appended to REQUIRED_DOM). drive.test.js and
+  scrubber.test.js use both so they don't have to duplicate the bootstrap-required fixture.
+
+Pinned in live-tile-derive.test.js: - LIVE_TILE_IDS is no longer a hardcoded array in telemetry.js -
+  every [data-live-tile="true"] element carries a non-empty id
+
+Verification: npm test passes 32 tests across 7 files (was 18 across 4). npm run lint emits zero
+  warnings.
+
+* feat(obd): Mode-01 multi-PID batching (B7) + heuristic ADRs (H3)
+
+B7 — Collapse the 5 Tier-1 broadcast Mode-01 PIDs (010D speed, 010C RPM, 0104 load, 0111 throttle,
+  0149 accel pedal) into a single ELM327 round-trip when the adapter supports it.
+
+The mechanism leans on a property that was already true: every existing Mode-01 parser
+  (parseSpeedKph, parseRpm, parseEngineLoadPct, parseThrottlePct, parseAccelPedalPct) finds its
+  bytes via `indexOf("41XX")` over the cleaned hex of the response. That means the SAME multi-PID
+  response can be stuffed into all 5 batched-command entries in lastRawByCommand and each parser
+  picks out its own bytes — no rendering path changes.
+
+Implementation: - ObdProtocol.buildMode01MultiCommand(pidHex) — concatenates "01" + each PID. -
+  ObdProtocol.responseContainsAllMode01Pids(response, pidHex) — verifies every 41XX marker is
+  present in the response (clones sometimes drop PIDs). - PidSchedule.MODE_01_BATCH_COMMANDS +
+  MODE_01_BATCH_PIDS_HEX — the parallel lists the engine matches against. -
+  ObdPollingEngine.probeMode01Batch() — runs once per session after init, sends "010D0C", verifies
+  both markers present, sets mode01BatchSupported. - ObdPollingEngine.tryBatchTier1Mode01() — when
+  supported AND every batchable command is due this cycle, sends one request and fills 5 entries.
+  Logs and disables for the session if a response comes back incomplete (defensive). -
+  runScheduledPolls() skips the per-PID round-trip for batched commands.
+
+Expected effect: drive-critical refresh goes from ~1 Hz to ~2.5 Hz on adapters that support
+  multi-PID (ELM327 v1.4+; most OBDLink units). Fallback to per-PID polling is automatic and silent
+  on adapters that don't.
+
+Tests: - ObdProtocolTest: 5 new cases — buildMode01MultiCommand, the contains-all helper (happy,
+  missing-PID, null/empty), and a regression that pins every per-PID parser against a concatenated
+  5-PID response. - PidScheduleTest: 2 new cases asserting the parallel lists stay in lockstep and
+  that every batched command is a period=1 broadcast spec (otherwise the "all batch commands are
+  due" predicate would never fire).
+
+H3 — Two new ADRs documenting the non-obvious heuristic orderings from #130 and #131:
+
+- docs/adr/0004-charge-detection-heuristics.md — priority order for ChargeSessionMaterializer (pack
+  current dominates, aux voltage as fallback, null speed never infers plugged) with field-test
+  evidence for each threshold. - docs/adr/0005-connection-failure-classification.md — strict
+  priority order for ConnectionFailureClassifier (BT_OFF → SDP_FAILURE → REMOTE_REFUSED → BOND_LOST
+  → CONNECT_TIMEOUT → INSTANT_DROP → UNKNOWN) with the symptom and remedy for each class.
+
+Verification: ./gradlew :app:testDebugUnitTest passes (368 -> 373 tests).
+
+* refactor: ObdLocalStore interface split + TroubleshooterBridge extract (A2, A1)
+
+A2 — Split the ObdLocalStore facade into two narrower interfaces in the same package:
+
+ObdSessionStore — start/finish/finalize, every record* writer, persistTrips/ persistChargeSessions,
+  upsertVehicleFromVin, recordAdapterSummary, clearAllData / checkpoint / pruneRawDataOlderThan,
+  close. ObdQueryStore — getSession / getRecent* / getAdapterHistory and the JSON projections, every
+  read*Samples from MaterializerData, getDatabaseFile.
+
+ObdLocalStore now implements both. Existing callers keep working unchanged — the split is purely
+  additive. New callers can choose the narrow interface they actually need, making JVM-side fakes
+  practical to write and shrinking the surface a reader has to keep in their head.
+
+A1 (partial — TroubleshooterBridge) — Extract the entire Bucket 4a + Bucket 4b helper region from
+  MainActivity (the 6 troubleshooter helpers + the notify-when-ready scheduler + their handler/flag
+  state + their constants) into a new TroubleshooterBridge POJO. MainActivity keeps the public
+  delegate methods so VoltBridge and its test suite still call the same names; the implementation,
+  the state, and the lifecycle (shutdown/clearPendingTestConnectionStop) all live in the new class.
+
+MainActivity LOC: 754 -> 507 (-247, -33%)
+
+Lifecycle wiring: - onCreate instantiates TroubleshooterBridge(this) after deviceCatalog +
+  localStore are set up (the bridge depends on both). - onDestroy delegates handler teardown to
+  troubleshooter.shutdown(). - startObdService delegates the stale-stop clear to
+  troubleshooter.clearPendingTestConnectionStop().
+
+The full A1 ambition (also extract AppStateCoordinator for publishAppState / publishStorageSummary /
+  publishStatus / callDashboard / lastTelemetry-Status-Storage / ALLOWED_DASHBOARD_FUNCTIONS) is
+  deferred to a follow-up — those methods cross-cut more existing fields and want their own focused
+  PR with test scaffolding.
+
+Verification: ./gradlew :app:testDebugUnitTest passes (373 tests, unchanged). Public API of
+  MainActivity is unchanged; VoltBridge and the test suite did not need any edits.
+
+* style: apply spotless to round-6 changes
+
+CI's spotlessCheck failed on the dashboard HTML edits (prettier rewrapped a few long lines in
+  drive.html and troubleshooter.html) and on a couple of Java files where the Google-style formatter
+  wanted slightly different layouts than the auto-generated bridge / interface stubs landed with.
+  Running `./gradlew spotlessApply` then `generateDashboardHtml` produces this purely-mechanical
+  diff. No behavior change.
+
+* test: cover TroubleshooterBridge defensive paths so JaCoCo floor holds
+
+Round-6 cluster 4 (A1 extraction) added ~280 LOC of TroubleshooterBridge with no test, which pulled
+  the project line-coverage floor below the ratcheting 0.71 baseline and failed CI. Per CLAUDE.md
+  ("never try to ignore a test because it will not pass, find a different way to fix it"), the right
+  answer is a test, not a lowered floor.
+
+TroubleshooterBridgeTest exercises every defensive early-return path with a Robolectric-bound
+  MainActivity:
+
+- forceStopPackage with null / empty / uninstalled package name - getRecentSessionsJson with n <= 0
+  (must produce a valid empty JSONArray) - cancelRetry when no service is bound -
+  openBluetoothSettings + shareDiagnostics no-throw guarantees - cancelAdapterReadyNotify /
+  clearPendingTestConnectionStop on a fresh bridge (no handler init) - scheduleAdapterReadyNotify(0)
+  — schedules with already-expired deadline - shutdown idempotency - onAdapterStatusForReadyNotify
+  is a no-op when the schedule isn't active
+
+The heavier paths (the real test-connection probe, the 30s tick loop, the system Notification post)
+  depend on system-service plumbing that's expensive to fake; an on-device integration test is the
+  right way to cover those.
+
+Verification: ./gradlew :app:testDebugUnitTest :app:jacocoTestCoverageVerification both pass
+  locally.
+
+* fix: CodeRabbit review feedback on round-6 PR
+
+Addresses 7 of 9 inline comments from the CodeRabbit review:
+
+TripMaterializer.java (CRITICAL — real bug) - The largest-gap loop used `if (gap > largestGap)`
+  which keeps the FIRST equal gap, so a uniformly-sampled long run (every gap equal) would split at
+  index 1 every recursion — peeling single-sample prefixes that buildTrip drops on the `size < 2`
+  check, leaking the entire body of the trip. Fix: midpoint-preferring tie-break so uniform runs
+  decompose into balanced halves. Regression test
+  `uniformlySampledRunOverCapSplitsBalancedInsteadOfPeelingPrefixes` pins this; it materializes >95%
+  of an 18-hour uniform run instead of leaking most of it.
+
+ObdProtocol.java - `responseContainsAllMode01Pids` used plain `indexOf("41" + pid)` which can match
+  inside another PID's data bytes. Rewrote to walk PIDs in order with a cursor that advances past
+  each PID's known payload byte count, so the next marker can only match AFTER the previous PID's
+  data.
+
+CONTRIBUTING.md - The "macOS / Linux" lint step used `open`, which is macOS-only. Split into
+  separate `open` (macOS) and `xdg-open` (Linux) lines.
+
+dashboard-tests/drive.test.js - The debounce test only asserted timer count after the debounce
+  window, which a leaking implementation could pass. Now snapshots a baseline before the resize
+  burst and asserts (a) more timers pending than baseline during the burst, then (b) back to
+  baseline after the debounce window. A leaky no-clearTimeout impl would leave 5 timers pending and
+  fail (b).
+
+dashboard-tests/live-tile-derive.test.js - The hardcoded-array regression regex only matched arrays
+  containing "speedValue". Broadened to match any literal `LIVE_TILE_IDS = [` assignment. - The
+  "every DOM tile gets covered" test was tautological (only re-checked elements that
+  querySelectorAll just returned). Rewrote with vi.useFakeTimers + vi.advanceTimersByTime(4000) to
+  actually drive the stale loop and assert the `.stale` class is applied to every
+  [data-live-tile="true"] node.
+
+Spotless on drive.html / troubleshooter.html (2 spotless comments): already addressed in commit
+  322086f, no further action.
+
+Verification: - ./gradlew :app:testDebugUnitTest :app:jacocoTestCoverageVerification pass. - npm
+  test passes 32/32 across 7 files.
+
+---------
+
+Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+### Features
+
+- **dashboard**: Show app version in Settings and stop truncating long-drive maps
+  ([#133](https://github.com/jtn0123/VoltTracker/pull/133),
+  [`c42a8ef`](https://github.com/jtn0123/VoltTracker/commit/c42a8efd2654001c776a5c5ce3e6d3ebdd92167b))
+
+Two user-facing fixes from analyzing a real backup database:
+
+1. Settings now shows `Volt Tracker vX.Y.Z-sha7` at the bottom of the screen. Sourced from the
+  existing `appState.app.version` value already pushed by MainActivity. Before this, the only way to
+  see the installed version was Android Settings → Apps → Volt Tracker → App info.
+
+2. The route polyline for a long drive no longer collapses to "just the last 8 minutes". Before:
+  `routePointsForSessionJson` queried `ORDER BY captured_at_ms DESC LIMIT 500` and reversed, so a
+  session with 7,881 GPS fixes (a real 131-minute drive from the user's backup) only surfaced its
+  last 500 points — 94% of the trip was invisible on the map. After: count rows for the session,
+  compute a stride, walk the cursor ascending and emit every Nth fix while reserving a slot for the
+  very last one. Same treatment for SOC and power tracks so they stay aligned to the full route. The
+  500-point cap is preserved as `MAX_TRACK_POINTS`; sessions under that cap still emit every fix.
+
+Also fixes `.claude/launch.json` to bind the preview HTTP server to `127.0.0.1` explicitly — the
+  default dual-stack bind was silently blocked by the Claude.app sandbox, leaving a python process
+  running with no listening socket.
+
+Tests: extends ObdStoreTripsDbTest with two new cases that exercise the downsampling — one for a
+  2000-row session (verifies first + last fix are both present and total points stay ≤ 500) and one
+  for a 4-row session (verifies no downsampling occurs).
+
+Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+
 ## v0.3.0 (2026-05-26)
 
 ### Features
