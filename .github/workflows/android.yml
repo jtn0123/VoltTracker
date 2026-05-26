@@ -1,14 +1,23 @@
 name: Android unit tests
 
+# The push trigger also fires on python-semantic-release's version-bump commits
+# (which only touch VERSION and pyproject.toml). Re-running this workflow after a
+# bump rebuilds the rolling latest-debug APK with the new versionName baked in,
+# so the in-app "Volt Tracker vX.Y.Z" footer stays in sync with the most recent
+# tag instead of lagging one release behind. Pull-request paths intentionally
+# stay narrow — release commits never arrive as PRs.
 on:
   push:
     paths:
       - 'mobile/android/**'
       - '.github/workflows/android.yml'
+      - 'VERSION'
+      - 'pyproject.toml'
   pull_request:
     paths:
       - 'mobile/android/**'
       - '.github/workflows/android.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
