@@ -30,9 +30,9 @@ class ElmConnection {
     }
 
     /**
-     * Stop condition for command reads. Kept local instead of using {@code
-     * java.util.function.BooleanSupplier} because the app supports API 23 without core-library
-     * desugaring.
+     * API-23-safe counterpart to {@code java.util.function.BooleanSupplier}. Android desugaring
+     * does not cover every java.util.function call site on the app's min SDK, so keep this tiny
+     * predicate local to the connection loop.
      */
     interface KeepWaiting {
         boolean getAsBoolean();

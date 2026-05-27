@@ -152,17 +152,19 @@
       (state.storage && state.storage.latestRoute && [state.storage.latestRoute]) ||
       [];
     const recorded = routes.filter((r) => {
-      const id = String((r && r.sessionId) || "");
+      const session = (r && r.session) || {};
+      const id = String(session.id || (r && r.sessionId) || "");
       return id && !id.startsWith("__sample-");
     });
     if (!recorded.length) return null;
     const r = recorded[0];
+    const session = r.session || r;
     const mi = Number(r.distanceMeters) / 1609.34;
     return {
       tone: "ok",
       label: "Last drive",
       meta: [
-        fmtChipDate(r.endedAtMs || r.startedAtMs),
+        fmtChipDate(session.endedAtMs || session.startedAtMs),
         Number.isFinite(mi) ? mi.toFixed(1) + " mi" : "--"
       ],
       isLink: true,

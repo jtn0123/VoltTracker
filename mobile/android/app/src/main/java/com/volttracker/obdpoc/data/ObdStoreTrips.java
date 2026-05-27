@@ -8,10 +8,11 @@ import static com.volttracker.obdpoc.data.ObdStoreSupport.clean;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.countRows;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.countRowsWhere;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.distanceMeters;
+import static com.volttracker.obdpoc.data.ObdStoreSupport.getAllSessions;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.getRecentSessions;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.maxIntForSession;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.maxIntForSessionBoxed;
-import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableDouble;
+import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableDoubleBoxed;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableIntBoxed;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.parseObject;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.reverse;
@@ -114,16 +115,23 @@ final class ObdStoreTrips {
         JSONObject payload = new JSONObject();
         SQLiteDatabase db = helper.getReadableDatabase();
         try {
-            JSONArray trips = tripsJson(100);
             double totalDistance = 0d;
             long totalDriveMs = 0L;
             double longestTrip = 0d;
             int maxSpeed = 0;
             int gpsTripCount = 0;
+            int tripCount = 0;
             long firstAt = 0L;
             long lastAt = 0L;
-            for (int i = 0; i < trips.length(); i++) {
-                JSONObject trip = trips.getJSONObject(i);
+            for (ObdSessionRecord session : getAllSessions(db)) {
+                if (!ObdLocalStore.MODE_OBD.equals(session.mode)) {
+                    continue;
+                }
+                JSONObject trip = tripJson(db, session);
+                if (trip == null) {
+                    continue;
+                }
+                tripCount += 1;
                 double distance = trip.optDouble("distanceMeters", 0d);
                 totalDistance += distance;
                 longestTrip = Math.max(longestTrip, distance);
@@ -138,7 +146,6 @@ final class ObdStoreTrips {
                     lastAt = Math.max(lastAt, startedAt);
                 }
             }
-            int tripCount = trips.length();
             payload.put("tripCount", tripCount);
             payload.put("totalDistanceMeters", totalDistance);
             payload.put("totalDriveMs", totalDriveMs);
@@ -162,7 +169,10 @@ final class ObdStoreTrips {
 
     double totalDistanceMeters(SQLiteDatabase db) throws JSONException {
         double total = 0d;
-        for (ObdSessionRecord session : getRecentSessions(db, 20)) {
+        for (ObdSessionRecord session : getAllSessions(db)) {
+            if (!ObdLocalStore.MODE_OBD.equals(session.mode)) {
+                continue;
+            }
             total += distanceMeters(routePointsForSessionJson(db, session.id, 1000));
         }
         return total;
@@ -606,28 +616,32 @@ final class ObdStoreTrips {
         long total =
                 countRowsWhere(
                         db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, "session_id = ?", sessionArg);
-        if (total > 0) {
-            return downsampledRoutePoints(
-                    db,
-                    VoltTrackerDb.TABLE_LOCATION_SAMPLES,
-                    new String[] {
-                        "captured_at_ms",
-                        "latitude",
-                        "longitude",
-                        "accuracy_m",
-                        "speed_mps",
-                        "bearing_deg",
-                        "altitude_m"
-                    },
-                    "session_id = ?",
-                    sessionArg,
-                    total,
-                    target,
-                    /* fromLocationSamples= */ true);
-        }
         String telemetryWhere = "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL";
         long telemetryTotal =
                 countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, telemetryWhere, sessionArg);
+        if (total > 0) {
+            JSONArray locationPoints =
+                    downsampledRoutePoints(
+                            db,
+                            VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                            new String[] {
+                                "captured_at_ms",
+                                "latitude",
+                                "longitude",
+                                "accuracy_m",
+                                "speed_mps",
+                                "bearing_deg",
+                                "altitude_m"
+                            },
+                            "session_id = ?",
+                            sessionArg,
+                            total,
+                            target,
+                            /* fromLocationSamples= */ true);
+            if (locationPoints.length() >= 2 || telemetryTotal == 0) {
+                return locationPoints;
+            }
+        }
         if (telemetryTotal == 0) {
             return new JSONArray();
         }
@@ -694,16 +708,20 @@ final class ObdStoreTrips {
         item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
         item.put("lat", cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")));
         item.put("lng", cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")));
-        item.put("accuracyM", nullableDouble(cursor, "accuracy_m"));
-        item.put("bearingDeg", nullableDouble(cursor, "bearing_deg"));
+        item.put("accuracyM", jsonNumberOrNull(nullableDoubleBoxed(cursor, "accuracy_m")));
+        item.put("bearingDeg", jsonNumberOrNull(nullableDoubleBoxed(cursor, "bearing_deg")));
         if (fromLocationSamples) {
-            item.put("speedMps", nullableDouble(cursor, "speed_mps"));
-            item.put("altM", nullableDouble(cursor, "altitude_m"));
+            item.put("speedMps", jsonNumberOrNull(nullableDoubleBoxed(cursor, "speed_mps")));
+            item.put("altM", jsonNumberOrNull(nullableDoubleBoxed(cursor, "altitude_m")));
         } else {
-            item.put("speedMps", nullableDouble(cursor, "gps_speed_mps"));
-            item.put("soc", nullableDouble(cursor, "soc"));
+            item.put("speedMps", jsonNumberOrNull(nullableDoubleBoxed(cursor, "gps_speed_mps")));
+            item.put("soc", jsonNumberOrNull(nullableDoubleBoxed(cursor, "soc")));
         }
         return item;
+    }
+
+    private static Object jsonNumberOrNull(Number value) {
+        return value == null ? JSONObject.NULL : value;
     }
 
     /**

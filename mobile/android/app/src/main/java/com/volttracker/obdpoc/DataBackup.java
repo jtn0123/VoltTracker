@@ -27,6 +27,24 @@ import org.json.JSONObject;
  */
 final class DataBackup {
 
+    private static final long MAX_RESTORE_BYTES = 128L * 1024L * 1024L;
+    private static final String[] REQUIRED_RESTORE_TABLES = {
+        "obd_sessions",
+        "telemetry_samples",
+        "status_events",
+        "adapter_history",
+        "pid_observations",
+        "diagnostic_codes",
+        "location_samples",
+        "vehicles",
+        "field_capabilities",
+        "trip_segments",
+        "charge_sessions",
+        "battery_snapshots",
+        "cell_snapshots",
+        "exports"
+    };
+
     private final Context context;
 
     DataBackup(Context context) {
@@ -40,7 +58,11 @@ final class DataBackup {
             payload.put("createdAtMs", System.currentTimeMillis());
             payload.put("appState", MainActivityUtils.parseJson(appStateJson));
             payload.put("storage", MainActivityUtils.parseJson(storageJson));
-            File dir = new File(context.getExternalFilesDir(null), "exports");
+            File root = context.getExternalFilesDir(null);
+            if (root == null) {
+                root = context.getCacheDir();
+            }
+            File dir = new File(root, "exports");
             if (!dir.exists() && !dir.mkdirs()) {
                 payload.put("ok", false);
                 payload.put("error", "Could not create export directory.");
@@ -55,7 +77,7 @@ final class DataBackup {
             try (FileWriter writer = new FileWriter(file)) {
                 writer.write(payload.toString(2));
             }
-        } catch (JSONException | IOException ex) {
+        } catch (JSONException | IOException | RuntimeException ex) {
             try {
                 payload.put("ok", false);
                 payload.put("error", ex.getClass().getSimpleName() + ": " + ex.getMessage());
@@ -109,7 +131,13 @@ final class DataBackup {
             }
             byte[] buffer = new byte[8192];
             int read;
+            long total = 0L;
             while ((read = in.read(buffer)) > 0) {
+                total += read;
+                if (total > MAX_RESTORE_BYTES) {
+                    temp.delete();
+                    return null;
+                }
                 out.write(buffer, 0, read);
             }
         } catch (IOException | RuntimeException ex) {
@@ -158,11 +186,8 @@ final class DataBackup {
         SQLiteDatabase db = null;
         try {
             db = SQLiteDatabase.openDatabase(file.getPath(), null, SQLiteDatabase.OPEN_READONLY);
-            try (Cursor cursor =
-                    db.rawQuery(
-                            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)",
-                            new String[] {"obd_sessions", "telemetry_samples"})) {
-                return cursor.getCount() == 2;
+            try (Cursor cursor = db.rawQuery(requiredTablesSql(), REQUIRED_RESTORE_TABLES)) {
+                return cursor.moveToFirst() && cursor.getInt(0) == REQUIRED_RESTORE_TABLES.length;
             }
         } catch (RuntimeException ex) {
             return false;
@@ -171,6 +196,19 @@ final class DataBackup {
                 db.close();
             }
         }
+    }
+
+    private static String requiredTablesSql() {
+        StringBuilder placeholders = new StringBuilder();
+        for (int i = 0; i < REQUIRED_RESTORE_TABLES.length; i++) {
+            if (i > 0) {
+                placeholders.append(", ");
+            }
+            placeholders.append("?");
+        }
+        return "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ("
+                + placeholders
+                + ")";
     }
 
     static void copyFile(File source, File dest) throws IOException {

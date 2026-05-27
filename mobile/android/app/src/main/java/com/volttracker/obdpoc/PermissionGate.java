@@ -36,9 +36,20 @@ final class PermissionGate {
         return requestMissing(missing);
     }
 
+    /** Backward-compatible alias for tests and callers that name the connect-only behavior. */
+    boolean ensureConnectionGranted() {
+        return ensureConnectPermissions();
+    }
+
     /** Requests optional feature permissions from the dashboard permissions button. */
     boolean ensureGranted() {
         List<String> missing = new ArrayList<>();
+        addMissingConnectionPermissions(missing);
+        addMissingLocationPermissions(missing);
+        return requestMissing(missing);
+    }
+
+    private void addMissingConnectionPermissions(List<String> missing) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (!granted(Manifest.permission.BLUETOOTH_CONNECT)) {
                 missing.add(Manifest.permission.BLUETOOTH_CONNECT);
@@ -51,13 +62,15 @@ final class PermissionGate {
                 && !granted(Manifest.permission.POST_NOTIFICATIONS)) {
             missing.add(Manifest.permission.POST_NOTIFICATIONS);
         }
+    }
+
+    private void addMissingLocationPermissions(List<String> missing) {
         if (!granted(Manifest.permission.ACCESS_FINE_LOCATION)) {
             missing.add(Manifest.permission.ACCESS_FINE_LOCATION);
         }
         if (!granted(Manifest.permission.ACCESS_COARSE_LOCATION)) {
             missing.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         }
-        return requestMissing(missing);
     }
 
     private boolean requestMissing(List<String> missing) {

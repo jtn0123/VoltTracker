@@ -48,6 +48,7 @@ public class ObdService extends Service {
     private static final AtomicBoolean SESSION_ACTIVE = new AtomicBoolean(false);
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService competingAppExecutor = Executors.newSingleThreadExecutor();
     // Shared IO monitor: serializes session teardown against in-flight command IO.
     final Object ioLock = new Object();
     final AtomicBoolean running = new AtomicBoolean(false);
@@ -168,9 +169,7 @@ public class ObdService extends Service {
         } else {
             recorder.logEvent("bluetooth_reporter_skipped", "reason", "missing_bluetooth_connect");
         }
-        // Run once at service start so the CSV is available for the first status broadcast; will
-        // be re-run inside the reporter when subsequent connect attempts keep failing.
-        competingAppDetector.refresh();
+        refreshCompetingAppsAsync();
     }
 
     @Override
@@ -249,6 +248,7 @@ public class ObdService extends Service {
             bluetoothObservability.unregister(this);
         }
         executor.shutdownNow();
+        competingAppExecutor.shutdownNow();
         recorder.shutdown();
         if (localStore != null) {
             localStore.close();
@@ -279,23 +279,9 @@ public class ObdService extends Service {
         // (Voltage, Torque, …) since service onCreate, and we want the dashboard's force-stop
         // button to surface for the *current* session, not a snapshot from process start.
         //
-        // refresh() calls PackageManager.getInstalledApplications, which can take hundreds of
-        // milliseconds on devices with many apps and runs in-line with onStartCommand → ANR
-        // risk on the main thread. Offload to a one-shot worker so the engine startup below
-        // doesn't wait on the PM query.
-        final CompetingAppDetector detectorRef = competingAppDetector;
-        if (detectorRef != null) {
-            new Thread(
-                            () -> {
-                                try {
-                                    detectorRef.refresh();
-                                } catch (RuntimeException ex) {
-                                    Log.w(MainActivity.TAG, "competing-app refresh failed", ex);
-                                }
-                            },
-                            "competing-apps-refresh")
-                    .start();
-        }
+        // The package-manager probe can take hundreds of milliseconds on devices with many apps.
+        // Keep it on the bounded service worker instead of starting ad-hoc threads per tap.
+        refreshCompetingAppsAsync();
         startForegroundSession((scanMode ? "Scanning " : "Connecting to ") + activeName);
         sessionStartedAtMs = System.currentTimeMillis();
         engine.beginSession("");
@@ -304,6 +290,25 @@ public class ObdService extends Service {
         running.set(true);
         SESSION_ACTIVE.set(true);
         activeTask = executor.submit(() -> engine.runBluetoothLoop(address, scanMode));
+    }
+
+    private void refreshCompetingAppsAsync() {
+        final CompetingAppDetector detectorRef = competingAppDetector;
+        if (detectorRef == null) {
+            return;
+        }
+        try {
+            competingAppExecutor.execute(
+                    () -> {
+                        try {
+                            detectorRef.refresh();
+                        } catch (RuntimeException ex) {
+                            Log.w(MainActivity.TAG, "competing-app refresh failed", ex);
+                        }
+                    });
+        } catch (RuntimeException ex) {
+            Log.w(MainActivity.TAG, "competing-app refresh rejected", ex);
+        }
     }
 
     private void startDemoSession() {
@@ -466,6 +471,7 @@ public class ObdService extends Service {
         foregroundServiceActive = true;
     }
 
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
     private int currentForegroundServiceType() {
         int serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
         if (hasLocationPermission()) {

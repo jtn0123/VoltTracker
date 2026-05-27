@@ -25,6 +25,7 @@ import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -58,14 +59,15 @@ final class SessionRecorder {
     // Bucket 3: snapshot source for the system_snapshot event emitted at session start.
     // Held as a Context-bearing Supplier so unit tests can wire it as null.
     private final SystemSnapshotSource snapshotSource;
+    private final AtomicLong droppedTelemetryTasks = new AtomicLong();
     // telemetryExecutor: high-volume telemetry/event/observation writes. Failures are
     // intentionally swallowed — these rows are diagnostic-only, never block OBD polling.
     // DiscardOldestUnlessShutdown: under sustained backpressure during normal operation,
     // drop the oldest queued telemetry rather than block the poll thread or grow the queue
     // without bound. AFTER shutdown, behave like AbortPolicy so awaitTelemetryDrain's
-    // RejectedExecutionException catch path runs immediately instead of waiting 2s for a
-    // marker that will never be processed. Without the shutdown-aware branch, shutdown ↔
-    // lifecycle ordering races on a 2s timeout and finalize can be skipped.
+    // RejectedExecutionException catch path runs immediately instead of waiting for a marker
+    // that will never be processed. Without the shutdown-aware branch, shutdown ↔ lifecycle
+    // ordering races can leave finalize waiting behind a marker that cannot run.
     private final ExecutorService telemetryExecutor =
             new ThreadPoolExecutor(
                     1,
@@ -73,7 +75,7 @@ final class SessionRecorder {
                     0L,
                     TimeUnit.MILLISECONDS,
                     new LinkedBlockingQueue<>(TELEMETRY_QUEUE_CAPACITY),
-                    new DiscardOldestUnlessShutdownPolicy());
+                    new DiscardOldestUnlessShutdownPolicy(droppedTelemetryTasks));
     // lifecycleExecutor: session lifecycle writes (closeSession / finalizeSession).
     // Failures are surfaced via Log.e AND a persist_failure status_events row, so a
     // failed finalize cannot silently leave a session marked active forever.
@@ -103,12 +105,23 @@ final class SessionRecorder {
     // AbortPolicy semantics post-shutdown. See the telemetryExecutor comment for why.
     private static final class DiscardOldestUnlessShutdownPolicy
             implements RejectedExecutionHandler {
+        private final AtomicLong droppedCount;
+
+        DiscardOldestUnlessShutdownPolicy(AtomicLong droppedCount) {
+            this.droppedCount = droppedCount;
+        }
+
         @Override
         public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
             if (executor.isShutdown()) {
                 throw new RejectedExecutionException("telemetry executor shut down");
             }
-            executor.getQueue().poll();
+            if (executor.getQueue().poll() != null) {
+                long dropped = droppedCount.incrementAndGet();
+                Log.w(
+                        MainActivity.TAG,
+                        "telemetry queue full; dropped oldest telemetry task #" + dropped);
+            }
             executor.execute(r);
         }
     }
@@ -264,6 +277,7 @@ final class SessionRecorder {
                 // could otherwise run before they land. Materializers read those rows back, so
                 // a race here would yield "trips" that are missing the last few seconds of
                 // telemetry.
+                final long droppedBeforeClose = droppedTelemetryTasks.getAndSet(0L);
                 lifecycleAsync(
                         () -> {
                             awaitTelemetryDrain();
@@ -277,6 +291,23 @@ final class SessionRecorder {
                                     closingMode,
                                     sampleCount,
                                     detail);
+                            if (droppedBeforeClose > 0) {
+                                JSONObject droppedPayload = new JSONObject();
+                                try {
+                                    droppedPayload.put("dropped", droppedBeforeClose);
+                                } catch (JSONException ignored) {
+                                    // Local numeric value is safe.
+                                }
+                                store.recordEvent(
+                                        closingSessionId,
+                                        "telemetry_dropped",
+                                        "persist",
+                                        "Dropped "
+                                                + droppedBeforeClose
+                                                + " queued telemetry writes before finalize.",
+                                        false,
+                                        droppedPayload);
+                            }
                             materializeIfEnabled(
                                     store,
                                     closingSessionId,
@@ -632,15 +663,15 @@ final class SessionRecorder {
     }
 
     /**
-     * Submits a no-op to {@link #telemetryExecutor} and waits up to two seconds for it to run.
-     * Because the executor is single-threaded with FIFO ordering, by the time our marker task runs
-     * every previously-submitted telemetry write has already finished. Used before
-     * finalize/materialize so those code paths see the full session in the database.
+     * Submits a no-op to {@link #telemetryExecutor} and waits for it to run. Because the executor
+     * is single-threaded with FIFO ordering, by the time our marker task runs every
+     * previously-submitted telemetry write has already finished. Used before finalize/materialize
+     * so those code paths see the full session in the database.
      */
     private void awaitTelemetryDrain() {
         try {
             Future<?> marker = telemetryExecutor.submit(() -> {});
-            marker.get(2, TimeUnit.SECONDS);
+            marker.get(30, TimeUnit.SECONDS);
         } catch (RejectedExecutionException ex) {
             // Submit was rejected because the executor entered shutdown. That tells us OUR
             // marker won't run — it does NOT tell us the previously-queued telemetry tasks
@@ -649,7 +680,7 @@ final class SessionRecorder {
             // returns immediately if the executor has already terminated) before letting
             // finalize/materialize read from the database.
             try {
-                telemetryExecutor.awaitTermination(2, TimeUnit.SECONDS);
+                telemetryExecutor.awaitTermination(30, TimeUnit.SECONDS);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
             }
@@ -658,10 +689,7 @@ final class SessionRecorder {
         } catch (ExecutionException ex) {
             Log.w(MainActivity.TAG, "telemetry drain marker failed", ex.getCause());
         } catch (TimeoutException ex) {
-            Log.w(
-                    MainActivity.TAG,
-                    "telemetry drain timed out after 2s; proceeding with finalize",
-                    ex);
+            Log.w(MainActivity.TAG, "telemetry drain timed out", ex);
         }
     }
 

@@ -16,10 +16,10 @@ import org.robolectric.annotation.Config;
 
 /**
  * Tests {@link CompetingAppDetector#detect()} — the filtering / ordering rules. Uses a stub
- * subclass that overrides {@link CompetingAppDetector#installedApplications()} so we don't need to
- * plumb a real {@link android.content.pm.PackageManager}. {@code ApplicationInfo} is a Parcelable
- * data class so we run under Robolectric to get a real Android runtime; the test stays pure-logic
- * otherwise.
+ * subclass that overrides {@link CompetingAppDetector#isPackageInstalled(String)} so we don't need
+ * to plumb a real {@link android.content.pm.PackageManager}. {@code ApplicationInfo} is a
+ * Parcelable data class so we run under Robolectric to get a real Android runtime; the test stays
+ * pure-logic otherwise.
  */
 @RunWith(RobolectricTestRunner.class)
 // Project targetSdk is 36; Robolectric 4.x ships SDK 34 as its newest. Pin so CI doesn't try to
@@ -42,8 +42,13 @@ public class CompetingAppDetectorTest {
             String ownPackage, List<ApplicationInfo> installed) {
         return new CompetingAppDetector(null, null, null, ownPackage) {
             @Override
-            List<ApplicationInfo> installedApplications() {
-                return installed;
+            boolean isPackageInstalled(String packageName) {
+                for (ApplicationInfo info : installed) {
+                    if (info != null && packageName.equals(info.packageName)) {
+                        return true;
+                    }
+                }
+                return false;
             }
         };
     }
@@ -76,10 +81,8 @@ public class CompetingAppDetectorTest {
 
     @Test
     public void doesNotDetectNonAllowlistedPackagesEvenIfTheirNamesSuggestObd() {
-        // Earlier versions ran a substring-match second pass for "obd"/"elm327"; that pass was
-        // dead on Android 11+ (getInstalledApplications only returns packages the manifest
-        // <queries> block lists) and has been removed. Non-allowlist packages stay invisible
-        // even when their names look OBD-flavored.
+        // Non-allowlist packages stay invisible even when their names look OBD-flavored; production
+        // probes only explicit <queries> packages instead of enumerating installed apps broadly.
         CompetingAppDetector d =
                 withInstalled(
                         "com.volttracker.obdpoc",

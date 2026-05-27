@@ -100,6 +100,20 @@ public class ObdStoreTripsDbTest {
     }
 
     @Test
+    public void sourceOnlyTelemetryIsNotReportedAsATrip() throws Exception {
+        long id = store.startSession("obd", "00:11", "Adapter");
+        JSONObject emptyPoll = new JSONObject();
+        emptyPoll.put("source", "obd");
+        emptyPoll.put("raw", "NO DATA");
+        emptyPoll.put("updatedAt", 1000L);
+        store.recordTelemetry(id, emptyPoll);
+        store.finishSession(id, ObdLocalStore.STATUS_ERROR, 2000L, "");
+
+        assertEquals(0, store.getTripsJson(40).length());
+        assertEquals(0L, store.getStorageSummary().optLong("sampleCount"));
+    }
+
+    @Test
     public void multiSampleSessionReportsHaversineDistance() throws Exception {
         long id = store.startSession("obd", "00:11", "Adapter");
         // Three points along the same longitude — ~1.1 km between each consecutive lat step.
@@ -246,5 +260,44 @@ public class ObdStoreTripsDbTest {
                 summary.getJSONArray("recentRoutes").getJSONObject(0).getJSONArray("points");
         assertEquals(
                 "every GPS fix in a short session must survive", route.length, points.length());
+    }
+
+    @Test
+    public void telemetryGpsBackfillsPartialLocationRoute() throws Exception {
+        long id = store.startSession("obd", "00:11", "Adapter");
+        store.recordLocationSample(id, 900L, "gps", 0.0, 0.0, null, null, null, null, null, null);
+        store.recordTelemetry(id, gpsSample(40, 32.70, -117.10, 1000L));
+        store.recordTelemetry(id, gpsSample(42, 32.71, -117.11, 2000L));
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "");
+
+        JSONArray points =
+                store.getStorageSummary()
+                        .getJSONArray("recentRoutes")
+                        .getJSONObject(0)
+                        .getJSONArray("points");
+        assertEquals(2, points.length());
+        assertEquals(32.70, points.getJSONObject(0).optDouble("lat"), 0.001);
+        assertEquals(-117.11, points.getJSONObject(1).optDouble("lng"), 0.001);
+    }
+
+    @Test
+    public void routePointsKeepUnknownLocationScalarsNull() throws Exception {
+        long id = store.startSession("obd", "00:11", "Adapter");
+        store.recordLocationSample(
+                id, 1000L, "gps", 32.70, -117.10, null, null, null, null, null, null);
+        store.recordLocationSample(
+                id, 2000L, "gps", 32.71, -117.11, null, null, null, null, null, null);
+        store.recordTelemetry(id, gpsSample(40, 32.70, -117.10, 1000L));
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "");
+
+        JSONObject point =
+                store.getStorageSummary()
+                        .getJSONArray("recentRoutes")
+                        .getJSONObject(0)
+                        .getJSONArray("points")
+                        .getJSONObject(0);
+        assertTrue(point.isNull("accuracyM"));
+        assertTrue(point.isNull("speedMps"));
+        assertTrue(point.isNull("altM"));
     }
 }

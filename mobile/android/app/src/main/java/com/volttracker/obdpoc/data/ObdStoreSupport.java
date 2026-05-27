@@ -23,11 +23,19 @@ final class ObdStoreSupport {
     /** A telemetry row counts as "useful" only if it carries at least one real reading. */
     static final String USEFUL_TELEMETRY_WHERE =
             "("
-                    + "COALESCE(source, '') != ''"
-                    + " OR speed_kph IS NOT NULL"
+                    + "speed_kph IS NOT NULL"
                     + " OR rpm IS NOT NULL"
+                    + " OR coolant_c IS NOT NULL"
+                    + " OR load_pct IS NOT NULL"
+                    + " OR throttle_pct IS NOT NULL"
                     + " OR voltage IS NOT NULL"
-                    + " OR TRIM(COALESCE(raw, '')) != ''"
+                    + " OR soc IS NOT NULL"
+                    + " OR battery_temp IS NOT NULL"
+                    + " OR power_kw IS NOT NULL"
+                    + " OR pack_voltage IS NOT NULL"
+                    + " OR pack_current_a IS NOT NULL"
+                    + " OR latitude IS NOT NULL"
+                    + " OR longitude IS NOT NULL"
                     + ")";
 
     // ---- ContentValues / JSON marshalling ------------------------------------------
@@ -105,6 +113,11 @@ final class ObdStoreSupport {
     static long nullableLong(Cursor cursor, String column) {
         int index = cursor.getColumnIndexOrThrow(column);
         return cursor.isNull(index) ? 0L : cursor.getLong(index);
+    }
+
+    static Long nullableLongBoxed(Cursor cursor, String column) {
+        int index = cursor.getColumnIndexOrThrow(column);
+        return cursor.isNull(index) ? null : cursor.getLong(index);
     }
 
     static double nullableDouble(Cursor cursor, String column) {
@@ -240,14 +253,13 @@ final class ObdStoreSupport {
         if (sample == null || sample.length() == 0) {
             return false;
         }
-        if (!clean(sample.optString("source", "")).isEmpty()) {
-            return true;
-        }
-        if (!clean(sample.optString("raw", "")).isEmpty()) {
-            return true;
-        }
         return sample.has("speedKph")
                 || sample.has("rpm")
+                || sample.has("coolantC")
+                || sample.has("loadPct")
+                || sample.has("throttlePct")
+                || sample.has("packVoltage")
+                || sample.has("packCurrentA")
                 || sample.has("voltage")
                 || sample.has("latitude")
                 || sample.has("longitude")
@@ -375,18 +387,18 @@ final class ObdStoreSupport {
     static long averageSampleIntervalMs(SQLiteDatabase db) {
         try (Cursor cursor =
                 db.rawQuery(
-                        "SELECT MIN(captured_at_ms), MAX(captured_at_ms), COUNT(*) FROM "
+                        "SELECT AVG(avg_interval) FROM ("
+                                + "SELECT (MAX(captured_at_ms) - MIN(captured_at_ms)) * 1.0"
+                                + " / (COUNT(*) - 1) AS avg_interval FROM "
                                 + VoltTrackerDb.TABLE_TELEMETRY
                                 + " WHERE "
-                                + USEFUL_TELEMETRY_WHERE,
+                                + USEFUL_TELEMETRY_WHERE
+                                + " GROUP BY session_id HAVING COUNT(*) > 1)",
                         null)) {
-            if (!cursor.moveToFirst() || cursor.getLong(2) < 2) {
+            if (!cursor.moveToFirst() || cursor.isNull(0)) {
                 return 0L;
             }
-            return Math.max(
-                    0L,
-                    Math.round(
-                            (cursor.getDouble(1) - cursor.getDouble(0)) / (cursor.getLong(2) - 1)));
+            return Math.max(0L, Math.round(cursor.getDouble(0)));
         }
     }
 
@@ -428,6 +440,14 @@ final class ObdStoreSupport {
     // ---- session reads shared by the report classes --------------------------------
 
     static List<ObdSessionRecord> getRecentSessions(SQLiteDatabase db, int limit) {
+        return getSessions(db, boundedLimit(limit));
+    }
+
+    static List<ObdSessionRecord> getAllSessions(SQLiteDatabase db) {
+        return getSessions(db, null);
+    }
+
+    private static List<ObdSessionRecord> getSessions(SQLiteDatabase db, String limit) {
         List<ObdSessionRecord> records = new ArrayList<>();
         try (Cursor cursor =
                 db.query(
@@ -438,7 +458,7 @@ final class ObdStoreSupport {
                         null,
                         null,
                         "started_at_ms DESC",
-                        boundedLimit(limit))) {
+                        limit)) {
             while (cursor.moveToNext()) {
                 records.add(readSession(cursor));
             }

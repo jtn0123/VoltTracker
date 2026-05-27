@@ -182,37 +182,35 @@
     }
     wrap.hidden = false;
     const selId = String(state.selectedMapSessionId || "");
-    const chips = [];
-    routes.forEach((route) => {
+    const chips = routes.map((route) => {
       if (typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
       const s = sessionForRoute(route);
       const id = String(s.id || "");
-      const active = id === selId;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "map-drive-chip" + (id === selId ? " is-active" : "");
+      button.dataset.mapSession = id;
+      const date = document.createElement("span");
+      date.className = "dl";
+      date.textContent = fmtChipDate(s.startedAtMs);
+      const meta = document.createElement("span");
+      meta.className = "dm";
+      const distance = document.createElement("b");
       const distMi = (Number(route.distanceMeters || 0) / 1609.34).toFixed(1);
+      distance.textContent = distMi + " mi";
+      meta.append(distance);
       const effPts = (route.points || []).filter((p) => Number.isFinite(Number(p.eff)));
       const avgEff = effPts.length
         ? effPts.reduce((acc, p) => acc + Number(p.eff), 0) / effPts.length
         : 0;
-      const effColor = mapEffColor(avgEff > 0 ? avgEff : NaN);
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "map-drive-chip" + (active ? " is-active" : "");
-      chip.dataset.mapSession = id;
-      const label = document.createElement("span");
-      label.className = "dl";
-      label.textContent = fmtChipDate(s.startedAtMs);
-      const meta = document.createElement("span");
-      meta.className = "dm";
-      const distance = document.createElement("b");
-      distance.textContent = distMi + " mi";
-      meta.append(distance);
       if (avgEff > 0) {
+        meta.append(document.createTextNode(" · "));
         const dot = document.createElement("u");
-        dot.style.background = effColor;
-        meta.append(" · ", dot, " " + avgEff.toFixed(1) + " mi/kWh");
+        dot.style.background = mapEffColor(avgEff);
+        meta.append(dot, document.createTextNode(" " + avgEff.toFixed(1) + " mi/kWh"));
       }
-      chip.append(label, meta);
-      chips.push(chip);
+      button.append(date, meta);
+      return button;
     });
     wrap.replaceChildren(...chips);
     // Keep the active chip visible after a selection change (or on first render

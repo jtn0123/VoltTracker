@@ -1,14 +1,10 @@
 package com.volttracker.obdpoc;
 
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -101,51 +97,35 @@ class CompetingAppDetector {
      */
     List<String> detect() {
         Set<String> ordered = new LinkedHashSet<>();
-        Set<String> seen = new LinkedHashSet<>();
-        List<ApplicationInfo> installed = installedApplications();
-        if (installed == null) {
-            return Collections.emptyList();
-        }
-        for (ApplicationInfo info : installed) {
-            if (info == null || info.packageName == null) {
-                continue;
-            }
-            seen.add(info.packageName.toLowerCase(Locale.US));
-        }
         for (String known : KNOWN_OBD_PACKAGES) {
             if (known.equalsIgnoreCase(ownPackageName)) {
                 continue;
             }
-            if (seen.contains(known)) {
+            if (isPackageInstalled(known)) {
                 ordered.add(known);
             }
         }
-        return new ArrayList<>(ordered);
+        return new java.util.ArrayList<>(ordered);
     }
 
     /**
-     * Test seam: returns package-manager-visible apps. Tests override for pure filtering checks.
+     * Test seam: production probes only the packages declared in {@link #KNOWN_OBD_PACKAGES}. This
+     * avoids broad installed-app enumeration, which Android package visibility restricts and lint
+     * flags for user-privacy reasons.
      */
-    List<ApplicationInfo> installedApplications() {
+    boolean isPackageInstalled(String packageName) {
         if (packageManager == null) {
-            return Collections.emptyList();
+            return false;
         }
-        List<ApplicationInfo> visible = new ArrayList<>();
-        for (String packageName : KNOWN_OBD_PACKAGES) {
-            ApplicationInfo info = applicationInfo(packageName);
-            if (info != null) {
-                visible.add(info);
-            }
-        }
-        return visible;
-    }
-
-    private ApplicationInfo applicationInfo(String packageName) {
         try {
-            return packageManager.getApplicationInfo(packageName, 0);
-        } catch (NameNotFoundException | RuntimeException ex) {
-            // Missing/hidden packages and transient PM errors both mean "not detected".
-            return null;
+            packageManager.getPackageInfo(packageName, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException ex) {
+            return false;
+        } catch (RuntimeException ex) {
+            // PackageManager can throw on transient PM errors; treat that as "not installed"
+            // rather than letting it crash session start.
+            return false;
         }
     }
 }

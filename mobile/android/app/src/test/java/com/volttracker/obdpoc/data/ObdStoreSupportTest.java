@@ -68,8 +68,10 @@ public class ObdStoreSupportTest {
     public void isUsefulTelemetryDetectsRealReadings() throws JSONException {
         assertFalse(ObdStoreSupport.isUsefulTelemetry(new JSONObject()));
         assertFalse(ObdStoreSupport.isUsefulTelemetry(new JSONObject().put("note", "hi")));
-        assertTrue(ObdStoreSupport.isUsefulTelemetry(new JSONObject().put("source", "obd")));
+        assertFalse(ObdStoreSupport.isUsefulTelemetry(new JSONObject().put("source", "obd")));
+        assertFalse(ObdStoreSupport.isUsefulTelemetry(new JSONObject().put("raw", "NO DATA")));
         assertTrue(ObdStoreSupport.isUsefulTelemetry(new JSONObject().put("speedKph", 40)));
+        assertTrue(ObdStoreSupport.isUsefulTelemetry(new JSONObject().put("voltage", 13.8)));
         assertTrue(ObdStoreSupport.isUsefulTelemetry(new JSONObject().put("latitude", 32.7)));
     }
 

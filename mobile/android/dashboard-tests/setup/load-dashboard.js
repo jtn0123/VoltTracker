@@ -200,6 +200,7 @@ const REQUIRED_DOM = `
   <div id="mapDistance"></div>
   <div id="mapDuration"></div>
   <div id="mapAccuracy"></div>
+  <div id="mapDriveChips"></div>
   <div id="mapSessionList"></div>
 
   <div id="demoBanner" hidden></div>

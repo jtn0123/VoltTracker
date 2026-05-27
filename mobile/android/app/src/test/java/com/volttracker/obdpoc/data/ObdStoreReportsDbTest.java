@@ -4,7 +4,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import android.content.ContentValues;
 import android.content.Context;
+import android.database.sqlite.SQLiteDatabase;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
@@ -146,5 +148,59 @@ public class ObdStoreReportsDbTest {
         JSONObject insights = store.getInsightsJson();
         assertEquals(2, insights.optInt("tripCount"));
         assertEquals("max should be taken across all trips", 95, insights.optInt("maxSpeedKph"));
+    }
+
+    @Test
+    public void summaryPreservesNullChargeAndBatteryFields() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        VoltTrackerDb helper = new VoltTrackerDb(context);
+        try {
+            SQLiteDatabase db = helper.getWritableDatabase();
+            ContentValues charge = new ContentValues();
+            charge.put("started_at_ms", 1000L);
+            charge.putNull("ended_at_ms");
+            charge.putNull("charger_type");
+            charge.putNull("start_soc");
+            charge.putNull("end_soc");
+            charge.putNull("power_kw");
+            charge.putNull("energy_kwh");
+            charge.putNull("confidence");
+            charge.put("created_at_ms", 1000L);
+            db.insertOrThrow(VoltTrackerDb.TABLE_CHARGE_SESSIONS, null, charge);
+
+            ContentValues battery = new ContentValues();
+            battery.put("captured_at_ms", 2000L);
+            battery.putNull("soc");
+            battery.putNull("capacity_ah");
+            battery.putNull("soh_pct");
+            battery.putNull("pack_voltage");
+            battery.putNull("pack_current_a");
+            battery.putNull("pack_power_kw");
+            battery.putNull("battery_temp_c");
+            battery.put("created_at_ms", 2000L);
+            db.insertOrThrow(VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS, null, battery);
+        } finally {
+            helper.close();
+        }
+
+        JSONObject summary = store.getStorageSummary();
+        JSONObject latestCharge = summary.getJSONObject("chargeSummary").getJSONObject("latest");
+        assertEquals(JSONObject.NULL, latestCharge.get("endedAtMs"));
+        assertEquals(JSONObject.NULL, latestCharge.get("chargerType"));
+        assertEquals(JSONObject.NULL, latestCharge.get("startSoc"));
+        assertEquals(JSONObject.NULL, latestCharge.get("endSoc"));
+        assertEquals(JSONObject.NULL, latestCharge.get("powerKw"));
+        assertEquals(JSONObject.NULL, latestCharge.get("energyKwh"));
+        assertEquals(JSONObject.NULL, latestCharge.get("confidence"));
+
+        JSONObject latestBattery =
+                summary.getJSONObject("batterySummary").getJSONObject("latestBatterySnapshot");
+        assertEquals(JSONObject.NULL, latestBattery.get("soc"));
+        assertEquals(JSONObject.NULL, latestBattery.get("capacityAh"));
+        assertEquals(JSONObject.NULL, latestBattery.get("sohPct"));
+        assertEquals(JSONObject.NULL, latestBattery.get("packVoltage"));
+        assertEquals(JSONObject.NULL, latestBattery.get("packCurrentA"));
+        assertEquals(JSONObject.NULL, latestBattery.get("packPowerKw"));
+        assertEquals(JSONObject.NULL, latestBattery.get("batteryTempC"));
     }
 }

@@ -345,9 +345,10 @@
       renderForRetry();
       return;
     }
+    const failedSessionStatuses = ["failed", "error", "disconnected"];
     const allFailed = recent
       .slice(0, 3)
-      .every((s) => String((s && s.status) || "").toLowerCase() === "failed");
+      .every((s) => failedSessionStatuses.includes(String((s && s.status) || "").toLowerCase()));
     if (!allFailed) {
       renderForRetry();
       return;

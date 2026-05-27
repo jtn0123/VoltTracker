@@ -10,6 +10,7 @@
     const parsed = VD.parsePayload(payload, {});
     const newRoutes =
       parsed && Array.isArray(parsed.recentRoutes) ? parsed.recentRoutes : [];
+    const allowSampleFallback = !bridge;
     // First-launch fallback: until the user has logged a real OBD drive,
     // populate the Map tab with the synthetic sample drive so the scrubber,
     // efficiency-colored route, drive picker, and Insights scatter all show
@@ -19,7 +20,7 @@
     // loaded sample against subsequent empty pushes — otherwise the next
     // publishStorageSummary call wipes the sample back to empty. Real data
     // (newRoutes.length > 0) always wins and clears the flag.
-    if (newRoutes.length > 0) {
+    if (newRoutes.length > 0 || !allowSampleFallback) {
       state._mapSampleLoaded = false;
     } else if (state._mapSampleLoaded) {
       // We're already showing the sample, incoming payload has no real
@@ -27,7 +28,7 @@
       return;
     }
     state.storage = parsed;
-    if (!state._mapSampleLoaded && newRoutes.length === 0 && typeof VD.loadSampleData === "function") {
+    if (allowSampleFallback && !state._mapSampleLoaded && newRoutes.length === 0 && typeof VD.loadSampleData === "function") {
       state._mapSampleLoaded = true;
       VD.loadSampleData();
       return;

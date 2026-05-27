@@ -10,10 +10,10 @@ import static com.volttracker.obdpoc.data.ObdStoreSupport.firstOrNull;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.getRecentSessions;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.maxDouble;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.maxInt;
-import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableDouble;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableDoubleBoxed;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableIntBoxed;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableLong;
+import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableLongBoxed;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.parseObject;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.readAdapterHistory;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.readSession;
@@ -543,15 +543,14 @@ final class ObdStoreReports {
             JSONObject item = new JSONObject();
             item.put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
             item.put("startedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("started_at_ms")));
-            item.put("endedAtMs", nullableLong(cursor, "ended_at_ms"));
-            item.put(
-                    "chargerType",
-                    clean(cursor.getString(cursor.getColumnIndexOrThrow("charger_type"))));
-            item.put("startSoc", nullableDouble(cursor, "start_soc"));
-            item.put("endSoc", nullableDouble(cursor, "end_soc"));
-            item.put("powerKw", nullableDouble(cursor, "power_kw"));
-            item.put("energyKwh", nullableDouble(cursor, "energy_kwh"));
-            item.put("confidence", nullableDouble(cursor, "confidence"));
+            item.put("endedAtMs", boxedOrNull(nullableLongBoxed(cursor, "ended_at_ms")));
+            String chargerType = cursor.getString(cursor.getColumnIndexOrThrow("charger_type"));
+            item.put("chargerType", chargerType == null ? JSONObject.NULL : clean(chargerType));
+            item.put("startSoc", boxedOrNull(nullableDoubleBoxed(cursor, "start_soc")));
+            item.put("endSoc", boxedOrNull(nullableDoubleBoxed(cursor, "end_soc")));
+            item.put("powerKw", boxedOrNull(nullableDoubleBoxed(cursor, "power_kw")));
+            item.put("energyKwh", boxedOrNull(nullableDoubleBoxed(cursor, "energy_kwh")));
+            item.put("confidence", boxedOrNull(nullableDoubleBoxed(cursor, "confidence")));
             return item;
         }
     }
@@ -584,13 +583,13 @@ final class ObdStoreReports {
             item.put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
             item.put(
                     "capturedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")));
-            item.put("soc", nullableDouble(cursor, "soc"));
-            item.put("capacityAh", nullableDouble(cursor, "capacity_ah"));
-            item.put("sohPct", nullableDouble(cursor, "soh_pct"));
-            item.put("packVoltage", nullableDouble(cursor, "pack_voltage"));
-            item.put("packCurrentA", nullableDouble(cursor, "pack_current_a"));
-            item.put("packPowerKw", nullableDouble(cursor, "pack_power_kw"));
-            item.put("batteryTempC", nullableDouble(cursor, "battery_temp_c"));
+            item.put("soc", boxedOrNull(nullableDoubleBoxed(cursor, "soc")));
+            item.put("capacityAh", boxedOrNull(nullableDoubleBoxed(cursor, "capacity_ah")));
+            item.put("sohPct", boxedOrNull(nullableDoubleBoxed(cursor, "soh_pct")));
+            item.put("packVoltage", boxedOrNull(nullableDoubleBoxed(cursor, "pack_voltage")));
+            item.put("packCurrentA", boxedOrNull(nullableDoubleBoxed(cursor, "pack_current_a")));
+            item.put("packPowerKw", boxedOrNull(nullableDoubleBoxed(cursor, "pack_power_kw")));
+            item.put("batteryTempC", boxedOrNull(nullableDoubleBoxed(cursor, "battery_temp_c")));
             return item;
         }
     }

@@ -7,7 +7,7 @@ apply plugin: "com.diffplug.spotless"
 spotless {
     java {
         target "src/main/java/**/*.java", "src/test/java/**/*.java"
-        googleJavaFormat("1.22.0").aosp()
+        googleJavaFormat("1.28.0").aosp()
         removeUnusedImports()
         trimTrailingWhitespace()
         endWithNewline()
@@ -16,7 +16,7 @@ spotless {
         target "src/main/assets/dashboard/**/*.{js,css,html}",
                "src/main/dashboard-src/**/*.html"
         targetExclude "src/main/assets/dashboard/lib/**", "src/main/assets/dashboard/index.html"
-        prettier("3.2.5")
+        prettier("3.8.3")
         trimTrailingWhitespace()
         endWithNewline()
     }
@@ -97,12 +97,13 @@ android {
         unitTests.all {
             jacoco.includeNoLocationClasses = true
             jacoco.excludes = ["jdk.*", "jdk.internal.*", "sun.*"]
+            jvmArgs += ["--enable-native-access=ALL-UNNAMED"]
         }
     }
 
     lint {
         abortOnError = true
-        warningsAsErrors = false
+        warningsAsErrors = true
         checkDependencies = true
         htmlReport = true
         xmlReport = true

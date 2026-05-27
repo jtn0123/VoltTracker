@@ -196,10 +196,31 @@ final class BackupController {
                 activity.localStore.close();
                 activity.localStore = null;
             }
-            DataBackup.copyFile(staged, dbFile);
+            File restoreTemp = new File(dbFile.getPath() + ".restore-tmp");
+            File restoreBackup = new File(dbFile.getPath() + ".restore-backup");
+            DataBackup.deleteIfExists(restoreTemp);
+            DataBackup.deleteIfExists(restoreBackup);
+            DataBackup.copyFile(staged, restoreTemp);
+            if (dbFile.exists()) {
+                DataBackup.copyFile(dbFile, restoreBackup);
+            }
+            try {
+                DataBackup.copyFile(restoreTemp, dbFile);
+            } catch (IOException | RuntimeException ex) {
+                restoreOriginalDatabase(dbFile, restoreBackup);
+                throw ex;
+            }
             DataBackup.deleteIfExists(new File(dbFile.getPath() + "-wal"));
             DataBackup.deleteIfExists(new File(dbFile.getPath() + "-shm"));
-            activity.localStore = new ObdLocalStore(activity);
+            try {
+                activity.localStore = new ObdLocalStore(activity);
+            } catch (RuntimeException ex) {
+                restoreOriginalDatabase(dbFile, restoreBackup);
+                activity.localStore = new ObdLocalStore(activity);
+                throw ex;
+            }
+            DataBackup.deleteIfExists(restoreTemp);
+            DataBackup.deleteIfExists(restoreBackup);
             return RestoreResult.OK;
         } catch (IOException | RuntimeException ex) {
             if (activity.localStore == null) {
@@ -212,6 +233,19 @@ final class BackupController {
             return RestoreResult.OTHER;
         } finally {
             staged.delete();
+        }
+    }
+
+    private static void restoreOriginalDatabase(File dbFile, File restoreBackup) {
+        if (restoreBackup == null || !restoreBackup.exists()) {
+            return;
+        }
+        try {
+            DataBackup.copyFile(restoreBackup, dbFile);
+            DataBackup.deleteIfExists(new File(dbFile.getPath() + "-wal"));
+            DataBackup.deleteIfExists(new File(dbFile.getPath() + "-shm"));
+        } catch (IOException | RuntimeException ignored) {
+            // The Activity will attempt to reopen the store in the caller's catch path.
         }
     }
 
