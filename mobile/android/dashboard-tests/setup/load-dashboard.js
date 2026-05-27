@@ -193,6 +193,7 @@ const REQUIRED_DOM = `
   <div id="mapCard"></div>
   <button id="mapFullBtn"></button>
   <div id="mapEmpty"></div>
+  <div id="mapDriveChips"></div>
   <div id="mapPointBadge"></div>
   <div id="mapTitle"></div>
   <div id="mapKicker"></div>

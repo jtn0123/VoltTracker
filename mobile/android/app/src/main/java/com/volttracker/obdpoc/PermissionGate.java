@@ -8,9 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Centralizes the runtime-permission handling for {@link MainActivity}: requesting the Bluetooth,
- * location, and notification permissions the OBD service needs and reporting which are currently
- * granted. Extracted so the SDK-version branching lives in one place.
+ * Centralizes the runtime-permission handling for {@link MainActivity}. Connecting only requires
+ * the Bluetooth runtime permissions; location and notifications are optional feature permissions
+ * and must not block the core OBD session.
  */
 final class PermissionGate {
 
@@ -22,7 +22,21 @@ final class PermissionGate {
         this.activity = activity;
     }
 
-    /** Requests any not-yet-granted permissions. Returns true when nothing was missing. */
+    /** Requests missing Bluetooth permissions. Returns true when connect can proceed now. */
+    boolean ensureConnectPermissions() {
+        List<String> missing = new ArrayList<>();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (!granted(Manifest.permission.BLUETOOTH_CONNECT)) {
+                missing.add(Manifest.permission.BLUETOOTH_CONNECT);
+            }
+            if (!granted(Manifest.permission.BLUETOOTH_SCAN)) {
+                missing.add(Manifest.permission.BLUETOOTH_SCAN);
+            }
+        }
+        return requestMissing(missing);
+    }
+
+    /** Requests optional feature permissions from the dashboard permissions button. */
     boolean ensureGranted() {
         List<String> missing = new ArrayList<>();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -43,6 +57,10 @@ final class PermissionGate {
         if (!granted(Manifest.permission.ACCESS_COARSE_LOCATION)) {
             missing.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         }
+        return requestMissing(missing);
+    }
+
+    private boolean requestMissing(List<String> missing) {
         if (!missing.isEmpty()) {
             activity.requestPermissions(missing.toArray(new String[0]), REQUEST_CODE);
             return false;

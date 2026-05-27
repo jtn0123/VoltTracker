@@ -15,7 +15,6 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BooleanSupplier;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -455,7 +454,7 @@ public class ObdPollingEngineTest {
         }
 
         @Override
-        String transact(String command, long timeoutMs, BooleanSupplier keepWaiting)
+        String transact(String command, long timeoutMs, ElmConnection.KeepWaiting keepWaiting)
                 throws IOException {
             commandLog.add(command);
             TransactInterceptor interceptor = transactInterceptor;

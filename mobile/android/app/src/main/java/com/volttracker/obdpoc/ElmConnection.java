@@ -7,7 +7,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
-import java.util.function.BooleanSupplier;
 
 /**
  * Owns the Bluetooth RFCOMM socket to the ELM327 adapter and the low-level command IO. Extracted
@@ -28,6 +27,15 @@ class ElmConnection {
      */
     interface Clock {
         long nowMs();
+    }
+
+    /**
+     * Stop condition for command reads. Kept local instead of using {@code
+     * java.util.function.BooleanSupplier} because the app supports API 23 without core-library
+     * desugaring.
+     */
+    interface KeepWaiting {
+        boolean getAsBoolean();
     }
 
     /**
@@ -199,8 +207,7 @@ class ElmConnection {
      *
      * @throws IOException if the stream is not open or the socket has broken
      */
-    String transact(String command, long timeoutMs, BooleanSupplier keepWaiting)
-            throws IOException {
+    String transact(String command, long timeoutMs, KeepWaiting keepWaiting) throws IOException {
         if (output == null || input == null) {
             throw new IOException("Adapter stream is not open");
         }

@@ -165,7 +165,8 @@
         fmtChipDate(r.endedAtMs || r.startedAtMs),
         Number.isFinite(mi) ? mi.toFixed(1) + " mi" : "--"
       ],
-      isLink: true
+      isLink: true,
+      liveStable: true
     };
   }
 
@@ -178,9 +179,11 @@
     if (c.isLink) {
       root.type = "button";
       root.dataset.navJump = "map";
-    } else {
+    } else if (c.liveStable || c.tone === "idle" || c.tone === "ok") {
       root.setAttribute("role", "status");
       root.setAttribute("aria-live", "polite");
+    } else {
+      root.setAttribute("aria-hidden", "true");
     }
     root.dataset.tone = c.tone;
 
@@ -213,6 +216,7 @@
     chips.push(deriveLiveChip());
     const last = deriveLastDriveChip();
     if (last) chips.push(last);
+
     host.replaceChildren(...chips.map(buildDriveNowChip));
   }
 

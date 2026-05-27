@@ -45,6 +45,7 @@ public class ObdService extends Service {
     public static final String EXTRA_ADDRESS = "address";
     public static final String EXTRA_NAME = "name";
     public static final String EXTRA_JSON = "json";
+    private static final AtomicBoolean SESSION_ACTIVE = new AtomicBoolean(false);
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     // Shared IO monitor: serializes session teardown against in-flight command IO.
@@ -86,6 +87,15 @@ public class ObdService extends Service {
      */
     public void requestCancelRetry() {
         cancelRetryRequested = true;
+    }
+
+    static boolean hasActiveSession() {
+        return SESSION_ACTIVE.get();
+    }
+
+    void markSessionInactive() {
+        running.set(false);
+        SESSION_ACTIVE.set(false);
     }
 
     // === SHARED CONTRACT (prep commit): per-session signals merged into every status broadcast.
@@ -292,6 +302,7 @@ public class ObdService extends Service {
         openSessionLog(scanMode ? "scan" : "obd", address);
         startLocationTracking();
         running.set(true);
+        SESSION_ACTIVE.set(true);
         activeTask = executor.submit(() -> engine.runBluetoothLoop(address, scanMode));
     }
 
@@ -302,6 +313,7 @@ public class ObdService extends Service {
         engine.beginSession("demo");
         openSessionLog("demo", null);
         running.set(true);
+        SESSION_ACTIVE.set(true);
         activeTask = executor.submit(engine::runDemoLoop);
     }
 
@@ -326,6 +338,7 @@ public class ObdService extends Service {
 
     private void stopCurrentSession(String statusMessage) {
         running.set(false);
+        SESSION_ACTIVE.set(false);
         if (activeTask != null) {
             activeTask.cancel(true);
             activeTask = null;

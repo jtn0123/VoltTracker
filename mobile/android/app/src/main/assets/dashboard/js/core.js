@@ -46,6 +46,15 @@
   const bridge = VD.bridge;
   const el = VD.el;
 
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   // C2: per-render AbortControllers so the listeners attached inside renderTrips()
   // and setHistory() don't accumulate across re-renders. Each render aborts the
   // previous batch before binding the new one.
@@ -511,6 +520,7 @@
 
   Object.assign(VD, {
     reportClientError,
+    escapeHtml,
     parsePayload,
     setText,
     setMeter,

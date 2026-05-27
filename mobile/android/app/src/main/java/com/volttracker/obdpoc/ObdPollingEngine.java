@@ -69,13 +69,9 @@ class ObdPollingEngine {
     private final SpeedPlausibilityFilter speedFilter = new SpeedPlausibilityFilter();
     private final DemoPollingLoop demoLoop;
     private final DiagnosticScanRunner scanRunner;
+    private final SessionHealthTracker sessionHealth;
     private int sampleCount;
     private String supportedPidsSummary = "";
-    private int backgroundSampleCount;
-    private int sampleGapCount;
-    private long lastSampleAtMs;
-    private long lastSampleGapMs;
-    private long maxSampleGapMs;
 
     // B6 — staggered polling state. cycleNum drives PidSchedule.dueOnCycle(); the maps
     // carry forward the most recent raw response (and wall-clock time it was taken) for
@@ -93,6 +89,7 @@ class ObdPollingEngine {
 
     ObdPollingEngine(ObdService service) {
         this.service = service;
+        this.sessionHealth = new SessionHealthTracker(service);
         this.demoLoop = new DemoPollingLoop(service, this);
         this.scanRunner = new DiagnosticScanRunner(service, this);
     }
@@ -120,11 +117,11 @@ class ObdPollingEngine {
     }
 
     int backgroundSampleCount() {
-        return backgroundSampleCount;
+        return sessionHealth.backgroundSampleCount();
     }
 
     int sampleGapCount() {
-        return sampleGapCount;
+        return sessionHealth.sampleGapCount();
     }
 
     void closeSocket() {
@@ -174,17 +171,20 @@ class ObdPollingEngine {
         if (address == null || address.trim().isEmpty()) {
             service.broadcastStatus("error", "No adapter selected.", true);
             service.closeSessionLog();
+            service.markSessionInactive();
             return;
         }
         if (!service.hasBluetoothConnectPermission()) {
             service.broadcastStatus("error", "Bluetooth permission is missing.", true);
             service.closeSessionLog();
+            service.markSessionInactive();
             return;
         }
 
         if (!isBluetoothReady()) {
             service.broadcastStatus("error", "Bluetooth is off or unavailable.", true);
             service.closeSessionLog();
+            service.markSessionInactive();
             return;
         }
 
@@ -402,6 +402,7 @@ class ObdPollingEngine {
             service.recorder.logEvent("socket_closing");
             closeSocket();
             service.closeSessionLog();
+            service.markSessionInactive();
         }
     }
 
@@ -818,13 +819,7 @@ class ObdPollingEngine {
     }
 
     private void resetSessionHealth() {
-        synchronized (service.ioLock) {
-            backgroundSampleCount = 0;
-            sampleGapCount = 0;
-            lastSampleAtMs = 0L;
-            lastSampleGapMs = 0L;
-            maxSampleGapMs = 0L;
-        }
+        sessionHealth.reset();
     }
 
     /**
@@ -970,34 +965,7 @@ class ObdPollingEngine {
     }
 
     void appendSessionHealth(JSONObject sample) throws JSONException {
-        synchronized (service.ioLock) {
-            long now = sample.optLong("updatedAt", System.currentTimeMillis());
-            long gapMs = lastSampleAtMs > 0L ? Math.max(0L, now - lastSampleAtMs) : 0L;
-            if (gapMs > 0L) {
-                lastSampleGapMs = gapMs;
-                maxSampleGapMs = Math.max(maxSampleGapMs, gapMs);
-                long expectedGapMs = "demo".equals(service.recorder.activeMode()) ? 3500L : 6000L;
-                if (gapMs > expectedGapMs) {
-                    sampleGapCount += 1;
-                    service.recorder.logEvent(
-                            "sample_gap",
-                            "gapMs",
-                            String.valueOf(gapMs),
-                            "mode",
-                            service.recorder.activeMode());
-                }
-            }
-            lastSampleAtMs = now;
-            if (!service.appInForeground) {
-                backgroundSampleCount += 1;
-            }
-            sample.put("appForeground", service.appInForeground);
-            sample.put("foregroundServiceActive", service.foregroundServiceActive);
-            sample.put("backgroundSampleCount", backgroundSampleCount);
-            sample.put("sampleGapCount", sampleGapCount);
-            sample.put("lastSampleGapMs", lastSampleGapMs);
-            sample.put("maxSampleGapMs", maxSampleGapMs);
-        }
+        sessionHealth.append(sample);
     }
 
     String sendRecoverableCommand(String command, long timeoutMs) throws IOException {

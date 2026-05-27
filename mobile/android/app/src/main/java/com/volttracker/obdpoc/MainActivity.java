@@ -141,7 +141,7 @@ public class MainActivity extends Activity {
 
         WebViewBootstrap.configure(webView, new VoltBridge(this), this::onDashboardReady);
 
-        permissionGate.ensureGranted();
+        permissionGate.ensureConnectPermissions();
     }
 
     private void onDashboardReady() {
@@ -237,7 +237,7 @@ public class MainActivity extends Activity {
 
     @SuppressLint("MissingPermission")
     void startObdService(String action, String address, String name) {
-        if (!permissionGate.ensureGranted()) {
+        if (!permissionGate.ensureConnectPermissions()) {
             publishStatus("blocked", "Grant Bluetooth permission, then connect again.", true);
             return;
         }
@@ -479,7 +479,8 @@ public class MainActivity extends Activity {
     /** True while an OBD logging session is connecting or active. */
     boolean isLoggingActive() {
         return MainActivityUtils.isConnectedState(
-                lastStatus == null ? "" : lastStatus.optString("state", ""));
+                        lastStatus == null ? "" : lastStatus.optString("state", ""))
+                || ObdService.hasActiveSession();
     }
 
     private void publishAppState() {

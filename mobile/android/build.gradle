@@ -11,3 +11,36 @@ tasks.named("dependencyUpdates").configure {
         }
     }
 }
+
+def dashboardTestsDir = file("dashboard-tests")
+
+tasks.register("dashboardNpmCi", Exec) {
+    description = "Installs dashboard test dependencies from package-lock.json."
+    workingDir = dashboardTestsDir
+    commandLine "npm", "ci"
+    inputs.file(file("${dashboardTestsDir}/package.json"))
+    inputs.file(file("${dashboardTestsDir}/package-lock.json"))
+    outputs.dir(file("${dashboardTestsDir}/node_modules"))
+}
+
+tasks.register("dashboardTest", Exec) {
+    description = "Runs dashboard Vitest coverage for the shipped WebView assets."
+    dependsOn("dashboardNpmCi")
+    workingDir = dashboardTestsDir
+    commandLine "npm", "test", "--", "--run"
+}
+
+tasks.register("dashboardLint", Exec) {
+    description = "Runs dashboard JavaScript lint."
+    dependsOn("dashboardNpmCi")
+    workingDir = dashboardTestsDir
+    commandLine "npm", "run", "lint"
+}
+
+subprojects {
+    plugins.withId("com.android.application") {
+        tasks.named("check") {
+            dependsOn(rootProject.tasks.named("dashboardTest"), rootProject.tasks.named("dashboardLint"))
+        }
+    }
+}

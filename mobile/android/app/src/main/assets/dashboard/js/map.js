@@ -176,13 +176,13 @@
     const wrap = el("mapDriveChips");
     if (!wrap) return;
     if (!routes.length) {
-      wrap.innerHTML = "";
+      wrap.replaceChildren();
       wrap.hidden = true;
       return;
     }
     wrap.hidden = false;
     const selId = String(state.selectedMapSessionId || "");
-    const buf = [];
+    const chips = [];
     routes.forEach((route) => {
       if (typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
       const s = sessionForRoute(route);
@@ -194,24 +194,27 @@
         ? effPts.reduce((acc, p) => acc + Number(p.eff), 0) / effPts.length
         : 0;
       const effColor = mapEffColor(avgEff > 0 ? avgEff : NaN);
-      const effLabel = avgEff > 0
-        ? ' · <u style="background:' + effColor + '"></u> ' + avgEff.toFixed(1) + " mi/kWh"
-        : "";
-      buf.push(
-        '<button type="button" class="map-drive-chip ' +
-          (active ? "is-active" : "") +
-          '" data-map-session="' +
-          id +
-          '"><span class="dl">' +
-          fmtChipDate(s.startedAtMs) +
-          '</span><span class="dm"><b>' +
-          distMi +
-          " mi</b>" +
-          effLabel +
-          "</span></button>"
-      );
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "map-drive-chip" + (active ? " is-active" : "");
+      chip.dataset.mapSession = id;
+      const label = document.createElement("span");
+      label.className = "dl";
+      label.textContent = fmtChipDate(s.startedAtMs);
+      const meta = document.createElement("span");
+      meta.className = "dm";
+      const distance = document.createElement("b");
+      distance.textContent = distMi + " mi";
+      meta.append(distance);
+      if (avgEff > 0) {
+        const dot = document.createElement("u");
+        dot.style.background = effColor;
+        meta.append(" · ", dot, " " + avgEff.toFixed(1) + " mi/kWh");
+      }
+      chip.append(label, meta);
+      chips.push(chip);
     });
-    wrap.innerHTML = buf.join("");
+    wrap.replaceChildren(...chips);
     // Keep the active chip visible after a selection change (or on first render
     // when the active chip might not be the first one).
     const active = wrap.querySelector(".map-drive-chip.is-active");

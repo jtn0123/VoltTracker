@@ -311,40 +311,39 @@
 
   function scrubChip(k, v, opts) {
     opts = opts || {};
-    const kStyle = opts.color ? ' style="color:' + opts.color + '"' : "";
-    return (
-      '<div class="' +
-      (opts.dim ? "scrub-dim" : "") +
-      '"><span class="kicker"' +
-      kStyle +
-      ">" +
-      k +
-      "</span><strong>" +
-      v +
-      "</strong></div>"
-    );
+    const chip = document.createElement("div");
+    if (opts.dim) chip.className = "scrub-dim";
+    const label = document.createElement("span");
+    label.className = "kicker";
+    if (opts.color) label.style.color = opts.color;
+    label.textContent = k;
+    const value = document.createElement("strong");
+    value.textContent = v;
+    chip.append(label, value);
+    return chip;
   }
 
   function fillScrubReadout(s) {
     const node = el("scrubReadout");
     if (!node) return;
-    node.innerHTML =
-      scrubChip("Dist mi", s.distMi.toFixed(1)) +
-      scrubChip("Speed", Math.round(s.mph), { color: SCRUB_SPEED }) +
+    node.replaceChildren(
+      scrubChip("Dist mi", s.distMi.toFixed(1)),
+      scrubChip("Speed", Math.round(s.mph), { color: SCRUB_SPEED }),
       scrubChip("Elev ft", scrubHasElev ? Math.round(s.elevFt) : "--", {
         color: scrubHasElev ? SCRUB_ELEV : null
-      }) +
-      scrubChip("Grade", scrubHasElev ? scrubGrade(s.grade) : "--") +
+      }),
+      scrubChip("Grade", scrubHasElev ? scrubGrade(s.grade) : "--"),
       scrubChip(
         "Battery",
         scrubHasSoc && Number.isFinite(s.soc) ? Math.round(s.soc) + "%" : "--",
         { color: scrubHasSoc ? SCRUB_SOC : null }
-      ) +
+      ),
       scrubChip(
         "mi/kWh",
         scrubHasEff && Number.isFinite(s.eff) ? s.eff.toFixed(1) : "soon",
         { dim: !scrubHasEff, color: scrubHasEff ? SCRUB_EFF : null }
-      );
+      )
+    );
   }
 
   // ----- render + interaction -----------------------------------------------

@@ -715,21 +715,42 @@
       `<text x="${w - padR}" y="${h - 4}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">speed (mph) -></text>`;
     chart.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${inner}</svg>`;
     if (head) {
-      head.innerHTML =
-        best.e > 0
-          ? `Most efficient around <b style="color:#b8e63b">${Math.round(best.mph)} mph</b> - about ${best.e.toFixed(1)} mi/kWh.`
-          : "Pooling samples across every logged drive.";
+      head.replaceChildren();
+      if (best.e > 0) {
+        const speed = document.createElement("b");
+        speed.textContent = Math.round(best.mph) + " mph";
+        speed.style.color = "#b8e63b";
+        head.append(
+          "Most efficient around ",
+          speed,
+          " - about " + best.e.toFixed(1) + " mi/kWh."
+        );
+      } else {
+        head.textContent = "Pooling samples across every logged drive.";
+      }
     }
     if (statsEl) {
       const hwy = pool.filter((p) => p.mph > 55).map((p) => p.eff);
       const down = pool.filter((p) => p.grade <= -0.012).map((p) => p.eff);
       const avg = (a) =>
         a.length ? (a.reduce((s, x) => s + x, 0) / a.length).toFixed(1) : "--";
-      statsEl.innerHTML =
-        `<div><span class="kicker">Samples</span><strong>${pool.length}</strong></div>` +
-        `<div><span class="kicker">Highway avg</span><strong>${avg(hwy)} mi/kWh</strong></div>` +
-        `<div><span class="kicker">Downhill avg</span><strong>${avg(down)} mi/kWh</strong></div>`;
+      statsEl.replaceChildren(
+        insightStat("Samples", String(pool.length)),
+        insightStat("Highway avg", avg(hwy) + " mi/kWh"),
+        insightStat("Downhill avg", avg(down) + " mi/kWh")
+      );
     }
+  }
+
+  function insightStat(label, value) {
+    const item = document.createElement("div");
+    const key = document.createElement("span");
+    key.className = "kicker";
+    key.textContent = label;
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    item.append(key, strong);
+    return item;
   }
 
   // Re-render the scatter on viewport resize (SVG sized in real pixels).

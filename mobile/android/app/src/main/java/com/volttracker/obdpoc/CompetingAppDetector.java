@@ -2,6 +2,7 @@ package com.volttracker.obdpoc;
 
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -16,9 +17,10 @@ import java.util.Set;
  * BT device", so the next-best signal is "what else is even capable of binding it" — the user is
  * then offered a force-stop button (Bucket 4a's C4) when a connect fails.
  *
- * <p>The detection logic is conservative: a tight allowlist of known OBD apps plus any package name
- * that contains "obd" or "elm327". False negatives are fine (the list is documentation, not
- * enforcement); false positives would push the user toward force-stopping an unrelated app.
+ * <p>The detection logic is conservative: a tight allowlist of known OBD apps plus package-name
+ * hints from test-injected/package-manager-visible entries. False negatives are fine (the list is
+ * documentation, not enforcement); false positives would push the user toward force-stopping an
+ * unrelated app.
  *
  * <p>Constructor takes a {@link PackageManager} so unit tests can hand in a stub list of {@link
  * ApplicationInfo}s rather than instantiating the real Android package store.
@@ -122,20 +124,28 @@ class CompetingAppDetector {
     }
 
     /**
-     * Test seam: returns the installed-application list. Production resolves via {@link
-     * PackageManager#getInstalledApplications(int)}; tests override to inject a fixed list without
-     * standing up a Robolectric environment for what is otherwise pure filtering logic.
+     * Test seam: returns package-manager-visible apps. Tests override for pure filtering checks.
      */
     List<ApplicationInfo> installedApplications() {
         if (packageManager == null) {
             return Collections.emptyList();
         }
+        List<ApplicationInfo> visible = new ArrayList<>();
+        for (String packageName : KNOWN_OBD_PACKAGES) {
+            ApplicationInfo info = applicationInfo(packageName);
+            if (info != null) {
+                visible.add(info);
+            }
+        }
+        return visible;
+    }
+
+    private ApplicationInfo applicationInfo(String packageName) {
         try {
-            return packageManager.getInstalledApplications(0);
-        } catch (RuntimeException ex) {
-            // PackageManager.getInstalledApplications can throw on transient PM errors; treat
-            // that as "nothing found" rather than letting it crash session start.
-            return Collections.emptyList();
+            return packageManager.getApplicationInfo(packageName, 0);
+        } catch (NameNotFoundException | RuntimeException ex) {
+            // Missing/hidden packages and transient PM errors both mean "not detected".
+            return null;
         }
     }
 }

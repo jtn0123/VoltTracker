@@ -18,10 +18,18 @@ import java.util.concurrent.ExecutorService;
 final class BackupController {
 
     static final int REQUEST_RESTORE = 4202;
+    private static final long RESTORE_STOP_TIMEOUT_MS = 2_000L;
 
     private final MainActivity activity;
     private final DataBackup dataBackup;
     private final ExecutorService executor;
+
+    private enum RestoreResult {
+        OK,
+        INVALID_FILE,
+        LOGGING_ACTIVE,
+        OTHER
+    }
 
     BackupController(MainActivity activity, DataBackup dataBackup, ExecutorService executor) {
         this.activity = activity;
@@ -40,11 +48,11 @@ final class BackupController {
 
     // Visible for tests / future toggles; kept package-private.
     String shareDisclosureMessage() {
-        return "This backup contains:\n"
-                + "• OBD session logs and telemetry\n"
-                + "• GPS coordinates from your trips\n"
-                + "• Bluetooth adapter address\n"
-                + "• Redacted VIN (if your car shared one)\n"
+        return "This backup is a full copy of Volt Tracker's on-device database and contains:\n"
+                + "• Raw OBD session logs and telemetry\n"
+                + "• Precise GPS coordinates from your trips\n"
+                + "• Bluetooth adapter addresses\n"
+                + "• Redacted VIN and vehicle records if your car shared them\n"
                 + "\n"
                 + "Only share with people you trust.";
     }
@@ -138,10 +146,10 @@ final class BackupController {
         activity.publishStatus("ready", "Restoring backup...", false);
         executor.execute(
                 () -> {
-                    final boolean ok = applyRestore(uri);
+                    final RestoreResult result = applyRestore(uri);
                     activity.runOnUiThread(
                             () -> {
-                                if (ok) {
+                                if (result == RestoreResult.OK) {
                                     activity.publishDeviceList();
                                     activity.publishStorageSummary();
                                     activity.publishStatus(
@@ -149,30 +157,41 @@ final class BackupController {
                                             "Backup restored - reconnect to resume logging.",
                                             false);
                                 } else {
-                                    activity.publishStatus(
-                                            "blocked",
-                                            "Restore failed - that file is not a valid Volt Tracker backup.",
-                                            true);
+                                    publishRestoreFailure(result);
                                 }
                             });
                 });
     }
 
+    private void publishRestoreFailure(RestoreResult result) {
+        String message;
+        if (result == RestoreResult.LOGGING_ACTIVE) {
+            message = "Restore failed - logging is still active. Stop logging and try again.";
+        } else if (result == RestoreResult.INVALID_FILE) {
+            message = "Restore failed - that file is not a valid Volt Tracker backup.";
+        } else {
+            message = "Restore failed - could not replace the on-device database.";
+        }
+        activity.publishStatus("blocked", message, true);
+    }
+
     // Replaces the on-device database with a user-picked backup file. The file is staged
     // and verified as a Volt Tracker SQLite database before the live database is touched.
-    private boolean applyRestore(Uri uri) {
+    private RestoreResult applyRestore(Uri uri) {
         File staged = dataBackup.stageRestoreFile(uri);
         if (staged == null) {
-            return false;
+            return RestoreResult.INVALID_FILE;
         }
         try {
             File dbFile =
                     activity.localStore == null ? null : activity.localStore.getDatabaseFile();
             if (dbFile == null) {
-                return false;
+                return RestoreResult.OTHER;
             }
             // Stop any logging session so the database file is not held open.
-            stopLoggingForRestore();
+            if (!stopLoggingForRestore()) {
+                return RestoreResult.LOGGING_ACTIVE;
+            }
             if (activity.localStore != null) {
                 activity.localStore.close();
                 activity.localStore = null;
@@ -181,7 +200,7 @@ final class BackupController {
             DataBackup.deleteIfExists(new File(dbFile.getPath() + "-wal"));
             DataBackup.deleteIfExists(new File(dbFile.getPath() + "-shm"));
             activity.localStore = new ObdLocalStore(activity);
-            return true;
+            return RestoreResult.OK;
         } catch (IOException | RuntimeException ex) {
             if (activity.localStore == null) {
                 try {
@@ -190,17 +209,30 @@ final class BackupController {
                     // Nothing more we can do; the next launch will recreate it.
                 }
             }
-            return false;
+            return RestoreResult.OTHER;
         } finally {
             staged.delete();
         }
     }
 
-    private void stopLoggingForRestore() {
+    private boolean stopLoggingForRestore() {
+        if (!activity.isLoggingActive()) {
+            return true;
+        }
         try {
             activity.stopObdService();
-        } catch (RuntimeException ignored) {
-            // Best effort; restore proceeds regardless.
+        } catch (RuntimeException ex) {
+            return false;
         }
+        long deadline = System.currentTimeMillis() + RESTORE_STOP_TIMEOUT_MS;
+        while (activity.isLoggingActive() && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(50L);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return !activity.isLoggingActive();
     }
 }

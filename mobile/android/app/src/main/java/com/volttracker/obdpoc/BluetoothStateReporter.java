@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.os.ParcelUuid;
 import android.os.Parcelable;
 import androidx.core.content.ContextCompat;
@@ -261,7 +262,7 @@ final class BluetoothStateReporter {
             return;
         }
         // The remaining actions all carry an EXTRA_DEVICE.
-        BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+        BluetoothDevice device = bluetoothDeviceExtra(intent);
         String address = device == null ? "" : safeString(device.getAddress());
         // Only log events for the device we're actually trying to talk to — keeps the log from
         // being flooded by every nearby keyboard/headset/watch on the user's phone.
@@ -289,12 +290,28 @@ final class BluetoothStateReporter {
                     describeBondState(previous));
         } else if (BluetoothDevice.ACTION_UUID.equals(action)) {
             String uuids = "[]";
-            Parcelable[] raw = intent.getParcelableArrayExtra(BluetoothDevice.EXTRA_UUID);
+            Parcelable[] raw = uuidArrayExtra(intent);
             if (raw != null) {
                 uuids = Arrays.toString(raw);
             }
             service.recorder.logEvent("sdp_refresh", "address", address, "uuids", uuids);
         }
+    }
+
+    @SuppressWarnings("deprecation")
+    private static BluetoothDevice bluetoothDeviceExtra(Intent intent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
+        }
+        return intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+    }
+
+    @SuppressWarnings("deprecation")
+    private static Parcelable[] uuidArrayExtra(Intent intent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return intent.getParcelableArrayExtra(BluetoothDevice.EXTRA_UUID, ParcelUuid.class);
+        }
+        return intent.getParcelableArrayExtra(BluetoothDevice.EXTRA_UUID);
     }
 
     private void handleStatusBroadcast(Intent intent) {
