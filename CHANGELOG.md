@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.4.2 (2026-05-27)
+
+### Bug Fixes
+
+- **android**: Resolve validated obd backup and dashboard bugs
+  ([#136](https://github.com/jtn0123/VoltTracker/pull/136),
+  [`fdd47c4`](https://github.com/jtn0123/VoltTracker/commit/fdd47c4c0afd5b2c2a49ba72d8ab50004ad28e63))
+
+* Fix validated VoltTracker bugs and dashboard safety issues
+
+* Fix Robolectric SDK for location tracker test
+
+
 ## v0.4.1 (2026-05-26)
 
 ### Bug Fixes
