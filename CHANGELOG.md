@@ -1,6 +1,294 @@
 # CHANGELOG
 
 
+## v0.4.4 (2026-05-27)
+
+### Bug Fixes
+
+- **android**: Resolve grade audit findings
+  ([#138](https://github.com/jtn0123/VoltTracker/pull/138),
+  [`2dac11c`](https://github.com/jtn0123/VoltTracker/commit/2dac11cc4111927fb517794cedd263d2d202fa1f))
+
+* ui(insights): adopt Map tab's hero / sheet / sub-panel rhythm
+
+Restructures the Insights view to mirror the Map tab's visual hierarchy without introducing an
+  actual map:
+
+- Hero card: HV pack ring (existing .ratio-card, promoted to top) - Summary sheet: lifetime totals
+  (.map-sheet styling, kicker + title + trip-count badge, 3-col stats grid for Distance / Drive time
+  / Top speed) - Sub-panel list (.map-layout): Check-engine DTC, additional lifetime stats (longest
+  trip, GPS trips), efficiency scatter, maintenance
+
+All existing DOM ids are preserved so panels.js / core.js continue to populate the data without code
+  changes. Verified via headless Playwright screenshot side-by-side with the Map tab; structure now
+  reads top-to-bottom in the same rhythm.
+
+Generated index.html regenerated via :app:generateDashboardHtml.
+
+* feat(insights): DTC descriptions, Google lookup, Clear-Codes (Mode 04)
+
+Three additions to the Check-engine card on the Insights tab:
+
+1. DTC descriptions (hybrid lookup + Google fallback) - New js/dtc-lookup.js with a curated table of
+  ~35 OBD-II + Volt- specific codes (P0420, P0AA6, P1E04, P0A7A, etc.). - Each rendered DTC row
+  shows its description inline when known, plus a "More on Google" / "Look up on Google" chip that
+  opens the system browser to a "<code> Chevy Volt DTC" search. - Browser-fallback uses window.open;
+  in the WebView the new VoltBridge.openExternalSearch builds and validates the URL itself so the JS
+  layer cannot smuggle arbitrary URLs through.
+
+2. Example-state preview - When no codes are stored, the empty-state article is followed by 2
+  grayed/dashed example rows marked "example", so users see what a real scan result will look like
+  before scanning. - Adds Preview DTC examples / Clear DTC examples buttons inside the Settings >
+  Preview sandbox so the demo data can be loaded for UI debugging.
+
+3. Clear vehicle codes (Mode 04) - New "Clear codes" danger button in the DTC action row that
+  expands an inline warning panel with a required acknowledgement checkbox. The "Send Mode 04"
+  confirm button stays disabled until the user ticks "I understand readiness monitors will reset." -
+  New ClearDtcRunner sends OBD-II 04, parses the 44 positive reply vs 7F 04 NRC negative replies
+  (with human-readable copy for the common NRCs 22 / 11 / 12 / 13 / 33), and broadcasts a structured
+  telemetry sample. - Wired through ObdService.ACTION_CLEAR_DTC and a new overload
+  ObdPollingEngine.runBluetoothLoop(..., clearDtcMode=true) so the existing connect/retry shell is
+  reused. VoltBridge gains a clearVehicleDtcCodes() method; VoltBridgeTest's expected method set is
+  updated.
+
+Verified via headless Playwright at 412x1400: empty-state shows example rows, the loaded state shows
+  descriptions + Google chips, the warning panel toggles on the checkbox correctly.
+
+Dashboard vitest (18/18) and Android unit tests (242/242) both pass.
+
+* feat(insights): expand DTC lookup from 35 to 360 codes + SAE prefix fallback
+
+The previous PR shipped only 35 curated codes - too thin given OBD-II has thousands of defined
+  codes. This expands the lookup substantially while keeping accuracy as the gate:
+
+- ~360 explicit entries covering the SAE J2012 generic powertrain ranges (P00xx-P09xx
+  misfire/fuel/ignition/transmission), the SAE hybrid ranges (P0Axx/P0Bxx/P0Cxx/P0Dxx), common P2xxx
+  extensions, ~40 U-codes for lost-communication faults, common B-codes (SRS) and C-codes (ABS /
+  wheel-speed), plus the well-known GM/Volt P1xxx codes (P1E04, P1E22, P1FFF, etc.).
+
+- Prefix-based category fallback for everything else: a code like P1234 not explicitly listed now
+  renders as "Manufacturer-specific powertrain (GM / Volt)" instead of nothing. Covers every P/B/C/U
+  range with a useful one-line hint, so unknown codes still tell the user *what kind* of fault
+  they're looking at before the Google chip opens for the specific lookup.
+
+The bundled list is intentionally limited to codes whose SAE-defined or GM-documented wording is
+  well-attested - a wrong description is worse than no description.
+
+panels.js now uses info.category when info.description is missing, so the headline always says
+  something useful.
+
+VD.dtcLookupSize exposed for the test/debug surface.
+
+* feat(insights): expand DTC lookup to 651 codes, focus on Volt electrical
+
+The previous expansion (360 codes) was light on the electrical/HV/12V/ network domain that's most
+  relevant to a Volt owner. This adds ~290 more entries with that focus:
+
+Hybrid drive electrical (P0Axx) - comprehensively filled in: - P0A00-P0A07 motor electronics cooling
+  - P0A08-P0A12 DC/DC converter status, HV interlock - P0A1A-P0A1E generator control module -
+  P0A20-P0A33 drive motor 'A' performance, position, inverter - P0A41-P0A4C motor current sensors -
+  P0A50-P0A56 generator (motor 'B') - P0A60-P0A62 motor phase current sensors - P0A78-P0AFE battery
+  contactors, precharge, isolation, temperature, over/under-voltage
+
+Hybrid battery cell + motor 'B' (P0Bxx): P0B22-P0B63 added HV charging (P0Cxx): P0C00-P0C20
+  (on-board charger, AC/DC input/output), P0C50-P0C54 (pack current sensor) HV auxiliary (P0Dxx):
+  P0D09-P0D31 (battery coolant heater, charger inlet temperature sensor) GM Volt-specific (P1Exx):
+  P1E05, P1E23, P1E24, P1E32, P1E33, P1E40, P1E45, P1E46 added
+
+12V power and PCM internal (P05xx, P06xx): - P0540-P0542 intake air heater circuit - P0550-P0553
+  power steering pressure sensor - P0561 system voltage unstable - P0608-P0699 control module VSS
+  outputs, starter relay, generator control, sensor reference voltages B/C, A/C clutch relay, MIL,
+  fuel level output, actuator supply, PCM power relay sense, cooling fan circuits
+
+Network / communication (U-codes) - the codes you see after a weak 12V battery wakes every module up
+  sad: - U0003-U0081 bus codes for high/medium/low-speed CAN, all bus open/low/high variants -
+  U0100-U0254 lost-comm with: drive motor, BECM A/B/C/D, restraints (centre/left/right/occupant),
+  gateway, charging system A/B, onboard charger, HPCM, EPS, adaptive lighting, telematic -
+  U0293-U0327 software incompatibility variants - U0401-U0447 invalid-data-received variants for the
+  same modules
+
+Memory: 42 KB raw / 8.5 KB gzipped. Negligible inside the APK.
+
+Unknown codes still fall back to the SAE prefix category hint (e.g. P0xxx -> "Hybrid propulsion")
+  and Google for specifics.
+
+Dashboard vitest: 18/18 pass.
+
+* feat(insights): merge 5-agent Volt DTC research → 814 codes (+166)
+
+Five parallel Sonnet sub-agents researched Volt-specific DTCs across: - HV propulsion (BECM / HPCM /
+  TPIM / contactors / DC/DC) - Drive unit (4ET50 Gen1 / 5ET50 Gen2 / aux fluid pump) - 1.4L LUU/LUV
+  range-extender (EVAP sealed-tank, fuel pressure) - On-board charger + charge port + EVSE pilot -
+  BCM / IPC / HVAC / ABS / brake-by-wire / TPMS / SRS
+
+Each agent cross-referenced GM TSBs, NHTSA database, gm-volt.com forum threads, speakev.com (Opel
+  Ampera = same platform), repairprocedures.com service-manual excerpts, and the Volt TIS mirror.
+  Required ≥2 independent sources per entry; "medium" confidence entries reviewed manually and
+  dropped if uncertain.
+
+Notable inclusions, all linked to GM TSB or service manual: - P1AF0 / P1AF2 / P1E22 isolation triad
+  (TSB PIC6244D) - P1AEE / P1AEF cold-weather HV voltage high (TSB PIC6285B) - P0DAA / P1F0E coolant
+  intrusion into HV pack (TSB PIC5920 series) - P1FFB-P1FFE coolant level sensor cluster (Service HV
+  Charging System) - P0497 EVAP low purge flow (TSB PIP4891H - don't overfill) - P07A3 friction
+  element 'A' stuck on (Volt 5ET50) - P1EBD-P1EC7 contactor and battery heater family - P1EDA /
+  P1EDC / P1EDD converter input voltage sensors (TSB PIC6076) - P1E65 cell group high resistance
+  (TSB 18-NA-330) - B101D BCM internal hardware (TSB PIC5943) - C0021 / C012D / C1100-C1101 Gen 1
+  vacuum + Gen 2 brake-by-wire - C0750-C0775 TPMS - B0013-B0086 SRS / airbag deployment loops
+
+CORRECTION: P1E22 was incorrectly mapped to "Hybrid battery voltage sensor B circuit" in the
+  previous expansion. Per the Volt service manual (confirmed by 4 of 5 agents) P1E22 is the
+  auxiliary transmission fluid pump control module HV isolation lost code, third member of the
+  P1AF0/P1AF2/P1E22 isolation triad. Updated accordingly.
+
+Three other duplicate keys removed (P0AA1, P0AA4, P0AF3) - kept the agent-researched
+  SAE-/Volt-correct definitions, removed earlier guesses.
+
+categoryHint() fallback extended to cover P3xxx prefix so any unknown code in any valid range still
+  returns a useful category.
+
+Final stats: 814 codes, 55 KB raw / 11 KB gzipped. Dashboard vitest: 18/18 pass.
+
+* feat(insights): expand C-codes 24 → 220 (chassis/ABS/EPS/brake-by-wire/TPMS)
+
+Sub-agent C researched SAE J2012, obd-codes.com, engine-codes.com, autocodes.com, repairpal.com, and
+  GM service documentation. 195 new high-confidence C-code entries (≥2-source agreement each),
+  covering:
+
+- Brake booster / pedal feedback (C0020-C0025) - Complete SAE wheel speed sensor family - tone
+  wheel, subfault, supply, range/perf, low/high/intermittent variants for all four corners - ABS
+  apply/release solenoid circuits (C0060-C0095, LF/RF/LR/RR x 2) - ABS pump motor relay coil/contact
+  open/short variants - Brake pressure sensors, isolation solenoids, master cylinder pressure - Yaw
+  rate sensor (C0196-C0199) - GM EBCM wheel-speed signal status family (C0200-C0237) - EBCM solenoid
+  faults (C0271-C0276) - Brake/TCS lamp circuits (C0286-C0288) - PCM communication (C0290-C0298) -
+  4WD transfer case (C0300-C0398) - Suspension position / electronic level control (C0563-C0650) -
+  Steering wheel angle sensor (C0711-C0720) - Extended TPMS battery/internal codes (C07A0-C07D5) -
+  Multi-axis accelerometer (C0840-C0896) - Brake booster vacuum / ABS indicator / EPS torque sensor
+  family - TCS valve/relay codes (C1400-C1450) - Brake-by-wire / hydraulic brake pump (C2100-C3017)
+
+No duplicate keys. JavaScript parses cleanly. Lookup size: 1010 codes.
+
+* feat(insights): expand DTC lookup 1010 → 2648 (+1638 from 4 SAE/GM agents)
+
+Five Sonnet sub-agents researched and validated codes across: - Agent A: P0xxx generic SAE J2012
+  gap-fill (~350 entries) - Agent B: P2xxx + P3xxx SAE generic extended (~370 entries) - Agent C:
+  U-codes - bus, lost-comm, software-incompat, invalid-data (~370 entries) - Agent D: B-codes - SRS
+  deployment loops + BCM body codes (~225 entries) - Agent E: C-codes -
+  chassis/ABS/EPS/brake-by-wire/TPMS (committed earlier)
+
+Validation requirement was ≥2 independent published sources per entry, from SAE J2012, NHTSA DTC
+  reference, obd-codes.com, engine-codes.com, repairpal.com, yourmechanic.com, kbb.com,
+  troublecodes.net, autocodes.com, myairbags.com SRS catalog, and the corvetteactioncenter.com
+  GM-factory-derived DTC list (which shares the GM BCM/SDM code space).
+
+Highlights: - Complete SAE HO2S heater family for all banks/sensors (P0040-P0167) - Complete
+  cylinder injector circuit + balance fault families (P0201-P0296) - Complete cylinder N misfire
+  (P0301-P0314) - Full ignition coil A-L primary/secondary families (P0350-P0362, P2300-P2335) -
+  Catalyst temperature sensor full bank-1/2 family (P0425-P0438) - EVAP purge/vent/leak detection
+  full family (P0444-P0499, P2400-P2422) - Cooling fan + speed sensor families (P0480-P0529) -
+  Cruise control input variants (P0566-P0596) - Glow plug per-cylinder (P0670-P0682) - Transmission
+  solenoids A-K stuck/electrical/intermittent (P0745-P0980) - Transmission fluid pressure switches
+  A-D (P0840-P0879) - TCM power input/relay sense family (P0880-P0892) - All gear-shift and clutch
+  actuators (P0900-P0959, P2706-P2858) - DPF/NOx aftertreatment families (P2000-P2204) - Throttle
+  actuator control A/B + pedal sensor A-F (P2100-P2199) - O2 sensor extended ranges + reference
+  voltage (P2231-P2298, P2A00-P2A05) - Cylinder deactivation per cylinder (P3400-P3497) -
+  Bus-physical CAN +/- open/low/high/shorted (U0004-U0099) - Lost-comm with every SAE-defined module
+  (U0118-U0299) - Software-incompat with every module (U0303-U0339) - Invalid-data variants
+  (U0404-U055A) - Generic control-module diagnostic (U3000-U300E) - SRS
+  multi-row/curtain/pretensioner deployment + occupant sensing (B0002-B00E4) - GM BCM mirror, seat,
+  door, window, lock, lamp, theft, wiper (B1xxx-B3xxx)
+
+CategoryHint() fallback still covers anything missed. 2648 codes, 162 KB raw / 28 KB gzipped (still
+  <1% of APK size).
+
+Dashboard vitest: 18/18 pass. No duplicate keys.
+
+* feat(insights): +182 GM-specific P1xxx + P30xx codes (now 2829)
+
+Sub-agent researched GM-specific manufacturer codes spanning: - P10xx-P11xx MAF/MAP/O2 GM
+  intermittent variants - P12xx-P13xx injector / ignition control / crank variation learned - P14xx
+  EGR closed position, EVAP fast purge, secondary air (GM) - P15xx starter circuit, A/C clutch
+  driver, cruise control family - P16xx PCM internal, theft deterrent (VATS/PASSLock), 5V refs A/B,
+  generator L/F terminals, thermal protection - P17xx-P18xx transmission range, TCC family, slipping
+  codes, internal mode switch P/N/D/R, 4WD low - P30xx-P32xx GM hybrid cell group voltage variants
+  (P3000-P3024, P3041-P3057), Volt-specific P3191 engine doesn't start, P3193 fuel run out (Volt
+  Forced ICE mode)
+
+All ≥2-source validated. No duplicate keys. File parses cleanly.
+
+* feat(insights): show "Likely causes" per DTC (202 generic OBD-II entries)
+
+New file dtc-causes.js with 202 high-confidence cause databases for the most common generic OBD-II
+  codes (MAF, MAP, IAT, ECT, TPS, O2, fuel trim, misfire, knock, crank/cam, ignition coils, EGR,
+  catalyst, EVAP, cooling, sensor refs, transmission, throttle actuator). Each entry has: - causes:
+  2-6 most-likely root causes, ordered most→least common - severity: info / warning / critical -
+  category: short tag (1.4L engine, Drive unit, 12V power, etc.)
+
+All entries ≥2-source validated against repairpal.com, yourmechanic.com, engine-codes.com,
+  autocodes.com, obd-codes.com.
+
+Wired into dtcInfo() which now returns {causes, severity, category} alongside description. panels.js
+  renders a small "Likely causes" bulleted list under each DTC item, and severity tints the left
+  border (red=critical, amber=warning, blue=info). Capped at 5 causes shown per code to keep the
+  card compact.
+
+Dashboard vitest: 18/18 pass. Verified visually with sample DTCs (P0420, P0171, P0128, P0700, P0606,
+  U0100).
+
+* feat(insights): +736 GM B/C codes (3566 total) + 123 Volt causes (339 total)
+
+Final wave from this round of sub-agent research:
+
+Sub-agent (B/C codes) added 736 new GM body/chassis entries to dtc-lookup.js, comprehensively
+  covering: - B02xx-B03xx advanced restraints / occupant detection / impact sensors - B06xx-B07xx
+  SRS arming, crash sensors, pretensioner enable - B11xx-B13xx door/window/key/PASSLock/RKE/passive
+  entry - B19xx-B21xx HVAC blower, A/C relay, gauges, radio, sunroof, heated seats/mirrors/wheel -
+  B30xx-B35xx push-button start, transponder, theft deterrent, liftgate, wipers, washers, horn,
+  steering wheel controls, OnStar - B40xx-B41xx Bluetooth, USB, ADAS modules, HVAC door actuators -
+  C01xx wheel speed sub-families, steering angle, dynamics plausibility - C04xx-C05xx traction
+  control, ESC/VSE, MagnaRide, electronic LSD, air suspension - C09xx electronic ride control, level
+  valves - C11xx-C12xx brake booster extended, modulator valves, EPB, pedal simulator - C21xx-C22xx
+  brake-by-wire pedal sensors, EPB, auto-hold, hill assist, roll stability - C26xx-C29xx parking
+  assist, FCW/LDW/BSM/AEB/ACC radar, EPS extended - C30xx-C31xx hydraulic brake modulator, regen
+  brake blending, electric brake booster, active suspension, stabilizer bar, continuous damping
+
+Sub-agent (Volt causes) appended 123 Volt-specific cause entries to the dtc-causes.js created
+  earlier. Now 339 codes have inline "Likely causes" showing in the UI, including the full Volt
+  pain-point set: - HV isolation triad P0AA6 / P0DAA / P1AF0 / P1AF2 / P1E22 / P1F0E with TSB
+  PIC5920 coolant-intrusion reference - HV contactors P0AA1/4, P0AE2-8, precharge, isolation sensors
+  - HPCM wrapper codes P0AC4 / P1E00 with "check co-set codes" guidance - Battery cell health
+  P0BBD/E, P0BCD, P0A7F/80, P1E65 - Charging codes P1EE6 (EVSE absent), P1E04, P1EDC/D (PIC5803C) -
+  P0CD2 charge port door (cold weather ice) marked info severity - Drive unit P07A3 (PIC6244D clutch
+  stuck), P3260 (PIM limp mode), P16E0 - Network U-codes with weak 12V battery as the dominant Volt
+  cause - TPMS C0750-C07B5
+
+Severity tinting (red=critical, amber=warning, blue=info) on the DTC card's left border makes the
+  most serious codes visually distinct.
+
+Final stats: 3566 codes in lookup, 339 with causes/severity/category. No duplicate keys. Dashboard
+  parses cleanly.
+
+* chore: apply spotless formatting (fixes CI spotlessDashboardCheck)
+
+The "unit-tests" CI job runs spotlessCheck after testDebugUnitTest; spotlessDashboardCheck (Prettier
+  on dashboard-src/partials) flagged a line-wrap in the Clear-Codes warning paragraph in
+  insights.html. Also ran spotless on Java files, which cleaned up minor line-wraps in
+  ClearDtcRunner and VoltBridge that had been there since the original commit but were never caught
+  locally because I'd been running only testDebugUnitTest.
+
+Regenerated assets/dashboard/index.html to reflect the insights.html partial change. No semantic
+  changes.
+
+* test(android): cover mode 04 clear runner
+
+* fix(android): resolve grade audit findings
+
+* ci: keep CodeQL python analysis scoped
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.4.3 (2026-05-27)
 
 ### Bug Fixes
