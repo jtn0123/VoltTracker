@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.4.3 (2026-05-27)
+
+### Bug Fixes
+
+- **android**: Resolve bug-hunt findings and tooling drift
+  ([`5a88b70`](https://github.com/jtn0123/VoltTracker/commit/5a88b70b388464f2c307822682d1ed411398aeca))
+
+Fix Android bug-hunt findings, dependency/tooling drift, and review feedback. Validated by Android
+  unit/build/lint/spotless/coverage, dashboard lint/tests/coverage, PR title lint, and CodeQL.
+
+
 ## v0.4.2 (2026-05-27)
 
 ### Bug Fixes
