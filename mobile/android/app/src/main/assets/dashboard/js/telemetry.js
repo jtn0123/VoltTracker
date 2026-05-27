@@ -6,7 +6,7 @@
   const bridge = VD.bridge;
   const el = VD.el;
 
-  // C6: live-tile element ids that should pulse with a `.stale` class when the
+  // Live-tile element ids that should pulse with a `.stale` class when the
   // adapter stops sending fresh samples (>3s since lastSampleAt). Derived at
   // boot from `[data-live-tile="true"]` so adding a tile to a partial is the
   // only change needed — no parallel JS edit. Tiles whose id is missing from
@@ -17,7 +17,7 @@
   )
     .map((el) => el.id)
     .filter(Boolean);
-  // C6: how long (ms) since the last accepted sample before we mark tiles stale.
+  // How long (ms) since the last accepted sample before we mark tiles stale.
   const STALE_THRESHOLD_MS = 3000;
 
   function average(values) {
@@ -231,7 +231,7 @@
     };
   }
 
-  // C1: stash the latest sample; defer the heavy renders (updateLiveUi,
+  // Stash the latest sample; defer the heavy renders (updateLiveUi,
   // drawTrace, renderOperationalState, updateValidationUi) to the next animation
   // frame so a high-rate OBD source can't cause render thrash.
   function updateTelemetry(payload) {
@@ -248,7 +248,7 @@
     const kph = Number(sample.speedKph);
     if (Number.isFinite(kph)) {
       state.speedHistory.push(kph);
-      // G2: fixed 48-sample window. shift() is O(n) on a JS
+      // Fixed 48-sample window. shift() is O(n) on a JS
       // array but n=48 makes the cost negligible (~µs); a circular buffer
       // would be cleaner but requires changes to every reader. Revisit if
       // speed of render becomes a hot path. `if` (not `while`) is correct
@@ -319,10 +319,10 @@
     drawTrace();
   }
 
-  // C6: toggle the `.stale` class on each live tile when no new sample has
+  // Toggle the `.stale` class on each live tile when no new sample has
   // arrived for STALE_THRESHOLD_MS. Called from updateLiveUi every render and
   // from a 1Hz tick so the indicator appears even without new samples.
-  // C3: also append a screen-reader-only "(stale)" span so the aria-live
+  // Also append a screen-reader-only "(stale)" span so the aria-live
   // wrappers around the tile clusters announce when readings have gone quiet.
   function applyStaleIndicator() {
     const last = Number(state.lastSampleAt || 0);
@@ -427,7 +427,7 @@
     const vehicle = app.vehicle || {};
     const status = state.status || {};
     const samples = Number(t.sampleCount || 0);
-    // A1: the Android classifier writes vehicle.state on the app-state payload as
+    // The Android classifier writes vehicle.state on the app-state payload as
     // the source of truth; fall back to the telemetry-level mirror only if a
     // bridge call hasn't delivered the app-state payload yet.
     const vehicleState = vehicle.state || t.vehicleState || "unknown";
@@ -455,7 +455,7 @@
     const hasFreshSample = samples > 0 && Number.isFinite(ageMs) && ageMs < 10000;
     const hasAnySample = samples > 0 || pidRows > 0;
     const hasGps = locationRows > 0 || gps.state === "locked" || (Number.isFinite(Number(t.latitude)) && Number.isFinite(Number(t.longitude)));
-    // A1: read the classifier output (state + confidence) from app.vehicle.*; the
+    // Read the classifier output (state + confidence) from app.vehicle.*; the
     // telemetry-level fields are kept as a fallback for the first frame, but the
     // JS no longer derives any of these values.
     const vehicle = app.vehicle || {};
@@ -489,7 +489,7 @@
       dbRows > 0 ? `${dbRows} rows saved on device` : "Waiting for stored rows",
       dbRows ? "writing" : "ready"
     );
-    // A1: "weak" replaces the legacy "inferred" tone — both mean "soft signal only".
+    // "weak" replaces the legacy "inferred" tone — both mean "soft signal only".
     const lowConfidence = confidence === "inferred" || confidence === "weak" || confidence === "unknown";
     setValidationRow(
       "validateParser",
@@ -584,7 +584,7 @@
     ctx.shadowBlur = 0;
   }
 
-  // C6: a 1Hz heartbeat so the .stale class is applied even when no new sample
+  // 1Hz heartbeat so the .stale class is applied even when no new sample
   // arrives (and removed promptly once one does). Cheap; touches a handful of
   // DOM nodes.
   setInterval(applyStaleIndicator, 1000);

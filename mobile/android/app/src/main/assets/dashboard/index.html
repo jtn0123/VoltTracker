@@ -22,7 +22,7 @@
     <link rel="stylesheet" href="css/base.css" />
     <link rel="stylesheet" href="css/components.css" />
     <link rel="stylesheet" href="css/screens.css" />
-    <!-- Bucket 4a owns troubleshooter.css; Bucket 4b owns status-tools.css. -->
+    <!-- Connection recovery and proactive adapter-tool styles. -->
     <link rel="stylesheet" href="css/troubleshooter.css" />
     <link rel="stylesheet" href="css/status-tools.css" />
   </head>
@@ -30,11 +30,11 @@
 <!--
   Connection error banner.
 
-  Bucket 4a wires three additional slots onto the existing banner:
-   - `errorBannerTitle` is rewritten with failure-class-specific copy (C1)
+  Connection recovery wires three additional slots onto the existing banner:
+   - `errorBannerTitle` is rewritten with failure-class-specific copy
      by panels.js when the status payload carries a `failureClass` field.
    - `errorBannerHint` shows the action-oriented one-liner under the detail.
-   - `errorBannerActions` carries the in-flight retry "Cancel" button (C6)
+   - `errorBannerActions` carries the in-flight retry "Cancel" button
      and a "Get help" affordance that opens the troubleshooter modal.
 
   Copy strings are NOT hardcoded in this partial. They are rendered into the
@@ -68,7 +68,7 @@
   <button id="errorBannerDismiss" type="button">Dismiss</button>
 </div>
 <!--
-  Bucket 4a — connection troubleshooter modal (C3/C4).
+  Connection troubleshooter modal.
 
   Markup-only stub. Display is driven entirely from troubleshooter.js, which
   toggles `[hidden]` based on consecutive failed sessions / retry counts and
@@ -270,7 +270,7 @@
     </div>
   </div>
   <!--
-    Bucket 4b: topbar-only surface for last-connected (C2) and adapter health (C8).
+    Topbar-only surface for last-connected and adapter health.
     Hidden until connection-status.js has a session row or live-voltage signal to show.
   -->
   <div class="connection-status" aria-label="Adapter status summary">
@@ -325,7 +325,7 @@
   ></div>
 
   <section class="hero">
-    <!-- C3: speed+power cluster announces value changes politely so screen
+    <!-- Speed+power cluster announces value changes politely so screen
          readers see "stale" / unit changes without barging into other UI. -->
     <article class="panel live-card" aria-live="polite" aria-atomic="false">
       <div class="live-head">
@@ -373,7 +373,7 @@
       </div>
     </article>
 
-    <!-- C3: SOC + pack temp cluster as a separate live region. The HV-pack sub-row
+    <!-- SOC + pack temp cluster as a separate live region. The HV-pack sub-row
          under the SOC meter surfaces the raw 300+ V traction-pack readings polled
          from mode-22 PIDs 222429 / 222414 (instead of just the powerKw aggregate). -->
     <article class="panel battery-strip" aria-live="polite" aria-atomic="false">
@@ -583,7 +583,7 @@
     </div>
   </article>
 
-  <!-- C3: live diagnostic counters (sample count, runtime, etc.) announced
+  <!-- Live diagnostic counters (sample count, runtime, etc.) announced
        politely so screen readers track OBD progress without barging. -->
   <article class="panel status-card" aria-live="polite">
     <div class="status-head">
@@ -814,6 +814,16 @@
         </div>
         <div class="map-top-right">
           <button
+            id="mapTilesBtn"
+            type="button"
+            class="map-full-btn"
+            aria-pressed="false"
+            aria-label="Enable remote map tiles"
+            title="Remote basemap tiles"
+          >
+            Tiles
+          </button>
+          <button
             id="mapFullBtn"
             type="button"
             class="map-full-btn"
@@ -1041,7 +1051,45 @@
         <button type="button" data-action="scan" class="scan">
           Scan car codes
         </button>
+        <button
+          type="button"
+          data-action="openClearDtc"
+          class="danger"
+          id="dtcClearOpenBtn"
+        >
+          Clear codes
+        </button>
         <button type="button" data-nav-jump="settings">Debug logs</button>
+      </div>
+
+      <div id="dtcClearWarning" class="dtc-clear-warning" hidden>
+        <strong>Clear vehicle trouble codes?</strong>
+        <p>
+          This sends OBD-II Mode 04 to the vehicle, erasing the check-engine
+          light and stored DTC memory. Emissions readiness monitors will reset
+          and may take 100+ miles of mixed driving before re-setting - some
+          inspection stations will fail the car until then.
+        </p>
+        <p class="dtc-clear-prereq">
+          Run with the ignition on and engine off, parked, transmission in Park,
+          all accessories off.
+        </p>
+        <label class="dtc-clear-ack">
+          <input type="checkbox" id="dtcClearAckBox" />
+          <span>I understand readiness monitors will reset.</span>
+        </label>
+        <div class="dtc-clear-actions">
+          <button type="button" data-action="cancelClearDtc">Cancel</button>
+          <button
+            type="button"
+            data-action="confirmClearDtc"
+            class="danger"
+            id="dtcClearConfirmBtn"
+            disabled
+          >
+            Send Mode 04
+          </button>
+        </div>
       </div>
       <div class="dtc-status-grid">
         <div><span>Codes</span><strong id="dtcTotalCount">0</strong></div>
@@ -1177,6 +1225,12 @@
       <button type="button" data-action="stopDemo" class="demo-stop">
         Stop demo
       </button>
+      <button type="button" data-action="previewDtcCodes">
+        Preview DTC examples
+      </button>
+      <button type="button" data-action="clearPreviewDtcCodes">
+        Clear DTC examples
+      </button>
     </div>
     <a class="demo-link" href="demos/efficiency.html"
       >&#9658; Efficiency &amp; scrubber demos</a
@@ -1258,9 +1312,9 @@
     </div>
     <div id="dbSessionList" style="margin-top: 12px"></div>
     <p class="status-copy" style="margin-top: 12px">
-      Back up keeps a full copy of this on-phone database; pick any destination
-      (cloud, email, PC) from the share sheet. Restore replaces all on-phone
-      data with a backup file.
+      Back up keeps a full copy of this on-phone database. Use encrypted backup
+      when saving to cloud, email, or a shared computer. Restore replaces all
+      on-phone data with a backup file.
     </p>
     <button
       type="button"
@@ -1271,10 +1325,24 @@
     </button>
     <button
       type="button"
+      data-action="backupEncrypted"
+      style="margin-top: 8px; width: 100%"
+    >
+      Back up encrypted file
+    </button>
+    <button
+      type="button"
       data-action="restore"
       style="margin-top: 8px; width: 100%"
     >
       Restore from a backup file
+    </button>
+    <button
+      type="button"
+      data-action="restoreEncrypted"
+      style="margin-top: 8px; width: 100%"
+    >
+      Restore encrypted backup
     </button>
     <button
       type="button"
@@ -1284,7 +1352,7 @@
     >
       Clear stored debug data
     </button>
-    <!-- Bucket 4b: C7 shortcut. Mirrors the Connection-tools "Send diagnostics"
+    <!-- Diagnostics shortcut. Mirrors the Connection-tools "Send diagnostics"
          button so users in the storage panel can share logs without scrolling
          back up. Both buttons funnel into VoltTrackerAndroid.shareDiagnostics(). -->
     <button
@@ -1348,12 +1416,10 @@
   </p>
 </section>
 <!--
-  Owner: Bucket 4b (status & proactive tools).
-  Hosts the proactive tools panel: test-connection button (C5), send-diagnostics
-  button (C7), low-voltage hint (C9), notify-when-ready toggle (C10). Lives at
-  the bottom of <main> but is declared as data-view="settings" so it surfaces
-  inside the Diag tab alongside the existing settings panels — no new nav entry
-  needed.
+  Proactive adapter tools: test connection, send diagnostics, low-voltage hint,
+  and notify-when-ready. Lives at the bottom of <main> but is declared as
+  data-view="settings" so it surfaces inside the Diag tab alongside the existing
+  settings panels; no new nav entry needed.
 -->
 <section
   id="view-connection-tools"
@@ -1368,8 +1434,8 @@
       </div>
     </header>
 
-    <!-- C9: low-voltage hint, populated from status.lastVoltage. Hidden until a
-         reading lands and only flips visible when the value is below ~12.2 V. -->
+    <!-- Low-voltage hint, populated from status.lastVoltage. Hidden until a
+         reading lands and only visible when the value is below roughly 12.2 V. -->
     <p
       id="lowVoltageHint"
       class="connection-tools__hint"
@@ -1382,7 +1448,7 @@
     </p>
 
     <div class="connection-tools__actions">
-      <!-- C5: one-shot probe against the last-known adapter, surfaces via status. -->
+      <!-- One-shot probe against the last-known adapter; results surface via status. -->
       <button
         type="button"
         id="testConnectionBtn"
@@ -1391,7 +1457,7 @@
       >
         Test connection
       </button>
-      <!-- C7: diagnostics share. Bucket 3 wires the actual zip + share intent. -->
+      <!-- Diagnostics share. Native code builds the zip and launches the share intent. -->
       <button
         type="button"
         id="sendDiagnosticsBtn"
@@ -1402,7 +1468,7 @@
       </button>
     </div>
 
-    <!-- C10: notify-when-ready toggle. Picks how long to keep probing in the
+    <!-- Notify-when-ready toggle. Picks how long to keep probing in the
          background; the bridge clamps the minutes to [1, 30] and we mirror that
          in the UI. -->
     <fieldset
@@ -1517,13 +1583,15 @@
     </nav>
 
     <script src="js/core.js"></script>
+    <script src="js/dtc-lookup.js"></script>
+    <script src="js/dtc-causes.js"></script>
     <script src="js/panels.js"></script>
     <script src="js/map.js"></script>
     <script src="js/scrubber.js"></script>
     <script src="js/drive.js"></script>
     <script src="js/telemetry.js"></script>
     <script src="js/actions.js"></script>
-    <!-- Bucket 4a owns troubleshooter.js; Bucket 4b owns connection-status.js + connection-tools.js. -->
+    <!-- Connection recovery and proactive adapter-tool behavior. -->
     <script src="js/troubleshooter.js"></script>
     <script src="js/connection-status.js"></script>
     <script src="js/connection-tools.js"></script>

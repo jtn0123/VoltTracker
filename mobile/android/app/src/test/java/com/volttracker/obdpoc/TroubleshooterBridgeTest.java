@@ -59,6 +59,11 @@ public class TroubleshooterBridgeTest {
     }
 
     @Test
+    public void forceStopPackage_rejectsInstalledPackagesOutsideObdAllowlist() {
+        assertFalse(bridge.forceStopPackage(controller.get().getPackageName()));
+    }
+
+    @Test
     public void getRecentSessionsJson_zeroOrNegativeReturnsEmptyArray() throws Exception {
         // n <= 0 short-circuits before touching SessionSummaryStore. Both paths must yield
         // a well-formed empty JSON array (the dashboard JSON.parse path keys off this exact

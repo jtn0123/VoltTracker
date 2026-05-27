@@ -8,10 +8,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Bucket 2 (A7): scans installed packages for other Bluetooth-OBD apps that could be holding the
- * adapter's RFCOMM socket open and preventing us from binding. The OS doesn't expose "who owns this
- * BT device", so the next-best signal is "what else is even capable of binding it" — the user is
- * then offered a force-stop button (Bucket 4a's C4) when a connect fails.
+ * Scans installed packages for other Bluetooth-OBD apps that could be holding the adapter's RFCOMM
+ * socket open and preventing us from binding. The OS doesn't expose "who owns this BT device", so
+ * the next-best signal is "what else is even capable of binding it" — the user is then offered a
+ * force-stop button when a connect fails.
  *
  * <p>The detection logic is conservative: a tight allowlist of known OBD apps plus package-name
  * hints from test-injected/package-manager-visible entries. False negatives are fine (the list is

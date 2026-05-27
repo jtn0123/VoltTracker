@@ -46,6 +46,10 @@ jobs:
         run: ./gradlew --no-daemon :app:lintDebug
       - name: Assemble debug APK
         run: ./gradlew --no-daemon :app:assembleDebug
+      - name: Verify generated dashboard is committed
+        run: ./gradlew --no-daemon verifyGeneratedDashboardClean
+      - name: Verify dashboard bundle budget
+        run: ./gradlew --no-daemon verifyDashboardBundleSize
       - name: JaCoCo coverage report
         run: ./gradlew --no-daemon :app:jacocoTestReport
       - name: Verify coverage thresholds
@@ -87,13 +91,12 @@ jobs:
       - name: Install dashboard test deps
         run: npm ci
       - name: Lint dashboard JS
-        # I1: ESLint catches undefined globals / redeclared names / unreachable code
+        # ESLint catches undefined globals / redeclared names / unreachable code
         # that Spotless (formatting-only) does not. Fails the job on any lint error.
         run: npm run lint
       - name: Run dashboard JS smoke tests with coverage gate
-        # D4: --coverage runs the same suites under v8 instrumentation and fails the
-        # job if coverage drops below the floor declared in vitest.config.js. The
-        # floor mirrors the JaCoCo ratchet pattern — never lower it, only raise it.
+        # Istanbul instruments the dashboard JS loaded by the jsdom smoke suite and
+        # fails the job if coverage drops below the ratchet in vitest.config.js.
         run: npm run test:coverage
       - name: Upload dashboard coverage report
         if: always()

@@ -7,6 +7,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
+import androidx.core.app.NotificationCompat;
 
 /**
  * Builds and posts the ongoing foreground-service notification for {@link ObdService}. Extracted so
@@ -15,7 +16,7 @@ import android.os.Build;
 final class ObdNotifications {
 
     static final int NOTIFICATION_ID = 4207;
-    // Package-visible so MainActivity (Bucket 4b's adapter-ready notification path) can post on
+    // Package-visible so MainActivity's adapter-ready notification path can post on
     // the same channel without us having to expose a builder method just for that one call site.
     static final String CHANNEL_ID = "volt_obd_connection";
 
@@ -31,8 +32,8 @@ final class ObdNotifications {
 
     /**
      * Idempotent channel creation usable from any {@link Context}. Both {@link ObdService} (at
-     * service onCreate) and {@link MainActivity} (at activity onCreate, so the Bucket 4b
-     * adapter-ready notification can land before the foreground service has ever run) call this.
+     * service onCreate) and {@link MainActivity} (at activity onCreate, so adapter-ready
+     * notifications can land before the foreground service has ever run) call this.
      */
     static void ensureChannel(Context ctx) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || ctx == null) {
@@ -54,15 +55,13 @@ final class ObdNotifications {
         Intent open = new Intent(context, MainActivity.class);
         PendingIntent pendingIntent =
                 PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder builder =
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                        ? new Notification.Builder(context, CHANNEL_ID)
-                        : new Notification.Builder(context);
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID);
         return builder.setSmallIcon(R.drawable.ic_stat_obd)
                 .setContentTitle("Volt Tracker OBD")
                 .setContentText(text)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();
     }
 

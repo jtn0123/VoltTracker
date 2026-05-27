@@ -39,6 +39,7 @@ public final class LocationManagerTracker implements LocationTracker {
                 public void onProviderEnabled(String provider) {}
 
                 @Override
+                @SuppressWarnings("deprecation")
                 public void onStatusChanged(String provider, int status, Bundle extras) {
                     // Deprecated but still required on older API levels.
                 }

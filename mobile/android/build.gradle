@@ -13,6 +13,8 @@ tasks.named("dependencyUpdates").configure {
 }
 
 def dashboardTestsDir = file("dashboard-tests")
+def dashboardAssetDir = file("app/src/main/assets/dashboard")
+def dashboardBundleBudgetBytes = 650_000L
 
 tasks.register("dashboardNpmCi", Exec) {
     description = "Installs dashboard test dependencies from package-lock.json."
@@ -37,10 +39,75 @@ tasks.register("dashboardLint", Exec) {
     commandLine "npm", "run", "lint"
 }
 
+tasks.register("verifyGeneratedDashboardClean") {
+    description = "Fails when generated dashboard HTML is stale relative to dashboard-src."
+    def srcDir = file("app/src/main/dashboard-src")
+    def outFile = file("app/src/main/assets/dashboard/index.html")
+    inputs.dir(srcDir)
+    doLast {
+        def sb = new StringBuilder()
+        new File(srcDir, "index.template.html").eachLine("UTF-8") { line ->
+            def m = (line =~ /^\s*<!-- include: (\S+) -->\s*$/)
+            if (m.find()) {
+                sb.append(new File(srcDir, m.group(1)).getText("UTF-8").replaceAll(/\s+$/, ""))
+            } else {
+                sb.append(line)
+            }
+            sb.append("\n")
+        }
+        def expected = sb.toString().replaceAll(/\n+$/, "") + "\n"
+        def current = outFile.exists() ? outFile.getText("UTF-8") : ""
+        if (current != expected) {
+            outFile.setText(expected, "UTF-8")
+            throw new GradleException(
+                    "Generated dashboard HTML was stale. Re-run ./gradlew generateDashboardHtml and include app/src/main/assets/dashboard/index.html.")
+        }
+    }
+}
+
+tasks.register("verifyDashboardBundleSize") {
+    description = "Fails when first-party dashboard JS/CSS exceeds the checked size budget."
+    def budgetedAssets = files(fileTree(dashboardAssetDir) {
+        include "js/**/*.js", "css/**/*.css"
+        exclude "lib/**"
+    })
+    inputs.files(budgetedAssets)
+    doLast {
+        def totalBytes = 0L
+        budgetedAssets.files.each { asset ->
+            totalBytes += asset.length()
+        }
+        if (totalBytes > dashboardBundleBudgetBytes) {
+            throw new GradleException(
+                    "Dashboard JS/CSS bundle is ${totalBytes} bytes, over budget ${dashboardBundleBudgetBytes} bytes")
+        }
+        logger.lifecycle(
+                "Dashboard JS/CSS bundle: ${totalBytes} bytes (budget ${dashboardBundleBudgetBytes})")
+    }
+}
+
+tasks.register("verifyActiveApp") {
+    description = "Runs the full local validation suite for the active Android app."
+    dependsOn(
+            ":app:testDebugUnitTest",
+            ":app:lintDebug",
+            ":app:spotlessCheck",
+            ":app:assembleDebug",
+            ":app:jacocoTestCoverageVerification",
+            "dashboardLint",
+            "dashboardTest",
+            "verifyDashboardBundleSize",
+            "verifyGeneratedDashboardClean")
+}
+
 subprojects {
     plugins.withId("com.android.application") {
         tasks.named("check") {
-            dependsOn(rootProject.tasks.named("dashboardTest"), rootProject.tasks.named("dashboardLint"))
+            dependsOn(
+                    rootProject.tasks.named("dashboardTest"),
+                    rootProject.tasks.named("dashboardLint"),
+                    rootProject.tasks.named("verifyDashboardBundleSize"),
+                    rootProject.tasks.named("verifyGeneratedDashboardClean"))
         }
     }
 }

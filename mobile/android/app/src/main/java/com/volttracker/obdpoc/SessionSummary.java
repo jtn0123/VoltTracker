@@ -4,10 +4,9 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
- * One-line summary of a recorded session — owned by Bucket 3's {@code SessionSummaryStore},
- * appended to {@code files/obd-logs/sessions-summary.jsonl} on session end, and read by Bucket 4b
- * via {@link VoltBridge#getRecentSessions(int)} to render the "last connected" badge and the
- * adapter-health pill.
+ * One-line summary of a recorded session, appended to {@code files/obd-logs/sessions-summary.jsonl}
+ * on session end, and read via {@link VoltBridge#getRecentSessions(int)} to render the "last
+ * connected" badge and adapter-health pill.
  *
  * <p>The on-disk JSON shape is exactly {@link #toJson()} — field renames are a wire break for the
  * dashboard. Add new fields with sensible defaults so old summary lines still parse.

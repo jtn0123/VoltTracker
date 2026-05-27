@@ -107,9 +107,9 @@ final class ObdProtocol {
      * ["0D","0C","04"]} → {@code "010D0C04"}). ELM327 v1.4+ accepts up to 6 PIDs in a single
      * Mode-01 request and replies with the concatenated frames in one response.
      *
-     * <p>B7: collapses the per-cycle Tier-1 PID set from 5 round-trips into 1 when the adapter
-     * supports it. Falls back to per-PID polling when {@link #responseContainsAllMode01Pids}
-     * reports the probe response doesn't include every requested PID.
+     * <p>Collapses the per-cycle Tier-1 PID set from 5 round-trips into 1 when the adapter supports
+     * it. Falls back to per-PID polling when {@link #responseContainsAllMode01Pids} reports the
+     * probe response doesn't include every requested PID.
      */
     static String buildMode01MultiCommand(List<String> pidHex) {
         StringBuilder sb = new StringBuilder("01");
@@ -155,8 +155,8 @@ final class ObdProtocol {
     }
 
     /**
-     * Expected payload byte count for the Mode-01 PIDs that participate in B7 batching. Used by
-     * {@link #responseContainsAllMode01Pids} to advance the cursor past each PID's data bytes so a
+     * Expected payload byte count for the Mode-01 PIDs that participate in batching. Used by {@link
+     * #responseContainsAllMode01Pids} to advance the cursor past each PID's data bytes so a
      * subsequent {@code 41XX} match can't accidentally land inside another PID's payload.
      */
     private static int mode01PayloadBytes(String pidHex) {

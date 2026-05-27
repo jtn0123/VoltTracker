@@ -18,12 +18,12 @@ const DRIVE_EXTRA_DOM = `
 `;
 
 describe('drive.js', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
-    loadDashboard({ extraDom: DRIVE_EXTRA_DOM, extras: ['drive.js'] });
+    await loadDashboard({ extraDom: DRIVE_EXTRA_DOM, extras: ['drive.js'] });
   });
 
   it('exposes the documented render entry points on window.VoltDashboard', () => {

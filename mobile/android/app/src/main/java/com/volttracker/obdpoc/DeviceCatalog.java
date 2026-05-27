@@ -54,7 +54,7 @@ final class DeviceCatalog {
     @SuppressLint("MissingPermission")
     String getBondedDevicesJson() {
         JSONArray devices = new JSONArray();
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        BluetoothAdapter adapter = BluetoothAdapters.get(context);
         if (adapter == null || !hasBluetoothConnectPermission()) {
             return devices.toString();
         }
@@ -93,7 +93,7 @@ final class DeviceCatalog {
     @SuppressLint("MissingPermission")
     private JSONArray getLikelyObdCandidates() {
         JSONArray candidates = new JSONArray();
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        BluetoothAdapter adapter = BluetoothAdapters.get(context);
         if (adapter == null || !hasBluetoothConnectPermission()) {
             return candidates;
         }

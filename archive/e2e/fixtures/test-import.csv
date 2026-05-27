@@ -1,6 +1,0 @@
-GPS Time,Latitude,Longitude,GPS Speed (Meters/second),Engine RPM(rpm),Throttle Position(Manifold)(%),Engine Coolant Temperature(°F),Intake Air Temperature(°F),Fuel Level (From Engine ECU)(%),Fuel Remaining (Calculated from ECU)(gal),Android device Battery Level(%),Voltage (OBD Adapter)(V),Ambient air temp(°F),Miles Per Gallon(Instant)(mpg),Trip Distance(mi)
-2026-02-01 10:00:00,37.7749,-122.4194,10.5,0,15.2,185,72,45.0,4.5,85,12.6,65,999,0.0
-2026-02-01 10:00:05,37.7750,-122.4195,11.2,0,16.1,185,72,45.0,4.5,85,12.6,65,999,0.1
-2026-02-01 10:00:10,37.7751,-122.4196,12.0,0,17.5,186,73,45.0,4.5,85,12.6,65,999,0.2
-2026-02-01 10:00:15,37.7752,-122.4197,11.8,0,14.8,186,73,45.0,4.5,85,12.6,65,999,0.3
-2026-02-01 10:00:20,37.7753,-122.4198,10.0,0,12.0,186,73,45.0,4.5,85,12.6,65,999,0.4

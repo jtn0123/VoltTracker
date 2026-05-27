@@ -10,7 +10,7 @@
   VD.bridge = window.VoltTrackerAndroid || null;
   VD.el = (id) => document.getElementById(id);
 
-  // C1: bindListenerGuarded — attaches a listener but warns + skips if the element ID is
+  // bindListenerGuarded attaches a listener but warns + skips if the element ID is
   // missing instead of throwing. The dashboard is assembled from partials at build time, so
   // a renamed/removed ID inside a partial would otherwise crash `bindListeners()` mid-way,
   // leaving every binding AFTER the missing one unwired with no surface signal. The warn is
@@ -40,11 +40,19 @@
     return true;
   };
   // Top-level abort controller for window-level error/rejection listeners, so the
-  // C2 reset hook can tear them down with the rest of the actions.js listeners.
+  // reset hook can tear them down with the rest of the actions.js listeners.
   VD.errorController = new AbortController();
 
   const bridge = VD.bridge;
   const el = VD.el;
+
+  function readRemoteTilesPreference() {
+    try {
+      return window.localStorage.getItem("volttracker.map.remoteTiles") === "1";
+    } catch (_err) {
+      return false;
+    }
+  }
 
   function escapeHtml(value) {
     return String(value == null ? "" : value)
@@ -55,7 +63,7 @@
       .replace(/'/g, "&#39;");
   }
 
-  // C2: per-render AbortControllers so the listeners attached inside renderTrips()
+  // Per-render AbortControllers so the listeners attached inside renderTrips()
   // and setHistory() don't accumulate across re-renders. Each render aborts the
   // previous batch before binding the new one.
   let tripsListController = null;
@@ -89,7 +97,7 @@
     );
   }, { signal: VD.errorController.signal });
 
-  // E2: forward CSP violations to the Android logger so blocked inline scripts,
+  // Forward CSP violations to the Android logger so blocked inline scripts,
   // disallowed sources, or accidental eval show up in adb logcat without
   // surfacing through the user-facing error banner.
   document.addEventListener("securitypolicyviolation", (event) => {
@@ -110,31 +118,64 @@
     }
   })();
 
-  const data = {
-    trips: [
-      { id: 8421, label: "Home -> Office", date: "Apr 30 - 08:14", miles: 18.4, mins: 28, efficiency: "4.1 mi/kWh", mode: "ev", wh: 241 },
-      { id: 8420, label: "Office -> Trader Joe's", date: "Apr 29 - 17:42", miles: 6.1, mins: 14, efficiency: "3.9 mi/kWh", mode: "ev", wh: 256 },
-      { id: 8419, label: "Trader Joe's -> Home", date: "Apr 29 - 19:08", miles: 7.3, mins: 14, efficiency: "4.0 mi/kWh", mode: "ev", wh: 250 },
-      { id: 8418, label: "Home -> Tahoe", date: "Apr 28 - 07:22", miles: 184.2, mins: 173, efficiency: "41.7 MPG", mode: "mixed", wh: 0 },
-      { id: 8417, label: "Tahoe Loop", date: "Apr 27 - 10:00", miles: 22.0, mins: 47, efficiency: "3.6 mi/kWh", mode: "ev", wh: 278 },
-      { id: 8416, label: "Tahoe -> Home", date: "Apr 26 - 16:48", miles: 178.5, mins: 160, efficiency: "43.2 MPG", mode: "gas", wh: 0 }
-    ],
-    sessions: [
-      { date: "Apr 30 - 21:18", type: "L2", kwh: 11.8, soc: "24->91", location: "Home", cost: "$1.41" },
-      { date: "Apr 29 - 22:04", type: "L2", kwh: 9.6, soc: "36->90", location: "Home", cost: "$1.15" },
-      { date: "Apr 28 - 18:12", type: "L1", kwh: 5.2, soc: "58->88", location: "Office", cost: "$0.62" },
-      { date: "Apr 27 - 20:48", type: "L2", kwh: 10.4, soc: "32->90", location: "Home", cost: "$1.25" }
-    ],
-    hourly: [8,12,18,24,16,10,4,0,0,2,4,8,12,10,6,4,8,14,22,30,42,68,82,54],
-    insights: [
-      { kind: "good", icon: "+", title: "Best month yet for EV ratio", body: "April hit 78% electric, up from 64% in March. Projected annual savings rises about $45." },
-      { kind: "good", icon: "OK", title: "Battery degrading below average", body: "8.7% capacity loss across 38k miles vs about 12% expected for 2017 Volts." },
-      { kind: "warn", icon: "!", title: "Cell 47 trending low", body: "Cell 47 has drifted 18 mV below the pack mean over the past two weeks." },
-      { kind: "info", icon: "i", title: "Cheaper to charge after 21:00", body: "Shifting two L2 sessions per week saves roughly $8 per month." },
-      { kind: "good", icon: "EV", title: "Tahoe trip MPG within 4% of route avg", body: "Apr 28's 184 mile roundtrip hit 41.7 MPG for that elevation profile." }
-    ]
-  };
+  const data = { trips: [], sessions: [], hourly: [], insights: [], demoLoaded: false };
   VD.data = data;
+
+  let demoDataLoading = false;
+  const demoDataCallbacks = [];
+
+  function cloneArray(value) {
+    return Array.isArray(value) ? value.map((item) => (
+      item && typeof item === "object" ? { ...item } : item
+    )) : [];
+  }
+
+  function applyDemoData(source) {
+    const next = typeof source === "function" ? source() : source;
+    data.trips = cloneArray(next && next.trips);
+    data.sessions = cloneArray(next && next.sessions);
+    data.hourly = cloneArray(next && next.hourly);
+    data.insights = cloneArray(next && next.insights);
+    data.demoLoaded = true;
+    return data;
+  }
+
+  function flushDemoDataCallbacks(error) {
+    const callbacks = demoDataCallbacks.splice(0);
+    callbacks.forEach((callback) => {
+      try { callback(error, data); } catch (err) { reportClientError("demoData.callback", err && err.message); }
+    });
+  }
+
+  function ensureDemoData(callback) {
+    if (data.demoLoaded) {
+      if (callback) callback(null, data);
+      return true;
+    }
+    if (callback) demoDataCallbacks.push(callback);
+    if (window.VoltDashboardDemoData) {
+      applyDemoData(window.VoltDashboardDemoData);
+      flushDemoDataCallbacks(null);
+      return true;
+    }
+    if (demoDataLoading) return false;
+    demoDataLoading = true;
+    const script = document.createElement("script");
+    script.src = "js/demo-data.js";
+    script.onload = () => {
+      demoDataLoading = false;
+      applyDemoData(window.VoltDashboardDemoData || {});
+      flushDemoDataCallbacks(null);
+    };
+    script.onerror = () => {
+      demoDataLoading = false;
+      const error = new Error("Unable to load dashboard demo data.");
+      reportClientError("demoData.load", error.message);
+      flushDemoDataCallbacks(error);
+    };
+    document.head.append(script);
+    return false;
+  }
 
   const state = {
     view: "drive",
@@ -149,6 +190,7 @@
     appState: {},
     demoActive: false,
     mapLayer: "eff",
+    mapRemoteTilesEnabled: readRemoteTilesPreference(),
     mapFull: false,
     selectedMapSessionId: null,
     status: {},
@@ -166,9 +208,9 @@
     sessionDistanceM: 0,
     sessionLastLat: null,
     sessionLastLng: null,
-    // Tracked by telemetry.js for the C6 BT-disconnected stale-data indicator.
+    // Tracked by telemetry.js for the BT-disconnected stale-data indicator.
     lastSampleAt: 0,
-    // C1: latest telemetry render is throttled via requestAnimationFrame; this
+    // Latest telemetry render is throttled via requestAnimationFrame; this
     // is the rAF id, cleared once the scheduled render runs.
     rafPending: 0,
     telemetry: {
@@ -319,7 +361,7 @@
   }
 
   function renderTrips() {
-    // C2: abort any listeners attached by the previous render so they don't
+    // Abort any listeners attached by the previous render so they don't
     // leak when the trip list is rebuilt.
     tripsListController?.abort();
     tripsListController = new AbortController();
@@ -339,7 +381,7 @@
     selectTrip(state.selectedTripId);
   }
 
-  // C4: build a demo-trip row via DOM APIs instead of innerHTML += template
+  // Build a demo-trip row via DOM APIs instead of innerHTML += template
   // literals, so user-provided fields never get re-interpreted as markup.
   function buildTripRow(trip) {
     const button = document.createElement("button");
@@ -476,7 +518,7 @@
   }
 
   function setHistory(payload) {
-    // C2: abort any listeners attached by the previous render so they don't
+    // Abort any listeners attached by the previous render so they don't
     // leak when the history list is rebuilt.
     historyController?.abort();
     historyController = new AbortController();
@@ -529,6 +571,7 @@
     setMode,
     setDemoActive,
     clearDemoTelemetry,
+    ensureDemoData,
     renderTrips,
     selectTrip,
     renderSessions,

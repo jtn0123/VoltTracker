@@ -246,6 +246,23 @@ public class ObdPollingEngineTest {
                 fake.closeCalls.get() >= 1);
     }
 
+    @Test
+    public void rawTranscriptIsCappedWithTruncationMarker() {
+        StringBuilder raw = new StringBuilder();
+        for (int i = 0; i < ObdPollingEngine.RAW_TRANSCRIPT_MAX_CHARS + 50; i++) {
+            raw.append('x');
+        }
+
+        String bounded = ObdPollingEngine.boundedRawTranscript(raw);
+
+        assertTrue(
+                "bounded raw transcript should include truncation marker",
+                bounded.endsWith("... [truncated 50 chars]"));
+        assertEquals(
+                ObdPollingEngine.RAW_TRANSCRIPT_MAX_CHARS + "... [truncated 50 chars]".length(),
+                bounded.length());
+    }
+
     // ---- 5. Init throws → treated as a connect failure ------------------------------
 
     @Test

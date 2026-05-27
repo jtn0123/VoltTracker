@@ -257,6 +257,44 @@ public class BackupRoundTripTest {
         assertEquals(1L, store.getStorageSummary().optLong("sampleCount"));
     }
 
+    @Test
+    public void encryptedBackupRequiresPassphraseAndRestoresWithCorrectPassphrase()
+            throws Exception {
+        long sessionId = store.startSession("obd", "AA:BB:CC", "Adapter", 1_000L);
+        store.recordTelemetry(sessionId, telemetrySample(41, 1500, 32.70, -117.10, 1_100L));
+        store.finalizeSession(
+                sessionId,
+                ObdLocalStore.STATUS_COMPLETE,
+                2_000L,
+                "0100",
+                "AA:BB:CC",
+                "Adapter",
+                "obd",
+                1,
+                "done");
+
+        File encrypted = dataBackup.buildEncryptedBackupFile(store, "correct horse battery");
+        assertNotNull(encrypted);
+        assertTrue(encrypted.exists());
+        assertTrue(DataBackup.isEncryptedBackup(encrypted));
+        assertFalse(
+                "encrypted backup must not be readable as plaintext SQLite",
+                DataBackup.isVoltTrackerBackup(encrypted));
+
+        Uri wrongUri = registerAsSafUri(encrypted);
+        assertNull(dataBackup.stageRestoreFile(wrongUri, "wrong passphrase"));
+
+        Uri correctUri = registerAsSafUri(encrypted);
+        File staged = dataBackup.stageRestoreFile(correctUri, "correct horse battery");
+        assertNotNull("encrypted restore should stage with the right passphrase", staged);
+        assertTrue(DataBackup.isVoltTrackerBackup(staged));
+
+        swapStagedFileIntoLiveDb(staged);
+        staged.delete();
+        assertNotNull(store.getSession(sessionId));
+        assertEquals(1L, store.getStorageSummary().optLong("sampleCount"));
+    }
+
     /**
      * A non-SQLite file passed to {@link DataBackup#stageRestoreFile} must be rejected (return
      * null) and must not touch the live store. We seed the target store first and verify it is

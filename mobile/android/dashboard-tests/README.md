@@ -11,7 +11,7 @@ window and then poke at the surface that the Android side touches:
 - `window.VoltDashboard.state` — the shared dashboard state shape. The tests
   fail loudly when seeded keys change so we catch accidental renames during
   partial refactors.
-- The C6 stale-tile indicator — verifies the `.stale` class lands on the
+- The stale-tile indicator — verifies the `.stale` class lands on the
   live telemetry tiles after the documented threshold.
 
 ## Run

@@ -21,6 +21,7 @@ import com.volttracker.obdpoc.data.ObdLocalStore;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -54,7 +55,7 @@ public class MainActivity extends Activity {
     PermissionGate permissionGate;
     ObdLocalStore localStore;
 
-    /** A1 — Bucket 4a/4b helpers extracted from this Activity. */
+    /** Troubleshooter and proactive connection helpers extracted from this Activity. */
     TroubleshooterBridge troubleshooter;
 
     private JSONObject lastTelemetry = new JSONObject();
@@ -63,6 +64,8 @@ public class MainActivity extends Activity {
     // Off-UI-thread worker for heavy DB work (storage summary, clearAllData, etc).
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
     private final BroadcastReceiverGroup broadcastReceivers = new BroadcastReceiverGroup();
+    private final AtomicBoolean storageSummaryInFlight = new AtomicBoolean(false);
+    private final AtomicBoolean storageSummaryQueued = new AtomicBoolean(false);
 
     /** Submits {@code task} to the background executor used for heavy DB work. */
     void runOnBackground(Runnable task) {
@@ -87,9 +90,9 @@ public class MainActivity extends Activity {
                         callDashboard("setStatus", json);
                         publishStorageSummary();
                         publishAppState();
-                        // Bucket 4b (C10): observe the same status broadcast feeding the
-                        // dashboard so the notify-when-ready schedule can wake the user as
-                        // soon as the adapter responds, then tear itself down.
+                        // Observe the same status broadcast feeding the dashboard so the
+                        // notify-when-ready schedule can wake the user as soon as the adapter
+                        // responds, then tear itself down.
                         onAdapterStatusForReadyNotify(lastStatus.optString("state", ""));
                     }
                 }
@@ -105,7 +108,7 @@ public class MainActivity extends Activity {
         permissionGate = new PermissionGate(this);
         localStore = new ObdLocalStore(this);
         troubleshooter = new TroubleshooterBridge(this);
-        // Bucket 4b: ensure the OBD notification channel exists before the adapter-ready
+        // Ensure the OBD notification channel exists before the adapter-ready
         // notification path (onAdapterStatusForReadyNotify) might try to post — the user can
         // enable notify-when-ready before ever starting a logging session, so we cannot rely
         // on ObdService.onCreate having run first to register the channel.
@@ -175,7 +178,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         backgroundExecutor.shutdownNow();
-        // Bucket 4b (C10): the periodic "notify when ready" tick and the test-connection
+        // The periodic "notify when ready" tick and the test-connection
         // auto-stop both post Runnables to handlers inside TroubleshooterBridge. Drain them
         // here so they can't fire on a destroyed Activity context.
         if (troubleshooter != null) {
@@ -229,7 +232,7 @@ public class MainActivity extends Activity {
     }
 
     private boolean isBluetoothReady() {
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        BluetoothAdapter adapter = BluetoothAdapters.get(this);
         return adapter != null
                 && adapter.isEnabled()
                 && deviceCatalog.hasBluetoothConnectPermission();
@@ -241,7 +244,7 @@ public class MainActivity extends Activity {
             publishStatus("blocked", "Grant Bluetooth permission, then connect again.", true);
             return;
         }
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        BluetoothAdapter adapter = BluetoothAdapters.get(this);
         if (adapter == null) {
             publishStatus("blocked", "This phone does not report Bluetooth support.", true);
             return;
@@ -256,7 +259,7 @@ public class MainActivity extends Activity {
             return;
         }
 
-        // Bucket 4b: any pending test-connection auto-stop is now stale — the C10 schedule
+        // Any pending test-connection auto-stop is now stale — the notify-when-ready schedule
         // posts an 8 s stopObdService callback per probe, and if it fires DURING the connect
         // we're about to start (manual user connect, or a re-issued probe), it would tear down
         // the new session. startTestConnection posts its own fresh stop right after calling
@@ -321,12 +324,11 @@ public class MainActivity extends Activity {
         startService(service);
     }
 
-    // ===== Bucket 4a + 4b bridge helpers =====================================
-    // A1: implementations live in TroubleshooterBridge so this Activity no longer
+    // ===== Troubleshooter and connection-tool bridge helpers ==================
+    // Implementations live in TroubleshooterBridge so this Activity no longer
     // carries the handler state, the constants, or the per-helper logic. The
     // VoltBridge-side API (method names + signatures) stays unchanged, so
-    // VoltBridge's bucket regions and the existing VoltBridge tests still call
-    // through these delegates verbatim.
+    // VoltBridge's existing tests still call through these delegates verbatim.
 
     boolean forceStopPackageFromBridge(String packageName) {
         return troubleshooter.forceStopPackage(packageName);
@@ -423,6 +425,14 @@ public class MainActivity extends Activity {
 
     void publishStorageSummary() {
         // getStorageSummary runs many queries over a large DB; keep it off the UI thread.
+        if (!storageSummaryInFlight.compareAndSet(false, true)) {
+            storageSummaryQueued.set(true);
+            return;
+        }
+        runStorageSummaryRefresh();
+    }
+
+    private void runStorageSummaryRefresh() {
         backgroundExecutor.execute(
                 () -> {
                     final String storage = getStorageSummaryJson();
@@ -431,42 +441,58 @@ public class MainActivity extends Activity {
                                 lastStorage = MainActivityUtils.parseJson(storage);
                                 callDashboard("setStorage", storage);
                             });
+                    storageSummaryInFlight.set(false);
+                    if (storageSummaryQueued.getAndSet(false)) {
+                        publishStorageSummary();
+                    }
                 });
     }
 
     String getStorageSummaryJson() {
         if (localStore == null) {
-            return "{}";
+            return MainActivityUtils.errorPayload(
+                            "storage_unavailable", "Local storage is not ready yet.")
+                    .toString();
         }
         try {
             return localStore.getStorageSummary().toString();
         } catch (RuntimeException ex) {
-            Log.w(TAG, "getStorageSummary failed; returning empty payload", ex);
-            return "{}";
+            Log.w(TAG, "getStorageSummary failed", ex);
+            return MainActivityUtils.errorPayload(
+                            "storage_summary_failed", "Could not read local storage summary.")
+                    .toString();
         }
     }
 
     String getTripsJson() {
         if (localStore == null) {
-            return "[]";
+            return MainActivityUtils.errorPayload(
+                            "storage_unavailable", "Local storage is not ready yet.")
+                    .toString();
         }
         try {
             return localStore.getTripsJson(40).toString();
         } catch (RuntimeException ex) {
-            Log.w(TAG, "getTripsJson failed; returning empty list", ex);
-            return "[]";
+            Log.w(TAG, "getTripsJson failed", ex);
+            return MainActivityUtils.errorPayload(
+                            "trips_read_failed", "Could not read logged trips.")
+                    .toString();
         }
     }
 
     String getInsightsJson() {
         if (localStore == null) {
-            return "{}";
+            return MainActivityUtils.errorPayload(
+                            "storage_unavailable", "Local storage is not ready yet.")
+                    .toString();
         }
         try {
             return localStore.getInsightsJson().toString();
         } catch (RuntimeException ex) {
-            Log.w(TAG, "getInsightsJson failed; returning empty payload", ex);
-            return "{}";
+            Log.w(TAG, "getInsightsJson failed", ex);
+            return MainActivityUtils.errorPayload(
+                            "insights_read_failed", "Could not read vehicle insights.")
+                    .toString();
         }
     }
 

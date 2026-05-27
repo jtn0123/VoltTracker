@@ -33,14 +33,6 @@ cd mobile/android
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
-## archive/
-
-The repository previously hosted a self-hosted Flask + PostgreSQL web app that
-ingested Torque Pro uploads and served an analytics dashboard. That codebase has
-been moved to [`archive/`](archive/) — it is deprecated and no longer
-maintained. The Android app is now the project; it keeps all data on the phone
-and needs no server.
-
 ## License
 
 MIT License — see LICENSE file for details.

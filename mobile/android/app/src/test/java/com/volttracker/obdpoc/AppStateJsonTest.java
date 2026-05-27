@@ -132,4 +132,31 @@ public class AppStateJsonTest {
         assertTrue(adapter.getBoolean("connected"));
         assertEquals("...44:55", adapter.getString("address"));
     }
+
+    @Test
+    public void appStatePayloadExposesTypedConstructorFieldsBeforeSerialization()
+            throws JSONException {
+        JSONObject telemetry = new JSONObject().put("source", "demo");
+        AppStatePayload payload =
+                new AppStatePayload(
+                        "2.0",
+                        true,
+                        false,
+                        true,
+                        "00:11:22:33:44:55",
+                        "OBDLink",
+                        telemetry,
+                        new JSONObject().put("state", "demo"),
+                        new JSONObject());
+
+        assertEquals("2.0", payload.version);
+        assertTrue(payload.bluetoothReady);
+        assertFalse(payload.locationGranted);
+        assertTrue(payload.notificationsGranted);
+        assertEquals("00:11:22:33:44:55", payload.lastAddress);
+
+        JSONObject json = payload.toJson();
+        assertEquals("demo", json.getJSONObject("session").getString("state"));
+        assertEquals("demo", json.getJSONObject("session").getString("mode"));
+    }
 }

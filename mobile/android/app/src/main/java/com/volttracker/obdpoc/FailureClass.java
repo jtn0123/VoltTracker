@@ -11,8 +11,8 @@ package com.volttracker.obdpoc;
  *   <li>{@code ObdService.broadcastStatus} — auto-merges the last value onto every status payload
  *       as {@code failureClass} (via {@link #wireName()}) so the dashboard can show actionable copy
  *       instead of a raw stack trace.
- *   <li>Dashboard (Bucket 4a) — picks user-facing error copy and troubleshooter steps off the
- *       {@link #wireName()} string.
+ *   <li>Dashboard — picks user-facing error copy and troubleshooter steps off the {@link
+ *       #wireName()} string.
  * </ul>
  *
  * <p>The {@link #wireName()} short snake-case strings are the stable JSON wire format. Renaming one

@@ -9,7 +9,7 @@
   ></div>
 
   <section class="hero">
-    <!-- C3: speed+power cluster announces value changes politely so screen
+    <!-- Speed+power cluster announces value changes politely so screen
          readers see "stale" / unit changes without barging into other UI. -->
     <article class="panel live-card" aria-live="polite" aria-atomic="false">
       <div class="live-head">
@@ -57,7 +57,7 @@
       </div>
     </article>
 
-    <!-- C3: SOC + pack temp cluster as a separate live region. The HV-pack sub-row
+    <!-- SOC + pack temp cluster as a separate live region. The HV-pack sub-row
          under the SOC meter surfaces the raw 300+ V traction-pack readings polled
          from mode-22 PIDs 222429 / 222414 (instead of just the powerKw aggregate). -->
     <article class="panel battery-strip" aria-live="polite" aria-atomic="false">
@@ -267,7 +267,7 @@
     </div>
   </article>
 
-  <!-- C3: live diagnostic counters (sample count, runtime, etc.) announced
+  <!-- Live diagnostic counters (sample count, runtime, etc.) announced
        politely so screen readers track OBD progress without barging. -->
   <article class="panel status-card" aria-live="polite">
     <div class="status-head">

@@ -1,7 +1,5 @@
 package com.volttracker.obdpoc;
 
-import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
@@ -23,97 +21,17 @@ final class AppStateJson {
             JSONObject telemetry,
             JSONObject status,
             JSONObject storage) {
-        JSONObject payload = new JSONObject();
-        try {
-            JSONObject app = new JSONObject();
-            app.put("version", version);
-            app.put("schemaVersion", 4);
-            payload.put("app", app);
-
-            JSONObject permissions = new JSONObject();
-            permissions.put("bluetooth", bluetoothReady);
-            permissions.put("location", locationGranted);
-            permissions.put("notifications", notificationsGranted);
-            payload.put("permissions", permissions);
-
-            JSONObject adapter = new JSONObject();
-            adapter.put(
-                    "name",
-                    MainActivityUtils.coalesce(
-                            telemetry.optString("adapter", ""),
-                            status.optString("adapter", ""),
-                            lastName));
-            adapter.put("address", MainActivityUtils.redactAddress(lastAddress));
-            adapter.put("remembered", lastAddress != null && !lastAddress.trim().isEmpty());
-            adapter.put(
-                    "connected", MainActivityUtils.isConnectedState(status.optString("state", "")));
-            payload.put("adapter", adapter);
-
-            JSONObject session = new JSONObject();
-            session.put("mode", telemetry.optString("source", ""));
-            session.put("state", status.optString("state", "idle"));
-            session.put("detail", status.optString("detail", ""));
-            session.put("sampleCount", telemetry.optInt("sampleCount", 0));
-            session.put("sessionMs", telemetry.optLong("sessionMs", 0L));
-            session.put("backgroundSampleCount", telemetry.optInt("backgroundSampleCount", 0));
-            session.put("sampleGapCount", telemetry.optInt("sampleGapCount", 0));
-            session.put("maxSampleGapMs", telemetry.optLong("maxSampleGapMs", 0L));
-            payload.put("session", session);
-
-            JSONObject vehicle = new JSONObject();
-            vehicle.put("state", telemetry.optString("vehicleState", "unknown"));
-            vehicle.put(
-                    "confidence",
-                    telemetry.optString(
-                            "vehicleStateConfidence",
-                            telemetry.has("vehicleState") ? "observed" : "unknown"));
-            // Forward classifier reasons when present so the dashboard can explain *why*
-            // the state was picked. Missing/empty array is fine — the JS renders no tags.
-            JSONArray reasons = telemetry.optJSONArray("vehicleStateReasons");
-            vehicle.put("reasons", reasons == null ? new JSONArray() : reasons);
-            // Identity fields populated from the vehicles table when a Scan has captured a VIN.
-            // The dashboard's renderVehicleUi() reads vehicle.name / make / model / year / vin
-            // and falls back to "--" when any field is absent.
-            JSONObject latestVehicle =
-                    storage == null ? null : storage.optJSONObject("latestVehicle");
-            boolean hasVehicleRow = latestVehicle != null && latestVehicle.length() > 0;
-            vehicle.put("vinStored", hasVehicleRow);
-            if (hasVehicleRow) {
-                java.util.Iterator<String> keys = latestVehicle.keys();
-                while (keys.hasNext()) {
-                    String key = keys.next();
-                    vehicle.put(key, latestVehicle.opt(key));
-                }
-            }
-            payload.put("vehicle", vehicle);
-
-            JSONObject gps = new JSONObject();
-            boolean hasLocation = telemetry.has("latitude") && telemetry.has("longitude");
-            gps.put("state", hasLocation ? "locked" : (locationGranted ? "waiting" : "blocked"));
-            if (telemetry.has("accuracyM")) {
-                gps.put("accuracyM", telemetry.optDouble("accuracyM"));
-            }
-            if (telemetry.has("locationAgeMs")) {
-                gps.put("ageMs", telemetry.optLong("locationAgeMs"));
-            }
-            payload.put("gps", gps);
-
-            JSONObject lifecycle = new JSONObject();
-            lifecycle.put("appForeground", telemetry.optBoolean("appForeground", true));
-            lifecycle.put(
-                    "foregroundServiceActive",
-                    telemetry.optBoolean("foregroundServiceActive", false));
-            lifecycle.put("backgroundSampleCount", telemetry.optInt("backgroundSampleCount", 0));
-            lifecycle.put("sampleGapCount", telemetry.optInt("sampleGapCount", 0));
-            lifecycle.put("lastSampleGapMs", telemetry.optLong("lastSampleGapMs", 0L));
-            lifecycle.put("maxSampleGapMs", telemetry.optLong("maxSampleGapMs", 0L));
-            payload.put("lifecycle", lifecycle);
-
-            payload.put("latestTelemetry", telemetry);
-            payload.put("storage", storage);
-        } catch (JSONException ignored) {
-            // Local state values are safe.
-        }
-        return payload.toString();
+        return new AppStatePayload(
+                        version,
+                        bluetoothReady,
+                        locationGranted,
+                        notificationsGranted,
+                        lastAddress,
+                        lastName,
+                        telemetry,
+                        status,
+                        storage)
+                .toJson()
+                .toString();
     }
 }

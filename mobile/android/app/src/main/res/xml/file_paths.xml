@@ -2,6 +2,6 @@
 <paths>
     <!-- Backup files are written here before being handed to the share sheet. -->
     <cache-path name="backups" path="backups/" />
-    <!-- Bucket 3's DiagnosticsShareIntent zips session logs + rolling app log here. -->
+    <!-- DiagnosticsShareIntent zips session logs + rolling app log here. -->
     <cache-path name="diagnostics" path="diagnostics/" />
 </paths>

@@ -1,6 +1,6 @@
 /*
- * troubleshooter.js — Bucket 4a behavior for the connection troubleshooter
- * modal (C3/C4) and the stuck-bond auto-suggest hook (A8).
+ * troubleshooter.js — connection troubleshooter modal behavior and the
+ * stuck-bond auto-suggest hook.
  *
  * The modal opens automatically when:
  *   - the current session has produced >=3 retry attempts (detail contains
@@ -11,16 +11,13 @@
  * status payload is non-empty. Each comma-separated package gets a one-tap
  * Force-stop button that calls `VoltTrackerAndroid.forceStopPackage(pkg)`.
  *
- * A8 (stuck-bond auto-suggest): every time the modal opens we ask Bucket 4b's
- * `getRecentSessions(3)` bridge for the last three sessions. If all three
- * failed with no success in between, we swap the primary action to
- * "Forget adapter & re-pair". When the bridge stub returns `[]` (the default
- * before Bucket 4b lands), the code path is silently dormant — that's
- * intentional.
+ * Stuck-bond auto-suggest: every time the modal opens we ask the
+ * `getRecentSessions(3)` bridge for the last three sessions. If all three failed
+ * with no success in between, we swap the primary action to "Forget adapter &
+ * re-pair". If the bridge returns `[]`, the code path is dormant.
  *
  * CSS namespace: every selector this file mutates is prefixed `.troubleshooter`
- * (see css/troubleshooter.css) so Bucket 4b's status-tools styling cannot
- * collide.
+ * (see css/troubleshooter.css) so connection-tool styling cannot collide.
  */
 (function () {
   "use strict";
@@ -31,12 +28,12 @@
   const bridge = VD.bridge;
   const el = VD.el;
 
-  // C3 trigger thresholds — keep low so users see help fast in real-world
+  // Trigger thresholds: keep low so users see help fast in real-world
   // flaky-adapter scenarios.
   const FAILED_SESSION_OPEN_THRESHOLD = 2;
   const RETRY_OPEN_THRESHOLD = 3;
 
-  // B8: which slow-tier PID staleness fields the polling engine emits, and the
+  // Slow-tier PID staleness fields the polling engine emits, and the
   // user-facing label for each. Threshold is the same 4s used elsewhere for
   // "the adapter has stopped answering this PID."
   const STALE_THRESHOLD_MS = 4000;
@@ -47,7 +44,7 @@
     { key: "batteryTempStaleMs", label: "HV pack temperature" }
   ];
 
-  // C1 — map FailureClass.name() to user-facing copy. Keys MUST match the
+  // Map FailureClass.name() to user-facing copy. Keys MUST match the
   // string values produced by FailureClass.java; unknown / missing falls
   // through to the generic message.
   const FAILURE_CLASS_COPY = {
@@ -90,7 +87,7 @@
     lastTelemetry: null
   };
 
-  // C2 listener discipline: every addEventListener attached from this file
+  // Listener discipline: every addEventListener attached from this file
   // passes { signal } so a single controller.abort() tears all bindings down.
   // Without this, hot-reloading the WebView or re-running bootstrap would
   // accumulate duplicate handlers across reloads.
@@ -128,7 +125,7 @@
     state.troubleshooter.autoOpened = false;
   }
 
-  // C3: collapsible step head. Toggles aria-expanded + body[hidden].
+  // Collapsible step head. Toggles aria-expanded + body[hidden].
   function bindStepToggles() {
     const root = modal();
     if (!root) return;
@@ -156,8 +153,8 @@
     if (!btn) return;
     btn.addEventListener("click", () => {
       if (state.troubleshooter.forgetMode) {
-        // A8: deep-link to the system Bluetooth settings so the user can
-        // forget the adapter and re-pair. Android handles the activity.
+        // Deep-link to the system Bluetooth settings so the user can forget the adapter and
+        // re-pair. Android handles the activity.
         openBluetoothSettings();
         return;
       }
@@ -179,9 +176,8 @@
       bridge.openBluetoothSettings();
       return;
     }
-    // Without a dedicated bridge call, surface a status so the user knows the
-    // path even when the helper is missing. Bucket 4b owns the settings
-    // partial that would carry a richer fallback button.
+    // Without a dedicated bridge call, surface a status so the user knows the path even when the
+    // helper is missing.
     if (typeof VD.setStatus === "function") {
       VD.setStatus({
         state: "blocked",
@@ -209,8 +205,8 @@
     }
   }
 
-  // C4: render Force-stop buttons for every competing package. `csv` may be
-  // null / "" — in which case the whole step stays hidden.
+  // Render Force-stop buttons for every competing package. `csv` may be null or ""; in that case
+  // the whole step stays hidden.
   function renderCompeting(csv) {
     const stepNode = el("troubleshooterStepCompeting");
     const listNode = el("troubleshooterCompetingList");
@@ -270,7 +266,7 @@
     return row;
   }
 
-  // B8: render the "telemetry isn't refreshing" step from the latest telemetry
+  // Render the "telemetry isn't refreshing" step from the latest telemetry
   // payload. Shows one <li> per slow-tier PID whose *StaleMs field exceeds
   // STALE_THRESHOLD_MS. Hidden entirely when no field is stale or when the
   // adapter hasn't started reporting staleness yet.
@@ -322,7 +318,7 @@
     }
   }
 
-  // A8: switch the primary action when the last 3 sessions all failed.
+  // Switch the primary action when the last 3 sessions all failed.
   function refreshStuckBondSuggestion() {
     state.troubleshooter.forgetMode = false;
     let recent = [];
@@ -330,7 +326,7 @@
       try {
         const raw = bridge.getRecentSessions(3);
         // Defensive: if panels.js failed to load or was renamed, VD.parsePayload may not exist.
-        // Fall back to a plain JSON.parse + Array check so the A8 path is not silently disabled.
+        // Fall back to JSON.parse + Array check so the stuck-bond path is not silently disabled.
         if (typeof VD.parsePayload === "function") {
           recent = VD.parsePayload(raw, []);
         } else {
@@ -357,7 +353,7 @@
     renderForRetry();
   }
 
-  // C1: rewrite the error-banner title/hint based on failureClass and toggle
+  // Rewrite the error-banner title/hint based on failureClass and toggle
   // the actions row (cancel + help) so the banner is actionable instead of
   // a plain "Dashboard error" string. Called from noteStatus on every status
   // payload.
@@ -401,7 +397,7 @@
       }
     }
 
-    // C6: surface the in-flight Cancel button only while a retry burst is
+    // Surface the in-flight Cancel button only while a retry burst is
     // actively running. Help button shows whenever we have failure copy or
     // an active retry.
     const showCancel = isRetrying;
@@ -411,7 +407,7 @@
     if (actionsNode) actionsNode.hidden = !(showCancel || showHelp);
   }
 
-  // C3: counts a status payload toward the auto-open trigger.
+  // Counts a status payload toward the auto-open trigger.
   function noteStatus(status) {
     if (!status) return;
     const stateName = String(status.state || "").toLowerCase();
@@ -455,8 +451,7 @@
     }
     if (stateName) t.lastSessionState = stateName;
 
-    // Refresh competing-apps list whenever a status comes through and the
-    // modal is open — Bucket 2's competingApps field may arrive mid-burst.
+    // Refresh competing-apps list whenever a status comes through and the modal is open.
     if (isOpen()) {
       renderCompeting(status.competingApps);
     }
@@ -501,7 +496,7 @@
     }
   }
 
-  // B8: same pattern as installStatusObserver but for the telemetry stream. The
+  // Same pattern as installStatusObserver but for the telemetry stream. The
   // *StaleMs fields ride on every telemetry payload, so we just need to read
   // them out and refresh the step. Observer must never break the underlying
   // updateTelemetry call.

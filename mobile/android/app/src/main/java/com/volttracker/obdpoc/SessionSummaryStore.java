@@ -13,9 +13,8 @@ import org.json.JSONObject;
 
 /**
  * Append-only one-summary-per-line rollup at {@code files/obd-logs/sessions-summary.jsonl}. The
- * per-session {@code .jsonl} is the full record; this file is the index Bucket 4b reads to render
- * the "last connected" badge (C2) and the adapter-health pill (C8) without parsing every detail
- * log.
+ * per-session {@code .jsonl} is the full record; this file is the index used to render the "last
+ * connected" badge and adapter-health pill without parsing every detail log.
  *
  * <p>{@link #recordStart} stores the open-session context in memory so the matching {@link
  * #recordEnd} call can stamp a {@link SessionSummary} with both timestamps + adapter identity. The

@@ -1,6 +1,6 @@
 # Volt Tracker Android OBD POC
 
-This is a standalone Android proof of concept for replacing Torque as the day-to-day OBD bridge.
+This is a standalone Android app for replacing Torque as the day-to-day OBD bridge.
 
 It does three things:
 
@@ -8,7 +8,7 @@ It does three things:
 2. Connects to a paired ELM327-style OBD2 adapter over Bluetooth Classic SPP.
 3. Streams basic live OBD telemetry into the dashboard.
 
-The POC also includes a demo telemetry mode so the UI can be tested without a scanner.
+The app also includes a demo telemetry mode so the UI can be tested without a scanner.
 
 ## Codebase Map
 
@@ -39,6 +39,9 @@ The app now writes two layers of local data:
 
 SQLite tables capture OBD sessions, parsed telemetry samples, status/debug events, and adapter history summaries. The Settings screen shows a database summary so field tests can confirm whether sessions and samples are being saved without pulling files from the phone.
 
+For the data/privacy model, backup contents, and map tile network behavior, see
+[`docs/privacy-data-handling.md`](docs/privacy-data-handling.md).
+
 ## Current PIDs
 
 Polled live every cycle:
@@ -58,8 +61,8 @@ see `docs/volt-pid-research-2026-05-20.md`):
 - Header `ATSH7E4`: `22434F` battery temp, `224368`/`224369` charger AC voltage/current,
   `22436B`/`22436C`/`224373` charger HV voltage/current/power, `22437D` last-charge energy
 
-The Volt mode-22 decode formulas still need confirmation against a real car — run a
-Scan and verify the captured responses before promoting any of them to the live loop.
+The scan-only Volt mode-22 formulas should be rechecked against fresh field data
+before promoting more of them to the live loop.
 
 ## Build
 
@@ -89,6 +92,22 @@ Run Spotless locally before each commit so format failures surface before CI:
 brew install lefthook && lefthook install
 ```
 
+### Full local verification
+
+Before opening a PR, run the active-app verification task:
+
+```sh
+npm --prefix dashboard-tests ci
+./gradlew verifyActiveApp
+```
+
+This runs Android unit tests, lint, Spotless, debug assemble, JaCoCo coverage,
+dashboard ESLint/Vitest, and a generated-dashboard drift check.
+
+The aggregate task is configuration-cache ready. For faster repeated local
+loops, run `./gradlew verifyActiveApp --configuration-cache`; the second run
+should reuse the stored configuration.
+
 ### Outdated dependency report
 
 List outdated direct and transitive dependencies (advisory; nothing fails):
@@ -96,6 +115,9 @@ List outdated direct and transitive dependencies (advisory; nothing fails):
 ```sh
 ./gradlew dependencyUpdates -Drevision=release
 ```
+
+Dependency snapshots and other dated audits are indexed in
+[`docs/reports-index.md`](docs/reports-index.md).
 
 ## Install On A Phone
 
@@ -122,12 +144,17 @@ Optional phone mirroring:
 scrcpy
 ```
 
-## POC Notes
+## Current Notes
 
-- This uses no AndroidX dependencies yet.
+- The app intentionally keeps a small dependency surface. Runtime code directly
+  ships AndroidX Core for `FileProvider`, notification/service compatibility,
+  and package-version helpers; test code uses JUnit, Robolectric, and `org.json`.
 - Bluetooth permissions are requested at runtime on Android 12+.
 - A foreground service keeps the OBD session alive while polling.
 - The WebView only loads local assets from `app/src/main/assets/dashboard`.
+- The Map tab keeps remote basemap tiles off by default; the Tiles control opts
+  into CARTO/OSM basemap requests while route, OBD, and GPS history still come
+  from on-device storage.
 - The service uses the standard ELM327 serial UUID: `00001101-0000-1000-8000-00805F9B34FB`.
 
 ## Pulling Field-Test Logs

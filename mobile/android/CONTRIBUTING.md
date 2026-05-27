@@ -5,8 +5,11 @@ Short, opinionated, and meant to bootstrap you into the inner loop quickly.
 ## Day-in-the-life dev loop
 
 ```sh
-# 1) Clean build + unit tests (macOS / Linux)
-./gradlew clean :app:testDebugUnitTest
+# 1) Full active-app verification (macOS / Linux)
+npm --prefix dashboard-tests ci
+./gradlew verifyActiveApp
+# Repeated local loop:
+./gradlew verifyActiveApp --configuration-cache
 
 # 2) Local lint with HTML report
 ./gradlew :app:lintDebug
@@ -22,7 +25,7 @@ xdg-open app/build/reports/lint-results-debug.html
 # 4) Dashboard tests (vitest + jsdom — fast, no Android emulator)
 npm --prefix dashboard-tests test
 
-# 5) Dashboard lint (ESLint 9 flat config)
+# 5) Dashboard lint (ESLint flat config)
 npm --prefix dashboard-tests run lint
 ```
 
@@ -45,14 +48,22 @@ After editing a partial or the template, regenerate the assembled HTML:
 
 CSS and JS edits load directly — no regeneration needed.
 
+CI also runs `verifyGeneratedDashboardClean`, which compares
+`app/src/main/assets/dashboard/index.html` with the partial/template output and
+fails if the generated file is stale. If that check fails, rerun
+`./gradlew generateDashboardHtml` and include the generated file in the same
+change as the partial/template edit.
+
 ## Pre-commit hooks
 
 ```sh
 brew install lefthook && lefthook install
 ```
 
-Hooks run Spotless (Java + Markdown) and ESLint on staged dashboard JS. To bypass
-on an emergency push: `git commit --no-verify` (use sparingly; CI will catch it).
+Hooks run Spotless and ESLint on staged dashboard JS. Install dashboard Node
+dependencies once with `npm --prefix dashboard-tests ci`; otherwise the local
+ESLint hook prints a warning and CI becomes the first strict check. To bypass on
+an emergency push: `git commit --no-verify` (use sparingly; CI will catch it).
 
 ## Where things live
 
@@ -67,6 +78,10 @@ Calls flow downward only (UI → Service → Engine → Data). See
 [`docs/mobile-architecture-roadmap.md`](docs/mobile-architecture-roadmap.md#layering-rule)
 for the full rule, and the ADRs in [`docs/adr/`](docs/adr/) for the load-bearing
 design decisions.
+
+Historical audit reports and dependency snapshots are indexed in
+[`docs/reports-index.md`](docs/reports-index.md). Privacy/data-handling behavior
+is summarized in [`docs/privacy-data-handling.md`](docs/privacy-data-handling.md).
 
 ## Coverage floors
 

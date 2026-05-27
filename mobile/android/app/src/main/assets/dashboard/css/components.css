@@ -555,13 +555,19 @@
 
   .dtc-action-row {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr);
     gap: 8px;
     margin-bottom: 12px;
   }
 
   .dtc-action-row button {
     min-width: 0;
+  }
+
+  .dtc-action-row .danger {
+    border-color: rgba(255,107,95,0.34);
+    color: #ff8a7e;
+    background: rgba(255,107,95,0.08);
   }
 
   .dtc-action-row .scan {
@@ -572,7 +578,7 @@
     box-shadow: 0 12px 28px rgba(255,122,69,0.18);
   }
 
-  .dtc-action-row button:not(.scan) {
+  .dtc-action-row button:not(.scan):not(.danger) {
     color: var(--muted);
   }
 
@@ -672,6 +678,179 @@
     color: var(--muted);
     font-size: 12px;
     line-height: 1.35;
+  }
+
+  .dtc-empty-wrap {
+    display: grid;
+    gap: 8px;
+  }
+
+  .dtc-example-header {
+    margin-top: 4px;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .dtc-item[data-example="true"] {
+    opacity: 0.55;
+    border-style: dashed;
+  }
+
+  .dtc-item[data-example="true"]::after {
+    content: "example";
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .dtc-search {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 3px 9px;
+    border: 1px solid rgba(92,200,255,0.34);
+    border-radius: 999px;
+    background: rgba(92,200,255,0.08);
+    color: #b6e1ff;
+    font-size: 11px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .dtc-causes {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-left-width: 3px;
+    border-radius: 9px;
+    background: rgba(255,255,255,0.025);
+  }
+
+  .dtc-causes-head {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .dtc-causes ul {
+    margin: 0;
+    padding-left: 16px;
+  }
+
+  .dtc-causes li {
+    margin: 1px 0;
+    color: var(--soft);
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  .dtc-item[data-severity="critical"] {
+    border-left-color: rgba(255,107,95,0.6);
+    border-left-width: 3px;
+  }
+
+  .dtc-item[data-severity="critical"] .dtc-causes {
+    border-left-color: rgba(255,107,95,0.55);
+    background: rgba(255,107,95,0.05);
+  }
+
+  .dtc-item[data-severity="warning"] {
+    border-left-color: rgba(255,184,74,0.5);
+    border-left-width: 3px;
+  }
+
+  .dtc-item[data-severity="warning"] .dtc-causes {
+    border-left-color: rgba(255,184,74,0.45);
+    background: rgba(255,184,74,0.04);
+  }
+
+  .dtc-item[data-severity="info"] .dtc-causes {
+    border-left-color: rgba(92,200,255,0.4);
+    background: rgba(92,200,255,0.04);
+  }
+
+  .dtc-search:active {
+    background: rgba(92,200,255,0.18);
+  }
+
+  .dtc-clear-warning {
+    margin-top: 4px;
+    padding: 12px;
+    border: 1px solid rgba(255,107,95,0.34);
+    border-radius: 13px;
+    background: rgba(255,107,95,0.07);
+    display: grid;
+    gap: 9px;
+  }
+
+  .dtc-clear-warning strong {
+    font-size: 14px;
+    color: #ffb1a8;
+  }
+
+  .dtc-clear-warning p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .dtc-clear-prereq {
+    padding: 8px 10px;
+    border: 1px dashed rgba(255,184,74,0.34);
+    border-radius: 10px;
+    background: rgba(255,184,74,0.06);
+    color: #f7d28a !important;
+  }
+
+  .dtc-clear-ack {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.18);
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--soft);
+  }
+
+  .dtc-clear-ack input {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    accent-color: #ff6b5f;
+  }
+
+  .dtc-clear-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .dtc-clear-actions .danger {
+    border-color: rgba(255,107,95,0.5);
+    background: rgba(255,107,95,0.18);
+    color: #ffd0c9;
+    font-weight: 700;
+  }
+
+  .dtc-clear-actions .danger:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .dtc-item[data-status="pending"] {
@@ -820,7 +999,7 @@
     white-space: nowrap;
   }
 
-  /* C6: live-tile stale indicator. Applied by telemetry.js when no fresh OBD
+  /* Live-tile stale indicator. Applied by telemetry.js when no fresh OBD
      sample has arrived in the last ~3 s — fades the readout to half opacity so
      the user can tell the BT/adapter link has gone quiet without reading the
      status badge. */
@@ -829,7 +1008,7 @@
     transition: opacity 0.3s ease;
   }
 
-  /* C4: in-flight indicator for bridge-triggering buttons. Combined with
+  /* In-flight indicator for bridge-triggering buttons. Combined with
      `disabled`, this also blocks taps via pointer-events so a quick double-tap
      can't slip through a CSS-only feedback layer. */
   button.busy {

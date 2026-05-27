@@ -1,4 +1,4 @@
-// C7: telemetry.js derives LIVE_TILE_IDS from `[data-live-tile="true"]` in the
+// telemetry.js derives LIVE_TILE_IDS from `[data-live-tile="true"]` in the
 // DOM at boot. This test pins the source-of-truth: the count must match.
 // A new live tile in a partial without the attribute will fail here (and the
 // stale indicator wouldn't bind to it in prod either).
@@ -15,13 +15,13 @@ const TELEMETRY_JS = resolve(
   '../app/src/main/assets/dashboard/js/telemetry.js',
 );
 
-describe('C7 LIVE_TILE_IDS is DOM-derived', () => {
-  beforeEach(() => {
+describe('LIVE_TILE_IDS is DOM-derived', () => {
+  beforeEach(async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
-    loadDashboard();
+    await loadDashboard();
   });
 
   it('telemetry.js no longer pins a static LIVE_TILE_IDS array', () => {
@@ -50,7 +50,7 @@ describe('C7 LIVE_TILE_IDS is DOM-derived', () => {
     }
   });
 
-  it('every DOM tile gets the .stale class once the stale loop fires', () => {
+  it('every DOM tile gets the .stale class once the stale loop fires', async () => {
     // Drive the stale tick with fake timers so we can prove the derived list and
     // the DOM nodes the loop touches are the same set. If telemetry.js's derived
     // LIVE_TILE_IDS didn't match the data-live-tile elements, some tiles would
@@ -61,7 +61,7 @@ describe('C7 LIVE_TILE_IDS is DOM-derived', () => {
       delete window.VoltDashboard;
       delete window.VoltTrackerNative;
       delete window.VoltTrackerAndroid;
-      loadDashboard();
+      await loadDashboard();
       const tiles = Array.from(document.querySelectorAll('[data-live-tile="true"]'));
       expect(tiles.length).toBeGreaterThan(0);
       // STALE_THRESHOLD_MS = 3000 plus the 1 Hz interval — 4s past boot is well past

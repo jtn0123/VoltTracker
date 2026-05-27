@@ -1,13 +1,12 @@
 /*
- * Owner: Bucket 4b.
- * Styles for the last-connected badge (C2), adapter-health pill (C8),
- * test-connection / send-diagnostics buttons (C5/C7), low-voltage hint (C9),
- * and notify-when-ready toggle (C10). Selectors are namespaced under
+ * Styles for the last-connected badge, adapter-health pill,
+ * test-connection / send-diagnostics buttons, low-voltage hint,
+ * and notify-when-ready toggle. Selectors are namespaced under
  * .connection-status / .connection-tools so they cannot collide with
  * troubleshooter.css or the shared components.css.
  */
 
-/* ---- Topbar: last-connected badge + adapter-health pill (C2 / C8) ---- */
+/* ---- Topbar: last-connected badge + adapter-health pill ---- */
 
 .connection-status {
   display: flex;
@@ -111,7 +110,7 @@
   background: #ff6b5f;
 }
 
-/* ---- Diag-tab proactive tools panel (C5 / C7 / C9 / C10) ---- */
+/* ---- Diag-tab proactive tools panel ---- */
 
 .connection-tools {
   /* Inherits .view + .is-active toggling from base.css. Stacks the panel after

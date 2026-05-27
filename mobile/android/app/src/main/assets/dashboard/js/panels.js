@@ -6,8 +6,30 @@
   const bridge = VD.bridge;
   const el = VD.el;
 
+  function isNativeError(payload) {
+    return payload && typeof payload === "object" && payload.ok === false && payload.error;
+  }
+
+  function reportNativeReadError(payload, fallbackDetail) {
+    const detail = payload.message || fallbackDetail || "Could not read local storage.";
+    VD.setStatus({ state: "blocked", detail });
+    if (bridge && typeof bridge.logClientError === "function") {
+      bridge.logClientError(String(payload.error || "native_read_failed"), detail);
+    }
+  }
+
   function setStorage(payload) {
     const parsed = VD.parsePayload(payload, {});
+    if (isNativeError(parsed)) {
+      reportNativeReadError(parsed, "Could not read local storage summary.");
+      state.storage = { error: parsed.error, message: parsed.message || "" };
+      updateStorageUi();
+      updateReviewUi();
+      renderRealV2Ui();
+      VD.renderMap();
+      VD.updateValidationUi();
+      return;
+    }
     const newRoutes =
       parsed && Array.isArray(parsed.recentRoutes) ? parsed.recentRoutes : [];
     const allowSampleFallback = !bridge;
@@ -81,7 +103,7 @@
     updateReviewUi();
   }
 
-  // ---- C4 row builders: prefer document.createElement + textContent over
+  // ---- Row builders: prefer document.createElement + textContent over
   // innerHTML += template literals so storage strings can never be reinterpreted
   // as markup. Each builder returns a single root Element.
 
@@ -135,10 +157,12 @@
       list.replaceChildren(buildDtcEmptyState());
       return;
     }
-    list.replaceChildren(...codes.map(buildDtcItem));
+    list.replaceChildren(...codes.map((c) => buildDtcItem(c, false)));
   }
 
   function buildDtcEmptyState() {
+    const wrap = document.createElement("div");
+    wrap.className = "dtc-empty-wrap";
     const article = document.createElement("article");
     article.className = "dtc-empty-state";
     const strong = document.createElement("strong");
@@ -146,13 +170,27 @@
     const small = document.createElement("small");
     small.textContent = "Current, pending, permanent, and freeze-frame results will appear here after a scan.";
     article.append(strong, small);
-    return article;
+    wrap.append(article);
+
+    const samples = Array.isArray(VD.dtcSampleCodes) ? VD.dtcSampleCodes : [];
+    if (samples.length) {
+      const header = document.createElement("div");
+      header.className = "dtc-example-header";
+      header.textContent = "Example - what a scan result looks like";
+      wrap.append(header);
+      samples.forEach((sample) => wrap.append(buildDtcItem(sample, true)));
+    }
+    return wrap;
   }
 
-  function buildDtcItem(code) {
+  function buildDtcItem(code, isExample) {
     const article = document.createElement("article");
     article.className = "dtc-item";
     article.dataset.status = String(code.status || "stored");
+    if (isExample) article.dataset.example = "true";
+    const _info = typeof VD.dtcInfo === "function" ? VD.dtcInfo(code.dtc) : null;
+    if (_info && _info.severity) article.dataset.severity = _info.severity;
+
     const codeBlock = document.createElement("span");
     codeBlock.className = "dtc-code-block";
     const codeB = document.createElement("b");
@@ -161,14 +199,59 @@
     const codeSmall = document.createElement("small");
     codeSmall.textContent = code.statusLabel || code.status || "stored";
     codeBlock.append(codeB, codeSmall);
+
     const moduleBlock = document.createElement("span");
     moduleBlock.className = "dtc-module-block";
-    const moduleStrong = document.createElement("strong");
-    moduleStrong.textContent = code.moduleName || "generic OBD-II";
-    const moduleSmall = document.createElement("small");
-    const headerLabel = code.header ? `header ${code.header} - ` : "";
-    moduleSmall.textContent = `${headerLabel}first ${VD.formatWhen(code.firstSeenMs)} - last ${VD.formatWhen(code.lastSeenMs)}`;
-    moduleBlock.append(moduleStrong, moduleSmall);
+    const info = typeof VD.dtcInfo === "function" ? VD.dtcInfo(code.dtc) : null;
+    const headline = document.createElement("strong");
+    if (info && info.description) {
+      headline.textContent = info.description;
+    } else if (info && info.category) {
+      headline.textContent = info.category;
+    } else {
+      headline.textContent = code.moduleName || "Unknown code - tap to look up";
+    }
+    moduleBlock.append(headline);
+
+    if (info && info.description) {
+      const small = document.createElement("small");
+      const headerLabel = code.header ? `header ${code.header} - ` : "";
+      small.textContent = `${code.moduleName || "generic OBD-II"} - ${headerLabel}first ${VD.formatWhen(code.firstSeenMs)}`;
+      moduleBlock.append(small);
+    } else {
+      const small = document.createElement("small");
+      const headerLabel = code.header ? `header ${code.header} - ` : "";
+      const moduleLabel = info && info.category ? (code.moduleName || "generic OBD-II") + " - " : "";
+      small.textContent = `${moduleLabel}${headerLabel}first ${VD.formatWhen(code.firstSeenMs)} - last ${VD.formatWhen(code.lastSeenMs)}`;
+      moduleBlock.append(small);
+    }
+
+    if (info && Array.isArray(info.causes) && info.causes.length) {
+      const causesWrap = document.createElement("div");
+      causesWrap.className = "dtc-causes";
+      const header = document.createElement("span");
+      header.className = "dtc-causes-head";
+      const tag = info.category ? ` - ${info.category}` : "";
+      header.textContent = `Likely causes${tag}`;
+      causesWrap.append(header);
+      const list = document.createElement("ul");
+      info.causes.slice(0, 5).forEach((cause) => {
+        const li = document.createElement("li");
+        li.textContent = cause;
+        list.append(li);
+      });
+      causesWrap.append(list);
+      moduleBlock.append(causesWrap);
+    }
+
+    const searchLink = document.createElement("a");
+    searchLink.className = "dtc-search";
+    searchLink.textContent = info && info.known ? "More on Google" : "Look up on Google";
+    searchLink.href = "#";
+    searchLink.dataset.dtcSearch = code.dtc || "";
+    searchLink.setAttribute("role", "button");
+    moduleBlock.append(searchLink);
+
     const repeatBlock = document.createElement("span");
     repeatBlock.className = "dtc-repeat-block";
     const repeatB = document.createElement("b");
@@ -176,6 +259,7 @@
     const repeatSmall = document.createElement("small");
     repeatSmall.textContent = "seen";
     repeatBlock.append(repeatB, repeatSmall);
+
     article.append(codeBlock, moduleBlock, repeatBlock);
     return article;
   }
@@ -478,7 +562,12 @@
   function loadTrips() {
     if (bridge && typeof bridge.getTrips === "function") {
       const parsed = VD.parsePayload(bridge.getTrips(), []);
-      state.trips = Array.isArray(parsed) ? parsed : [];
+      if (isNativeError(parsed)) {
+        reportNativeReadError(parsed, "Could not read logged trips.");
+        state.trips = [];
+      } else {
+        state.trips = Array.isArray(parsed) ? parsed : [];
+      }
     }
     renderRealTrips();
   }
@@ -519,7 +608,13 @@
 
   function loadInsights() {
     if (bridge && typeof bridge.getInsights === "function") {
-      state.insights = VD.parsePayload(bridge.getInsights(), {});
+      const parsed = VD.parsePayload(bridge.getInsights(), {});
+      if (isNativeError(parsed)) {
+        reportNativeReadError(parsed, "Could not read vehicle insights.");
+        state.insights = {};
+      } else {
+        state.insights = parsed;
+      }
     }
     renderInsightStats();
     renderInsightScatter();
@@ -783,9 +878,9 @@
     enrichRouteEff
   });
 
-  // C6: retry-cancel button in the error banner. Wired here instead of in
+  // Retry-cancel button in the error banner. Wired here instead of in
   // actions.js so the surgical addition stays inside the panels file the
-  // bucket owns. The button visibility is driven by troubleshooter.js based
+  // related rendering code. The button visibility is driven by troubleshooter.js based
   // on the status state — this binding just forwards the click to the
   // bridge.
   (function bindRetryCancel() {

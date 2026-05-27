@@ -21,6 +21,19 @@ final class MainActivityUtils {
         }
     }
 
+    /** Returns the dashboard-facing shape for native read failures. */
+    static JSONObject errorPayload(String error, String message) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("ok", false);
+            payload.put("error", error == null ? "unknown_error" : error);
+            payload.put("message", message == null ? "" : message);
+        } catch (JSONException ignored) {
+            // JSONObject with static keys should not fail; keep the helper total anyway.
+        }
+        return payload;
+    }
+
     /** True if {@code state} names a session phase where the OBD link is being driven. */
     static boolean isConnectedState(String state) {
         String clean = state == null ? "" : state.toLowerCase(Locale.US);

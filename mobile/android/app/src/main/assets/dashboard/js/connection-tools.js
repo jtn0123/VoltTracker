@@ -1,12 +1,12 @@
-// Bucket 4b — proactive tools button wiring (C5/C7/C10).
+// Proactive connection-tools button wiring.
 //
 // Wires:
-//  - Test connection (C5)        → VoltTrackerAndroid.startTestConnection()
-//  - Send diagnostics (C7)       → VoltTrackerAndroid.shareDiagnostics()
+//  - Test connection             -> VoltTrackerAndroid.startTestConnection()
+//  - Send diagnostics            -> VoltTrackerAndroid.shareDiagnostics()
 //                                   (also bound on the settings panel mirror)
-//  - Notify when ready (C10)     → VoltTrackerAndroid.scheduleAdapterReadyNotify(mins)
+//  - Notify when ready           -> VoltTrackerAndroid.scheduleAdapterReadyNotify(mins)
 //
-// C9's low-voltage hint markup lives in the same partial but is owned by
+// The low-voltage hint markup lives in the same partial but is owned by
 // connection-status.js (it observes every status broadcast for `lastVoltage`).
 (function () {
   "use strict";
@@ -24,7 +24,7 @@
     }
   }
 
-  // C5: test-connection button. The Android side starts ObdService for the
+  // Test-connection button. The Android side starts ObdService for the
   // last device and stops it after ~8s, so we just nudge the button to a
   // "running" state for a short window and let the status broadcasts paint
   // the rest of the UI.
@@ -45,7 +45,7 @@
     });
   }
 
-  // C7: send-diagnostics button. Two bindings — primary in connection-tools
+  // Send-diagnostics button. Two bindings — primary in connection-tools
   // and a mirror in the settings panel — funnel into the same bridge call.
   function bindSendDiagnostics() {
     ["sendDiagnosticsBtn", "sendDiagnosticsSettingsBtn"].forEach((id) => {
@@ -55,7 +55,7 @@
     });
   }
 
-  // C10: notify-when-ready toggle. Enabling sends the clamped duration; disabling explicitly
+  // Notify-when-ready toggle. Enabling sends the clamped duration; disabling explicitly
   // cancels the schedule on the Android side so probes stop immediately rather than running on
   // until the (up to 30 min) deadline.
   function bindNotifyWhenReady() {

@@ -1,10 +1,8 @@
 <!--
-  Owner: Bucket 4b (status & proactive tools).
-  Hosts the proactive tools panel: test-connection button (C5), send-diagnostics
-  button (C7), low-voltage hint (C9), notify-when-ready toggle (C10). Lives at
-  the bottom of <main> but is declared as data-view="settings" so it surfaces
-  inside the Diag tab alongside the existing settings panels — no new nav entry
-  needed.
+  Proactive adapter tools: test connection, send diagnostics, low-voltage hint,
+  and notify-when-ready. Lives at the bottom of <main> but is declared as
+  data-view="settings" so it surfaces inside the Diag tab alongside the existing
+  settings panels; no new nav entry needed.
 -->
 <section
   id="view-connection-tools"
@@ -19,8 +17,8 @@
       </div>
     </header>
 
-    <!-- C9: low-voltage hint, populated from status.lastVoltage. Hidden until a
-         reading lands and only flips visible when the value is below ~12.2 V. -->
+    <!-- Low-voltage hint, populated from status.lastVoltage. Hidden until a
+         reading lands and only visible when the value is below roughly 12.2 V. -->
     <p
       id="lowVoltageHint"
       class="connection-tools__hint"
@@ -33,7 +31,7 @@
     </p>
 
     <div class="connection-tools__actions">
-      <!-- C5: one-shot probe against the last-known adapter, surfaces via status. -->
+      <!-- One-shot probe against the last-known adapter; results surface via status. -->
       <button
         type="button"
         id="testConnectionBtn"
@@ -42,7 +40,7 @@
       >
         Test connection
       </button>
-      <!-- C7: diagnostics share. Bucket 3 wires the actual zip + share intent. -->
+      <!-- Diagnostics share. Native code builds the zip and launches the share intent. -->
       <button
         type="button"
         id="sendDiagnosticsBtn"
@@ -53,7 +51,7 @@
       </button>
     </div>
 
-    <!-- C10: notify-when-ready toggle. Picks how long to keep probing in the
+    <!-- Notify-when-ready toggle. Picks how long to keep probing in the
          background; the bridge clamps the minutes to [1, 30] and we mirror that
          in the UI. -->
     <fieldset

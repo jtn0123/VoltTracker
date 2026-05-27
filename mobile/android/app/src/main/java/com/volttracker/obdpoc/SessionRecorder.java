@@ -53,10 +53,10 @@ final class SessionRecorder {
 
     private final Object lock;
     private final ObdSessionLog sessionLog;
-    // Bucket 3: appended-to on session start/end so the dashboard can render last-connected /
+    // Appended-to on session start/end so the dashboard can render last-connected /
     // adapter-health pills without parsing every per-session JSONL. Null in legacy tests.
     private final SessionSummaryStore summaryStore;
-    // Bucket 3: snapshot source for the system_snapshot event emitted at session start.
+    // Snapshot source for the system_snapshot event emitted at session start.
     // Held as a Context-bearing Supplier so unit tests can wire it as null.
     private final SystemSnapshotSource snapshotSource;
     private final AtomicLong droppedTelemetryTasks = new AtomicLong();
@@ -190,7 +190,7 @@ final class SessionRecorder {
                         adapterName,
                         "address",
                         activeAddress);
-                // Bucket 3: rollup row + diagnostic snapshot stamped at start. These are optional
+                // Rollup row + diagnostic snapshot stamped at start. These are optional
                 // observability hooks — a failure here must not abort the core session start,
                 // since the .jsonl session row above is the source of truth for the run.
                 if (summaryStore != null) {
@@ -231,8 +231,8 @@ final class SessionRecorder {
     /**
      * Same as {@link #closeSession(String, String, String, int)} but accepts the fine-grained
      * {@link FailureClass} from {@link ObdService#lastFailureClass()} so the session summary row
-     * carries Bucket 1's classifier output (e.g. {@code instant_drop}) instead of the coarse state
-     * string ({@code "error"}).
+     * carries the classifier output (e.g. {@code instant_drop}) instead of the coarse state string
+     * ({@code "error"}).
      */
     void closeSession(
             String state,
@@ -248,7 +248,7 @@ final class SessionRecorder {
             String closingAddress = activeAddress;
             if (sessionLog.isOpen()) {
                 logEvent("session_end");
-                // Bucket 3: append a summary row for the dashboard's last-connected pill.
+                // Append a summary row for the dashboard's last-connected pill.
                 if (summaryStore != null) {
                     try {
                         summaryStore.recordEnd(
@@ -415,7 +415,7 @@ final class SessionRecorder {
 
     void logJson(String type, JSONObject payload) {
         synchronized (lock) {
-            // Bucket 3 (A9): error rows fsync to disk so a process death between the JSON
+            // Error rows fsync to disk so a process death between the JSON
             // appearing in the log and the OS flushing the page cache can't lose the most
             // diagnostic line the file would have had.
             if ("error".equals(type)) {
@@ -715,7 +715,7 @@ final class SessionRecorder {
         }
     }
 
-    // Bucket 3 (B8): the rollup file groups every session into one of three buckets so the
+    // The rollup file groups every session into one of three outcomes so the
     // dashboard can render its health pill without re-deriving on the JS side.
     private static String outcomeFor(String state, int sampleCount) {
         if ("blocked".equals(state) || "error".equals(state)) {

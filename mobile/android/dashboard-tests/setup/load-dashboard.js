@@ -1,10 +1,10 @@
 // Loads the production dashboard JS bundle into the current jsdom window.
 //
-// The 5 files are pure side-effecting IIFEs that mutate `window`, so we
-// `eval` them in the same order the WebView would (see
-// `app/src/main/dashboard-src/index.template.html`). We use new Function()
-// rather than Node's `require`/`import` because the files are written as
-// browser scripts, not ESM modules.
+// The dashboard files are pure side-effecting browser modules that mutate
+// `window`, so we execute them in the same order the WebView would (see
+// `app/src/main/dashboard-src/index.template.html`). Use Node's module loader
+// instead of dynamic script evaluation so Vitest coverage can attribute execution to
+// the real dashboard files.
 //
 // The DOM is a hand-picked subset of `index.html` covering every id the
 // bootstrap path dereferences without a null check — see the comments in
@@ -12,15 +12,45 @@
 // the dashboard JS, add the corresponding placeholder here.
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import {
+  clearInterval as nodeClearInterval,
+  clearTimeout as nodeClearTimeout,
+  setInterval as nodeSetInterval,
+  setTimeout as nodeSetTimeout,
+} from 'node:timers';
 import { fileURLToPath } from 'node:url';
+
+import { vi } from 'vitest';
 
 import { createVoltBridgeFixture } from './voltbridge.fixture.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DASHBOARD_JS_DIR = resolve(HERE, '../../app/src/main/assets/dashboard/js');
+const DASHBOARD_INDEX_HTML = resolve(HERE, '../../app/src/main/assets/dashboard/index.html');
+
+const DASHBOARD_MODULE_LOADERS = {
+  'actions.js': () => import('../../app/src/main/assets/dashboard/js/actions.js'),
+  'connection-status.js': () => import('../../app/src/main/assets/dashboard/js/connection-status.js'),
+  'connection-tools.js': () => import('../../app/src/main/assets/dashboard/js/connection-tools.js'),
+  'core.js': () => import('../../app/src/main/assets/dashboard/js/core.js'),
+  'demo-data.js': () => import('../../app/src/main/assets/dashboard/js/demo-data.js'),
+  'drive.js': () => import('../../app/src/main/assets/dashboard/js/drive.js'),
+  'dtc-causes.js': () => import('../../app/src/main/assets/dashboard/js/dtc-causes.js'),
+  'dtc-lookup.js': () => import('../../app/src/main/assets/dashboard/js/dtc-lookup.js'),
+  'map.js': () => import('../../app/src/main/assets/dashboard/js/map.js'),
+  'panels.js': () => import('../../app/src/main/assets/dashboard/js/panels.js'),
+  'scrubber.js': () => import('../../app/src/main/assets/dashboard/js/scrubber.js'),
+  'telemetry.js': () => import('../../app/src/main/assets/dashboard/js/telemetry.js'),
+  'troubleshooter.js': () => import('../../app/src/main/assets/dashboard/js/troubleshooter.js'),
+};
 
 // Loaded in the exact order that index.template.html lists them.
 const DASHBOARD_JS_FILES = ['core.js', 'panels.js', 'map.js', 'telemetry.js', 'actions.js'];
+
+function dashboardDomHtml() {
+  const html = readFileSync(DASHBOARD_INDEX_HTML, 'utf8');
+  const body = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return body ? body[1] : REQUIRED_DOM;
+}
 
 // Smallest DOM that lets every IIFE finish wiring. Covers:
 // - actions.js bootstrap: addEventListener targets that have no null guard.
@@ -191,6 +221,7 @@ const REQUIRED_DOM = `
   <div id="mapLeaflet"></div>
   <div id="mapFrame"></div>
   <div id="mapCard"></div>
+  <button id="mapTilesBtn"></button>
   <button id="mapFullBtn"></button>
   <div id="mapEmpty"></div>
   <div id="mapDriveChips"></div>
@@ -254,7 +285,7 @@ function installCanvasShim() {
 }
 
 /**
- * Install the bridge fixture, mount the minimal DOM, and eval the
+ * Install the bridge fixture, mount the minimal DOM, and execute the
  * 5 dashboard JS files in load order. Returns the bridge so tests can
  * assert what the bootstrap path called.
  *
@@ -266,13 +297,13 @@ function installCanvasShim() {
  * Opts:
  *   `bridge` — custom VoltBridge fixture (defaults to createVoltBridgeFixture())
  *   `extras` — additional JS files (filename relative to dashboard/js/) to
- *              eval AFTER the standard 5-file bundle. Use for tests that need
+ *              execute AFTER the standard 5-file bundle. Use for tests that need
  *              drive.js / scrubber.js / troubleshooter.js etc.
  *   `extraDom` — HTML appended to REQUIRED_DOM. Use for tests that need
  *                additional fixture nodes (chart hosts, etc.) without losing
  *                the bootstrap-required tiles.
  */
-export function loadDashboard({ bridge, extras, extraDom } = {}) {
+export async function loadDashboard({ bridge, extras, extraDom } = {}) {
   clearOwnedTimers();
   installCanvasShim();
   installScrollShim();
@@ -280,10 +311,10 @@ export function loadDashboard({ bridge, extras, extraDom } = {}) {
   // The Android side exposes the bridge as `window.VoltTrackerAndroid` before
   // the dashboard's scripts run, so do the same here.
   window.VoltTrackerAndroid = bridgeImpl;
-  document.body.innerHTML = REQUIRED_DOM + (extraDom ?? '');
+  document.body.innerHTML = dashboardDomHtml() + (extraDom ?? '');
 
-  const nativeSetInterval = window.setInterval.bind(window);
-  const nativeSetTimeout = window.setTimeout.bind(window);
+  const nativeSetInterval = (window.setInterval || globalThis.setInterval || nodeSetInterval).bind(window);
+  const nativeSetTimeout = (window.setTimeout || globalThis.setTimeout || nodeSetTimeout).bind(window);
   window.setInterval = (...args) => {
     const id = nativeSetInterval(...args);
     OWNED_INTERVAL_IDS.push(id);
@@ -296,15 +327,14 @@ export function loadDashboard({ bridge, extras, extraDom } = {}) {
   };
 
   try {
+    vi.resetModules();
     const allFiles = [...DASHBOARD_JS_FILES, ...(extras ?? [])];
     for (const file of allFiles) {
-      const source = readFileSync(resolve(DASHBOARD_JS_DIR, file), 'utf8');
-      // `new Function` runs the script in the global scope of the current
-      // realm (jsdom's window), which is the same shape a <script> tag would
-      // produce. Using indirect eval here means each file's top-level "use
-      // strict" only applies to that file, matching browser semantics.
-      // eslint-disable-next-line no-new-func
-      new Function(`${source}\n//# sourceURL=${file}`).call(window);
+      const loadModule = DASHBOARD_MODULE_LOADERS[file];
+      if (!loadModule) {
+        throw new Error(`No dashboard module loader registered for ${file}`);
+      }
+      await loadModule();
     }
   } finally {
     window.setInterval = nativeSetInterval;
@@ -320,9 +350,9 @@ const OWNED_TIMEOUT_IDS = [];
 
 function clearOwnedTimers() {
   for (const id of OWNED_INTERVAL_IDS.splice(0)) {
-    try { clearInterval(id); } catch (_ignored) { /* jsdom may be torn down */ }
+    try { (globalThis.clearInterval || nodeClearInterval)(id); } catch (_ignored) { /* jsdom may be torn down */ }
   }
   for (const id of OWNED_TIMEOUT_IDS.splice(0)) {
-    try { clearTimeout(id); } catch (_ignored) { /* jsdom may be torn down */ }
+    try { (globalThis.clearTimeout || nodeClearTimeout)(id); } catch (_ignored) { /* jsdom may be torn down */ }
   }
 }

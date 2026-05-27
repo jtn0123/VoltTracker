@@ -1,8 +1,8 @@
 /*
- * Bucket 4a — connection troubleshooter modal + retry-cancel/error-class copy.
+ * Connection troubleshooter modal + retry-cancel/error-class copy.
  *
  * CSS-namespace rule: every selector below is prefixed `.troubleshooter` or
- * `.error-copy` to keep Bucket 4b's `status-tools.css` from colliding with
+ * `.error-copy` to keep `status-tools.css` from colliding with
  * ours. Do not add bare-class selectors here.
  */
 
@@ -340,11 +340,11 @@
 }
 
 /* --------------------------------------------------------------------------
- * Error-banner failure-class copy (C1) + retry cancel button (C6).
+ * Error-banner failure-class copy + retry cancel button.
  *
  * The error-banner markup itself lives in `partials/error-banner.html`. CSS
  * additions for the new slots are namespaced `.error-copy` so we don't
- * collide with Bucket 4b's banner-level styling.
+ * collide with banner-level styling.
  * --------------------------------------------------------------------------
  */
 

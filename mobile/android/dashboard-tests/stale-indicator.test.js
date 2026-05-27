@@ -1,4 +1,4 @@
-// C6 contract: when more than STALE_THRESHOLD_MS (3000 ms) elapses without a
+// Stale-indicator contract: when more than STALE_THRESHOLD_MS (3000 ms) elapses without a
 // fresh sample, every live telemetry tile gets the `.stale` class so the UI
 // can dim them. The check runs on a 1 Hz setInterval AND every render — we
 // drive the setInterval path here.
@@ -6,19 +6,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
-// Drive-tab gpsDetail / gpsMetricValue / gpsMetricSub were retired when the
-// live readout strip replaced the old .mini-grid + .drive-signal-grid layout
-// (see drive.html). Keep this list in lockstep with LIVE_TILE_IDS in
-// telemetry.js.
-const STALE_TILE_IDS = [
-  'speedValue', 'speedKph', 'rpmValue', 'voltageValue', 'coolantValue',
-  'loadValue', 'throttleValue', 'gpsValue', 'updatedValue', 'socValue',
-  'rangeValue', 'packTempValue', 'driveSocValue', 'drivePackTempValue',
-  'powerValue',
-];
+function staleTileIds() {
+  return Array.from(document.querySelectorAll('[data-live-tile="true"]'))
+    .map((node) => node.id)
+    .filter(Boolean);
+}
 
-describe('C6 stale-tile indicator', () => {
-  beforeEach(() => {
+describe('stale-tile indicator', () => {
+  beforeEach(async () => {
     // Fake timers must be installed before loadDashboard so the
     // setInterval(applyStaleIndicator, 1000) registered at the bottom of
     // telemetry.js binds to the fake clock.
@@ -27,7 +22,7 @@ describe('C6 stale-tile indicator', () => {
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
-    loadDashboard();
+    await loadDashboard();
   });
 
   afterEach(() => {
@@ -38,7 +33,7 @@ describe('C6 stale-tile indicator', () => {
     // No sample has been delivered yet, so lastSampleAt is 0 and the very
     // first interval tick should paint every tile stale.
     vi.advanceTimersByTime(1100);
-    for (const id of STALE_TILE_IDS) {
+    for (const id of staleTileIds()) {
       const node = document.getElementById(id);
       expect(node, `#${id} missing from fixture DOM`).not.toBeNull();
       expect(node.classList.contains('stale'), `#${id} should start stale`).toBe(true);
@@ -62,7 +57,7 @@ describe('C6 stale-tile indicator', () => {
     // Push the clock past the 3 s threshold without delivering a new
     // sample; the 1 Hz interval will then re-mark tiles as stale.
     vi.advanceTimersByTime(4000);
-    for (const id of STALE_TILE_IDS) {
+    for (const id of staleTileIds()) {
       const node = document.getElementById(id);
       expect(node.classList.contains('stale'), `#${id} should be stale after 4 s of silence`).toBe(true);
     }

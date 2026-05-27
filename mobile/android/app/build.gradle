@@ -145,6 +145,10 @@ tasks.register("generateDashboardHtml") {
     }
 }
 
+tasks.named("generateDashboardHtml") {
+    mustRunAfter(rootProject.tasks.named("verifyGeneratedDashboardClean"))
+}
+
 tasks.named("preBuild") {
     dependsOn("generateDashboardHtml")
 }

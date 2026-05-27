@@ -10,16 +10,18 @@ import android.os.Build;
 import android.os.Handler;
 import android.provider.Settings;
 import android.util.Log;
+import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import java.util.List;
+import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * A1: extracted from {@link MainActivity} (lines 323-612 of the round-5 layout) so the Activity no
- * longer owns the troubleshooter / notify-when-ready bridge state directly. Each public method here
- * corresponds 1:1 to one of {@link VoltBridge}'s Bucket 4a / 4b entry points; {@link MainActivity}
- * retains thin delegates so the bridge API didn't move.
+ * Extracted from {@link MainActivity} so the Activity no longer owns the troubleshooter /
+ * notify-when-ready bridge state directly. Each public method here corresponds 1:1 to one of {@link
+ * VoltBridge}'s connection-recovery or proactive-tool entry points; {@link MainActivity} retains
+ * thin delegates so the bridge API did not move.
  *
  * <p>Holds an {@link MainActivity} reference for the Activity-bound calls it still needs ({@code
  * startActivity}, {@code startService}, {@code getSystemService}, {@code runOnUiThread}, {@code
@@ -108,20 +110,22 @@ final class TroubleshooterBridge {
         }
     }
 
-    // ===== Bucket 4a bridge helpers ==========================================
-    // Each helper is invoked from VoltBridge's BUCKET 4a region. Kept on the
-    // Activity-bound bridge (and not on ObdService) so they have an Activity
-    // context for startActivity / system service lookups without binding to
-    // the service.
+    // ===== Connection-recovery bridge helpers =================================
+    // Kept on the Activity-bound bridge (and not on ObdService) so they have an Activity context
+    // for startActivity / system service lookups without binding to the service.
 
     /**
-     * Bucket 4a (C4) — force-stop a competing app surfaced via the {@code competingApps} status
-     * field. Uses {@link ActivityManager#killBackgroundProcesses(String)} — Android only acts on
-     * background-promotable apps but it is the right API to expose. Returns true if the package is
-     * installed (so the UI can surface the request honestly).
+     * Force-stop a competing app surfaced via the {@code competingApps} status field. Uses {@link
+     * ActivityManager#killBackgroundProcesses(String)}; Android only acts on background-promotable
+     * apps but it is the right API to expose. Returns true if the package is installed so the UI
+     * can surface the request honestly.
      */
     boolean forceStopPackage(String packageName) {
         if (packageName == null || packageName.isEmpty()) {
+            return false;
+        }
+        if (!CompetingAppDetector.KNOWN_OBD_PACKAGES.contains(packageName.toLowerCase(Locale.US))) {
+            Log.w(MainActivity.TAG, "forceStopPackage rejected non-OBD package " + packageName);
             return false;
         }
         try {
@@ -148,8 +152,8 @@ final class TroubleshooterBridge {
     }
 
     /**
-     * Bucket 4a (C6) — forward a cancel request from the dashboard to the running ObdService so its
-     * polling engine can bail out of the retry burst. No-op if the service is not bound / running.
+     * Forward a cancel request from the dashboard to the running ObdService so its polling engine
+     * can bail out of the retry burst. No-op if the service is not bound / running.
      */
     void cancelRetry() {
         Intent service = new Intent(activity, ObdService.class);
@@ -162,8 +166,8 @@ final class TroubleshooterBridge {
     }
 
     /**
-     * Bucket 4a (A8) — open Android Bluetooth settings so the user can forget the adapter and
-     * re-pair. Falls back to a status broadcast if the activity is unavailable on this device.
+     * Open Android Bluetooth settings so the user can forget the adapter and re-pair. Falls back to
+     * a status broadcast if the activity is unavailable on this device.
      */
     void openBluetoothSettings() {
         try {
@@ -180,13 +184,12 @@ final class TroubleshooterBridge {
         }
     }
 
-    // ===== Bucket 4b bridge helpers ==========================================
+    // ===== Proactive-tool bridge helpers ======================================
 
     /**
-     * Bucket 4b (C2, C8) — return the last {@code n} session summaries as a JSON array string,
-     * newest first. Reads Bucket 3's {@link SessionSummaryStore}; returns {@code "[]"} on any
-     * failure so the dashboard's last-connected badge / health pill code paths stay dormant instead
-     * of crashing.
+     * Returns the last {@code n} session summaries as a JSON array string, newest first. Reads
+     * {@link SessionSummaryStore}; returns {@code "[]"} on any failure so the dashboard's
+     * last-connected badge / health pill code paths stay dormant instead of crashing.
      */
     String getRecentSessionsJson(int n) {
         try {
@@ -207,8 +210,8 @@ final class TroubleshooterBridge {
     }
 
     /**
-     * Bucket 4b (C7) — bundle recent diagnostics into a zip via Bucket 3's helper and launch the
-     * system share sheet. Errors surface as a status broadcast rather than throwing.
+     * Bundle recent diagnostics into a zip and launch the system share sheet. Errors surface as a
+     * status broadcast rather than throwing.
      */
     void shareDiagnostics() {
         try {
@@ -228,9 +231,9 @@ final class TroubleshooterBridge {
     }
 
     /**
-     * Bucket 4b (C5) — start a one-shot probe session against the last-known adapter and schedule a
-     * stop after {@link #TEST_CONNECTION_DURATION_MS} so we exercise the connect/init path without
-     * committing to a full logging session.
+     * Start a one-shot probe session against the last-known adapter and schedule a stop after
+     * {@link #TEST_CONNECTION_DURATION_MS} so we exercise the connect/init path without committing
+     * to a full logging session.
      */
     void startTestConnection() {
         JSONObject device = activity.deviceCatalog.getLastOrCandidateDevice();
@@ -267,9 +270,9 @@ final class TroubleshooterBridge {
     }
 
     /**
-     * Bucket 4b (C10) — periodic test-connection probe for {@code mins} minutes; the first status
-     * broadcast with {@code state == "connected"} during the window posts a notification and
-     * cancels the rest. {@code mins} is already clamped to [1, 30] by {@link
+     * Periodic test-connection probe for {@code mins} minutes; the first status broadcast with
+     * {@code state == "connected"} during the window posts a notification and cancels the rest.
+     * {@code mins} is already clamped to [1, 30] by {@link
      * VoltBridge#scheduleAdapterReadyNotify(int)}.
      */
     void scheduleAdapterReadyNotify(int mins) {
@@ -284,9 +287,8 @@ final class TroubleshooterBridge {
     }
 
     /**
-     * Bucket 4b (C10) — cancel a running notify-when-ready schedule. Called from the bridge when
-     * the user unchecks the toggle, and internally when the first successful probe lands or the
-     * deadline expires.
+     * Cancel a running notify-when-ready schedule. Called from the bridge when the user unchecks
+     * the toggle, and internally when the first successful probe lands or the deadline expires.
      */
     void cancelAdapterReadyNotify() {
         adapterReadyActive = false;
@@ -300,11 +302,11 @@ final class TroubleshooterBridge {
     }
 
     /**
-     * Bucket 4b (C10) — called from the Activity's status-broadcast receiver. Fires the user-facing
-     * "adapter is ready" notification when a probe started by the notify-when-ready schedule
-     * reports {@code state == "connected"}, then tears down the schedule. Gated on {@link
-     * #probeInFlight} so a "connected" broadcast for an unrelated session (e.g. the user manually
-     * started one while the schedule happened to be active) does not fire the notification.
+     * Called from the Activity's status-broadcast receiver. Fires the user-facing "adapter is
+     * ready" notification when a probe started by the notify-when-ready schedule reports {@code
+     * state == "connected"}, then tears down the schedule. Gated on {@link #probeInFlight} so a
+     * "connected" broadcast for an unrelated session (e.g. the user manually started one while the
+     * schedule happened to be active) does not fire the notification.
      */
     void onAdapterStatusForReadyNotify(String state) {
         if (!adapterReadyActive || !probeInFlight) {
@@ -341,20 +343,15 @@ final class TroubleshooterBridge {
                                 0,
                                 open,
                                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-                // The (Context, channelId) Builder constructor is API 26+; the channel-less
-                // form is the only legal call on minSdk=23 devices. Mirror the same gate as
-                // ObdNotifications.build(...) so this notification path doesn't crash on
-                // KitKat-era Androids that we still support.
-                Notification.Builder b =
-                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                                ? new Notification.Builder(activity, ObdNotifications.CHANNEL_ID)
-                                : new Notification.Builder(activity);
+                NotificationCompat.Builder b =
+                        new NotificationCompat.Builder(activity, ObdNotifications.CHANNEL_ID);
                 Notification n =
                         b.setContentTitle("OBD adapter is responding")
                                 .setContentText("Tap to open VoltTracker and start logging.")
                                 .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
                                 .setContentIntent(tap)
                                 .setAutoCancel(true)
+                                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                                 .build();
                 nm.notify(ADAPTER_READY_NOTIFICATION_ID, n);
             }

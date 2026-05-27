@@ -4,13 +4,13 @@ import java.io.IOException;
 import java.util.Locale;
 
 /**
- * Bucket 2 (B7): one-shot Mode 01 PID 42 probe after a successful ELM327 init.
+ * One-shot Mode 01 PID 42 probe after a successful ELM327 init.
  *
- * <p>Captures the OBD control-module voltage so the dashboard's low-voltage hint (Bucket 4b's C9)
- * has a real number to render and the session summary records adapter-side battery state at the
- * moment we managed to bring the link up. Runs exactly once per successful init — the engine's
- * normal {@code LIVE_PROBES} loop will keep refreshing the value during the session, but having the
- * probe here means we get the reading even on sessions that never reach steady-state polling.
+ * <p>Captures the OBD control-module voltage so the dashboard's low-voltage hint has a real number
+ * to render and the session summary records adapter-side battery state at the moment we managed to
+ * bring the link up. Runs exactly once per successful init — the engine's normal {@code
+ * LIVE_PROBES} loop will keep refreshing the value during the session, but having the probe here
+ * means we get the reading even on sessions that never reach steady-state polling.
  *
  * <p>The decoding lives here instead of {@link ObdProtocol} because the value flows directly into
  * {@link ObdService#setLastVoltage(double)} as a service-level signal, not into the per-sample
@@ -32,7 +32,7 @@ final class VoltageProbe {
     // delays the first live-data PID, so we don't want a wedged adapter to cost us multiple
     // seconds of latency on every connect. 1 s is plenty for an ELM327 to answer a single PID;
     // missing the reply just means lastVoltage stays null and the dashboard's low-voltage hint
-    // (C9) stays hidden — no correctness impact.
+    // stays hidden — no correctness impact.
     static final long DEFAULT_TIMEOUT_MS = 1000L;
 
     /** Functional handle to the engine's IO without exposing the full engine surface. */
@@ -136,7 +136,7 @@ final class VoltageProbe {
             // Plausibility: the OBD-II port carries the LV battery, so legitimate readings span
             // roughly 0 V (totally dead battery) to ~16 V (engine running, alternator charging).
             // Anything wildly outside is a parse error. We deliberately keep the lower bound at
-            // 0 — the C9 low-voltage hint is most useful exactly when the battery is dying.
+            // 0 — the low-voltage hint is most useful exactly when the battery is dying.
             if (volts < 0.0 || volts > 32.0) {
                 return null;
             }

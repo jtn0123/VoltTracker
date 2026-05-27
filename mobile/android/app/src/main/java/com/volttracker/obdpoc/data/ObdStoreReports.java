@@ -12,7 +12,6 @@ import static com.volttracker.obdpoc.data.ObdStoreSupport.maxDouble;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.maxInt;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableDoubleBoxed;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableIntBoxed;
-import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableLong;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.nullableLongBoxed;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.parseObject;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.readAdapterHistory;
@@ -334,24 +333,16 @@ final class ObdStoreReports {
     }
 
     private static JSONArray latestDiagnosticCodesJson(SQLiteDatabase db, int limit) {
-        JSONArray payload = new JSONArray();
+        return diagnosticCodeReportsJson(latestDiagnosticCodeReports(db, limit));
+    }
+
+    private static List<DiagnosticCodeReport> latestDiagnosticCodeReports(
+            SQLiteDatabase db, int limit) {
+        List<DiagnosticCodeReport> reports = new ArrayList<>();
         try (Cursor cursor =
                 db.query(
                         VoltTrackerDb.TABLE_DIAGNOSTIC_CODES,
-                        new String[] {
-                            "_id",
-                            "dtc",
-                            "status",
-                            "status_label",
-                            "module_key",
-                            "module_name",
-                            "header",
-                            "first_seen_ms",
-                            "last_seen_ms",
-                            "seen_count",
-                            "last_session_id",
-                            "raw_response"
-                        },
+                        DiagnosticCodeReport.QUERY_COLUMNS,
                         null,
                         null,
                         null,
@@ -359,43 +350,16 @@ final class ObdStoreReports {
                         "last_seen_ms DESC",
                         boundedLimit(limit))) {
             while (cursor.moveToNext()) {
-                JSONObject item = new JSONObject();
-                try {
-                    item.put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
-                    item.put("dtc", clean(cursor.getString(cursor.getColumnIndexOrThrow("dtc"))));
-                    item.put(
-                            "status",
-                            clean(cursor.getString(cursor.getColumnIndexOrThrow("status"))));
-                    item.put(
-                            "statusLabel",
-                            clean(cursor.getString(cursor.getColumnIndexOrThrow("status_label"))));
-                    item.put(
-                            "moduleKey",
-                            clean(cursor.getString(cursor.getColumnIndexOrThrow("module_key"))));
-                    item.put(
-                            "moduleName",
-                            clean(cursor.getString(cursor.getColumnIndexOrThrow("module_name"))));
-                    item.put(
-                            "header",
-                            clean(cursor.getString(cursor.getColumnIndexOrThrow("header"))));
-                    item.put(
-                            "firstSeenMs",
-                            cursor.getLong(cursor.getColumnIndexOrThrow("first_seen_ms")));
-                    item.put(
-                            "lastSeenMs",
-                            cursor.getLong(cursor.getColumnIndexOrThrow("last_seen_ms")));
-                    item.put(
-                            "seenCount",
-                            cursor.getLong(cursor.getColumnIndexOrThrow("seen_count")));
-                    item.put("lastSessionId", nullableLong(cursor, "last_session_id"));
-                    item.put(
-                            "rawResponse",
-                            clean(cursor.getString(cursor.getColumnIndexOrThrow("raw_response"))));
-                } catch (JSONException ignored) {
-                    // Local fields are safe.
-                }
-                payload.put(item);
+                reports.add(DiagnosticCodeReport.fromCursor(cursor));
             }
+        }
+        return reports;
+    }
+
+    private static JSONArray diagnosticCodeReportsJson(List<DiagnosticCodeReport> reports) {
+        JSONArray payload = new JSONArray();
+        for (DiagnosticCodeReport report : reports) {
+            payload.put(report.toJson());
         }
         return payload;
     }

@@ -1,8 +1,8 @@
 # VoltTracker Development Guidelines
 
 This repository is the **Volt Tracker Android app** (`mobile/android/`). The
-former Flask/PostgreSQL web receiver has been deprecated and moved to `archive/`
-— do not work on it unless explicitly asked.
+former Flask/PostgreSQL web receiver has been removed; do not recreate or work
+on that web stack unless explicitly asked.
 
 ## Testing
 

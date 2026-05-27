@@ -5,7 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Tiered/staggered polling schedule for the OBD live-data loop (B6).
+ * Tiered/staggered polling schedule for the OBD live-data loop.
  *
  * <p>The Volt exposes values that change at very different rates — speed and RPM update many times
  * per second while in motion, while coolant temperature, battery temperature, and adapter voltage
@@ -59,7 +59,7 @@ final class PidSchedule {
     static final String RESTORE_BROADCAST_HEADER_COMMAND = "ATSH7DF";
 
     /**
-     * B7: Tier-1 broadcast Mode-01 PIDs that get batched into a single request when the adapter
+     * Tier-1 broadcast Mode-01 PIDs that get batched into a single request when the adapter
      * supports it. Listing both the full command strings (so the engine can match against {@link
      * PidSpec#command}) and the bare PID hex (so {@link ObdProtocol#buildMode01MultiCommand} can
      * assemble the batched request) avoids substring slicing in two places.

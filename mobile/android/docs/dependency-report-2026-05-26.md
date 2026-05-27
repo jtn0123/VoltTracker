@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Scope: active Android app only (`mobile/android/`). Deprecated `archive/` package and Python dependency files were intentionally excluded per repo guidance.
+Scope: active Android app only (`mobile/android/`). The former web receiver/archive dependency tree has been removed from the repo.
 
 ## Upgrade Update
 
@@ -63,6 +63,16 @@ Resolved debug runtime highlights from `:app:dependencies --configuration debugR
 - `org.jetbrains.kotlin:kotlin-stdlib:2.2.10` is pulled transitively by AGP/AndroidX.
 - `androidx.core:core:1.18.0` pulls `androidx.annotation`, `androidx.collection`, `androidx.lifecycle`, `androidx.tracing`, `androidx.versionedparcelable`, coroutines, and `org.jspecify`.
 - No direct app runtime dependencies beyond AndroidX Core.
+
+### Maintenance Notes
+
+- Kotlin stdlib is transitive from AGP/AndroidX, not declared by the app. Do not
+  add a direct Kotlin override just to chase the milestone line in
+  `dependencyUpdates`; re-check when AGP or AndroidX moves it forward.
+- `com.github.ben-manes.versions` is current at 0.54.0. If Gradle reports a
+  Gradle 10 deprecation from `dependencyUpdates`, treat it as isolated update
+  tooling debt and watch for the plugin's next Gradle-10-compatible release
+  before changing active app build logic.
 
 ## Dashboard Test Dependencies
 

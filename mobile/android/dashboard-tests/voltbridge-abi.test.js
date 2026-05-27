@@ -11,14 +11,14 @@ import { loadDashboard } from './setup/load-dashboard.js';
 const NATIVE_METHODS = ['setDevices', 'setHistory', 'setStatus', 'setStorage', 'setAppState', 'updateTelemetry'];
 
 describe('window.VoltTrackerNative ABI', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Each test gets a fresh dashboard load — the IIFEs mutate globals, so
     // we cannot share state across tests safely.
     document.body.innerHTML = '';
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
-    loadDashboard();
+    await loadDashboard();
   });
 
   it('exposes the 6 documented callback methods', () => {

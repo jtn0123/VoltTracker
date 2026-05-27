@@ -1,5 +1,4 @@
-# Active project is the Android app at mobile/android/. The deprecated Flask
-# receiver in archive/ is intentionally not monitored.
+# Active project is the Android app at mobile/android/.
 version: 2
 updates:
   - package-ecosystem: "gradle"

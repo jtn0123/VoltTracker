@@ -11,15 +11,12 @@ import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.util.Log;
-import com.volttracker.obdpoc.PidSchedule.Header;
 import com.volttracker.obdpoc.PidSchedule.PidSpec;
 import com.volttracker.obdpoc.classify.ClassifierInput;
 import com.volttracker.obdpoc.classify.ClassifierResult;
 import com.volttracker.obdpoc.classify.VehicleStateClassifier;
 import com.volttracker.obdpoc.location.FilteredLocation;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.json.JSONArray;
@@ -42,13 +39,12 @@ import org.json.JSONObject;
 class ObdPollingEngine {
 
     /**
-     * A3 long-backoff schedule. Activated when two consecutive {@link FailureClass#INSTANT_DROP}s
-     * fire in &lt;500 ms each (the wedged-adapter signature). The default exponential ramp burns
-     * through all 6 retries in ~25 s; this gives the adapter ~20 s of quiet to recover before
-     * giving up — empirically the shortest interval that lets a wedged OBDLink MX+ recover without
-     * a power-cycle. Indexed by retry count after wedge detection trips: index 0 covers the first
-     * retry done in wedged mode (the third overall failed attempt), index 1 the fourth, and the
-     * fallback kicks in for attempt 5 / 6 so the loop still terminates.
+     * Long-backoff schedule for the wedged-adapter signature: two consecutive instant drops in
+     * under 500 ms each. The default exponential ramp burns through all 6 retries in about 25 s;
+     * this gives the adapter about 20 s of quiet to recover before giving up. Indexed by retry
+     * count after wedge detection trips: index 0 covers the first retry done in wedged mode, index
+     * 1 the fourth overall failed attempt, and the fallback covers later attempts so the loop
+     * terminates.
      */
     static final long[] LONG_BACKOFFS_MS = {8_000L, 12_000L};
 
@@ -62,6 +58,9 @@ class ObdPollingEngine {
     /** Number of frames pulled off the throwable when assembling {@code stackHead}. */
     private static final int STACK_HEAD_FRAMES = 5;
 
+    /** Max characters stored in one telemetry sample's raw wire transcript. */
+    static final int RAW_TRANSCRIPT_MAX_CHARS = 4000;
+
     private final ObdService service;
     // Non-final so tests can swap in a fake via setConnectionForTest(). Production code
     // never reassigns this — the constructor's initializer is the only real assignment.
@@ -69,29 +68,19 @@ class ObdPollingEngine {
     private final SpeedPlausibilityFilter speedFilter = new SpeedPlausibilityFilter();
     private final DemoPollingLoop demoLoop;
     private final DiagnosticScanRunner scanRunner;
+    private final ClearDtcRunner clearDtcRunner;
     private final SessionHealthTracker sessionHealth;
+    private final PidPollingState pidPolling;
     private int sampleCount;
     private String supportedPidsSummary = "";
-
-    // B6 — staggered polling state. cycleNum drives PidSchedule.dueOnCycle(); the maps
-    // carry forward the most recent raw response (and wall-clock time it was taken) for
-    // every PID so cycles that don't re-poll a slow PID can still emit its last-known value
-    // and a *StaleMs companion. Reset at the start of every session.
-    private int cycleNum;
-    private final Map<String, String> lastRawByCommand = new HashMap<>();
-    private final Map<String, Long> lastPolledAtMsByCommand = new HashMap<>();
-
-    // B7 — Mode-01 multi-PID batching state. Set by probeMode01Batch() once per session
-    // after init. When true, runScheduledPolls collapses the 5 Tier-1 broadcast Mode-01
-    // round-trips into a single batched command (~5x fewer ELM round-trips per cycle,
-    // measurable as a Hz bump in the live speed/RPM/pedal tiles).
-    private boolean mode01BatchSupported = false;
 
     ObdPollingEngine(ObdService service) {
         this.service = service;
         this.sessionHealth = new SessionHealthTracker(service);
+        this.pidPolling = new PidPollingState(service, this);
         this.demoLoop = new DemoPollingLoop(service, this);
         this.scanRunner = new DiagnosticScanRunner(service, this);
+        this.clearDtcRunner = new ClearDtcRunner(service, this);
     }
 
     /** Resets the per-session counters before a new session's loop is submitted. */
@@ -100,12 +89,7 @@ class ObdPollingEngine {
         resetSessionHealth();
         speedFilter.reset();
         supportedPidsSummary = supportedPidsSeed;
-        cycleNum = 0;
-        lastRawByCommand.clear();
-        lastPolledAtMsByCommand.clear();
-        // B7: re-probe per session — the adapter could have been swapped without an
-        // app restart, and probe is cheap (one round-trip we'd be doing anyway).
-        mode01BatchSupported = false;
+        pidPolling.reset();
     }
 
     int sampleCount() {
@@ -168,6 +152,11 @@ class ObdPollingEngine {
      */
     @SuppressLint("MissingPermission")
     void runBluetoothLoop(String address, boolean scanMode) {
+        runBluetoothLoop(address, scanMode, false);
+    }
+
+    @SuppressLint("MissingPermission")
+    void runBluetoothLoop(String address, boolean scanMode, boolean clearDtcMode) {
         if (address == null || address.trim().isEmpty()) {
             service.broadcastStatus("error", "No adapter selected.", true);
             service.closeSessionLog();
@@ -192,14 +181,14 @@ class ObdPollingEngine {
         // Distinguishes a never-established link from a mid-session drop: the wording
         // and backoff differ, since "reconnecting" makes no sense before a first connect.
         boolean everConnected = false;
-        // A3: track consecutive instant_drop attempts so the engine can switch into
-        // long-backoff mode after two failures in <500 ms each — the wedged-adapter signature.
+        // Track consecutive instant_drop attempts so the engine can switch into long-backoff mode
+        // after two failures in <500 ms each - the wedged-adapter signature.
         int consecutiveInstantDrops = 0;
         boolean wedgedMode = false;
         try {
             while (service.running.get()) {
-                // C6: honor a user cancel that arrived between attempts (or before the very first
-                // one) — without this check the engine could press on into another multi-second
+                // Honor a user cancel that arrived between attempts (or before the very first one).
+                // Without this check the engine could press on into another multi-second
                 // connectAndInitialize that the user has already asked us to abandon. The post-
                 // sleep check below catches cancels that arrive during the backoff; this one
                 // catches everything else.
@@ -224,10 +213,14 @@ class ObdPollingEngine {
                     consecutiveInstantDrops = 0;
                     wedgedMode = false;
                     service.clearLastFailureClass();
-                    // C6: a successful connect clears any stale cancel-retry request so a fresh
-                    // user-initiated mid-session retry burst can proceed unhindered.
+                    // A successful connect clears any stale cancel-retry request so a fresh
+                    // user-initiated mid-session retry burst can proceed.
                     service.cancelRetryRequested = false;
                     OBDLog.event("ObdPollingEngine", "connect", Map.of("name", service.activeName));
+                    if (clearDtcMode) {
+                        clearDtcRunner.run();
+                        return;
+                    }
                     if (scanMode) {
                         scanRunner.run();
                         return;
@@ -264,8 +257,8 @@ class ObdPollingEngine {
                                     phase, attemptDurationMs, ex, isBluetoothReady());
                     service.setLastFailureClass(fc);
 
-                    // Track instant_drop streak for A3's adaptive-backoff decision. Anything
-                    // other than an instant_drop breaks the streak so we don't trip the long
+                    // Track instant_drop streak for the adaptive-backoff decision. Anything other
+                    // than an instant_drop breaks the streak so we do not trip the long
                     // backoff on, say, alternating connect_timeout / instant_drop sequences.
                     if (fc == FailureClass.INSTANT_DROP
                             && attemptDurationMs
@@ -289,8 +282,8 @@ class ObdPollingEngine {
                                         + " attempts",
                                 ex);
                         service.recorder.logError("reconnect_exhausted", ex);
-                        // B6: an additional structured event carries failureClass +
-                        // exceptionClass + stackHead so post-hoc triage doesn't depend on
+                        // An additional structured event carries failureClass, exceptionClass, and
+                        // stackHead so post-hoc triage does not depend on
                         // the unstructured "error" row.
                         service.recorder.logEvent(
                                 "reconnect_exhausted",
@@ -322,7 +315,7 @@ class ObdPollingEngine {
                         return;
                     }
 
-                    // A3: once we've seen two instant_drops in a row, switch to the long-backoff
+                    // Once we have seen two instant_drops in a row, switch to the long-backoff
                     // schedule (8 s / 12 s for attempts 3+4 / 4+5). The default exponential
                     // ramp would burn through attempts in ~25 s — barely a chance for the
                     // adapter to recover from a wedge. Emit wedged_suspected once per streak.
@@ -378,7 +371,7 @@ class ObdPollingEngine {
                                             + ")...",
                             false);
                     sleep(backoffMs);
-                    // C6: honor a user cancel that arrived during the backoff sleep — bail out of
+                    // Honor a user cancel that arrived during the backoff sleep; bail out of
                     // the retry burst instead of pressing on through the remaining attempts.
                     if (service.cancelRetryRequested) {
                         service.cancelRetryRequested = false;
@@ -410,12 +403,12 @@ class ObdPollingEngine {
     private void connectAndInitialize(String address) throws IOException {
         service.broadcastStatus(
                 "connecting", "Opening serial connection to " + service.activeName + "...", false);
-        // Bucket 2 hook: snapshot bond/SDP/adapter state right before the RFCOMM attempt so a
+        // Snapshot bond/SDP/adapter state right before the RFCOMM attempt so a
         // failure later in this method can be correlated with the pre-flight signals.
         if (service.bluetoothObservability != null) {
             service.bluetoothObservability.onPreConnect(address);
         }
-        // A1: socket_open_attempt fires BEFORE openBluetoothSocket so timing is comparable to
+        // socket_open_attempt fires before openBluetoothSocket so timing is comparable to
         // the subsequent socket_open_result. The legacy "bluetooth_socket_open" event used to
         // straddle both, which made it impossible to tell from a JSONL whether a failure
         // happened during rfcomm connect, getStreams, or the first read.
@@ -439,7 +432,7 @@ class ObdPollingEngine {
             logSocketOpenResult(false, openStart, openErrorPhase);
             throw ex;
         }
-        // A4: wake-nudge. Send a single \r and tolerate up to 200 ms of silence. On a healthy
+        // Wake-nudge: send a single \r and tolerate up to 200 ms of silence. On a healthy
         // adapter this returns gotResponse=true and ATZ lands cleanly; on a wedged adapter the
         // exception bubbles up as a first_read failure, classified downstream.
         try {
@@ -498,7 +491,7 @@ class ObdPollingEngine {
      */
     @SuppressLint("MissingPermission")
     boolean isBluetoothReady() {
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        BluetoothAdapter adapter = BluetoothAdapters.get(service);
         return adapter != null && adapter.isEnabled();
     }
 
@@ -509,7 +502,7 @@ class ObdPollingEngine {
      */
     @SuppressLint("MissingPermission")
     void openBluetoothSocket(String address) throws IOException {
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        BluetoothAdapter adapter = BluetoothAdapters.get(service);
         if (service.hasBluetoothScanPermission()) {
             adapter.cancelDiscovery();
         } else {
@@ -599,10 +592,10 @@ class ObdPollingEngine {
     }
 
     /**
-     * B7: probe whether the adapter accepts a Mode-01 multi-PID request. Sends {@code 010D0C}
-     * (speed + RPM in one shot) and checks the response contains both {@code 410D} and {@code 410C}
-     * markers. ELM327 v1.4+ supports this; many cheap clones don't. Result is cached in {@link
-     * #mode01BatchSupported}; subsequent {@code runScheduledPolls} cycles read the flag and batch
+     * Probes whether the adapter accepts a Mode-01 multi-PID request. Sends {@code 010D0C} (speed +
+     * RPM in one shot) and checks the response contains both {@code 410D} and {@code 410C} markers.
+     * ELM327 v1.4+ supports this; many cheap clones don't. Result is cached in {@link
+     * {@link PidPollingState}; subsequent live poll cycles read the flag and batch
      * all 5 Tier-1 broadcast Mode-01 PIDs into one command when set.
      *
      * <p>Always safe to call: a failed probe leaves the flag false (the existing per-PID path runs
@@ -613,7 +606,7 @@ class ObdPollingEngine {
             String probeResponse = sendCommand("010D0C", 1500);
             boolean ok =
                     ObdProtocol.responseContainsAllMode01Pids(probeResponse, List.of("0D", "0C"));
-            mode01BatchSupported = ok;
+            pidPolling.setMode01BatchSupported(ok);
             service.recorder.logEvent(
                     "mode01_batch_probe",
                     "supported",
@@ -621,17 +614,17 @@ class ObdPollingEngine {
                     "response",
                     ObdProtocol.summarize(probeResponse));
         } catch (IOException ex) {
-            mode01BatchSupported = false;
+            pidPolling.setMode01BatchSupported(false);
             service.recorder.logEvent(
                     "mode01_batch_probe_failed", "error", String.valueOf(ex.getMessage()));
         }
     }
 
     /**
-     * Bucket 2 helper: a single-command IO round-trip exposed package-private so {@link
-     * VoltageProbe} can run its one-shot {@code 0142} probe without taking on the rest of the
-     * engine's connection state. Delegates to the same {@link #sendCommand} path the engine uses,
-     * so the {@code ioLock} synchronization and the {@code logCommand} accounting still apply.
+     * Single-command IO round-trip exposed package-private so {@link VoltageProbe} can run its
+     * one-shot {@code 0142} probe without taking on the rest of the engine's connection state.
+     * Delegates to the same {@link #sendCommand} path the engine uses, so the {@code ioLock}
+     * synchronization and the {@code logCommand} accounting still apply.
      */
     String transactOneShot(String command, long timeoutMs) throws IOException {
         return sendCommand(command, timeoutMs);
@@ -642,31 +635,31 @@ class ObdPollingEngine {
         JSONObject sample = new JSONObject();
         StringBuilder rawThisCycle = new StringBuilder();
         try {
-            // B6: poll only the PIDs due on this cycle, grouped by ATSH header so we only
+            // Poll only the PIDs due on this cycle, grouped by ATSH header so we only
             // pay the 7E4 switch cost when batteryTemp is actually being read. The first
             // cycle (cycleNum == 0) intentionally polls every spec so the dashboard has a
             // complete baseline within one cycle instead of phasing in over ~10 seconds.
-            boolean isInitialCycle = (cycleNum == 0);
-            List<PidSpec> due =
-                    isInitialCycle ? PidSchedule.SPECS : PidSchedule.dueOnCycle(cycleNum);
-            runScheduledPolls(due, rawThisCycle);
-            cycleNum += 1;
+            boolean isInitialCycle = pidPolling.isInitialCycle();
+            List<PidSpec> due = pidPolling.dueForCurrentCycle();
+            pidPolling.runScheduledPolls(due, rawThisCycle);
+            pidPolling.advanceCycle();
 
             // Every parse below reads the carry-forward last-known raw. That way cycles that
             // skip a slow PID still emit its last value (and a *StaleMs companion below) and
             // the dashboard sees a complete sample with no flicker.
-            String voltageRaw = lastRawByCommand.get("ATRV");
+            String voltageRaw = pidPolling.lastRaw("ATRV");
             Float voltage = ObdProtocol.parseVoltage(voltageRaw);
             if (voltage != null) {
                 sample.put("voltage", voltage);
             }
 
-            String speedRaw = lastRawByCommand.get("010D");
+            String speedRaw = pidPolling.lastRaw("010D");
             Integer speed = ObdProtocol.parseSpeedKph(speedRaw);
             // The speed sentinel (0xFF) is the Volt's "charging" hint. We only re-evaluate the
             // charge-transition hint / speed filter when this cycle actually polled speed —
             // otherwise we'd double-count old samples as "rejected" every cycle.
-            boolean polledSpeedThisCycle = !isInitialCycle ? wasPolledThisCycle(due, "010D") : true;
+            boolean polledSpeedThisCycle =
+                    !isInitialCycle ? PidPollingState.wasPolledThisCycle(due, "010D") : true;
             boolean chargeTransitionHint =
                     polledSpeedThisCycle && ObdProtocol.hasMaxSpeedSentinel(speedRaw);
             Integer acceptedSpeed = null;
@@ -694,15 +687,15 @@ class ObdPollingEngine {
                 acceptedSpeed = speed;
             }
 
-            Float rpm = ObdProtocol.parseRpm(lastRawByCommand.get("010C"));
+            Float rpm = ObdProtocol.parseRpm(pidPolling.lastRaw("010C"));
             if (rpm != null) {
                 sample.put("rpm", Math.round(rpm));
             }
-            Integer coolant = ObdProtocol.parseCoolantC(lastRawByCommand.get("0105"));
+            Integer coolant = ObdProtocol.parseCoolantC(pidPolling.lastRaw("0105"));
             if (coolant != null) {
                 sample.put("coolantC", coolant);
             }
-            Integer load = ObdProtocol.parseEngineLoadPct(lastRawByCommand.get("0104"));
+            Integer load = ObdProtocol.parseEngineLoadPct(pidPolling.lastRaw("0104"));
             if (load != null) {
                 sample.put("loadPct", load);
             }
@@ -711,25 +704,25 @@ class ObdPollingEngine {
             // throttle body isn't user-actuated — the real pedal position lives behind 0149.
             // Fall back to 0111 only when 0149 hasn't responded (older vehicles or unsupported
             // by the ECM), so users without the Volt-specific PID still see *something*.
-            Integer pedal = ObdProtocol.parseAccelPedalPct(lastRawByCommand.get("0149"));
+            Integer pedal = ObdProtocol.parseAccelPedalPct(pidPolling.lastRaw("0149"));
             if (pedal != null) {
                 sample.put("throttlePct", pedal);
                 sample.put("throttleSource", "accelPedal");
             } else {
-                Integer throttle = ObdProtocol.parseThrottlePct(lastRawByCommand.get("0111"));
+                Integer throttle = ObdProtocol.parseThrottlePct(pidPolling.lastRaw("0111"));
                 if (throttle != null) {
                     sample.put("throttlePct", throttle);
                     sample.put("throttleSource", "iceThrottleBody");
                 }
             }
-            Integer soc = ObdProtocol.parseStateOfChargePct(lastRawByCommand.get("015B"));
+            Integer soc = ObdProtocol.parseStateOfChargePct(pidPolling.lastRaw("015B"));
             if (soc != null) {
                 sample.put("soc", soc);
             }
 
-            String packVoltageRaw = lastRawByCommand.get("222429");
-            String packCurrentRaw = lastRawByCommand.get("222414");
-            String batteryTempRaw = lastRawByCommand.get("22434F");
+            String packVoltageRaw = pidPolling.lastRaw("222429");
+            String packCurrentRaw = pidPolling.lastRaw("222414");
+            String batteryTempRaw = pidPolling.lastRaw("22434F");
             ObdProtocol.ParsedPidValue batteryTemp =
                     ObdProtocol.parseKnownValue("22434F", batteryTempRaw);
             if (batteryTemp != null && batteryTemp.valueNumeric != null) {
@@ -746,15 +739,15 @@ class ObdPollingEngine {
                 sample.put("powerKw", round1(powerKw));
             }
 
-            // B6: per-PID staleness companion fields. Only emit for slow PIDs (period > 1)
+            // Per-PID staleness companion fields. Only emit for slow PIDs (period > 1)
             // since Tier 1 PIDs are always fresh on every cycle. Dashboard may ignore these
             // (and most rendering does) — they exist so a future stale-tile UI can show
             // "value last updated N seconds ago" without flicker between polls.
             long now = System.currentTimeMillis();
-            putStaleMsIfTracked(sample, "voltageStaleMs", "ATRV", now);
-            putStaleMsIfTracked(sample, "socStaleMs", "015B", now);
-            putStaleMsIfTracked(sample, "coolantCStaleMs", "0105", now);
-            putStaleMsIfTracked(sample, "batteryTempStaleMs", "22434F", now);
+            pidPolling.putStaleMsIfTracked(sample, "voltageStaleMs", "ATRV", now);
+            pidPolling.putStaleMsIfTracked(sample, "socStaleMs", "015B", now);
+            pidPolling.putStaleMsIfTracked(sample, "coolantCStaleMs", "0105", now);
+            pidPolling.putStaleMsIfTracked(sample, "batteryTempStaleMs", "22434F", now);
 
             sampleCount += 1;
             sample.put("source", "obd");
@@ -786,7 +779,7 @@ class ObdPollingEngine {
             sample.put("updatedAt", now);
             appendSessionHealth(sample);
             appendLocation(sample);
-            sample.put("raw", rawThisCycle.toString().trim());
+            sample.put("raw", boundedRawTranscript(rawThisCycle));
         } catch (JSONException ex) {
             // Local numeric values are safe; an encoding error is non-fatal, keep polling.
             service.recorder.logError("sample_encoding_error", ex);
@@ -822,146 +815,8 @@ class ObdPollingEngine {
         sessionHealth.reset();
     }
 
-    /**
-     * Issues every PID read due on this cycle, grouped by ATSH header so we don't pay an
-     * unnecessary header switch for headers that have nothing due. Captures the wire transcript
-     * into {@code rawThisCycle} and updates the carry-forward maps. Throws {@link IOException} only
-     * if the underlying socket breaks — non-fatal "no prompt" or empty-response cases are absorbed
-     * by {@link #sendRecoverableCommand}.
-     */
-    private void runScheduledPolls(List<PidSpec> due, StringBuilder rawThisCycle)
-            throws IOException {
-        if (due.isEmpty()) {
-            return;
-        }
-        // B7: when the adapter supports Mode-01 multi-PID AND every batchable Tier-1 PID is due
-        // this cycle (the common case — they're all period=1), collapse them into a single
-        // round-trip. The same response is stashed for all 5 commands; the existing parsers
-        // each search for their own "41XX" marker so the rendering path stays unchanged.
-        boolean batchedTier1 = tryBatchTier1Mode01(due, rawThisCycle);
-        boolean switchedHeader = false;
-        Header lastHeaderSet = Header.BROADCAST;
-        for (Header header : Header.values()) {
-            List<PidSpec> headerSpecs = filterByHeader(due, header);
-            if (headerSpecs.isEmpty()) {
-                continue;
-            }
-            if (header != Header.BROADCAST && header != lastHeaderSet) {
-                sendCommand(header.atCommand, 1500);
-                switchedHeader = true;
-                lastHeaderSet = header;
-            }
-            for (PidSpec spec : headerSpecs) {
-                if (batchedTier1
-                        && header == Header.BROADCAST
-                        && PidSchedule.MODE_01_BATCH_COMMANDS.contains(spec.command)) {
-                    // Already filled by the batched read; skip the per-PID round-trip.
-                    continue;
-                }
-                String response = sendRecoverableCommand(spec.command, 1500);
-                appendRawTo(rawThisCycle, spec.command, response);
-                lastRawByCommand.put(spec.command, response);
-                lastPolledAtMsByCommand.put(spec.command, System.currentTimeMillis());
-            }
-        }
-        // Restore the broadcast header only if we actually changed it — most cycles only
-        // touch BROADCAST + 7E1, so the restore lands once. The init path runs ATSP0 on
-        // reconnect, so a half-restored header self-heals on the next reconnect.
-        if (switchedHeader) {
-            sendCommand(PidSchedule.RESTORE_BROADCAST_HEADER_COMMAND, 1500);
-        }
-    }
-
-    /**
-     * B7: if the adapter supports multi-PID and every batchable Tier-1 broadcast Mode-01 PID is due
-     * this cycle, send one batched command and stuff the response into every batched PID's {@code
-     * lastRawByCommand} entry. Returns true when the batch fired (and the per-PID loop should skip
-     * those commands), false otherwise.
-     *
-     * <p>Defensive: if the adapter's response doesn't contain every requested PID marker, drops
-     * back to per-PID polling for this cycle and disables batching for the rest of the session.
-     */
-    private boolean tryBatchTier1Mode01(List<PidSpec> due, StringBuilder rawThisCycle)
-            throws IOException {
-        if (!mode01BatchSupported) {
-            return false;
-        }
-        for (String batchCommand : PidSchedule.MODE_01_BATCH_COMMANDS) {
-            if (!commandDueOnBroadcast(due, batchCommand)) {
-                return false;
-            }
-        }
-        String batched = ObdProtocol.buildMode01MultiCommand(PidSchedule.MODE_01_BATCH_PIDS_HEX);
-        String response = sendRecoverableCommand(batched, 1500);
-        if (!ObdProtocol.responseContainsAllMode01Pids(
-                response, PidSchedule.MODE_01_BATCH_PIDS_HEX)) {
-            // The adapter answered but skipped some PIDs — likely a clone advertising support it
-            // doesn't fully have. Disable for the rest of the session and let the per-PID loop
-            // handle this cycle.
-            mode01BatchSupported = false;
-            service.recorder.logEvent(
-                    "mode01_batch_disabled",
-                    "reason",
-                    "incomplete_response",
-                    "response",
-                    ObdProtocol.summarize(response));
-            return false;
-        }
-        long now = System.currentTimeMillis();
-        appendRawTo(rawThisCycle, batched, response);
-        for (String command : PidSchedule.MODE_01_BATCH_COMMANDS) {
-            lastRawByCommand.put(command, response);
-            lastPolledAtMsByCommand.put(command, now);
-        }
-        return true;
-    }
-
-    private static boolean commandDueOnBroadcast(List<PidSpec> due, String command) {
-        for (PidSpec spec : due) {
-            if (spec.header == Header.BROADCAST && command.equals(spec.command)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static List<PidSpec> filterByHeader(List<PidSpec> specs, Header header) {
-        List<PidSpec> out = new ArrayList<>();
-        for (PidSpec spec : specs) {
-            if (spec.header == header) {
-                out.add(spec);
-            }
-        }
-        return out;
-    }
-
-    /**
-     * True if the given command appears in {@code due}. Used so the speed/sentinel logic only fires
-     * on cycles that actually polled speed; carry-forward cycles use the last-accepted-speed path
-     * without re-running the time-sensitive filter.
-     */
-    private static boolean wasPolledThisCycle(List<PidSpec> due, String command) {
-        for (PidSpec spec : due) {
-            if (command.equals(spec.command)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void putStaleMsIfTracked(JSONObject sample, String key, String command, long now)
-            throws JSONException {
-        Long polledAtMs = lastPolledAtMsByCommand.get(command);
-        if (polledAtMs != null) {
-            sample.put(key, Math.max(0L, now - polledAtMs));
-        }
-    }
-
-    private static void appendRawTo(StringBuilder buf, String command, String response) {
-        if (buf.length() > 0) {
-            buf.append(' ');
-        }
-        buf.append('[').append(command).append("] ").append(ObdProtocol.summarize(response));
+    static String boundedRawTranscript(StringBuilder rawThisCycle) {
+        return PidPollingState.boundedRawTranscript(rawThisCycle);
     }
 
     void appendSessionHealth(JSONObject sample) throws JSONException {
@@ -982,7 +837,7 @@ class ObdPollingEngine {
         return response;
     }
 
-    private String sendCommand(String command, long timeoutMs) throws IOException {
+    String sendCommand(String command, long timeoutMs) throws IOException {
         synchronized (service.ioLock) {
             long startedAt = System.currentTimeMillis();
             String rawResponse = connection.transact(command, timeoutMs, service.running::get);
@@ -1000,7 +855,7 @@ class ObdPollingEngine {
     }
 
     /**
-     * Compute the backoff before the next reconnect attempt. In wedged mode (A3) the first two
+     * Compute the backoff before the next reconnect attempt. In wedged mode, the first two
      * wedged-mode retries use {@link #LONG_BACKOFFS_MS}; everything else falls back to the existing
      * exponential / initial curves so the retry math stays predictable for non-wedge failures.
      *
@@ -1022,7 +877,7 @@ class ObdPollingEngine {
     }
 
     /**
-     * B6: short, grep-friendly fully-qualified class name for the exception that ended the attempt.
+     * Short, grep-friendly fully-qualified class name for the exception that ended the attempt.
      * Returns the simple name when {@code getName()} is empty (shouldn't happen for real exceptions
      * but defensive against synthetic ones in tests).
      */
@@ -1038,8 +893,8 @@ class ObdPollingEngine {
     }
 
     /**
-     * B6: render the first few stack frames of {@code ex} into a single newline-free string capped
-     * at {@link #STACK_HEAD_MAX_CHARS}. Frames are joined with {@code " | "} so the field stays
+     * Renders the first few stack frames of {@code ex} into a single newline-free string capped at
+     * {@link #STACK_HEAD_MAX_CHARS}. Frames are joined with {@code " | "} so the field stays
      * readable in {@code jq}-style flat JSONL dumps. Returns the empty string for a null exception
      * or one with no stack trace (which a JVM can elide under heavy load).
      */

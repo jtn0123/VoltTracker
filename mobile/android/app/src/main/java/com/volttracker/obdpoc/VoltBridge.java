@@ -1,7 +1,11 @@
 package com.volttracker.obdpoc;
 
+import android.content.Intent;
+import android.net.Uri;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
 /**
@@ -24,6 +28,8 @@ public final class VoltBridge {
     private static final int MAX_NAME_LEN = 256;
     private static final int MAX_LABEL_LEN = 128;
     private static final int MAX_DETAIL_LEN = 4096;
+    private static final int MAX_DTC_LEN = 16;
+    private static final int MAX_PASSPHRASE_LEN = 256;
 
     private final MainActivity activity;
 
@@ -121,8 +127,22 @@ public final class VoltBridge {
     }
 
     @JavascriptInterface
+    public void shareEncryptedBackup(String passphrase) {
+        final String cleanPassphrase = safe(passphrase, MAX_PASSPHRASE_LEN);
+        activity.runOnUiThread(
+                () -> activity.backupController.launchEncryptedShare(cleanPassphrase));
+    }
+
+    @JavascriptInterface
     public void restoreBackup() {
         activity.runOnUiThread(activity.backupController::launchRestorePicker);
+    }
+
+    @JavascriptInterface
+    public void restoreEncryptedBackup(String passphrase) {
+        final String cleanPassphrase = safe(passphrase, MAX_PASSPHRASE_LEN);
+        activity.runOnUiThread(
+                () -> activity.backupController.launchEncryptedRestorePicker(cleanPassphrase));
     }
 
     @JavascriptInterface
@@ -191,6 +211,57 @@ public final class VoltBridge {
                 });
     }
 
+    /**
+     * Sends OBD-II Mode 04 to the currently-remembered adapter, clearing vehicle DTC memory. The JS
+     * layer is responsible for surfacing the warning checkbox confirmation BEFORE calling this
+     * method - this bridge does no UI prompt of its own.
+     */
+    @JavascriptInterface
+    public void clearVehicleDtcCodes() {
+        JSONObject device = activity.deviceCatalog.getLastOrCandidateDevice();
+        final String address = safe(device.optString("address", ""), MAX_ADDRESS_LEN);
+        final String name = safe(device.optString("name", ""), MAX_NAME_LEN);
+        activity.runOnUiThread(
+                () -> {
+                    if (address.isEmpty()) {
+                        activity.publishStatus(
+                                "blocked",
+                                "No remembered adapter yet. Connect once to save it.",
+                                true);
+                        return;
+                    }
+                    activity.rememberDevice(address, name);
+                    activity.startObdService(ObdService.ACTION_CLEAR_DTC, address, name);
+                });
+    }
+
+    /**
+     * Opens a Google search for "{code} Chevy Volt DTC" in the system browser. The DTC string is
+     * length-bounded and the URL is constructed locally - the JS layer cannot smuggle an arbitrary
+     * URL through this surface.
+     */
+    @JavascriptInterface
+    public void openExternalSearch(String dtc) {
+        final String code = safe(dtc, MAX_DTC_LEN);
+        if (code.isEmpty()) return;
+        activity.runOnUiThread(
+                () -> {
+                    try {
+                        String q =
+                                URLEncoder.encode(
+                                        code + " Chevy Volt DTC", StandardCharsets.UTF_8.name());
+                        Uri uri = Uri.parse("https://www.google.com/search?q=" + q);
+                        Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        activity.startActivity(intent);
+                    } catch (RuntimeException | java.io.UnsupportedEncodingException ex) {
+                        Log.w(MainActivity.TAG, "openExternalSearch failed", ex);
+                        activity.publishStatus(
+                                "blocked", "Could not open the browser for DTC lookup.", true);
+                    }
+                });
+    }
+
     @JavascriptInterface
     public void scanLast() {
         JSONObject device = activity.deviceCatalog.getLastOrCandidateDevice();
@@ -232,11 +303,11 @@ public final class VoltBridge {
     }
 
     // ============================================================================================
-    // === BUCKET 4a region — Error & troubleshooter UX                                          ===
+    // === Error & troubleshooter UX                                                           ===
     // ============================================================================================
 
     /**
-     * C4 — Force-stop a competing app surfaced in {@code competingApps}. Uses {@link
+     * Force-stop a competing app surfaced in {@code competingApps}. Uses {@link
      * android.app.ActivityManager#killBackgroundProcesses(String)}; Android limits this to
      * background-promotable apps but it is the right API to expose, and we surface success/failure
      * honestly via the return value (true if the package is installed, false otherwise).
@@ -251,7 +322,7 @@ public final class VoltBridge {
     }
 
     /**
-     * C6 — Cancel an in-flight retry burst. Sets the {@code cancelRetryRequested} flag on {@link
+     * Cancel an in-flight retry burst. Sets the {@code cancelRetryRequested} flag on {@link
      * ObdService}; the engine reads it between connect attempts and bails out instead of issuing
      * the next retry.
      */
@@ -285,24 +356,23 @@ public final class VoltBridge {
     }
 
     /**
-     * A8 helper — open the system Bluetooth settings so the user can forget the adapter and
-     * re-pair. Delegated to MainActivity (a startActivity call needs the Activity context).
+     * Opens the system Bluetooth settings so the user can forget the adapter and re-pair. Delegated
+     * to MainActivity (a startActivity call needs the Activity context).
      */
     @JavascriptInterface
     public void openBluetoothSettings() {
         activity.runOnUiThread(activity::openBluetoothSettingsFromBridge);
     }
 
-    // === END BUCKET 4a region ===================================================================
+    // === END Error & troubleshooter UX ==========================================================
 
     // ============================================================================================
-    // === BUCKET 4b region — Status & proactive tools                                           ===
+    // === Status & proactive tools                                                             ===
     // ============================================================================================
 
     /**
      * Returns the last {@code n} session summary rows as a JSON array string, newest first. Reads
-     * {@code files/obd-logs/sessions-summary.jsonl} via Bucket 3's {@code SessionSummaryStore}.
-     * Filled in by Bucket 4b.
+     * {@code files/obd-logs/sessions-summary.jsonl} via {@code SessionSummaryStore}.
      */
     @JavascriptInterface
     public String getRecentSessions(int n) {
@@ -311,7 +381,7 @@ public final class VoltBridge {
 
     /**
      * Bundles recent session JSONLs + rolling app log + summary into a zip and launches the system
-     * share sheet. Filled in by Bucket 4b.
+     * share sheet.
      */
     @JavascriptInterface
     public void shareDiagnostics() {
@@ -320,7 +390,7 @@ public final class VoltBridge {
 
     /**
      * Runs a quick ATZ + 0100 + voltage probe against the last-known adapter, then disconnects.
-     * Surfaces results via the normal status broadcast pipeline. Filled in by Bucket 4b.
+     * Surfaces results via the normal status broadcast pipeline.
      */
     @JavascriptInterface
     public void startTestConnection() {
@@ -329,7 +399,7 @@ public final class VoltBridge {
 
     /**
      * Schedules test-connection probes every 30s for {@code mins} minutes (clamped to [1, 30]);
-     * posts a notification when the adapter first responds. Filled in by Bucket 4b.
+     * posts a notification when the adapter first responds.
      */
     @JavascriptInterface
     public void scheduleAdapterReadyNotify(int mins) {
@@ -346,5 +416,5 @@ public final class VoltBridge {
         activity.runOnUiThread(activity::cancelAdapterReadyNotifyFromBridge);
     }
 
-    // === END BUCKET 4b region ===================================================================
+    // === END Status & proactive tools ============================================================
 }

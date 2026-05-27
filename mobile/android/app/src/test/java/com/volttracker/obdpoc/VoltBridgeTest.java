@@ -42,7 +42,9 @@ public class VoltBridgeTest {
                             "getStorageSummary",
                             "exportDebugBundle",
                             "shareBackup",
+                            "shareEncryptedBackup",
                             "restoreBackup",
+                            "restoreEncryptedBackup",
                             "getTrips",
                             "getInsights",
                             "clearStoredData",
@@ -52,6 +54,8 @@ public class VoltBridgeTest {
                             "demo",
                             "disconnect",
                             "logClientError",
+                            "clearVehicleDtcCodes",
+                            "openExternalSearch",
                             // Bucket 4a — connection-troubleshooter bridge surface.
                             "getRecentSessions",
                             "forceStopPackage",
@@ -130,6 +134,22 @@ public class VoltBridgeTest {
     }
 
     @Test
+    public void openExternalSearchMethodSignatureIsSingleString() throws NoSuchMethodException {
+        Method method = VoltBridge.class.getMethod("openExternalSearch", String.class);
+        assertEquals(void.class, method.getReturnType());
+        assertNotNull(method.getAnnotation(JavascriptInterface.class));
+    }
+
+    @Test
+    public void encryptedBackupMethodsTakePassphraseString() throws NoSuchMethodException {
+        for (String name : new String[] {"shareEncryptedBackup", "restoreEncryptedBackup"}) {
+            Method method = VoltBridge.class.getMethod(name, String.class);
+            assertEquals(void.class, method.getReturnType());
+            assertNotNull(method.getAnnotation(JavascriptInterface.class));
+        }
+    }
+
+    @Test
     public void getterMethodsReturnString() throws NoSuchMethodException {
         for (String getter :
                 new String[] {
@@ -161,7 +181,8 @@ public class VoltBridgeTest {
                     "connectLast",
                     "scanLast",
                     "demo",
-                    "disconnect"
+                    "disconnect",
+                    "clearVehicleDtcCodes"
                 }) {
             Method method = VoltBridge.class.getMethod(name);
             assertEquals(name + " must return void", void.class, method.getReturnType());

@@ -1,11 +1,11 @@
 <!--
   Connection error banner.
 
-  Bucket 4a wires three additional slots onto the existing banner:
-   - `errorBannerTitle` is rewritten with failure-class-specific copy (C1)
+  Connection recovery wires three additional slots onto the existing banner:
+   - `errorBannerTitle` is rewritten with failure-class-specific copy
      by panels.js when the status payload carries a `failureClass` field.
    - `errorBannerHint` shows the action-oriented one-liner under the detail.
-   - `errorBannerActions` carries the in-flight retry "Cancel" button (C6)
+   - `errorBannerActions` carries the in-flight retry "Cancel" button
      and a "Get help" affordance that opens the troubleshooter modal.
 
   Copy strings are NOT hardcoded in this partial. They are rendered into the

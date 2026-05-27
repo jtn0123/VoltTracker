@@ -7,6 +7,7 @@
   const el = VD.el;
 
   let mapInstance = null;
+  let remoteTileLayer = null;
   const mapLayerGroups = { routes: null, heat: null, stops: null, eff: null };
   let mapFitKey = null;
 
@@ -20,23 +21,15 @@
     return "#ff6b5f";
   }
 
-  // Creates the Leaflet map once, with CARTO dark basemap tiles. Tiles need network;
-  // the route and all data are drawn from on-device state and work offline regardless.
-  function ensureMap() {
-    if (mapInstance) return mapInstance;
-    if (typeof L === "undefined") return null;
-    const container = el("mapLeaflet");
-    if (!container) return null;
-    mapInstance = L.map(container, { zoomControl: false, attributionControl: true })
-      .setView([39.5, -98.35], 4);
+  function createRemoteTileLayer(map) {
     const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       subdomains: "abcd",
       maxZoom: 19,
       attribution: "&copy; OpenStreetMap, &copy; CARTO"
     });
-    // C6: track tile errors and swap to the plain OSM basemap if CARTO is
-    // unreachable (DNS block, CDN outage, regional restriction). Log only the
-    // first couple to avoid spamming when the whole basemap is down.
+    // Track tile errors and swap to the plain OSM basemap if CARTO is unreachable (DNS block, CDN
+    // outage, regional restriction). Log only the first couple to avoid spamming when the whole
+    // basemap is down.
     let tileErrorCount = 0;
     let fallbackActivated = false;
     tiles.on("tileerror", (event) => {
@@ -50,12 +43,13 @@
       if (tileErrorCount > 5 && !fallbackActivated) {
         fallbackActivated = true;
         try {
-          mapInstance.removeLayer(tiles);
+          map.removeLayer(tiles);
           const fallback = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
             attribution: "© OpenStreetMap",
             maxZoom: 19
           });
-          fallback.addTo(mapInstance);
+          fallback.addTo(map);
+          remoteTileLayer = fallback;
           if (bridge && typeof bridge.logClientError === "function") {
             bridge.logClientError("map.fallback", "Switched to OSM basemap after tile errors");
           }
@@ -66,7 +60,32 @@
         }
       }
     });
-    tiles.addTo(mapInstance);
+    return tiles;
+  }
+
+  function syncRemoteTiles() {
+    if (!mapInstance || typeof L === "undefined") return;
+    if (state.mapRemoteTilesEnabled && !remoteTileLayer) {
+      remoteTileLayer = createRemoteTileLayer(mapInstance);
+      remoteTileLayer.addTo(mapInstance);
+      return;
+    }
+    if (!state.mapRemoteTilesEnabled && remoteTileLayer) {
+      mapInstance.removeLayer(remoteTileLayer);
+      remoteTileLayer = null;
+    }
+  }
+
+  // Creates the Leaflet map once. Remote basemap tiles are opt-in; the route and all data are drawn
+  // from on-device state and work against the blank offline canvas regardless.
+  function ensureMap() {
+    if (mapInstance) return mapInstance;
+    if (typeof L === "undefined") return null;
+    const container = el("mapLeaflet");
+    if (!container) return null;
+    mapInstance = L.map(container, { zoomControl: false, attributionControl: true })
+      .setView([39.5, -98.35], 4);
+    syncRemoteTiles();
     if (typeof VD.scrubberAttachMap === "function") VD.scrubberAttachMap(mapInstance);
     // Tap anywhere on the map → snap the scrubber to the closest route point.
     mapInstance.on("click", (e) => {
@@ -98,6 +117,14 @@
     const mapCard = el("mapCard");
     if (mapCard) mapCard.classList.toggle("is-fullscreen", state.mapFull);
     document.body.classList.toggle("map-full-active", state.mapFull);
+    const tilesBtn = el("mapTilesBtn");
+    if (tilesBtn) {
+      tilesBtn.setAttribute("aria-pressed", state.mapRemoteTilesEnabled ? "true" : "false");
+      tilesBtn.setAttribute(
+        "aria-label",
+        state.mapRemoteTilesEnabled ? "Disable remote map tiles" : "Enable remote map tiles"
+      );
+    }
     const fullBtn = el("mapFullBtn");
     if (fullBtn) {
       fullBtn.setAttribute("aria-pressed", state.mapFull ? "true" : "false");
@@ -132,6 +159,7 @@
     if (empty) empty.hidden = hasRoute;
 
     if (hasRoute && typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
+    syncRemoteTiles();
     drawMapRoute(points, hasRoute, layer, routeSession);
     if (hasRoute && typeof VD.renderScrubber === "function") VD.renderScrubber(route);
     else if (typeof VD.hideScrubber === "function") VD.hideScrubber();

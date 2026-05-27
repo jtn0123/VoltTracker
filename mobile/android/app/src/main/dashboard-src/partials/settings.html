@@ -37,6 +37,12 @@
       <button type="button" data-action="stopDemo" class="demo-stop">
         Stop demo
       </button>
+      <button type="button" data-action="previewDtcCodes">
+        Preview DTC examples
+      </button>
+      <button type="button" data-action="clearPreviewDtcCodes">
+        Clear DTC examples
+      </button>
     </div>
     <a class="demo-link" href="demos/efficiency.html"
       >&#9658; Efficiency &amp; scrubber demos</a
@@ -118,9 +124,9 @@
     </div>
     <div id="dbSessionList" style="margin-top: 12px"></div>
     <p class="status-copy" style="margin-top: 12px">
-      Back up keeps a full copy of this on-phone database; pick any destination
-      (cloud, email, PC) from the share sheet. Restore replaces all on-phone
-      data with a backup file.
+      Back up keeps a full copy of this on-phone database. Use encrypted backup
+      when saving to cloud, email, or a shared computer. Restore replaces all
+      on-phone data with a backup file.
     </p>
     <button
       type="button"
@@ -131,10 +137,24 @@
     </button>
     <button
       type="button"
+      data-action="backupEncrypted"
+      style="margin-top: 8px; width: 100%"
+    >
+      Back up encrypted file
+    </button>
+    <button
+      type="button"
       data-action="restore"
       style="margin-top: 8px; width: 100%"
     >
       Restore from a backup file
+    </button>
+    <button
+      type="button"
+      data-action="restoreEncrypted"
+      style="margin-top: 8px; width: 100%"
+    >
+      Restore encrypted backup
     </button>
     <button
       type="button"
@@ -144,7 +164,7 @@
     >
       Clear stored debug data
     </button>
-    <!-- Bucket 4b: C7 shortcut. Mirrors the Connection-tools "Send diagnostics"
+    <!-- Diagnostics shortcut. Mirrors the Connection-tools "Send diagnostics"
          button so users in the storage panel can share logs without scrolling
          back up. Both buttons funnel into VoltTrackerAndroid.shareDiagnostics(). -->
     <button

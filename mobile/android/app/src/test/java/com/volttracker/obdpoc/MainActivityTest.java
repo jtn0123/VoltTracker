@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import org.json.JSONObject;
 import org.junit.Test;
 
 /**
@@ -60,5 +61,13 @@ public class MainActivityTest {
     public void redactAddressDropsShortOrMissingAddresses() {
         assertEquals("", MainActivityUtils.redactAddress("ab"));
         assertEquals("", MainActivityUtils.redactAddress(null));
+    }
+
+    @Test
+    public void errorPayloadUsesStableDashboardShape() {
+        JSONObject payload = MainActivityUtils.errorPayload("storage_summary_failed", "broken");
+        assertFalse(payload.optBoolean("ok", true));
+        assertEquals("storage_summary_failed", payload.optString("error"));
+        assertEquals("broken", payload.optString("message"));
     }
 }

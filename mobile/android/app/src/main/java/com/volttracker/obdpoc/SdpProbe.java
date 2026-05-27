@@ -7,7 +7,7 @@ import android.os.ParcelUuid;
 import java.util.Arrays;
 
 /**
- * Bucket 2 (A6): triggers an SDP UUID refresh on the OBD adapter device.
+ * Triggers an SDP UUID refresh on the OBD adapter device.
  *
  * <p>When a connect attempt fails on the SPP UUID, one common cause is that the device's cached SDP
  * record has gone stale (especially after a phone reboot or BT-stack restart on the adapter side).
@@ -65,7 +65,7 @@ class SdpProbe {
                     String.valueOf(now - lastTriggeredAtMs));
             return false;
         }
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        BluetoothAdapter adapter = BluetoothAdapters.get(service);
         if (adapter == null) {
             log("sdp_refresh_skipped", address, "reason", "no_adapter");
             return false;

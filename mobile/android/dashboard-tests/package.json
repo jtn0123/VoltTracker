@@ -5,10 +5,11 @@
   "scripts": {
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "setup": "npm ci",
     "lint": "cd .. && eslint app/src/main/assets/dashboard/js/**/*.js"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.7",
+    "@vitest/coverage-istanbul": "^4.1.7",
     "eslint": "^10.4.0",
     "jsdom": "^29.1.1",
     "vitest": "^4.1.7"

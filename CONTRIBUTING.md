@@ -1,8 +1,8 @@
 # Contributing to VoltTracker
 
 VoltTracker is the Android OBD-II companion app for the 2017 Chevy Volt. Source
-lives under `mobile/android/`. The former Flask/Postgres web receiver is archived
-in `archive/` and is not maintained — please don't open PRs against it.
+lives under `mobile/android/`. The former Flask/Postgres web receiver has been
+removed; this repo now ships only the Android app.
 
 ## Quick start
 
@@ -18,11 +18,19 @@ Requires JDK 17 and Android SDK 36 (the wrapper handles Gradle).
 
 ## The five gates we run in CI
 
-1. `./gradlew :app:testDebugUnitTest` — JUnit + Robolectric unit tests (370+ tests).
+1. `./gradlew :app:testDebugUnitTest` — JUnit + Robolectric unit tests.
 2. `./gradlew :app:spotlessCheck` — google-java-format (AOSP) for Java, Prettier for dashboard.
 3. `./gradlew :app:lintDebug` — Android Lint, baseline-tracked in `lint-baseline.xml`.
 4. `./gradlew :app:jacocoTestReport` + `jacocoTestCoverageVerification` — coverage floors.
-5. `cd dashboard-tests && npm test` — Vitest + jsdom dashboard JS smoke tests (18 tests).
+5. `cd dashboard-tests && npm run lint && npm run test:coverage` — ESLint plus Vitest/jsdom dashboard smoke tests.
+
+For local pre-PR validation, run:
+
+```bash
+cd mobile/android
+npm --prefix dashboard-tests ci
+./gradlew verifyActiveApp
+```
 
 If a gate complains: `./gradlew :app:spotlessApply` reformats; lint findings need
 a real fix (don't add to baseline without justification); coverage floors ratchet
@@ -37,6 +45,7 @@ The shipped `assets/dashboard/index.html` is generated. Edit:
 - Behavior: `app/src/main/assets/dashboard/js/*.js` (load directly, no regen)
 
 After editing a partial, run `./gradlew generateDashboardHtml`. CSS/JS edits need no regeneration.
+CI fails if the committed generated file drifts from the partial/template output.
 
 ## Layering rule (see ADR 0002)
 
@@ -48,6 +57,12 @@ UI → Service → Engine → Data. Calls flow downward only.
 - `MainActivity` / `VoltBridge` may call into the service via Intents and into `data/*` for read-only DTOs.
 
 If a change would require a `data/*` class to import from above, the abstraction is in the wrong file.
+
+## Security scan scope
+
+GitHub security dashboards should stay focused on the active Android app. New
+dependency or code-scanning findings in `mobile/android/` should be treated as
+active release blockers.
 
 ## Pre-commit hooks (optional)
 

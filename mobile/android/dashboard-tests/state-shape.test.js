@@ -22,6 +22,7 @@ const REQUIRED_STATE_KEYS = [
   'demoActive',
   'mapLayer',
   'mapFull',
+  'mapRemoteTilesEnabled',
   'selectedMapSessionId',
   'status',
   'speedHistory',
@@ -48,12 +49,12 @@ const REQUIRED_TELEMETRY_KEYS = [
 ];
 
 describe('window.VoltDashboard.state shape', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
-    loadDashboard();
+    await loadDashboard();
   });
 
   it('seeds the documented top-level keys', () => {
@@ -83,7 +84,8 @@ describe('window.VoltDashboard.state shape', () => {
     // the user can still tap Routes / Heat / Stops in the layer tabs.
     expect(state.mapLayer).toBe('eff');
     expect(state.mapFull).toBe(false);
-    // lastSampleAt is the C6 stale-tile clock; it starts at 0 so the first
+    expect(state.mapRemoteTilesEnabled).toBe(false);
+    // lastSampleAt is the stale-tile clock; it starts at 0 so the first
     // tick reports stale until a real sample arrives.
     expect(state.lastSampleAt).toBe(0);
     expect(state.rafPending).toBe(0);

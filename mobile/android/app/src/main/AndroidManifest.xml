@@ -13,20 +13,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Map basemap tiles only; all OBD/GPS data stays on-device. -->
+    <!-- Map basemap tiles only, and only after the user enables Tiles; OBD/GPS data stays local. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Bucket 4a (C4) — used by MainActivity.forceStopPackage to terminate competing
-         BT-OBD apps (Voltage, Torque, …) at the user's request from the troubleshooter. This
-         is a normal-tier permission (no runtime grant) and only affects packages the user
-         explicitly picks; we don't kill apps unprompted. -->
+    <!-- Used by the troubleshooter's user-triggered force-stop button for known competing
+         BT-OBD apps only. This is a normal-tier permission and is never used automatically. -->
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="true" />
 
-    <!-- Bucket 2 (C4) — on Android 11+ getInstalledApplications only returns packages the
-         caller can "see". We list every BT-OBD app the detector watches for by name so the
-         "force-stop competing app" UX surfaces without us needing the Play-Store-restricted
-         QUERY_ALL_PACKAGES permission. Keep this list in sync with CompetingAppDetector.java. -->
+    <!-- On Android 11+ PackageManager only returns packages the caller can "see". We list every
+         BT-OBD app the detector watches for so the competing-app UX works without the
+         Play-Store-restricted QUERY_ALL_PACKAGES permission. Keep this list in sync with
+         CompetingAppDetector.java. -->
     <queries>
         <package android:name="io.tripovan.voltage" />
         <package android:name="com.gretio.obd" />

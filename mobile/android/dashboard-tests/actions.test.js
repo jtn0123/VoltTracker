@@ -1,4 +1,4 @@
-// D5 — behavioral coverage for actions.js.
+// Behavioral coverage for actions.js.
 //
 // actions.js wires every "click" path in the dashboard to a bridge call.
 // These tests poke the exported functions (VD.actions.*) directly so we
@@ -22,7 +22,7 @@ function seedSelectedDevice(VD, { address = 'AA:BB:CC:DD:EE:FF', name = 'TestOBD
 
 // Reset every global the dashboard IIFEs touch so loadDashboard() can
 // re-bootstrap cleanly. Mirrors the pattern in the other test files.
-function freshLoad(bridge) {
+async function freshLoad(bridge) {
   document.body.innerHTML = '';
   delete window.VoltDashboard;
   delete window.VoltTrackerNative;
@@ -35,7 +35,7 @@ describe('actions.js — bridge dispatch', () => {
   let VD;
   let button;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Fake timers because every withBusy()-guarded path schedules a 600 ms
     // setTimeout to release the button. Without fake timers the timer fires
     // mid-suite and emits "release after dashboard teardown" warnings.
@@ -46,9 +46,11 @@ describe('actions.js — bridge dispatch', () => {
       rememberDevice: vi.fn(),
       clearStoredData: vi.fn(),
       shareBackup: vi.fn(),
+      shareEncryptedBackup: vi.fn(),
       restoreBackup: vi.fn(),
+      restoreEncryptedBackup: vi.fn(),
     });
-    freshLoad(bridge);
+    await freshLoad(bridge);
     VD = window.VoltDashboard;
     // Every withBusy-guarded action needs a button — withBusy bails out
     // immediately if `button` is falsy, so dispatch tests would otherwise
@@ -111,6 +113,12 @@ describe('actions.js — bridge dispatch', () => {
     expect(bridge.shareBackup).toHaveBeenCalledTimes(1);
   });
 
+  it('shareEncryptedBackup() passes the chosen passphrase to the bridge', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('secret-pass');
+    VD.actions.shareEncryptedBackup(button);
+    expect(bridge.shareEncryptedBackup).toHaveBeenCalledWith('secret-pass');
+  });
+
   it('shareBackup() cancel path sets a ready status and skips the bridge', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     VD.actions.shareBackup(button);
@@ -124,10 +132,17 @@ describe('actions.js — bridge dispatch', () => {
     VD.actions.restoreBackup(button);
     expect(bridge.restoreBackup).toHaveBeenCalledTimes(1);
   });
+
+  it('restoreEncryptedBackup() requires a passphrase and confirm before picker launch', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('secret-pass');
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    VD.actions.restoreEncryptedBackup(button);
+    expect(bridge.restoreEncryptedBackup).toHaveBeenCalledWith('secret-pass');
+  });
 });
 
-describe('actions.js — withBusy guard (C4 double-tap suppression)', () => {
-  // The C4 guard lives inside actions.js as a closure (`withBusy`). It's
+describe('actions.js — withBusy guard (double-tap suppression)', () => {
+  // The guard lives inside actions.js as a closure (`withBusy`). It's
   // not directly exported, but every guard-protected entry point uses it,
   // so we drive it through connectSelected with a fake button passed via
   // the underlying handleAction path.
@@ -135,13 +150,13 @@ describe('actions.js — withBusy guard (C4 double-tap suppression)', () => {
   let VD;
   let button;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
     bridge = createVoltBridgeFixture({
       connect: vi.fn(),
       rememberDevice: vi.fn(),
     });
-    freshLoad(bridge);
+    await freshLoad(bridge);
     VD = window.VoltDashboard;
     seedSelectedDevice(VD);
     button = document.createElement('button');
@@ -192,5 +207,32 @@ describe('actions.js — withBusy guard (C4 double-tap suppression)', () => {
     expect(button.disabled).toBe(false);
     expect(button.dataset.busy).toBe('0');
     expect(button.classList.contains('busy')).toBe(false);
+  });
+});
+
+describe('actions.js — map privacy controls', () => {
+  beforeEach(async () => {
+    vi.useRealTimers();
+    document.body.innerHTML = '';
+    window.localStorage.clear();
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    await loadDashboard();
+  });
+
+  it('keeps remote basemap tiles off by default and persists an explicit opt-in', () => {
+    const VD = window.VoltDashboard;
+    const button = document.getElementById('mapTilesBtn');
+
+    expect(VD.state.mapRemoteTilesEnabled).toBe(false);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+
+    button.click();
+
+    expect(VD.state.mapRemoteTilesEnabled).toBe(true);
+    expect(window.localStorage.getItem('volttracker.map.remoteTiles')).toBe('1');
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(button.getAttribute('aria-label')).toMatch(/disable remote map tiles/i);
   });
 });

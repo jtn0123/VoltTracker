@@ -41,7 +41,7 @@ class ElmConnection {
     /**
      * Per-phase wall-clock timings (ms) for the last successful {@link #open} call. Field-readable
      * so {@link ObdPollingEngine} can stamp these onto the {@code socket_open_result} event without
-     * needing a side-channel — A1/B3 in the connection-hardening plan.
+     * needing a side-channel in the connection-hardening path.
      *
      * <p>{@link #firstReadMs} is populated by {@link #wakeNudge} (the first read after open) rather
      * than by {@link #open} itself, because the OS rarely surfaces a wedged adapter until the first

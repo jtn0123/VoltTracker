@@ -16,7 +16,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
- * Bucket 2 (A5/A6/B4/B5): captures the Bluetooth-subsystem state that the OS won't otherwise log.
+ * Captures the Bluetooth-subsystem state that the OS won't otherwise log.
  *
  * <p>Responsibilities:
  *
@@ -108,8 +108,8 @@ final class BluetoothStateReporter {
 
     /**
      * Pre-flight hook called from {@link ObdPollingEngine#connectAndInitialize} immediately before
-     * the RFCOMM socket open. Snapshots the device/bond/adapter state. Combined A5 + B4 in a single
-     * helper because both need the same {@link BluetoothDevice} resolution.
+     * the RFCOMM socket open. Snapshots the device/bond/adapter state in a single helper because
+     * both need the same {@link BluetoothDevice} resolution.
      */
     @SuppressLint("MissingPermission")
     void onPreConnect(String address) {
@@ -121,7 +121,7 @@ final class BluetoothStateReporter {
         if (service.recorder == null) {
             return;
         }
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        BluetoothAdapter adapter = BluetoothAdapters.get(service);
         if (adapter == null) {
             service.recorder.logEvent(
                     "bluetooth_preflight", "address", address, "reason", "no_adapter");
@@ -130,7 +130,7 @@ final class BluetoothStateReporter {
         boolean hasConnectPerm = service.hasBluetoothConnectPermission();
         boolean hasScanPerm = service.hasBluetoothScanPermission();
 
-        // A5: adapter + device snapshot.
+        // Adapter + device snapshot.
         String adapterState = describeAdapterState(adapter.getState());
         Boolean discovering = null;
         if (hasScanPerm) {
@@ -192,7 +192,7 @@ final class BluetoothStateReporter {
                 "hasScanPerm",
                 String.valueOf(hasScanPerm));
 
-        // B4: bond/SDP snapshot kept as a separate event so dashboards can index it independently.
+        // Bond/SDP snapshot kept as a separate event so dashboards can index it independently.
         service.recorder.logEvent(
                 "bond_sdp_snapshot",
                 "address",

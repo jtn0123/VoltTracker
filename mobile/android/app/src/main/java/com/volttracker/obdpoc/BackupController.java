@@ -23,6 +23,7 @@ final class BackupController {
     private final MainActivity activity;
     private final DataBackup dataBackup;
     private final ExecutorService executor;
+    private String pendingRestorePassphrase;
 
     private enum RestoreResult {
         OK,
@@ -46,6 +47,14 @@ final class BackupController {
         showShareDisclosure(this::performBackupAndShare);
     }
 
+    void launchEncryptedShare(String passphrase) {
+        if (!hasPassphrase(passphrase)) {
+            activity.publishStatus("blocked", "Enter a backup passphrase first.", true);
+            return;
+        }
+        showShareDisclosure(() -> performBackupAndShare(true, passphrase));
+    }
+
     // Visible for tests / future toggles; kept package-private.
     String shareDisclosureMessage() {
         return "This backup is a full copy of Volt Tracker's on-device database and contains:\n"
@@ -54,6 +63,7 @@ final class BackupController {
                 + "• Bluetooth adapter addresses\n"
                 + "• Redacted VIN and vehicle records if your car shared them\n"
                 + "\n"
+                + "Encrypted backups are protected by your passphrase; plaintext backups are not.\n"
                 + "Only share with people you trust.";
     }
 
@@ -78,10 +88,21 @@ final class BackupController {
     }
 
     private void performBackupAndShare() {
-        activity.publishStatus("ready", "Preparing data backup...", false);
+        performBackupAndShare(false, null);
+    }
+
+    private void performBackupAndShare(boolean encrypted, String passphrase) {
+        activity.publishStatus(
+                "ready",
+                encrypted ? "Preparing encrypted data backup..." : "Preparing data backup...",
+                false);
         executor.execute(
                 () -> {
-                    final File backup = dataBackup.buildBackupFile(activity.localStore);
+                    final File backup =
+                            encrypted
+                                    ? dataBackup.buildEncryptedBackupFile(
+                                            activity.localStore, passphrase)
+                                    : dataBackup.buildBackupFile(activity.localStore);
                     activity.runOnUiThread(
                             () -> {
                                 if (backup == null) {
@@ -105,7 +126,9 @@ final class BackupController {
                                                     share, "Back up Volt Tracker data"));
                                     activity.publishStatus(
                                             "ready",
-                                            "Backup ready - choose where to save it.",
+                                            encrypted
+                                                    ? "Encrypted backup ready - choose where to save it."
+                                                    : "Backup ready - choose where to save it.",
                                             false);
                                 } catch (RuntimeException ex) {
                                     activity.publishStatus(
@@ -117,15 +140,31 @@ final class BackupController {
 
     /** Handles the SAF result for {@link #REQUEST_RESTORE}; a no-op for other requests. */
     void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQUEST_RESTORE
-                && resultCode == Activity.RESULT_OK
-                && data != null
-                && data.getData() != null) {
-            restoreFromUri(data.getData());
+        if (requestCode != REQUEST_RESTORE) {
+            return;
+        }
+        if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
+            String passphrase = pendingRestorePassphrase;
+            pendingRestorePassphrase = null;
+            restoreFromUri(data.getData(), passphrase);
+        } else {
+            pendingRestorePassphrase = null;
         }
     }
 
     void launchRestorePicker() {
+        launchRestorePicker(null);
+    }
+
+    void launchEncryptedRestorePicker(String passphrase) {
+        if (!hasPassphrase(passphrase)) {
+            activity.publishStatus("blocked", "Enter the backup passphrase first.", true);
+            return;
+        }
+        launchRestorePicker(passphrase);
+    }
+
+    private void launchRestorePicker(String passphrase) {
         // Refuse restore while a logging session is active so the swap cannot race
         // in-flight ObdService database writes.
         if (activity.isLoggingActive()) {
@@ -136,17 +175,19 @@ final class BackupController {
             Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             pick.addCategory(Intent.CATEGORY_OPENABLE);
             pick.setType("*/*");
+            pendingRestorePassphrase = passphrase;
             activity.startActivityForResult(pick, REQUEST_RESTORE);
         } catch (RuntimeException ex) {
+            pendingRestorePassphrase = null;
             activity.publishStatus("blocked", "Could not open the file picker.", true);
         }
     }
 
-    private void restoreFromUri(Uri uri) {
+    private void restoreFromUri(Uri uri, String passphrase) {
         activity.publishStatus("ready", "Restoring backup...", false);
         executor.execute(
                 () -> {
-                    final RestoreResult result = applyRestore(uri);
+                    final RestoreResult result = applyRestore(uri, passphrase);
                     activity.runOnUiThread(
                             () -> {
                                 if (result == RestoreResult.OK) {
@@ -177,8 +218,8 @@ final class BackupController {
 
     // Replaces the on-device database with a user-picked backup file. The file is staged
     // and verified as a Volt Tracker SQLite database before the live database is touched.
-    private RestoreResult applyRestore(Uri uri) {
-        File staged = dataBackup.stageRestoreFile(uri);
+    private RestoreResult applyRestore(Uri uri, String passphrase) {
+        File staged = dataBackup.stageRestoreFile(uri, passphrase);
         if (staged == null) {
             return RestoreResult.INVALID_FILE;
         }
@@ -234,6 +275,10 @@ final class BackupController {
         } finally {
             staged.delete();
         }
+    }
+
+    private static boolean hasPassphrase(String passphrase) {
+        return passphrase != null && !passphrase.trim().isEmpty();
     }
 
     private static void restoreOriginalDatabase(File dbFile, File restoreBackup) {

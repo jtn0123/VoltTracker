@@ -22,7 +22,9 @@ pre-commit:
         if [ -d mobile/android/dashboard-tests/node_modules ]; then
           npm --prefix mobile/android/dashboard-tests run lint
         else
-          echo "skipping eslint: run 'npm --prefix mobile/android/dashboard-tests install' to enable"
+          echo "warning: skipping eslint because dashboard test dependencies are not installed"
+          echo "run 'npm --prefix mobile/android/dashboard-tests ci' to enable local dashboard lint"
+          echo "CI will still run dashboard lint for this change"
         fi
       stage_fixed: false
 

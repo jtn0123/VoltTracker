@@ -1,8 +1,8 @@
-// Bucket 4b — last-connected badge (C2) + adapter health pill (C8).
+// Last-connected badge + adapter health pill.
 //
 // Reads recent session summaries via VoltTrackerAndroid.getRecentSessions(n)
 // on dashboard load and on every status broadcast, then renders into the
-// topbar. C9's low-voltage hint also lives here (the hint element is in
+// topbar. The low-voltage hint also lives here (the hint element is in
 // connection-tools.html but the status payload is the same).
 (function () {
   "use strict";
@@ -34,7 +34,7 @@
     return new Date(ms).toLocaleDateString();
   }
 
-  // C2: render the "last connected" badge from the single most recent session.
+  // Render the "last connected" badge from the single most recent session.
   function renderLastConnected() {
     const badge = el("lastConnectedBadge");
     const label = el("lastConnectedLabel");
@@ -52,7 +52,7 @@
     badge.hidden = false;
   }
 
-  // C8: render the adapter-health pill from the last 5 sessions.
+  // Render the adapter-health pill from the last 5 sessions.
   function renderAdapterHealth() {
     const pill = el("adapterHealthPill");
     const label = el("adapterHealthLabel");
@@ -80,7 +80,7 @@
     pill.hidden = false;
   }
 
-  // C9: low-voltage hint — keyed off the lastVoltage field on status payloads.
+  // Low-voltage hint keyed off the lastVoltage field on status payloads.
   function renderLowVoltageHint(status) {
     const hint = el("lowVoltageHint");
     if (!hint || !status) return;

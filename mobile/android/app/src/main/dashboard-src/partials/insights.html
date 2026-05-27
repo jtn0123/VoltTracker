@@ -62,7 +62,45 @@
         <button type="button" data-action="scan" class="scan">
           Scan car codes
         </button>
+        <button
+          type="button"
+          data-action="openClearDtc"
+          class="danger"
+          id="dtcClearOpenBtn"
+        >
+          Clear codes
+        </button>
         <button type="button" data-nav-jump="settings">Debug logs</button>
+      </div>
+
+      <div id="dtcClearWarning" class="dtc-clear-warning" hidden>
+        <strong>Clear vehicle trouble codes?</strong>
+        <p>
+          This sends OBD-II Mode 04 to the vehicle, erasing the check-engine
+          light and stored DTC memory. Emissions readiness monitors will reset
+          and may take 100+ miles of mixed driving before re-setting - some
+          inspection stations will fail the car until then.
+        </p>
+        <p class="dtc-clear-prereq">
+          Run with the ignition on and engine off, parked, transmission in Park,
+          all accessories off.
+        </p>
+        <label class="dtc-clear-ack">
+          <input type="checkbox" id="dtcClearAckBox" />
+          <span>I understand readiness monitors will reset.</span>
+        </label>
+        <div class="dtc-clear-actions">
+          <button type="button" data-action="cancelClearDtc">Cancel</button>
+          <button
+            type="button"
+            data-action="confirmClearDtc"
+            class="danger"
+            id="dtcClearConfirmBtn"
+            disabled
+          >
+            Send Mode 04
+          </button>
+        </div>
       </div>
       <div class="dtc-status-grid">
         <div><span>Codes</span><strong id="dtcTotalCount">0</strong></div>

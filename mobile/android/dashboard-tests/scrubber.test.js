@@ -39,12 +39,12 @@ function withSinglePointRoute() {
 }
 
 describe('scrubber.js', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
-    loadDashboard({ extraDom: SCRUBBER_EXTRA_DOM, extras: ['scrubber.js'] });
+    await loadDashboard({ extraDom: SCRUBBER_EXTRA_DOM, extras: ['scrubber.js'] });
   });
 
   it('exposes the documented public surface on window.VoltDashboard', () => {

@@ -46,6 +46,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Validate release config
+        run: python .github/scripts/check_release_config.py
+
       - name: Install python-semantic-release
         run: pip install python-semantic-release==9.21.1
 

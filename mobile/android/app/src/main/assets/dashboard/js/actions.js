@@ -1,8 +1,8 @@
 /*
  * actions.js — wiring + lifecycle.
  *
- * C2 listener-discipline pattern
- * ------------------------------
+ * Listener-discipline pattern
+ * ---------------------------
  * Every addEventListener registered from this file is passed
  * `{ signal: controller.signal }` so a single `controller.abort()` tears every
  * one of them down at once — no per-listener bookkeeping, no leaked closures
@@ -23,12 +23,12 @@
   const el = VD.el;
   const data = VD.data;
 
-  // C2: AbortController for every listener bound below. resetListeners() aborts
+  // AbortController for every listener bound below. resetListeners() aborts
   // the current set and rebinds — useful for hot-reloading WebView content or
   // for tests that swap fixtures between runs.
   let controller = new AbortController();
 
-  // C4: lightweight in-flight guard for bridge-triggering buttons. The Android
+  // Lightweight in-flight guard for bridge-triggering buttons. The Android
   // bridge calls are sync-fire-and-forget so we can't await completion; a short
   // 600ms cooldown is enough to swallow accidental double-taps without making
   // the button feel sticky on real-device latency.
@@ -75,7 +75,7 @@
       return;
     }
     if (!bridge) return;
-    // C4: guard the bridge call so a quick double-tap doesn't issue two
+    // Guard the bridge call so a quick double-tap doesn't issue two
     // overlapping connect/scan invocations against the adapter.
     withBusy(button, () => {
       bridge.rememberDevice(selected.address, selected.name);
@@ -91,19 +91,101 @@
     if (action === "clearStorage") clearStorage(button);
     if (action === "exportDebug") exportDebugBundle();
     if (action === "backup") shareBackup(button);
+    if (action === "backupEncrypted") shareEncryptedBackup(button);
     if (action === "restore") restoreBackup(button);
+    if (action === "restoreEncrypted") restoreEncryptedBackup(button);
     if (action === "last") bridge && bridge.connectLast();
     if (action === "scan") connectSelected(true, button);
     if (action === "connect") connectSelected(false, button);
     if (action === "demo") startDemo();
     if (action === "stopDemo") stopDemo();
     if (action === "stop") stopAll();
+    if (action === "openClearDtc") openClearDtcWarning();
+    if (action === "cancelClearDtc") closeClearDtcWarning();
+    if (action === "confirmClearDtc") confirmClearDtc(button);
+    if (action === "previewDtcCodes") previewDtcCodes();
+    if (action === "clearPreviewDtcCodes") clearPreviewDtcCodes();
+  }
+
+  function openClearDtcWarning() {
+    const panel = el("dtcClearWarning");
+    const ack = el("dtcClearAckBox");
+    const confirm = el("dtcClearConfirmBtn");
+    if (!panel) return;
+    panel.hidden = false;
+    if (ack) ack.checked = false;
+    if (confirm) confirm.disabled = true;
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function closeClearDtcWarning() {
+    const panel = el("dtcClearWarning");
+    if (panel) panel.hidden = true;
+  }
+
+  function confirmClearDtc(button) {
+    const ack = el("dtcClearAckBox");
+    if (!ack || !ack.checked) {
+      VD.setStatus({ state: "blocked", detail: "Tick the acknowledgement first." });
+      return;
+    }
+    if (!bridge || typeof bridge.clearVehicleDtcCodes !== "function") {
+      VD.setStatus({ state: "blocked", detail: "Clear-codes is only available inside the Android app." });
+      return;
+    }
+    withBusy(button, () => {
+      bridge.clearVehicleDtcCodes();
+      closeClearDtcWarning();
+    });
+  }
+
+  function previewDtcCodes() {
+    const samples = Array.isArray(VD.dtcSampleCodes) ? VD.dtcSampleCodes : [];
+    const storage = state.storage || (state.storage = {});
+    storage.latestDiagnosticCodes = samples.map((s) => ({ ...s }));
+    storage.diagnosticCodeCount = samples.length;
+    storage.diagnosticCodeStatusCounts = samples.reduce((acc, s) => {
+      const k = String(s.status || "stored").toLowerCase();
+      acc[k] = (acc[k] || 0) + 1;
+      return acc;
+    }, {});
+    if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
+    VD.setStatus({ state: "ready", detail: "DTC example data loaded into the Insights view." });
+  }
+
+  function clearPreviewDtcCodes() {
+    const storage = state.storage || (state.storage = {});
+    storage.latestDiagnosticCodes = [];
+    storage.diagnosticCodeCount = 0;
+    storage.diagnosticCodeStatusCounts = {};
+    if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
+    VD.setStatus({ state: "ready", detail: "DTC examples cleared." });
+  }
+
+  function handleDtcSearch(event) {
+    const link = event.target.closest("[data-dtc-search]");
+    if (!link) return;
+    event.preventDefault();
+    const code = link.dataset.dtcSearch;
+    if (!code) return;
+    if (bridge && typeof bridge.openExternalSearch === "function") {
+      bridge.openExternalSearch(code);
+    } else {
+      const url = typeof VD.dtcSearchUrl === "function" ? VD.dtcSearchUrl(code) : null;
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+    }
   }
 
   function startDemo() {
-    VD.setDemoActive(true, "Demo preview is running.");
-    if (bridge) bridge.demo();
-    else runBrowserDemo();
+    VD.ensureDemoData((error) => {
+      if (error) {
+        VD.setStatus({ state: "blocked", detail: "Demo data could not be loaded." });
+        return;
+      }
+      VD.setDemoActive(true, "Demo preview is running.");
+      if (bridge) bridge.demo();
+      else runBrowserDemo();
+    });
   }
 
   function stopDemo() {
@@ -136,7 +218,7 @@
     if (!bridge || typeof bridge.clearStoredData !== "function") return;
     const confirmed = window.confirm("Clear local OBD sessions, samples, and debug events from this phone?");
     if (!confirmed) return;
-    // C4: guard the bridge call against accidental re-issue while the storage
+    // Guard the bridge call against accidental re-issue while the storage
     // wipe is still propagating.
     withBusy(button, () => {
       bridge.clearStoredData();
@@ -159,9 +241,29 @@
       VD.setStatus({ state: "ready", detail: "Backup cancelled." });
       return;
     }
-    // C4: guard the bridge call so a quick double-tap doesn't open two
+    // Guard the bridge call so a quick double-tap doesn't open two
     // share sheets.
     withBusy(button, () => bridge.shareBackup());
+  }
+
+  function readBackupPassphrase(message) {
+    const passphrase = window.prompt(message);
+    if (passphrase == null) return null;
+    const trimmed = String(passphrase).trim();
+    return trimmed.length ? trimmed : null;
+  }
+
+  function shareEncryptedBackup(button) {
+    if (!bridge || typeof bridge.shareEncryptedBackup !== "function") {
+      VD.setStatus({ state: "blocked", detail: "Encrypted backup is only available inside the Android app." });
+      return;
+    }
+    const passphrase = readBackupPassphrase("Choose a passphrase for this encrypted backup. You will need it to restore.");
+    if (!passphrase) {
+      VD.setStatus({ state: "ready", detail: "Encrypted backup cancelled." });
+      return;
+    }
+    withBusy(button, () => bridge.shareEncryptedBackup(passphrase));
   }
 
   function restoreBackup(button) {
@@ -172,9 +274,25 @@
     if (!window.confirm("Restore will REPLACE all data on this phone with the backup file. Continue?")) {
       return;
     }
-    // C4: guard the bridge call so a quick double-tap doesn't launch two
+    // Guard the bridge call so a quick double-tap doesn't launch two
     // file pickers.
     withBusy(button, () => bridge.restoreBackup());
+  }
+
+  function restoreEncryptedBackup(button) {
+    if (!bridge || typeof bridge.restoreEncryptedBackup !== "function") {
+      VD.setStatus({ state: "blocked", detail: "Encrypted restore is only available inside the Android app." });
+      return;
+    }
+    const passphrase = readBackupPassphrase("Enter the passphrase for this encrypted backup.");
+    if (!passphrase) {
+      VD.setStatus({ state: "ready", detail: "Encrypted restore cancelled." });
+      return;
+    }
+    if (!window.confirm("Restore will REPLACE all data on this phone with the backup file. Continue?")) {
+      return;
+    }
+    withBusy(button, () => bridge.restoreEncryptedBackup(passphrase));
   }
 
   function exportDebugBundle() {
@@ -218,7 +336,7 @@
     }, 1000);
   }
 
-  // C1: window resize handler is debounced to 100ms — drawTrace recomputes canvas
+  // Window resize handler is debounced to 100ms — drawTrace recomputes canvas
   // backing-store size, which is genuinely expensive to do on every resize event
   // from a runaway WebView layout pass.
   let resizeTimer = 0;
@@ -251,7 +369,7 @@
         VD.renderMap();
       }, opts);
     });
-    // C1: bind through bindListenerGuarded so a renamed partial ID logs a warn + skips
+    // Bind through bindListenerGuarded so a renamed partial ID logs a warn + skips
     // rather than throwing and aborting every binding below it.
     const onSessionClick = (event) => {
       const button = event.target.closest("[data-map-session]");
@@ -266,6 +384,25 @@
     VD.bindListenerGuarded("mapFullBtn", "click", () => {
       state.mapFull = !state.mapFull;
       VD.renderMap();
+    }, opts);
+    VD.bindListenerGuarded("mapTilesBtn", "click", () => {
+      state.mapRemoteTilesEnabled = !state.mapRemoteTilesEnabled;
+      try {
+        window.localStorage.setItem(
+          "volttracker.map.remoteTiles",
+          state.mapRemoteTilesEnabled ? "1" : "0"
+        );
+      } catch (_err) {
+        // Preference persistence is best-effort; the visible state still updates.
+      }
+      VD.renderMap();
+    }, opts);
+    document.addEventListener("click", handleDtcSearch, opts);
+    document.addEventListener("change", (event) => {
+      if (event.target && event.target.id === "dtcClearAckBox") {
+        const confirm = el("dtcClearConfirmBtn");
+        if (confirm) confirm.disabled = !event.target.checked;
+      }
     }, opts);
     document.addEventListener("click", (event) => {
       const tripButton = event.target.closest("[data-trip-map]");
@@ -301,20 +438,26 @@
       VD.renderTrips();
     }, opts);
     VD.bindListenerGuarded("addChargeBtn", "click", () => {
-      // Stage the row on the demo-only sessions list (state.demoSessions) instead of
-      // mutating the static `data.sessions` seed. Without this, every "add" persists
-      // across demo toggles and reappears on the next demo session.
-      if (!Array.isArray(state.demoSessions)) {
-        state.demoSessions = data.sessions.slice();
-      }
-      state.demoSessions.unshift({ date: "Today - 21:10", type: "L2", kwh: 10.8, soc: "31->90", location: "Home", cost: "$1.30" });
-      VD.renderSessions();
-      VD.setStatus({ state: "ready", detail: "Charging session staged locally." });
+      VD.ensureDemoData((error) => {
+        if (error) {
+          VD.setStatus({ state: "blocked", detail: "Demo data could not be loaded." });
+          return;
+        }
+        // Stage the row on the demo-only sessions list (state.demoSessions) instead of
+        // mutating the static `data.sessions` seed. Without this, every "add" persists
+        // across demo toggles and reappears on the next demo session.
+        if (!Array.isArray(state.demoSessions)) {
+          state.demoSessions = data.sessions.slice();
+        }
+        state.demoSessions.unshift({ date: "Today - 21:10", type: "L2", kwh: 10.8, soc: "31->90", location: "Home", cost: "$1.30" });
+        VD.renderSessions();
+        VD.setStatus({ state: "ready", detail: "Charging session staged locally." });
+      });
     }, opts);
     window.addEventListener("resize", debouncedResize, opts);
   }
 
-  // C2: reset hook. Aborts every listener bound by bindListeners() (and the
+  // Reset hook. Aborts every listener bound by bindListeners() (and the
   // window-level handlers in core.js if you also reset VD.errorController) and
   // re-arms them with a fresh AbortController.
   function resetListeners() {
@@ -333,7 +476,9 @@
     refreshStorage,
     clearStorage,
     shareBackup,
+    shareEncryptedBackup,
     restoreBackup,
+    restoreEncryptedBackup,
     exportDebugBundle,
     runBrowserDemo,
     resetListeners
@@ -348,7 +493,9 @@
     refreshStorage,
     clearStorage,
     shareBackup,
+    shareEncryptedBackup,
     restoreBackup,
+    restoreEncryptedBackup,
     exportDebugBundle,
     runBrowserDemo
   });
@@ -372,6 +519,7 @@
   VD.renderMap();
   VD.loadTrips();
   VD.loadInsights();
+  if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
   VD.drawTrace();
   // Initial paint of the Drive-tab live polish — without this the session chip
   // strip + micro-charts stay empty until the first telemetry sample arrives.

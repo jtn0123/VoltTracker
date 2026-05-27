@@ -19,7 +19,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Builds a one-zip share intent for the diagnostics share-sheet flow (B10). The zip pulls together:
+ * Builds a one-zip share intent for the diagnostics share-sheet flow. The zip pulls together:
  *
  * <ul>
  *   <li>the most recent {@value #MAX_SESSION_LOGS} per-session JSONLs from {@code files/obd-logs/}
@@ -28,8 +28,8 @@ import java.util.zip.ZipOutputStream;
  * </ul>
  *
  * <p>The zip is written to {@code cacheDir/diagnostics/} and exposed via the project's {@code
- * FileProvider} — Bucket 4b's bridge call wraps the returned intent in {@code Intent.createChooser}
- * and starts it.
+ * FileProvider} — the bridge call wraps the returned intent in {@code Intent.createChooser} and
+ * starts it.
  */
 final class DiagnosticsShareIntent {
 

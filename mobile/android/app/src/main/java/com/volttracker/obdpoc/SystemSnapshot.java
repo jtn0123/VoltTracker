@@ -7,6 +7,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.SystemClock;
+import androidx.core.content.pm.PackageInfoCompat;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -15,7 +16,7 @@ import org.json.JSONObject;
  * app build, Bluetooth stack state, process uptime, and the timestamp of the most recent successful
  * session from {@link SessionSummaryStore}.
  *
- * <p>Bucket 3 logs the snapshot as a {@code system_snapshot} event at session start so a future
+ * <p>The recorder logs the snapshot as a {@code system_snapshot} event at session start so a future
  * diagnosis sees the device's actual state (right BT name? Android 13 vs 15? last successful
  * connect five seconds ago or five days?) without having to correlate three other log files.
  */
@@ -43,12 +44,7 @@ final class SystemSnapshot {
                     PackageInfo pi =
                             ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0);
                     o.put("appVersionName", str(pi.versionName));
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        o.put("appVersionCode", pi.getLongVersionCode());
-                    } else {
-                        // Pre-P only has the int field, but the value still fits a long.
-                        o.put("appVersionCode", (long) pi.versionCode);
-                    }
+                    o.put("appVersionCode", PackageInfoCompat.getLongVersionCode(pi));
                 } catch (PackageManager.NameNotFoundException ignored) {
                     // Our own package not found is impossible in practice but we still don't want
                     // to escalate a missing-info case to a crash.
@@ -80,7 +76,7 @@ final class SystemSnapshot {
     private static void addBluetoothInfo(Context ctx, JSONObject o) throws JSONException {
         BluetoothAdapter adapter;
         try {
-            adapter = BluetoothAdapter.getDefaultAdapter();
+            adapter = BluetoothAdapters.get(ctx);
         } catch (RuntimeException ex) {
             // Some unit-test harnesses don't have a BT shadow and throw here. Treat as
             // "no adapter" and move on.
