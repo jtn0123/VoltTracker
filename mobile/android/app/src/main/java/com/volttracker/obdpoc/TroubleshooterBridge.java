@@ -50,6 +50,12 @@ final class TroubleshooterBridge {
     /** ID for the "adapter is ready" notification posted when a scheduled probe connects. */
     private static final int ADAPTER_READY_NOTIFICATION_ID = 4711;
 
+    /**
+     * "Ready" should mean the vehicle is awake, not merely that the ELM adapter still has power.
+     * The classifier uses the same 13 V DC-DC threshold for an awake/ready hint.
+     */
+    private static final double ADAPTER_READY_MIN_VOLTS = 13.0;
+
     private final MainActivity activity;
 
     private long adapterReadyDeadlineMs = 0L;
@@ -292,6 +298,11 @@ final class TroubleshooterBridge {
      * the toggle, and internally when the first successful probe lands or the deadline expires.
      */
     void cancelAdapterReadyNotify() {
+        stopAdapterReadySchedule();
+        cancelAdapterReadyNotification();
+    }
+
+    private void stopAdapterReadySchedule() {
         adapterReadyActive = false;
         adapterReadyDeadlineMs = 0L;
         // Clear the probe-in-flight gate so a stale "connected" broadcast after a re-enable
@@ -302,18 +313,31 @@ final class TroubleshooterBridge {
         }
     }
 
+    private void cancelAdapterReadyNotification() {
+        try {
+            NotificationManager nm =
+                    (NotificationManager)
+                            activity.getSystemService(MainActivity.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                nm.cancel(ADAPTER_READY_NOTIFICATION_ID);
+            }
+        } catch (RuntimeException ex) {
+            Log.w(MainActivity.TAG, "adapter-ready notification cancel failed", ex);
+        }
+    }
+
     /**
      * Called from the Activity's status-broadcast receiver. Fires the user-facing "adapter is
-     * ready" notification when a probe started by the notify-when-ready schedule reports {@code
-     * state == "connected"}, then tears down the schedule. Gated on {@link #probeInFlight} so a
-     * "connected" broadcast for an unrelated session (e.g. the user manually started one while the
-     * schedule happened to be active) does not fire the notification.
+     * ready" notification when a probe started by the notify-when-ready schedule reports connected
+     * and carries an awake-car voltage. Gated on {@link #probeInFlight} so a "connected" broadcast
+     * for an unrelated session (e.g. the user manually started one while the schedule happened to
+     * be active) does not fire the notification.
      */
-    void onAdapterStatusForReadyNotify(String state) {
+    void onAdapterStatusForReadyNotify(JSONObject status) {
         if (!adapterReadyActive || !probeInFlight) {
             return;
         }
-        if (!"connected".equals(state)) {
+        if (!statusMeansAdapterReadyForNotification(status)) {
             return;
         }
         // On API 33+ this notification needs runtime POST_NOTIFICATIONS permission. We don't
@@ -359,6 +383,16 @@ final class TroubleshooterBridge {
         } catch (RuntimeException ex) {
             Log.w(MainActivity.TAG, "adapter-ready notification failed", ex);
         }
-        cancelAdapterReadyNotify();
+        stopAdapterReadySchedule();
+    }
+
+    static boolean statusMeansAdapterReadyForNotification(JSONObject status) {
+        if (status == null || !"connected".equals(status.optString("state", ""))) {
+            return false;
+        }
+        if (!status.has("lastVoltage")) {
+            return false;
+        }
+        return status.optDouble("lastVoltage", 0.0d) > ADAPTER_READY_MIN_VOLTS;
     }
 }

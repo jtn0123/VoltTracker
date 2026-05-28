@@ -93,7 +93,7 @@ public class MainActivity extends Activity {
                         // Observe the same status broadcast feeding the dashboard so the
                         // notify-when-ready schedule can wake the user as soon as the adapter
                         // responds, then tear itself down.
-                        onAdapterStatusForReadyNotify(lastStatus.optString("state", ""));
+                        onAdapterStatusForReadyNotify(lastStatus);
                     }
                 }
             };
@@ -362,8 +362,8 @@ public class MainActivity extends Activity {
         troubleshooter.cancelAdapterReadyNotify();
     }
 
-    void onAdapterStatusForReadyNotify(String state) {
-        troubleshooter.onAdapterStatusForReadyNotify(state);
+    void onAdapterStatusForReadyNotify(JSONObject status) {
+        troubleshooter.onAdapterStatusForReadyNotify(status);
     }
 
     // ===== end bridge delegates ==============================================

@@ -138,15 +138,32 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: volttracker-debug-apk
           path: artifact
-      - name: Stage APKs (stable + commit-tagged filenames)
+      - name: Stage APK with versioned filename
         run: |
           mkdir -p release
-          cp artifact/app-debug.apk release/app-debug.apk
-          cp artifact/app-debug.apk "release/volttracker-debug-${GITHUB_SHA::7}.apk"
+          VERSION="$(cat VERSION)"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          cp artifact/app-debug.apk "release/volttracker-v${VERSION}-${SHORT_SHA}-debug.apk"
+      - name: Remove legacy generic debug assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view latest-debug --repo "${{ github.repository }}" \
+            --json assets --jq '.assets[].name' \
+            | grep -E '^(app-debug\.apk|volttracker-debug-[0-9a-f]+\.apk)$' \
+            > legacy-debug-assets.txt || true
+          while read -r asset; do
+            if [ -n "${asset}" ]; then
+              gh release delete-asset latest-debug "${asset}" \
+                --repo "${{ github.repository }}" --yes
+              echo "Removed legacy latest-debug asset ${asset}"
+            fi
+          done < legacy-debug-assets.txt
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: latest-debug
@@ -155,10 +172,12 @@ jobs:
             Rolling debug build of `main`. Updates on every push.
 
             - Commit: ${{ github.sha }}
+            - APK flavor: debug
+            - Filename format: `volttracker-v<version>-<commit>-debug.apk`
 
             The APK is signed with the standard Android debug key. To install:
             grant "Install unknown apps" to your browser or file manager, then
-            tap `app-debug.apk` below.
+            tap the `volttracker-v...-debug.apk` asset below.
           files: release/*.apk
           prerelease: true
           make_latest: 'false'

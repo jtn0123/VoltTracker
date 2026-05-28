@@ -2,8 +2,10 @@ package com.volttracker.obdpoc;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.json.JSONArray;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -129,8 +131,47 @@ public class TroubleshooterBridgeTest {
     @Test
     public void onAdapterStatusForReadyNotify_doesNothingWhenScheduleInactive() {
         // No schedule active → must NOT post a notification, even on "connected".
-        bridge.onAdapterStatusForReadyNotify("connected");
-        bridge.onAdapterStatusForReadyNotify("idle");
+        bridge.onAdapterStatusForReadyNotify(status("connected", 14.2));
+        bridge.onAdapterStatusForReadyNotify(status("idle", 14.2));
         bridge.onAdapterStatusForReadyNotify(null);
+    }
+
+    @Test
+    public void statusMeansAdapterReadyForNotification_requiresConnectedAwakeVoltage() {
+        assertTrue(
+                "connected with DC-DC voltage should be notification-ready",
+                TroubleshooterBridge.statusMeansAdapterReadyForNotification(
+                        status("connected", 14.2)));
+        assertFalse(
+                "car-off voltage must not fire an adapter-ready notification",
+                TroubleshooterBridge.statusMeansAdapterReadyForNotification(
+                        status("connected", 12.4)));
+        assertFalse(
+                "exact threshold voltage must not fire an adapter-ready notification",
+                TroubleshooterBridge.statusMeansAdapterReadyForNotification(
+                        status("connected", 13.0)));
+        assertFalse(
+                "adapter-only connection without voltage is not enough",
+                TroubleshooterBridge.statusMeansAdapterReadyForNotification(
+                        statusWithoutVoltage("connected")));
+        assertFalse(
+                TroubleshooterBridge.statusMeansAdapterReadyForNotification(
+                        status("connecting", 14.2)));
+    }
+
+    private static JSONObject status(String state, double lastVoltage) {
+        try {
+            return new JSONObject().put("state", state).put("lastVoltage", lastVoltage);
+        } catch (org.json.JSONException ex) {
+            throw new AssertionError(ex);
+        }
+    }
+
+    private static JSONObject statusWithoutVoltage(String state) {
+        try {
+            return new JSONObject().put("state", state);
+        } catch (org.json.JSONException ex) {
+            throw new AssertionError(ex);
+        }
     }
 }

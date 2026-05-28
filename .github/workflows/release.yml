@@ -131,7 +131,7 @@ jobs:
           done
 
   build-release-apk:
-    name: Build and attach release APK
+    name: Build and attach Android APKs
     needs: release
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
@@ -188,7 +188,7 @@ jobs:
             -storepass "${KEYSTORE_PASSWORD}" >/dev/null
           echo "Keystore decoded; release build will be signed."
 
-      - name: Assemble release APK
+      - name: Assemble release and debug APKs
         # When keystore.properties exists (previous step decoded it from
         # secrets), this produces a signed app-release.apk. Without the
         # secrets, it falls back to app-release-unsigned.apk and downstream
@@ -201,9 +201,9 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:assembleRelease
+          ./gradlew --no-daemon :app:assembleRelease :app:assembleDebug
 
-      - name: Stage APKs (stable + version-tagged filenames)
+      - name: Stage APKs (version-tagged flavor filenames)
         run: |
           mkdir -p release
           TAG="${{ needs.release.outputs.tag }}"
@@ -211,23 +211,63 @@ jobs:
           # app-release-unsigned.apk. Detect which one landed so the workflow
           # keeps working through a future keystore-rotation outage.
           if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
-            SRC="app/build/outputs/apk/release/app-release.apk"
-            STABLE="app-release.apk"
-            VERSIONED="volttracker-${TAG}.apk"
+            RELEASE_SRC="app/build/outputs/apk/release/app-release.apk"
+            RELEASE_NAME="volttracker-${TAG}-release.apk"
           else
-            SRC="app/build/outputs/apk/release/app-release-unsigned.apk"
-            STABLE="app-release-unsigned.apk"
-            VERSIONED="volttracker-${TAG}-unsigned.apk"
+            RELEASE_SRC="app/build/outputs/apk/release/app-release-unsigned.apk"
+            RELEASE_NAME="volttracker-${TAG}-release-unsigned.apk"
           fi
-          cp "${SRC}" "release/${STABLE}"
-          cp "${SRC}" "release/${VERSIONED}"
-          echo "Staged: ${STABLE} + ${VERSIONED}"
+          DEBUG_SRC="app/build/outputs/apk/debug/app-debug.apk"
+          DEBUG_NAME="volttracker-${TAG}-debug.apk"
+          cp "${RELEASE_SRC}" "release/${RELEASE_NAME}"
+          cp "${DEBUG_SRC}" "release/${DEBUG_NAME}"
+          echo "Staged: ${RELEASE_NAME}"
+          echo "Staged: ${DEBUG_NAME}"
+
+      - name: Update release install notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.release.outputs.tag }}"
+          gh release view "${TAG}" --repo "${{ github.repository }}" \
+            --json body --jq '.body // ""' > release/body.md
+          START="<!-- volttracker-android-apks:start -->"
+          END="<!-- volttracker-android-apks:end -->"
+          awk -v start="${START}" -v end="${END}" '
+            $0 == start { skip = 1; next }
+            $0 == end { skip = 0; next }
+            !skip { print }
+          ' release/body.md > release/body.clean.md
+          mv release/body.clean.md release/body.md
+          cat >> release/body.md <<EOF
+
+          ${START}
+          ## Android APKs
+
+          - \`volttracker-${TAG}-release.apk\` is the normal signed release build.
+          - \`volttracker-${TAG}-release-unsigned.apk\` appears instead when release signing secrets are unavailable. It is a release build, but Android will not treat it as the same signed app as the normal release APK.
+          - \`volttracker-${TAG}-debug.apk\` is the Android debug-key build. Use it as the daily testing build when you want \`adb run-as\` and richer debugging. It cannot install over the release build; back up data, uninstall release, install debug, then restore.
+          ${END}
+          EOF
+          gh release edit "${TAG}" --repo "${{ github.repository }}" \
+            --notes-file release/body.md
 
       - name: Attach APK to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ needs.release.outputs.tag }}"
+          gh release view "${TAG}" --repo "${{ github.repository }}" \
+            --json assets --jq '.assets[].name' \
+            | grep -E '^(app-(release(-unsigned)?|debug)\.apk|volttracker-'"${TAG}"'(-unsigned)?\.apk|volttracker-'"${TAG}"'-field-diagnostics-debuggable.*\.apk)$' \
+            > release/legacy-assets.txt || true
+          while read -r asset; do
+            if [ -n "${asset}" ]; then
+                gh release delete-asset "${TAG}" "${asset}" \
+                  --repo "${{ github.repository }}" --yes
+                echo "Removed legacy release asset ${asset}"
+            fi
+          done < release/legacy-assets.txt
           gh release upload "${TAG}" release/*.apk \
             --repo "${{ github.repository }}" \
             --clobber
