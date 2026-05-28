@@ -4,22 +4,16 @@ import static com.volttracker.obdpoc.ObdElmDecode.friendlyConnectionMessage;
 import static com.volttracker.obdpoc.ObdElmDecode.hasElmPrompt;
 import static com.volttracker.obdpoc.ObdElmDecode.initialConnectBackoffMs;
 import static com.volttracker.obdpoc.ObdElmDecode.reconnectBackoffMs;
-import static com.volttracker.obdpoc.ObdElmDecode.round1;
 import static com.volttracker.obdpoc.ObdElmDecode.safeMessage;
 
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.util.Log;
-import com.volttracker.obdpoc.PidSchedule.PidSpec;
-import com.volttracker.obdpoc.classify.ClassifierInput;
-import com.volttracker.obdpoc.classify.ClassifierResult;
-import com.volttracker.obdpoc.classify.VehicleStateClassifier;
 import com.volttracker.obdpoc.location.FilteredLocation;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -71,6 +65,7 @@ class ObdPollingEngine {
     private final ClearDtcRunner clearDtcRunner;
     private final SessionHealthTracker sessionHealth;
     private final PidPollingState pidPolling;
+    private final LiveSampleReader liveSampleReader;
     private int sampleCount;
     private String supportedPidsSummary = "";
 
@@ -78,6 +73,7 @@ class ObdPollingEngine {
         this.service = service;
         this.sessionHealth = new SessionHealthTracker(service);
         this.pidPolling = new PidPollingState(service, this);
+        this.liveSampleReader = new LiveSampleReader(service, this, speedFilter, pidPolling);
         this.demoLoop = new DemoPollingLoop(service, this);
         this.scanRunner = new DiagnosticScanRunner(service, this);
         this.clearDtcRunner = new ClearDtcRunner(service, this);
@@ -517,7 +513,7 @@ class ObdPollingEngine {
     // which the caller turns into a reconnect attempt).
     private void pollUntilStoppedOrBroken() throws IOException {
         while (service.running.get()) {
-            JSONObject sample = readObdSample();
+            JSONObject sample = liveSampleReader.read();
             if (sample == null || sample.length() == 0) {
                 // A non-fatal encoding glitch yielded no usable sample; skip it and keep
                 // the session polling rather than ending it on a transient issue.
@@ -628,163 +624,6 @@ class ObdPollingEngine {
      */
     String transactOneShot(String command, long timeoutMs) throws IOException {
         return sendCommand(command, timeoutMs);
-    }
-
-    // Throws IOException when the adapter socket has broken so the caller can reconnect.
-    private JSONObject readObdSample() throws IOException {
-        JSONObject sample = new JSONObject();
-        StringBuilder rawThisCycle = new StringBuilder();
-        try {
-            // Poll only the PIDs due on this cycle, grouped by ATSH header so we only
-            // pay the 7E4 switch cost when batteryTemp is actually being read. The first
-            // cycle (cycleNum == 0) intentionally polls every spec so the dashboard has a
-            // complete baseline within one cycle instead of phasing in over ~10 seconds.
-            boolean isInitialCycle = pidPolling.isInitialCycle();
-            List<PidSpec> due = pidPolling.dueForCurrentCycle();
-            pidPolling.runScheduledPolls(due, rawThisCycle);
-            pidPolling.advanceCycle();
-
-            // Every parse below reads the carry-forward last-known raw. That way cycles that
-            // skip a slow PID still emit its last value (and a *StaleMs companion below) and
-            // the dashboard sees a complete sample with no flicker.
-            String voltageRaw = pidPolling.lastRaw("ATRV");
-            Float voltage = ObdProtocol.parseVoltage(voltageRaw);
-            if (voltage != null) {
-                sample.put("voltage", voltage);
-            }
-
-            String speedRaw = pidPolling.lastRaw("010D");
-            Integer speed = ObdProtocol.parseSpeedKph(speedRaw);
-            // The speed sentinel (0xFF) is the Volt's "charging" hint. We only re-evaluate the
-            // charge-transition hint / speed filter when this cycle actually polled speed —
-            // otherwise we'd double-count old samples as "rejected" every cycle.
-            boolean polledSpeedThisCycle =
-                    !isInitialCycle ? PidPollingState.wasPolledThisCycle(due, "010D") : true;
-            boolean chargeTransitionHint =
-                    polledSpeedThisCycle && ObdProtocol.hasMaxSpeedSentinel(speedRaw);
-            Integer acceptedSpeed = null;
-            if (polledSpeedThisCycle) {
-                if (speed != null && speedFilter.accept(speed, System.currentTimeMillis())) {
-                    sample.put("speedKph", speed);
-                    acceptedSpeed = speed;
-                } else if (speed != null) {
-                    sample.put("speedRejectedKph", speed);
-                    service.recorder.logEvent("speed_rejected", "speedKph", String.valueOf(speed));
-                } else if (chargeTransitionHint) {
-                    sample.put("speedRejectedKph", 255);
-                    sample.put("chargeTransitionHint", true);
-                    service.recorder.logEvent(
-                            "speed_rejected",
-                            "speedKph",
-                            "255",
-                            "reason",
-                            "charge_transition_hint");
-                }
-            } else if (speed != null) {
-                // Carry-forward path: re-emit the last accepted speed without re-running the
-                // filter (it's time-sensitive) so the dashboard keeps showing the last value.
-                sample.put("speedKph", speed);
-                acceptedSpeed = speed;
-            }
-
-            Float rpm = ObdProtocol.parseRpm(pidPolling.lastRaw("010C"));
-            if (rpm != null) {
-                sample.put("rpm", Math.round(rpm));
-            }
-            Integer coolant = ObdProtocol.parseCoolantC(pidPolling.lastRaw("0105"));
-            if (coolant != null) {
-                sample.put("coolantC", coolant);
-            }
-            Integer load = ObdProtocol.parseEngineLoadPct(pidPolling.lastRaw("0104"));
-            if (load != null) {
-                sample.put("loadPct", load);
-            }
-            // Prefer the drive-by-wire accelerator pedal (0149) over the legacy ICE throttle
-            // body (0111). On a Chevy Volt 0111 returns a constant ~33% because the engine's
-            // throttle body isn't user-actuated — the real pedal position lives behind 0149.
-            // Fall back to 0111 only when 0149 hasn't responded (older vehicles or unsupported
-            // by the ECM), so users without the Volt-specific PID still see *something*.
-            Integer pedal = ObdProtocol.parseAccelPedalPct(pidPolling.lastRaw("0149"));
-            if (pedal != null) {
-                sample.put("throttlePct", pedal);
-                sample.put("throttleSource", "accelPedal");
-            } else {
-                Integer throttle = ObdProtocol.parseThrottlePct(pidPolling.lastRaw("0111"));
-                if (throttle != null) {
-                    sample.put("throttlePct", throttle);
-                    sample.put("throttleSource", "iceThrottleBody");
-                }
-            }
-            Integer soc = ObdProtocol.parseStateOfChargePct(pidPolling.lastRaw("015B"));
-            if (soc != null) {
-                sample.put("soc", soc);
-            }
-
-            String packVoltageRaw = pidPolling.lastRaw("222429");
-            String packCurrentRaw = pidPolling.lastRaw("222414");
-            String batteryTempRaw = pidPolling.lastRaw("22434F");
-            ObdProtocol.ParsedPidValue batteryTemp =
-                    ObdProtocol.parseKnownValue("22434F", batteryTempRaw);
-            if (batteryTemp != null && batteryTemp.valueNumeric != null) {
-                sample.put("batteryTemp", round1(batteryTemp.valueNumeric));
-            }
-            ObdProtocol.ParsedPidValue packVoltage =
-                    ObdProtocol.parseKnownValue("222429", packVoltageRaw);
-            if (packVoltage != null && packVoltage.valueNumeric != null) {
-                sample.put("packVoltage", round1(packVoltage.valueNumeric));
-            }
-            // packCurrent is parsed below as part of the vehicle-state classifier inputs.
-            Double powerKw = ObdProtocol.parsePackPowerKw(packVoltageRaw, packCurrentRaw);
-            if (powerKw != null) {
-                sample.put("powerKw", round1(powerKw));
-            }
-
-            // Per-PID staleness companion fields. Only emit for slow PIDs (period > 1)
-            // since Tier 1 PIDs are always fresh on every cycle. Dashboard may ignore these
-            // (and most rendering does) — they exist so a future stale-tile UI can show
-            // "value last updated N seconds ago" without flicker between polls.
-            long now = System.currentTimeMillis();
-            pidPolling.putStaleMsIfTracked(sample, "voltageStaleMs", "ATRV", now);
-            pidPolling.putStaleMsIfTracked(sample, "socStaleMs", "015B", now);
-            pidPolling.putStaleMsIfTracked(sample, "coolantCStaleMs", "0105", now);
-            pidPolling.putStaleMsIfTracked(sample, "batteryTempStaleMs", "22434F", now);
-
-            sampleCount += 1;
-            sample.put("source", "obd");
-            sample.put("connected", true);
-            sample.put("adapter", service.activeName);
-            sample.put("sampleCount", sampleCount);
-            sample.put("sessionMs", Math.max(0, now - service.sessionStartedAtMs));
-            sample.put("supportedPids", supportedPidsSummary);
-            ObdProtocol.ParsedPidValue packCurrent =
-                    ObdProtocol.parseKnownValue("222414", packCurrentRaw);
-            Double packCurrentA = packCurrent == null ? null : packCurrent.valueNumeric;
-            if (packCurrentA != null) {
-                sample.put("packCurrentA", round1(packCurrentA));
-            }
-            Boolean engineRunningHint = rpm == null ? null : (rpm > 200f);
-            ClassifierResult classified =
-                    VehicleStateClassifier.classify(
-                            new ClassifierInput(
-                                    acceptedSpeed == null ? null : acceptedSpeed.doubleValue(),
-                                    rpm == null ? null : Math.round(rpm),
-                                    voltage == null ? null : voltage.doubleValue(),
-                                    packCurrentA,
-                                    chargeTransitionHint ? Boolean.TRUE : null,
-                                    engineRunningHint,
-                                    now));
-            sample.put("vehicleState", classified.state.asPayloadKey());
-            sample.put("vehicleStateConfidence", classified.confidence.asPayloadKey());
-            sample.put("vehicleStateReasons", new JSONArray(classified.reasons));
-            sample.put("updatedAt", now);
-            appendSessionHealth(sample);
-            appendLocation(sample);
-            sample.put("raw", boundedRawTranscript(rawThisCycle));
-        } catch (JSONException ex) {
-            // Local numeric values are safe; an encoding error is non-fatal, keep polling.
-            service.recorder.logError("sample_encoding_error", ex);
-        }
-        return sample;
     }
 
     void appendLocation(JSONObject sample) throws JSONException {

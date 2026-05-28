@@ -23,7 +23,9 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -143,68 +145,106 @@ final class ObdStoreReports {
 
     // ---- storage summary -----------------------------------------------------------
 
-    JSONObject storageSummary(File databaseFile) {
-        JSONObject payload = new JSONObject();
+    StorageSummaryRecord storageSummaryRecord(File databaseFile) {
         SQLiteDatabase db = helper.getReadableDatabase();
         try {
-            payload.put("database", VoltTrackerDb.DATABASE_NAME);
-            payload.put("databaseBytes", databaseFile.length());
-            payload.put("sessionCount", countRows(db, VoltTrackerDb.TABLE_SESSIONS));
             long rawTelemetryCount = countRows(db, VoltTrackerDb.TABLE_TELEMETRY);
             long usefulTelemetryCount =
                     countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, USEFUL_TELEMETRY_WHERE, null);
-            payload.put("rawTelemetryCount", rawTelemetryCount);
-            payload.put("sampleCount", usefulTelemetryCount);
-            payload.put(
-                    "emptyTelemetryCount", Math.max(0L, rawTelemetryCount - usefulTelemetryCount));
-            payload.put("eventCount", countRows(db, VoltTrackerDb.TABLE_EVENTS));
-            payload.put("adapterCount", countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY));
-            payload.put("pidObservationCount", countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS));
-            payload.put("diagnosticCodeCount", countRows(db, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES));
-            payload.put("diagnosticCodeStatusCounts", diagnosticCodeStatusCountsJson(db));
-            payload.put("locationSampleCount", countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES));
-            payload.put("vehicleCount", countRows(db, VoltTrackerDb.TABLE_VEHICLES));
-            payload.put(
-                    "fieldCapabilityCount", countRows(db, VoltTrackerDb.TABLE_FIELD_CAPABILITIES));
-            payload.put("tripSegmentCount", countRows(db, VoltTrackerDb.TABLE_TRIP_SEGMENTS));
-            payload.put("chargeSessionCount", countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS));
-            payload.put(
-                    "batterySnapshotCount", countRows(db, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS));
-            payload.put("cellSnapshotCount", countRows(db, VoltTrackerDb.TABLE_CELL_SNAPSHOTS));
-            payload.put("exportCount", countRows(db, VoltTrackerDb.TABLE_EXPORTS));
             ObdSessionRecord latest = firstOrNull(getRecentSessions(1));
-            if (latest != null) {
-                payload.put("lastSessionId", latest.id);
-                payload.put("lastMode", latest.mode);
-                payload.put("lastStatus", latest.status);
-                payload.put("lastStartedAtMs", latest.startedAtMs);
-                payload.put("lastEventAtMs", latest.lastEventAtMs);
-                payload.put("lastSampleCount", latest.sampleCount);
-                payload.put("lastAdapter", latest.adapterName);
-            }
-            payload.put("recentSessions", recentSessionsJson(6));
-            payload.put("adapters", adapterHistoryJson(6));
-            payload.put("latestDiagnosticCodes", latestDiagnosticCodesJson(db, 12));
             ObdSessionRecord reviewSession = trips.latestReviewableSession(db);
-            payload.put(
-                    "latestReview",
+            return new StorageSummaryRecord(
+                    VoltTrackerDb.DATABASE_NAME,
+                    databaseFile.length(),
+                    countRows(db, VoltTrackerDb.TABLE_SESSIONS),
+                    rawTelemetryCount,
+                    usefulTelemetryCount,
+                    Math.max(0L, rawTelemetryCount - usefulTelemetryCount),
+                    countRows(db, VoltTrackerDb.TABLE_EVENTS),
+                    countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY),
+                    countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS),
+                    countRows(db, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES),
+                    diagnosticCodeStatusCounts(db),
+                    countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES),
+                    countRows(db, VoltTrackerDb.TABLE_VEHICLES),
+                    countRows(db, VoltTrackerDb.TABLE_FIELD_CAPABILITIES),
+                    countRows(db, VoltTrackerDb.TABLE_TRIP_SEGMENTS),
+                    countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS),
+                    countRows(db, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS),
+                    countRows(db, VoltTrackerDb.TABLE_CELL_SNAPSHOTS),
+                    countRows(db, VoltTrackerDb.TABLE_EXPORTS),
+                    latest,
+                    recentSessionSummaries(db, 6),
+                    getAdapterHistory(6),
+                    latestDiagnosticCodeReports(db, 12),
                     reviewSession == null
                             ? new JSONObject()
-                            : trips.sessionReview(db, reviewSession));
-            payload.put(
-                    "latestRoute",
+                            : trips.sessionReview(db, reviewSession),
                     reviewSession == null
                             ? new JSONObject()
-                            : trips.routeForSession(db, reviewSession, 240));
-            payload.put("recentRoutes", trips.recentRoutes(db, 8, 500));
-            payload.put("overview", overviewJson(db));
-            payload.put("chargeSummary", chargeSummaryJson(db));
-            payload.put("batterySummary", batterySummaryJson(db));
-            payload.put("latestVehicle", latestVehicleJson(db));
+                            : trips.routeForSession(db, reviewSession, 240),
+                    trips.recentRoutes(db, 8, 500),
+                    overviewJson(db),
+                    chargeSummaryJson(db),
+                    batterySummaryJson(db),
+                    latestVehicleJson(db));
         } catch (JSONException ignored) {
-            // Local numeric/string values are safe.
+            // Local numeric/string values are safe; fall back to a usable empty projection if a
+            // nested JSON helper ever rejects one of its static keys.
         }
-        return payload;
+        return emptyStorageSummary(databaseFile);
+    }
+
+    private StorageSummaryRecord emptyStorageSummary(File databaseFile) {
+        return new StorageSummaryRecord(
+                VoltTrackerDb.DATABASE_NAME,
+                databaseFile.length(),
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                Map.of(),
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                null,
+                List.of(),
+                List.of(),
+                List.of(),
+                new JSONObject(),
+                new JSONObject(),
+                new JSONArray(),
+                new JSONObject(),
+                new JSONObject(),
+                new JSONObject(),
+                new JSONObject());
+    }
+
+    private List<RecentSessionSummaryRecord> recentSessionSummaries(SQLiteDatabase db, int limit) {
+        List<RecentSessionSummaryRecord> records = new ArrayList<>();
+        for (ObdSessionRecord session : getRecentSessions(limit)) {
+            long usefulSamples =
+                    countRowsWhere(
+                            db,
+                            VoltTrackerDb.TABLE_TELEMETRY,
+                            "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
+                            new String[] {String.valueOf(session.id)});
+            records.add(
+                    new RecentSessionSummaryRecord(
+                            session,
+                            usefulSamples,
+                            Math.max(0L, session.sampleCount - usefulSamples)));
+        }
+        return records;
     }
 
     /**
@@ -364,8 +404,8 @@ final class ObdStoreReports {
         return payload;
     }
 
-    private static JSONObject diagnosticCodeStatusCountsJson(SQLiteDatabase db) {
-        JSONObject payload = new JSONObject();
+    private static Map<String, Long> diagnosticCodeStatusCounts(SQLiteDatabase db) {
+        Map<String, Long> payload = new LinkedHashMap<>();
         try (Cursor cursor =
                 db.rawQuery(
                         "SELECT status, COUNT(*) AS count FROM "
@@ -377,11 +417,7 @@ final class ObdStoreReports {
                 if (key.isEmpty()) {
                     key = "stored";
                 }
-                try {
-                    payload.put(key, cursor.getLong(cursor.getColumnIndexOrThrow("count")));
-                } catch (JSONException ignored) {
-                    // Local fields are safe.
-                }
+                payload.put(key, cursor.getLong(cursor.getColumnIndexOrThrow("count")));
             }
         }
         return payload;

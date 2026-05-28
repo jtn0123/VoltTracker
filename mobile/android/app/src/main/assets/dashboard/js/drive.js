@@ -43,7 +43,11 @@
     if (!target) return;
     const old = target.querySelector("svg");
     if (old) old.remove();
-    target.insertAdjacentHTML("afterbegin", markup);
+    const doc = new window.DOMParser().parseFromString(markup, "image/svg+xml");
+    const next = doc.documentElement;
+    if (next && next.nodeName.toLowerCase() === "svg") {
+      target.prepend(document.importNode(next, true));
+    }
   }
 
   function targetWidth(node) {

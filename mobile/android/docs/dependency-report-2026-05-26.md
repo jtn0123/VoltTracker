@@ -4,6 +4,17 @@ Date: 2026-05-26
 
 Scope: active Android app only (`mobile/android/`). The former web receiver/archive dependency tree has been removed from the repo.
 
+## Regrade Update - 2026-05-27
+
+Validated again from synced `origin/main` (`0.4.4`) while regrading the active
+Android app:
+
+- `cd mobile/android && ./gradlew --no-daemon verifyActiveApp`: passed.
+- `cd mobile/android/dashboard-tests && npm run test:coverage && npm audit --audit-level=low`: passed; 49 dashboard tests, Istanbul coverage at 49.0% lines / 48.97% functions, 0 vulnerabilities.
+- `cd mobile/android && ./gradlew --no-daemon dependencyUpdates`: passed.
+- `cd mobile/android && ./gradlew --no-daemon dependencyUpdates --warning-mode all`: passed and isolated the Gradle 10 warning to the `dependencyUpdates` task path: `Invocation of Task.project at execution time has been deprecated.` Treat this as Gradle Versions plugin/tooling debt, not active app build logic.
+- PR CI lint follow-up: Spotless was bumped from `8.5.1` to `8.6.0` after Android lint's online `NewerVersionAvailable` detector reported the newer release on 2026-05-27. `dependencyUpdates` passes after the bump, though its milestone comparison still lists Spotless under "exceeds" against `8.5.1`.
+
 ## Upgrade Update
 
 Applied and validated after the initial report:
@@ -36,6 +47,12 @@ ESLint 10 investigation:
 - Android app/test dependencies are mostly current against stable releases.
 - The Gradle Versions plugin was upgraded and `dependencyUpdates` now runs successfully.
 - Dashboard-test npm deps are installed and top-level packages resolve cleanly.
+- `.github/workflows/dependency-snapshot.yml` now runs the Gradle and npm
+  dependency snapshot weekly and on demand, then uploads the reports as CI
+  artifacts.
+- GitHub Actions pins were refreshed from passing Dependabot PRs: checkout
+  v6.0.2, setup-node v6.4.0, setup-python v6.2.0,
+  action-semantic-pull-request v6.1.1, and upload-artifact v7.0.1.
 
 ## Android / Gradle Tooling
 
@@ -43,7 +60,7 @@ ESLint 10 investigation:
 |---|---:|---:|---|---|
 | Gradle wrapper | 9.5.1 | 9.5.1 | Current | `mobile/android/gradle/wrapper/gradle-wrapper.properties`; Gradle current service also reports 9.5.1. |
 | Android Gradle Plugin | 9.2.1 | 9.2.1 | Current stable | Latest pre-release in Google Maven is 9.3.0-alpha07. |
-| Spotless Gradle plugin | 8.5.1 | 8.5.1 | Current | Declared in root build and version catalog. |
+| Spotless Gradle plugin | 8.6.0 | 8.6.0 | Current | Declared in root build and version catalog; bumped for Android lint's live Maven version check. |
 | Gradle Versions plugin | 0.54.0 | 0.54.0 | Current | `./gradlew dependencyUpdates` now passes. |
 | JaCoCo | 0.8.14 | 0.8.14 | Current | Coverage verification passes. |
 | google-java-format | 1.28.0 | 1.35.0 | Held below latest | `1.29.0+` requires running the formatter on JDK 21+, while Android CI currently runs JDK 17. `1.28.0` is the newest compatible formatter upgrade for this CI/runtime shape. |
@@ -81,14 +98,14 @@ Resolved debug runtime highlights from `:app:dependencies --configuration debugR
 | Package | Installed | Wanted | Latest | Status |
 |---|---:|---:|---:|---|
 | `vitest` | 4.1.7 | 4.1.7 | 4.1.7 | Current |
-| `@vitest/coverage-v8` | 4.1.7 | 4.1.7 | 4.1.7 | Current |
+| `@vitest/coverage-istanbul` | 4.1.7 | 4.1.7 | 4.1.7 | Current |
 | `jsdom` | 29.1.1 | 29.1.1 | 29.1.1 | Current |
 | `eslint` | 10.4.0 | 10.4.0 | 10.4.0 | Current |
 
 `package.json` ranges:
 
 - `vitest`: `^4.1.7`
-- `@vitest/coverage-v8`: `^4.1.7`
+- `@vitest/coverage-istanbul`: `^4.1.7`
 - `jsdom`: `^29.1.1`
 - `eslint`: `^10.4.0`
 
@@ -98,6 +115,7 @@ Resolved debug runtime highlights from `:app:dependencies --configuration debugR
 - `./gradlew :app:dependencies --configuration debugRuntimeClasspath`
 - `./gradlew :app:dependencies --configuration debugUnitTestRuntimeClasspath`
 - `./gradlew dependencyUpdates`
+- `./gradlew dependencyUpdates --warning-mode all`
 - `npm ls --depth=0`
 - `npm outdated --long`
 - Maven / Google Maven / Gradle / npm metadata checks for latest versions.
@@ -105,5 +123,5 @@ Resolved debug runtime highlights from `:app:dependencies --configuration debugR
 ## Recommended Follow-Up
 
 1. Watch only the Kotlin milestone line from `dependencyUpdates`; it is transitive from AGP/AndroidX, not directly declared by this app.
-2. Keep dependency update checks in CI or a recurring maintenance habit now that the Gradle Versions plugin works again.
+2. Review the weekly `Dependency snapshot` workflow artifacts when Dependabot opens grouped update PRs.
 3. Re-check ESLint plugin compatibility if the project later adds third-party ESLint plugins or shared configs.

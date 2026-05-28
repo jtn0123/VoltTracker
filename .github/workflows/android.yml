@@ -29,7 +29,7 @@ jobs:
       run:
         working-directory: mobile/android
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
@@ -37,23 +37,26 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Run unit tests
+        # CI keeps the same checks as verifyActiveApp split into separate steps
+        # so failures point at the exact lane and artifact uploads still run.
+        # Keep this list in sync with mobile/android/build.gradle:verifyActiveApp.
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:testDebugUnitTest
+          ./gradlew --no-daemon --configuration-cache :app:testDebugUnitTest
       - name: Spotless check
-        run: ./gradlew --no-daemon :app:spotlessCheck
+        run: ./gradlew --no-daemon --configuration-cache :app:spotlessCheck
       - name: Android Lint
-        run: ./gradlew --no-daemon :app:lintDebug
+        run: ./gradlew --no-daemon --configuration-cache :app:lintDebug
       - name: Assemble debug APK
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon --configuration-cache :app:assembleDebug
       - name: Verify generated dashboard is committed
-        run: ./gradlew --no-daemon verifyGeneratedDashboardClean
+        run: ./gradlew --no-daemon --configuration-cache verifyGeneratedDashboardClean
       - name: Verify dashboard bundle budget
-        run: ./gradlew --no-daemon verifyDashboardBundleSize
+        run: ./gradlew --no-daemon --configuration-cache verifyDashboardBundleSize
       - name: JaCoCo coverage report
-        run: ./gradlew --no-daemon :app:jacocoTestReport
+        run: ./gradlew --no-daemon --configuration-cache :app:jacocoTestReport
       - name: Verify coverage thresholds
-        run: ./gradlew --no-daemon :app:jacocoTestCoverageVerification
+        run: ./gradlew --no-daemon --configuration-cache :app:jacocoTestCoverageVerification
       - name: Upload debug APK
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -82,10 +85,10 @@ jobs:
       run:
         working-directory: mobile/android/dashboard-tests
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6 # v4.0.4
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '20'
       - name: Install dashboard test deps
@@ -97,10 +100,12 @@ jobs:
       - name: Run dashboard JS smoke tests with coverage gate
         # Istanbul instruments the dashboard JS loaded by the jsdom smoke suite and
         # fails the job if coverage drops below the ratchet in vitest.config.js.
+        # This is the dashboard half of verifyActiveApp, kept as its own job for
+        # npm dependency caching and coverage artifact isolation.
         run: npm run test:coverage
       - name: Upload dashboard coverage report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dashboard-coverage
           path: mobile/android/dashboard-tests/coverage/

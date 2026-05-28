@@ -144,8 +144,9 @@
     const totalCodes = Number(storage.diagnosticCodeCount ?? codes.length);
     const storedOrCurrent = Number(statusCounts.stored || 0) + Number(statusCounts.current || 0);
     const latestSeen = codes.reduce((latest, code) => Math.max(latest, Number(code.lastSeenMs || 0)), 0);
+    const needsDtcData = codes.length > 0 && typeof VD.dtcInfo !== "function";
     VD.setText("dtcTitle", totalCodes ? `${totalCodes} code${totalCodes === 1 ? "" : "s"} saved` : "No car-code scan yet");
-    VD.setText("dtcReportBadge", totalCodes ? "evidence saved" : "ready");
+    VD.setText("dtcReportBadge", needsDtcData ? "loading details" : totalCodes ? "evidence saved" : "ready");
     VD.setText("dtcTotalCount", totalCodes);
     VD.setText("dtcStoredCount", storedOrCurrent);
     VD.setText("dtcPendingCount", Number(statusCounts.pending || 0));
@@ -153,6 +154,15 @@
     VD.setText("dtcFreezeCount", Number(statusCounts["freeze-frame"] || 0));
     VD.setText("dtcLastSeen", latestSeen ? VD.formatWhen(latestSeen) : "--");
     if (!list) return;
+    if (needsDtcData && typeof VD.ensureDtcData === "function") {
+      VD.ensureDtcData()
+        .then(() => {
+          if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
+        })
+        .catch(() => {
+          VD.setText("dtcReportBadge", "details unavailable");
+        });
+    }
     if (!codes.length) {
       list.replaceChildren(buildDtcEmptyState());
       return;

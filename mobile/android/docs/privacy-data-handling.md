@@ -20,9 +20,14 @@ under app-private `files/obd-logs/`.
 
 ## Backups and Diagnostics
 
-The backup action shares a full copy of the on-device SQLite database. That file
-can include precise GPS routes, raw OBD samples, Bluetooth adapter addresses,
-and redacted vehicle records. Share it only with people or storage providers you
+Encrypted backup is the primary export path. It creates a passphrase-protected
+portable backup before handing the file to the Android share sheet, which is the
+right choice for cloud storage, email, shared computers, or support handoffs.
+
+Plaintext backup remains available as an advanced compatibility option when a
+trusted tool specifically needs the raw SQLite database. Plaintext files can
+include precise GPS routes, raw OBD samples, Bluetooth adapter addresses, and
+redacted vehicle records. Share them only with people or storage providers you
 trust.
 
 Diagnostics exports are meant for troubleshooting. They can include recent

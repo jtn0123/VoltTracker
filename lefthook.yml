@@ -15,16 +15,24 @@ pre-commit:
     # I1: catch undefined globals, redeclared names, and unreachable code locally before
     # they ride to CI. Spotless handles formatting; this catches semantic issues Spotless
     # can't see. Skipped if dashboard-tests/node_modules is missing so first-time clones
-    # don't break commits — run `npm --prefix mobile/android/dashboard-tests install` once.
+    # bootstrap themselves before the lint run.
     lint-dashboard-js:
       glob: "mobile/android/app/src/main/assets/dashboard/js/**/*.js"
       run: |
-        if [ -d mobile/android/dashboard-tests/node_modules ]; then
-          npm --prefix mobile/android/dashboard-tests run lint
+        if [ ! -d mobile/android/dashboard-tests/node_modules ]; then
+          echo "dashboard test dependencies missing; running npm ci once"
+          npm --prefix mobile/android/dashboard-tests ci
+        fi
+        npm --prefix mobile/android/dashboard-tests run lint
+      stage_fixed: false
+    actionlint-workflows:
+      glob: ".github/workflows/**/*.{yml,yaml}"
+      run: |
+        if command -v actionlint >/dev/null 2>&1; then
+          actionlint -config-file .github/actionlint.yaml {staged_files}
         else
-          echo "warning: skipping eslint because dashboard test dependencies are not installed"
-          echo "run 'npm --prefix mobile/android/dashboard-tests ci' to enable local dashboard lint"
-          echo "CI will still run dashboard lint for this change"
+          echo "warning: skipping actionlint because it is not installed"
+          echo "run 'brew install actionlint' to enable local workflow lint"
         fi
       stage_fixed: false
 

@@ -146,6 +146,45 @@ public class SessionRecorderTest {
         }
     }
 
+    @Test
+    public void telemetryQueueOverflowRecordsDroppedEventBeforeFinalize()
+            throws InterruptedException {
+        final int writes = SessionRecorder.TELEMETRY_QUEUE_CAPACITY + 50;
+        final RecordingStore store = new RecordingStore();
+        store.blockTelemetryWrites = true;
+        final SessionRecorder recorder = newOpenRecorder(store, "sr-overflow-test");
+
+        recorder.persistTelemetry(taggedTelemetry(0, 0));
+        assertTrue(
+                "first telemetry write should enter the blocked fake store",
+                store.firstTelemetryEntered.await(AWAIT_MS, TimeUnit.MILLISECONDS));
+
+        for (int seq = 1; seq < writes; seq++) {
+            recorder.persistTelemetry(taggedTelemetry(0, seq));
+        }
+
+        store.releaseTelemetryWrites.countDown();
+        recorder.closeSession("disconnected", "overflow-test", "supported", writes);
+        recorder.shutdown();
+
+        assertTrue(
+                "overflow should drop some queued telemetry", store.telemetryCalls.size() < writes);
+        RecordedTelemetry latest = store.telemetryCalls.get(store.telemetryCalls.size() - 1);
+        assertEquals(
+                "discard-oldest policy should retain the newest submitted telemetry",
+                writes - 1,
+                latest.payload.optInt("seq", -1));
+        RecordedEvent dropped = store.onlyEvent("telemetry_dropped");
+        assertTrue(
+                "telemetry_dropped must be recorded before finalizeSession",
+                dropped.arrivalOrder < store.finalizeArrivalOrder.get());
+        assertEquals(SESSION_ID, dropped.sessionId);
+        assertEquals("persist", dropped.state);
+        assertFalse(dropped.blocked);
+        assertTrue(dropped.payload.optLong("dropped") > 0L);
+        assertTrue(dropped.detail.contains("queued telemetry writes"));
+    }
+
     /**
      * Telemetry submitted AFTER {@code closeSession} is dropped — it cannot leak into the
      * just-closed session id. {@code SessionRecorder.persistTelemetry} guards on {@code
@@ -330,10 +369,15 @@ public class SessionRecorderTest {
      */
     private static final class RecordingStore extends ObdLocalStore {
         final AtomicInteger finalizeCalls = new AtomicInteger();
+        final AtomicLong finalizeArrivalOrder = new AtomicLong();
         final List<RecordedTelemetry> telemetryCalls = new ArrayList<>();
         final List<RecordedStatus> statusCalls = new ArrayList<>();
         final List<RecordedPidObservation> pidObservationCalls = new ArrayList<>();
+        final List<RecordedEvent> eventCalls = new ArrayList<>();
         final AtomicLong arrivalCounter = new AtomicLong();
+        volatile boolean blockTelemetryWrites;
+        final CountDownLatch firstTelemetryEntered = new CountDownLatch(1);
+        final CountDownLatch releaseTelemetryWrites = new CountDownLatch(1);
 
         RecordingStore() {
             super(RuntimeEnvironment.getApplication());
@@ -348,6 +392,14 @@ public class SessionRecorderTest {
 
         @Override
         public long recordTelemetry(long sessionId, JSONObject sample) {
+            if (blockTelemetryWrites) {
+                firstTelemetryEntered.countDown();
+                try {
+                    releaseTelemetryWrites.await(AWAIT_MS, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+            }
             long arrival = arrivalCounter.incrementAndGet();
             synchronized (telemetryCalls) {
                 telemetryCalls.add(new RecordedTelemetry(sessionId, sample, arrival));
@@ -385,6 +437,7 @@ public class SessionRecorderTest {
                 String mode,
                 int sampleCount,
                 String lastEventDetail) {
+            finalizeArrivalOrder.compareAndSet(0L, arrivalCounter.incrementAndGet());
             finalizeCalls.incrementAndGet();
         }
 
@@ -396,10 +449,26 @@ public class SessionRecorderTest {
                 String detail,
                 boolean blocked,
                 JSONObject payload) {
-            // Recorder's logEvent path (session_start, session_end, etc.) lands here. Tests
-            // don't currently assert on these — they're allowed to flow through. Returning a
-            // benign id keeps the production path happy.
-            return 1L;
+            long arrival = arrivalCounter.incrementAndGet();
+            synchronized (eventCalls) {
+                eventCalls.add(
+                        new RecordedEvent(
+                                sessionId, kind, state, detail, blocked, payload, arrival));
+                return eventCalls.size();
+            }
+        }
+
+        RecordedEvent onlyEvent(String kind) {
+            List<RecordedEvent> matches = new ArrayList<>();
+            synchronized (eventCalls) {
+                for (RecordedEvent event : eventCalls) {
+                    if (kind.equals(event.kind)) {
+                        matches.add(event);
+                    }
+                }
+            }
+            assertEquals("expected one event of kind " + kind, 1, matches.size());
+            return matches.get(0);
         }
     }
 
@@ -441,6 +510,33 @@ public class SessionRecorderTest {
             this.sessionId = sessionId;
             this.payload = payload;
             this.observedAtMs = observedAtMs;
+        }
+    }
+
+    private static final class RecordedEvent {
+        final long sessionId;
+        final String kind;
+        final String state;
+        final String detail;
+        final boolean blocked;
+        final JSONObject payload;
+        final long arrivalOrder;
+
+        RecordedEvent(
+                long sessionId,
+                String kind,
+                String state,
+                String detail,
+                boolean blocked,
+                JSONObject payload,
+                long arrivalOrder) {
+            this.sessionId = sessionId;
+            this.kind = kind;
+            this.state = state;
+            this.detail = detail;
+            this.blocked = blocked;
+            this.payload = payload;
+            this.arrivalOrder = arrivalOrder;
         }
     }
 }

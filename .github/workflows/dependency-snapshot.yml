@@ -1,0 +1,62 @@
+name: Dependency snapshot
+
+on:
+  schedule:
+    - cron: '0 14 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: dependency-snapshot
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/android
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
+      - name: Gradle dependency updates
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon dependencyUpdates
+      - name: npm dependency snapshot
+        run: |
+          cd dashboard-tests
+          npm ci
+          npm outdated --long > ../build/npm-outdated.txt || true
+          npm audit --audit-level=low
+      - name: Summarize dependency snapshot
+        if: always()
+        run: |
+          {
+            echo "## Dependency snapshot"
+            echo ""
+            echo "- Gradle report: \`mobile/android/build/dependencyUpdates/report.txt\`"
+            echo "- npm outdated report: \`mobile/android/build/npm-outdated.txt\`"
+            echo "- npm audit gate: \`npm audit --audit-level=low\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload dependency reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-snapshot
+          path: |
+            mobile/android/build/dependencyUpdates/report.txt
+            mobile/android/build/npm-outdated.txt
+          if-no-files-found: warn

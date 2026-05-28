@@ -8,7 +8,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 /** Stable read-model for diagnostic-code rows before they are serialized for the dashboard. */
-final class DiagnosticCodeReport {
+public final class DiagnosticCodeReport {
 
     static final String[] QUERY_COLUMNS = {
         "_id",
@@ -25,18 +25,18 @@ final class DiagnosticCodeReport {
         "raw_response"
     };
 
-    final long id;
-    final String dtc;
-    final String status;
-    final String statusLabel;
-    final String moduleKey;
-    final String moduleName;
-    final String header;
-    final long firstSeenMs;
-    final long lastSeenMs;
-    final long seenCount;
-    final Long lastSessionId;
-    final String rawResponse;
+    public final long id;
+    public final String dtc;
+    public final String status;
+    public final String statusLabel;
+    public final String moduleKey;
+    public final String moduleName;
+    public final String header;
+    public final long firstSeenMs;
+    public final long lastSeenMs;
+    public final long seenCount;
+    public final Long lastSessionId;
+    public final String rawResponse;
 
     DiagnosticCodeReport(
             long id,
@@ -81,7 +81,7 @@ final class DiagnosticCodeReport {
                 cursor.getString(cursor.getColumnIndexOrThrow("raw_response")));
     }
 
-    JSONObject toJson() {
+    public JSONObject toJson() {
         JSONObject item = new JSONObject();
         try {
             item.put("id", id);

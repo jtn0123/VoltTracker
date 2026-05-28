@@ -39,8 +39,8 @@ final class TroubleshooterBridge {
      * case (ATZ + 7 short AT commands + two {@code 0100} attempts each with a 9 s timeout for the
      * "no prompt" recovery path). An 8 s deadline used to tear the probe down mid-init, so the
      * subsequent "connected" broadcast that {@link #onAdapterStatusForReadyNotify} listens for
-     * never arrived, and the C10 notify-when-ready schedule could not fire. 25 s gives the engine
-     * room to land on either "connected" or a real failure before we cut the session.
+     * never arrived, and the notify-when-ready schedule could not fire. 25 s gives the engine room
+     * to land on either "connected" or a real failure before we cut the session.
      */
     private static final long TEST_CONNECTION_DURATION_MS = 25_000L;
 
@@ -57,8 +57,9 @@ final class TroubleshooterBridge {
 
     /**
      * Distinguishes a probe-driven "connected" status from a user-initiated session that just
-     * happens to be running while the C10 schedule is active. Set in {@link #startTestConnection},
-     * cleared by the auto-stop callback or {@link #cancelAdapterReadyNotify}.
+     * happens to be running while the adapter-ready schedule is active. Set in {@link
+     * #startTestConnection}, cleared by the auto-stop callback or {@link
+     * #cancelAdapterReadyNotify}.
      */
     private volatile boolean probeInFlight = false;
 
@@ -253,7 +254,7 @@ final class TroubleshooterBridge {
         probeInFlight = true;
         activity.startObdService(ObdService.ACTION_CONNECT, address, name);
         // Defer the stop onto the main looper so the connect kicks off first. Use a single
-        // long-lived Handler and clear any prior pending stop — without this, the C10 periodic
+        // long-lived Handler and clear any prior pending stop — without this, the notify-when-ready
         // tick (every 30 s) would accumulate one independent stop Runnable per probe with no
         // way to cancel them, so a manual full-session connect started between probes could be
         // torn down 8 s after the next tick.

@@ -110,7 +110,10 @@ public class ObdStoreTripsDbTest {
         store.finishSession(id, ObdLocalStore.STATUS_ERROR, 2000L, "");
 
         assertEquals(0, store.getTripsJson(40).length());
-        assertEquals(0L, store.getStorageSummary().optLong("sampleCount"));
+        assertEquals(
+                0L,
+                com.volttracker.obdpoc.StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .optLong("sampleCount"));
     }
 
     @Test
@@ -213,7 +216,8 @@ public class ObdStoreTripsDbTest {
         }
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, lastAtMs + 1L, "");
 
-        JSONObject summary = store.getStorageSummary();
+        JSONObject summary =
+                com.volttracker.obdpoc.StorageSummaryJson.build(store.getStorageSummaryRecord());
         JSONArray routes = summary.optJSONArray("recentRoutes");
         assertNotNull(routes);
         assertEquals(1, routes.length());
@@ -255,7 +259,8 @@ public class ObdStoreTripsDbTest {
         }
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 5000L, "");
 
-        JSONObject summary = store.getStorageSummary();
+        JSONObject summary =
+                com.volttracker.obdpoc.StorageSummaryJson.build(store.getStorageSummaryRecord());
         JSONArray points =
                 summary.getJSONArray("recentRoutes").getJSONObject(0).getJSONArray("points");
         assertEquals(
@@ -271,7 +276,7 @@ public class ObdStoreTripsDbTest {
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "");
 
         JSONArray points =
-                store.getStorageSummary()
+                com.volttracker.obdpoc.StorageSummaryJson.build(store.getStorageSummaryRecord())
                         .getJSONArray("recentRoutes")
                         .getJSONObject(0)
                         .getJSONArray("points");
@@ -291,7 +296,7 @@ public class ObdStoreTripsDbTest {
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "");
 
         JSONObject point =
-                store.getStorageSummary()
+                com.volttracker.obdpoc.StorageSummaryJson.build(store.getStorageSummaryRecord())
                         .getJSONArray("recentRoutes")
                         .getJSONObject(0)
                         .getJSONArray("points")

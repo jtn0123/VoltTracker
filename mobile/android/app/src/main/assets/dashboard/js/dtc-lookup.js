@@ -3766,6 +3766,7 @@
 
   VD.dtcInfo = dtcInfo;
   VD.dtcSearchUrl = dtcSearchUrl;
+  VD.dtcLookupCodes = Object.freeze(Object.keys(VOLT_DTC));
   VD.dtcLookupSize = Object.keys(VOLT_DTC).length;
 
   // Sample rows for the empty-state preview and the demo preview button.

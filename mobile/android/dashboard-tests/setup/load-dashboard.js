@@ -304,13 +304,21 @@ function installCanvasShim() {
  *                the bootstrap-required tiles.
  */
 export async function loadDashboard({ bridge, extras, extraDom } = {}) {
-  clearOwnedTimers();
+  clearDashboardTimers();
   installCanvasShim();
   installScrollShim();
   const bridgeImpl = bridge ?? createVoltBridgeFixture();
   // The Android side exposes the bridge as `window.VoltTrackerAndroid` before
   // the dashboard's scripts run, so do the same here.
   window.VoltTrackerAndroid = bridgeImpl;
+  window.__VoltDashboardLoadScript = async (src) => {
+    const file = String(src || '').replace(/^js\//, '');
+    const loadModule = DASHBOARD_MODULE_LOADERS[file];
+    if (!loadModule) {
+      throw new Error(`No dashboard module loader registered for ${file}`);
+    }
+    await loadModule();
+  };
   document.body.innerHTML = dashboardDomHtml() + (extraDom ?? '');
 
   const nativeSetInterval = (window.setInterval || globalThis.setInterval || nodeSetInterval).bind(window);
@@ -348,7 +356,7 @@ export async function loadDashboard({ bridge, extras, extraDom } = {}) {
 const OWNED_INTERVAL_IDS = [];
 const OWNED_TIMEOUT_IDS = [];
 
-function clearOwnedTimers() {
+export function clearDashboardTimers() {
   for (const id of OWNED_INTERVAL_IDS.splice(0)) {
     try { (globalThis.clearInterval || nodeClearInterval)(id); } catch (_ignored) { /* jsdom may be torn down */ }
   }

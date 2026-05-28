@@ -2,7 +2,6 @@ package com.volttracker.obdpoc;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import org.json.JSONObject;
@@ -25,8 +24,55 @@ public class TelemetryPayloadTest {
         assertEquals("obd", payload.source());
         assertTrue(payload.connected());
         assertEquals(1234L, payload.updatedAt());
-        assertSame(source, payload.toJson());
         assertEquals(42, payload.toJson().getInt("speedKph"));
+    }
+
+    @Test
+    public void fromJsonPreservesDiagnosticExtrasButDecouplesMutableSource() throws Exception {
+        JSONObject source =
+                new JSONObject()
+                        .put("source", "obd")
+                        .put("connected", true)
+                        .put("vehicleState", "driving")
+                        .put("vehicleStateReasons", new org.json.JSONArray().put("speed"))
+                        .put("speedRejectedKph", 255);
+
+        TelemetryPayload payload = TelemetryPayload.fromJson(source);
+        source.put("source", "changed");
+        source.getJSONArray("vehicleStateReasons").put("mutated");
+        source.put("speedRejectedKph", 0);
+
+        JSONObject serialized = payload.toJson();
+        assertEquals("obd", serialized.getString("source"));
+        assertEquals("driving", serialized.getString("vehicleState"));
+        assertEquals(1, serialized.getJSONArray("vehicleStateReasons").length());
+        assertEquals("speed", serialized.getJSONArray("vehicleStateReasons").getString(0));
+        assertEquals(255, serialized.getInt("speedRejectedKph"));
+    }
+
+    @Test
+    public void builderCreatesTypedTelemetryPayload() throws Exception {
+        TelemetryPayload payload =
+                TelemetryPayload.builder()
+                        .source("demo")
+                        .connected(true)
+                        .updatedAt(2000L)
+                        .speedKph(64)
+                        .rpm(1200)
+                        .voltage(13.8)
+                        .vehicleState("driving")
+                        .extra("customPid", "22434F")
+                        .build();
+
+        JSONObject serialized = payload.toJson();
+        assertEquals("demo", payload.source());
+        assertTrue(payload.connected());
+        assertEquals(2000L, payload.updatedAt());
+        assertEquals(64, serialized.getInt("speedKph"));
+        assertEquals(1200, serialized.getInt("rpm"));
+        assertEquals(13.8, serialized.getDouble("voltage"), 0.001);
+        assertEquals("driving", serialized.getString("vehicleState"));
+        assertEquals("22434F", serialized.getString("customPid"));
     }
 
     @Test

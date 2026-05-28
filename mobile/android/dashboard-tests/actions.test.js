@@ -108,15 +108,25 @@ describe('actions.js — bridge dispatch', () => {
   });
 
   it('shareBackup() invokes bridge.shareBackup after a confirmed prompt', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     VD.actions.shareBackup(button);
     expect(bridge.shareBackup).toHaveBeenCalledTimes(1);
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/plaintext backup/i);
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/encrypted backup/i);
   });
 
   it('shareEncryptedBackup() passes the chosen passphrase to the bridge', () => {
     vi.spyOn(window, 'prompt').mockReturnValue('secret-pass');
     VD.actions.shareEncryptedBackup(button);
     expect(bridge.shareEncryptedBackup).toHaveBeenCalledWith('secret-pass');
+  });
+
+  it('previewDtcCodes() lazy-loads dictionaries before staging examples', async () => {
+    expect(VD.dtcSampleCodes).toBeUndefined();
+    await VD.actions.previewDtcCodes();
+    expect(VD.dtcSampleCodes.length).toBeGreaterThan(0);
+    expect(VD.state.storage.latestDiagnosticCodes).toHaveLength(VD.dtcSampleCodes.length);
+    expect(VD.state.status.detail).toMatch(/example data loaded/i);
   });
 
   it('shareBackup() cancel path sets a ready status and skips the bridge', () => {

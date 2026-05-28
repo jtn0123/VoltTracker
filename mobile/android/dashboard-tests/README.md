@@ -17,24 +17,24 @@ window and then poke at the surface that the Android side touches:
 ## Run
 
 ```bash
-npm install
+npm ci
 npm test
+npm run test:coverage
 ```
 
-Requires Node 20+. `npm install` needs network access. CI runs the same
-two commands in `.github/workflows/android.yml`.
+Requires Node 20+. `npm ci` needs network access. CI runs lint and the
+coverage-gated suite in `.github/workflows/android.yml`.
 
 ## Layout
 
 - `setup/voltbridge.fixture.js` — fake `VoltTrackerAndroid` bridge that
   mirrors every `@JavascriptInterface` method on `VoltBridge.java` with
   sensible defaults. Update this when the bridge gains or renames a method.
-- `setup/load-dashboard.js` — installs the bridge, builds the minimal DOM
-  the bootstrap path touches, then evals the 5 JS files in the same order
-  as `index.template.html` (`core`, `panels`, `map`, `telemetry`,
-  `actions`).
+- `setup/load-dashboard.js` — installs the bridge, loads the generated
+  dashboard body, then imports the production dashboard files in the same
+  order as `index.template.html` so coverage is attributed to the real files.
 - `*.test.js` — one file per smoke check.
 
-The suite is intentionally narrow: it is not a behavioral test for every
-panel, it is a tripwire that fires when the JS ABI or core state shape
-drifts.
+The suite is intentionally focused: it is not a behavioral test for every
+panel, but it is a tripwire for JS ABI drift, core state-shape changes,
+storage-error handling, accessibility basics, and DTC dictionary integrity.

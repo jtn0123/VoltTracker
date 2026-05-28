@@ -162,7 +162,7 @@ public class BackupRoundTripTest {
                 3,
                 "trip end");
 
-        JSONObject before = store.getStorageSummary();
+        JSONObject before = StorageSummaryJson.build(store.getStorageSummaryRecord());
         assertEquals(1, before.optInt("sessionCount"));
         assertEquals(3L, before.optLong("sampleCount"));
         assertTrue("seeded status event", before.optLong("eventCount") >= 1L);
@@ -198,7 +198,7 @@ public class BackupRoundTripTest {
         List<StatusEventRecord> events = store.getRecentEvents(sessionId, 100);
         assertTrue("status event should round-trip", events.size() >= 1);
 
-        JSONObject after = store.getStorageSummary();
+        JSONObject after = StorageSummaryJson.build(store.getStorageSummaryRecord());
         assertEquals(1, after.optInt("sessionCount"));
         assertEquals(3L, after.optLong("sampleCount"));
         assertEquals(before.optLong("eventCount"), after.optLong("eventCount"));
@@ -236,7 +236,9 @@ public class BackupRoundTripTest {
         long throwawaySessionId = store.startSession("obd", "ZZ:ZZ:ZZ", "Other", 5_000L);
         store.recordTelemetry(throwawaySessionId, telemetrySample(99, 9999, 0.0, 0.0, 5_100L));
         store.recordStatus(throwawaySessionId, "blocked", "before restore", true, new JSONObject());
-        assertEquals(1, store.getStorageSummary().optInt("sessionCount"));
+        assertEquals(
+                1,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optInt("sessionCount"));
 
         // -- restore --
         Uri uri = registerAsSafUri(backup);
@@ -253,8 +255,12 @@ public class BackupRoundTripTest {
         ObdSessionRecord throwaway = store.getSession(throwawaySessionId);
         assertNull("throwaway session from the pre-restore target store must be wiped", throwaway);
 
-        assertEquals(1, store.getStorageSummary().optInt("sessionCount"));
-        assertEquals(1L, store.getStorageSummary().optLong("sampleCount"));
+        assertEquals(
+                1,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optInt("sessionCount"));
+        assertEquals(
+                1L,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("sampleCount"));
     }
 
     @Test
@@ -292,7 +298,9 @@ public class BackupRoundTripTest {
         swapStagedFileIntoLiveDb(staged);
         staged.delete();
         assertNotNull(store.getSession(sessionId));
-        assertEquals(1L, store.getStorageSummary().optLong("sampleCount"));
+        assertEquals(
+                1L,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("sampleCount"));
     }
 
     /**
@@ -305,8 +313,10 @@ public class BackupRoundTripTest {
     public void restoreOfInvalidFileIsRejectedAndLeavesTargetStoreIntact() throws Exception {
         long sessionId = store.startSession("obd", "AA:BB:CC", "Adapter", 1_000L);
         store.recordTelemetry(sessionId, telemetrySample(40, 1500, 32.70, -117.10, 1_100L));
-        long beforeSamples = store.getStorageSummary().optLong("sampleCount");
-        long beforeSessions = store.getStorageSummary().optInt("sessionCount");
+        long beforeSamples =
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("sampleCount");
+        long beforeSessions =
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optInt("sessionCount");
 
         Uri uri =
                 registerBytesAsSafUri(
@@ -319,8 +329,12 @@ public class BackupRoundTripTest {
         assertFalse(new File(context.getCacheDir(), "restore-tmp.db").exists());
 
         // The live store is untouched.
-        assertEquals(beforeSessions, store.getStorageSummary().optInt("sessionCount"));
-        assertEquals(beforeSamples, store.getStorageSummary().optLong("sampleCount"));
+        assertEquals(
+                beforeSessions,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optInt("sessionCount"));
+        assertEquals(
+                beforeSamples,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("sampleCount"));
         assertNotNull(store.getSession(sessionId));
     }
 

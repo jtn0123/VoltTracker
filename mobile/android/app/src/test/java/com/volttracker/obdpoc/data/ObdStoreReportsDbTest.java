@@ -18,7 +18,7 @@ import org.robolectric.annotation.Config;
 
 /**
  * Robolectric coverage for the storage-summary and insights projections in {@link ObdStoreReports}
- * (exposed via {@link ObdLocalStore#getStorageSummary()} and {@link
+ * (exposed via {@link ObdLocalStore#getStorageSummaryRecord()} and {@link
  * ObdLocalStore#getInsightsJson()}). Asserts only the keys the source actually writes.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -58,10 +58,11 @@ public class ObdStoreReportsDbTest {
 
     @Test
     public void emptyStoreSummaryHasZeroCountsAndKnownKeys() {
-        JSONObject summary = store.getStorageSummary();
+        JSONObject summary =
+                com.volttracker.obdpoc.StorageSummaryJson.build(store.getStorageSummaryRecord());
         assertNotNull(summary);
 
-        // The keys we know storageSummary() writes — see ObdStoreReports#storageSummary.
+        // The keys the dashboard serializer writes from the typed storage summary record.
         assertEquals(0, summary.optInt("sessionCount"));
         assertEquals(0L, summary.optLong("sampleCount"));
         assertEquals(0L, summary.optLong("rawTelemetryCount"));
@@ -104,7 +105,8 @@ public class ObdStoreReportsDbTest {
         store.recordTelemetry(id, sample(50, 51.0, 32.71, -117.10, 2000L));
         store.recordTelemetry(id, sample(60, 52.0, 32.72, -117.10, 3000L));
 
-        JSONObject summary = store.getStorageSummary();
+        JSONObject summary =
+                com.volttracker.obdpoc.StorageSummaryJson.build(store.getStorageSummaryRecord());
         assertEquals(1, summary.optInt("sessionCount"));
         assertEquals(3L, summary.optLong("sampleCount"));
         assertEquals(3L, summary.optLong("rawTelemetryCount"));
@@ -183,7 +185,8 @@ public class ObdStoreReportsDbTest {
             helper.close();
         }
 
-        JSONObject summary = store.getStorageSummary();
+        JSONObject summary =
+                com.volttracker.obdpoc.StorageSummaryJson.build(store.getStorageSummaryRecord());
         JSONObject latestCharge = summary.getJSONObject("chargeSummary").getJSONObject("latest");
         assertEquals(JSONObject.NULL, latestCharge.get("endedAtMs"));
         assertEquals(JSONObject.NULL, latestCharge.get("chargerType"));

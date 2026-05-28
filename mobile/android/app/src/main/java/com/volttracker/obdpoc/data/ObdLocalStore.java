@@ -578,8 +578,8 @@ public class ObdLocalStore implements Closeable, MaterializerData, ObdSessionSto
 
     // ---- JSON projections (delegated) ----------------------------------------------
 
-    public JSONObject getStorageSummary() {
-        return reports.storageSummary(getDatabaseFile());
+    public StorageSummaryRecord getStorageSummaryRecord() {
+        return reports.storageSummaryRecord(getDatabaseFile());
     }
 
     public JSONArray getRecentSessionsJson(int limit) {

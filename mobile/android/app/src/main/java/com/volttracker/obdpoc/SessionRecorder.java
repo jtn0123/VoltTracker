@@ -281,16 +281,6 @@ final class SessionRecorder {
                 lifecycleAsync(
                         () -> {
                             awaitTelemetryDrain();
-                            store.finalizeSession(
-                                    closingSessionId,
-                                    status,
-                                    endedAtMs,
-                                    supportedPids,
-                                    closingAddress,
-                                    closingAdapterName,
-                                    closingMode,
-                                    sampleCount,
-                                    detail);
                             if (droppedBeforeClose > 0) {
                                 JSONObject droppedPayload = new JSONObject();
                                 try {
@@ -308,6 +298,16 @@ final class SessionRecorder {
                                         false,
                                         droppedPayload);
                             }
+                            store.finalizeSession(
+                                    closingSessionId,
+                                    status,
+                                    endedAtMs,
+                                    supportedPids,
+                                    closingAddress,
+                                    closingAdapterName,
+                                    closingMode,
+                                    sampleCount,
+                                    detail);
                             materializeIfEnabled(
                                     store,
                                     closingSessionId,

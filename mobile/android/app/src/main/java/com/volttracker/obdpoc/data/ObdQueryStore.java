@@ -37,7 +37,7 @@ public interface ObdQueryStore extends MaterializerData {
 
     // ---- JSON projections ----------------------------------------------------------
 
-    JSONObject getStorageSummary();
+    StorageSummaryRecord getStorageSummaryRecord();
 
     JSONArray getRecentSessionsJson(int limit);
 

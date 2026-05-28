@@ -6,7 +6,7 @@
 // Purpose: catch undefined variables, unused imports, and typos locally before they surface
 // as a WebView console error or a Vitest failure 8 minutes later in CI. The rule set is
 // deliberately conservative — recommended + a few targeted rules — so it never fights the
-// IIFE bootstrap pattern or other legitimate dashboard idioms.
+// module bootstrap, IIFE module bodies, or other legitimate dashboard idioms.
 //
 // Run via `npm --prefix mobile/android/dashboard-tests run lint`. The lefthook pre-commit
 // hook invokes the same npm script for staged dashboard JS files.
@@ -19,7 +19,7 @@ export default [
     ignores: ['app/src/main/assets/dashboard/lib/**/*'],
     languageOptions: {
       ecmaVersion: 2022,
-      sourceType: 'script',
+      sourceType: 'module',
       globals: {
         // Browser globals the dashboard runs against inside the Android WebView.
         window: 'readonly',

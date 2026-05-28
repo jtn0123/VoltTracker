@@ -5,6 +5,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
+import com.volttracker.obdpoc.StorageSummaryJson;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.After;
@@ -54,7 +55,9 @@ public class ObdLocalStoreDbTest {
     @Test
     public void startSessionShowsInStorageSummary() {
         store.startSession("obd", "00:11:22:33", "Adapter");
-        assertEquals(1, store.getStorageSummary().optInt("sessionCount"));
+        assertEquals(
+                1,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optInt("sessionCount"));
     }
 
     @Test
@@ -62,14 +65,18 @@ public class ObdLocalStoreDbTest {
         long id = store.startSession("obd", "00:11", "Adapter");
         store.recordTelemetry(id, sample(40, 1500, 32.70, -117.10, 1000));
         store.recordTelemetry(id, sample(45, 1550, 32.71, -117.10, 2000));
-        assertEquals(2L, store.getStorageSummary().optLong("sampleCount"));
+        assertEquals(
+                2L,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("sampleCount"));
     }
 
     @Test
     public void emptyTelemetryIsRejected() {
         long id = store.startSession("obd", "00:11", "Adapter");
         assertEquals(-1L, store.recordTelemetry(id, new JSONObject()));
-        assertEquals(0L, store.getStorageSummary().optLong("sampleCount"));
+        assertEquals(
+                0L,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("sampleCount"));
     }
 
     @Test
@@ -116,7 +123,7 @@ public class ObdLocalStoreDbTest {
         store.recordDiagnosticCode(id, diagnosticCode("P25A2", "stored", 1000));
         store.clearAllData();
 
-        JSONObject summary = store.getStorageSummary();
+        JSONObject summary = StorageSummaryJson.build(store.getStorageSummaryRecord());
         assertEquals(0, summary.optInt("sessionCount"));
         assertEquals(0L, summary.optLong("sampleCount"));
         assertEquals(0L, summary.optLong("diagnosticCodeCount"));
@@ -130,7 +137,7 @@ public class ObdLocalStoreDbTest {
         store.recordDiagnosticCode(nextId, diagnosticCode("P25A2", "stored", 2000));
         store.recordDiagnosticCode(nextId, diagnosticCode("U0073", "pending", 2000));
 
-        JSONObject summary = store.getStorageSummary();
+        JSONObject summary = StorageSummaryJson.build(store.getStorageSummaryRecord());
         assertEquals(2L, summary.optLong("diagnosticCodeCount"));
         JSONObject statusCounts = summary.getJSONObject("diagnosticCodeStatusCounts");
         assertEquals(1L, statusCounts.optLong("stored"));
@@ -160,7 +167,9 @@ public class ObdLocalStoreDbTest {
         store.recordDiagnosticCode(id, diagnosticCode("U0073", "stored", 1200));
 
         JSONObject code =
-                store.getStorageSummary().getJSONArray("latestDiagnosticCodes").getJSONObject(0);
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .getJSONArray("latestDiagnosticCodes")
+                        .getJSONObject(0);
         assertEquals("U0073", code.optString("dtc"));
         assertEquals(1L, code.optLong("seenCount"));
         assertEquals(1200L, code.optLong("lastSeenMs"));
@@ -194,7 +203,9 @@ public class ObdLocalStoreDbTest {
         locationSample(id, 2000L, 32.71, -117.10, 5.0);
         locationSample(id, 3000L, 32.72, -117.10, 5.0);
 
-        JSONArray routes = store.getStorageSummary().getJSONArray("recentRoutes");
+        JSONArray routes =
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .getJSONArray("recentRoutes");
         assertEquals(1, routes.length());
         JSONObject route = routes.getJSONObject(0);
         assertEquals(3, route.optInt("pointCount"));
@@ -207,7 +218,11 @@ public class ObdLocalStoreDbTest {
         long id = store.startSession("obd", "00:11", "Adapter");
         locationSample(id, 1000L, 32.70, -117.10, 5.0);
 
-        assertEquals(0, store.getStorageSummary().getJSONArray("recentRoutes").length());
+        assertEquals(
+                0,
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .getJSONArray("recentRoutes")
+                        .length());
     }
 
     @Test
@@ -219,7 +234,7 @@ public class ObdLocalStoreDbTest {
         locationSample(id, 2000L, 32.71, -117.10, 5.0);
 
         JSONArray points =
-                store.getStorageSummary()
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
                         .getJSONArray("recentRoutes")
                         .getJSONObject(0)
                         .getJSONArray("points");
@@ -235,7 +250,7 @@ public class ObdLocalStoreDbTest {
         locationSample(id, 2000L, 32.71, -117.10, 9.0);
 
         JSONArray points =
-                store.getStorageSummary()
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
                         .getJSONArray("recentRoutes")
                         .getJSONObject(0)
                         .getJSONArray("points");
@@ -419,11 +434,15 @@ public class ObdLocalStoreDbTest {
 
         assertTrue("upsert should return a positive row id", id > 0);
         // vehicleCount on the storage summary picks up the new row.
-        assertEquals(1L, store.getStorageSummary().optLong("vehicleCount"));
+        assertEquals(
+                1L,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("vehicleCount"));
 
         // latestVehicleJson surfaces the redacted form (last 4 chars only) + the
         // WMI-derived make / position-10 year — never the full VIN.
-        JSONObject latest = store.getStorageSummary().optJSONObject("latestVehicle");
+        JSONObject latest =
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .optJSONObject("latestVehicle");
         assertNotNull(latest);
         assertEquals("Chevrolet", latest.optString("make"));
         assertEquals("Chevrolet", latest.optString("name"));
@@ -440,7 +459,9 @@ public class ObdLocalStoreDbTest {
 
         // Same VIN → same hash → updates the existing row in place rather than inserting.
         assertEquals(firstId, secondId);
-        assertEquals(1L, store.getStorageSummary().optLong("vehicleCount"));
+        assertEquals(
+                1L,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("vehicleCount"));
     }
 
     @Test
@@ -448,7 +469,9 @@ public class ObdLocalStoreDbTest {
         assertEquals(0L, store.upsertVehicleFromVin(null));
         assertEquals(0L, store.upsertVehicleFromVin("TOOSHORT"));
         assertEquals(0L, store.upsertVehicleFromVin("ALSO_WAY_TOO_LONG_FOR_A_VIN"));
-        assertEquals(0L, store.getStorageSummary().optLong("vehicleCount"));
+        assertEquals(
+                0L,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("vehicleCount"));
     }
 
     @Test
@@ -456,7 +479,9 @@ public class ObdLocalStoreDbTest {
         // "ZZZ" is not in the WMI lookup; make/display_name stay NULL.
         long id = store.upsertVehicleFromVin("ZZZ12345678901234");
         assertTrue(id > 0);
-        JSONObject latest = store.getStorageSummary().optJSONObject("latestVehicle");
+        JSONObject latest =
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .optJSONObject("latestVehicle");
         assertNotNull(latest);
         assertEquals("", latest.optString("make"));
         // VIN suffix still surfaces even without manufacturer mapping.
@@ -466,7 +491,9 @@ public class ObdLocalStoreDbTest {
     @Test
     public void storageSummaryLatestVehicleIsEmptyWhenNoVehiclesRecorded() {
         // No upsert called → vehicles table is empty → latestVehicleJson returns {}.
-        JSONObject latest = store.getStorageSummary().optJSONObject("latestVehicle");
+        JSONObject latest =
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .optJSONObject("latestVehicle");
         assertNotNull(latest);
         assertEquals(0, latest.length());
     }
@@ -493,12 +520,18 @@ public class ObdLocalStoreDbTest {
         // Recent (<1 day)
         long recent = now - 60_000L;
         store.recordTelemetry(sessionId, sample(50, 1700, 10.1, 20.1, recent), recent);
-        assertEquals(2, store.getStorageSummary().optInt("rawTelemetryCount"));
+        assertEquals(
+                2,
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .optInt("rawTelemetryCount"));
 
         int deleted = store.pruneRawDataOlderThan(60);
 
         assertTrue("expected to delete the old row", deleted >= 1);
-        assertEquals(1, store.getStorageSummary().optInt("rawTelemetryCount"));
+        assertEquals(
+                1,
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .optInt("rawTelemetryCount"));
     }
 
     @Test
@@ -509,7 +542,10 @@ public class ObdLocalStoreDbTest {
 
         assertEquals(0, store.pruneRawDataOlderThan(0));
         assertEquals(0, store.pruneRawDataOlderThan(-7));
-        assertEquals(1, store.getStorageSummary().optInt("rawTelemetryCount"));
+        assertEquals(
+                1,
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .optInt("rawTelemetryCount"));
     }
 
     @Test
@@ -521,7 +557,12 @@ public class ObdLocalStoreDbTest {
         store.pruneRawDataOlderThan(30);
 
         // session row is summary data — must NOT be pruned by raw-data retention
-        assertEquals(1, store.getStorageSummary().optInt("sessionCount"));
-        assertEquals(0, store.getStorageSummary().optInt("rawTelemetryCount"));
+        assertEquals(
+                1,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optInt("sessionCount"));
+        assertEquals(
+                0,
+                StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .optInt("rawTelemetryCount"));
     }
 }

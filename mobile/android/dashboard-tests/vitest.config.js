@@ -14,6 +14,7 @@ export default {
     environment: 'jsdom',
     globals: false,
     include: ['**/*.test.js'],
+    setupFiles: ['./setup/test-lifecycle.js'],
     reporters: [['default', { summary: false }]],
     coverage: {
       provider: 'istanbul',
@@ -23,10 +24,10 @@ export default {
       exclude: ['**/app/src/main/assets/dashboard/lib/**/*'],
       reporter: ['text-summary', 'html'],
       thresholds: {
-        lines: 47,
-        statements: 45,
-        functions: 46,
-        branches: 36,
+        lines: 52,
+        statements: 49,
+        functions: 50,
+        branches: 40,
       },
     },
   },

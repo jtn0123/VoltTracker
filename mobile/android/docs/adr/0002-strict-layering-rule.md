@@ -90,6 +90,19 @@ The four layers above are normative. The rules are:
   incremental builds, and the modules would each contain only a handful of
   classes. Revisit if the codebase grows past ~15k LOC.
 
+## 2026-05-27 Revisit
+
+The app has grown enough that the layering rule is now partly enforced by
+`ArchitectureBoundaryTest`: data-layer upward imports, engine-to-WebView
+references, service-to-WebView calls, and direct writable-DB access from the
+dashboard bridge are regression-gated. That is enough enforcement for the
+current single-module shape.
+
+Keep the single Android app module for now. Revisit a split into a small
+`:obd-core` JVM module only if the remaining engine/service refactors push more
+logic behind package-private tests or if the architecture test allowlist starts
+growing instead of shrinking.
+
 ## Revisit triggers
 
 Revisit this decision if any of these hold:

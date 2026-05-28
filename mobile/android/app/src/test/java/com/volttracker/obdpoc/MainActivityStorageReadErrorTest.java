@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 
 import android.content.Context;
 import com.volttracker.obdpoc.data.ObdLocalStore;
+import com.volttracker.obdpoc.data.StorageSummaryRecord;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.After;
@@ -73,7 +74,7 @@ public class MainActivityStorageReadErrorTest {
         }
 
         @Override
-        public JSONObject getStorageSummary() {
+        public StorageSummaryRecord getStorageSummaryRecord() {
             throw new RuntimeException("summary boom");
         }
 

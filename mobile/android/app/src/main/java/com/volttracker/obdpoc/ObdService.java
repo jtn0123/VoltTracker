@@ -18,6 +18,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import org.json.JSONObject;
 
 /**
@@ -52,6 +53,8 @@ public class ObdService extends Service {
     final Object ioLock = new Object();
     final AtomicBoolean running = new AtomicBoolean(false);
     final SessionStateMachine sessionStateMachine = new SessionStateMachine();
+    private final AtomicLong sessionToken = new AtomicLong();
+    private final ThreadLocal<Long> runnerSessionToken = new ThreadLocal<>();
     private Future<?> activeTask;
     // Package-private so DiagnosticScanRunner can persist VIN-derived vehicle rows by
     // calling recorder.runAsync(() -> localStore.upsertVehicleFromVin(...)) — the runAsync
@@ -81,6 +84,42 @@ public class ObdService extends Service {
     // burst cannot suppress a fresh user-initiated retry.
     public volatile boolean cancelRetryRequested = false;
 
+    private static final class SessionStartRequest {
+        final String mode;
+        final String address;
+        final String foregroundText;
+        final SessionStateMachine.Phase phase;
+        final String phaseDetail;
+        final String engineMode;
+        final boolean resetCancelRetry;
+        final boolean refreshCompetingApps;
+        final boolean startLocationTracking;
+        final Runnable runner;
+
+        SessionStartRequest(
+                String mode,
+                String address,
+                String foregroundText,
+                SessionStateMachine.Phase phase,
+                String phaseDetail,
+                String engineMode,
+                boolean resetCancelRetry,
+                boolean refreshCompetingApps,
+                boolean startLocationTracking,
+                Runnable runner) {
+            this.mode = mode;
+            this.address = address;
+            this.foregroundText = foregroundText;
+            this.phase = phase;
+            this.phaseDetail = phaseDetail;
+            this.engineMode = engineMode;
+            this.resetCancelRetry = resetCancelRetry;
+            this.refreshCompetingApps = refreshCompetingApps;
+            this.startLocationTracking = startLocationTracking;
+            this.runner = runner;
+        }
+    }
+
     /**
      * Entry point used by VoltBridge.cancelRetry(). The engine reads {@link #cancelRetryRequested}
      * on its retry loop.
@@ -94,6 +133,9 @@ public class ObdService extends Service {
     }
 
     void markSessionInactive() {
+        if (!canCurrentThreadCleanupSession()) {
+            return;
+        }
         running.set(false);
         SESSION_ACTIVE.set(false);
         sessionStateMachine.stop("inactive");
@@ -214,32 +256,28 @@ public class ObdService extends Service {
         }
         if (ACTION_CONNECT.equals(action)) {
             String address = intent.getStringExtra(EXTRA_ADDRESS);
-            activeName = intent.getStringExtra(EXTRA_NAME);
-            if (activeName == null || activeName.trim().isEmpty()) {
-                activeName = "OBD adapter";
-            }
+            activeName = adapterNameFrom(intent);
             startObdSession(address, false);
             return START_STICKY;
         }
         if (ACTION_SCAN.equals(action)) {
             String address = intent.getStringExtra(EXTRA_ADDRESS);
-            activeName = intent.getStringExtra(EXTRA_NAME);
-            if (activeName == null || activeName.trim().isEmpty()) {
-                activeName = "OBD adapter";
-            }
+            activeName = adapterNameFrom(intent);
             startObdSession(address, true);
             return START_STICKY;
         }
         if (ACTION_CLEAR_DTC.equals(action)) {
             String address = intent.getStringExtra(EXTRA_ADDRESS);
-            activeName = intent.getStringExtra(EXTRA_NAME);
-            if (activeName == null || activeName.trim().isEmpty()) {
-                activeName = "OBD adapter";
-            }
+            activeName = adapterNameFrom(intent);
             startClearDtcSession(address);
             return START_STICKY;
         }
         return START_NOT_STICKY;
+    }
+
+    private static String adapterNameFrom(Intent intent) {
+        String name = intent == null ? null : intent.getStringExtra(EXTRA_NAME);
+        return name == null || name.trim().isEmpty() ? "OBD adapter" : name;
     }
 
     @Override
@@ -277,46 +315,35 @@ public class ObdService extends Service {
     }
 
     private void startObdSession(String address, boolean scanMode) {
-        stopCurrentSession(null);
-        // Clear any stale cancel-retry flag so a user-initiated retry burst does not inherit a
-        // cancel from the previous session.
-        cancelRetryRequested = false;
-        // Re-scan for competing BT-OBD apps now. The user may have installed one since
-        // service onCreate, and we want the dashboard's force-stop
-        // button to surface for the *current* session, not a snapshot from process start.
-        //
-        // The package-manager probe can take hundreds of milliseconds on devices with many apps.
-        // Keep it on the bounded service worker instead of starting ad-hoc threads per tap.
-        refreshCompetingAppsAsync();
-        startForegroundSession((scanMode ? "Scanning " : "Connecting to ") + activeName);
-        sessionStartedAtMs = System.currentTimeMillis();
-        sessionStateMachine.start(
-                scanMode
-                        ? SessionStateMachine.Phase.SCANNING
-                        : SessionStateMachine.Phase.CONNECTING,
-                scanMode ? "Starting diagnostic scan." : "Connecting to adapter.");
-        engine.beginSession("");
-        openSessionLog(scanMode ? "scan" : "obd", address);
-        startLocationTracking();
-        running.set(true);
-        SESSION_ACTIVE.set(true);
-        activeTask = executor.submit(() -> engine.runBluetoothLoop(address, scanMode));
+        startSession(
+                new SessionStartRequest(
+                        scanMode ? "scan" : "obd",
+                        address,
+                        (scanMode ? "Scanning " : "Connecting to ") + activeName,
+                        scanMode
+                                ? SessionStateMachine.Phase.SCANNING
+                                : SessionStateMachine.Phase.CONNECTING,
+                        scanMode ? "Starting diagnostic scan." : "Connecting to adapter.",
+                        "",
+                        true,
+                        true,
+                        true,
+                        () -> engine.runBluetoothLoop(address, scanMode)));
     }
 
     private void startClearDtcSession(String address) {
-        stopCurrentSession(null);
-        cancelRetryRequested = false;
-        refreshCompetingAppsAsync();
-        startForegroundSession("Clearing codes on " + activeName);
-        sessionStartedAtMs = System.currentTimeMillis();
-        sessionStateMachine.start(
-                SessionStateMachine.Phase.CLEAR_DTC, "Preparing to clear diagnostic codes.");
-        engine.beginSession("");
-        openSessionLog("clear-dtc", address);
-        startLocationTracking();
-        running.set(true);
-        SESSION_ACTIVE.set(true);
-        activeTask = executor.submit(() -> engine.runBluetoothLoop(address, false, true));
+        startSession(
+                new SessionStartRequest(
+                        "clear-dtc",
+                        address,
+                        "Clearing codes on " + activeName,
+                        SessionStateMachine.Phase.CLEAR_DTC,
+                        "Preparing to clear diagnostic codes.",
+                        "",
+                        true,
+                        true,
+                        true,
+                        () -> engine.runBluetoothLoop(address, false, true)));
     }
 
     private void refreshCompetingAppsAsync() {
@@ -339,15 +366,56 @@ public class ObdService extends Service {
     }
 
     private void startDemoSession() {
+        startSession(
+                new SessionStartRequest(
+                        "demo",
+                        null,
+                        "Running demo telemetry",
+                        SessionStateMachine.Phase.DEMO,
+                        "Demo telemetry starting.",
+                        "demo",
+                        false,
+                        false,
+                        false,
+                        engine::runDemoLoop));
+    }
+
+    private void startSession(SessionStartRequest request) {
         stopCurrentSession(null);
-        startForegroundSession("Running demo telemetry");
+        if (request.resetCancelRetry) {
+            // Clear any stale cancel-retry flag so a new user-initiated burst does not inherit a
+            // cancel from the previous session.
+            cancelRetryRequested = false;
+        }
+        if (request.refreshCompetingApps) {
+            refreshCompetingAppsAsync();
+        }
+        long token = sessionToken.incrementAndGet();
+        startForegroundSession(request.foregroundText);
         sessionStartedAtMs = System.currentTimeMillis();
-        sessionStateMachine.start(SessionStateMachine.Phase.DEMO, "Demo telemetry starting.");
-        engine.beginSession("demo");
-        openSessionLog("demo", null);
+        sessionStateMachine.start(request.phase, request.phaseDetail);
+        engine.beginSession(request.engineMode);
+        openSessionLog(request.mode, request.address);
+        if (request.startLocationTracking) {
+            startLocationTracking();
+        }
         running.set(true);
         SESSION_ACTIVE.set(true);
-        activeTask = executor.submit(engine::runDemoLoop);
+        activeTask = executor.submit(() -> runSessionTask(token, request.runner));
+    }
+
+    private void runSessionTask(long token, Runnable runner) {
+        runnerSessionToken.set(token);
+        try {
+            runner.run();
+        } finally {
+            runnerSessionToken.remove();
+        }
+    }
+
+    private boolean canCurrentThreadCleanupSession() {
+        Long token = runnerSessionToken.get();
+        return token == null || token.longValue() == sessionToken.get();
     }
 
     private void startLocationTracking() {
@@ -598,6 +666,9 @@ public class ObdService extends Service {
     }
 
     void closeSessionLog() {
+        if (!canCurrentThreadCleanupSession()) {
+            return;
+        }
         synchronized (ioLock) {
             recorder.closeSession(
                     lastSessionState,

@@ -1,0 +1,70 @@
+name: Android emulator smoke
+
+on:
+  schedule:
+    - cron: '30 14 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: android-emulator-smoke
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  emulator-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mobile/android
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build debug APK
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --configuration-cache :app:assembleDebug
+      - name: Prepare emulator
+        run: |
+          sdkmanager --install "platform-tools" "platforms;android-36" "system-images;android-35;google_apis;x86_64"
+          echo "no" | avdmanager create avd \
+            --force \
+            --name volttracker-smoke \
+            --package "system-images;android-35;google_apis;x86_64" \
+            --device pixel_6
+      - name: Launch app and scan logcat
+        run: |
+          "$ANDROID_HOME/emulator/emulator" \
+            -avd volttracker-smoke \
+            -no-window \
+            -no-audio \
+            -no-snapshot \
+            -no-boot-anim \
+            -gpu swiftshader_indirect \
+            -accel off &
+          adb wait-for-device
+          # shellcheck disable=SC2016
+          adb shell 'while [[ "$(getprop sys.boot_completed)" != "1" ]]; do sleep 2; done'
+          adb install -r app/build/outputs/apk/debug/app-debug.apk
+          adb logcat -c
+          adb shell am start -n com.volttracker.obdpoc/.MainActivity
+          sleep 12
+          adb logcat -d -v time > build/emulator-smoke-logcat.txt
+          if grep -E "FATAL EXCEPTION|AndroidRuntime|Unable to start activity|chromium.*Uncaught|dashboard console:.*(TypeError|ReferenceError)" build/emulator-smoke-logcat.txt; then
+            echo "Startup smoke found an exception in logcat."
+            exit 1
+          fi
+      - name: Upload emulator smoke logcat
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: emulator-smoke-logcat
+          path: mobile/android/build/emulator-smoke-logcat.txt
+          if-no-files-found: ignore

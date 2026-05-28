@@ -30,6 +30,21 @@ public class ArchitectureBoundaryTest {
                     "import com.volttracker.obdpoc.DataBackup",
                     "import android.webkit.");
 
+    private static final List<String> FORBIDDEN_ENGINE_UI_REFERENCES =
+            Arrays.asList(
+                    "import com.volttracker.obdpoc.VoltBridge",
+                    "import com.volttracker.obdpoc.WebViewBootstrap",
+                    "import android.webkit.",
+                    "evaluateJavascript",
+                    "webView");
+
+    private static final List<String> FORBIDDEN_SERVICE_WEBVIEW_REFERENCES =
+            Arrays.asList(
+                    "import android.webkit.",
+                    "import com.volttracker.obdpoc.VoltBridge",
+                    "import com.volttracker.obdpoc.WebViewBootstrap",
+                    "evaluateJavascript");
+
     @Test
     public void dataLayerDoesNotImportUiServiceOrEngineClasses() throws IOException {
         Path dataDir =
@@ -62,6 +77,65 @@ public class ArchitectureBoundaryTest {
                             });
         }
         assertTrue("Layering violations:\n" + String.join("\n", violations), violations.isEmpty());
+    }
+
+    @Test
+    public void engineDoesNotReferenceDashboardBridgeOrWebViewApis() throws IOException {
+        List<String> violations =
+                scanFilesForForbiddenReferences(
+                        Arrays.asList(
+                                "ObdPollingEngine.java",
+                                "ElmConnection.java",
+                                "DiagnosticScanRunner.java",
+                                "ClearDtcRunner.java"),
+                        FORBIDDEN_ENGINE_UI_REFERENCES);
+
+        assertTrue(
+                "Engine/UI boundary violations:\n" + String.join("\n", violations),
+                violations.isEmpty());
+    }
+
+    @Test
+    public void serviceLayerDoesNotCallWebViewApis() throws IOException {
+        List<String> violations =
+                scanFilesForForbiddenReferences(
+                        Arrays.asList(
+                                "ObdService.java", "ObdNotifications.java", "PermissionGate.java"),
+                        FORBIDDEN_SERVICE_WEBVIEW_REFERENCES);
+
+        assertTrue(
+                "Service/WebView boundary violations:\n" + String.join("\n", violations),
+                violations.isEmpty());
+    }
+
+    @Test
+    public void dashboardBridgeDoesNotOpenWritableDatabaseDirectly() throws IOException {
+        List<String> violations =
+                scanFilesForForbiddenReferences(
+                        Arrays.asList(
+                                "MainActivity.java", "VoltBridge.java", "WebViewBootstrap.java"),
+                        Arrays.asList("getWritableDatabase("));
+
+        assertTrue(
+                "UI/data boundary violations:\n" + String.join("\n", violations),
+                violations.isEmpty());
+    }
+
+    private static List<String> scanFilesForForbiddenReferences(
+            List<String> fileNames, List<String> forbiddenReferences) throws IOException {
+        Path packageRoot = sourceRoot().resolve("com").resolve("volttracker").resolve("obdpoc");
+        List<String> violations = new ArrayList<>();
+
+        for (String fileName : fileNames) {
+            Path path = packageRoot.resolve(fileName);
+            String source = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+            for (String forbidden : forbiddenReferences) {
+                if (source.contains(forbidden)) {
+                    violations.add(sourceRoot().relativize(path) + " references " + forbidden);
+                }
+            }
+        }
+        return violations;
     }
 
     private static Path sourceRoot() {

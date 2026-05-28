@@ -177,6 +177,60 @@
     return false;
   }
 
+  function dashboardScriptAlreadyLoaded(src) {
+    return Boolean(document.querySelector(`script[src="${src}"][data-dashboard-lazy="true"]`));
+  }
+
+  function loadDashboardScript(src) {
+    if (window.__VoltDashboardLoadScript) {
+      return Promise.resolve(window.__VoltDashboardLoadScript(src));
+    }
+    if (dashboardScriptAlreadyLoaded(src)) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = false;
+      script.dataset.dashboardLazy = "true";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Unable to load " + src));
+      document.head.append(script);
+    });
+  }
+
+  let dtcDataPromise = null;
+
+  function dtcDataLoaded() {
+    return typeof VD.dtcInfo === "function" && Array.isArray(VD.dtcSampleCodes);
+  }
+
+  function ensureDtcData() {
+    if (dtcDataLoaded()) return Promise.resolve(VD);
+    if (!dtcDataPromise) {
+      dtcDataPromise = loadDashboardScript("js/dtc-causes.js")
+        .then(() => loadDashboardScript("js/dtc-lookup.js"))
+        .then(() => {
+          if (!dtcDataLoaded()) {
+            throw new Error("DTC scripts loaded but expected globals were not registered.");
+          }
+          return VD;
+        })
+        .catch((err) => {
+          dtcDataPromise = null;
+          reportClientError("dtcData.load", err && err.message);
+          throw err;
+        });
+    }
+    return dtcDataPromise;
+  }
+
+  function dtcSearchUrl(code) {
+    const key = String(code || "").trim().toUpperCase();
+    const q = encodeURIComponent((key || "OBD-II") + " Chevy Volt DTC");
+    return "https://www.google.com/search?q=" + q;
+  }
+
   const state = {
     view: "drive",
     mode: "ev",
@@ -572,6 +626,9 @@
     setDemoActive,
     clearDemoTelemetry,
     ensureDemoData,
+    ensureDtcData,
+    dtcDataLoaded,
+    dtcSearchUrl,
     renderTrips,
     selectTrip,
     renderSessions,

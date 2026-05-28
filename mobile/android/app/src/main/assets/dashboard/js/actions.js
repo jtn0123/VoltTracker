@@ -140,6 +140,12 @@
   }
 
   function previewDtcCodes() {
+    if (!Array.isArray(VD.dtcSampleCodes) && typeof VD.ensureDtcData === "function") {
+      VD.setStatus({ state: "ready", detail: "Loading DTC examples..." });
+      return VD.ensureDtcData()
+        .then(previewDtcCodes)
+        .catch(() => VD.setStatus({ state: "blocked", detail: "DTC examples could not be loaded." }));
+    }
     const samples = Array.isArray(VD.dtcSampleCodes) ? VD.dtcSampleCodes : [];
     const storage = state.storage || (state.storage = {});
     storage.latestDiagnosticCodes = samples.map((s) => ({ ...s }));
@@ -231,11 +237,12 @@
       VD.setStatus({ state: "blocked", detail: "Backup is only available inside the Android app." });
       return;
     }
-    // The backup contains every GPS sample and raw OBD response from this phone.
-    // Confirm before handing it to the share sheet so a stray tap can't leak PII.
+    // Plaintext backup is an advanced compatibility escape hatch. The primary
+    // UI path is encrypted backup; make this disclosure explicit before the
+    // share sheet can receive a raw database copy.
     var ok = window.confirm(
-      "Backup includes your GPS routes, every OBD sample, and adapter history.\n\n" +
-      "Share only with people you trust. Continue?"
+      "Plaintext backup includes your GPS routes, every OBD sample, and adapter history.\n\n" +
+      "Use encrypted backup unless another tool specifically needs the raw database. Continue?"
     );
     if (!ok) {
       VD.setStatus({ state: "ready", detail: "Backup cancelled." });
@@ -481,6 +488,8 @@
     restoreEncryptedBackup,
     exportDebugBundle,
     runBrowserDemo,
+    previewDtcCodes,
+    clearPreviewDtcCodes,
     resetListeners
   };
   Object.assign(VD, {
@@ -497,7 +506,9 @@
     restoreBackup,
     restoreEncryptedBackup,
     exportDebugBundle,
-    runBrowserDemo
+    runBrowserDemo,
+    previewDtcCodes,
+    clearPreviewDtcCodes
   });
 
   // Android side calls into VoltTrackerNative.* on the WebView — this surface

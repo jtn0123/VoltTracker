@@ -8,389 +8,379 @@
 
 | ID | Category | Grade | Items |
 |----|----------|-------|-------|
-| A | Architecture & Design | B | 4 |
-| B | Backend Quality | B | 4 |
-| C | Frontend Quality | C+ | 5 |
-| D | Testing & Reliability | B | 5 |
-| E | Security | B- | 5 |
-| F | Dependencies & Tech Currency | B+ | 4 |
-| G | Performance & Scalability | B | 4 |
-| H | Documentation & Onboarding | B- | 4 |
-| I | Developer Experience & Tooling | B | 5 |
-| **Overall** | | **B** | **40** |
+| A | Architecture & Design | A- | 4 |
+| B | Backend Quality | A- | 4 |
+| C | Frontend Quality | B+ | 5 |
+| D | Testing & Reliability | A- | 5 |
+| E | Security | B+ | 4 |
+| F | Dependencies & Tech Currency | A- | 4 |
+| G | Performance & Scalability | B+ | 4 |
+| H | Documentation & Onboarding | B+ | 4 |
+| I | Developer Experience & Tooling | A- | 4 |
+| **Overall** | | **A-** | **38** |
 
-**Top 5 highest-leverage fixes:** C1, E1, D1, A1, I1
+**Top 5 highest-leverage fixes:** C1, G1, A1, E1, D1 — all completed 2026-05-27.
+
+## Comparison To Previous Report
+
+The previous saved report graded the active app overall **B** with 40 items, all marked done. Main is now synced at `origin/main` commit `89759b1` (`0.4.4`), and the largest improvements are visible in the evidence: dashboard tests now import real dashboard files with Istanbul coverage (`mobile/android/dashboard-tests/setup/load-dashboard.js:30-47`, `mobile/android/dashboard-tests/vitest.config.js:18-30`), CI checks generated dashboard drift and bundle size (`mobile/android/build.gradle:42-100`), security noise from the old archive is gone, backup validation/encryption exists (`mobile/android/app/src/main/java/com/volttracker/obdpoc/DataBackup.java:39-80`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/DataBackup.java:280-347`), and `verifyActiveApp` passed locally.
+
+The grade moves from **B -> A-** after the follow-up fix pass. It is not a solid A yet because the dashboard module bootstrap still preserves the `window.VoltDashboard` compatibility ABI, the DTC dictionaries remain large even though they are lazy-loaded, frontend coverage is useful but still around half the shipped JS, and the OBD/session runtime still has a few large classes even after the latest extractions.
 
 ---
 
-## A - Architecture & Design - B
+## A - Architecture & Design - A-
 
-The active app has a real layer story: `mobile/android/README.md:13-27` documents UI -> Service -> Engine -> Data, `mobile/android/docs/adr/0001-webview-dashboard.md` and the generated-dashboard rule describe important architectural choices, and `ObdLocalStore` has been split into a facade plus report/trip/snapshot/materialize helpers (`mobile/android/app/src/main/java/com/volttracker/obdpoc/data/ObdLocalStore.java:27-63`). The weak spot is that the runtime orchestration still clusters too much state in a few classes: `ObdPollingEngine.java` is 1,089 lines, `ObdService.java` is 633 lines, and multiple comments still refer to old bucket-ticket implementation phases rather than domain concepts. Overall: solid structure, but not yet exemplary.
+The codebase has a clear active-app boundary: root guidance and `mobile/android/README.md:13-31` point maintainers to the Android app and generated-dashboard workflow, while ADR 0002 defines UI -> Service -> Engine -> Data dependency direction (`mobile/android/docs/adr/0002-strict-layering-rule.md:31-49`). Main now has architecture boundary tests for data/service/engine direction, meaningful extractions such as typed payload classes and `SessionStateMachine`, and a dedicated `LiveSampleReader` for live sample assembly. The remaining design debt is mostly concentration in the connection/retry half of `ObdPollingEngine` and the service lifecycle surface.
 
-#### ~~A1 - Split the OBD polling engine by responsibility~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdPollingEngine.java:42-97`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdPollingEngine.java:176-253`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdPollingEngine.java:651-928`
-- **What's wrong:** `ObdPollingEngine` owns connection retry policy, ELM init, live polling, PID scheduling, raw transcript capture, state classification, and clear/scan runners. Its size and mixed responsibilities make future Bluetooth fixes risky because small changes can affect unrelated parsing, scheduling, and lifecycle behavior.
-- **Impact:** Major — this sits on the live OBD session path, so reducing coupling lowers the chance that a Bluetooth fix breaks polling, parsing, or diagnostics.
-- **Fix:** Extract `ObdConnectionLoop` for connect/reconnect/backoff, `LivePoller` for `readObdSample`/scheduled reads, and keep `ObdPollingEngine` as the coordinator. Move tests from subclassing the whole engine to focused fakes around `ElmConnection` and the extracted collaborators.
+#### ~~A1 - Continue splitting `ObdPollingEngine` into connection and polling collaborators~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdPollingEngine.java`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/LiveSampleReader.java`
+- **What's wrong:** `ObdPollingEngine` still owned retry/backoff policy, ELM initialization, live PID scheduling, payload assembly, vehicle classification, raw transcript capture, and location append. The latest pass moved live sample assembly into `LiveSampleReader` while keeping command IO on the engine.
+- **Impact:** Major — this is the live vehicle data path, so high coupling here can turn a Bluetooth fix into a telemetry or diagnostics regression.
+- **Fix:** Extract a package-private `ObdConnectionLoop` around `runBluetoothLoop`, reconnect/backoff bookkeeping, and failure classification. Extract `LiveSampleReader` or `ObdSampleBuilder` around `readObdSample`, keeping command IO in the engine and moving payload assembly behind tests.
 - **Effort:** L
-- **Grade lift:** B -> B+ (reduces the highest-risk coupling in the active runtime path)
+- **Grade lift:** B+ -> A- (removes the last largest runtime coupling hotspot)
 
-#### ~~A2 - Make service session state an explicit state machine~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdService.java:49-84`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdService.java:283-317`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdService.java:368-381`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdService.java:614-631`
-- **What's wrong:** Session state is spread across `SESSION_ACTIVE`, `running`, `foregroundServiceActive`, `lastSessionState`, `lastSessionDetail`, `activeTask`, and `cancelRetryRequested`. The code has good guardrails, but the invariants are implicit and easy to violate when adding a new action mode.
-- **Impact:** Major — service-state mistakes can leave logging, GPS, sockets, or foreground notifications in the wrong state.
-- **Fix:** Introduce a small `SessionController` or `SessionState` class with explicit transitions for idle, connecting, connected, scanning, clear-dtc, demo, stopping, and error. Keep Android service calls in `ObdService`, but move transition validation and session bookkeeping behind methods with tests.
-- **Effort:** M
-- **Grade lift:** B -> B+ (turns lifecycle correctness from convention into a testable contract)
-
-#### ~~A3 - Replace cross-file bucket comments with domain comments~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdService.java:40-43`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdPollingEngine.java:77-89`, `mobile/android/app/src/main/assets/dashboard/js/troubleshooter.js:1-22`, `mobile/android/app/src/main/dashboard-src/partials/connection-tools.html:1-4`
-- **What's wrong:** Many comments name old implementation buckets like "Bucket 4a", "C6", and "A8". Those labels do not help a new maintainer understand the current product behavior and make the code read like a patch stack instead of a maintained app.
-- **Impact:** Minor — this is mostly comprehension and maintainability polish, not a current runtime risk.
-- **Fix:** Replace bucket IDs with durable concepts: retry cancellation, status tools, adapter-health signals, diagnostics sharing, and stale telemetry. Keep comments only where they explain non-obvious Android/WebView behavior.
+#### ~~A2 - Expand boundary tests beyond the data layer~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/test/java/com/volttracker/obdpoc/ArchitectureBoundaryTest.java:17-65`, `mobile/android/docs/adr/0002-strict-layering-rule.md:37-49`
+- **What's wrong:** The current architecture test only protects `data/*` from importing UI/service/engine classes. ADR 0002 also says service must not call the WebView and engine must not import UI/bridge classes, but those rules are still human-enforced.
+- **Impact:** Moderate — this prevents slow architectural drift as more OBD and dashboard bridge features land.
+- **Fix:** Add scan rules for engine and service source files: engine cannot import `MainActivity`, `VoltBridge`, `WebViewBootstrap`, or `android.webkit`; service cannot import or call WebView APIs. Keep allowlists explicit if any current exception is intentional.
 - **Effort:** S
-- **Grade lift:** B -> B+ (removes architectural noise without changing behavior)
+- **Grade lift:** B+ -> A- (turns the written layering rule into a fuller regression gate)
 
-#### ~~A4 - Add architecture boundary checks~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/README.md:13-27`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/`, `mobile/android/app/src/test/java/com/volttracker/obdpoc/`
-- **What's wrong:** The layering rule is documented, but no test or lint task prevents future code from calling upward, for example data code reaching into Activity/service classes or dashboard bridge code acquiring storage directly.
-- **Impact:** Moderate — this prevents gradual architectural drift that would make later fixes slower and riskier.
-- **Fix:** Add a JVM architecture test that scans Java imports/package names and enforces the documented UI -> Service -> Engine -> Data dependency direction. Start with allow-lists for current known exceptions, then tighten as A1/A2 land.
+#### ~~A3 - Retire stale bucket/code-name comments in active runtime docs~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/TroubleshooterBridge.java:35-43`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/TroubleshooterBridge.java:58-62`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/TroubleshooterBridge.java:255-259`
+- **What's wrong:** A few comments still refer to internal bucket IDs like `C10`. Those labels are not product concepts and make maintained code read like a temporary work log.
+- **Impact:** Minor — low runtime risk, but noisy comments slow future maintainers and code reviewers.
+- **Fix:** Replace `C10` references with durable wording such as "notify-when-ready schedule" or "adapter-ready probe window." Add a small grep check only if this pattern keeps recurring.
+- **Effort:** S
+- **Grade lift:** B+ -> A- (removes active-code maintenance noise)
+
+#### ~~A4 - Revisit multi-module boundaries if source keeps growing~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/docs/adr/0002-strict-layering-rule.md:86-91`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/`
+- **What's wrong:** ADR 0002 correctly rejected Gradle multi-module enforcement as overkill, but the active Java/dashboard surface has grown past the point where one package plus tests is the only plausible shape. Current tests still keep things under control, but package boundaries are doing more work each pass.
+- **Impact:** Minor — not an immediate defect, but a future scale trigger.
+- **Fix:** Add a short ADR revisit note once the app crosses the documented trigger. If the engine/data/UI split keeps growing, prototype a small `:obd-core` JVM module or stricter package-level architecture tests before moving to Gradle modules.
 - **Effort:** M
-- **Grade lift:** B -> B+ (keeps the existing layering rule from drifting)
+- **Grade lift:** B+ -> A- (keeps architecture decisions fresh as the app grows)
 
 ---
 
-## B - Backend Quality - B
+## B - Backend Quality - A-
 
-For an Android app, the service/data layer is professional: SQLite writes are transaction-wrapped (`ObdLocalStore.java:178-197`, `ObdLocalStore.java:255-273`), schema migrations are incremental (`VoltTrackerDb.java:188-260`), and runtime broadcasts use structured JSON (`ObdService.java:422-465`). The main issue is type safety and ownership: business payloads are mostly `JSONObject`, and lifecycle errors are often logged and collapsed to empty JSON or user-facing status strings. This is acceptable for a field-test app, but it leaves correctness too dependent on conventions.
+The Android service/data layer is solid. SQLite restore validation checks schema version, required tables/columns, integrity, and foreign keys (`mobile/android/app/src/main/java/com/volttracker/obdpoc/DataBackup.java:280-347`), read projections now expose typed-record paths before dashboard JSON (`mobile/android/app/src/main/java/com/volttracker/obdpoc/data/ObdStoreReports.java:47-142`), and session lifecycle persistence has bounded queues and failure surfacing (`mobile/android/app/src/main/java/com/volttracker/obdpoc/SessionRecorder.java:43-92`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/SessionRecorder.java:636-715`). The main weakness is still business data flowing through `JSONObject` at several internal seams.
 
-#### ~~B1 - Introduce typed payload builders for status and telemetry~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdService.java:422-465`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdPollingEngine.java:651-805`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/AppStateJson.java`
-- **What's wrong:** Status, telemetry, and app-state objects are assembled with ad hoc `JSONObject.put` calls. A typo or renamed field has no compile-time signal and can silently break the dashboard ABI.
-- **Impact:** Moderate — field drift can create user-visible dashboard bugs, but current tests and bridge checks reduce immediate risk.
-- **Fix:** Add small immutable Java payload classes or builder helpers for `StatusPayload`, `TelemetryPayload`, and `AppStatePayload`, each with a `toJson()` method. Update producers first, then update tests to assert typed fields before JSON serialization.
+#### ~~B1 - Make telemetry payloads typed instead of wrapping raw JSON~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/TelemetryPayload.java:5-36`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdPollingEngine.java:633-787`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdService.java:407-418`
+- **What's wrong:** `TelemetryPayload` is currently a wrapper around a mutable `JSONObject`, unlike `StatusPayload` and `AppStatePayload`, which define explicit fields. Typos in telemetry keys can still travel from engine to service to dashboard with no compiler signal.
+- **Impact:** Moderate — telemetry is user-visible and persisted, so schema drift creates recurring dashboard and data-quality bugs.
+- **Fix:** Introduce a `TelemetryPayload.Builder` with explicit fields for the common sample keys, plus a bounded `extras` object for rare diagnostic fields. Keep `toJson()` at the service boundary and migrate `readObdSample` in small slices.
 - **Effort:** M
-- **Grade lift:** B -> B+ (reduces schema drift across native and dashboard code)
+- **Grade lift:** B+ -> A- (finishes the typed payload migration on the busiest ABI)
 
-#### ~~B2 - Preserve errors in bridge/store read failures~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/MainActivity.java:437-470`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/VoltBridge.java:144-168`
-- **What's wrong:** Several read paths catch `RuntimeException` and return `{}` or `[]`. That prevents crashes, which is good, but it also makes database/query failures look like "no data" to the dashboard.
-- **Impact:** Moderate — users and developers can lose the difference between empty history and a broken storage query.
-- **Fix:** Return structured error payloads such as `{ "ok": false, "error": "storage_summary_failed" }` for storage/trips/insights reads and teach the dashboard to show a diagnostic message while preserving crash-safety.
+#### ~~B2 - Separate diagnostic persistence failures from intentionally lossy telemetry drops~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/SessionRecorder.java:62-78`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/SessionRecorder.java:622-633`
+- **What's wrong:** The telemetry queue intentionally drops old telemetry under pressure and swallows persistence failures so polling stays alive. That is the right runtime tradeoff, but there is no dashboard/storage summary counter that tells the user or developer data was dropped.
+- **Impact:** Moderate — a long drive under I/O pressure could look complete even when diagnostic rows were discarded.
+- **Fix:** Persist a compact `telemetry_dropped` or `persist_degraded` event when `droppedTelemetryTasks` increments, rate-limited to avoid a write storm. Surface the count in storage summary and tests.
 - **Effort:** S
-- **Grade lift:** B -> B+ (turns silent data loss into actionable diagnostics)
+- **Grade lift:** B+ -> A- (turns intentional lossiness into visible diagnostics)
 
-#### ~~B3 - Tighten backup restore validation beyond table presence~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/DataBackup.java:30-46`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/DataBackup.java:175-212`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/BackupController.java:178-224`
-- **What's wrong:** Restore validation checks SQLite header and required table names, then swaps the DB. It does not verify `PRAGMA user_version`, schema columns, foreign-key integrity, or app/schema compatibility before replacing the live database.
-- **Impact:** Major — restore is a destructive data path, so accepting a subtly incompatible DB can damage or strand user history.
-- **Fix:** In `isVoltTrackerBackup`, verify `user_version` is within supported range, run `PRAGMA integrity_check`, confirm key columns for current schema version, and reject files with foreign-key violations. Add negative tests for wrong version and missing current columns.
+#### ~~B3 - Normalize service action setup to reduce duplicated session starts~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdService.java:215-240`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdService.java:279-320`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdService.java:341-350`
+- **What's wrong:** Connect, scan, clear-DTC, and demo paths now share concepts but still duplicate address/name/defaulting, foreground setup, session timestamps, engine begin, log open, location tracking, `running`, and `SESSION_ACTIVE` updates across multiple methods.
+- **Impact:** Moderate — adding another session mode can easily miss one lifecycle flag or log setup call.
+- **Fix:** Add a small `SessionStartRequest` value object and one `startSession(request)` method that handles common setup, with mode-specific runner selection for live, scan, clear-DTC, and demo.
 - **Effort:** M
-- **Grade lift:** B -> B+ (hardens the riskiest local data mutation path)
+- **Grade lift:** B+ -> A- (reduces lifecycle drift across session modes)
 
-#### ~~B4 - Move diagnostic report queries behind stable DTOs~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/data/ObdStoreReports.java:32-38`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/data/ObdStoreReports.java:155-205`, `mobile/android/app/src/main/assets/dashboard/js/panels.js:112-130`
-- **What's wrong:** Report projections return dashboard-shaped JSON directly from the data layer. That is convenient, but it couples SQLite query names, JSON keys, and UI expectations in one jump.
-- **Impact:** Moderate — it slows future schema/UI changes and increases the odds of breaking a dashboard panel during data-layer work.
-- **Fix:** Return typed records from `ObdStoreReports` for storage summary, latest vehicle, diagnostic counts, and review summary; serialize to dashboard JSON at the bridge boundary.
+#### ~~B4 - Move dashboard JSON assembly out of persistence classes~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/data/ObdStoreReports.java`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/data/StorageSummaryRecord.java`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/StorageSummaryJson.java`
+- **What's wrong:** `ObdStoreReports` had typed read methods, but `storageSummary` still assembled dashboard-shaped JSON directly inside the data package. The data layer now returns `StorageSummaryRecord`, and `MainActivity` serializes that record through `StorageSummaryJson` before calling the WebView.
+- **Impact:** Minor — current behavior is tested, but it makes future schema/UI changes noisier.
+- **Fix:** Return a `StorageSummaryRecord` from the data layer and serialize it to dashboard JSON at `VoltBridge`/Activity boundary. Keep DB-specific helpers private to the data package.
 - **Effort:** M
-- **Grade lift:** B -> B+ (separates persistence contracts from presentation contracts)
+- **Grade lift:** B+ -> A- (keeps persistence contracts distinct from presentation ABI)
 
 ---
 
-## C - Frontend Quality - C+
+## C - Frontend Quality - B+
 
-The dashboard has a useful product surface and several thoughtful patterns: listener cleanup with `AbortController` (`actions.js:26-35`), rAF-throttled live telemetry rendering (`telemetry.js:234-320`), DOM builders instead of HTML string insertion for storage rows (`panels.js:84-110`), and a CSP in the generated template (`index.template.html:15-18`). The weakness is maintainability: the JS is still global-IIFE based, tests execute it through `new Function`, and coverage reports cannot see real execution. This is the least mature part of the active app.
+The dashboard is much healthier than the previous report: production now enters through a single ES module bootstrap (`mobile/android/app/src/main/assets/dashboard/js/bootstrap.js`), tests load real dashboard files via imports (`mobile/android/dashboard-tests/setup/load-dashboard.js:30-47`), Istanbul coverage has non-zero ratchets (`mobile/android/dashboard-tests/vitest.config.js:18-30`), storage errors render as real blocked states (`mobile/android/app/src/main/assets/dashboard/js/panels.js:9-31`), and map tiles are opt-in (`mobile/android/app/src/main/assets/dashboard/js/map.js:66-80`). The remaining frontend debt is size and ABI structure: modules still mutate `window.VoltDashboard` for Android bridge compatibility, and the DTC dictionaries dominate the first-party bundle.
 
-#### ~~C1 - Convert dashboard JS to importable modules so tests and coverage are real~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/assets/dashboard/js/core.js:6-20`, `mobile/android/dashboard-tests/setup/load-dashboard.js:1-23`, `mobile/android/dashboard-tests/vitest.config.js:24-41`, `mobile/android/app/src/main/dashboard-src/index.template.html:119-131`
-- **What's wrong:** Dashboard files are side-effecting IIFEs loaded with script tags. Tests use `new Function()` to evaluate them, which is why V8 coverage reports `Unknown% (0/0)` even though 32 tests run.
-- **Impact:** Major — this makes the frontend coverage gate misleading and lets untested dashboard code look healthier than it is.
-- **Fix:** Wrap each dashboard file as an ES module that exports an initializer, keep a tiny bootstrap script for the WebView order, and change tests to `import` the modules. Raise Vitest coverage thresholds above zero after the loader change.
+#### ~~C1 - Convert dashboard scripts from globals to real ES modules~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/dashboard-src/index.template.html:119`, `mobile/android/app/src/main/assets/dashboard/js/bootstrap.js`, `mobile/android/dashboard-tests/script-order.test.js`
+- **What's wrong:** Tests could import files for coverage, but production still relied on ordered global scripts and `window.VoltDashboard` mutation. Production now loads a single `type="module"` bootstrap that imports the dashboard modules in tested order.
+- **Impact:** Major — this is the core WebView UI wiring and the most common place for user-visible regressions.
+- **Fix:** Add a small `bootstrap.js` module that imports and initializes dashboard modules in order. Move each IIFE to an exported `initX(VD)` function, preserve the public Android bridge names, and update the template plus tests together.
 - **Effort:** L
-- **Grade lift:** C+ -> B (unblocks meaningful frontend coverage and shrinks fixture drift)
+- **Grade lift:** B -> B+ (turns load order and shared globals into explicit dependencies)
 
-#### ~~C2 - Remove production demo fixtures from `core.js`~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/assets/dashboard/js/core.js:113-136`, `mobile/android/app/src/main/assets/dashboard/js/core.js:139-188`
-- **What's wrong:** Real dashboard state and sample/demo data live in the same production bootstrap. That makes it easy for fake trips, charge sessions, costs, or insights to leak into real app views when state-reset logic regresses.
-- **Impact:** Moderate — demo leakage would confuse users and field testing, but it is bounded to presentation state.
-- **Fix:** Move demo fixture data into `app/src/main/assets/dashboard/demos/` or a dedicated `demo-data.js` loaded only when demo mode starts. Keep `VD.state` in `core.js`, but remove hard-coded trip/session/insight arrays from the always-loaded runtime.
+#### ~~C2 - Split DTC dictionaries into lazy-loaded data chunks~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/assets/dashboard/js/dtc-lookup.js:1-20`, `mobile/android/app/src/main/assets/dashboard/js/dtc-causes.js:1-31`, `mobile/android/app/src/main/dashboard-src/index.template.html:119-123`
+- **What's wrong:** `dtc-lookup.js` is about 219 KB and `dtc-causes.js` is about 118 KB, and both load before the dashboard can finish booting even when the user never opens Insights or scans codes.
+- **Impact:** Moderate — this increases WebView parse/startup cost and pushes the dashboard close to its 650 KB first-party JS/CSS budget.
+- **Fix:** Move dictionaries to JSON assets or generated JS chunks loaded only when the Insights/DTC panel is opened. Cache the loaded dictionaries in `VD` and add tests for lookup fallback before/after lazy load.
 - **Effort:** M
-- **Grade lift:** C+ -> B- (separates field data from preview data)
+- **Grade lift:** B -> B+ (cuts startup parse cost and bundle pressure)
 
-#### ~~C3 - Replace test DOM mega-fixture with generated markup loading~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/dashboard-tests/setup/load-dashboard.js:25-218`, `mobile/android/app/src/main/dashboard-src/index.template.html:30-40`
-- **What's wrong:** The test fixture manually mirrors hundreds of DOM IDs from generated dashboard HTML. This drifts from the real partials and can produce false confidence when production markup changes but the fixture does not.
-- **Impact:** Moderate — fixture drift can hide broken real markup while tests continue to pass.
-- **Fix:** Run or reuse `generateDashboardHtml`, load the generated `index.html` into jsdom, and stub only unsupported browser APIs like canvas, scroll, and Leaflet.
-- **Effort:** M
-- **Grade lift:** C+ -> B- (tests the real shipped DOM instead of a parallel hand copy)
-
-#### ~~C4 - Make map tile networking user-visible and privacy-aware~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/assets/dashboard/js/map.js:23-35`, `mobile/android/app/src/main/dashboard-src/index.template.html:15-18`, `mobile/android/app/src/main/AndroidManifest.xml:16-18`
-- **What's wrong:** The app is described as offline/on-device, but the map tab loads remote CARTO/OSM basemap tiles. Route data stays local, but the network behavior is not surfaced as a setting or documented in the UI.
-- **Impact:** Moderate — it is not leaking OBD data, but it can still surprise privacy-conscious users by contacting tile providers.
-- **Fix:** Add a map setting or first-use disclosure for remote basemap tiles, and provide an "offline/no basemap" mode that only renders stored routes on a blank grid.
-- **Effort:** M
-- **Grade lift:** C+ -> B- (aligns UI behavior with privacy expectations)
-
-#### ~~C5 - Add automated accessibility assertions for the dashboard~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/dashboard-src/partials/drive.html:11-24`, `mobile/android/app/src/main/dashboard-src/index.template.html:43-117`, `mobile/android/dashboard-tests/*.test.js`
-- **What's wrong:** The UI includes ARIA labels/live regions, but tests do not assert navigability, focus order, button labels, or key landmarks. Regressions in a WebView dashboard can slip past visual and bridge tests.
-- **Impact:** Moderate — accessibility regressions can block some users and are cheap to catch before they ship.
-- **Fix:** Add focused jsdom assertions for nav `aria-current`, unique IDs, button labels, live-region presence, and modal focus/expanded states. If the module conversion lands, add `axe-core` checks over the generated HTML.
+#### ~~C3 - Replace remaining markup string injection with DOM builders~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/assets/dashboard/js/drive.js:46`, `mobile/android/app/src/main/assets/dashboard/js/scrubber.js:354`, `mobile/android/app/src/main/assets/dashboard/js/scrubber.js:401`, `mobile/android/app/src/main/assets/dashboard/js/panels.js:812`
+- **What's wrong:** Most data rendering now uses DOM APIs and `textContent`, but a few paths still use `insertAdjacentHTML` or `innerHTML`. Some are controlled SVG/markup, but the mixed style makes future user-data edits easier to get wrong.
+- **Impact:** Moderate — current known call sites appear controlled, but consistency matters in a WebView bridge that displays stored vehicle/session data.
+- **Fix:** Convert the remaining HTML-string builders to `document.createElement` helpers where they touch labels or state. Keep the SVG chart path if generated only from numeric values, but wrap it in a helper with an explicit comment and tests.
 - **Effort:** S
-- **Grade lift:** C+ -> B- (catches common WebView accessibility regressions cheaply)
+- **Grade lift:** B -> B+ (reduces future XSS-style mistakes and rendering drift)
+
+#### ~~C4 - Raise frontend coverage toward the Android bar~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/dashboard-tests/vitest.config.js:25-30`, `mobile/android/app/src/main/assets/dashboard/js/map.js`, `mobile/android/app/src/main/assets/dashboard/js/troubleshooter.js`
+- **What's wrong:** Dashboard coverage is now real and passing, but current lines/functions are still roughly half the shipped JS. The biggest remaining gaps are likely map interaction, scrubber edge cases, troubleshooting flows, and DTC rendering.
+- **Impact:** Moderate — useful coverage exists, but complex UI paths still have room for silent regressions.
+- **Fix:** Add focused jsdom tests for map tile toggling/fallback, scrubber route-point snapping, clear-DTC warning flow, and trouble-shooter notify-when-ready state. Ratchet thresholds after each group.
+- **Effort:** M
+- **Grade lift:** B -> B+ (brings frontend reliability closer to the Java suite)
+
+#### ~~C5 - Introduce a generated DTC-data validation step~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/assets/dashboard/js/dtc-lookup.js:19-80`, `mobile/android/app/src/main/assets/dashboard/js/dtc-causes.js:31-80`, `mobile/android/dashboard-tests/`
+- **What's wrong:** Large hand-maintained DTC objects are easy to duplicate, mis-sort, or assign malformed codes. The current tests validate behavior around the UI, but not the integrity of the whole dictionary.
+- **Impact:** Moderate — wrong diagnostic descriptions are user-visible and worse than showing no description.
+- **Fix:** Add a dashboard test or small Node script that checks unique uppercase DTC keys, valid code shape, non-empty descriptions/causes, known sample coverage, and no duplicate/conflicting entries.
+- **Effort:** S
+- **Grade lift:** B -> B+ (protects the largest domain-data asset)
 
 ---
 
-## D - Testing & Reliability - B
+## D - Testing & Reliability - A-
 
-The test suite is much healthier than a typical Android side project: 407 Java tests across 44 files, 32 dashboard tests across 7 files, Robolectric coverage for SQLite/migrations/bridge/engine paths, lint/Spotless/Jacoco gates, and dashboard tests in CI. Java coverage has real ratcheting floors (`jacoco.gradle:21-47`), and local validation passed for `:app:testDebugUnitTest`, `:app:lintDebug`, `:app:spotlessCheck`, `:app:jacocoTestCoverageVerification`, `npm run lint`, and `npm run test:coverage`. The biggest reliability hole is frontend coverage being wired but ineffective.
+Main now has a strong local and CI safety net. The synced run passed `./gradlew --no-daemon verifyActiveApp`, which includes unit tests, lint, Spotless, assemble, JaCoCo coverage, dashboard lint/tests, bundle-size check, and generated-dashboard drift check (`mobile/android/build.gradle:89-100`). The latest local test evidence was 437 Java tests across 53 JVM test files and 43 dashboard tests across 10 JS files, with dashboard coverage at 49.29% lines / 48.8% functions and zero npm audit findings. This is near A-range for a small Android app, but real-device and long-run reliability are still thin.
 
-#### ~~D1 - Make dashboard coverage thresholds meaningful [FE]~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/dashboard-tests/vitest.config.js:24-41`, `mobile/android/dashboard-tests/setup/load-dashboard.js:1-23`
-- **What's wrong:** CI runs `npm run test:coverage`, but all thresholds are zero and V8 reports `Unknown% (0/0)` because sources are evaluated with `new Function`. This is a coverage gate in name only.
-- **Impact:** Major — this is a misleading CI signal around the most change-prone UI code.
-- **Fix:** Complete C1 or use an instrumentation-aware loader, then set initial line/function thresholds to the measured value minus a small ratchet buffer. Fail CI on drops like the Java Jacoco gate.
+#### ~~D1 - Add a small real-device or emulator smoke lane~~ ✓ done 2026-05-27
+- **Where:** `.github/workflows/android.yml:25-78`, `mobile/android/app/src/test/java/com/volttracker/obdpoc/`
+- **What's wrong:** The suite is JVM/Robolectric only by design, which is good for speed, but there is no smoke test for Android platform behavior around foreground services, WebView startup, notification permission surfaces, or Bluetooth permission flows on an actual Android runtime.
+- **Impact:** Major — these are the paths most likely to differ between Robolectric and a phone.
+- **Fix:** Add a minimal emulator smoke job that installs the debug APK, launches `MainActivity`, waits for the dashboard asset to load, and checks logcat for startup exceptions. Keep it nightly or workflow-dispatch if PR runtime is a concern.
 - **Effort:** M
-- **Grade lift:** B -> B+ (fixes the most misleading test signal)
+- **Grade lift:** B+ -> A- (covers platform integration that JVM tests cannot fully prove)
 
-#### ~~D2 - Add generated dashboard drift tests [FE]~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/build.gradle:121-145`, `mobile/android/app/src/main/assets/dashboard/index.html`, `mobile/android/app/src/main/dashboard-src/partials/*.html`
-- **What's wrong:** The generated `index.html` is committed and `preBuild` regenerates it, but CI does not fail if partials and generated HTML drift in the working tree.
-- **Impact:** Moderate — stale generated HTML can ship a different dashboard than the partials reviewers inspected.
-- **Fix:** Add a Gradle or CI step that runs `generateDashboardHtml` and checks `git diff --exit-code -- app/src/main/assets/dashboard/index.html`.
+#### ~~D2 - Add long-session persistence/backpressure tests~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/SessionRecorder.java:43-92`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/SessionRecorder.java:671-693`, `mobile/android/app/src/test/java/com/volttracker/obdpoc/SessionRecorderTest.java`
+- **What's wrong:** Queue caps and drain behavior are carefully designed, but test coverage should stress a long session with slow/blocked persistence and verify finalization, dropped-count visibility, and no deadlock.
+- **Impact:** Moderate — long drives are exactly where hidden queue behavior matters.
+- **Fix:** Add a fake/slow `ObdLocalStore` test that floods more than `TELEMETRY_QUEUE_CAPACITY`, closes the session, and asserts finalize returns, latest rows are retained, and drop diagnostics are surfaced.
+- **Effort:** M
+- **Grade lift:** B+ -> A- (hardens the reliability story under sustained load)
+
+#### ~~D3 - Cover release workflow behavior with local/static tests~~ ✓ done 2026-05-27
+- **Where:** `.github/workflows/release.yml:49-60`, `.github/scripts/check_release_config.py`, `.github/workflows/pr-title-lint.yml`
+- **What's wrong:** Release config now has a Python validator, but workflow behavior still depends on semantic-release, PR-title conventions, and tag resolution shell. The failure modes are mostly discovered after merge.
+- **Impact:** Moderate — release/version drift is user-visible because APK version strings and tags drive install artifacts.
+- **Fix:** Extend `check_release_config.py` or add a shell/unit test that validates expected bumpable commit subjects, no-release warning behavior, and required release assets before merges.
 - **Effort:** S
-- **Grade lift:** B -> B+ (prevents stale generated assets from shipping)
+- **Grade lift:** B+ -> A- (keeps release automation from regressing quietly)
 
-#### ~~D3 - Add replay fixtures for real OBD transcripts [BE]~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/test/java/com/volttracker/obdpoc/ObdPollingEngineTest.java:95-176`, `mobile/android/docs/field-test-2026-05-19.md`, `mobile/android/docs/volt-pids-community-sheet.csv`
-- **What's wrong:** Engine tests script fake ELM responses well, but there is no golden replay of a captured session transcript through parser, scheduler, classifier, and storage materialization.
-- **Impact:** Moderate — realistic replay tests would catch parser and scheduler regressions that synthetic cases miss.
-- **Fix:** Add sanitized JSONL/ELM transcript fixtures under the existing JVM test tree and replay them through `ObdProtocol`, `PidSchedule`, `VehicleStateClassifier`, and `ObdLocalStore` to lock in real-car behavior.
-- **Effort:** M
-- **Grade lift:** B -> B+ (catches parser regressions fake unit cases miss)
-
-#### ~~D4 - Broaden lifecycle tests for foreground service and restore races [both]~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdService.java:485-543`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/BackupController.java:178-224`, `mobile/android/app/src/test/java/com/volttracker/obdpoc/ObdServiceTest.java`
-- **What's wrong:** There are many unit tests, but the riskiest Android lifecycle behaviors are still difficult to prove: foreground service type changes, permission revocation mid-session, and backup restore while service state is moving.
-- **Impact:** Major — these are the paths most likely to create stuck services, lost restores, or OS-specific crashes.
-- **Fix:** Add Robolectric tests that simulate location permission changes, active session restore rejection, and failed restore rollback while checking status broadcasts and `localStore` reopen behavior.
-- **Effort:** M
-- **Grade lift:** B -> B+ (hardens high-impact lifecycle edges)
-
-#### ~~D5 - Add negative-path tests for bridge/store error payloads [both]~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/MainActivity.java:437-470`, `mobile/android/app/src/test/java/com/volttracker/obdpoc/VoltBridgeTest.java:209-243`, `mobile/android/dashboard-tests/actions.test.js:95-127`
-- **What's wrong:** Bridge ABI and happy/error-free input paths are covered, but failures from storage reads still collapse to empty JSON and are not tested as user-visible errors.
-- **Impact:** Moderate — this keeps recoverable storage failures visible instead of silently presenting empty data.
-- **Fix:** After B2, add JVM tests with a failing `ObdLocalStore` and dashboard tests that render the resulting error payloads.
+#### ~~D4 - Add full dictionary integrity tests for DTC data~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/assets/dashboard/js/dtc-lookup.js`, `mobile/android/app/src/main/assets/dashboard/js/dtc-causes.js`, `mobile/android/dashboard-tests/`
+- **What's wrong:** The DTC lookup and cause datasets are product-critical, large, and easy to regress, but coverage mostly exercises the UI surfaces rather than full data integrity.
+- **Impact:** Moderate — inaccurate diagnostics can mislead users troubleshooting a real vehicle issue.
+- **Fix:** Add table-driven tests over every dictionary entry for code format, unique keys, non-empty text, severity/category validity, and known Volt-specific sample lookups.
 - **Effort:** S
-- **Grade lift:** B -> B+ (keeps future crash-safety from becoming silent failure)
+- **Grade lift:** B+ -> A- (validates high-volume domain content)
+
+#### ~~D5 - Track generated coverage artifacts outside the working tree~~ ✓ verified 2026-05-27
+- **Where:** `mobile/android/dashboard-tests/coverage/`, `mobile/android/app/build/reports/jacoco/`, `.gitignore`
+- **What's wrong:** Test runs generate coverage/report directories inside the repo tree. They appear ignored in practice, but they are easy to include accidentally in broad file searches and can make audits noisy.
+- **Impact:** Minor — mostly DevEx/review noise, not runtime risk.
+- **Fix:** Ensure `.gitignore` explicitly covers dashboard coverage and Android build reports, and consider sending coverage output to a temp/build directory by default.
+- **Effort:** S
+- **Grade lift:** B+ -> A- (keeps validation artifacts from polluting repo exploration)
 
 ---
 
-## E - Security - B-
+## E - Security - B+
 
-The active Android app has several strong security/privacy choices: `allowBackup=false`, backup rules exclude all app data, services/providers are not exported, cleartext traffic is disabled (`AndroidManifest.xml:42-74`), WebView file/content access is disabled (`WebViewBootstrap.java:34-44`), bridge inputs are bounded (`VoltBridge.java:25-59`), dashboard callbacks quote JSON (`MainActivity.java:380-420`), and backups show a PII disclosure (`BackupController.java:40-77`). Repository-level security noise from the deprecated receiver has been addressed by deleting the removed `archive/` tree and keeping CodeQL focused on active Android code.
+Security is substantially cleaner than the old report. The manifest disables Android backup, keeps services/providers unexported, disables cleartext traffic, and documents sensitive permissions (`mobile/android/app/src/main/AndroidManifest.xml:40-72`). WebView hardening disables file/content access and gates debugging on debug builds (`mobile/android/app/src/main/java/com/volttracker/obdpoc/WebViewBootstrap.java:32-44`), CSP blocks remote scripts (`mobile/android/app/src/main/dashboard-src/index.template.html:15-18`), map tiles are opt-in (`mobile/android/docs/privacy-data-handling.md:32-39`), and encrypted backups exist (`mobile/android/app/src/main/java/com/volttracker/obdpoc/DataBackup.java:153-179`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/DataBackup.java:366-429`). The remaining concerns are hardening around optional plaintext export, WebView test completeness, and workflow supply-chain updates.
 
-#### ~~E1 - Remove or quarantine archived receiver security alerts~~ ✓ done 2026-05-27
-- **Where:** Former `archive/receiver/frontend/package-lock.json`, former `archive/e2e/package-lock.json`, `.github/workflows/`, GitHub Dependabot/code-scanning settings
-- **What's wrong:** GitHub reported 3 open Dependabot alerts and 34 open code-scanning alerts, all in the deprecated archive. Even though the archive was deprecated, those alerts created noise and trained reviewers to ignore security dashboards.
-- **Impact:** Major — noisy security dashboards make it easier to miss a real active-app alert later.
-- **Fix:** Either remove archived dependency lockfiles and disable archive code scanning, or move archive into a clearly excluded artifact with CodeQL/Dependabot path ignores. Keep active Android scanning enabled.
-- **Effort:** S
-- **Grade lift:** B- -> B+ (clears repo-wide security noise without touching the active app)
-
-#### ~~E2 - Add optional encrypted backups~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/DataBackup.java:91-116`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/BackupController.java:40-77`, `mobile/android/app/src/main/res/xml/file_paths.xml:1-7`
-- **What's wrong:** Backups are full SQLite database copies and the UI warns about GPS/OBD/device data, but the file itself is plaintext once shared. A mistaken share or cloud sync exposes route history and vehicle records.
-- **Impact:** Major — plaintext backups contain sensitive location and vehicle history once they leave app-private storage.
-- **Fix:** Add an encrypted export mode using Android Keystore/passphrase-derived encryption, clearly label plaintext vs encrypted share actions, and add restore support for encrypted backups.
-- **Effort:** L
-- **Grade lift:** B- -> B (reduces impact of accidental backup disclosure)
-
-#### ~~E3 - Make remote map tile behavior opt-in or disableable~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/AndroidManifest.xml:16-18`, `mobile/android/app/src/main/assets/dashboard/js/map.js:23-35`, `mobile/android/app/src/main/dashboard-src/index.template.html:15-18`
-- **What's wrong:** The app says all OBD/GPS data stays on-device, but basemap tile requests disclose approximate viewed map area to third-party tile providers. The current CSP allows those domains but there is no user-facing control.
-- **Impact:** Major — it is a privacy expectation mismatch in an app whose core promise is local vehicle and route data.
-- **Fix:** Add an offline map mode and a setting that enables remote tiles only after disclosure. Update docs and CSP comments to reflect the privacy model.
+#### ~~E1 - Make encrypted backup the default sharing path~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/DataBackup.java:126-179`, `mobile/android/docs/privacy-data-handling.md:21-30`
+- **What's wrong:** The app supports encrypted backups, but the plaintext backup path still exists and docs still describe the backup action as sharing a full SQLite copy. A user can still accidentally share unencrypted GPS/OBD history.
+- **Impact:** Major — backup files contain sensitive route and vehicle history once they leave app-private storage.
+- **Fix:** Make encrypted backup the primary/default button and move plaintext export behind an explicit advanced/disclosed action. Update docs and UI copy so plaintext is clearly a compatibility escape hatch.
 - **Effort:** M
-- **Grade lift:** B- -> B (aligns privacy claims with network behavior)
+- **Grade lift:** B -> B+ (reduces accidental sensitive-data disclosure)
 
-#### ~~E4 - Assert WebView hardening in tests~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/WebViewBootstrap.java:32-44`, `mobile/android/app/src/test/java/com/volttracker/obdpoc/`
-- **What's wrong:** WebView security settings are good but only enforced by code review. A future change could re-enable file/content access or debugging outside debug builds without a failing test.
-- **Impact:** Moderate — it locks down an important trust boundary, though current code is already hardened.
-- **Fix:** Add a Robolectric test for `WebViewBootstrap.configure` that asserts JavaScript is enabled intentionally, file/content access are disabled, web contents debugging follows `BuildConfig.DEBUG`, and only the expected bridge name is attached.
+#### ~~E2 - Assert the WebView JavaScript bridge name and debugging behavior~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/WebViewBootstrap.java:32-103`, `mobile/android/app/src/test/java/com/volttracker/obdpoc/WebViewBootstrapTest.java:20-43`
+- **What's wrong:** The test checks core WebSettings but not the bridge attachment name, loaded asset URL, WebViewClient one-shot behavior, or debug-mode behavior. A future change could break the Android-to-JS ABI without this test noticing.
+- **Impact:** Moderate — the WebView bridge is a trust boundary and critical ABI.
+- **Fix:** Extend `WebViewBootstrapTest` with a custom/shadowed WebView or Robolectric accessors that assert the bridge is attached as `VoltTrackerAndroid`, the URL is `file:///android_asset/dashboard/index.html`, and debugging follows `BuildConfig.DEBUG`.
 - **Effort:** S
-- **Grade lift:** B- -> B (locks in the WebView trust boundary)
+- **Grade lift:** B -> B+ (locks down the WebView boundary more completely)
 
-#### ~~E5 - Keep package-visibility and kill-process behavior tightly documented~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/AndroidManifest.xml:19-40`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/CompetingAppDetector.java`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/VoltBridge.java:294-307`
-- **What's wrong:** The app declares `KILL_BACKGROUND_PROCESSES` and a package query list for competing OBD tools. The comments explain intent, but this is still a sensitive-looking permission surface for users and app review.
-- **Impact:** Moderate — the behavior is intentional, but unusual permissions need strong guardrails and explanation.
-- **Fix:** Add a short user-facing docs section and a targeted test that `forceStopPackage` only acts on explicit bridge-provided packages surfaced by the detector UI.
+#### ~~E3 - Upgrade pinned GitHub Actions majors from Dependabot PRs~~ ✓ done 2026-05-27
+- **Where:** `.github/workflows/android.yml:32-35`, `.github/workflows/android.yml:85-90`, `.github/workflows/android.yml:101-107`, `.github/workflows/release.yml:34-47`
+- **What's wrong:** Dependabot has opened current action-major update branches, while main still pins older majors in several workflow steps. Pinning SHAs is good, but staying on old action majors leaves support/security fixes for the workflow layer pending.
+- **Impact:** Moderate — CI supply-chain hygiene matters because workflows build and publish APK artifacts.
+- **Fix:** Review and merge the action update PRs in small batches, then run `gh pr checks` and the local `verifyActiveApp` equivalent. Keep SHA pinning after updates.
 - **Effort:** S
-- **Grade lift:** B- -> B (reduces review/user trust risk around unusual permissions)
+- **Grade lift:** B -> B+ (keeps workflow dependencies current without weakening pinning)
+
+#### ~~E4 - Add a security scan for dashboard DOM sink regressions~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/assets/dashboard/js/drive.js:46`, `mobile/android/app/src/main/assets/dashboard/js/scrubber.js:354`, `mobile/android/app/src/main/assets/dashboard/js/scrubber.js:401`, `mobile/android/app/src/main/assets/dashboard/js/panels.js:812`
+- **What's wrong:** Remaining HTML-string sinks are probably controlled today, but there is no static guardrail that fails if future code adds `innerHTML` with bridge/storage data.
+- **Impact:** Moderate — bridge-fed stored data displayed in a WebView should default to text nodes.
+- **Fix:** Add an ESLint custom rule or simple grep-based test that permits known audited sinks with comments and fails on new `innerHTML`/`insertAdjacentHTML` call sites.
+- **Effort:** S
+- **Grade lift:** B -> B+ (prevents accidental XSS-style regressions)
 
 ---
 
-## F - Dependencies & Tech Currency - B+
+## F - Dependencies & Tech Currency - A-
 
-The active dependency surface is intentionally small. `libs.versions.toml` declares only AndroidX Core plus test dependencies (`mobile/android/gradle/libs.versions.toml:1-15`), Gradle's `dependencyUpdates` reports active Android dependencies/tooling current except a transitive Kotlin stdlib line, and dashboard `npm audit --audit-level=low` found 0 vulnerabilities. The remaining issues are mostly future-compatibility: a Gradle 10 deprecation from the dependency-update task and keeping dependency notes current.
+The active dependency surface is small and current. `libs.versions.toml` declares only AndroidX Core plus test dependencies (`mobile/android/gradle/libs.versions.toml:1-15`), dashboard dev dependencies are current in `package.json` (`mobile/android/dashboard-tests/package.json:11-16`), `npm audit --audit-level=low` found 0 vulnerabilities, and `./gradlew dependencyUpdates` reports the active Android dependencies/tooling current except transitive Kotlin milestone noise and a Gradle 10 deprecation from the Versions plugin. Dependabot now watches Gradle, npm, and GitHub Actions (`.github/dependabot.yml:1-24`).
 
-#### ~~F1 - Resolve archive dependency alerts or exclude archive from dependency scanning~~ ✓ done 2026-05-27
-- **Where:** Former `archive/receiver/frontend/package-lock.json`, former `archive/e2e/package-lock.json`, `.github/dependabot.yml` if present or repository Dependabot settings
-- **What's wrong:** Open Dependabot alerts were for `uuid`, `ws`, and `postcss` under the deprecated archive, not active Android. They still appeared as current repository vulnerabilities.
-- **Impact:** Moderate — active app dependencies are clean, but repo-level CVE noise reduces confidence in the dependency process.
-- **Fix:** Prefer deleting obsolete archive lockfiles if the archive is reference-only. If the archive must stay reproducible, update those lockfiles or configure Dependabot to ignore deprecated archive paths with a documented reason.
+#### ~~F1 - Resolve the Gradle 10 deprecation in dependency update tooling~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/build.gradle:1-13`, `mobile/android/docs/dependency-report-2026-05-26.md:72-75`
+- **What's wrong:** `./gradlew dependencyUpdates` passes, but it still emits "Deprecated Gradle features were used in this build, making it incompatible with Gradle 10." The report says to watch the plugin, but the warning remains live noise.
+- **Impact:** Moderate — warning fatigue around build tooling makes real Gradle compatibility warnings easier to miss.
+- **Fix:** Run `./gradlew dependencyUpdates --warning-mode all`, identify whether the deprecation comes from the Versions plugin or local build script usage, and either update/file upstream or document a tracked issue with the exact warning.
 - **Effort:** S
-- **Grade lift:** B+ -> A- (keeps dependency signal clean)
+- **Grade lift:** B+ -> A- (keeps dependency tooling quiet and future-ready)
 
-#### ~~F2 - Track the transitive Kotlin stdlib update from AGP/AndroidX~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/build.gradle:1-15`, `mobile/android/gradle/libs.versions.toml:1-15`, `mobile/android/docs/dependency-report-2026-05-26.md:61-65`
-- **What's wrong:** `dependencyUpdates` reports `org.jetbrains.kotlin:kotlin-stdlib [2.2.10 -> 2.3.21]`, but this app does not declare Kotlin directly. The update likely waits on Android Gradle Plugin/AndroidX transitive movement.
-- **Impact:** Minor — this is maintenance bookkeeping for a transitive dependency, not an active upgrade blocker.
-- **Fix:** Add a note to the dependency report or maintenance checklist that this is transitive, not an app-declared dependency, and re-check when AGP moves past 9.2.1.
+#### ~~F2 - Reconcile dependency report drift after switching coverage provider~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/docs/dependency-report-2026-05-26.md:81-92`, `mobile/android/dashboard-tests/package.json:11-16`
+- **What's wrong:** The docs list `@vitest/coverage-v8`, while main now uses `@vitest/coverage-istanbul`. The actual package is correct, but the current dependency report is already stale.
+- **Impact:** Minor — documentation drift can mislead future upgrade work.
+- **Fix:** Update the dependency report table and package-range bullets to `@vitest/coverage-istanbul`, and add the regrade validation commands/results from this audit.
 - **Effort:** S
-- **Grade lift:** B+ -> A- (prevents noisy or unsafe direct overrides)
+- **Grade lift:** B+ -> A- (keeps dependency guidance accurate)
 
-#### ~~F3 - File or track the Gradle 10 deprecation in the Versions plugin~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/build.gradle:1-16`
-- **What's wrong:** `./gradlew dependencyUpdates --warning-mode all` reports `Invocation of Task.project at execution time has been deprecated` and says it will fail in Gradle 10. The active task is useful but not future-proof.
-- **Impact:** Moderate — dependency-update tooling will break on Gradle 10 if the plugin does not move first.
-- **Fix:** Track `com.github.ben-manes.versions` for a Gradle 10-compatible release, or add a short-term note to dependency maintenance docs that the warning is third-party-owned and isolated to `dependencyUpdates`.
+#### ~~F3 - Batch and verify GitHub Actions Dependabot updates~~ ✓ done 2026-05-27
+- **Where:** `.github/dependabot.yml:21-24`, `.github/workflows/android.yml`, `.github/workflows/release.yml`
+- **What's wrong:** Dependabot is correctly opening action update branches, but the current repo state has several workflow dependency upgrades pending. These are not app runtime dependencies, but they affect builds, artifacts, and releases.
+- **Impact:** Moderate — stale CI actions can become security or platform breakage later.
+- **Fix:** Review the open action PRs, merge compatible ones in grouped batches, and rerun PR checks plus a release-workflow dry validation where possible.
 - **Effort:** S
-- **Grade lift:** B+ -> A- (keeps update tooling ready for Gradle 10)
+- **Grade lift:** B+ -> A- (keeps automation dependencies current)
 
-#### ~~F4 - Update stale docs after AndroidX adoption~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/README.md:125-131`, `mobile/android/gradle/libs.versions.toml:8-12`
-- **What's wrong:** The README still says "This uses no AndroidX dependencies yet", but the app ships `androidx.core:core` and uses AndroidX APIs like `FileProvider`, `ServiceCompat`, and `NotificationCompat`.
-- **Impact:** Minor — stale docs waste time and can mislead dependency reviews, but runtime behavior is unaffected.
-- **Fix:** Replace the stale note with a current "Dependency surface" section listing AndroidX Core and why it is used.
+#### ~~F4 - Add a recurring dependency snapshot command to CI or automation~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/README.md:111-120`, `mobile/android/docs/reports-index.md:7-16`, `.github/workflows/android.yml`
+- **What's wrong:** The dependency snapshot is currently a manual dated report. That is fine for a small app, but it can go stale quickly when Dependabot branches accumulate.
+- **Impact:** Minor — current dependencies are healthy, but maintenance relies on someone remembering to re-run the check.
+- **Fix:** Add a scheduled or workflow-dispatch dependency report job that runs `./gradlew dependencyUpdates` and `npm outdated --long` and posts artifacts or step summaries without failing on available updates.
 - **Effort:** S
-- **Grade lift:** B+ -> A- (removes misleading dependency documentation)
+- **Grade lift:** B+ -> A- (keeps tech-currency evidence fresh)
 
 ---
 
-## G - Performance & Scalability - B
+## G - Performance & Scalability - B+
 
-The app has meaningful performance work already: SQLite indexes exist for time/session queries (`VoltTrackerDb.java:167-185`), raw retention pruning runs off the UI thread (`MainActivity.java:113-135`), live telemetry rendering is rAF-batched (`telemetry.js:234-320`), and telemetry arrays are capped (`telemetry.js:250-279`). The main risks are uncoalesced DB summary refreshes, raw transcript volume, and build/dev-loop speed rather than algorithmic collapse.
+The app has good performance guardrails for its size: dashboard bundle budget is enforced (`mobile/android/build.gradle:68-86`), local validation reported 614,604 bytes under the 650,000-byte budget, telemetry persistence queues are bounded (`mobile/android/app/src/main/java/com/volttracker/obdpoc/SessionRecorder.java:43-92`), and SQLite query/index behavior has dedicated tests. The main performance risk is the near-budget first-party dashboard bundle.
 
-#### ~~G1 - Coalesce storage summary refreshes during active sessions~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/MainActivity.java:85-89`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/MainActivity.java:424-435`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/data/ObdStoreReports.java:155-205`
-- **What's wrong:** Every status broadcast triggers `publishStorageSummary`, which runs many SQLite count/projection queries on a single background executor. During noisy connect/retry periods this can queue redundant summary work and delay more important tasks.
-- **Impact:** Moderate — redundant DB work can make the dashboard feel sluggish during the already-frustrating connect/retry path.
-- **Fix:** Add a debounce/coalescing flag so only one summary query is in flight and status bursts schedule at most one delayed refresh. Keep explicit refresh buttons immediate.
-- **Effort:** S
-- **Grade lift:** B -> B+ (cuts redundant DB work in noisy sessions)
-
-#### ~~G2 - Bound or compress raw transcript persistence~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdPollingEngine.java:654-663`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/ObdPollingEngine.java:800`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/data/ObdLocalStore.java:178-197`
-- **What's wrong:** Each sample can include a `raw` transcript string that is logged and persisted. Long sessions with verbose adapters can grow local storage quickly and make backups heavier.
-- **Impact:** Moderate — the app remains functional, but long sessions can create avoidable storage and backup bloat.
-- **Fix:** Add a per-sample raw size cap and/or store raw transcripts only in debug/diagnostics mode while keeping parsed fields always on. Add tests for truncation markers and retention pruning.
+#### ~~G1 - Lazy-load or generate compact DTC dictionary assets~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/assets/dashboard/js/dtc-lookup.js:1-20`, `mobile/android/app/src/main/assets/dashboard/js/dtc-causes.js:1-31`, `mobile/android/build.gradle:68-86`
+- **What's wrong:** Two DTC dictionary scripts account for roughly 337 KB of the 614,604-byte first-party JS/CSS bundle. They are now lazy-loaded instead of parsed at startup, but still dominate the first-party byte budget until they become compact generated data assets.
+- **Impact:** Major — startup parse cost on older phones can become user-visible before the hard byte budget fails.
+- **Fix:** Generate compact JSON assets grouped by prefix/family and lazy-load them from the Insights/DTC code path. Keep a tiny fallback lookup for common/generic codes if instant display is needed.
 - **Effort:** M
-- **Grade lift:** B -> B+ (prevents storage growth from scaling with adapter verbosity)
+- **Grade lift:** B -> B+ (removes the biggest startup and bundle pressure)
 
-#### ~~G3 - Enforce dashboard bundle size budgets~~ ✓ done 2026-05-27
-- **Where:** `.github/workflows/android.yml:105-122`, `mobile/android/app/src/main/assets/dashboard/js/`, `mobile/android/app/src/main/assets/dashboard/css/`
-- **What's wrong:** CI reports dashboard bundle size to the job summary but never fails on unexpected growth. The dashboard is a local WebView, so large JS/CSS still affects startup and memory on older phones.
-- **Impact:** Moderate — it prevents slow creep in WebView startup cost, especially on older devices.
-- **Fix:** Add a checked budget file or workflow threshold for total non-vendor JS/CSS bytes, with explicit approval required to raise it.
-- **Effort:** S
-- **Grade lift:** B -> B+ (turns a passive metric into a regression guard)
-
-#### ~~G4 - Enable and fix Gradle configuration-cache readiness~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/build.gradle:17-45`, `mobile/android/app/build.gradle:121-145`, `lefthook.yml:7-26`
-- **What's wrong:** Gradle suggests enabling configuration cache, and the dependency-update task currently reports a configuration-cache-incompatible API. Local hooks invoke Gradle repeatedly, so configuration cache would improve the edit/test loop.
-- **Impact:** Moderate — this is developer-speed work, not app behavior, but it compounds across every local validation run.
-- **Fix:** Run representative tasks with `--configuration-cache`, fix project-owned incompatibilities first, and document any third-party limitations separately.
+#### ~~G2 - Add a dashboard startup performance budget~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/build.gradle:68-86`, `mobile/android/dashboard-tests/setup/load-dashboard.js:49-53`
+- **What's wrong:** The build enforces byte size, but not parse/bootstrap time. A small code change can keep the bundle under 650 KB while making startup slower.
+- **Impact:** Moderate — WebView dashboard startup is a core user path.
+- **Fix:** Add a Node/jsdom or browser-based smoke that measures dashboard bootstrap/import time for the production HTML and fails only on a generous regression threshold. Track it in CI step summary first if hard gating feels too noisy.
 - **Effort:** M
-- **Grade lift:** B -> B+ (speeds up local and CI-like validation loops)
+- **Grade lift:** B -> B+ (protects perceived startup speed, not just file size)
+
+#### ~~G3 - Surface telemetry queue drops in performance diagnostics~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/java/com/volttracker/obdpoc/SessionRecorder.java:43-92`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/SessionRecorder.java:104-127`
+- **What's wrong:** The queue backpressure strategy protects memory, but users/developers do not see when it has activated. Performance degradation can masquerade as a normal complete session.
+- **Impact:** Moderate — backpressure is most likely on long sessions or constrained devices.
+- **Fix:** Persist a rate-limited drop counter and show it in the storage/debug summary. Add a test that the counter increments when the queue overflows.
+- **Effort:** S
+- **Grade lift:** B -> B+ (makes performance degradation observable)
+
+#### ~~G4 - Put bundle-size reporting and budget history in docs~~ ✓ done 2026-05-27
+- **Where:** `.github/workflows/android.yml:108-125`, `mobile/android/docs/reports-index.md:7-16`
+- **What's wrong:** CI writes a dashboard bundle-size step summary, but there is no durable trend or dated note in the reports index. The budget is enforced, but the project does not show whether it is steadily approaching the limit.
+- **Impact:** Minor — good current guardrail, weak trend visibility.
+- **Fix:** Add a short dated bundle-size note to `docs/reports-index.md` or generate an artifact from CI. Include total bytes, budget, and biggest assets.
+- **Effort:** S
+- **Grade lift:** B -> B+ (helps avoid surprise budget failures)
 
 ---
 
-## H - Documentation & Onboarding - B-
+## H - Documentation & Onboarding - B+
 
-Documentation is much better than average for a small Android app: root README states the active/deprecated split, `mobile/android/README.md` maps layers and build/test/install commands, and ADRs explain WebView, JSONL, strict layering, charge detection, and connection classification. The weak spots are stale notes, scattered reports, and missing user-facing privacy/field-test guidance for the current app behavior.
+Docs are much better than the previous state. `mobile/android/README.md` explains the architecture, build, verification, dependency checks, privacy model, map tile behavior, and field-test log pulling (`mobile/android/README.md:13-120`, `mobile/android/README.md:147-185`). ADRs cover WebView/dashboard and layering decisions, and reports are indexed (`mobile/android/docs/reports-index.md:7-16`). Remaining documentation debt is mostly freshness and advanced operations.
 
-#### ~~H1 - Fix stale Android README notes~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/README.md:125-131`, `mobile/android/README.md:61-62`
-- **What's wrong:** The README still says no AndroidX dependencies are used, and it notes Volt mode-22 formulas need real-car confirmation even though newer docs and implementation have moved beyond the original POC framing.
-- **Impact:** Minor — this mainly affects onboarding accuracy, not shipped behavior.
-- **Fix:** Refresh the POC notes into a "Current status" section covering AndroidX Core, current live PIDs, scan-only Volt PIDs, what has and has not been field-confirmed, and where field-test notes live.
+#### ~~H1 - Update the dependency report after the regrade~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/docs/dependency-report-2026-05-26.md:77-93`, `mobile/android/dashboard-tests/package.json:11-16`
+- **What's wrong:** The current dependency report says `@vitest/coverage-v8`, but the actual package is `@vitest/coverage-istanbul`. It also predates the latest synced-main validation results.
+- **Impact:** Moderate — stale dependency docs can send future maintenance down the wrong path.
+- **Fix:** Update the dashboard dependency table, command results, and maintenance notes with the current `dependencyUpdates`, `npm audit`, and coverage-provider state.
 - **Effort:** S
-- **Grade lift:** B- -> B (removes misleading onboarding text)
+- **Grade lift:** B -> B+ (keeps the active dependency snapshot trustworthy)
 
-#### ~~H2 - Add a privacy/data-handling page~~ ✓ done 2026-05-27
-- **Where:** `README.md:1-24`, `mobile/android/README.md:33-40`, `mobile/android/app/src/main/java/com/volttracker/obdpoc/BackupController.java:40-77`, `mobile/android/app/src/main/assets/dashboard/js/map.js:23-35`
-- **What's wrong:** Privacy behavior is scattered across code comments and UI prompts: local SQLite, GPS samples, backup disclosure, map tile networking, and redacted VIN handling are not explained in one place.
-- **Impact:** Moderate — better privacy documentation improves user trust and makes app-review/security conversations simpler.
-- **Fix:** Add `mobile/android/docs/privacy-data-handling.md` covering what stays local, what a backup contains, map tile network behavior, redacted VINs, and how to delete/export data.
+#### ~~H2 - Add release/signing/on-phone install troubleshooting docs~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/README.md:67-85`, `.github/workflows/release.yml:133-180`
+- **What's wrong:** The README covers debug build/install, while release APK signing behavior is mostly documented inside the workflow comments. A maintainer debugging unsigned release assets has to inspect CI YAML.
+- **Impact:** Moderate — release/install confusion is user-facing when distributing APK artifacts.
+- **Fix:** Add a short `mobile/android/docs/release.md` covering debug vs release APKs, optional signing secrets, latest-debug release behavior, and where artifacts land.
 - **Effort:** S
-- **Grade lift:** B- -> B (helps users and reviewers trust the app)
+- **Grade lift:** B -> B+ (makes shipping/on-phone validation easier)
 
-#### ~~H3 - Consolidate dated reports into an index~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/docs/android-bug-hunt-third-pass-30.md`, `mobile/android/docs/android-polish-second-pass-30.md`, `mobile/android/docs/debugging-issues-2026-05-26.md`, `mobile/android/docs/dependency-report-2026-05-26.md`
-- **What's wrong:** Useful reports exist, but there is no index explaining which are current, which are historical, and which findings are done. New contributors have to infer status from filenames.
-- **Impact:** Minor — it reduces navigation friction, but does not change product quality directly.
-- **Fix:** Add `mobile/android/docs/reports-index.md` with date, scope, status, and superseded-by links for each report. Link it from `mobile/android/README.md`.
+#### ~~H3 - Document dashboard module/load-order contract until modules land~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/app/src/main/dashboard-src/index.template.html:119-131`, `mobile/android/dashboard-tests/setup/load-dashboard.js:30-47`
+- **What's wrong:** Production script order and test import order must stay aligned, but the contract is split between the template and test loader. A future script addition can easily update one but miss the other.
+- **Impact:** Moderate — load-order drift can break the dashboard at runtime.
+- **Fix:** Add a short dashboard architecture note or generated manifest that lists script order once and is consumed by both template generation/tests. If C1 lands, replace this with module dependency docs.
 - **Effort:** S
-- **Grade lift:** B- -> B (turns report history into navigable knowledge)
+- **Grade lift:** B -> B+ (reduces onboarding mistakes in the dashboard)
 
-#### ~~H4 - Document the dashboard generated-asset workflow in contributor docs~~ ✓ done 2026-05-27
-- **Where:** `CONTRIBUTING.md`, `mobile/android/CONTRIBUTING.md`, `mobile/android/app/build.gradle:121-145`
-- **What's wrong:** The generated dashboard rule appears in README/CLAUDE/AGENTS guidance, but contributor docs should also spell out "edit partials, run `generateDashboardHtml`, do not hand-edit index.html" because this is a recurring footgun.
-- **Impact:** Minor — it prevents contributor confusion around generated files, but CI should carry the real enforcement.
-- **Fix:** Add the generated-asset workflow, validation commands, and common failure mode to `mobile/android/CONTRIBUTING.md`.
+#### ~~H4 - Move historical bug-hunt reports farther from active guidance~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/docs/reports-index.md:7-16`, `mobile/android/docs/android-bug-hunt-third-pass-30.md`, `mobile/android/docs/android-polish-second-pass-30.md`
+- **What's wrong:** The reports index labels older audit documents as historical, but they still live beside current ADRs and dependency docs. New contributors can still treat stale findings as active guidance without reading the status column carefully.
+- **Impact:** Minor — mostly onboarding noise.
+- **Fix:** Move historical reports into `mobile/android/docs/archive/` or add a stronger header at the top of each historical report pointing to `.Codex/grade-report.md` for current items.
 - **Effort:** S
-- **Grade lift:** B- -> B (puts the key workflow where contributors look)
+- **Grade lift:** B -> B+ (keeps current guidance easier to find)
 
 ---
 
-## I - Developer Experience & Tooling - B
+## I - Developer Experience & Tooling - A-
 
-CI is strong for the active app: Android unit tests, Spotless, Android Lint, assemble, Jacoco report/verification, dashboard ESLint/Vitest coverage command, artifact upload, pinned actions, PR-title lint, and semantic-release are all configured (`.github/workflows/android.yml:25-123`, `.github/workflows/pr-title-lint.yml:1-46`, `.github/workflows/release.yml:1-58`). Local validation also passed. The remaining friction is mostly signal quality: generated asset drift is not enforced, dashboard coverage is noisy, pre-commit hooks are optional/skippable, and archive alerts pollute GitHub dashboards.
+DevEx is strong: `verifyActiveApp` aggregates the real app validation suite (`mobile/android/build.gradle:89-100`), Android lint runs with warnings as errors (`mobile/android/app/build.gradle:104-110`), Spotless formats Java and dashboard assets (`mobile/android/app/build.gradle:7-22`), dashboard ESLint catches semantic JS errors (`mobile/android/eslint.config.js:51-65`), and pre-commit hooks run formatting plus dashboard lint when dependencies are installed (`lefthook.yml:4-29`). The remaining issues are noise and local/CI parity rather than missing fundamentals.
 
-#### ~~I1 - Add one local/CI command for full active-app validation~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/README.md:64-98`, `.github/workflows/android.yml:39-52`, `mobile/android/dashboard-tests/package.json:5-9`
-- **What's wrong:** The full validation set is spread across Gradle tasks and npm scripts. Developers have to remember the right combination for Android + dashboard + coverage.
-- **Impact:** Major — a single reliable command cuts down on missed checks before PRs and makes future cleanup work easier to verify.
-- **Fix:** Add a root or `mobile/android` script/task such as `./gradlew verifyActiveApp` that depends on unit tests, lint, Spotless, assemble, Jacoco verification, `dashboardLint`, and `dashboardTest`. Document it as the pre-PR command.
+#### ~~I1 - Add actionlint or workflow validation to CI/local hooks~~ ✓ done 2026-05-27
+- **Where:** `.github/actionlint.yaml`, `.github/workflows/android.yml`, `.github/workflows/release.yml`, `lefthook.yml:4-29`
+- **What's wrong:** The repo has an `actionlint` config file, but no visible workflow or local hook runs it. Workflow edits can pass code tests but fail only after push.
+- **Impact:** Moderate — broken CI YAML blocks every PR and release path.
+- **Fix:** Add an actionlint step in CI and a lefthook command for `.github/workflows/**/*.{yml,yaml}` changes, using the existing config.
 - **Effort:** S
-- **Grade lift:** B -> B+ (reduces missed local validation)
+- **Grade lift:** B+ -> A- (catches workflow errors before they hit PRs)
 
-#### ~~I2 - Enforce generated dashboard cleanliness in CI~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/app/build.gradle:121-145`, `.github/workflows/android.yml:39-52`
-- **What's wrong:** `generateDashboardHtml` runs before build, but CI does not check that the committed generated file is updated. A PR can pass while leaving uncommitted generated output in CI.
-- **Impact:** Moderate — it prevents review/build drift for the shipped dashboard asset.
-- **Fix:** After the Gradle build or as a dedicated step, run `git diff --exit-code -- mobile/android/app/src/main/assets/dashboard/index.html`.
+#### ~~I2 - Make local dashboard lint setup more self-healing~~ ✓ done 2026-05-27
+- **Where:** `lefthook.yml:15-28`, `mobile/android/build.gradle:19-39`
+- **What's wrong:** The pre-commit hook skips dashboard ESLint if `dashboard-tests/node_modules` is missing. That is friendly for first clones, but a developer can commit JS without local semantic lint and only learn in CI.
+- **Impact:** Moderate — it weakens a useful local guardrail for dashboard changes.
+- **Fix:** Change the hook to offer an opt-in auto `npm ci` path, or add a fast `lefthook run setup` / `mobile/android/README.md` first-time command that installs dashboard deps before enabling the hook.
 - **Effort:** S
-- **Grade lift:** B -> B+ (prevents generated-file churn from landing)
+- **Grade lift:** B+ -> A- (improves local/CI parity)
 
-#### ~~I3 - Make dashboard coverage output honest~~ ✓ done 2026-05-27
-- **Where:** `mobile/android/dashboard-tests/vitest.config.js:24-41`, `.github/workflows/android.yml:93-97`
-- **What's wrong:** CI says it runs "dashboard JS smoke tests with coverage gate", but the report currently returns `Unknown% (0/0)` with zero thresholds. That mismatch creates false confidence.
-- **Impact:** Major — CI wording overstates the safety net and can hide untested UI code.
-- **Fix:** Rename the current CI step to "dashboard smoke tests" until C1 lands, or fix C1 and then set non-zero thresholds.
+#### ~~I3 - Reduce duplicate Gradle/dashboard validation wiring~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/build.gradle:28-40`, `mobile/android/build.gradle:89-100`, `.github/workflows/android.yml:39-56`, `.github/workflows/android.yml:91-100`
+- **What's wrong:** The aggregate Gradle task and CI workflow both spell out overlapping validation steps. This is readable today, but future additions can land in one place and not the other.
+- **Impact:** Minor — duplicated validation wiring causes drift over time.
+- **Fix:** In CI, call `./gradlew --no-daemon verifyActiveApp` for the unit job or add comments that explain why each CI step intentionally stays separate for artifact upload/debuggability.
 - **Effort:** S
-- **Grade lift:** B -> B+ (aligns CI labels with actual signal)
+- **Grade lift:** B+ -> A- (reduces future validation drift)
 
-#### ~~I4 - Make pre-commit setup fail less silently~~ ✓ done 2026-05-27
-- **Where:** `lefthook.yml:15-26`, `mobile/android/README.md:84-90`
-- **What's wrong:** The dashboard ESLint pre-commit hook skips itself when `node_modules` is missing. That is convenient for first-time clones, but it also means a developer can commit JS syntax mistakes locally and only learn in CI.
-- **Impact:** Moderate — it shifts avoidable JavaScript failures from local commit time to CI.
-- **Fix:** Add a setup task that runs `npm ci` for dashboard tests, and have the hook print a stronger one-time warning or fail for staged dashboard JS unless an explicit env var bypass is set.
+#### ~~I4 - Enable Gradle configuration cache in CI once stable~~ ✓ done 2026-05-27
+- **Where:** `mobile/android/README.md:107-109`, `.github/workflows/android.yml:39-56`
+- **What's wrong:** The README says `verifyActiveApp` is configuration-cache ready, but CI does not use Gradle setup/cache or `--configuration-cache`. Local runs are fine, but CI leaves speed on the table.
+- **Impact:** Minor — build speed polish, not correctness.
+- **Fix:** Add `gradle/actions/setup-gradle` or equivalent cache support and test `verifyActiveApp --configuration-cache` in CI. Keep it opt-in if any task remains flaky with cache.
 - **Effort:** S
-- **Grade lift:** B -> B+ (catches JS errors before CI more reliably)
-
-#### ~~I5 - Keep GitHub security dashboards scoped to active code~~ ✓ done 2026-05-27
-- **Where:** `.github/workflows/`, GitHub code scanning setup, former `archive/`
-- **What's wrong:** GitHub code scanning had 34 open alerts in the deprecated archive. This was not active-app risk, but it reduced the usefulness of the dashboard for future Android findings.
-- **Impact:** Moderate — active alerts become harder to spot when the dashboard is already full of deprecated-code noise.
-- **Fix:** Update CodeQL/Semgrep scanning paths to active Android code or remove the deprecated archive code from the main repo. Add a short note in contributor docs explaining the active-app scan scope.
-- **Effort:** S
-- **Grade lift:** B -> B+ (restores actionable signal in GitHub security tooling)
+- **Grade lift:** B+ -> A- (shortens feedback loops)

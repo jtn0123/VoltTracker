@@ -351,7 +351,15 @@
   function paintScrub(target, markup) {
     const old = target.querySelector("svg");
     if (old) old.remove();
-    target.insertAdjacentHTML("afterbegin", markup);
+    const next = parseSvg(markup);
+    if (next) target.prepend(next);
+  }
+
+  function parseSvg(markup) {
+    const doc = new window.DOMParser().parseFromString(markup, "image/svg+xml");
+    const node = doc.documentElement;
+    if (!node || node.nodeName.toLowerCase() !== "svg") return null;
+    return document.importNode(node, true);
   }
 
   function renderScrubCharts() {
@@ -361,7 +369,6 @@
     const stack = el("scrubStack");
     if (stack && scrubExpanded) {
       const w = chart.clientWidth;
-      let html = "";
       const tracks = [
         ["mph", SCRUB_SPEED, "rgba(255,122,69,0.16)", "SPEED MPH", false]
       ];
@@ -392,13 +399,17 @@
           false
         ]);
       }
+      stack.replaceChildren();
       tracks.forEach((t) => {
-        html +=
-          '<div class="scrub-track">' +
-          drawScrubTrack(w, t[0], t[1], t[2], t[3], t[4]) +
-          '<div class="scrub-cursor"></div></div>';
+        const track = document.createElement("div");
+        track.className = "scrub-track";
+        const svgNode = parseSvg(drawScrubTrack(w, t[0], t[1], t[2], t[3], t[4]));
+        if (svgNode) track.appendChild(svgNode);
+        const cursor = document.createElement("div");
+        cursor.className = "scrub-cursor";
+        track.appendChild(cursor);
+        stack.appendChild(track);
       });
-      stack.innerHTML = html;
     }
     scrubCursors = [el("scrubCursor")]
       .concat(

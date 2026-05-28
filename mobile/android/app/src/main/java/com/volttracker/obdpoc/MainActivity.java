@@ -455,7 +455,7 @@ public class MainActivity extends Activity {
                     .toString();
         }
         try {
-            return localStore.getStorageSummary().toString();
+            return StorageSummaryJson.build(localStore.getStorageSummaryRecord()).toString();
         } catch (RuntimeException ex) {
             Log.w(TAG, "getStorageSummary failed", ex);
             return MainActivityUtils.errorPayload(
