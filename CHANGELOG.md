@@ -1,6 +1,25 @@
 # CHANGELOG
 
 
+## v0.4.6 (2026-05-28)
+
+### Bug Fixes
+
+- **android**: Publish release and debug APKs
+  ([#145](https://github.com/jtn0123/VoltTracker/pull/145),
+  [`10e7628`](https://github.com/jtn0123/VoltTracker/commit/10e7628372c8be38f2c3d09142569c59b9cb2046))
+
+* fix(android): publish release and debug APKs
+
+* fix(android): apply spotless formatting
+
+* fix(android): address PR review feedback
+
+- **release**: Repair two-apk release contract
+  ([#146](https://github.com/jtn0123/VoltTracker/pull/146),
+  [`8c1bd15`](https://github.com/jtn0123/VoltTracker/commit/8c1bd15ff18e87e0f9e05ec9c3e791e6050aec6f))
+
+
 ## v0.4.5 (2026-05-28)
 
 ### Bug Fixes
