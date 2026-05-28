@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v0.4.5 (2026-05-28)
+
+### Bug Fixes
+
+- **android**: Finish grade remediation follow-up
+  ([#144](https://github.com/jtn0123/VoltTracker/pull/144),
+  [`1c13854`](https://github.com/jtn0123/VoltTracker/commit/1c138544430c2305c88167d5984a1b063602f139))
+
+* fix(android): finish grade remediation follow-up
+
+* fix(android): address PR review feedback
+
+* fix(android): clear PR follow-up findings
+
+* fix(android): update spotless for lint
+
+
 ## v0.4.4 (2026-05-27)
 
 ### Bug Fixes
