@@ -99,11 +99,23 @@ def validate_release_workflow(workflow_text: str) -> None:
         raise ValueError("release workflow must resolve vX.Y.Z tags from HEAD")
 
 
+def validate_android_gradle_signing(build_gradle_text: str) -> None:
+    required_snippets = [
+        "debug {",
+        'if (rootProject.file("keystore.properties").exists())',
+        "signingConfig = signingConfigs.release",
+    ]
+    for snippet in required_snippets:
+        if snippet not in build_gradle_text:
+            raise ValueError(f"Android build.gradle missing debug signing contract {snippet!r}")
+
+
 def main() -> int:
     config = semantic_release_config((ROOT / "pyproject.toml").read_bytes())
     validate_semantic_release_config(config)
     validate_pr_title_lint((ROOT / ".github/workflows/pr-title-lint.yml").read_text())
     validate_release_workflow((ROOT / ".github/workflows/release.yml").read_text())
+    validate_android_gradle_signing((ROOT / "mobile/android/app/build.gradle").read_text())
     if not (ROOT / "VERSION").read_text().strip():
         raise ValueError("VERSION must not be empty")
     return 0

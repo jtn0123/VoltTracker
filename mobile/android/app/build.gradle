@@ -31,8 +31,9 @@ spotless {
 //
 // versionCode comes from GITHUB_RUN_NUMBER on CI so the Play-style integer
 // version is monotonic per workflow. Local dev builds fall back to 1, which
-// is fine because debug and release APKs sign differently and Android treats
-// them as separate apps regardless.
+// is fine for fresh installs; Android may reject installing them over newer
+// release artifacts unless you explicitly allow downgrades and the signatures
+// match.
 def repoVersionFile = file("$rootDir/../../VERSION")
 def repoVersionName = repoVersionFile.exists() ? repoVersionFile.text.trim() : "0.0.0"
 def repoVersionSuffix = (System.getenv("GITHUB_SHA")?.take(7)) ?: "dev"
@@ -76,6 +77,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Release-produced debug APKs should be debuggable *and* signed by the
+            // stable app key when CI has signing secrets. Otherwise every tagged
+            // debug APK gets Android's throwaway runner debug key and cannot update
+            // the previous debug/release install.
+            if (rootProject.file("keystore.properties").exists()) {
+                signingConfig = signingConfigs.release
+            }
+        }
         release {
             minifyEnabled = true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"

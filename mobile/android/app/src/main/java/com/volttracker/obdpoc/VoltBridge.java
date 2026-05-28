@@ -37,6 +37,11 @@ public final class VoltBridge {
         this.activity = activity;
     }
 
+    @JavascriptInterface
+    public void dashboardReady() {
+        activity.runOnUiThread(activity::onDashboardReady);
+    }
+
     /**
      * Null-coalesces, trims, and bounds a bridge string argument. {@link String#substring} cuts on
      * UTF-16 code-unit boundaries, so a naive {@code substring(0, maxLen)} can split a surrogate

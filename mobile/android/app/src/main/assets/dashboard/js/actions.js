@@ -538,6 +538,7 @@
   refreshDevices();
   refreshStorage();
   if (!bridge) VD.loadSampleData();
+  if (bridge && typeof bridge.dashboardReady === "function") bridge.dashboardReady();
   requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
   setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 200);
 })();

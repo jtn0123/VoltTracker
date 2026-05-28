@@ -8,7 +8,6 @@ import static org.robolectric.Shadows.shadowOf;
 
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -29,7 +28,7 @@ public class WebViewBootstrapTest {
             MainActivity activity = controller.get();
             WebView webView = new WebView(activity);
 
-            WebViewBootstrap.configure(webView, new VoltBridge(activity), () -> {});
+            WebViewBootstrap.configure(webView, new VoltBridge(activity));
 
             WebSettings settings = webView.getSettings();
             assertTrue(settings.getJavaScriptEnabled());
@@ -47,35 +46,21 @@ public class WebViewBootstrapTest {
     }
 
     @Test
-    public void configureAttachesBridgeLoadsDashboardAndFiresReadyOnce() {
+    public void configureAttachesBridgeAndLoadsDashboardWithoutMarkingPageReady() {
         ActivityController<MainActivity> controller =
                 Robolectric.buildActivity(MainActivity.class).create();
         try {
             MainActivity activity = controller.get();
             WebView webView = new WebView(activity);
             VoltBridge bridge = new VoltBridge(activity);
-            AtomicInteger readyCalls = new AtomicInteger();
 
-            WebViewBootstrap.configure(webView, bridge, readyCalls::incrementAndGet);
+            WebViewBootstrap.configure(webView, bridge);
 
             ShadowWebView shadowWebView = shadowOf(webView);
             assertSame(bridge, shadowWebView.getJavascriptInterface("VoltTrackerAndroid"));
             assertEquals(
                     "file:///android_asset/dashboard/index.html", shadowWebView.getLastLoadedUrl());
-
-            shadowWebView
-                    .getWebViewClient()
-                    .onPageFinished(webView, "file:///android_asset/other/index.html");
-            assertEquals(0, readyCalls.get());
-
-            shadowWebView
-                    .getWebViewClient()
-                    .onPageFinished(webView, "file:///android_asset/dashboard/index.html");
-            shadowWebView
-                    .getWebViewClient()
-                    .onPageFinished(webView, "file:///android_asset/dashboard/index.html?reload=1");
-
-            assertEquals(1, readyCalls.get());
+            assertFalse(activity.isDashboardReadyForTest());
         } finally {
             controller.destroy();
         }

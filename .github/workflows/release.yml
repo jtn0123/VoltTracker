@@ -246,7 +246,7 @@ jobs:
 
           - \`volttracker-${TAG}-release.apk\` is the normal signed release build.
           - \`volttracker-${TAG}-release-unsigned.apk\` appears instead when release signing secrets are unavailable. It is a release build, but Android will not treat it as the same signed app as the normal release APK.
-          - \`volttracker-${TAG}-debug.apk\` is the Android debug-key build. Use it as the daily testing build when you want \`adb run-as\` and richer debugging. It cannot install over the release build; back up data, uninstall release, install debug, then restore.
+          - \`volttracker-${TAG}-debug.apk\` is the debuggable field build. When signing secrets are configured, it uses the same stable app key as the release APK so it can update tagged release installs while still allowing \`adb run-as\` and richer debugging. If signing secrets are unavailable, it falls back to the Android debug key and may require a backup, uninstall, install, and restore cycle.
           ${END}
           EOF
           gh release edit "${TAG}" --repo "${{ github.repository }}" \

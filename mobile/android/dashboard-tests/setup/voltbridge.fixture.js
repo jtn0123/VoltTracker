@@ -20,6 +20,7 @@ export function createVoltBridgeFixture(overrides = {}) {
     getInsights: stub('{}'),
 
     // void methods that hand work off to MainActivity.
+    dashboardReady: voidStub,
     requestPermissions: voidStub,
     refreshDevices: voidStub,
     connect: voidStub,
@@ -55,6 +56,7 @@ export function createVoltBridgeFixture(overrides = {}) {
 // VoltBridge.java actually advertises.
 export const VOLT_BRIDGE_METHODS = Object.freeze([
   'listDevices',
+  'dashboardReady',
   'requestPermissions',
   'refreshDevices',
   'connect',

@@ -6,7 +6,6 @@ import android.webkit.ConsoleMessage;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 
 /**
  * One-shot helper that configures the dashboard {@link WebView}: applies the project's hardened
@@ -26,11 +25,12 @@ final class WebViewBootstrap {
 
     /**
      * Configures {@code webView}, attaches {@code bridge} as the {@link #BRIDGE_NAME} JS interface,
-     * then loads the dashboard. {@code onPageReady} runs from {@link WebViewClient#onPageFinished}
-     * on the UI thread.
+     * then loads the dashboard. The dashboard calls {@code VoltTrackerAndroid.dashboardReady()}
+     * once its module bootstrap has created {@code window.VoltTrackerNative}; {@code
+     * onPageFinished} is too early on some WebView builds.
      */
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
-    static void configure(WebView webView, VoltBridge bridge, Runnable onPageReady) {
+    static void configure(WebView webView, VoltBridge bridge) {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -79,24 +79,6 @@ final class WebViewBootstrap {
                                 break;
                         }
                         return true;
-                    }
-                });
-        // WebViewClient.onPageFinished is documented as not-quite one-shot: it can fire on
-        // redirects or intermediate loads inside the same logical navigation. Gate to a single
-        // invocation for our dashboard URL so the post-load publish chain doesn't repeat.
-        final boolean[] readyFired = {false};
-        webView.setWebViewClient(
-                new WebViewClient() {
-                    @Override
-                    public void onPageFinished(WebView view, String url) {
-                        if (readyFired[0]) {
-                            return;
-                        }
-                        if (url == null || !url.startsWith(DASHBOARD_URL)) {
-                            return;
-                        }
-                        readyFired[0] = true;
-                        onPageReady.run();
                     }
                 });
         webView.addJavascriptInterface(bridge, BRIDGE_NAME);

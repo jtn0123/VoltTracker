@@ -1,10 +1,13 @@
 package com.volttracker.obdpoc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.robolectric.Shadows.shadowOf;
 
+import android.os.Looper;
 import android.webkit.JavascriptInterface;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -33,6 +36,7 @@ public class VoltBridgeTest {
             new HashSet<>(
                     Arrays.asList(
                             "listDevices",
+                            "dashboardReady",
                             "requestPermissions",
                             "refreshDevices",
                             "connect",
@@ -207,6 +211,23 @@ public class VoltBridgeTest {
         // added to the expected set so we keep the dashboard ABI explicit.
         Set<String> unexpected = diff(seen, EXPECTED_BRIDGE_METHODS);
         assertTrue("New bridge methods are not yet pinned: " + unexpected, unexpected.isEmpty());
+    }
+
+    @Test
+    public void dashboardReadyMarksActivityReadyOnlyAfterJsHandshake() {
+        ActivityController<MainActivity> controller =
+                Robolectric.buildActivity(MainActivity.class).create();
+        try {
+            MainActivity activity = controller.get();
+            assertFalse(activity.isDashboardReadyForTest());
+
+            new VoltBridge(activity).dashboardReady();
+            shadowOf(Looper.getMainLooper()).idle();
+
+            assertTrue(activity.isDashboardReadyForTest());
+        } finally {
+            controller.destroy();
+        }
     }
 
     private static <T> Set<T> diff(Set<T> a, Set<T> b) {

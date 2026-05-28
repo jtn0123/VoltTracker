@@ -142,17 +142,24 @@ public class MainActivity extends Activity {
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(webView);
 
-        WebViewBootstrap.configure(webView, new VoltBridge(this), this::onDashboardReady);
+        WebViewBootstrap.configure(webView, new VoltBridge(this));
 
         permissionGate.ensureConnectPermissions();
     }
 
-    private void onDashboardReady() {
+    void onDashboardReady() {
+        if (pageReady) {
+            return;
+        }
         pageReady = true;
         publishDeviceList();
         publishStorageSummary();
         publishAppState();
         publishStatus("ready", "Pick a paired OBD adapter to start logging.", false);
+    }
+
+    boolean isDashboardReadyForTest() {
+        return pageReady;
     }
 
     @Override
@@ -414,8 +421,9 @@ public class MainActivity extends Activity {
                     // catches view replacement; the lifecycle checks catch Activity destruction
                     // where this.webView still points to the same instance (we don't null it in
                     // onDestroy). pageReady catches the brief window after Activity start but
-                    // before the WebView's onPageFinished. Without ALL of these, evaluateJavascript
-                    // can fire against a torn-down WebView and crash on some Android builds.
+                    // before the dashboard's JS-ready handshake. Without ALL of these,
+                    // evaluateJavascript can fire against a torn-down WebView and crash on some
+                    // Android builds.
                     if (isFinishing() || isDestroyed() || !pageReady || wv != this.webView) {
                         return;
                     }
