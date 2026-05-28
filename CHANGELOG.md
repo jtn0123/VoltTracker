@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.4.7 (2026-05-28)
+
+### Bug Fixes
+
+- **android**: Wait for dashboard bridge readiness
+  ([#147](https://github.com/jtn0123/VoltTracker/pull/147),
+  [`a5f7e16`](https://github.com/jtn0123/VoltTracker/commit/a5f7e16d64629531249274b7c041cce47f7148d5))
+
+
 ## v0.4.6 (2026-05-28)
 
 ### Bug Fixes
