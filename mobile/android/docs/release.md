@@ -4,10 +4,12 @@ VoltTracker ships two APK streams:
 
 - `latest-debug`: a rolling debug APK built from every push to `main` by
   `.github/workflows/android.yml`. It is attached to the prerelease tag
-  `latest-debug` as `app-debug.apk` and a commit-tagged debug filename.
+  `latest-debug` as `volttracker-vX.Y.Z-<commit>-debug.apk`.
 - Tagged releases: conventional-commit merges to `main` run
   `.github/workflows/release.yml`. `feat:` creates a minor bump, `fix:` and
-  `perf:` create patch bumps, and `BREAKING CHANGE:` creates a major bump.
+  `perf:` create patch bumps, and `BREAKING CHANGE:` creates a major bump. When
+  a release is cut, the workflow attaches both an install-oriented release APK
+  and a debug-key APK to the tagged release.
 
 ## Debug APKs
 
@@ -26,11 +28,15 @@ release build if their signatures differ.
 
 ## Tagged Release APKs
 
-Tagged releases attach an APK to the `vX.Y.Z` GitHub release. If release signing
-secrets are configured, the workflow uploads `app-release.apk` and
-`volttracker-vX.Y.Z.apk`. If secrets are missing, it uploads the unsigned
-fallback as `app-release-unsigned.apk` and `volttracker-vX.Y.Z-unsigned.apk` so
-the release remains inspectable but not store-ready.
+Tagged releases attach clearly named APKs to the `vX.Y.Z` GitHub release:
+
+- `volttracker-vX.Y.Z-release.apk`: the normal signed user build.
+- `volttracker-vX.Y.Z-release-unsigned.apk`: the fallback when release signing
+  secrets are unavailable. It is inspectable, but Android will not treat it as
+  the same signed app as the normal release APK.
+- `volttracker-vX.Y.Z-debug.apk`: the debug-key build for developers and field
+  diagnostics. It cannot install over the release build; back up data, uninstall
+  release, install debug, then restore.
 
 The signing secrets are:
 

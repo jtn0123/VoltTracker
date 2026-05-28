@@ -84,7 +84,12 @@ def validate_release_workflow(workflow_text: str) -> None:
         "semantic-release publish",
         "Warn loudly if no release was cut",
         "Strip build-only files from GitHub release",
-        "Build and attach release APK",
+        "Build and attach Android APKs",
+        "Assemble release and debug APKs",
+        "Stage APKs (version-tagged flavor filenames)",
+        "Update release install notes",
+        "volttracker-${TAG}-release.apk",
+        "volttracker-${TAG}-debug.apk",
     ]
     for snippet in required_snippets:
         if snippet not in workflow_text:
