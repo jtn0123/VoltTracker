@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v0.4.9 (2026-05-29)
+
+### Bug Fixes
+
+- **android**: Inset WebView by system bars so bottom-nav is tappable
+  ([#150](https://github.com/jtn0123/VoltTracker/pull/150),
+  [`59341ba`](https://github.com/jtn0123/VoltTracker/commit/59341bafa8b5d0a26dafb8db694533eeea8a0aea))
+
+On Android 15+, apps targeting SDK 35+ are forced edge-to-edge, so the WebView (setContentView with
+  MATCH_PARENT, no insets handling) draws under the status and navigation/gesture bars. WebView's
+  CSS env(safe-area-inset-*) reflects only display cutouts — not the gesture bar — so the fixed
+  bottom-nav sat at bottom:8px inside the system gesture zone, where the OS swallows taps. The page
+  above still scrolled, which is why scrolling worked but you couldn't tap off the Drive view.
+
+Apply the system-bar + display-cutout insets as WebView padding so the whole dashboard (including
+  the bottom-nav) stays within the tappable, visible area.
+
+Verified: compiles, spotlessJavaCheck, and :app:testDebugUnitTest pass. Needs on-device confirmation
+  on an Android 15+ device (the symptom is WebView/OS edge-to-edge behavior that can't be reproduced
+  in desktop Chrome — taps work there).
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.4.8 (2026-05-29)
 
 ### Bug Fixes
