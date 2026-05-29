@@ -17,6 +17,9 @@ import android.view.ViewGroup;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import com.volttracker.obdpoc.data.ObdLocalStore;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -141,6 +144,25 @@ public class MainActivity extends Activity {
                 new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(webView);
+
+        // Apps targeting SDK 35+ are forced edge-to-edge on Android 15+, so the
+        // WebView draws under the status and navigation/gesture bars. The WebView's
+        // CSS env(safe-area-inset-*) only reflects display cutouts — NOT the
+        // gesture bar — so the fixed bottom-nav would sit inside the system
+        // gesture zone, where taps are swallowed by the OS (you can still scroll
+        // the content above it). Inset the WebView by the system bars so the whole
+        // dashboard, including the bottom-nav, stays in the tappable area.
+        ViewCompat.setOnApplyWindowInsetsListener(
+                webView,
+                (view, windowInsets) -> {
+                    Insets bars =
+                            windowInsets.getInsets(
+                                    WindowInsetsCompat.Type.systemBars()
+                                            | WindowInsetsCompat.Type.displayCutout());
+                    view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                    return windowInsets;
+                });
+        ViewCompat.requestApplyInsets(webView);
 
         WebViewBootstrap.configure(webView, new VoltBridge(this));
 
