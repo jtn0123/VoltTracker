@@ -1,6 +1,35 @@
 # CHANGELOG
 
 
+## v0.4.10 (2026-05-29)
+
+### Bug Fixes
+
+- **android**: Load dashboard JS as classic scripts (modules dead over file://)
+  ([#151](https://github.com/jtn0123/VoltTracker/pull/151),
+  [`18b698c`](https://github.com/jtn0123/VoltTracker/commit/18b698c9a1a7de08847a517183b270b9b09c3ae1))
+
+The dashboard is served from file:///android_asset/dashboard/index.html in the WebView. Since #147
+  the JS bootstrap was loaded as <script type="module">, but ES module scripts are fetched with CORS
+  semantics that the file:// scheme can't satisfy — so the entire module graph silently never
+  executes on-device. The result: every JS-wired control is dead (bottom-nav, Connect, Scan,
+  Refresh…), while classic scripts (Leaflet), native <select>/<details>, scrolling, and the CSS
+  press highlight all still work. That's the "I can scroll but can't tap off Drive" report, and it
+  lined up with #147 (~3 versions ago).
+
+The ten dashboard JS files are self-contained IIFEs that share state via window.VoltDashboard — they
+  don't use ES import/export — so they load fine as ordered classic scripts (like Leaflet already
+  does over file://). Replace the single module bootstrap with the ten files as classic <script>
+  tags in dependency order, delete the now-unused bootstrap.js, and update script-order.test.js to
+  assert classic loading + guard against type="module" regressing.
+
+This is effectively a revert of #147's script-loading change; verified clean locally (dashboardTest
+  61/61, dashboardLint, spotlessCheck, verifyGeneratedDashboardClean, verifyDashboardBundleSize).
+  Needs on-device confirmation, but it restores the pre-#147 classic-script loading that worked.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.4.9 (2026-05-29)
 
 ### Bug Fixes
