@@ -116,6 +116,24 @@
       </button>
     </nav>
 
-    <script type="module" src="js/bootstrap.js"></script>
+    <!--
+      Classic (non-module) scripts loaded in dependency order. The dashboard is
+      served from file:///android_asset/ in the WebView, and `<script type="module">`
+      is fetched with CORS semantics that file:// cannot satisfy — so a module
+      bootstrap silently never executes on-device (all JS dead, while classic
+      scripts like Leaflet still run). Each file is a self-contained IIFE that
+      shares state via window.VoltDashboard, so plain ordered scripts work. Keep
+      this order in sync with dashboard-tests/script-order.test.js.
+    -->
+    <script src="js/core.js"></script>
+    <script src="js/panels.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/scrubber.js"></script>
+    <script src="js/drive.js"></script>
+    <script src="js/telemetry.js"></script>
+    <script src="js/actions.js"></script>
+    <script src="js/troubleshooter.js"></script>
+    <script src="js/connection-status.js"></script>
+    <script src="js/connection-tools.js"></script>
   </body>
 </html>
