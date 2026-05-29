@@ -1,6 +1,107 @@
 # CHANGELOG
 
 
+## v0.4.8 (2026-05-29)
+
+### Bug Fixes
+
+- **android**: Polish dashboard drive and trips UX
+  ([#148](https://github.com/jtn0123/VoltTracker/pull/148),
+  [`f23e1c6`](https://github.com/jtn0123/VoltTracker/commit/f23e1c69867a20620c93900b92cdfadd99b8e72b))
+
+* fix(android): polish dashboard drive and trips UX
+
+* fix(android): address PR review on dashboard polish + add live-rate chip
+
+CodeRabbit findings: - telemetry.js: render numeric 0 for rpm/voltage instead of "--" (use null/""
+  checks, matching coolantC handling) - settings.html / connection-tools.html: drop dead
+  data-action="send-diagnostics" attribute; the buttons are wired by id in connection-tools.js
+  (shareDiagnostics) - actions.test.js: capture and restore innerHeight/scrollHeight descriptors in
+  afterEach so the drag-scroll suite no longer leaks dimension overrides - layout-css.test.js:
+  assert overflow:clip with a whitespace-tolerant regex
+
+Live-rate chip: - Drive speed card chip now reflects sample freshness (waiting/live/stale) via
+  updateRateChip() + hasLiveSamples() in telemetry.js, driven off the existing applyStaleIndicator
+  clock so chip and tile staleness stay in sync - components.css: waiting dims the dot, stale
+  recolors to the warn tone - stale-indicator.test.js: cover the waiting -> live -> stale
+  transitions
+
+Regenerated assets/dashboard/index.html from partials.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* refactor(dashboard): tokenize design system, user-facing copy, chip docs (#149)
+
+* polish(dashboard): phase 1 — design token sweep
+
+- Add radius (--radius-lg/xl/pill), type (--font-h1..xs), motion (--motion-fast/base/slow),
+  card-padding (--card-pad/-tight), and semantic color (--gas, --on-volt) tokens to base.css. - Add
+  a prefers-reduced-motion guard that neutralizes transitions/animations. - Replace stray hex
+  (#190a04, #ff7141, #a48cff) with --on-volt/--gas/--mixed across screens.css and components.css. -
+  Tokenize single-value border-radius declarations that map to the scale (6/12/18/20/999 ->
+  --radius-sm/md/lg/xl/pill); off-scale 10/13/14/16 kept. - Wire base typography
+  (h1/h2/h3/kicker/status-copy) to the type scale and primary card paddings
+  (connect/status/list/map-sheet) to card tokens.
+
+* polish(dashboard): phase 2 — user-facing empty-state copy
+
+Rewrite developer-facing language (PIDs, materialize, schema, SQLite, "stay unknown") into plain
+  user-facing copy across Charge, Insights, and Settings, including the runtime strings panels.js
+  sets for the HV pack, vehicle identity, and session-review charge hint. Regenerated index.html.
+
+* polish(dashboard): phase 3 — chip/badge system + type-scale adoption
+
+- Document the canonical chip & badge family (.badge / .session-badge / .rate-chip / .micro-tag /
+  .trip-route-state / .power-state) in base.css so future work extends one instead of adding a 9th
+  variant. - Tokenize recurring font sizes (11px -> --font-xs, 13px -> --font-sm) across all
+  dashboard CSS so the type scale is adopted system-wide (no visual change).
+
+* polish(dashboard): phase 4 — accessibility pass
+
+- DTC clear-codes confirmation is now role="alertdialog" with aria-labelledby/aria-describedby;
+  focus moves into it on open and returns to the "Clear codes" trigger on close (actions.js). -
+  Troubleshooter modal: store the prior focus on open, focus the dialog (tabindex=-1 added), and
+  restore focus to the opener on close so keyboard users aren't stranded (troubleshooter.js). -
+  Charge summary is an aria-labelled polite live region so status/count updates are announced. -
+  Real-trip chips get an explicit aria-label ("Open trip from <when> — <meta>") so they read as
+  actions, not just a date string.
+
+Regenerated index.html. Deferred: the --soft contrast bump (a global aesthetic change best judged
+  visually).
+
+* fix(dashboard): keep JS/CSS bundle under budget after token sweep
+
+The token/comment additions pushed the bundle to 650973 B, over the 650000 B
+  verifyDashboardBundleSize guardrail. Tokenizing high-count short literals (`999px` ->
+  `var(--radius-pill)`, `11px` -> `var(--font-xs)`) added raw bytes for little value, so:
+
+- Revert the pill-radius and label-font-size sweeps back to literals and drop the now-unused
+  --radius-pill / --font-xs / --font-sm / --font-body / --motion-* token definitions. - Trim the
+  verbose chip-family and token comments.
+
+Kept the high-value tokens (semantic --gas/--on-volt, --radius-lg/xl on panel + nav,
+  --card-pad/-tight, --font-h1/h2/h3 on headings), the reduced-motion guard, and the chip-family doc
+  comment. Bundle now 649493 B.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* fix(dashboard): count lastSampleAt as a live sample for the rate chip
+
+hasLiveSamples() only checked sampleCount and the chart-history buffers, so a frame that updated
+  only optional tiles (RPM / Aux 12V / GPS) left the live-rate chip on "waiting" even though
+  lastSampleAt was fresh and the tiles read live. Treat any stamped lastSampleAt as a live sample so
+  the chip stays in lockstep with the rest of the UI. (Addresses CodeRabbit review on #148.)
+
+* fix(dashboard): use role=group for the inline clear-DTC confirmation
+
+role="alertdialog" implies a modal that traps focus and makes background content inert, but this is
+  an inline, non-modal panel — semantically misleading for assistive tech. Downgrade to role="group"
+  (a labelled set of related controls), keeping aria-labelledby/aria-describedby and the
+  focus-move-on-open / focus-restore-on-close behavior. (Addresses CodeRabbit review on #148.)
+
+
 ## v0.4.7 (2026-05-28)
 
 ### Bug Fixes
