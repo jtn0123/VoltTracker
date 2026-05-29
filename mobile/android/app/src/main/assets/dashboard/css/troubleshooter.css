@@ -50,7 +50,7 @@
     align-items: center;
   }
   .troubleshooter-card {
-    border-radius: 18px;
+    border-radius: var(--radius-lg);
     border: 1px solid rgba(255, 255, 255, 0.08);
     max-height: 80vh;
   }
@@ -116,7 +116,7 @@
 
 .troubleshooter-step {
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.02);
   overflow: hidden;
 }
@@ -151,7 +151,7 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: rgba(255, 156, 145, 0.16);
   color: #ff9c91;
   font-weight: 600;
@@ -248,7 +248,7 @@
   border: 1px solid rgba(255, 156, 145, 0.4);
   background: rgba(255, 156, 145, 0.12);
   color: #ffd9d4;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 600;
@@ -364,7 +364,7 @@
   border: 1px solid rgba(255, 192, 187, 0.5);
   background: rgba(255, 192, 187, 0.12);
   color: #ffc0bb;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 600;

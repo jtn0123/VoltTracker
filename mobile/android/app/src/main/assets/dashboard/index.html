@@ -26,7 +26,7 @@
     <link rel="stylesheet" href="css/troubleshooter.css" />
     <link rel="stylesheet" href="css/status-tools.css" />
   </head>
-  <body>
+  <body data-active-view="drive">
 <!--
   Connection error banner.
 
@@ -86,6 +86,7 @@
   role="dialog"
   aria-modal="true"
   aria-labelledby="troubleshooterTitle"
+  tabindex="-1"
   hidden
 >
   <div class="troubleshooter-backdrop" data-troubleshooter-dismiss></div>
@@ -261,9 +262,16 @@
     <main class="app">
 <header class="topbar">
   <div class="top-main">
-    <div>
-      <div id="screenKicker" class="kicker">Volt Tracker Android</div>
-      <h1 id="screenTitle">Drive</h1>
+    <div class="screen-heading">
+      <span class="drive-title-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <path id="screenTitleIcon" d="M13 2 5 13h6l-1 9 9-13h-6z" />
+        </svg>
+      </span>
+      <div>
+        <div id="screenKicker" class="kicker">Volt Tracker Android</div>
+        <h1 id="screenTitle">Drive</h1>
+      </div>
     </div>
     <div id="stateBadge" class="badge" data-state="idle">
       <span class="dot"></span><span id="stateText">idle</span>
@@ -330,7 +338,13 @@
     <article class="panel live-card" aria-live="polite" aria-atomic="false">
       <div class="live-head">
         <span class="kicker">Vehicle speed</span>
-        <span class="rate-chip"><span class="rate-dot"></span>live</span>
+        <!-- Live-rate chip reflects sample freshness: waiting (no samples yet) /
+             live (fresh) / stale (no sample for STALE_THRESHOLD_MS). Driven by
+             updateRateChip() in telemetry.js. -->
+        <span id="liveRateChip" class="rate-chip" data-state="waiting"
+          ><span class="rate-dot"></span
+          ><span id="liveRateLabel">waiting</span></span
+        >
       </div>
       <div class="speed-row">
         <div id="speedValue" class="speed-value" data-live-tile="true">--</div>
@@ -350,6 +364,7 @@
         class="scrub-chart live-trace-chart"
         aria-hidden="true"
       >
+        <canvas id="liveTraceCanvas" class="live-trace-canvas"></canvas>
         <div class="scrub-cursor live-trace-cursor"></div>
       </div>
 
@@ -391,16 +406,21 @@
         </div>
       </div>
       <div class="meter battery-meter"><span id="driveSocMeter"></span></div>
-      <div class="battery-pack-readout" aria-label="HV pack live readings">
-        <div>
+      <div
+        id="batteryPackReadout"
+        class="battery-pack-readout"
+        data-optional-live-group="true"
+        aria-label="HV pack live readings"
+      >
+        <div data-live-cell="true">
           <span class="kicker">Pack V</span>
           <strong id="drivePackVoltage" data-live-tile="true">--</strong>
         </div>
-        <div>
+        <div data-live-cell="true">
           <span class="kicker">Pack A</span>
           <strong id="drivePackCurrent" data-live-tile="true">--</strong>
         </div>
-        <div>
+        <div data-live-cell="true">
           <span class="kicker">Pack kW</span>
           <strong id="drivePackPower" data-live-tile="true">--</strong>
         </div>
@@ -414,34 +434,36 @@
       id="liveReadout"
       class="scrub-readout live-readout panel"
       role="group"
+      data-optional-live-group="true"
+      data-empty="Waiting for live OBD signals"
       aria-label="Live OBD signals"
     >
-      <div>
+      <div data-live-cell="true">
         <span class="kicker" style="color: #ff7a45">RPM</span>
         <strong id="rpmValue" data-live-tile="true">--</strong>
       </div>
-      <div>
+      <div data-live-cell="true">
         <!-- This is ATRV (12V auxiliary battery, ~12-14 V) — NOT the HV traction
              pack. The 300+ V pack reading lives in the HV Battery panel above. -->
         <span class="kicker" style="color: #8b94ad">Aux 12V</span>
         <strong id="voltageValue" data-live-tile="true">--</strong>
       </div>
-      <div>
+      <div data-live-cell="true">
         <span class="kicker" style="color: #ffb84a">Coolant</span>
         <strong id="coolantValue" data-live-tile="true">--</strong>
       </div>
-      <div>
+      <div data-live-cell="true">
         <!-- Sourced from PID 0149 (drive-by-wire accelerator pedal) when the
              vehicle supports it; falls back to 0111 (ICE throttle body) for
              vehicles where 0149 isn't responding. -->
         <span class="kicker" style="color: #b8e63b">Throttle</span>
         <strong id="throttleValue" data-live-tile="true">--</strong>
       </div>
-      <div>
+      <div data-live-cell="true">
         <span class="kicker" style="color: #b8e63b">Load</span>
         <strong id="loadValue" data-live-tile="true">--</strong>
       </div>
-      <div>
+      <div data-live-cell="true">
         <span class="kicker" style="color: #a48cff">GPS</span>
         <strong id="gpsValue" data-live-tile="true">--</strong>
       </div>
@@ -482,7 +504,7 @@
   <article class="panel connect-card">
     <div class="connection-head">
       <div>
-        <div class="kicker">Adapter</div>
+        <div class="kicker">Connection</div>
         <strong id="adapterSummary">No adapter selected</strong>
         <small id="appStateSummary"
           >Pick a paired OBD adapter to start logging.</small
@@ -498,13 +520,13 @@
       <div><span>DB</span><strong id="dbState">ready</strong></div>
       <div><span>Source</span><strong id="dataSourceState">real</strong></div>
     </div>
-    <div class="control-row">
+    <div class="control-row" data-demo-hidden="true">
       <select id="deviceSelect">
         <option value="">No paired adapters found</option>
       </select>
       <button id="refreshBtn" type="button">Refresh</button>
     </div>
-    <details class="secondary-tools">
+    <details class="secondary-tools" data-demo-hidden="true">
       <summary>Tools and diagnostics</summary>
       <div class="button-grid">
         <button id="permissionBtn" type="button">Permissions</button>
@@ -513,10 +535,10 @@
         <button id="disconnectBtn" type="button" class="danger">Stop</button>
       </div>
     </details>
-    <p id="statusCopy" class="status-copy">
+    <p id="statusCopy" class="status-copy" data-demo-hidden="true">
       Pick a paired OBD adapter to start logging.
     </p>
-    <div id="demoBanner" class="demo-banner" hidden>
+    <div id="demoBanner" class="demo-banner" data-demo-hidden="true" hidden>
       <span>
         <strong>Demo preview is running</strong>
         <small>Preview data is isolated from real OBD history.</small>
@@ -717,12 +739,43 @@
       </div>
       <button type="button" class="link-btn" data-nav-jump="map">map</button>
     </header>
-    <p class="status-copy">
-      Each logged OBD session with movement. Tap a trip with GPS to see its
-      route.
-    </p>
-    <div id="realTripsList"></div>
+    <p class="status-copy">Each logged OBD session with movement.</p>
+    <div id="realTripsList" class="map-drive-chips real-trip-strip"></div>
   </article>
+  <section
+    id="realTripDetailGrid"
+    class="detail-grid real-trip-detail non-demo-only"
+    hidden
+  >
+    <article class="panel route-card">
+      <div class="card-head">
+        <div>
+          <span class="kicker">Route preview</span>
+          <h3 id="realTripRouteTitle">Select a drive</h3>
+        </div>
+        <button
+          id="realTripMapBtn"
+          type="button"
+          class="link-btn"
+          data-trip-map=""
+        >
+          map
+        </button>
+      </div>
+      <small id="realTripRouteMeta" class="status-copy">--</small>
+      <div id="realTripRouteBox" class="route-box real-route-box"></div>
+    </article>
+
+    <article class="panel route-card">
+      <div class="card-head">
+        <div>
+          <span class="kicker">Drive summary</span>
+          <h3 id="realTripEnergyTitle">--</h3>
+        </div>
+      </div>
+      <div id="realTripEnergyRows" class="energy-rows"></div>
+    </article>
+  </section>
   <article class="panel list-card demo-only" hidden>
     <header>
       <div>
@@ -795,13 +848,13 @@
       <div class="map-overlay-top">
         <div class="map-layer-tabs" role="tablist" aria-label="Map layer">
           <button type="button" data-map-layer="routes" aria-selected="false">
-            Routes
+            <span>Routes</span>
           </button>
           <button type="button" data-map-layer="heat" aria-selected="false">
-            Heat
+            <span>Heat</span>
           </button>
           <button type="button" data-map-layer="stops" aria-selected="false">
-            Stops
+            <span>Stops</span><b id="mapStopsCount">0</b>
           </button>
           <button
             type="button"
@@ -809,7 +862,7 @@
             class="is-active"
             aria-selected="true"
           >
-            Eff
+            <span>Eff</span>
           </button>
         </div>
         <div class="map-top-right">
@@ -918,32 +971,36 @@
 <section id="view-charge" class="view" data-view="charge">
   <article id="chargeEmptyState" class="panel empty-state non-demo-only">
     <span class="kicker">Charging</span>
-    <h2>No charging sessions captured yet.</h2>
+    <h2>No charging sessions yet.</h2>
     <p>
-      The standalone app has the schema ready; the next step is validating
-      charging PIDs and materializing real charge sessions.
+      Plug in your Volt with the adapter connected and charging sessions will
+      show up here automatically.
     </p>
   </article>
-  <section class="charge-grid non-demo-only">
+  <section
+    class="charge-grid non-demo-only"
+    aria-label="Charging summary"
+    aria-live="polite"
+  >
     <article class="panel charge-kpi">
       <header><span>Sessions</span><span>real</span></header>
       <strong id="realChargeSessions">0</strong>
-      <small>materialized charge rows</small>
+      <small>Charging sessions recorded</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Hints</span><span>parser</span></header>
+      <header><span>Hints</span><span>detected</span></header>
       <strong id="realChargeHints">0</strong>
-      <small>possible plugged-in events</small>
+      <small>Possible charges detected</small>
     </article>
     <article class="panel charge-kpi">
       <header><span>Max power</span><span>observed</span></header>
       <strong id="realChargePower">--</strong>
-      <small>from parsed telemetry</small>
+      <small>Peak charging power seen</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Status</span><span>confidence</span></header>
+      <header><span>Status</span><span>charging</span></header>
       <strong id="realChargeStatus">needs data</strong>
-      <small>charging PIDs still validating</small>
+      <small>Charge detection status</small>
     </article>
   </section>
   <section class="charge-grid demo-only" hidden>
@@ -990,10 +1047,10 @@
 <section id="view-insights" class="view" data-view="insights">
   <article id="insightsEmptyState" class="panel empty-state non-demo-only">
     <span class="kicker">Insights</span>
-    <h2>Waiting for enough real data.</h2>
+    <h2>Not enough data yet.</h2>
     <p>
-      Live OBD values are available now; pack health, cell watch, savings, and
-      monthly insights need stored history before they should appear here.
+      Pack health, savings, and monthly insights appear here once you've logged
+      a few drives with the adapter connected.
     </p>
   </article>
 
@@ -1003,10 +1060,10 @@
     </div>
     <div>
       <span class="kicker">HV pack</span>
-      <h2 id="realPackTitle">Waiting for battery samples.</h2>
+      <h2 id="realPackTitle">Waiting for battery readings.</h2>
       <p id="realPackCopy" class="status-copy">
-        SOC, power, and pack health will stay unknown until those PIDs are
-        validated and stored.
+        Battery charge, power, and pack health appear here once the adapter has
+        logged a few readings.
       </p>
     </div>
   </article>
@@ -1062,9 +1119,20 @@
         <button type="button" data-nav-jump="settings">Debug logs</button>
       </div>
 
-      <div id="dtcClearWarning" class="dtc-clear-warning" hidden>
-        <strong>Clear vehicle trouble codes?</strong>
-        <p>
+      <!-- Non-modal inline confirmation: role="group" (not alertdialog — we
+           don't trap focus or make the background inert). Focus is moved here
+           on open and returned to the trigger on close by actions.js. -->
+      <div
+        id="dtcClearWarning"
+        class="dtc-clear-warning"
+        role="group"
+        aria-labelledby="dtcClearTitle"
+        aria-describedby="dtcClearDesc"
+        tabindex="-1"
+        hidden
+      >
+        <strong id="dtcClearTitle">Clear vehicle trouble codes?</strong>
+        <p id="dtcClearDesc">
           This sends OBD-II Mode 04 to the vehicle, erasing the check-engine
           light and stored DTC memory. Emissions readiness monitors will reset
           and may take 100+ miles of mixed driving before re-setting - some
@@ -1200,8 +1268,8 @@
       <button type="button" data-action="stop" class="danger">Stop</button>
     </div>
     <p class="status-copy">
-      Structured samples are saved in SQLite; raw field logs still stay in the
-      private OBD log folder.
+      Your drive data is saved on this phone; raw adapter logs stay in a private
+      folder.
     </p>
   </article>
 
@@ -1245,7 +1313,7 @@
     <div id="historyList"></div>
   </article>
 
-  <article id="reviewCard" class="panel list-card">
+  <article id="reviewCard" class="panel list-card diagnostic-compact-card">
     <header>
       <div>
         <span class="kicker">Last session review</span>
@@ -1269,7 +1337,11 @@
       <div><span>Useful</span><strong id="reviewUsefulSamples">--</strong></div>
       <div><span>Empty</span><strong id="reviewEmptySamples">0</strong></div>
     </div>
-    <div id="reviewWarnings" class="warning-list"></div>
+    <div id="reviewWarnings" class="warning-list">
+      <p class="status-copy">
+        Connect or scan once, then this becomes the post-test review.
+      </p>
+    </div>
     <div id="realInsightList" class="real-insight-list"></div>
     <div id="reviewTimeline" class="timeline-list"></div>
   </article>
@@ -1284,7 +1356,7 @@
     <div id="pidFrameList" class="pid-frame-list"></div>
   </article>
 
-  <article class="panel list-card">
+  <article id="dbCard" class="panel list-card diagnostic-compact-card">
     <header>
       <div>
         <span class="kicker">On-phone database</span>
@@ -1311,58 +1383,29 @@
       <div><span>Empty</span><strong id="dbEmptyTelemetryCount">0</strong></div>
     </div>
     <div id="dbSessionList" style="margin-top: 12px"></div>
-    <p class="status-copy" style="margin-top: 12px">
-      Encrypted backup is the safest way to save or share this on-phone
-      database. Plaintext export is available only as an advanced compatibility
-      option. Restore replaces all on-phone data with a backup file.
-    </p>
-    <button
-      type="button"
-      data-action="backupEncrypted"
-      style="margin-top: 8px; width: 100%"
-    >
-      Back up encrypted file
-    </button>
-    <button
-      type="button"
-      data-action="backup"
-      style="margin-top: 8px; width: 100%"
-    >
-      Export plaintext backup (advanced)
-    </button>
-    <button
-      type="button"
-      data-action="restore"
-      style="margin-top: 8px; width: 100%"
-    >
-      Restore from a backup file
-    </button>
-    <button
-      type="button"
-      data-action="restoreEncrypted"
-      style="margin-top: 8px; width: 100%"
-    >
-      Restore encrypted backup
-    </button>
-    <button
-      type="button"
-      data-action="clearStorage"
-      class="danger"
-      style="margin-top: 8px; width: 100%"
-    >
-      Clear stored debug data
-    </button>
-    <!-- Diagnostics shortcut. Mirrors the Connection-tools "Send diagnostics"
-         button so users in the storage panel can share logs without scrolling
-         back up. Both buttons funnel into VoltTrackerAndroid.shareDiagnostics(). -->
-    <button
-      type="button"
-      id="sendDiagnosticsSettingsBtn"
-      data-action="send-diagnostics"
-      style="margin-top: 8px; width: 100%"
-    >
-      Send diagnostics bundle
-    </button>
+    <details class="db-backup-tools">
+      <summary>Backup, restore, and diagnostics</summary>
+      <p class="status-copy">
+        Encrypted backup is safest. Restore replaces all on-phone data with a
+        backup file.
+      </p>
+      <div class="db-action-grid">
+        <button type="button" data-action="backupEncrypted">
+          Back up encrypted
+        </button>
+        <button type="button" data-action="restoreEncrypted">
+          Restore encrypted
+        </button>
+        <button type="button" data-action="backup">Export plaintext</button>
+        <button type="button" data-action="restore">Restore file</button>
+        <button type="button" id="sendDiagnosticsSettingsBtn">
+          Send diagnostics
+        </button>
+        <button type="button" data-action="clearStorage" class="danger">
+          Clear debug data
+        </button>
+      </div>
+    </details>
   </article>
 
   <article class="panel raw">
@@ -1376,7 +1419,8 @@
         <span class="kicker">Vehicle</span>
         <h3 id="vehicleName">No vehicle identified yet</h3>
         <p id="vehicleSummary" class="status-copy">
-          Vehicle identity fills in once VIN and odometer PIDs are validated.
+          Your vehicle's details fill in automatically once the VIN and odometer
+          are read.
         </p>
       </div>
     </div>
@@ -1462,7 +1506,6 @@
         type="button"
         id="sendDiagnosticsBtn"
         class="connection-tools__btn"
-        data-action="send-diagnostics"
       >
         Send diagnostics
       </button>

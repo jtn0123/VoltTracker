@@ -48,9 +48,9 @@
 
   function readRemoteTilesPreference() {
     try {
-      return window.localStorage.getItem("volttracker.map.remoteTiles") === "1";
+      return window.localStorage.getItem("volttracker.map.remoteTiles") !== "0";
     } catch (_err) {
-      return false;
+      return true;
     }
   }
 
@@ -236,6 +236,7 @@
     mode: "ev",
     tripFilter: "all",
     selectedTripId: 8421,
+    selectedRealTripId: null,
     lastDevice: null,
     deviceHistory: [],
     storage: {},
@@ -299,6 +300,15 @@
     insights: ["Preview sandbox", "Insights"]
   };
 
+  const viewIconPaths = {
+    drive: "M13 2 5 13h6l-1 9 9-13h-6z",
+    trips: "M4 5h3v3H4V5zm5 0h11v3H9V5zM4 10.5h3v3H4v-3zm5 0h11v3H9v-3zM4 16h3v3H4v-3zm5 0h11v3H9v-3z",
+    map: "M15 4 9 2 3 4v18l6-2 6 2 6-2V2l-6 2zm-1 15-4-1.35V5l4 1.35V19z",
+    charge: "M14 2v7h5l-9 13v-7H5l9-13z",
+    insights: "M4 19h16v2H2V3h2v16zm3-2V9h3v8H7zm5 0V5h3v12h-3zm5 0v-6h3v6h-3z",
+    settings: "M12 2a3 3 0 0 1 3 3v1h2.2l1.1 1.9-1.6 1.6c.2.5.3 1 .3 1.5s-.1 1-.3 1.5l1.6 1.6-1.1 1.9H15v1a3 3 0 0 1-6 0v-1H6.8l-1.1-1.9 1.6-1.6A4.2 4.2 0 0 1 7 11c0-.5.1-1 .3-1.5L5.7 7.9 6.8 6H9V5a3 3 0 0 1 3-3zm0 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"
+  };
+
   function parsePayload(payload, fallback) {
     if (!payload) return fallback;
     try { return typeof payload === "string" ? JSON.parse(payload) : payload; }
@@ -317,6 +327,7 @@
 
   function setView(view) {
     state.view = view;
+    document.body.dataset.activeView = view;
     if (view !== "map" && state.mapFull) {
       state.mapFull = false;
       document.body.classList.remove("map-full-active");
@@ -343,6 +354,8 @@
     const meta = (state.demoActive ? demoViewMeta : realViewMeta)[state.view] || realViewMeta.drive;
     setText("screenKicker", meta[0]);
     setText("screenTitle", meta[1]);
+    const icon = el("screenTitleIcon");
+    if (icon) icon.setAttribute("d", viewIconPaths[state.view] || viewIconPaths.drive);
   }
 
   function setMode(mode) {

@@ -10,7 +10,7 @@ import { loadDashboard } from './setup/load-dashboard.js';
 // REQUIRED_DOM via the loader's extraDom option.
 const DRIVE_EXTRA_DOM = `
   <div id="driveNowChips"></div>
-  <div id="liveTraceChart"><div class="scrub-cursor live-trace-cursor"></div></div>
+  <div id="liveTraceChart"><canvas id="liveTraceCanvas"></canvas><div class="scrub-cursor live-trace-cursor"></div></div>
   <div id="powerBarsChart"></div>
   <div id="socTraceChart"></div>
   <span id="powerMicroTag" data-tone="idle" data-kind="power">kW</span>
@@ -77,8 +77,63 @@ describe('drive.js', () => {
       value: 320,
     });
     VD.drawLiveSpeedTrace();
-    expect(host.querySelector('svg')).not.toBeNull();
-    expect(host.innerHTML).toContain('waiting for samples');
+    expect(host.querySelector('canvas')).not.toBeNull();
+    expect(host.dataset.traceState).toBe('empty');
+    expect(host.dataset.traceLabel).toBe('waiting for samples');
+  });
+
+  it('renders power and SOC chart marks as HTML DOM nodes when live samples exist', () => {
+    const VD = window.VoltDashboard;
+    const powerHost = document.getElementById('powerBarsChart');
+    const socHost = document.getElementById('socTraceChart');
+    Object.defineProperty(powerHost, 'clientWidth', {
+      configurable: true,
+      value: 320,
+    });
+    Object.defineProperty(socHost, 'clientWidth', {
+      configurable: true,
+      value: 320,
+    });
+    VD.state.powerHistory = [4, 12, -3, 0, 18];
+    VD.state.socHistory = [78.2, 78.1, 78.0, 77.9];
+
+    VD.drawLivePowerBars();
+    VD.drawLiveSocTrace();
+
+    expect(powerHost.dataset.chartState).toBe('ready');
+    expect(socHost.dataset.chartState).toBe('ready');
+    expect(powerHost.querySelectorAll('.live-power-bar').length).toBeGreaterThan(0);
+    expect(socHost.querySelectorAll('.live-soc-segment').length).toBeGreaterThan(0);
+    expect(powerHost.querySelector('.live-chart-empty')).toBeNull();
+    expect(socHost.querySelector('.live-chart-empty')).toBeNull();
+    expect(powerHost.querySelector('svg')).toBeNull();
+    expect(socHost.querySelector('svg')).toBeNull();
+  });
+
+  it('renders layout-stable empty states for power and SOC charts', () => {
+    const VD = window.VoltDashboard;
+    const powerHost = document.getElementById('powerBarsChart');
+    const socHost = document.getElementById('socTraceChart');
+    Object.defineProperty(powerHost, 'clientWidth', {
+      configurable: true,
+      value: 320,
+    });
+    Object.defineProperty(socHost, 'clientWidth', {
+      configurable: true,
+      value: 320,
+    });
+    VD.state.powerHistory = [];
+    VD.state.socHistory = [];
+
+    VD.drawLivePowerBars();
+    VD.drawLiveSocTrace();
+
+    expect(powerHost.dataset.chartState).toBe('empty');
+    expect(socHost.dataset.chartState).toBe('empty');
+    expect(powerHost.querySelector('.live-chart-empty')?.textContent).toBe('Waiting for power samples');
+    expect(socHost.querySelector('.live-chart-empty')?.textContent).toBe('Waiting for SOC samples');
+    expect(powerHost.querySelector('svg')).toBeNull();
+    expect(socHost.querySelector('svg')).toBeNull();
   });
 
   it('resize handler debounces multiple resize events into one pending timer', () => {

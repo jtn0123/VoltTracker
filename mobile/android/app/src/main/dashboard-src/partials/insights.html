@@ -1,10 +1,10 @@
 <section id="view-insights" class="view" data-view="insights">
   <article id="insightsEmptyState" class="panel empty-state non-demo-only">
     <span class="kicker">Insights</span>
-    <h2>Waiting for enough real data.</h2>
+    <h2>Not enough data yet.</h2>
     <p>
-      Live OBD values are available now; pack health, cell watch, savings, and
-      monthly insights need stored history before they should appear here.
+      Pack health, savings, and monthly insights appear here once you've logged
+      a few drives with the adapter connected.
     </p>
   </article>
 
@@ -14,10 +14,10 @@
     </div>
     <div>
       <span class="kicker">HV pack</span>
-      <h2 id="realPackTitle">Waiting for battery samples.</h2>
+      <h2 id="realPackTitle">Waiting for battery readings.</h2>
       <p id="realPackCopy" class="status-copy">
-        SOC, power, and pack health will stay unknown until those PIDs are
-        validated and stored.
+        Battery charge, power, and pack health appear here once the adapter has
+        logged a few readings.
       </p>
     </div>
   </article>
@@ -73,9 +73,20 @@
         <button type="button" data-nav-jump="settings">Debug logs</button>
       </div>
 
-      <div id="dtcClearWarning" class="dtc-clear-warning" hidden>
-        <strong>Clear vehicle trouble codes?</strong>
-        <p>
+      <!-- Non-modal inline confirmation: role="group" (not alertdialog — we
+           don't trap focus or make the background inert). Focus is moved here
+           on open and returned to the trigger on close by actions.js. -->
+      <div
+        id="dtcClearWarning"
+        class="dtc-clear-warning"
+        role="group"
+        aria-labelledby="dtcClearTitle"
+        aria-describedby="dtcClearDesc"
+        tabindex="-1"
+        hidden
+      >
+        <strong id="dtcClearTitle">Clear vehicle trouble codes?</strong>
+        <p id="dtcClearDesc">
           This sends OBD-II Mode 04 to the vehicle, erasing the check-engine
           light and stored DTC memory. Emissions readiness monitors will reset
           and may take 100+ miles of mixed driving before re-setting - some

@@ -16,12 +16,43 @@
       </div>
       <button type="button" class="link-btn" data-nav-jump="map">map</button>
     </header>
-    <p class="status-copy">
-      Each logged OBD session with movement. Tap a trip with GPS to see its
-      route.
-    </p>
-    <div id="realTripsList"></div>
+    <p class="status-copy">Each logged OBD session with movement.</p>
+    <div id="realTripsList" class="map-drive-chips real-trip-strip"></div>
   </article>
+  <section
+    id="realTripDetailGrid"
+    class="detail-grid real-trip-detail non-demo-only"
+    hidden
+  >
+    <article class="panel route-card">
+      <div class="card-head">
+        <div>
+          <span class="kicker">Route preview</span>
+          <h3 id="realTripRouteTitle">Select a drive</h3>
+        </div>
+        <button
+          id="realTripMapBtn"
+          type="button"
+          class="link-btn"
+          data-trip-map=""
+        >
+          map
+        </button>
+      </div>
+      <small id="realTripRouteMeta" class="status-copy">--</small>
+      <div id="realTripRouteBox" class="route-box real-route-box"></div>
+    </article>
+
+    <article class="panel route-card">
+      <div class="card-head">
+        <div>
+          <span class="kicker">Drive summary</span>
+          <h3 id="realTripEnergyTitle">--</h3>
+        </div>
+      </div>
+      <div id="realTripEnergyRows" class="energy-rows"></div>
+    </article>
+  </section>
   <article class="panel list-card demo-only" hidden>
     <header>
       <div>

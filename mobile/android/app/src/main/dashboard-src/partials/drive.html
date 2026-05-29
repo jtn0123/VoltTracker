@@ -14,7 +14,13 @@
     <article class="panel live-card" aria-live="polite" aria-atomic="false">
       <div class="live-head">
         <span class="kicker">Vehicle speed</span>
-        <span class="rate-chip"><span class="rate-dot"></span>live</span>
+        <!-- Live-rate chip reflects sample freshness: waiting (no samples yet) /
+             live (fresh) / stale (no sample for STALE_THRESHOLD_MS). Driven by
+             updateRateChip() in telemetry.js. -->
+        <span id="liveRateChip" class="rate-chip" data-state="waiting"
+          ><span class="rate-dot"></span
+          ><span id="liveRateLabel">waiting</span></span
+        >
       </div>
       <div class="speed-row">
         <div id="speedValue" class="speed-value" data-live-tile="true">--</div>
@@ -34,6 +40,7 @@
         class="scrub-chart live-trace-chart"
         aria-hidden="true"
       >
+        <canvas id="liveTraceCanvas" class="live-trace-canvas"></canvas>
         <div class="scrub-cursor live-trace-cursor"></div>
       </div>
 
@@ -75,16 +82,21 @@
         </div>
       </div>
       <div class="meter battery-meter"><span id="driveSocMeter"></span></div>
-      <div class="battery-pack-readout" aria-label="HV pack live readings">
-        <div>
+      <div
+        id="batteryPackReadout"
+        class="battery-pack-readout"
+        data-optional-live-group="true"
+        aria-label="HV pack live readings"
+      >
+        <div data-live-cell="true">
           <span class="kicker">Pack V</span>
           <strong id="drivePackVoltage" data-live-tile="true">--</strong>
         </div>
-        <div>
+        <div data-live-cell="true">
           <span class="kicker">Pack A</span>
           <strong id="drivePackCurrent" data-live-tile="true">--</strong>
         </div>
-        <div>
+        <div data-live-cell="true">
           <span class="kicker">Pack kW</span>
           <strong id="drivePackPower" data-live-tile="true">--</strong>
         </div>
@@ -98,34 +110,36 @@
       id="liveReadout"
       class="scrub-readout live-readout panel"
       role="group"
+      data-optional-live-group="true"
+      data-empty="Waiting for live OBD signals"
       aria-label="Live OBD signals"
     >
-      <div>
+      <div data-live-cell="true">
         <span class="kicker" style="color: #ff7a45">RPM</span>
         <strong id="rpmValue" data-live-tile="true">--</strong>
       </div>
-      <div>
+      <div data-live-cell="true">
         <!-- This is ATRV (12V auxiliary battery, ~12-14 V) — NOT the HV traction
              pack. The 300+ V pack reading lives in the HV Battery panel above. -->
         <span class="kicker" style="color: #8b94ad">Aux 12V</span>
         <strong id="voltageValue" data-live-tile="true">--</strong>
       </div>
-      <div>
+      <div data-live-cell="true">
         <span class="kicker" style="color: #ffb84a">Coolant</span>
         <strong id="coolantValue" data-live-tile="true">--</strong>
       </div>
-      <div>
+      <div data-live-cell="true">
         <!-- Sourced from PID 0149 (drive-by-wire accelerator pedal) when the
              vehicle supports it; falls back to 0111 (ICE throttle body) for
              vehicles where 0149 isn't responding. -->
         <span class="kicker" style="color: #b8e63b">Throttle</span>
         <strong id="throttleValue" data-live-tile="true">--</strong>
       </div>
-      <div>
+      <div data-live-cell="true">
         <span class="kicker" style="color: #b8e63b">Load</span>
         <strong id="loadValue" data-live-tile="true">--</strong>
       </div>
-      <div>
+      <div data-live-cell="true">
         <span class="kicker" style="color: #a48cff">GPS</span>
         <strong id="gpsValue" data-live-tile="true">--</strong>
       </div>
@@ -166,7 +180,7 @@
   <article class="panel connect-card">
     <div class="connection-head">
       <div>
-        <div class="kicker">Adapter</div>
+        <div class="kicker">Connection</div>
         <strong id="adapterSummary">No adapter selected</strong>
         <small id="appStateSummary"
           >Pick a paired OBD adapter to start logging.</small
@@ -182,13 +196,13 @@
       <div><span>DB</span><strong id="dbState">ready</strong></div>
       <div><span>Source</span><strong id="dataSourceState">real</strong></div>
     </div>
-    <div class="control-row">
+    <div class="control-row" data-demo-hidden="true">
       <select id="deviceSelect">
         <option value="">No paired adapters found</option>
       </select>
       <button id="refreshBtn" type="button">Refresh</button>
     </div>
-    <details class="secondary-tools">
+    <details class="secondary-tools" data-demo-hidden="true">
       <summary>Tools and diagnostics</summary>
       <div class="button-grid">
         <button id="permissionBtn" type="button">Permissions</button>
@@ -197,10 +211,10 @@
         <button id="disconnectBtn" type="button" class="danger">Stop</button>
       </div>
     </details>
-    <p id="statusCopy" class="status-copy">
+    <p id="statusCopy" class="status-copy" data-demo-hidden="true">
       Pick a paired OBD adapter to start logging.
     </p>
-    <div id="demoBanner" class="demo-banner" hidden>
+    <div id="demoBanner" class="demo-banner" data-demo-hidden="true" hidden>
       <span>
         <strong>Demo preview is running</strong>
         <small>Preview data is isolated from real OBD history.</small>

@@ -104,7 +104,10 @@
   function open(reason) {
     const node = modal();
     if (!node) return;
+    // Remember the focused element so it can be restored when the modal closes.
+    state.troubleshooter.priorFocus = document.activeElement;
     node.hidden = false;
+    if (typeof node.focus === "function") node.focus();
     renderForRetry();
     renderCompeting((state.status || {}).competingApps);
     renderStaleTelemetry(state.troubleshooter.lastTelemetry);
@@ -123,6 +126,12 @@
     if (!node) return;
     node.hidden = true;
     state.troubleshooter.autoOpened = false;
+    // Restore focus to whatever opened the modal so keyboard users aren't stranded.
+    const prior = state.troubleshooter.priorFocus;
+    if (prior && typeof prior.focus === "function" && document.contains(prior)) {
+      prior.focus();
+    }
+    state.troubleshooter.priorFocus = null;
   }
 
   // Collapsible step head. Toggles aria-expanded + body[hidden].

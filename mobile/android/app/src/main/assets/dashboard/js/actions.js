@@ -28,6 +28,9 @@
   // for tests that swap fixtures between runs.
   let controller = new AbortController();
 
+  // Element that opened the clear-DTC alertdialog, so focus can return to it.
+  let clearDtcOpener = null;
+
   // Lightweight in-flight guard for bridge-triggering buttons. The Android
   // bridge calls are sync-fire-and-forget so we can't await completion; a short
   // 600ms cooldown is enough to swallow accidental double-taps without making
@@ -112,15 +115,24 @@
     const ack = el("dtcClearAckBox");
     const confirm = el("dtcClearConfirmBtn");
     if (!panel) return;
+    // Remember the trigger so focus can return to it when the panel closes.
+    clearDtcOpener = document.activeElement;
     panel.hidden = false;
     if (ack) ack.checked = false;
     if (confirm) confirm.disabled = true;
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    // Move focus into the alertdialog so keyboard/SR users land on the warning.
+    if (typeof panel.focus === "function") panel.focus();
   }
 
   function closeClearDtcWarning() {
     const panel = el("dtcClearWarning");
     if (panel) panel.hidden = true;
+    // Return focus to whatever opened the panel (the "Clear codes" button).
+    if (clearDtcOpener && typeof clearDtcOpener.focus === "function") {
+      clearDtcOpener.focus();
+    }
+    clearDtcOpener = null;
   }
 
   function confirmClearDtc(button) {
@@ -355,6 +367,72 @@
     }, 100);
   }
 
+  const pageDragScrollBlockSelector = [
+    "a",
+    "button",
+    "input",
+    "select",
+    "textarea",
+    "summary",
+    "[role='button']",
+    "[data-nav]",
+    "[data-action]",
+    "[data-map-layer]",
+    "[data-real-trip-id]",
+    "[data-trip-map]",
+    ".bottom-nav",
+    ".map-card",
+    ".map-frame",
+    ".map-drive-chips",
+    ".scrub-chart",
+    ".scrub-track",
+    ".route-box"
+  ].join(",");
+
+  let pageDragScroll = null;
+
+  function canStartPageDragScroll(event) {
+    if (event.button !== 0) return false;
+    if (event.pointerType && event.pointerType !== "mouse") return false;
+    if (event.target && event.target.closest(pageDragScrollBlockSelector)) return false;
+    return document.documentElement.scrollHeight > window.innerHeight + 2;
+  }
+
+  function bindPageDragScroll(opts) {
+    document.addEventListener("pointerdown", (event) => {
+      if (!canStartPageDragScroll(event)) return;
+      pageDragScroll = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        lastY: event.clientY,
+        active: false
+      };
+    }, opts);
+
+    document.addEventListener("pointermove", (event) => {
+      if (!pageDragScroll || event.pointerId !== pageDragScroll.pointerId) return;
+      const totalX = Math.abs(event.clientX - pageDragScroll.startX);
+      const totalY = Math.abs(event.clientY - pageDragScroll.startY);
+      if (!pageDragScroll.active) {
+        if (totalY < 8 || totalY <= totalX) return;
+        pageDragScroll.active = true;
+        document.body.classList.add("is-page-dragging");
+      }
+      event.preventDefault();
+      window.scrollBy({ top: pageDragScroll.lastY - event.clientY, left: 0, behavior: "auto" });
+      pageDragScroll.lastY = event.clientY;
+    }, { ...opts, passive: false });
+
+    const stopDragScroll = () => {
+      pageDragScroll = null;
+      document.body.classList.remove("is-page-dragging");
+    };
+    document.addEventListener("pointerup", stopDragScroll, opts);
+    document.addEventListener("pointercancel", stopDragScroll, opts);
+    window.addEventListener("blur", stopDragScroll, opts);
+  }
+
   function bindListeners() {
     const opts = { signal: controller.signal };
 
@@ -373,7 +451,9 @@
     document.querySelectorAll("[data-map-layer]").forEach((button) => {
       button.addEventListener("click", () => {
         state.mapLayer = button.dataset.mapLayer;
+        button.blur();
         VD.renderMap();
+        window.setTimeout(VD.renderMap, 80);
       }, opts);
     });
     // Bind through bindListenerGuarded so a renamed partial ID logs a warn + skips
@@ -412,6 +492,13 @@
       }
     }, opts);
     document.addEventListener("click", (event) => {
+      const realTripButton = event.target.closest("[data-real-trip-id]");
+      if (realTripButton) {
+        if (typeof VD.selectRealTrip === "function") {
+          VD.selectRealTrip(realTripButton.dataset.realTripId);
+        }
+        return;
+      }
       const tripButton = event.target.closest("[data-trip-map]");
       if (!tripButton) return;
       const id = tripButton.dataset.tripMap;
@@ -461,6 +548,7 @@
         VD.setStatus({ state: "ready", detail: "Charging session staged locally." });
       });
     }, opts);
+    bindPageDragScroll(opts);
     window.addEventListener("resize", debouncedResize, opts);
   }
 

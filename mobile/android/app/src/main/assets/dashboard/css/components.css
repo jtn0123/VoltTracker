@@ -64,6 +64,22 @@
     box-shadow: 0 0 8px var(--ok);
   }
 
+  /* Live-rate chip states: default (live) keeps the green .rate-dot above.
+     waiting dims the dot; stale recolors chip + dot to the warning tone. */
+  .rate-chip[data-state="waiting"] .rate-dot {
+    background: var(--soft);
+    box-shadow: none;
+  }
+
+  .rate-chip[data-state="stale"] {
+    color: var(--warn);
+  }
+
+  .rate-chip[data-state="stale"] .rate-dot {
+    background: var(--warn);
+    box-shadow: 0 0 8px var(--warn);
+  }
+
   .speed-row {
     position: relative;
     z-index: 1;
@@ -285,7 +301,7 @@
   }
 
   .mini, .metric, .list-card, .insight, .charge-kpi, .setting-row {
-    padding: 12px;
+    padding: var(--card-pad-tight);
   }
 
   .mini strong,
@@ -389,7 +405,7 @@
   .ratio-stats div {
     min-width: 0;
     padding: 10px;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     background: rgba(255,255,255,0.045);
   }
 
@@ -411,7 +427,7 @@
   }
 
   .status-card {
-    padding: 15px;
+    padding: var(--card-pad);
   }
 
   .status-head, .card-head {
@@ -497,6 +513,78 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
+  .history-row.is-active {
+    background: rgba(255, 122, 69, 0.08);
+  }
+
+  .trip-route-spark {
+    display: block;
+    width: 100%;
+    height: 46px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.035);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+
+  .trip-route-map {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 96px;
+    overflow: hidden;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.035);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    pointer-events: none;
+  }
+
+  .trip-route-map .leaflet-container,
+  .real-route-map .leaflet-container {
+    background: rgba(5, 6, 9, 0.92);
+  }
+
+  .trip-route-spark-halo,
+  .trip-route-spark-line {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .trip-route-spark-halo {
+    stroke: rgba(255, 255, 255, 0.35);
+    stroke-width: 5;
+  }
+
+  .trip-route-spark-line {
+    stroke: var(--volt);
+    stroke-width: 2.5;
+  }
+
+  .trip-route-spark-start {
+    fill: var(--ev);
+    stroke: rgba(255, 255, 255, 0.9);
+    stroke-width: 1.3;
+  }
+
+  .trip-route-spark-end {
+    fill: var(--volt);
+    stroke: rgba(255, 255, 255, 0.9);
+    stroke-width: 1.3;
+  }
+
+  .trip-route-state {
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 122, 69, 0.26);
+    background: rgba(255, 122, 69, 0.08);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    line-height: 1.45;
+    color: var(--soft);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
   .review-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -573,7 +661,7 @@
   .dtc-action-row .scan {
     border-color: transparent;
     background: var(--volt);
-    color: #190a04;
+    color: var(--on-volt);
     font-weight: 800;
     box-shadow: 0 12px 28px rgba(255,122,69,0.18);
   }
@@ -592,7 +680,7 @@
     min-width: 0;
     padding: 10px;
     border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     background: rgba(255,255,255,0.045);
   }
 
@@ -971,7 +1059,7 @@
   }
 
   .trip-row[data-mode="mixed"] .trip-dot { background: var(--mixed); box-shadow: 0 0 12px var(--mixed); }
-  .trip-row[data-mode="gas"] .trip-dot { background: #ff7141; box-shadow: 0 0 12px #ff7141; }
+  .trip-row[data-mode="gas"] .trip-dot { background: var(--gas); box-shadow: 0 0 12px var(--gas); }
 
   .trip-row strong,
   .session-row strong,

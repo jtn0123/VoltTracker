@@ -62,4 +62,30 @@ describe('stale-tile indicator', () => {
       expect(node.classList.contains('stale'), `#${id} should be stale after 4 s of silence`).toBe(true);
     }
   });
+
+  it('keeps the Drive live-rate chip aligned with sample freshness', () => {
+    const chip = document.getElementById('liveRateChip');
+    const label = document.getElementById('liveRateLabel');
+    expect(chip, 'liveRateChip missing from generated DOM').not.toBeNull();
+
+    // No samples yet → the chip advertises "waiting".
+    vi.advanceTimersByTime(1100);
+    expect(chip.dataset.state).toBe('waiting');
+    expect(label.textContent).toBe('waiting');
+
+    // A fresh sample flips the chip to "live".
+    window.VoltTrackerNative.updateTelemetry({
+      source: 'demo',
+      speedKph: 42,
+      updatedAt: Date.now(),
+    });
+    vi.advanceTimersByTime(1100);
+    expect(chip.dataset.state).toBe('live');
+    expect(label.textContent).toBe('live');
+
+    // Going quiet past the threshold flips it to "stale" (not back to waiting).
+    vi.advanceTimersByTime(4000);
+    expect(chip.dataset.state).toBe('stale');
+    expect(label.textContent).toBe('stale');
+  });
 });

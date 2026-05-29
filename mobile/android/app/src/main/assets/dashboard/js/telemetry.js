@@ -120,14 +120,28 @@
     const storage = state.storage || {};
     const status = state.status || {};
     const selected = getSelectedDevice();
-    const adapterName = adapter.name || (selected && selected.name) || "No adapter selected";
+    const adapterName = state.demoActive
+      ? "Demo telemetry"
+      : (adapter.name || (selected && selected.name) || "No adapter selected");
     const remembered = adapter.remembered || Boolean((getLastDevice() || {}).address);
-    const connected = Boolean(adapter.connected) || ["connected", "connecting", "initializing", "scanning", "demo"].includes(String(status.state || "").toLowerCase());
+    const connected =
+      state.demoActive ||
+      Boolean(adapter.connected) ||
+      ["connected", "connecting", "initializing", "scanning", "demo"].includes(String(status.state || "").toLowerCase());
     const sessionState = session.state || status.state || "idle";
     const samples = Number(session.sampleCount || state.telemetry.sampleCount || 0);
 
     VD.setText("adapterSummary", adapterName);
-    VD.setText("appStateSummary", status.detail || session.detail || (remembered ? "Ready to resume the remembered adapter." : "Pick a paired adapter to start logging."));
+    VD.setText(
+      "appStateSummary",
+      state.demoActive
+        ? "Preview data is isolated from real OBD history."
+        : (
+            status.detail ||
+            session.detail ||
+            (remembered ? "Ready to resume the remembered adapter." : "Pick a paired adapter to start logging.")
+          )
+    );
     VD.setText("loggingState", connected ? (samples ? `${samples} samples` : sessionState) : "idle");
     VD.setText("gpsState", gps.state || (state.telemetry.latitude ? "locked" : "waiting"));
     VD.setText("dataSourceState", state.demoActive ? "demo" : "real");
@@ -139,9 +153,15 @@
     if (!primary) return;
     primary.classList.toggle("is-stop", connected);
     primary.classList.toggle("primary", !connected);
-    if (connected) {
+    if (state.demoActive) {
+      primary.dataset.primaryAction = "stopDemo";
+      primary.textContent = "Stop demo";
+    } else if (connected) {
       primary.dataset.primaryAction = "stop";
       primary.textContent = "Stop";
+    } else if (!bridge) {
+      primary.dataset.primaryAction = "demo";
+      primary.textContent = "Start demo";
     } else if (remembered) {
       primary.dataset.primaryAction = "last";
       primary.textContent = "Resume";
@@ -205,6 +225,23 @@
     const value = Math.max(0, Number(ms) || 0);
     if (value < 1000) return `${Math.round(value)}ms`;
     return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}s`;
+  }
+
+  function setOptionalLiveText(id, value) {
+    VD.setText(id, value);
+    const node = el(id);
+    if (!node) return;
+    const cell = node.closest("[data-live-cell]");
+    if (!cell) return;
+    const text = String(value == null || value === "" ? "--" : value).trim();
+    cell.classList.toggle("is-empty", text === "--");
+    syncOptionalLiveGroup(cell.closest("[data-optional-live-group]"));
+  }
+
+  function syncOptionalLiveGroup(group) {
+    if (!group) return;
+    const cells = Array.from(group.querySelectorAll("[data-live-cell]"));
+    group.classList.toggle("is-empty", cells.length > 0 && cells.every((cell) => cell.classList.contains("is-empty")));
   }
 
   function selectDevice(address, name) {
@@ -344,6 +381,40 @@
         existing.remove();
       }
     });
+    updateRateChip(isStale);
+  }
+
+  // True once any live data has been observed this session — either a counted
+  // sample or a populated history buffer. Lets the rate chip distinguish
+  // "waiting for the first sample" from "samples arrived but went quiet".
+  function hasLiveSamples() {
+    const t = state.telemetry || {};
+    const session = (state.appState && state.appState.session) || {};
+    const sampleCount = Number(session.sampleCount || t.sampleCount || 0);
+    return (
+      // Any accepted frame stamps lastSampleAt (even optional-tile-only frames),
+      // so the chip flips to live in lockstep with the tiles.
+      Number(state.lastSampleAt || 0) > 0 ||
+      sampleCount > 0 ||
+      (state.speedHistory || []).length > 0 ||
+      (state.powerHistory || []).length > 0 ||
+      (state.socHistory || []).length > 0
+    );
+  }
+
+  // Keep the Drive live-rate chip in lockstep with tile staleness:
+  //   waiting → no samples observed yet
+  //   live    → samples flowing and fresh
+  //   stale   → samples seen but none for STALE_THRESHOLD_MS
+  // `isStale` is passed in from applyStaleIndicator() so both share one clock read.
+  function updateRateChip(isStale) {
+    const chip = el("liveRateChip");
+    if (!chip) return;
+    const samples = hasLiveSamples();
+    const label = samples && isStale ? "stale" : samples ? "live" : "waiting";
+    chip.dataset.state = label;
+    const rateLabel = el("liveRateLabel");
+    if (rateLabel) rateLabel.textContent = label;
   }
 
   function updateLiveUi() {
@@ -352,17 +423,20 @@
     const mph = Number.isFinite(kph) ? Math.round(kph * 0.621371) : null;
     VD.setText("speedValue", mph);
     VD.setText("speedKph", Number.isFinite(kph) ? `${Math.round(kph)} km/h` : "-- km/h");
-    VD.setText("rpmValue", t.rpm ? `${t.rpm}` : "--");
+    setOptionalLiveText("rpmValue", t.rpm == null || t.rpm === "" ? "--" : `${t.rpm}`);
     // voltageValue is the aux 12V (ATRV from the ELM adapter), labelled accordingly
     // in the partial. The HV traction-pack voltage is rendered via drivePackVoltage below.
-    VD.setText("voltageValue", t.voltage ? `${Number(t.voltage).toFixed(1)} V` : "--");
-    VD.setText("coolantValue", t.coolantC != null ? `${t.coolantC} °C` : "--");
-    VD.setText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
-    VD.setText("throttleValue", t.throttlePct != null ? `${t.throttlePct}%` : "--");
+    setOptionalLiveText(
+      "voltageValue",
+      t.voltage == null || t.voltage === "" ? "--" : `${Number(t.voltage).toFixed(1)} V`
+    );
+    setOptionalLiveText("coolantValue", t.coolantC != null ? `${t.coolantC} °C` : "--");
+    setOptionalLiveText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
+    setOptionalLiveText("throttleValue", t.throttlePct != null ? `${t.throttlePct}%` : "--");
     const lat = Number(t.latitude);
     const lon = Number(t.longitude);
     const _acc = Number(t.accuracyM);
-    VD.setText("gpsValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
+    setOptionalLiveText("gpsValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
     // gpsDetail / gpsMetricValue / gpsMetricSub all disappeared with the old
     // .mini-grid + .drive-signal-grid; the GPS chip in .live-readout now
     // carries the same signal in the unified scrub-readout style.
@@ -382,15 +456,15 @@
     // adapter hasn't responded yet these fall back to "--" exactly like the rest of
     // the live readout.
     const packV = t.packVoltage == null || t.packVoltage === "" ? NaN : Number(t.packVoltage);
-    VD.setText("drivePackVoltage", Number.isFinite(packV) ? `${packV.toFixed(1)} V` : "--");
+    setOptionalLiveText("drivePackVoltage", Number.isFinite(packV) ? `${packV.toFixed(1)} V` : "--");
     const packA = t.packCurrentA == null || t.packCurrentA === "" ? NaN : Number(t.packCurrentA);
     // Sign convention: discharge is positive (Volt mode-22 222414), so "+" means
     // current flowing OUT of the pack (driving), "-" means INTO it (regen / charging).
-    VD.setText(
+    setOptionalLiveText(
       "drivePackCurrent",
       Number.isFinite(packA) ? `${packA >= 0 ? "+" : ""}${packA.toFixed(1)} A` : "--"
     );
-    VD.setText(
+    setOptionalLiveText(
       "drivePackPower",
       Number.isFinite(power) ? `${power >= 0 ? "+" : ""}${power.toFixed(1)} kW` : "--"
     );

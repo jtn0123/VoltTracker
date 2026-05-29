@@ -20,6 +20,7 @@
   .detail-grid {
     display: grid;
     gap: var(--space-md);
+    min-width: 0;
   }
 
   .route-card {
@@ -43,7 +44,7 @@
     position: absolute;
     inset: 24px 24px 24px 20px;
     border-bottom: 4px solid var(--volt);
-    border-right: 4px solid #ff7141;
+    border-right: 4px solid var(--gas);
     border-radius: 0 0 78px 0;
     transform: skew(-18deg);
     filter: drop-shadow(0 0 8px rgba(255,122,69,0.45));
@@ -58,8 +59,94 @@
     background: var(--volt);
   }
 
+  .real-trip-detail {
+    margin-top: var(--space-md);
+  }
+
+  .real-trip-detail .route-card {
+    min-height: 214px;
+  }
+
+  .real-trip-detail .card-head {
+    align-items: start;
+  }
+
+  .real-trip-detail .link-btn {
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 122, 69, 0.28);
+    border-radius: 999px;
+    background: rgba(255, 122, 69, 0.08);
+    color: var(--soft);
+    font-weight: 750;
+  }
+
+  .real-trip-detail .link-btn:disabled {
+    opacity: 0.5;
+  }
+
+  .real-route-box {
+    display: grid;
+    place-items: center;
+    height: 156px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+  }
+
+  .real-route-box:hover {
+    border-color: rgba(255, 122, 69, 0.38);
+  }
+
+  .real-route-map {
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .real-route-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .real-route-halo,
+  .real-route-line {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .real-route-halo {
+    stroke: rgba(255, 255, 255, 0.32);
+    stroke-width: 10;
+  }
+
+  .real-route-line {
+    stroke: var(--volt);
+    stroke-width: 5.5;
+    filter: drop-shadow(0 0 8px rgba(255, 122, 69, 0.42));
+  }
+
+  .real-route-start {
+    fill: var(--ev);
+    stroke: #fff;
+    stroke-width: 2.5;
+  }
+
+  .real-route-end {
+    fill: var(--volt);
+    stroke: #fff;
+    stroke-width: 2.5;
+  }
+
+  .real-route-empty {
+    color: var(--muted);
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+  }
+
   .route-pin.start { left: 28px; bottom: 25px; }
-  .route-pin.end { right: 31px; top: 25px; background: #ff7141; }
+  .route-pin.end { right: 31px; top: 25px; background: var(--gas); }
 
   .map-layout {
     display: grid;
@@ -95,7 +182,7 @@
   .map-frame {
     position: relative;
     height: var(--map-height);
-    border-radius: 18px;
+    border-radius: var(--radius-lg);
     overflow: hidden;
     background: #0a0b10;
   }
@@ -124,8 +211,8 @@
 
   .map-layer-tabs {
     display: inline-flex;
-    gap: 2px;
-    padding: 3px;
+    gap: 4px;
+    padding: 4px;
     border: 1px solid var(--line-strong);
     border-radius: 999px;
     background: rgba(16,18,22,0.85);
@@ -133,8 +220,8 @@
   }
 
   .map-layer-tabs button {
-    min-height: 32px;
-    padding: 0 13px;
+    min-height: 36px;
+    padding: 0 14px;
     border: 0;
     border-radius: 999px;
     background: transparent;
@@ -146,9 +233,33 @@
     text-transform: uppercase;
   }
 
+  .map-layer-tabs button span,
+  .map-layer-tabs button b {
+    pointer-events: none;
+  }
+
+  .map-layer-tabs button b {
+    display: inline-grid;
+    place-items: center;
+    min-width: 18px;
+    height: 18px;
+    margin-left: 5px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--soft);
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+
   .map-layer-tabs button.is-active {
     background: var(--volt);
-    color: #190a04;
+    color: var(--on-volt);
+  }
+
+  .map-layer-tabs button.is-active b {
+    background: rgba(25, 10, 4, 0.18);
+    color: var(--on-volt);
   }
 
   .map-top-right {
@@ -173,7 +284,7 @@
   .map-full-btn[aria-pressed="true"] {
     border-color: transparent;
     background: var(--volt);
-    color: #190a04;
+    color: var(--on-volt);
     font-weight: 850;
   }
 
@@ -286,7 +397,7 @@
   }
 
   .map-sheet {
-    padding: 12px 14px;
+    padding: var(--card-pad-tight) var(--card-pad);
     border: 1px solid var(--line);
     border-radius: 16px;
     background:
@@ -361,11 +472,22 @@
 
   .energy-rows div {
     display: grid;
-    grid-template-columns: 82px 1fr 38px;
+    grid-template-columns: minmax(72px, 0.7fr) minmax(72px, 1fr) minmax(72px, max-content);
     gap: 8px;
     align-items: center;
     color: var(--muted);
     font-size: 13px;
+  }
+
+  .energy-rows span,
+  .energy-rows i,
+  .energy-rows b {
+    min-width: 0;
+  }
+
+  .energy-rows b {
+    text-align: right;
+    white-space: nowrap;
   }
 
   .energy-rows i {
@@ -432,7 +554,7 @@
     place-items: center;
     width: 34px;
     height: 34px;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     background: rgba(53,230,160,0.16);
     color: var(--ok);
     font-weight: 900;
@@ -527,7 +649,7 @@
     margin: 0 auto;
     padding: 7px;
     border: 1px solid var(--line);
-    border-radius: 20px;
+    border-radius: var(--radius-xl);
     background: rgba(17,18,24,0.94);
     box-shadow: 0 16px 42px rgba(0,0,0,0.45);
     backdrop-filter: blur(16px);
@@ -579,12 +701,15 @@
     body { padding-inline: 18px; }
     .summary-grid { grid-template-columns: repeat(4, 1fr); }
     .drive-signal-grid { grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr); }
-    .detail-grid { grid-template-columns: 1fr 1fr; }
+    .detail-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
     .button-grid { grid-template-columns: repeat(6, 1fr); }
   }
 
-  @media (max-width: 390px) {
+  @media (max-width: 520px) {
     .mobile-controls { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 390px) {
     .ratio-card { grid-template-columns: 1fr; }
     .state-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .connection-head { grid-template-columns: 1fr; }
@@ -618,6 +743,125 @@
   .eff-scatter-stats div + div { border-left: 1px solid var(--line); }
   .eff-scatter-stats strong {
     display: block; margin-top: 3px; font-size: 15px; font-variant-numeric: tabular-nums;
+  }
+
+  #realTripsCard {
+    min-width: 0;
+    padding: 12px 14px 14px;
+    overflow: visible;
+  }
+
+  #realTripsCard header {
+    margin-bottom: 6px;
+  }
+
+  #realTripsCard .status-copy {
+    display: none;
+  }
+
+  .real-trip-strip {
+    min-width: 0;
+    max-width: 100%;
+    margin: 4px -4px 0;
+    padding: 2px 4px 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+  }
+
+  #view-trips > * {
+    min-width: 0;
+  }
+
+  .real-trip-chip {
+    display: grid;
+    position: relative;
+    grid-template-rows: auto minmax(96px, 1fr);
+    align-content: start;
+    gap: 10px;
+    min-width: min(268px, 78vw);
+    max-width: 292px;
+    min-height: 172px;
+    padding: 13px;
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(14, 15, 20, 0.78);
+  }
+
+  .real-trip-chip.is-active {
+    border-color: var(--volt);
+    background:
+      linear-gradient(135deg, rgba(255, 122, 69, 0.18), rgba(255, 122, 69, 0.04)),
+      rgba(14, 15, 20, 0.86);
+    box-shadow: 0 12px 24px rgba(255, 122, 69, 0.12);
+  }
+
+  .real-trip-chip-copy {
+    min-width: 0;
+  }
+
+  .real-trip-chip-copy strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+  }
+
+  .real-trip-chip-copy small {
+    display: block;
+    margin-top: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+
+  .real-trip-chip .trip-route-state {
+    position: absolute;
+    top: 11px;
+    right: 11px;
+    z-index: 2;
+    background: rgba(10, 11, 15, 0.76);
+    backdrop-filter: blur(8px);
+  }
+
+  #insightStatsCard {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+  }
+
+  #insightStatsCard header {
+    margin: 0;
+  }
+
+  #insightStatsCard .state-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+  }
+
+  #insightStatsCard .state-grid div {
+    min-width: 116px;
+    padding: 8px 12px;
+  }
+
+  #insightStatsCard .state-grid strong {
+    margin-top: 2px;
+    font-size: 16px;
+  }
+
+  @media (max-width: 520px) {
+    #insightStatsCard {
+      align-items: stretch;
+      flex-direction: column;
+    }
   }
 
   .scrubber {
@@ -799,6 +1043,32 @@
     display: inline-block;
   }
 
+  #realTripsList .real-trip-chip {
+    display: grid;
+    position: relative;
+    grid-template-rows: auto minmax(112px, 1fr);
+    align-content: start;
+    gap: 10px;
+    min-width: min(292px, 78vw);
+    max-width: 320px;
+    min-height: 188px;
+    padding: 13px;
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(14, 15, 20, 0.78);
+  }
+
+  #realTripsList .real-trip-chip.is-active {
+    border-color: var(--volt);
+    background:
+      linear-gradient(135deg, rgba(255, 122, 69, 0.18), rgba(255, 122, 69, 0.04)),
+      rgba(14, 15, 20, 0.86);
+    box-shadow: 0 12px 24px rgba(255, 122, 69, 0.12);
+  }
+
+  #realTripsList .trip-route-map {
+    min-height: 112px;
+  }
+
   .scrub-toolbar {
     display: flex;
     gap: 8px;
@@ -820,7 +1090,7 @@
 
   .scrub-btn:first-child {
     background: var(--volt);
-    color: #190a04;
+    color: var(--on-volt);
     border-color: transparent;
     font-weight: 800;
   }
@@ -844,7 +1114,7 @@
   .leaflet-popup.scrub-popup .leaflet-popup-content-wrapper {
     padding: 8px 12px;
     border: 1px solid var(--line-strong);
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     background: rgba(8, 9, 13, 0.92);
     backdrop-filter: blur(12px);
     color: var(--text);
@@ -1004,19 +1274,15 @@
      monospace tabular-nums + center-aligned values, then we add panel chrome. */
   .live-readout {
     margin: 0;
-    padding: 4px 0;
+    padding: 4px;
     border-top: 0;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+    grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
   }
 
   /* Small-screen fallback: six columns get cramped under ~390px so wrap into 3. */
   @media (max-width: 390px) {
-    .live-readout {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-    .live-readout div:nth-child(3n) {
-      border-right: 0;
-    }
+    .live-readout { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
 
   /* Micro-charts row — power bars + SOC trace. */
@@ -1024,6 +1290,7 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+    margin-bottom: 6px;
   }
 
   @media (max-width: 390px) {
@@ -1087,7 +1354,7 @@
     border-color: rgba(255, 184, 74, 0.4);
   }
   .live-micro .micro-tag[data-kind="soc"][data-tone="idle"] {
-    color: #a48cff;
+    color: var(--mixed);
     background: rgba(164, 140, 255, 0.1);
   }
 
@@ -1127,14 +1394,125 @@
      gracefully because the field is updated only when samples exist. */
   .live-trace-chart {
     overflow: hidden;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.02);
+  }
+
+  .live-chart-empty {
+    display: grid;
+    min-height: 86px;
+    place-items: center;
+    padding: 12px;
+    position: relative;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    text-align: center;
+    user-select: none;
+  }
+
+  .live-chart-empty::before {
+    content: "";
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    top: 50%;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+
+  .live-dom-chart {
+    position: relative;
+    min-height: 86px;
+    overflow: hidden;
+  }
+
+  .live-power-zero,
+  .live-soc-baseline {
+    position: absolute;
+    left: 0;
+    right: 0;
+    border-top: 1px dashed rgba(255, 255, 255, 0.16);
+  }
+
+  .live-soc-baseline {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .live-power-bar,
+  .live-soc-segment,
+  .live-soc-dot {
+    position: absolute;
+    display: block;
+  }
+
+  .live-power-bar {
+    min-height: 1px;
+    border-radius: 999px;
+    opacity: 0.86;
+  }
+
+  .live-power-bar.is-drive {
+    background: var(--volt);
+    box-shadow: 0 0 10px rgba(255, 122, 69, 0.22);
+  }
+
+  .live-power-bar.is-regen {
+    background: var(--ev);
+    box-shadow: 0 0 10px rgba(184, 230, 59, 0.2);
+  }
+
+  .live-soc-segment {
+    height: 2px;
+    border-radius: 999px;
+    background: var(--mixed);
+    box-shadow: 0 0 10px rgba(164, 140, 255, 0.24);
+    transform-origin: 0 50%;
+  }
+
+  .live-soc-dot {
+    width: 5px;
+    height: 5px;
+    margin: -2.5px 0 0 -2.5px;
+    border-radius: 50%;
+    background: #c7b9ff;
+  }
+
+  .live-trace-canvas {
+    display: block;
+    width: 100%;
+    height: 96px;
   }
 
   /* Slight bump on the live-readout cells so values breathe — the 4px 0
      baseline was too cramped on mid-density phones. */
   .live-readout div {
-    padding: 9px 4px;
+    padding: 9px 6px;
+    border-left: 0;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .live-readout div + div {
+    border-left: 0;
+  }
+
+  [data-live-cell].is-empty {
+    display: none;
+  }
+
+  .live-readout.is-empty {
+    display: block;
+    padding: 12px 14px;
+  }
+
+  .live-readout.is-empty::after {
+    content: attr(data-empty);
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .battery-pack-readout.is-empty {
+    display: none;
   }
   .live-readout .kicker {
     font-size: 9px;
@@ -1185,4 +1563,68 @@
 
   .validation-collapse > .validation-list {
     margin-top: 12px;
+  }
+
+  .diagnostic-compact-card {
+    padding: 12px 14px;
+  }
+
+  #reviewCard:not(.has-session) .review-grid {
+    display: none;
+  }
+
+  #reviewCard:not(.has-session) .warning-list {
+    margin-top: 8px;
+  }
+
+  #dbCard .status-meta {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+    margin-top: 8px;
+  }
+
+  #dbCard .status-meta div {
+    padding: 8px 10px;
+  }
+
+  #dbCard .status-meta strong {
+    margin-top: 3px;
+    font-size: 16px;
+  }
+
+  #dbCard .status-meta div:nth-child(n+5) {
+    display: none;
+  }
+
+  #dbCard #dbSessionList {
+    margin-top: 8px !important;
+  }
+
+  .db-backup-tools {
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px solid var(--line);
+  }
+
+  .db-backup-tools summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .db-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 9px;
+  }
+
+  .db-action-grid button {
+    min-height: 38px;
+  }
+
+  @media (max-width: 390px) {
+    #dbCard .status-meta {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }

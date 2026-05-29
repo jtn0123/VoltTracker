@@ -303,14 +303,15 @@ function installCanvasShim() {
  *                additional fixture nodes (chart hosts, etc.) without losing
  *                the bootstrap-required tiles.
  */
-export async function loadDashboard({ bridge, extras, extraDom } = {}) {
+export async function loadDashboard({ bridge, extras, extraDom, withBridge = true } = {}) {
   clearDashboardTimers();
   installCanvasShim();
   installScrollShim();
-  const bridgeImpl = bridge ?? createVoltBridgeFixture();
+  const bridgeImpl = withBridge ? (bridge ?? createVoltBridgeFixture()) : null;
   // The Android side exposes the bridge as `window.VoltTrackerAndroid` before
   // the dashboard's scripts run, so do the same here.
-  window.VoltTrackerAndroid = bridgeImpl;
+  if (bridgeImpl) window.VoltTrackerAndroid = bridgeImpl;
+  else delete window.VoltTrackerAndroid;
   window.__VoltDashboardLoadScript = async (src) => {
     const file = String(src || '').replace(/^js\//, '');
     const loadModule = DASHBOARD_MODULE_LOADERS[file];

@@ -1,32 +1,36 @@
 <section id="view-charge" class="view" data-view="charge">
   <article id="chargeEmptyState" class="panel empty-state non-demo-only">
     <span class="kicker">Charging</span>
-    <h2>No charging sessions captured yet.</h2>
+    <h2>No charging sessions yet.</h2>
     <p>
-      The standalone app has the schema ready; the next step is validating
-      charging PIDs and materializing real charge sessions.
+      Plug in your Volt with the adapter connected and charging sessions will
+      show up here automatically.
     </p>
   </article>
-  <section class="charge-grid non-demo-only">
+  <section
+    class="charge-grid non-demo-only"
+    aria-label="Charging summary"
+    aria-live="polite"
+  >
     <article class="panel charge-kpi">
       <header><span>Sessions</span><span>real</span></header>
       <strong id="realChargeSessions">0</strong>
-      <small>materialized charge rows</small>
+      <small>Charging sessions recorded</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Hints</span><span>parser</span></header>
+      <header><span>Hints</span><span>detected</span></header>
       <strong id="realChargeHints">0</strong>
-      <small>possible plugged-in events</small>
+      <small>Possible charges detected</small>
     </article>
     <article class="panel charge-kpi">
       <header><span>Max power</span><span>observed</span></header>
       <strong id="realChargePower">--</strong>
-      <small>from parsed telemetry</small>
+      <small>Peak charging power seen</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Status</span><span>confidence</span></header>
+      <header><span>Status</span><span>charging</span></header>
       <strong id="realChargeStatus">needs data</strong>
-      <small>charging PIDs still validating</small>
+      <small>Charge detection status</small>
     </article>
   </section>
   <section class="charge-grid demo-only" hidden>

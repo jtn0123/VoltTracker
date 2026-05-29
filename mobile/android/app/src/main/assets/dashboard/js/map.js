@@ -106,13 +106,16 @@
     const points = Array.isArray(route.points) ? route.points : [];
     const hasRoute = points.length >= 2;
     const layer = state.mapLayer;
+    const stops = hasRoute ? detectStops(points) : [];
 
     const frame = el("mapFrame");
     if (frame) frame.dataset.layer = layer;
+    VD.setText("mapStopsCount", stops.length ? String(Math.min(20, stops.length)) : "0");
     document.querySelectorAll("[data-map-layer]").forEach((button) => {
       const active = button.dataset.mapLayer === layer;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-selected", active ? "true" : "false");
+      button.setAttribute("aria-pressed", active ? "true" : "false");
     });
     const mapCard = el("mapCard");
     if (mapCard) mapCard.classList.toggle("is-fullscreen", state.mapFull);
@@ -288,10 +291,11 @@
     mapLayerGroups.stops = L.layerGroup([
       L.polyline(latlngs, { color: "#ff7a45", weight: 2.5, opacity: 0.4 })
     ]);
-    detectStops(points).slice(0, 20).forEach((stop) => {
+    const stops = detectStops(points).slice(0, 20);
+    stops.forEach((stop) => {
       const radius = Math.min(13, 7 + stop.durationMs / 120000);
       L.circleMarker([stop.lat, stop.lng], {
-        radius, color: "#ffa84c", weight: 2, fillColor: "#ffa84c", fillOpacity: 0.25
+        radius, color: "#ffd7b0", weight: 3, fillColor: "#ff8a3d", fillOpacity: 0.38
       }).bindTooltip(`Stop · ${VD.formatDuration(stop.durationMs)}`).addTo(mapLayerGroups.stops);
     });
 

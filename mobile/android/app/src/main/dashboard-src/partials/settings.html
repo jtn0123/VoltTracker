@@ -12,8 +12,8 @@
       <button type="button" data-action="stop" class="danger">Stop</button>
     </div>
     <p class="status-copy">
-      Structured samples are saved in SQLite; raw field logs still stay in the
-      private OBD log folder.
+      Your drive data is saved on this phone; raw adapter logs stay in a private
+      folder.
     </p>
   </article>
 
@@ -57,7 +57,7 @@
     <div id="historyList"></div>
   </article>
 
-  <article id="reviewCard" class="panel list-card">
+  <article id="reviewCard" class="panel list-card diagnostic-compact-card">
     <header>
       <div>
         <span class="kicker">Last session review</span>
@@ -81,7 +81,11 @@
       <div><span>Useful</span><strong id="reviewUsefulSamples">--</strong></div>
       <div><span>Empty</span><strong id="reviewEmptySamples">0</strong></div>
     </div>
-    <div id="reviewWarnings" class="warning-list"></div>
+    <div id="reviewWarnings" class="warning-list">
+      <p class="status-copy">
+        Connect or scan once, then this becomes the post-test review.
+      </p>
+    </div>
     <div id="realInsightList" class="real-insight-list"></div>
     <div id="reviewTimeline" class="timeline-list"></div>
   </article>
@@ -96,7 +100,7 @@
     <div id="pidFrameList" class="pid-frame-list"></div>
   </article>
 
-  <article class="panel list-card">
+  <article id="dbCard" class="panel list-card diagnostic-compact-card">
     <header>
       <div>
         <span class="kicker">On-phone database</span>
@@ -123,58 +127,29 @@
       <div><span>Empty</span><strong id="dbEmptyTelemetryCount">0</strong></div>
     </div>
     <div id="dbSessionList" style="margin-top: 12px"></div>
-    <p class="status-copy" style="margin-top: 12px">
-      Encrypted backup is the safest way to save or share this on-phone
-      database. Plaintext export is available only as an advanced compatibility
-      option. Restore replaces all on-phone data with a backup file.
-    </p>
-    <button
-      type="button"
-      data-action="backupEncrypted"
-      style="margin-top: 8px; width: 100%"
-    >
-      Back up encrypted file
-    </button>
-    <button
-      type="button"
-      data-action="backup"
-      style="margin-top: 8px; width: 100%"
-    >
-      Export plaintext backup (advanced)
-    </button>
-    <button
-      type="button"
-      data-action="restore"
-      style="margin-top: 8px; width: 100%"
-    >
-      Restore from a backup file
-    </button>
-    <button
-      type="button"
-      data-action="restoreEncrypted"
-      style="margin-top: 8px; width: 100%"
-    >
-      Restore encrypted backup
-    </button>
-    <button
-      type="button"
-      data-action="clearStorage"
-      class="danger"
-      style="margin-top: 8px; width: 100%"
-    >
-      Clear stored debug data
-    </button>
-    <!-- Diagnostics shortcut. Mirrors the Connection-tools "Send diagnostics"
-         button so users in the storage panel can share logs without scrolling
-         back up. Both buttons funnel into VoltTrackerAndroid.shareDiagnostics(). -->
-    <button
-      type="button"
-      id="sendDiagnosticsSettingsBtn"
-      data-action="send-diagnostics"
-      style="margin-top: 8px; width: 100%"
-    >
-      Send diagnostics bundle
-    </button>
+    <details class="db-backup-tools">
+      <summary>Backup, restore, and diagnostics</summary>
+      <p class="status-copy">
+        Encrypted backup is safest. Restore replaces all on-phone data with a
+        backup file.
+      </p>
+      <div class="db-action-grid">
+        <button type="button" data-action="backupEncrypted">
+          Back up encrypted
+        </button>
+        <button type="button" data-action="restoreEncrypted">
+          Restore encrypted
+        </button>
+        <button type="button" data-action="backup">Export plaintext</button>
+        <button type="button" data-action="restore">Restore file</button>
+        <button type="button" id="sendDiagnosticsSettingsBtn">
+          Send diagnostics
+        </button>
+        <button type="button" data-action="clearStorage" class="danger">
+          Clear debug data
+        </button>
+      </div>
+    </details>
   </article>
 
   <article class="panel raw">
@@ -188,7 +163,8 @@
         <span class="kicker">Vehicle</span>
         <h3 id="vehicleName">No vehicle identified yet</h3>
         <p id="vehicleSummary" class="status-copy">
-          Vehicle identity fills in once VIN and odometer PIDs are validated.
+          Your vehicle's details fill in automatically once the VIN and odometer
+          are read.
         </p>
       </div>
     </div>

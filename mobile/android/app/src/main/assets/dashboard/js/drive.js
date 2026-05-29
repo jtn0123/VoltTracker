@@ -6,8 +6,8 @@
  *
  *  - renderDriveNowChips(): top session chip strip (Idle / Recording / Demo)
  *    plus an optional "Last drive" chip that jumps to the Map tab.
- *  - drawLiveSpeedTrace(): SVG speed trace replacing the old canvas; same look
- *    as the Map scrubber tracks, with a "now" cursor pinned to the right edge.
+ *  - drawLiveSpeedTrace(): canvas speed trace with a "now" cursor pinned to
+ *    the right edge.
  *  - drawLivePowerBars(): +/- bars around zero for the last ~60s of power.
  *  - drawLiveSocTrace(): single-stroke SOC fall across the session.
  *
@@ -23,31 +23,19 @@
 
   // ----- shared SVG helpers -------------------------------------------------
 
-  function svg(w, h, inner) {
-    return (
-      '<svg width="' +
-      w +
-      '" height="' +
-      h +
-      '" viewBox="0 0 ' +
-      w +
-      " " +
-      h +
-      '">' +
-      inner +
-      "</svg>"
-    );
+  function paintEmpty(target, label) {
+    if (!target) return;
+    const empty = document.createElement("div");
+    empty.className = "live-chart-empty";
+    empty.textContent = label;
+    target.dataset.chartState = "empty";
+    target.replaceChildren(empty);
   }
 
-  function paint(target, markup) {
-    if (!target) return;
-    const old = target.querySelector("svg");
-    if (old) old.remove();
-    const doc = new window.DOMParser().parseFromString(markup, "image/svg+xml");
-    const next = doc.documentElement;
-    if (next && next.nodeName.toLowerCase() === "svg") {
-      target.prepend(document.importNode(next, true));
-    }
+  function domNode(tag, className) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    return node;
   }
 
   function targetWidth(node) {
@@ -228,84 +216,90 @@
 
   // ----- live speed trace ---------------------------------------------------
 
-  // Build a path that flows leftward — newest sample at x=w, oldest at x=0.
-  // We pad missing samples on the left so a fresh session doesn't squish the
-  // last few samples into the rightmost pixel.
-  function speedLinePath(samples, w, h, padT, padB) {
-    if (!samples.length) return { d: "", maxMph: 0 };
-    const maxMph = Math.max(40, ...samples) * 1.1;
-    const cap = Math.max(48, samples.length);
-    const stride = w / Math.max(1, cap - 1);
-    const offset = w - (samples.length - 1) * stride;
-    let d = "";
-    for (let i = 0; i < samples.length; i += 1) {
-      const x = offset + i * stride;
-      const y = padT + (1 - samples[i] / maxMph) * (h - padT - padB);
-      d += (i === 0 ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1) + " ";
-    }
-    return { d: d.trim(), maxMph: maxMph };
-  }
-
   function drawLiveSpeedTrace() {
     const host = el("liveTraceChart");
-    if (!host) return;
+    const canvas = el("liveTraceCanvas");
+    if (!host || !canvas) return;
     const w = targetWidth(host);
     if (!w) return;
     const h = 96;
     const padT = 16;
     const padB = 10;
-    // Convert kph history → mph for the visual.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.max(1, Math.round(h * dpr));
+    canvas.style.height = h + "px";
+    const ctx = canvas.getContext && canvas.getContext("2d");
     const samples = state.speedHistory.map((kph) => kph * 0.621371);
-    let inner =
-      '<text x="8" y="13" fill="#8b8c98" font-size="9" font-weight="700" ' +
-      'font-family="ui-monospace,monospace" letter-spacing="0.08em">SPEED MPH</text>';
-    // Grid lines.
+    host.dataset.traceState = samples.length >= 2 ? "ready" : "empty";
+    host.dataset.traceLabel = samples.length >= 2
+      ? Math.round(samples[samples.length - 1]) + " mph"
+      : "waiting for samples";
+    if (!ctx) return;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.012)";
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+    ctx.lineWidth = 1;
     for (let i = 1; i < 4; i += 1) {
       const y = padT + (i / 4) * (h - padT - padB);
-      inner +=
-        '<line x1="0" y1="' +
-        y +
-        '" x2="' +
-        w +
-        '" y2="' +
-        y +
-        '" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>';
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
     }
-    if (samples.length >= 2) {
-      const built = speedLinePath(samples, w, h, padT, padB);
-      // Soft area fill under the trace.
-      inner +=
-        '<path d="' +
-        built.d +
-        " L" +
-        w +
-        " " +
-        (h - padB) +
-        " L0 " +
-        (h - padB) +
-        ' Z" fill="rgba(255,122,69,0.16)"/>' +
-        '<path d="' +
-        built.d +
-        '" fill="none" stroke="#ff7a45" stroke-width="2.2" ' +
-        'stroke-linejoin="round" stroke-linecap="round"/>';
-      // Y-axis hint top-right showing the current cap.
-      inner +=
-        '<text x="' +
-        (w - 6) +
-        '" y="13" text-anchor="end" fill="#8b8c98" font-size="9" font-weight="700" ' +
-        'font-family="ui-monospace,monospace">' +
-        Math.round(built.maxMph) +
-        "</text>";
-    } else {
-      inner +=
-        '<text x="' +
-        w / 2 +
-        '" y="' +
-        h / 2 +
-        '" text-anchor="middle" fill="#5d5e69" font-size="11" ' +
-        'font-family="ui-monospace,monospace">waiting for samples…</text>';
+    if (samples.length < 2) {
+      ctx.fillStyle = "#5d5e69";
+      ctx.font = "11px ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("waiting for samples", w / 2, h / 2);
+      return;
     }
-    paint(host, svg(w, h, inner));
+
+    const maxMph = Math.max(40, ...samples) * 1.12;
+    const cap = Math.max(12, samples.length);
+    const stride = w / Math.max(1, cap - 1);
+    const offset = w - (samples.length - 1) * stride;
+    const points = samples.map((sample, index) => ({
+      x: offset + index * stride,
+      y: padT + (1 - sample / maxMph) * (h - padT - padB)
+    }));
+
+    const gradient = ctx.createLinearGradient(0, padT, 0, h - padB);
+    gradient.addColorStop(0, "rgba(255, 122, 69, 0.2)");
+    gradient.addColorStop(1, "rgba(255, 122, 69, 0)");
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.lineTo(points[points.length - 1].x, h - padB);
+    ctx.lineTo(points[0].x, h - padB);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.strokeStyle = "#ff7a45";
+    ctx.lineWidth = 2.4;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.shadowColor = "rgba(255, 122, 69, 0.38)";
+    ctx.shadowBlur = 12;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    const latest = points[points.length - 1];
+    ctx.beginPath();
+    ctx.arc(latest.x, latest.y, 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffd0b8";
+    ctx.fill();
   }
 
   // ----- power bars ---------------------------------------------------------
@@ -319,70 +313,54 @@
     const padT = 14;
     const padB = 10;
     const samples = state.powerHistory || [];
+    if (!samples.length) {
+      paintEmpty(host, "Waiting for power samples");
+      return;
+    }
     const ZERO_PCT = 0.55; // zero line a touch below center so regen has room.
     const zeroY = padT + ZERO_PCT * (h - padT - padB);
     const cap = Math.max(60, samples.length);
-    let inner =
-      '<text x="8" y="13" fill="#8b8c98" font-size="9" font-weight="700" ' +
-      'font-family="ui-monospace,monospace" letter-spacing="0.08em">DRIVE / REGEN</text>' +
-      '<line x1="0" y1="' +
-      zeroY +
-      '" x2="' +
-      w +
-      '" y2="' +
-      zeroY +
-      '" stroke="rgba(255,255,255,0.18)" stroke-dasharray="2 3"/>';
-    if (samples.length) {
-      // Range from observed |power|, with a floor so quiet idling reads cleanly.
-      const abs = samples.map(Math.abs);
-      const maxAbs = Math.max(8, ...abs) * 1.1;
-      const stride = w / cap;
-      const barW = Math.max(1, stride * 0.7);
-      const offset = w - samples.length * stride;
-      for (let i = 0; i < samples.length; i += 1) {
-        const v = samples[i];
-        const x = offset + i * stride;
-        const top = padT;
-        const bottom = h - padB;
-        if (v >= 0) {
-          // Drive — bar grows upward from zero line.
-          const usable = zeroY - top;
-          const bh = Math.min(usable, (v / maxAbs) * usable);
-          inner +=
-            '<rect x="' +
-            x.toFixed(1) +
-            '" y="' +
-            (zeroY - bh).toFixed(1) +
-            '" width="' +
-            barW.toFixed(1) +
-            '" height="' +
-            bh.toFixed(1) +
-            '" fill="#ff7a45" opacity="0.85"/>';
-        } else {
-          const usable = bottom - zeroY;
-          const bh = Math.min(usable, (-v / maxAbs) * usable);
-          inner +=
-            '<rect x="' +
-            x.toFixed(1) +
-            '" y="' +
-            zeroY.toFixed(1) +
-            '" width="' +
-            barW.toFixed(1) +
-            '" height="' +
-            bh.toFixed(1) +
-            '" fill="#b8e63b" opacity="0.85"/>';
-        }
+    const chart = domNode("div", "live-dom-chart live-power-chart");
+    chart.style.height = h + "px";
+    const zero = domNode("span", "live-power-zero");
+    zero.style.top = zeroY.toFixed(1) + "px";
+    chart.append(zero);
+
+    // Range from observed |power|, with a floor so quiet idling reads cleanly.
+    const abs = samples.map(Math.abs);
+    const maxAbs = Math.max(8, ...abs) * 1.1;
+    const stride = w / cap;
+    const barW = Math.max(1, stride * 0.7);
+    const offset = w - samples.length * stride;
+    for (let i = 0; i < samples.length; i += 1) {
+      const v = samples[i];
+      const x = offset + i * stride;
+      const top = padT;
+      const bottom = h - padB;
+      const bar = domNode(
+        "span",
+        "live-power-bar " + (v >= 0 ? "is-drive" : "is-regen")
+      );
+      let y;
+      let bh;
+      if (v >= 0) {
+        // Drive — bar grows upward from zero line.
+        const usable = zeroY - top;
+        bh = Math.min(usable, (v / maxAbs) * usable);
+        y = zeroY - Math.max(1, bh);
+      } else {
+        const usable = bottom - zeroY;
+        bh = Math.min(usable, (-v / maxAbs) * usable);
+        y = zeroY;
       }
-    } else {
-      inner +=
-        '<text x="' +
-        w / 2 +
-        '" y="' +
-        h / 2 +
-        '" text-anchor="middle" fill="#5d5e69" font-size="11" ' +
-        'font-family="ui-monospace,monospace">no power samples yet</text>';
+      bar.style.left = x.toFixed(1) + "px";
+      bar.style.top = y.toFixed(1) + "px";
+      bar.style.width = barW.toFixed(1) + "px";
+      bar.style.height = Math.max(1, bh).toFixed(1) + "px";
+      chart.append(bar);
     }
-    paint(host, svg(w, h, inner));
+    host.dataset.chartState = "ready";
+    host.replaceChildren(chart);
   }
 
   // ----- SOC trace ----------------------------------------------------------
@@ -404,84 +382,68 @@
     const padT = 14;
     const padB = 12;
     const samples = state.socHistory || [];
-    // Header label kept in the SVG; the live value chip lives in the panel
-    // header (rendered from renderSocMicroHeader) so it can show a colored Δ.
-    let inner =
-      '<text x="8" y="13" fill="#8b8c98" font-size="9" font-weight="700" ' +
-      'font-family="ui-monospace,monospace" letter-spacing="0.08em">BATTERY %</text>';
-    if (samples.length >= 2) {
-      // The SOC chart's biggest failure mode is auto-zoom on a 0.2% drift —
-      // making a near-flat line read as dramatic. Clamp the range to a
-      // minimum span (MIN_RANGE) so trivial drift renders trivially and a
-      // real drop reads in proportion. Then add a typical floor pad so the
-      // line never glues to the chart top or bottom.
-      const MIN_RANGE = 6;
-      const obsLo = Math.min(...samples);
-      const obsHi = Math.max(...samples);
-      const observed = obsHi - obsLo;
-      let lo;
-      let hi;
-      if (observed < MIN_RANGE) {
-        const center = (obsHi + obsLo) / 2;
-        lo = Math.max(0, center - MIN_RANGE / 2);
-        hi = Math.min(100, center + MIN_RANGE / 2);
-        // Re-clamp to keep total span ~= MIN_RANGE near 0% or 100%.
-        if (hi - lo < MIN_RANGE) {
-          if (lo === 0) hi = Math.min(100, MIN_RANGE);
-          if (hi === 100) lo = Math.max(0, 100 - MIN_RANGE);
-        }
-      } else {
-        const pad = Math.max(1, observed * 0.18);
-        lo = Math.max(0, obsLo - pad);
-        hi = Math.min(100, obsHi + pad);
-      }
-      const cap = Math.max(48, samples.length);
-      const stride = w / Math.max(1, cap - 1);
-      const offset = w - (samples.length - 1) * stride;
-      let d = "";
-      for (let i = 0; i < samples.length; i += 1) {
-        const x = offset + i * stride;
-        const y =
-          padT + (1 - (samples[i] - lo) / (hi - lo)) * (h - padT - padB);
-        d += (i === 0 ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1) + " ";
-      }
-      // Faint "starting %" guide line so the eye anchors to the session
-      // baseline rather than to the chart's bottom edge.
-      const startSoc = samples[0];
-      const baselineY =
-        padT + (1 - (startSoc - lo) / (hi - lo)) * (h - padT - padB);
-      inner +=
-        '<line x1="0" y1="' +
-        baselineY.toFixed(1) +
-        '" x2="' +
-        w +
-        '" y2="' +
-        baselineY.toFixed(1) +
-        '" stroke="rgba(255,255,255,0.08)" stroke-dasharray="2 3"/>';
-      inner +=
-        '<path d="' +
-        d.trim() +
-        " L" +
-        w +
-        " " +
-        (h - padB) +
-        " L0 " +
-        (h - padB) +
-        ' Z" fill="rgba(164,140,255,0.16)"/>' +
-        '<path d="' +
-        d.trim() +
-        '" fill="none" stroke="#a48cff" stroke-width="2.2" ' +
-        'stroke-linejoin="round" stroke-linecap="round"/>';
-    } else {
-      inner +=
-        '<text x="' +
-        w / 2 +
-        '" y="' +
-        h / 2 +
-        '" text-anchor="middle" fill="#5d5e69" font-size="11" ' +
-        'font-family="ui-monospace,monospace">no SOC samples yet</text>';
+    // The live value chip lives in the panel header so the chart body can stay
+    // dedicated to the trace or a single centered empty-state label.
+    if (samples.length < 2) {
+      paintEmpty(host, "Waiting for SOC samples");
+      return;
     }
-    paint(host, svg(w, h, inner));
+    // The SOC chart's biggest failure mode is auto-zoom on a 0.2% drift —
+    // making a near-flat line read as dramatic. Clamp the range to a minimum
+    // span so trivial drift renders trivially and a real drop reads in proportion.
+    const MIN_RANGE = 6;
+    const obsLo = Math.min(...samples);
+    const obsHi = Math.max(...samples);
+    const observed = obsHi - obsLo;
+    let lo;
+    let hi;
+    if (observed < MIN_RANGE) {
+      const center = (obsHi + obsLo) / 2;
+      lo = Math.max(0, center - MIN_RANGE / 2);
+      hi = Math.min(100, center + MIN_RANGE / 2);
+      if (hi - lo < MIN_RANGE) {
+        if (lo === 0) hi = Math.min(100, MIN_RANGE);
+        if (hi === 100) lo = Math.max(0, 100 - MIN_RANGE);
+      }
+    } else {
+      const pad = Math.max(1, observed * 0.18);
+      lo = Math.max(0, obsLo - pad);
+      hi = Math.min(100, obsHi + pad);
+    }
+    const cap = Math.max(48, samples.length);
+    const stride = w / Math.max(1, cap - 1);
+    const offset = w - (samples.length - 1) * stride;
+    const points = samples.map((sample, index) => ({
+      x: offset + index * stride,
+      y: padT + (1 - (sample - lo) / (hi - lo)) * (h - padT - padB)
+    }));
+    const chart = domNode("div", "live-dom-chart live-soc-chart");
+    chart.style.height = h + "px";
+    const startSoc = samples[0];
+    const baselineY =
+      padT + (1 - (startSoc - lo) / (hi - lo)) * (h - padT - padB);
+    const baseline = domNode("span", "live-soc-baseline");
+    baseline.style.top = baselineY.toFixed(1) + "px";
+    chart.append(baseline);
+
+    points.forEach((point, index) => {
+      const dot = domNode("span", "live-soc-dot");
+      dot.style.left = point.x.toFixed(1) + "px";
+      dot.style.top = point.y.toFixed(1) + "px";
+      chart.append(dot);
+      if (index === points.length - 1) return;
+      const next = points[index + 1];
+      const dx = next.x - point.x;
+      const dy = next.y - point.y;
+      const segment = domNode("span", "live-soc-segment");
+      segment.style.left = point.x.toFixed(1) + "px";
+      segment.style.top = point.y.toFixed(1) + "px";
+      segment.style.width = Math.hypot(dx, dy).toFixed(1) + "px";
+      segment.style.transform = "rotate(" + Math.atan2(dy, dx) + "rad)";
+      chart.append(segment);
+    });
+    host.dataset.chartState = "ready";
+    host.replaceChildren(chart);
   }
 
   // Update the SOC micro-card header with the current value and a delta-from-
@@ -490,7 +452,7 @@
     const tag = el("socMicroTag");
     if (!tag) return;
     const t = state.telemetry || {};
-    const current = Number(t.soc);
+    const current = t.soc == null || t.soc === "" ? NaN : Number(t.soc);
     const start = Number(state.sessionStartSoc);
     if (!Number.isFinite(current)) {
       tag.textContent = "%";
@@ -516,7 +478,7 @@
     const tag = el("powerMicroTag");
     if (!tag) return;
     const t = state.telemetry || {};
-    const v = Number(t.powerKw);
+    const v = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
     if (!Number.isFinite(v)) {
       tag.textContent = "kW";
       tag.dataset.tone = "idle";

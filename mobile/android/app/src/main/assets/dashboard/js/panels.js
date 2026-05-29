@@ -76,6 +76,8 @@
     const chargeRows = Number(storage.chargeSessionCount || 0);
     const batteryRows = Number(storage.batterySnapshotCount || 0);
     const cellRows = Number(storage.cellSnapshotCount || 0);
+    const dbCard = el("dbCard");
+    if (dbCard) dbCard.classList.toggle("is-empty", VD.dbRowCount(storage) === 0);
     VD.setText("dbSessionCount", sessions);
     VD.setText("dbSampleCount", samples);
     VD.setText("dbEventCount", events);
@@ -290,6 +292,8 @@
     const sampleGaps = Number(review.sampleGapEventCount || (review.latestHealth || {}).sampleGapCount || 0);
     const usefulSamples = Number(review.usefulTelemetryCount || 0);
     const emptySamples = Number(review.emptyTelemetryCount || 0);
+    const reviewCard = el("reviewCard");
+    if (reviewCard) reviewCard.classList.toggle("has-session", hasSession);
 
     VD.setText("reviewTitle", hasSession
       ? `${session.mode || "session"} - ${session.adapterName || "OBD adapter"}`
@@ -427,8 +431,8 @@
         detail: "Raw frames are retained even when the parser does not understand them yet."
       },
       {
-        title: hasChargeHint ? "Possible charging transition detected" : "No charging clue detected",
-        detail: hasChargeHint ? "A rejected 255 km/h frame was stored as a Volt-specific clue to validate." : "Charging detection still needs more real plugged-in samples."
+        title: hasChargeHint ? "Possible charging detected" : "No charging detected yet",
+        detail: hasChargeHint ? "A possible charging event was saved for review." : "Connect the adapter while the car is charging to detect sessions."
       },
       {
         title: hasDriving ? "Possible driving state detected" : "No driving state detected",
@@ -487,13 +491,13 @@
     if (Number.isFinite(soc) && soc > 0) {
       if (ring) ring.style.setProperty("--v", Math.max(0, Math.min(100, soc)));
       if (ringValue) ringValue.textContent = `${Math.round(soc)}%`;
-      VD.setText("realPackTitle", "Latest pack signal captured.");
-      VD.setText("realPackCopy", `${Number.isFinite(power) ? power.toFixed(1) + " kW · " : ""}${latest.vehicleState || "vehicle state unknown"} · confidence grows as Volt-specific PIDs are validated.`);
+      VD.setText("realPackTitle", "Latest battery reading captured.");
+      VD.setText("realPackCopy", `${Number.isFinite(power) ? power.toFixed(1) + " kW · " : ""}${latest.vehicleState || "vehicle state unknown"} · accuracy improves as more drives are logged.`);
     } else {
       if (ring) ring.style.setProperty("--v", 0);
       if (ringValue) ringValue.textContent = "--";
-      VD.setText("realPackTitle", "Waiting for battery samples.");
-      VD.setText("realPackCopy", "SOC, power, and pack health will stay unknown until those PIDs are validated and stored.");
+      VD.setText("realPackTitle", "Waiting for battery readings.");
+      VD.setText("realPackCopy", "Battery charge, power, and pack health appear here once the adapter has logged a few readings.");
     }
 
     const maintenance = el("maintenanceList");
@@ -539,8 +543,8 @@
 
     VD.setText("vehicleName", name || identity || "No vehicle identified yet");
     VD.setText("vehicleSummary", known
-      ? "Identity reported by the OBD bridge. Blank fields wait on PIDs that are not validated yet."
-      : "Vehicle identity fills in once VIN and odometer PIDs are validated.");
+      ? "Read from your vehicle. Blank fields fill in as more readings come through."
+      : "Your vehicle's details fill in automatically once the VIN and odometer are read.");
     VD.setText("vehicleVin", vehicle.vin || "--");
     VD.setText("vehicleYear", year || "--");
 
@@ -587,11 +591,44 @@
     const trips = Array.isArray(state.trips) ? state.trips : [];
     toggleHidden("realTripsCard", trips.length === 0);
     toggleHidden("tripsEmptyState", trips.length > 0);
+    toggleHidden("realTripDetailGrid", trips.length === 0);
+    if (trips.length && !trips.some((trip) => String(trip.id) === String(state.selectedRealTripId || ""))) {
+      const withRoute = trips.find((trip) => trip.hasRoute);
+      state.selectedRealTripId = String((withRoute || trips[0]).id || "");
+    }
     const list = el("realTripsList");
-    if (list) list.replaceChildren(...trips.map(renderTripRow));
+    const renderKey = realTripsRenderKey(trips);
+    const listChanged = !list || list.dataset.renderKey !== renderKey;
+    if (listChanged && list) {
+      list.dataset.renderKey = renderKey;
+      list.replaceChildren(...trips.map(renderTripRow));
+    } else {
+      updateRealTripSelection();
+    }
+    renderRealTripDetail();
+    queueRenderRealTripMaps({ detailOnly: !(listChanged || needsMiniMapUpgrade(list)) });
     VD.setText("realTripsTitle", trips.length
       ? `${trips.length} logged ${trips.length === 1 ? "drive" : "drives"}`
       : "Your trips");
+  }
+
+  function realTripsRenderKey(trips) {
+    return trips.map((trip) => [
+      trip.id,
+      trip.hasRoute ? "route" : "samples",
+      trip.pointCount || 0,
+      trip.sampleCount || 0,
+      trip.startedAtMs || 0,
+      trip.distanceMeters || 0
+    ].join(":")).join("|");
+  }
+
+  function needsMiniMapUpgrade(list) {
+    if (!list) return false;
+    return Array.prototype.some.call(
+      list.querySelectorAll("[data-real-trip-map-role='mini']"),
+      (slot) => !slot.querySelector(".leaflet-container")
+    );
   }
 
   function renderTripRow(trip) {
@@ -600,20 +637,322 @@
     const topMph = trip.maxSpeedKph ? Math.round(Number(trip.maxSpeedKph) * 0.621371) : 0;
     const meta = [distance !== "--" ? distance : null, duration, topMph ? `top ${topMph} mph` : null]
       .filter(Boolean).join(" · ") || "no movement logged";
+    const whenLabel = VD.formatWhen(trip.startedAtMs);
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "history-row";
-    button.dataset.tripMap = String(trip.id);
+    button.className = "map-drive-chip real-trip-chip";
+    button.dataset.realTripId = String(trip.id);
+    button.setAttribute("aria-label", `Open trip from ${whenLabel} — ${meta}`);
+    button.classList.toggle("is-active", String(trip.id) === String(state.selectedRealTripId || ""));
+    const route = trip.hasRoute ? routeForTrip(trip) : null;
+    if (route) button.classList.add("has-route-preview");
     const center = document.createElement("span");
+    center.className = "real-trip-chip-copy";
     const strong = document.createElement("strong");
-    strong.textContent = VD.formatWhen(trip.startedAtMs);
+    strong.textContent = whenLabel;
     const small = document.createElement("small");
     small.textContent = meta;
     center.append(strong, small);
     const right = document.createElement("b");
-    right.textContent = trip.hasRoute ? "route" : `${Number(trip.sampleCount || 0)}x`;
-    button.append(center, right);
+    right.className = "trip-route-state";
+    right.textContent = trip.hasRoute ? `${Number(trip.pointCount || 0) || "GPS"} pts` : `${Number(trip.sampleCount || 0)}x`;
+    if (route) {
+      button.append(center, right, buildTripMapSlot(route, "mini", trip.id));
+    } else {
+      button.append(center, right);
+    }
     return button;
+  }
+
+  function selectRealTrip(id) {
+    state.selectedRealTripId = String(id || "");
+    updateRealTripSelection();
+    renderRealTripDetail();
+    queueRenderRealTripMaps({ detailOnly: true });
+  }
+
+  function updateRealTripSelection() {
+    document.querySelectorAll("[data-real-trip-id]").forEach((button) => {
+      button.classList.toggle("is-active", String(button.dataset.realTripId || "") === String(state.selectedRealTripId || ""));
+    });
+  }
+
+  function routeForTrip(trip) {
+    const routes =
+      state.storage && Array.isArray(state.storage.recentRoutes)
+        ? state.storage.recentRoutes
+        : [];
+    const id = String(trip.id || "");
+    return routes.find((route) => String((route.session || {}).id || "") === id) || null;
+  }
+
+  function buildTripRouteSpark(route) {
+    const points = (route && route.points || [])
+      .map((point) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
+      .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+    if (points.length < 2) return document.createTextNode("");
+    const ns = "http://www.w3.org/2000/svg";
+    const svgNode = document.createElementNS(ns, "svg");
+    svgNode.setAttribute("class", "trip-route-spark");
+    svgNode.setAttribute("viewBox", "0 0 72 38");
+    svgNode.setAttribute("aria-hidden", "true");
+    const minLat = Math.min.apply(null, points.map((point) => point.lat));
+    const maxLat = Math.max.apply(null, points.map((point) => point.lat));
+    const minLng = Math.min.apply(null, points.map((point) => point.lng));
+    const maxLng = Math.max.apply(null, points.map((point) => point.lng));
+    const spanLat = maxLat - minLat || 1;
+    const spanLng = maxLng - minLng || 1;
+    const coords = points.map((point) => {
+      const x = 6 + ((point.lng - minLng) / spanLng) * 60;
+      const y = 6 + (1 - (point.lat - minLat) / spanLat) * 26;
+      return x.toFixed(1) + "," + y.toFixed(1);
+    }).join(" ");
+    const halo = document.createElementNS(ns, "polyline");
+    halo.setAttribute("points", coords);
+    halo.setAttribute("class", "trip-route-spark-halo");
+    const line = document.createElementNS(ns, "polyline");
+    line.setAttribute("points", coords);
+    line.setAttribute("class", "trip-route-spark-line");
+    const start = document.createElementNS(ns, "circle");
+    start.setAttribute("cx", coords.split(" ")[0].split(",")[0]);
+    start.setAttribute("cy", coords.split(" ")[0].split(",")[1]);
+    start.setAttribute("r", "2.6");
+    start.setAttribute("class", "trip-route-spark-start");
+    const endPair = coords.split(" ").pop().split(",");
+    const end = document.createElementNS(ns, "circle");
+    end.setAttribute("cx", endPair[0]);
+    end.setAttribute("cy", endPair[1]);
+    end.setAttribute("r", "3");
+    end.setAttribute("class", "trip-route-spark-end");
+    svgNode.append(halo, line, start, end);
+    return svgNode;
+  }
+
+  function buildTripMapSlot(route, role, tripId) {
+    const slot = document.createElement("span");
+    slot.className = role === "detail" ? "real-route-map" : "trip-route-map";
+    slot.dataset.realTripMap = String(tripId || (route && route.session && route.session.id) || "");
+    slot.dataset.realTripMapRole = role;
+    slot.appendChild(role === "detail" ? buildTripRoutePreview(route) : buildTripRouteSpark(route));
+    return slot;
+  }
+
+  function buildTripRoutePreview(route) {
+    const points = (route && route.points || [])
+      .map((point) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
+      .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+    const box = document.createElement("div");
+    box.className = "real-route-empty";
+    if (points.length < 2) {
+      box.textContent = "No route shape stored";
+      return box;
+    }
+    const ns = "http://www.w3.org/2000/svg";
+    const svgNode = document.createElementNS(ns, "svg");
+    svgNode.setAttribute("class", "real-route-svg");
+    svgNode.setAttribute("viewBox", "0 0 320 150");
+    svgNode.setAttribute("aria-hidden", "true");
+    const minLat = Math.min.apply(null, points.map((point) => point.lat));
+    const maxLat = Math.max.apply(null, points.map((point) => point.lat));
+    const minLng = Math.min.apply(null, points.map((point) => point.lng));
+    const maxLng = Math.max.apply(null, points.map((point) => point.lng));
+    const spanLat = maxLat - minLat || 1;
+    const spanLng = maxLng - minLng || 1;
+    const coords = points.map((point) => {
+      const x = 22 + ((point.lng - minLng) / spanLng) * 276;
+      const y = 18 + (1 - (point.lat - minLat) / spanLat) * 112;
+      return x.toFixed(1) + "," + y.toFixed(1);
+    }).join(" ");
+    const halo = document.createElementNS(ns, "polyline");
+    halo.setAttribute("points", coords);
+    halo.setAttribute("class", "real-route-halo");
+    const line = document.createElementNS(ns, "polyline");
+    line.setAttribute("points", coords);
+    line.setAttribute("class", "real-route-line");
+    const startPair = coords.split(" ")[0].split(",");
+    const endPair = coords.split(" ").pop().split(",");
+    const start = document.createElementNS(ns, "circle");
+    start.setAttribute("cx", startPair[0]);
+    start.setAttribute("cy", startPair[1]);
+    start.setAttribute("r", "5");
+    start.setAttribute("class", "real-route-start");
+    const end = document.createElementNS(ns, "circle");
+    end.setAttribute("cx", endPair[0]);
+    end.setAttribute("cy", endPair[1]);
+    end.setAttribute("r", "5.5");
+    end.setAttribute("class", "real-route-end");
+    svgNode.append(halo, line, start, end);
+    return svgNode;
+  }
+
+  function buildEnergyRow(label, value, pct, color) {
+    const row = document.createElement("div");
+    const span = document.createElement("span");
+    span.textContent = label;
+    const bar = document.createElement("i");
+    bar.style.width = Math.max(3, Math.min(100, Number(pct) || 0)) + "%";
+    if (color) bar.style.background = color;
+    const strong = document.createElement("b");
+    strong.textContent = value;
+    row.append(span, bar, strong);
+    return row;
+  }
+
+  function renderRealTripDetail() {
+    const trips = Array.isArray(state.trips) ? state.trips : [];
+    const trip =
+      trips.find((item) => String(item.id) === String(state.selectedRealTripId || "")) ||
+      trips[0];
+    const detail = el("realTripDetailGrid");
+    if (!detail || !trip) return;
+    detail.hidden = false;
+    const route = trip.hasRoute ? routeForTrip(trip) : null;
+    const distance = VD.formatDistance(Number(trip.distanceMeters || 0));
+    const duration = Number(trip.durationMs) > 0 ? VD.formatDuration(Number(trip.durationMs)) : "--";
+    const topMph = trip.maxSpeedKph ? Math.round(Number(trip.maxSpeedKph) * 0.621371) : 0;
+    const avgMph = trip.avgMovingSpeedKph ? Math.round(Number(trip.avgMovingSpeedKph) * 0.621371) : 0;
+    VD.setText("realTripRouteTitle", VD.formatWhen(trip.startedAtMs));
+    VD.setText(
+      "realTripRouteMeta",
+      [distance !== "--" ? distance : null, duration !== "--" ? duration : null, topMph ? `top ${topMph} mph` : null]
+        .filter(Boolean)
+        .join(" - ") || "stored drive"
+    );
+    const mapBtn = el("realTripMapBtn");
+    if (mapBtn) {
+      mapBtn.dataset.tripMap = String(trip.id || "");
+      mapBtn.disabled = !trip.hasRoute;
+      mapBtn.textContent = trip.hasRoute ? "Open map" : "No route";
+    }
+    const routeBox = el("realTripRouteBox");
+    if (routeBox) {
+      const nextTripMap = trip.hasRoute ? String(trip.id || "") : "";
+      const hasCurrentMap = routeBox.dataset.tripMap === nextTripMap &&
+        routeBox.querySelector("[data-real-trip-map-role='detail']");
+      routeBox.dataset.tripMap = nextTripMap;
+      routeBox.setAttribute("role", trip.hasRoute ? "button" : "presentation");
+      routeBox.setAttribute("aria-label", trip.hasRoute ? "Open selected trip on map" : "No route map available");
+      if (!hasCurrentMap) routeBox.replaceChildren(buildTripMapSlot(route, "detail", trip.id));
+    }
+    const effPts = route && Array.isArray(route.points)
+      ? route.points.map((point) => Number(point.eff)).filter(Number.isFinite)
+      : [];
+    const avgEff = effPts.length
+      ? effPts.reduce((sum, value) => sum + value, 0) / effPts.length
+      : 0;
+    VD.setText("realTripEnergyTitle", avgEff ? `${avgEff.toFixed(1)} mi/kWh` : (avgMph ? `${avgMph} mph avg` : "Stored drive"));
+    const rows = el("realTripEnergyRows");
+    if (rows) {
+      rows.replaceChildren(
+        buildEnergyRow("Distance", distance, 100, "var(--volt)"),
+        buildEnergyRow("Duration", duration, 68, "#a4b8ff"),
+        buildEnergyRow("Samples", `${Number(trip.sampleCount || 0).toLocaleString()}x`, 52, "rgba(255, 255, 255, 0.32)"),
+        buildEnergyRow("Efficiency", avgEff ? `${avgEff.toFixed(1)} mi/kWh` : "--", avgEff ? Math.min(100, avgEff * 16) : 8, "var(--ok)")
+      );
+    }
+  }
+
+  const realTripMaps = new Map();
+  let realTripMapTimer = 0;
+
+  function clearRealTripMaps() {
+    realTripMaps.forEach((map) => {
+      try { map.remove(); } catch (_err) {}
+    });
+    realTripMaps.clear();
+  }
+
+  function queueRenderRealTripMaps(options) {
+    clearTimeout(realTripMapTimer);
+    const detailOnly = Boolean(options && options.detailOnly);
+    realTripMapTimer = setTimeout(() => renderRealTripLeafletMaps({ detailOnly }), 80);
+  }
+
+  function renderRealTripLeafletMaps(options) {
+    if (typeof L === "undefined") return;
+    const detailOnly = Boolean(options && options.detailOnly);
+    if (!detailOnly) {
+      clearRealTripMaps();
+    } else {
+      const currentDetailId = (el("realTripRouteBox") || {}).dataset?.tripMap || "";
+      realTripMaps.forEach((map, slot) => {
+        if (
+          slot.dataset.realTripMapRole === "detail" &&
+          (!slot.isConnected || String(slot.dataset.realTripMap || "") !== String(currentDetailId))
+        ) {
+          try { map.remove(); } catch (_err) {}
+          realTripMaps.delete(slot);
+        }
+      });
+    }
+    document.querySelectorAll("[data-real-trip-map]").forEach((slot) => {
+      if (detailOnly && slot.dataset.realTripMapRole !== "detail") return;
+      if (realTripMaps.has(slot)) {
+        try { realTripMaps.get(slot).invalidateSize(false); } catch (_err) {}
+        return;
+      }
+      if (slot.querySelector(".leaflet-container")) return;
+      const id = slot.dataset.realTripMap;
+      const role = slot.dataset.realTripMapRole || "mini";
+      const route = routeForTrip({ id });
+      const points = (route && route.points || [])
+        .map((point) => [Number(point.lat), Number(point.lng)])
+        .filter((pair) => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
+      const rect = slot.getBoundingClientRect();
+      if (points.length < 2 || rect.width < 24 || rect.height < 24) return;
+      slot.replaceChildren();
+      const map = L.map(slot, {
+        attributionControl: false,
+        boxZoom: false,
+        dragging: false,
+        doubleClickZoom: false,
+        keyboard: false,
+        scrollWheelZoom: false,
+        tap: false,
+        touchZoom: false,
+        zoomControl: false
+      });
+      if (state.mapRemoteTilesEnabled) {
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+          subdomains: "abcd",
+          maxZoom: 19
+        }).addTo(map);
+      }
+      L.polyline(points, {
+        color: "rgba(255, 255, 255, 0.64)",
+        weight: role === "detail" ? 9 : 6,
+        opacity: 0.64,
+        lineCap: "round",
+        lineJoin: "round"
+      }).addTo(map);
+      L.polyline(points, {
+        color: "#ff7a45",
+        weight: role === "detail" ? 5 : 3,
+        opacity: 0.95,
+        lineCap: "round",
+        lineJoin: "round"
+      }).addTo(map);
+      L.circleMarker(points[0], {
+        radius: role === "detail" ? 5.5 : 3.6,
+        color: "#fff",
+        weight: role === "detail" ? 2 : 1.4,
+        fillColor: "#ff7a45",
+        fillOpacity: 1
+      }).addTo(map);
+      L.circleMarker(points[points.length - 1], {
+        radius: role === "detail" ? 6 : 3.8,
+        color: "#fff",
+        weight: role === "detail" ? 2 : 1.4,
+        fillColor: "#b8e63b",
+        fillOpacity: 1
+      }).addTo(map);
+      map.fitBounds(L.latLngBounds(points), {
+        animate: false,
+        padding: role === "detail" ? [18, 18] : [8, 8]
+      });
+      setTimeout(() => map.invalidateSize(false), 40);
+      realTripMaps.set(slot, map);
+    });
   }
 
   function loadInsights() {
@@ -882,6 +1221,9 @@
     loadTrips,
     renderRealTrips,
     renderTripRow,
+    selectRealTrip,
+    renderRealTripDetail,
+    renderRealTripLeafletMaps,
     loadInsights,
     renderInsightStats,
     renderInsightScatter,
