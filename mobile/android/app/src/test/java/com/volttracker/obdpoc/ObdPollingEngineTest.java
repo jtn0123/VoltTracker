@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -347,6 +348,67 @@ public class ObdPollingEngineTest {
         assertTrue(
                 "demo loop must never transact any AT/OBD commands, got " + fake.commandLog,
                 fake.commandLog.isEmpty());
+    }
+
+    // ---- Mode-01 multi-PID batching (probe + per-cycle batch + per-adapter fallback) ----
+
+    @Test
+    public void mode01BatchProbeRunsDuringInit() throws Exception {
+        fake.defaultResponse = ">";
+        fake.responses.put("0100", "41 00 00 00 00 00>");
+        fake.responses.put("010D0C", "41 0D 28 41 0C 0F A0\r>");
+        fake.responses.put("010D0C041149", "41 0D 28 41 0C 0F A0 41 04 80 41 11 33 41 49 7F\r>");
+        fake.afterCommand("ATSH7DF", () -> service.running.set(false));
+
+        openSession();
+        runEngineUntilFinished(() -> engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false));
+
+        assertTrue(
+                "the multi-PID capability probe (010D0C) must run during init",
+                fake.commandLog.contains("010D0C"));
+    }
+
+    @Test
+    public void supportedAdapterPollsTier1AsOneBatchedCommand() throws Exception {
+        fake.defaultResponse = ">";
+        fake.responses.put("0100", "41 00 00 00 00 00>");
+        // Probe returns both PIDs -> batching is supported for the session.
+        fake.responses.put("010D0C", "41 0D 28 41 0C 0F A0\r>");
+        fake.responses.put("010D0C041149", "41 0D 28 41 0C 0F A0 41 04 80 41 11 33 41 49 7F\r>");
+        fake.afterCommand("ATSH7DF", () -> service.running.set(false));
+
+        openSession();
+        runEngineUntilFinished(() -> engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false));
+
+        assertTrue(
+                "Tier-1 PIDs must be polled as one batched command when the adapter supports it",
+                fake.commandLog.contains("010D0C041149"));
+        assertFalse(
+                "a batched cycle must not also send the individual speed PID",
+                fake.commandLog.contains("010D"));
+        assertFalse(
+                "a batched cycle must not also send the individual RPM PID",
+                fake.commandLog.contains("010C"));
+    }
+
+    @Test
+    public void unsupportedAdapterFallsBackToPerPidPolling() throws Exception {
+        fake.defaultResponse = ">";
+        fake.responses.put("0100", "41 00 00 00 00 00>");
+        // Probe reply is missing RPM (0C), so batching stays disabled for the session.
+        fake.responses.put("010D0C", "41 0D 28\r>");
+        fake.responses.put("010D", "41 0D 28\r>");
+        fake.responses.put("010C", "41 0C 0F A0\r>");
+        fake.afterCommand("ATSH7DF", () -> service.running.set(false));
+
+        openSession();
+        runEngineUntilFinished(() -> engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false));
+
+        assertFalse(
+                "an incomplete probe must disable batching",
+                fake.commandLog.contains("010D0C041149"));
+        assertTrue("fallback must poll speed per-PID", fake.commandLog.contains("010D"));
+        assertTrue("fallback must poll RPM per-PID", fake.commandLog.contains("010C"));
     }
 
     // ---- helpers --------------------------------------------------------------------

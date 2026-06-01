@@ -162,4 +162,33 @@ public class LocationFilterTest {
                 Decision.REJECT_PROVIDER,
                 f.evaluate(LAT, LNG, 30f, T0 + 5_000L, "network", T0 + 5_000L));
     }
+
+    @Test
+    public void stationaryRereadIsAccepted() {
+        // A parked car re-reporting the same coordinates a few seconds later is a valid 0 m/s fix,
+        // not a jump and not a duplicate to drop — there is no minimum-movement gate.
+        LocationFilter f = new LocationFilter();
+        assertEquals(Decision.ACCEPT, f.evaluate(LAT, LNG, 5f, T0, "gps", T0));
+        assertEquals(Decision.ACCEPT, f.evaluate(LAT, LNG, 5f, T0 + 3_000L, "gps", T0 + 3_000L));
+    }
+
+    @Test
+    public void antimeridianCrossingIsNotAJump() {
+        // Crossing the 180° meridian (lng 179.999 -> -179.999) is ~222 m, not ~24,000 mi: the
+        // haversine wrap is handled by sin(Δlng/2)'s periodicity, so a real crossing at ~22 m/s is
+        // accepted rather than rejected as a teleport. (A naive equirectangular Δlng would
+        // teleport.)
+        LocationFilter f = new LocationFilter();
+        assertEquals(Decision.ACCEPT, f.evaluate(1.0, 179.999, 5f, T0, "gps", T0));
+        assertEquals(
+                Decision.ACCEPT, f.evaluate(1.0, -179.999, 5f, T0 + 10_000L, "gps", T0 + 10_000L));
+    }
+
+    @Test
+    public void haversineHandlesAntimeridianWrap() {
+        // Direct guard on the formula: two points 0.002° apart straddling the antimeridian are a
+        // couple hundred metres apart, well under a kilometre — never the whole-globe distance.
+        double meters = LocationFilter.haversineMeters(1.0, 179.999, 1.0, -179.999);
+        assertEquals(222.0, meters, 30.0);
+    }
 }

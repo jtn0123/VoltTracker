@@ -163,6 +163,10 @@ public class MainActivity extends Activity {
     }
 
     void onDashboardReady() {
+        // Distinctive, greppable proof that the dashboard's JS chain executed and called back into
+        // native — the emulator smoke test asserts this line appears. If the script chain is dead
+        // (e.g. the file:// ES-module regression), this handshake never fires and the smoke fails.
+        Log.i(TAG, "dashboard handshake received: JS is live");
         if (dashboardPublisher.isPageReady()) {
             return;
         }

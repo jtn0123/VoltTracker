@@ -1,3 +1,4 @@
+// @ts-check
 (function () {
   "use strict";
 
@@ -672,7 +673,7 @@
   }
 
   function updateRealTripSelection() {
-    document.querySelectorAll("[data-real-trip-id]").forEach((button) => {
+    /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-real-trip-id]")).forEach((button) => {
       button.classList.toggle("is-active", String(button.dataset.realTripId || "") === String(state.selectedRealTripId || ""));
     });
   }
@@ -885,7 +886,7 @@
         }
       });
     }
-    document.querySelectorAll("[data-real-trip-map]").forEach((slot) => {
+    /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-real-trip-map]")).forEach((slot) => {
       if (detailOnly && slot.dataset.realTripMapRole !== "detail") return;
       if (realTripMaps.has(slot)) {
         try { realTripMaps.get(slot).invalidateSize(false); } catch (_err) {}

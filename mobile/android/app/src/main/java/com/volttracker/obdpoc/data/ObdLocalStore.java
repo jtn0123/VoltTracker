@@ -40,6 +40,7 @@ public class ObdLocalStore implements Closeable, MaterializerData, ObdSessionSto
     private final ObdStoreReports reports;
     private final ObdStoreMaintenance maintenance;
     private final ObdStoreWriter writer;
+    private final ObdStoreVehicles vehicles;
     private final ObdStoreMaterialize materialize;
 
     public ObdLocalStore(Context context) {
@@ -49,6 +50,7 @@ public class ObdLocalStore implements Closeable, MaterializerData, ObdSessionSto
         reports = new ObdStoreReports(helper, trips);
         maintenance = new ObdStoreMaintenance(appContext, helper);
         writer = new ObdStoreWriter(helper, new ObdStoreSnapshots());
+        vehicles = new ObdStoreVehicles(helper);
         materialize = new ObdStoreMaterialize(helper);
     }
 
@@ -189,7 +191,7 @@ public class ObdLocalStore implements Closeable, MaterializerData, ObdSessionSto
     }
 
     public long upsertVehicleFromVin(String vin) {
-        return writer.upsertVehicleFromVin(vin);
+        return vehicles.upsertVehicleFromVin(vin);
     }
 
     public void recordAdapterSummary(

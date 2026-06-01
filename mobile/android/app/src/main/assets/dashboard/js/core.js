@@ -1,3 +1,4 @@
+// @ts-check
 // Initializes the VoltDashboard namespace shared by every dashboard JS file. Each
 // of the 5 files is wrapped in its own IIFE; cross-file calls go through
 // `window.VoltDashboard` (aliased locally as `VD`). `window.VoltTrackerAndroid`
@@ -6,7 +7,7 @@
 (function () {
   "use strict";
 
-  const VD = (window.VoltDashboard = window.VoltDashboard || {});
+  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || {});
   VD.bridge = window.VoltTrackerAndroid || null;
   VD.el = (id) => document.getElementById(id);
 
@@ -45,6 +46,11 @@
 
   const bridge = VD.bridge;
   const el = VD.el;
+
+  // Typed querySelectorAll over elements (every dashboard selector targets HTMLElements), so
+  // callers get .dataset/.hidden without a per-site cast.
+  const queryAll = (selector) =>
+    /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(selector));
 
   function readRemoteTilesPreference() {
     try {
@@ -368,8 +374,8 @@
       document.body.classList.remove("map-full-active");
       VD.renderMap();
     }
-    document.querySelectorAll(".view").forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
-    document.querySelectorAll("[data-nav]").forEach((node) => {
+    queryAll(".view").forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
+    queryAll("[data-nav]").forEach((node) => {
       const active = node.dataset.nav === view;
       node.classList.toggle("is-active", active);
       if (active) {
@@ -395,7 +401,7 @@
 
   function setMode(mode) {
     state.mode = mode;
-    document.querySelectorAll("[data-mode]").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.mode === mode));
+    queryAll("[data-mode]").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.mode === mode));
     const ratio = mode === "ev" ? 78 : 22;
     el("evRing").style.setProperty("--v", ratio);
     setText("evRatioValue", ratio + "%");
@@ -406,20 +412,20 @@
     const changed = state.demoActive !== next;
     state.demoActive = next;
     document.body.classList.toggle("demo-active", next);
-    document.querySelectorAll(".demo-only").forEach((node) => {
+    queryAll(".demo-only").forEach((node) => {
       node.hidden = !next;
     });
-    document.querySelectorAll(".non-demo-only").forEach((node) => {
+    queryAll(".non-demo-only").forEach((node) => {
       node.hidden = next;
     });
     const banner = el("demoBanner");
     if (banner) banner.hidden = !next;
     const bannerStop = el("demoStopBtn");
     if (bannerStop) bannerStop.hidden = !next;
-    document.querySelectorAll('[data-action="stopDemo"]').forEach((button) => {
+    queryAll('[data-action="stopDemo"]').forEach((button) => {
       button.hidden = !next;
     });
-    document.querySelectorAll('[data-action="demo"]').forEach((button) => {
+    queryAll('[data-action="demo"]').forEach((button) => {
       button.textContent = next ? "Demo on" : (button.dataset.demoLabel || "Demo");
       button.classList.toggle("is-active", next);
     });
@@ -477,7 +483,7 @@
     home.replaceChildren(...data.trips.slice(0, 5).map(buildTripRow));
     const filtered = data.trips.filter((trip) => state.tripFilter === "all" || trip.mode === state.tripFilter);
     list.replaceChildren(...filtered.map(buildTripRow));
-    document.querySelectorAll("[data-trip-id]").forEach((button) => {
+    queryAll("[data-trip-id]").forEach((button) => {
       button.addEventListener("click", () => selectTrip(Number(button.dataset.tripId)), { signal: tripsListController.signal });
     });
     selectTrip(state.selectedTripId);
@@ -570,7 +576,7 @@
       const c = watch ? 0.8 : 0.16 + ((i * 13 + 5) % 9) / 14;
       const span = document.createElement("span");
       span.className = "cell" + (watch ? " is-watch" : "");
-      span.style.setProperty("--c", c);
+      span.style.setProperty("--c", String(c));
       return span;
     }));
   }
@@ -634,7 +640,7 @@
     const savedCount = state.deviceHistory.filter((device) => !device.candidate).length;
     setText("historyHint", savedCount ? "tap to select" : "paired candidate");
     list.replaceChildren(...state.deviceHistory.map((device, index) => buildHistoryRow(device, index)));
-    document.querySelectorAll("[data-history-index]").forEach((button) => {
+    queryAll("[data-history-index]").forEach((button) => {
       button.addEventListener("click", () => {
         const device = state.deviceHistory[Number(button.dataset.historyIndex)];
         VD.selectDevice(device.address, device.name || "OBD adapter");
