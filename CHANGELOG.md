@@ -1,6 +1,222 @@
 # CHANGELOG
 
 
+## v0.4.11 (2026-06-01)
+
+### Performance Improvements
+
+- **android**: Round-6 grade-report remediation
+  ([#152](https://github.com/jtn0123/VoltTracker/pull/152),
+  [`0fb17da`](https://github.com/jtn0123/VoltTracker/commit/0fb17dac45664146c4c59a9d4fbbd1574b645d8a))
+
+* chore(android): wave 1 grade-report guardrails & doc fixes
+
+Round-6 grade-report items, all low-risk:
+
+- H1: roadmap schema v7 -> v8 (+ accurate v8 HV-pack-columns entry) - H3: ESLint config comment
+  drift (drop deleted module-bootstrap ref; ESLint 9 -> ESLint) - H2: README documents JaCoCo floors
+  (71%/89%) + standalone test commands - F2: CI gates dashboard deps via `npm audit
+  --audit-level=high` - I2: aggregate `ci-success` job so branch protection needs one check - I1:
+  enable opt-in pre-push hook (unit + dashboard tests) + CONTRIBUTING note
+
+C1 (duplicate `.dtc-empty-state small`) was dropped: the selector appears in a grouped rule
+  (display:block, shared with `strong`) and a separate rule (spacing) — both declarations are live
+  and non-conflicting, not dead code.
+
+actionlint clean; dashboard lint + 61 vitest tests pass.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* test(android): wave 2 grade-report guardrail tests
+
+Pin current behavior before the wave-4/5 changes touch it:
+
+- E1: dashboard-tests/csp.test.js — asserts CSP directives, no remote <script>, and that Leaflet
+  tile URLs stay within the img/connect allowlist (the round-5 E2 failure mode). Navigation-only
+  links (DTC Google search) are out of scope. - D2/G2: QueryPlanIndexTest pins the route-downsample
+  reads (ObdStoreTrips#routePointsForSessionJson) over location_samples and the telemetry fallback —
+  the hot path G1 will rewrite. Must stay index-bound. - D1: ratchet Vitest coverage floors to ~3pts
+  below measured (lines 52->62, statements 49->60, functions 50->60, branches 40->46).
+
+Dashboard: 17 files / 65 tests pass; coverage gate green. QueryPlanIndexTest green.
+
+* feat(android): wave 3 — fail-fast validation on classifier/materializer inputs
+
+B1: ClassifierInput rejects physically-impossible values (negative speed, absurd
+  RPM/voltage/current, NaN/Inf) with generous bounds; nulls still mean "unknown". The single live
+  caller (LiveSampleReader) catches the throw and degrades to an unknown classification + logs
+  `classifier_input_rejected`, so a transient adapter glitch can never crash the polling loop.
+
+B2: MaterializerInput rejects impossible windows (closedAt < startedAt, negative start, non-positive
+  sessionId). Zero-duration windows stay legal. No max-span cap — a car left connected for days is
+  legitimate and the materializers split long runs internally. SessionRecorder already wraps
+  construction in try/catch, so a bad window records materialize_failure and skips rather than
+  crashing finalize.
+
+Adds ClassifierInputTest + MaterializerInputTest. Full Java suite green; spotless clean.
+
+* feat(dashboard): wave 4 (partial) — surface missing tiles, document SVG sink
+
+C3: setText/setMeter now return whether the target element existed and warn ONCE per id (deduped;
+  they run ~1Hz) through console + logClientError when it's missing — the same surfacing
+  bindListenerGuarded uses. Turns silent partial-drift (a renamed tile stuck at "--" forever) into a
+  dev/test signal. Chose the per-id warn over a global data-stale-reason attribute to avoid false
+  positives across the ~110 heterogeneous call sites.
+
+C4: documented the panels.js efficiency-scatter innerHTML as a geometry-only safe sink (computed
+  numbers only, never telemetry/user strings). The dom-sinks.test.js allowlist already enforces that
+  this stays one of only two HTML sinks.
+
+C2 (bundle budget) intentionally deferred — the recommended JSON+fetch path is infeasible over
+  file:// (no fetch in the dashboard for that reason), so it needs a raise-vs-split decision.
+
+Dashboard: 17 files / 65 tests pass; lint + spotless clean.
+
+* build(android): wave 4 (C2) — split dashboard bundle budget core vs DTC data
+
+The single 650KB budget was 60% lazy-loaded DTC reference data, so the startup-critical core could
+  creep up unnoticed while a one-line core copy edit could fail CI (566 bytes of headroom). The
+  JSON+fetch fix from the report is infeasible — fetch is blocked over file:// — so split the budget
+  instead:
+
+- core (js+css excl lib + excl dtc data): 360,000 B (today ~314KB, ~13% headroom) - DTC data
+  (dtc-lookup.js + dtc-causes.js): 380,000 B (today ~337KB, ~11% headroom)
+
+verifyDashboardBundleSize now checks both buckets; the CI summary reports both. Adds
+  docs/bundle-budget.md explaining the split and the file:// constraint.
+
+verifyDashboardBundleSize green; actionlint clean.
+
+* perf(android): wave 5 (G3) — throttle per-tick storage-summary refresh
+
+publishStorageSummary() ran on every BROADCAST_STATUS (~1Hz during a drive), each time firing many
+  whole-DB queries (incl. the totalDistanceMeters all-sessions loop). The summary is session/sample
+  counts + DB size — not live telemetry — so a new publishStorageSummaryThrottled() gates the
+  status-tick path to at most once per 10s. Transitions (page-ready, resume, connect) still call
+  publishStorageSummary() directly for an immediate refresh. lastStorageSummaryAtMs is stamped on
+  completion.
+
+Cuts the redundant heavy query ~10x during continuous operation; G1 will remove the underlying N+1.
+  Full Java suite green; spotless clean.
+
+* perf(android): wave 5 (G1) — cache per-session trip rollup, kill the insights N+1
+
+insightsJson/totalDistanceMeters looped every session and re-walked its GPS track on every read —
+  O(sessions x route reads), growing unbounded with history. Now a schema-v9 session_trip_rollups
+  table caches each closed session's scalar (distance, duration, max speed, route flag), so reads
+  become a single scalar query plus the at-most-one live active session.
+
+Semantics are preserved exactly: "one session = one trip", same folding math (TripAggregate mirrors
+  the old loop), active session still folded in live. The cache lazy-backfills on read (first read
+  after upgrade computes the history once; counted=0 rows keep failed-connection sessions out of
+  trip counts while still contributing route distance to the storage summary). CASCADE +
+  clearAllData keep it in lockstep with sessions.
+
+Also bumped DataBackup.CURRENT_RESTORE_SCHEMA_VERSION 8->9 and added the new table to
+  REQUIRED_RESTORE_TABLES (backup/restore validates schema version + table set).
+
+New ObdStoreTripsRollupDbTest covers idempotency, backfill of new closes, live active session, and
+  clear. Full Java suite (463 tests) green; spotless clean.
+
+* refactor(android): wave 6 (A3, F1) — data-layer materialize entry + version catalog
+
+A3: SessionRecorder (engine) no longer reaches into the materialize package. The orchestration moves
+  into ObdLocalStore.materializeSession(sessionId, start, close) — the data layer already owns the
+  materialize types (implements MaterializerData, has persistTrips/persistChargeSessions).
+  SessionRecorder drops all 5 materialize.* imports and just calls store.materializeSession(...);
+  the only remaining cross-layer import is gone, so ArchitectureBoundaryTest's layering holds
+  cleanly.
+
+F1: AGP (9.2.1) now lives in gradle/libs.versions.toml as a plugin alias, and the root build.gradle
+  uses alias(libs.plugins.android.application) / alias(libs.plugins. spotless) instead of hardcoding
+  versions. The catalog is now the single source of truth (the spotless alias was defined-but-unused
+  before).
+
+Full Java suite green; spotless clean; build resolves via the catalog.
+
+* feat(android): wave 6 (E2) — WebView origin guard
+
+WebViewBootstrap now installs a WebViewClient that only allows navigations within
+  file:///android_asset/dashboard/; anything off-origin is consumed and logged. The dashboard never
+  navigates the main frame elsewhere (external links open via the VoltBridge ACTION_VIEW intent, and
+  the window.open fallback is a WebView no-op), so this is pure defense-in-depth against a bug or
+  injected content steering the WebView off-origin. Both shouldOverrideUrlLoading overloads are
+  implemented to cover API 23 (String) and 24+ (WebResourceRequest); the initial loadUrl and
+  CSP-bounded sub-resource loads are unaffected. Also dropped the stale "module bootstrap" mention
+  from the javadoc.
+
+WebViewBootstrapTest asserts dashboard-origin nav is allowed and off-origin (https +
+  file:///etc/passwd) is blocked. Full suite green; lint + spotless clean.
+
+* refactor(android): wave 6 (A1) — split ObdStoreTrips by read concern
+
+ObdStoreTrips was 957 LOC mixing three concerns. Split into: - ObdStoreRouteProjection (265) — route
+  + SOC/power track downsampling geometry, the engine both trips/insights and session-review depend
+  on (static). - ObdStoreSessionReview (417) — the Diagnostics deep-review payload (static). -
+  ObdStoreTrips (321) — trips list, insights, and the rollup cache.
+
+All three now under the 500-LOC house guideline. Pure code movement, no behavior change: callers in
+  ObdStoreReports now invoke the static helpers (ObdStoreSessionReview.* /
+  ObdStoreRouteProjection.*); ObdStoreTrips keeps totalDistanceMeters so ObdStoreReports'
+  constructor is unchanged. Full Java suite (465 tests) green; lint + spotless clean.
+
+* refactor(android): wave 6 (A2) — extract ObdStoreWriter from ObdLocalStore
+
+ObdLocalStore was a 678-LOC facade implementing three interfaces and owning the entire write surface
+  inline. Moved the write half — session lifecycle, telemetry/ PID/location/event inserts,
+  adapter-history upserts, and VIN-derived vehicle identity (plus the prepared-statement cache and
+  ObdStoreSnapshots dependency) — into a new ObdStoreWriter. ObdLocalStore now delegates each
+  ObdSessionStore method one-to-one and drops to 326 LOC: a thin facade over reads
+  (ObdStoreReports/Trips), writes (ObdStoreWriter), materialization, and maintenance.
+
+Pure code movement: the public ObdLocalStore API is byte-for-byte unchanged, so every caller and
+  test is unaffected. Full Java suite (465 tests) green; lint + spotless clean.
+
+* refactor(android): wave 6 (A4) — extract DashboardPublisher from MainActivity
+
+The native->WebView publish path (the function-name allowlist + callDashboard's page-ready /
+  tear-down gating) lived inline in MainActivity, untestable without a full Activity. Extracted it
+  into DashboardPublisher, which owns the allowlist, pageReady flag, and liveness/UI-thread
+  marshalling via injected seams (a Liveness check + an Executor — production passes
+  Activity::runOnUiThread, tests pass a synchronous executor). MainActivity.callDashboard now
+  delegates; onDashboardReady/ isDashboardReadyForTest go through the publisher.
+
+This is the testable, cohesive slice of A4 — the broadcast aggregation, service binding, and
+  lifecycle stay in the Activity where they belong. New DashboardPublisherTest covers allowlist
+  enforcement, payload quoting, and the not-ready / torn-down drops with no Activity. (Liveness is a
+  local interface, not java.util.function.BooleanSupplier, which is API 24+ vs minSdk 23.)
+
+Full Java suite (470 tests) green; lint + spotless clean.
+
+* build(dashboard): wave 6 (I3) — opt-in tsc --checkJs type-checking
+
+ESLint catches undefined names but not type-level bugs (wrong property access, bad arity). Added a
+  TypeScript checker (no emit) over the dashboard JS, gated in CI and in verifyActiveApp via a new
+  dashboardTypecheck task.
+
+It's opt-in to avoid drowning in noise on the IIFE-shared-window pattern: only files whose first
+  line is `// @ts-check` are checked (checkJs:false), and shared globals (VoltDashboard, the native
+  bridge, Leaflet) are declared loosely in dashboard-globals.d.ts so checking surfaces real local
+  bugs without false "property does not exist on Window" errors. Migrated three files as the seed —
+  connection-status.js, connection-tools.js (where tsc flagged genuinely untyped form-element
+  access: .value/.checked/.disabled on HTMLElement, now cast to HTMLInputElement/HTMLButtonElement),
+  and demo-data.js. CONTRIBUTING documents the one-comment migration path.
+
+tsc clean; ESLint + 65 vitest + spotless + bundle budget all green.
+
+* fix(android): address CodeRabbit review on #152
+
+- csp.test.js: tighten tile-host allowlist match to exact/domain-suffix boundary (startsWith would
+  let basemaps.cartocdn.com.evil.com slip past the regression test). - roadmap: schema v8 -> v9 +
+  add the v9 session_trip_rollups entry (G1 bumped the DB after the wave-1 doc fix set it to v8). -
+  MainActivity: simplify callDashboard javadoc — it referenced the removed
+  ALLOWED_DASHBOARD_FUNCTIONS; now points at DashboardPublisher.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.4.10 (2026-05-29)
 
 ### Bug Fixes
