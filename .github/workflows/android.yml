@@ -93,10 +93,21 @@ jobs:
           node-version: '20'
       - name: Install dashboard test deps
         run: npm ci
+      - name: Audit dashboard dependencies
+        # Fail the job on a known high/critical advisory in the dashboard's
+        # (dev-only) npm tree. `--audit-level=high` keeps low/moderate noise from
+        # blocking PRs while still gating on anything seriously exploitable.
+        run: npm audit --audit-level=high
       - name: Lint dashboard JS
         # ESLint catches undefined globals / redeclared names / unreachable code
         # that Spotless (formatting-only) does not. Fails the job on any lint error.
         run: npm run lint
+      - name: Type-check opted-in dashboard JS
+        # tsc --checkJs over the files that start with `// @ts-check` (see
+        # tsconfig.json). Catches type-level bugs ESLint can't — wrong property
+        # access, bad call arity. Migrate a file by adding the comment + clearing
+        # errors; this gate keeps the already-migrated files honest.
+        run: npm run typecheck
       - name: Run dashboard JS smoke tests with coverage gate
         # Istanbul instruments the dashboard JS loaded by the jsdom smoke suite and
         # fails the job if coverage drops below the ratchet in vitest.config.js.
@@ -125,9 +136,31 @@ jobs:
                 echo "| $f | $size |"
               fi
             done
-            total=$(find js css -type f \( -name "*.js" -o -name "*.css" \) ! -path "*/lib/*" -exec cat {} + | wc -c | tr -d ' ')
-            echo "| **total (excl lib/)** | **$total** |"
+            # Split budget (build.gradle:verifyDashboardBundleSize): core bundle vs lazy DTC data.
+            dtc=$(cat js/dtc-lookup.js js/dtc-causes.js | wc -c | tr -d ' ')
+            all=$(find js css -type f \( -name "*.js" -o -name "*.css" \) ! -path "*/lib/*" -exec cat {} + | wc -c | tr -d ' ')
+            core=$((all - dtc))
+            echo "| **core (excl lib/, excl dtc data)** | **$core** / 360000 |"
+            echo "| **dtc data (lookup + causes)** | **$dtc** / 380000 |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  ci-success:
+    # Single aggregate status so branch protection only needs to require one
+    # check ("ci-success") instead of enumerating every lane. Adding a new test
+    # job just means adding it to `needs:` here — no branch-protection edit.
+    if: always()
+    needs: [unit-tests, dashboard-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required jobs passed
+        run: |
+          if [ "${{ needs.unit-tests.result }}" != "success" ] \
+            || [ "${{ needs.dashboard-tests.result }}" != "success" ]; then
+            echo "unit-tests=${{ needs.unit-tests.result }} dashboard-tests=${{ needs.dashboard-tests.result }}"
+            echo "::error::One or more required CI jobs did not succeed."
+            exit 1
+          fi
+          echo "All required CI jobs succeeded."
 
   publish-debug-release:
     # Rolling debug build of main, surfaced as a permanent download URL:

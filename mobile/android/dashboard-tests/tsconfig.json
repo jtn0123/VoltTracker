@@ -1,0 +1,21 @@
+{
+  "//": "Opt-in type-checking for the dashboard JS (I3). checkJs is false, so only files that start with `// @ts-check` are type-checked — migrate a file by adding that comment and clearing the errors. tsc emits nothing; this is a checker only. Run via `npm run typecheck`.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": [
+    "dashboard-globals.d.ts",
+    "../app/src/main/assets/dashboard/js/**/*.js"
+  ],
+  "exclude": ["../app/src/main/assets/dashboard/lib/**"]
+}

@@ -180,6 +180,35 @@ public class QueryPlanIndexTest {
         assertUsesIndex(sql, new String[] {"1"}, "idx_pid_observations_session_time");
     }
 
+    // ---- route-downsample reads (Trips/Map, ObdStoreTrips#routePointsForSessionJson) --
+    // These back the Drive/Map route render and are the hot path G1 reworks. The
+    // session-scoped, oldest-first scan must stay index-bound as history grows.
+
+    @Test
+    public void routeDownsampleLocationRead_usesSessionTimeIndex() {
+        // ObdStoreTrips#downsampledRoutePoints over location_samples.
+        String sql =
+                "SELECT captured_at_ms, latitude, longitude, accuracy_m, speed_mps, bearing_deg,"
+                        + " altitude_m FROM "
+                        + VoltTrackerDb.TABLE_LOCATION_SAMPLES
+                        + " WHERE session_id = ? ORDER BY captured_at_ms ASC";
+        assertUsesIndex(sql, new String[] {"1"}, "idx_location_samples_session_time");
+    }
+
+    @Test
+    public void routeDownsampleTelemetryFallbackRead_usesSessionTimeIndex() {
+        // Telemetry fallback when a session has no GPS fixes. The extra
+        // "latitude/longitude IS NOT NULL" predicate is a residual filter; the
+        // session_id equality + captured_at_ms ordering must still ride the index.
+        String sql =
+                "SELECT captured_at_ms, latitude, longitude, accuracy_m, gps_speed_mps, bearing_deg,"
+                        + " soc FROM "
+                        + VoltTrackerDb.TABLE_TELEMETRY
+                        + " WHERE session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL"
+                        + " ORDER BY captured_at_ms ASC";
+        assertUsesIndex(sql, new String[] {"1"}, "idx_telemetry_session_time");
+    }
+
     // ---- prune-by-time deletes (background maintenance) ------------------------------
 
     @Test

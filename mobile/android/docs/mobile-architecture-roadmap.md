@@ -12,9 +12,9 @@ The UI should not mix real data, demo data, and future/placeholder data. Demo re
 
 ## Current Progress
 
-Last updated: 2026-05-23
+Last updated: 2026-05-30
 
-Current Android database schema: v7
+Current Android database schema: v9
 
 Completed:
 
@@ -35,6 +35,8 @@ Completed:
 - **Schema v5** added `charge_transition_hint` and `app_foreground` columns to `telemetry_samples` (with backfill from existing JSON).
 - **Schema v6** added the diagnostic-code tables and indexes.
 - **Schema v7** added prune-by-time indexes (`idx_telemetry_captured_at`, `idx_location_samples_captured_at`, `idx_events_occurred_at`, `idx_pid_observations_observed_at`) so retention sweeps stay index-bound on large databases.
+- **Schema v8** added raw HV pack voltage (V) and current (A, discharge-positive) columns to `telemetry_samples` so the trip materializer can integrate V·I for `energy_kwh` and the dashboard can show real EV pack readings instead of the aux 12V battery. Older rows stay NULL (no backfill — prior sample JSON stored only the computed `power_kw`, not its inputs).
+- **Schema v9** added the `session_trip_rollups` cache (one row per closed session: distance, duration, max speed, route flag) so Insights and the storage-summary total-distance read pre-computed scalars instead of re-walking every session's GPS track on each load. Lazily backfilled on read; `ON DELETE CASCADE` keeps it in lockstep with sessions. See `ObdStoreTrips`.
 - Query-plan regression test (`QueryPlanIndexTest`) that seeds 50 sessions, runs `ANALYZE`, and asserts `SEARCH USING INDEX` on every hot query in `ObdStoreReports` and `ObdStoreTrips`.
 - Migration regression test (`VoltTrackerDbMigrationTest`) that round-trips every schema version.
 - Backup round-trip test (`BackupRoundTripTest`) covering the full export/import cycle.

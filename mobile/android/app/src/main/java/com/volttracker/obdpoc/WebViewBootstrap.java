@@ -4,8 +4,10 @@ import android.annotation.SuppressLint;
 import android.util.Log;
 import android.webkit.ConsoleMessage;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 /**
  * One-shot helper that configures the dashboard {@link WebView}: applies the project's hardened
@@ -18,7 +20,8 @@ import android.webkit.WebView;
  */
 final class WebViewBootstrap {
 
-    private static final String DASHBOARD_URL = "file:///android_asset/dashboard/index.html";
+    private static final String DASHBOARD_ORIGIN = "file:///android_asset/dashboard/";
+    private static final String DASHBOARD_URL = DASHBOARD_ORIGIN + "index.html";
     private static final String BRIDGE_NAME = "VoltTrackerAndroid";
 
     private WebViewBootstrap() {}
@@ -26,8 +29,8 @@ final class WebViewBootstrap {
     /**
      * Configures {@code webView}, attaches {@code bridge} as the {@link #BRIDGE_NAME} JS interface,
      * then loads the dashboard. The dashboard calls {@code VoltTrackerAndroid.dashboardReady()}
-     * once its module bootstrap has created {@code window.VoltTrackerNative}; {@code
-     * onPageFinished} is too early on some WebView builds.
+     * once its scripts have created {@code window.VoltTrackerNative}; {@code onPageFinished} is too
+     * early on some WebView builds.
      */
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     static void configure(WebView webView, VoltBridge bridge) {
@@ -81,7 +84,37 @@ final class WebViewBootstrap {
                         return true;
                     }
                 });
+        // Origin guard: the dashboard only ever navigates within file:///android_asset/dashboard/.
+        // External links open via the VoltBridge ACTION_VIEW intent, never in this WebView, so any
+        // attempt to navigate the main frame elsewhere is unexpected (a bug or injected content)
+        // and
+        // is blocked. shouldOverrideUrlLoading is not invoked for the initial loadUrl() below or
+        // for
+        // sub-resource loads (those are bounded by the CSP), only for navigations.
+        webView.setWebViewClient(
+                new WebViewClient() {
+                    @Override
+                    public boolean shouldOverrideUrlLoading(
+                            WebView view, WebResourceRequest request) {
+                        return blockOffOrigin(request == null ? null : request.getUrl().toString());
+                    }
+
+                    @SuppressWarnings("deprecation") // String overload still fires on API 23
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                        return blockOffOrigin(url);
+                    }
+                });
         webView.addJavascriptInterface(bridge, BRIDGE_NAME);
         webView.loadUrl(DASHBOARD_URL);
+    }
+
+    /** Returns true (consume, do not navigate) for any URL outside the dashboard origin. */
+    private static boolean blockOffOrigin(String url) {
+        if (url != null && url.startsWith(DASHBOARD_ORIGIN)) {
+            return false;
+        }
+        Log.w(MainActivity.TAG, "Blocked off-origin WebView navigation: " + url);
+        return true;
     }
 }

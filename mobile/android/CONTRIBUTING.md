@@ -60,10 +60,25 @@ change as the partial/template edit.
 brew install lefthook && lefthook install
 ```
 
-Hooks run Spotless and ESLint on staged dashboard JS. Install dashboard Node
-dependencies once with `npm --prefix dashboard-tests ci`; otherwise the local
-ESLint hook prints a warning and CI becomes the first strict check. To bypass on
-an emergency push: `git commit --no-verify` (use sparingly; CI will catch it).
+The **pre-commit** hook runs Spotless and ESLint on staged dashboard JS. Install
+dashboard Node dependencies once with `npm --prefix dashboard-tests ci`;
+otherwise the local ESLint hook prints a warning and CI becomes the first strict
+check.
+
+The **pre-push** hook runs the Java unit tests and the dashboard Vitest suite so
+a broken push is caught in ~30-60s instead of ~8min later in CI.
+
+To bypass in an emergency: `git commit --no-verify` / `git push --no-verify`
+(use sparingly; CI will catch it).
+
+## Dashboard JS type-checking
+
+`npm --prefix dashboard-tests run typecheck` runs `tsc --checkJs` over the dashboard
+JS. It is **opt-in**: only files whose first line is `// @ts-check` are checked, and
+those are gated in CI. To migrate a file, add `// @ts-check`, run `typecheck`, and
+clear the errors — usually a JSDoc cast like `/** @type {HTMLInputElement} */
+(el("id"))` or `/** @type {any} */ (window.VoltDashboard ...)`. Shared globals are
+declared in `dashboard-tests/dashboard-globals.d.ts`.
 
 ## Where things live
 

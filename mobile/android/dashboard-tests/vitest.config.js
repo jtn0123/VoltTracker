@@ -23,11 +23,13 @@ export default {
       include: ['**/app/src/main/assets/dashboard/js/**/*.js'],
       exclude: ['**/app/src/main/assets/dashboard/lib/**/*'],
       reporter: ['text-summary', 'html'],
+      // Ratcheted 2026-05-29 to ~3pts below measured (lines 65.4 / stmts 62.2 /
+      // funcs 62.6 / branches 48.7). Raise only; never lower.
       thresholds: {
-        lines: 52,
-        statements: 49,
-        functions: 50,
-        branches: 40,
+        lines: 62,
+        statements: 60,
+        functions: 60,
+        branches: 46,
       },
     },
   },

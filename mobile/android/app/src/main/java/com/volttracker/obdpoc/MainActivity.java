@@ -21,10 +21,10 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import com.volttracker.obdpoc.data.ObdLocalStore;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -32,25 +32,8 @@ public class MainActivity extends Activity {
     static final String TAG = "VoltTracker";
     private static final String PREFS = "volt_obd_prefs";
 
-    /**
-     * Whitelist of dashboard entry-point functions {@link #callDashboard} may invoke.
-     *
-     * <p>Keeping this closed-set + the {@link JSONObject#quote} of the payload makes
-     * `evaluateJavascript` structurally incapable of running arbitrary JS even if a caller later
-     * passes attacker-controlled input by mistake — the worst a malformed function name does is
-     * trigger a no-op + warn log.
-     */
-    private static final Set<String> ALLOWED_DASHBOARD_FUNCTIONS =
-            Set.of(
-                    "updateTelemetry",
-                    "setStatus",
-                    "setDevices",
-                    "setHistory",
-                    "setStorage",
-                    "setAppState");
-
     private WebView webView;
-    private boolean pageReady;
+    private DashboardPublisher dashboardPublisher;
     private SharedPreferences prefs;
     DeviceCatalog deviceCatalog;
     DataBackup dataBackup;
@@ -69,6 +52,13 @@ public class MainActivity extends Activity {
     private final BroadcastReceiverGroup broadcastReceivers = new BroadcastReceiverGroup();
     private final AtomicBoolean storageSummaryInFlight = new AtomicBoolean(false);
     private final AtomicBoolean storageSummaryQueued = new AtomicBoolean(false);
+    // Throttle the per-status-tick storage-summary refresh. The summary runs many
+    // queries over the whole DB (see ObdStoreReports/ObdStoreTrips), and a status
+    // broadcast fires ~1Hz during a drive — but session/sample counts and DB size
+    // are not live telemetry, so recomputing them at most every few seconds is
+    // plenty. Transitions (resume, connect, page-ready) bypass this and refresh now.
+    private static final long STORAGE_SUMMARY_MIN_INTERVAL_MS = 10_000L;
+    private final AtomicLong lastStorageSummaryAtMs = new AtomicLong(0L);
 
     /** Submits {@code task} to the background executor used for heavy DB work. */
     void runOnBackground(Runnable task) {
@@ -91,7 +81,7 @@ public class MainActivity extends Activity {
                     } else if (ObdService.BROADCAST_STATUS.equals(action)) {
                         lastStatus = MainActivityUtils.parseJson(json);
                         callDashboard("setStatus", json);
-                        publishStorageSummary();
+                        publishStorageSummaryThrottled();
                         publishAppState();
                         // Observe the same status broadcast feeding the dashboard so the
                         // notify-when-ready schedule can wake the user as soon as the adapter
@@ -164,16 +154,19 @@ public class MainActivity extends Activity {
                 });
         ViewCompat.requestApplyInsets(webView);
 
+        dashboardPublisher =
+                new DashboardPublisher(
+                        webView, () -> !isFinishing() && !isDestroyed(), this::runOnUiThread);
         WebViewBootstrap.configure(webView, new VoltBridge(this));
 
         permissionGate.ensureConnectPermissions();
     }
 
     void onDashboardReady() {
-        if (pageReady) {
+        if (dashboardPublisher.isPageReady()) {
             return;
         }
-        pageReady = true;
+        dashboardPublisher.setPageReady(true);
         publishDeviceList();
         publishStorageSummary();
         publishAppState();
@@ -181,7 +174,7 @@ public class MainActivity extends Activity {
     }
 
     boolean isDashboardReadyForTest() {
-        return pageReady;
+        return dashboardPublisher != null && dashboardPublisher.isPageReady();
     }
 
     @Override
@@ -409,48 +402,30 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Invokes {@code window.VoltTrackerNative.<functionName>(<jsonPayload>)} on the WebView UI
-     * thread.
+     * Invokes {@code window.VoltTrackerNative.<functionName>(<jsonPayload>)} on the dashboard.
      *
-     * <p>The function name must be in {@link #ALLOWED_DASHBOARD_FUNCTIONS} — unknown names are
-     * dropped with a warn log rather than executed. The JSON payload is passed as a quoted JS
-     * string literal via {@link JSONObject#quote}, so the dashboard receives a single string
-     * argument and parses it (matching the existing dashboard ABI). The combination makes it
-     * structurally impossible for a caller to inject arbitrary JavaScript.
-     *
-     * <p>The WebView reference is captured at call time and re-checked inside the UI-thread
-     * runnable: if {@link #onDestroy} ran (or replaced the view) in between, the deferred call is a
-     * safe no-op rather than a {@code NullPointerException} on a destroyed view.
+     * <p>Delegates to {@link DashboardPublisher#publish}, which enforces the function-name
+     * allowlist, JSON-quotes the payload (so injection is structurally impossible), and gates
+     * dispatch on page-ready + host-liveness on the UI thread.
      */
     private void callDashboard(String functionName, String jsonPayload) {
-        if (!ALLOWED_DASHBOARD_FUNCTIONS.contains(functionName)) {
-            Log.w(TAG, "callDashboard: refused unknown function name: " + functionName);
+        if (dashboardPublisher != null) {
+            dashboardPublisher.publish(functionName, jsonPayload);
+        }
+    }
+
+    /**
+     * Refresh the storage summary, but at most once per {@link #STORAGE_SUMMARY_MIN_INTERVAL_MS}.
+     * Used by the ~1Hz status-broadcast path; on a skip the next tick past the interval (or any
+     * forced transition) brings it current. Eventual consistency within the interval is fine — this
+     * is session/sample counts and DB size, not live telemetry.
+     */
+    void publishStorageSummaryThrottled() {
+        long now = System.currentTimeMillis();
+        if (now - lastStorageSummaryAtMs.get() < STORAGE_SUMMARY_MIN_INTERVAL_MS) {
             return;
         }
-        final WebView wv = this.webView;
-        if (!pageReady || wv == null) {
-            return;
-        }
-        final String script =
-                "window.VoltTrackerNative."
-                        + functionName
-                        + "("
-                        + JSONObject.quote(jsonPayload == null ? "{}" : jsonPayload)
-                        + ");";
-        runOnUiThread(
-                () -> {
-                    // Re-check every tear-down signal inside the runnable. The identity check
-                    // catches view replacement; the lifecycle checks catch Activity destruction
-                    // where this.webView still points to the same instance (we don't null it in
-                    // onDestroy). pageReady catches the brief window after Activity start but
-                    // before the dashboard's JS-ready handshake. Without ALL of these,
-                    // evaluateJavascript can fire against a torn-down WebView and crash on some
-                    // Android builds.
-                    if (isFinishing() || isDestroyed() || !pageReady || wv != this.webView) {
-                        return;
-                    }
-                    wv.evaluateJavascript(script, null);
-                });
+        publishStorageSummary();
     }
 
     void publishStorageSummary() {
@@ -466,6 +441,7 @@ public class MainActivity extends Activity {
         backgroundExecutor.execute(
                 () -> {
                     final String storage = getStorageSummaryJson();
+                    lastStorageSummaryAtMs.set(System.currentTimeMillis());
                     runOnUiThread(
                             () -> {
                                 lastStorage = MainActivityUtils.parseJson(storage);

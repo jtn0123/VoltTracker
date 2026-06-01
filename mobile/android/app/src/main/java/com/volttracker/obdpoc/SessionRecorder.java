@@ -9,11 +9,6 @@ import static com.volttracker.obdpoc.ObdElmDecode.summarizeForStorage;
 import android.util.Log;
 import com.volttracker.obdpoc.data.ObdLocalStore;
 import com.volttracker.obdpoc.location.FilteredLocation;
-import com.volttracker.obdpoc.materialize.ChargeSession;
-import com.volttracker.obdpoc.materialize.ChargeSessionMaterializer;
-import com.volttracker.obdpoc.materialize.MaterializerInput;
-import com.volttracker.obdpoc.materialize.Trip;
-import com.volttracker.obdpoc.materialize.TripMaterializer;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutionException;
@@ -343,12 +338,7 @@ final class SessionRecorder {
             return;
         }
         try {
-            MaterializerInput input = new MaterializerInput(sessionId, startedAtMs, closedAtMs);
-            List<Trip> tripList = TripMaterializer.materialize(input, store);
-            store.persistTrips(sessionId, tripList);
-            List<ChargeSession> chargeSessions =
-                    ChargeSessionMaterializer.materialize(input, store);
-            store.persistChargeSessions(sessionId, chargeSessions);
+            store.materializeSession(sessionId, startedAtMs, closedAtMs);
         } catch (RuntimeException ex) {
             Log.w(MainActivity.TAG, "session materialization failed", ex);
             try {

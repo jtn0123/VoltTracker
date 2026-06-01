@@ -44,6 +44,17 @@ public final class ClassifierInput {
             Boolean pluggedHint,
             Boolean engineRunningHint,
             long sampleAtMs) {
+        // Reject physically-impossible values so a parser bug or a wild adapter read surfaces here
+        // (fail fast) instead of silently producing a confident-but-wrong classification. Bounds
+        // are
+        // deliberately generous — only nonsense trips them; null always means "unknown" and is
+        // fine.
+        // The single live caller (LiveSampleReader) catches this and degrades to an unknown sample,
+        // so a transient glitch can never crash the polling loop.
+        requireInRange("speedKph", speedKph, 0.0, 500.0);
+        requireInRange("rpm", rpm == null ? null : rpm.doubleValue(), 0.0, 20_000.0);
+        requireInRange("adapterVoltage", adapterVoltage, 0.0, 60.0);
+        requireInRange("packCurrentA", packCurrentA, -2_000.0, 2_000.0);
         this.speedKph = speedKph;
         this.rpm = rpm;
         this.adapterVoltage = adapterVoltage;
@@ -51,5 +62,19 @@ public final class ClassifierInput {
         this.pluggedHint = pluggedHint;
         this.engineRunningHint = engineRunningHint;
         this.sampleAtMs = sampleAtMs;
+    }
+
+    /**
+     * Throws {@link IllegalArgumentException} when a non-null value is NaN, infinite, or out of
+     * range.
+     */
+    private static void requireInRange(String name, Double value, double min, double max) {
+        if (value == null) {
+            return;
+        }
+        if (Double.isNaN(value) || Double.isInfinite(value) || value < min || value > max) {
+            throw new IllegalArgumentException(
+                    name + " out of range [" + min + ", " + max + "]: " + value);
+        }
     }
 }

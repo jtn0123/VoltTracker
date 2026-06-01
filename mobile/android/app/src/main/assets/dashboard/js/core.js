@@ -315,14 +315,49 @@
     catch (_err) { return fallback; }
   }
 
+  // setText/setMeter null-guard on a missing element so a renamed/removed partial ID can't crash a
+  // render mid-pass. The downside is silence: a live tile would sit at "--" forever with no signal.
+  // So a miss now warns ONCE per id (deduped — these run ~1Hz) and pipes through logClientError, the
+  // same surfacing the bindListenerGuarded path uses. Both helpers return whether the element was
+  // found, so a caller can react to a false if it ever needs to. Mirrors VD.bindListenerGuarded.
+  const warnedMissingTargets = new Set();
+  function warnMissingTarget(fn, id) {
+    if (warnedMissingTargets.has(id)) return;
+    warnedMissingTargets.add(id);
+    const message = fn + " skipped: missing #" + id;
+    try {
+      if (typeof console !== "undefined" && console && console.warn) {
+        console.warn(message);
+      }
+    } catch (ignored) {}
+    try {
+      if (
+        window.VoltTrackerAndroid &&
+        typeof window.VoltTrackerAndroid.logClientError === "function"
+      ) {
+        window.VoltTrackerAndroid.logClientError("setTarget", message);
+      }
+    } catch (ignored) {}
+  }
+
   function setText(id, value) {
     const node = el(id);
-    if (node) node.textContent = value == null || value === "" ? "--" : value;
+    if (!node) {
+      warnMissingTarget("setText", id);
+      return false;
+    }
+    node.textContent = value == null || value === "" ? "--" : value;
+    return true;
   }
 
   function setMeter(id, value) {
     const node = el(id);
-    if (node) node.style.width = Math.max(0, Math.min(100, Number(value) || 0)) + "%";
+    if (!node) {
+      warnMissingTarget("setMeter", id);
+      return false;
+    }
+    node.style.width = Math.max(0, Math.min(100, Number(value) || 0)) + "%";
+    return true;
   }
 
   function setView(view) {

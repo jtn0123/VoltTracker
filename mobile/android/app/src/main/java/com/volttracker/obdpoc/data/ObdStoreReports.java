@@ -152,7 +152,7 @@ final class ObdStoreReports {
             long usefulTelemetryCount =
                     countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, USEFUL_TELEMETRY_WHERE, null);
             ObdSessionRecord latest = firstOrNull(getRecentSessions(1));
-            ObdSessionRecord reviewSession = trips.latestReviewableSession(db);
+            ObdSessionRecord reviewSession = ObdStoreSessionReview.latestReviewableSession(db);
             return new StorageSummaryRecord(
                     VoltTrackerDb.DATABASE_NAME,
                     databaseFile.length(),
@@ -179,11 +179,11 @@ final class ObdStoreReports {
                     latestDiagnosticCodeReports(db, 12),
                     reviewSession == null
                             ? new JSONObject()
-                            : trips.sessionReview(db, reviewSession),
+                            : ObdStoreSessionReview.sessionReview(db, reviewSession),
                     reviewSession == null
                             ? new JSONObject()
-                            : trips.routeForSession(db, reviewSession, 240),
-                    trips.recentRoutes(db, 8, 500),
+                            : ObdStoreRouteProjection.routeForSession(db, reviewSession, 240),
+                    ObdStoreRouteProjection.recentRoutes(db, 8, 500),
                     overviewJson(db),
                     chargeSummaryJson(db),
                     batterySummaryJson(db),
@@ -427,7 +427,7 @@ final class ObdStoreReports {
 
     private JSONObject overviewJson(SQLiteDatabase db) throws JSONException {
         JSONObject payload = new JSONObject();
-        payload.put("distanceMeters", trips.totalDistanceMeters(db));
+        payload.put("distanceMeters", trips.totalDistanceMeters());
         payload.put("maxSpeedKph", maxInt(db, VoltTrackerDb.TABLE_TELEMETRY, "speed_kph"));
         payload.put("avgSampleIntervalMs", averageSampleIntervalMs(db));
         payload.put(

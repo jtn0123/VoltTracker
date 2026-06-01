@@ -1,3 +1,4 @@
+// @ts-check
 // Last-connected badge + adapter health pill.
 //
 // Reads recent session summaries via VoltTrackerAndroid.getRecentSessions(n)
@@ -6,7 +7,7 @@
 // connection-tools.html but the status payload is the same).
 (function () {
   "use strict";
-  const VD = (window.VoltDashboard = window.VoltDashboard || {});
+  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || {});
   const bridge = window.VoltTrackerAndroid || null;
   const el = (id) => document.getElementById(id);
 

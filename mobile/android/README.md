@@ -108,6 +108,19 @@ The aggregate task is configuration-cache ready. For faster repeated local
 loops, run `./gradlew verifyActiveApp --configuration-cache`; the second run
 should reuse the stored configuration.
 
+#### Running pieces individually
+
+```sh
+./gradlew :app:testDebugUnitTest                 # Java/Robolectric unit tests only
+./gradlew :app:jacocoTestReport                  # coverage report (build/reports/jacoco/)
+npm --prefix dashboard-tests run test:coverage   # dashboard Vitest + Istanbul coverage
+```
+
+`jacocoTestCoverageVerification` enforces a coverage floor that a PR must clear:
+**71% line coverage project-wide** and **89% for the `data/` package** (the
+append-only persistence layer is held to a higher bar). The dashboard Vitest
+suite has its own Istanbul thresholds in `dashboard-tests/vitest.config.js`.
+
 ### Outdated dependency report
 
 List outdated direct and transitive dependencies (advisory; nothing fails):

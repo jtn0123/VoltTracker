@@ -11,7 +11,7 @@ import java.util.Set;
 
 final class VoltTrackerDb extends SQLiteOpenHelper {
     static final String DATABASE_NAME = "volttracker_obd_poc.db";
-    static final int DATABASE_VERSION = 8;
+    static final int DATABASE_VERSION = 9;
 
     static final String TABLE_SESSIONS = "obd_sessions";
     static final String TABLE_TELEMETRY = "telemetry_samples";
@@ -23,6 +23,7 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
     static final String TABLE_VEHICLES = "vehicles";
     static final String TABLE_FIELD_CAPABILITIES = "field_capabilities";
     static final String TABLE_TRIP_SEGMENTS = "trip_segments";
+    static final String TABLE_SESSION_TRIP_ROLLUPS = "session_trip_rollups";
     static final String TABLE_CHARGE_SESSIONS = "charge_sessions";
     static final String TABLE_BATTERY_SNAPSHOTS = "battery_snapshots";
     static final String TABLE_CELL_SNAPSHOTS = "cell_snapshots";
@@ -47,6 +48,7 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                                     TABLE_VEHICLES,
                                     TABLE_FIELD_CAPABILITIES,
                                     TABLE_TRIP_SEGMENTS,
+                                    TABLE_SESSION_TRIP_ROLLUPS,
                                     TABLE_CHARGE_SESSIONS,
                                     TABLE_BATTERY_SNAPSHOTS,
                                     TABLE_CELL_SNAPSHOTS,
@@ -183,6 +185,34 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
         createRoadmapTables(db);
         createRoadmapIndexes(db);
         createPruneIndexes(db);
+        createSessionTripRollups(db);
+    }
+
+    /**
+     * Per-session trip rollup cache (schema v9). Stores the scalar a Trips/Insights read would
+     * otherwise recompute by walking every session's GPS track on every load — distance, duration,
+     * max speed, route presence — keyed by session. {@code counted} is 1 when the session produced
+     * a real trip (had useful telemetry) and 0 for a failed connection, so Insights can sum trips
+     * while the storage summary still sums distance over all sessions. Lazily populated on read in
+     * ObdStoreTrips for closed sessions; the active session is always computed live. CASCADE keeps
+     * it in lockstep with sessions on delete.
+     */
+    private static void createSessionTripRollups(SQLiteDatabase db) {
+        db.execSQL(
+                "CREATE TABLE IF NOT EXISTS "
+                        + TABLE_SESSION_TRIP_ROLLUPS
+                        + " ("
+                        + "session_id INTEGER PRIMARY KEY,"
+                        + "counted INTEGER NOT NULL,"
+                        + "distance_m REAL NOT NULL DEFAULT 0,"
+                        + "duration_ms INTEGER NOT NULL DEFAULT 0,"
+                        + "max_speed_kph INTEGER,"
+                        + "has_route INTEGER NOT NULL DEFAULT 0,"
+                        + "started_at_ms INTEGER NOT NULL DEFAULT 0,"
+                        + "FOREIGN KEY(session_id) REFERENCES "
+                        + TABLE_SESSIONS
+                        + "(_id) ON DELETE CASCADE"
+                        + ")");
     }
 
     @Override
@@ -314,6 +344,14 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                                         + TABLE_TELEMETRY
                                         + " ADD COLUMN pack_current_a REAL");
                     });
+        }
+        if (oldVersion < 9) {
+            runMigrationStep(
+                    db,
+                    oldVersion,
+                    9,
+                    "session-trip-rollups",
+                    VoltTrackerDb::createSessionTripRollups);
         }
     }
 

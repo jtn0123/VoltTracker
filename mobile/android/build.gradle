@@ -1,6 +1,7 @@
 plugins {
-    id "com.android.application" version "9.2.1" apply false
-    id "com.diffplug.spotless" version "8.6.0" apply false
+    // AGP and Spotless versions live in gradle/libs.versions.toml (the single source of truth).
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.spotless) apply false
     id "com.github.ben-manes.versions" version "0.54.0"
 }
 
@@ -14,7 +15,15 @@ tasks.named("dependencyUpdates").configure {
 
 def dashboardTestsDir = file("dashboard-tests")
 def dashboardAssetDir = file("app/src/main/assets/dashboard")
-def dashboardBundleBudgetBytes = 650_000L
+// Split budget (C2): the *core* bundle (boot + interactive JS/CSS) is what affects
+// startup and responsiveness, so it gets a tight budget. The DTC lookup tables
+// (dtc-lookup.js + dtc-causes.js) are lazy-loaded reference data — only fetched when
+// a user drills into a specific diagnostic code — so they get their own, larger
+// budget instead of crowding the core number. Both are still bounded; neither can
+// grow unchecked. See docs/bundle-budget.md.
+def dashboardCoreBudgetBytes = 360_000L
+def dashboardDtcDataBudgetBytes = 380_000L
+def dashboardDtcDataFiles = ["js/dtc-lookup.js", "js/dtc-causes.js"]
 
 tasks.register("dashboardNpmCi", Exec) {
     description = "Installs dashboard test dependencies from package-lock.json."
@@ -37,6 +46,13 @@ tasks.register("dashboardLint", Exec) {
     dependsOn("dashboardNpmCi")
     workingDir = dashboardTestsDir
     commandLine "npm", "run", "lint"
+}
+
+tasks.register("dashboardTypecheck", Exec) {
+    description = "Type-checks the dashboard JS files opted in via `// @ts-check` (tsc --checkJs)."
+    dependsOn("dashboardNpmCi")
+    workingDir = dashboardTestsDir
+    commandLine "npm", "run", "typecheck"
 }
 
 tasks.register("verifyGeneratedDashboardClean") {
@@ -66,23 +82,31 @@ tasks.register("verifyGeneratedDashboardClean") {
 }
 
 tasks.register("verifyDashboardBundleSize") {
-    description = "Fails when first-party dashboard JS/CSS exceeds the checked size budget."
-    def budgetedAssets = files(fileTree(dashboardAssetDir) {
+    description = "Fails when the core dashboard bundle or the DTC data exceeds its size budget."
+    // Core = boot/interactive JS + CSS, minus the lazy DTC reference tables.
+    def coreAssets = files(fileTree(dashboardAssetDir) {
         include "js/**/*.js", "css/**/*.css"
         exclude "lib/**"
+        dashboardDtcDataFiles.each { exclude it }
     })
-    inputs.files(budgetedAssets)
+    def dtcDataAssets = files(dashboardDtcDataFiles.collect { new File(dashboardAssetDir, it) })
+    inputs.files(coreAssets)
+    inputs.files(dtcDataAssets)
     doLast {
-        def totalBytes = 0L
-        budgetedAssets.files.each { asset ->
-            totalBytes += asset.length()
-        }
-        if (totalBytes > dashboardBundleBudgetBytes) {
+        def sumBytes = { assets -> assets.files.sum { it.length() } ?: 0L }
+        def coreBytes = sumBytes(coreAssets)
+        def dtcBytes = sumBytes(dtcDataAssets)
+        if (coreBytes > dashboardCoreBudgetBytes) {
             throw new GradleException(
-                    "Dashboard JS/CSS bundle is ${totalBytes} bytes, over budget ${dashboardBundleBudgetBytes} bytes")
+                    "Core dashboard JS/CSS bundle is ${coreBytes} bytes, over budget ${dashboardCoreBudgetBytes} bytes")
+        }
+        if (dtcBytes > dashboardDtcDataBudgetBytes) {
+            throw new GradleException(
+                    "DTC data bundle is ${dtcBytes} bytes, over budget ${dashboardDtcDataBudgetBytes} bytes")
         }
         logger.lifecycle(
-                "Dashboard JS/CSS bundle: ${totalBytes} bytes (budget ${dashboardBundleBudgetBytes})")
+                "Dashboard core bundle: ${coreBytes} bytes (budget ${dashboardCoreBudgetBytes}); " +
+                        "DTC data: ${dtcBytes} bytes (budget ${dashboardDtcDataBudgetBytes})")
     }
 }
 
@@ -95,6 +119,7 @@ tasks.register("verifyActiveApp") {
             ":app:assembleDebug",
             ":app:jacocoTestCoverageVerification",
             "dashboardLint",
+            "dashboardTypecheck",
             "dashboardTest",
             "verifyDashboardBundleSize",
             "verifyGeneratedDashboardClean")
@@ -106,6 +131,7 @@ subprojects {
             dependsOn(
                     rootProject.tasks.named("dashboardTest"),
                     rootProject.tasks.named("dashboardLint"),
+                    rootProject.tasks.named("dashboardTypecheck"),
                     rootProject.tasks.named("verifyDashboardBundleSize"),
                     rootProject.tasks.named("verifyGeneratedDashboardClean"))
         }

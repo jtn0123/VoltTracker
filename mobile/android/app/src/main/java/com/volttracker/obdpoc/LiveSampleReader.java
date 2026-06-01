@@ -181,16 +181,24 @@ final class LiveSampleReader {
             long now)
             throws JSONException {
         Boolean engineRunningHint = rpm == null ? null : (rpm > 200f);
-        ClassifierResult classified =
-                VehicleStateClassifier.classify(
-                        new ClassifierInput(
-                                acceptedSpeed == null ? null : acceptedSpeed.doubleValue(),
-                                rpm == null ? null : Math.round(rpm),
-                                voltage == null ? null : voltage.doubleValue(),
-                                packCurrentA,
-                                chargeTransitionHint ? Boolean.TRUE : null,
-                                engineRunningHint,
-                                now));
+        ClassifierInput input;
+        try {
+            input =
+                    new ClassifierInput(
+                            acceptedSpeed == null ? null : acceptedSpeed.doubleValue(),
+                            rpm == null ? null : Math.round(rpm),
+                            voltage == null ? null : voltage.doubleValue(),
+                            packCurrentA,
+                            chargeTransitionHint ? Boolean.TRUE : null,
+                            engineRunningHint,
+                            now);
+        } catch (IllegalArgumentException ex) {
+            // Impossible sensor values (parser bug or wild adapter). Don't crash the
+            // sample — log the anomaly and fall back to an all-unknown classification.
+            service.recorder.logError("classifier_input_rejected", ex);
+            input = new ClassifierInput(null, null, null, null, null, null, now);
+        }
+        ClassifierResult classified = VehicleStateClassifier.classify(input);
         sample.put("vehicleState", classified.state.asPayloadKey());
         sample.put("vehicleStateConfidence", classified.confidence.asPayloadKey());
         sample.put("vehicleStateReasons", new JSONArray(classified.reasons));

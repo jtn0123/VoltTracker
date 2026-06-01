@@ -36,8 +36,17 @@ pre-commit:
         fi
       stage_fixed: false
 
-# Optional pre-push (uncomment to enable full test suite before push)
-# pre-push:
-#   commands:
-#     unit-tests:
-#       run: cd mobile/android && ./gradlew --no-daemon :app:testDebugUnitTest
+# Pre-push gate: run the fast test suites locally so a broken push is caught in
+# ~30-60s instead of ~8min later in CI. Opt-in (only fires after `lefthook
+# install`). Escape hatch for emergencies: `git push --no-verify`.
+pre-push:
+  parallel: true
+  commands:
+    unit-tests:
+      run: cd mobile/android && ./gradlew --no-daemon :app:testDebugUnitTest
+    dashboard-tests:
+      run: |
+        if [ ! -d mobile/android/dashboard-tests/node_modules ]; then
+          npm --prefix mobile/android/dashboard-tests ci
+        fi
+        npm --prefix mobile/android/dashboard-tests test

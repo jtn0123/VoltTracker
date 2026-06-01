@@ -1158,6 +1158,12 @@
     inner +=
       `<path d="${trend}" fill="none" stroke="#ff7a45" stroke-width="2.5" stroke-linejoin="round"/>` +
       `<text x="${w - padR}" y="${h - 4}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">speed (mph) -></text>`;
+    // SAFE SINK: `inner` is composed exclusively from computed numbers (chart
+    // geometry via xOf/yS/.toFixed, loop integers, and the fixed gColor palette) —
+    // never from telemetry strings or any user/bridge input, so no markup can be
+    // injected. This is one of two innerHTML sinks allowlisted in
+    // dashboard-tests/dom-sinks.test.js; keep it geometry-only. If you ever need to
+    // render a label from data, build it with createElementNS, not string interp.
     chart.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${inner}</svg>`;
     if (head) {
       head.replaceChildren();

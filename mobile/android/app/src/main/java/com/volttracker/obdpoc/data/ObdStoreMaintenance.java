@@ -37,6 +37,7 @@ final class ObdStoreMaintenance {
             db.delete(VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS, null, null);
             db.delete(VoltTrackerDb.TABLE_EXPORTS, null, null);
             db.delete(VoltTrackerDb.TABLE_CHARGE_SESSIONS, null, null);
+            db.delete(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, null, null);
             db.delete(VoltTrackerDb.TABLE_TRIP_SEGMENTS, null, null);
             db.delete(VoltTrackerDb.TABLE_FIELD_CAPABILITIES, null, null);
             db.delete(VoltTrackerDb.TABLE_LOCATION_SAMPLES, null, null);

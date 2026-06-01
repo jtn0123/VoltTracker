@@ -1,3 +1,4 @@
+// @ts-check
 // Proactive connection-tools button wiring.
 //
 // Wires:
@@ -29,7 +30,7 @@
   // "running" state for a short window and let the status broadcasts paint
   // the rest of the UI.
   function bindTestConnection() {
-    const btn = el("testConnectionBtn");
+    const btn = /** @type {HTMLButtonElement} */ (el("testConnectionBtn"));
     if (!btn) return;
     btn.addEventListener("click", () => {
       btn.disabled = true;
@@ -59,8 +60,8 @@
   // cancels the schedule on the Android side so probes stop immediately rather than running on
   // until the (up to 30 min) deadline.
   function bindNotifyWhenReady() {
-    const toggle = el("notifyWhenReadyToggle");
-    const mins = el("notifyWhenReadyMinutes");
+    const toggle = /** @type {HTMLInputElement} */ (el("notifyWhenReadyToggle"));
+    const mins = /** @type {HTMLInputElement} */ (el("notifyWhenReadyMinutes"));
     const status = el("notifyWhenReadyStatus");
     if (!toggle || !mins) return;
     function applyToggleState() {

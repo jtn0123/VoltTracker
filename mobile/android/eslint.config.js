@@ -1,12 +1,13 @@
 // ESLint flat config (I1) — placed at mobile/android/ so it's the root for the dashboard
-// JS files at app/src/main/assets/dashboard/js/**. ESLint 9 will not match files outside
+// JS files at app/src/main/assets/dashboard/js/**. ESLint will not match files outside
 // the directory containing the config, so the config lives one level above both `app/` and
 // `dashboard-tests/`.
 //
 // Purpose: catch undefined variables, unused imports, and typos locally before they surface
 // as a WebView console error or a Vitest failure 8 minutes later in CI. The rule set is
 // deliberately conservative — recommended + a few targeted rules — so it never fights the
-// module bootstrap, IIFE module bodies, or other legitimate dashboard idioms.
+// classic-script IIFE module bodies or other legitimate dashboard idioms. (The dashboard
+// loads as ordered classic <script> tags, not ES modules — modules don't load over file://.)
 //
 // Run via `npm --prefix mobile/android/dashboard-tests run lint`. The lefthook pre-commit
 // hook invokes the same npm script for staged dashboard JS files.

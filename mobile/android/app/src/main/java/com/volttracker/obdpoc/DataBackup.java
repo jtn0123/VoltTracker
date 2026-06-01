@@ -37,7 +37,9 @@ import org.json.JSONObject;
 final class DataBackup {
 
     private static final long MAX_RESTORE_BYTES = 128L * 1024L * 1024L;
-    private static final int CURRENT_RESTORE_SCHEMA_VERSION = 8;
+    // Must track VoltTrackerDb.DATABASE_VERSION (package-private there, so mirrored here). Bump on
+    // every schema migration. v9 added session_trip_rollups.
+    private static final int CURRENT_RESTORE_SCHEMA_VERSION = 9;
     private static final int IO_BUFFER_BYTES = 8192;
     private static final byte[] ENCRYPTED_BACKUP_MAGIC =
             new byte[] {'V', 'T', 'B', 'K', 'E', 'N', '1', '\n'};
@@ -56,6 +58,7 @@ final class DataBackup {
         "vehicles",
         "field_capabilities",
         "trip_segments",
+        "session_trip_rollups",
         "charge_sessions",
         "battery_snapshots",
         "cell_snapshots",
