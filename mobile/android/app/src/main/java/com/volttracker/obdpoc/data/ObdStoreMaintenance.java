@@ -110,4 +110,37 @@ final class ObdStoreMaintenance {
                     "VoltTracker", "wal_checkpoint(TRUNCATE) failed; backup uses current file", ex);
         }
     }
+
+    /**
+     * Folds a verified donor backup into the live database via {@link DatabaseMerger}. The donor
+     * file is opened read-only; the live connection owns the merge transaction, so a failure leaves
+     * the live database untouched. The caller is responsible for having stopped logging first.
+     */
+    DatabaseMerger.MergeResult mergeFrom(File donorDbFile) {
+        if (donorDbFile == null || !donorDbFile.exists()) {
+            return DatabaseMerger.MergeResult.failure("Merge failed - backup file is missing.");
+        }
+        SQLiteDatabase target = helper.getWritableDatabase();
+        SQLiteDatabase donor = null;
+        try {
+            donor =
+                    SQLiteDatabase.openDatabase(
+                            donorDbFile.getPath(), null, SQLiteDatabase.OPEN_READONLY);
+            // Merge only supports same-schema backups. BackupController already gates on this via
+            // stageRestoreFile, but mergeFrom is a public entry point — enforce it here too so a
+            // direct caller can't drive a mismatched donor into the column-by-column copy.
+            if (donor.getVersion() != VoltTrackerDb.DATABASE_VERSION) {
+                return DatabaseMerger.MergeResult.failure(
+                        "Merge failed - that backup is from a different app version.");
+            }
+            return DatabaseMerger.merge(target, donor);
+        } catch (RuntimeException ex) {
+            return DatabaseMerger.MergeResult.failure(
+                    "Merge failed - could not open the backup file.");
+        } finally {
+            if (donor != null) {
+                donor.close();
+            }
+        }
+    }
 }

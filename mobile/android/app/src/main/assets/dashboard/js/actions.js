@@ -296,11 +296,9 @@
       VD.setStatus({ state: "blocked", detail: "Restore is only available inside the Android app." });
       return;
     }
-    if (!window.confirm("Restore will REPLACE all data on this phone with the backup file. Continue?")) {
-      return;
-    }
-    // Guard the bridge call so a quick double-tap doesn't launch two
-    // file pickers.
+    // The merge-vs-replace choice (and the destructive-replace warning) is shown
+    // natively after the file is picked and verified, so no pre-pick confirm here.
+    // Guard the bridge call so a quick double-tap doesn't launch two file pickers.
     withBusy(button, () => bridge.restoreBackup());
   }
 
@@ -314,9 +312,8 @@
       VD.setStatus({ state: "ready", detail: "Encrypted restore cancelled." });
       return;
     }
-    if (!window.confirm("Restore will REPLACE all data on this phone with the backup file. Continue?")) {
-      return;
-    }
+    // Merge-vs-replace (and the destructive-replace warning) is chosen natively
+    // once the file is picked, decrypted, and verified.
     withBusy(button, () => bridge.restoreEncryptedBackup(passphrase));
   }
 

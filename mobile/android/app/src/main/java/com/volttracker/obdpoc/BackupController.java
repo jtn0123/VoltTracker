@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
 import androidx.core.content.FileProvider;
+import com.volttracker.obdpoc.data.DatabaseMerger;
 import com.volttracker.obdpoc.data.ObdLocalStore;
 import java.io.File;
 import java.io.IOException;
@@ -183,11 +184,55 @@ final class BackupController {
         }
     }
 
+    // Stages + verifies the picked file once, then lets the user choose Replace (destructive
+    // whole-database swap) or Merge (additive fold-in). The verification cost is paid before the
+    // choice so the dialog is only shown for a real Volt Tracker backup.
     private void restoreFromUri(Uri uri, String passphrase) {
+        activity.publishStatus("ready", "Reading backup...", false);
+        executor.execute(
+                () -> {
+                    final File staged = dataBackup.stageRestoreFile(uri, passphrase);
+                    activity.runOnUiThread(
+                            () -> {
+                                if (staged == null) {
+                                    publishRestoreFailure(RestoreResult.INVALID_FILE);
+                                    return;
+                                }
+                                promptRestoreMode(staged);
+                            });
+                });
+    }
+
+    private void promptRestoreMode(File staged) {
+        try {
+            new AlertDialog.Builder(activity)
+                    .setTitle("Restore backup")
+                    .setMessage(
+                            "Merge adds this backup's trips to what's already on your phone "
+                                    + "(duplicate trips are skipped).\n\n"
+                                    + "Replace erases everything on this phone first, then "
+                                    + "loads the backup.")
+                    .setPositiveButton("Merge", (dialog, which) -> performMerge(staged))
+                    .setNegativeButton("Replace all", (dialog, which) -> performReplace(staged))
+                    .setNeutralButton("Cancel", (dialog, which) -> cancelStagedRestore(staged))
+                    .setOnCancelListener(dialog -> cancelStagedRestore(staged))
+                    .show();
+        } catch (RuntimeException ex) {
+            cancelStagedRestore(staged);
+            activity.publishStatus("blocked", "Could not show the restore options.", true);
+        }
+    }
+
+    private void cancelStagedRestore(File staged) {
+        DataBackup.deleteIfExists(staged);
+        activity.publishStatus("ready", "Restore cancelled.", false);
+    }
+
+    private void performReplace(File staged) {
         activity.publishStatus("ready", "Restoring backup...", false);
         executor.execute(
                 () -> {
-                    final RestoreResult result = applyRestore(uri, passphrase);
+                    final RestoreResult result = applyReplace(staged);
                     activity.runOnUiThread(
                             () -> {
                                 if (result == RestoreResult.OK) {
@@ -199,6 +244,35 @@ final class BackupController {
                                             false);
                                 } else {
                                     publishRestoreFailure(result);
+                                }
+                            });
+                });
+    }
+
+    private void performMerge(File staged) {
+        activity.publishStatus("ready", "Merging backup...", false);
+        executor.execute(
+                () -> {
+                    final MergeOutcome outcome = applyMerge(staged);
+                    activity.runOnUiThread(
+                            () -> {
+                                if (outcome.result == RestoreResult.OK) {
+                                    activity.publishDeviceList();
+                                    activity.publishStorageSummary();
+                                    activity.publishStatus(
+                                            "ready",
+                                            outcome.message + " Reconnect to resume logging.",
+                                            false);
+                                } else if (outcome.result == RestoreResult.LOGGING_ACTIVE) {
+                                    publishRestoreFailure(outcome.result);
+                                } else {
+                                    activity.publishStatus(
+                                            "blocked",
+                                            outcome.message != null
+                                                    ? outcome.message
+                                                    : "Merge failed - the backup could not be"
+                                                            + " merged.",
+                                            true);
                                 }
                             });
                 });
@@ -216,13 +290,48 @@ final class BackupController {
         activity.publishStatus("blocked", message, true);
     }
 
-    // Replaces the on-device database with a user-picked backup file. The file is staged
-    // and verified as a Volt Tracker SQLite database before the live database is touched.
-    private RestoreResult applyRestore(Uri uri, String passphrase) {
-        File staged = dataBackup.stageRestoreFile(uri, passphrase);
-        if (staged == null) {
-            return RestoreResult.INVALID_FILE;
+    /** Carries the merge outcome plus the user-facing one-line summary back to the UI thread. */
+    private static final class MergeOutcome {
+        final RestoreResult result;
+        final String message;
+
+        MergeOutcome(RestoreResult result, String message) {
+            this.result = result;
+            this.message = message;
         }
+    }
+
+    // Folds the staged backup into the live database additively, deduplicating sessions by start
+    // time. The merge is transactional inside the data layer, so a failure leaves the live store
+    // untouched and we never swap the file.
+    private MergeOutcome applyMerge(File staged) {
+        try {
+            if (activity.localStore == null) {
+                return new MergeOutcome(RestoreResult.OTHER, null);
+            }
+            // Stop any logging session so the merge cannot race in-flight ObdService writes.
+            if (!stopLoggingForRestore()) {
+                return new MergeOutcome(RestoreResult.LOGGING_ACTIVE, null);
+            }
+            DatabaseMerger.MergeResult merged = activity.localStore.mergeFrom(staged);
+            if (!merged.ok) {
+                return new MergeOutcome(RestoreResult.OTHER, merged.summary());
+            }
+            return new MergeOutcome(RestoreResult.OK, merged.summary());
+        } catch (RuntimeException ex) {
+            return new MergeOutcome(RestoreResult.OTHER, null);
+        } finally {
+            DataBackup.deleteIfExists(staged);
+        }
+    }
+
+    // Replaces the on-device database with the already-staged, verified backup file. The staged
+    // file has already been confirmed a Volt Tracker SQLite database before this point.
+    private RestoreResult applyReplace(File staged) {
+        // Hoisted so the finally can clean them up regardless of which path we exit on — a caught
+        // failure must not leave the transient .restore-* copies next to the live database.
+        File restoreTemp = null;
+        File restoreBackup = null;
         try {
             File dbFile =
                     activity.localStore == null ? null : activity.localStore.getDatabaseFile();
@@ -237,8 +346,8 @@ final class BackupController {
                 activity.localStore.close();
                 activity.localStore = null;
             }
-            File restoreTemp = new File(dbFile.getPath() + ".restore-tmp");
-            File restoreBackup = new File(dbFile.getPath() + ".restore-backup");
+            restoreTemp = new File(dbFile.getPath() + ".restore-tmp");
+            restoreBackup = new File(dbFile.getPath() + ".restore-backup");
             DataBackup.deleteIfExists(restoreTemp);
             DataBackup.deleteIfExists(restoreBackup);
             DataBackup.copyFile(staged, restoreTemp);
@@ -260,8 +369,6 @@ final class BackupController {
                 activity.localStore = new ObdLocalStore(activity);
                 throw ex;
             }
-            DataBackup.deleteIfExists(restoreTemp);
-            DataBackup.deleteIfExists(restoreBackup);
             return RestoreResult.OK;
         } catch (IOException | RuntimeException ex) {
             if (activity.localStore == null) {
@@ -273,6 +380,8 @@ final class BackupController {
             }
             return RestoreResult.OTHER;
         } finally {
+            DataBackup.deleteIfExists(restoreTemp);
+            DataBackup.deleteIfExists(restoreBackup);
             staged.delete();
         }
     }

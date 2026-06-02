@@ -486,7 +486,7 @@ final class DataBackup {
     }
 
     static void deleteIfExists(File file) {
-        if (file.exists()) {
+        if (file != null && file.exists()) {
             file.delete();
         }
     }

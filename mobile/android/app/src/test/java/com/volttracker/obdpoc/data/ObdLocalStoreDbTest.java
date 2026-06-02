@@ -1,11 +1,15 @@
 package com.volttracker.obdpoc.data;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import android.content.ContentValues;
 import android.content.Context;
+import android.database.sqlite.SQLiteDatabase;
 import com.volttracker.obdpoc.StorageSummaryJson;
+import java.io.File;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.After;
@@ -564,5 +568,60 @@ public class ObdLocalStoreDbTest {
                 0,
                 StorageSummaryJson.build(store.getStorageSummaryRecord())
                         .optInt("rawTelemetryCount"));
+    }
+
+    @Test
+    public void mergeFromImportsAValidDonorBackup() {
+        Context context = RuntimeEnvironment.getApplication();
+        VoltTrackerDb donorHelper = new VoltTrackerDb(context, "merge-from-donor.db");
+        try {
+            SQLiteDatabase donor = donorHelper.getWritableDatabase();
+            ContentValues session = new ContentValues();
+            session.put("mode", "obd");
+            session.put("started_at_ms", 123_456L);
+            session.put("status", "complete");
+            session.put("sample_count", 0);
+            session.put("created_at_ms", 123_456L);
+            donor.insertOrThrow(VoltTrackerDb.TABLE_SESSIONS, null, session);
+        } finally {
+            donorHelper.close();
+        }
+        File donorFile = context.getDatabasePath("merge-from-donor.db");
+
+        DatabaseMerger.MergeResult result = store.mergeFrom(donorFile);
+
+        assertTrue(result.ok);
+        assertEquals(1, result.sessionsAdded);
+        assertEquals(
+                1,
+                StorageSummaryJson.build(store.getStorageSummaryRecord()).optInt("sessionCount"));
+        context.deleteDatabase("merge-from-donor.db");
+    }
+
+    @Test
+    public void mergeFromRejectsAMissingFile() {
+        Context context = RuntimeEnvironment.getApplication();
+        File missing = new File(context.getCacheDir(), "does-not-exist.db");
+
+        DatabaseMerger.MergeResult result = store.mergeFrom(missing);
+
+        assertFalse(result.ok);
+    }
+
+    @Test
+    public void mergeFromRejectsADifferentSchemaVersion() {
+        Context context = RuntimeEnvironment.getApplication();
+        File donorFile = new File(context.getCacheDir(), "wrong-version.db");
+        SQLiteDatabase donor = SQLiteDatabase.openOrCreateDatabase(donorFile.getPath(), null);
+        try {
+            donor.setVersion(VoltTrackerDb.DATABASE_VERSION - 1);
+        } finally {
+            donor.close();
+        }
+
+        DatabaseMerger.MergeResult result = store.mergeFrom(donorFile);
+
+        assertFalse(result.ok);
+        assertTrue(result.summary().contains("different app version"));
     }
 }

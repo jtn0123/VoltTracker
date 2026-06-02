@@ -306,6 +306,15 @@ public class ObdLocalStore implements Closeable, MaterializerData, ObdSessionSto
         maintenance.checkpoint();
     }
 
+    /**
+     * Merges a verified donor backup file into this live store, additively (see {@link
+     * DatabaseMerger}). Sessions already present (by start time) are skipped. Returns a result
+     * describing what was imported; the live store is left untouched on failure.
+     */
+    public DatabaseMerger.MergeResult mergeFrom(File donorDbFile) {
+        return maintenance.mergeFrom(donorDbFile);
+    }
+
     /** Default raw-data retention in days (telemetry / location / events / pid_observations). */
     public static final int DEFAULT_RAW_RETENTION_DAYS =
             ObdStoreMaintenance.DEFAULT_RAW_RETENTION_DAYS;
