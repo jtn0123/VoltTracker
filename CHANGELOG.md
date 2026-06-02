@@ -1,6 +1,297 @@
 # CHANGELOG
 
 
+## v0.4.12 (2026-06-02)
+
+### Bug Fixes
+
+- **android**: Round-7 grade-report remediation — 20 items via 4 parallel agents
+  ([#156](https://github.com/jtn0123/VoltTracker/pull/156),
+  [`677c159`](https://github.com/jtn0123/VoltTracker/commit/677c15973eb6079a8e6ee2dda23dc3966ec94708))
+
+* feat(dashboard): round-7 a11y + finish tsc migration (C1,C2,C4,C5,I1,I2)
+
+- C1: Trips tab — tablist/tab roles + aria-selected on #tripTabs filter (kept in sync in
+  actions.js); list/listitem semantics on real + demo trip lists (rows tagged in core.js
+  buildTripRow + panels.js renderTripRow). New a11y tests. - C2: map scrubber play/details buttons
+  get aria-labels; charge #sessionList -> role=list (+ listitem rows in core.js buildSessionRow),
+  #hourBars -> role=img. - C4: Drive speed cluster, power meter, and SOC meter get role=meter +
+  labels + valuemin/max. setMeter (core.js) now sets aria-valuenow; telemetry.js sets it live for
+  the speed and power meters. - C5: settings backup/restore <details> labelled, button grid wrapped
+  in role=group. - I1: added // @ts-check to actions, drive, map, scrubber, troubleshooter,
+  dtc-causes, dtc-lookup and fixed all resulting errors with JSDoc casts (no @ts-ignore). Added
+  __voltDemoTimer to dashboard-globals.d.ts. - I2: attempted noImplicitAny=true; it surfaced ~474
+  errors across all checked files, so reverted to false per instructions.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* test(android): round-7 testing/CI/docs (D1,D2,D3,F1,H1,H2)
+
+H1: add mobile/android/docs/data-model.md — one-page SQLite schema reference (tables, key columns,
+  FK CASCADE/SET NULL behavior, raw vs derived/cache), accurate to VoltTrackerSchema.java.
+
+H2: flag the "dashboard handshake received" logcat string as a TEST CONTRACT in the
+  emulator-smoke.sh header (and in data-model.md / the workflow header) so it can't be silently
+  reworded out from under the smoke.
+
+D2: add coverage-ratchet.test.js — meta-test importing vitest.config.js and asserting each coverage
+  threshold is >= a committed baseline (62/60/60/46), enforcing the "raise only; never lower"
+  comment. Runs under npm test.
+
+D3: add 6 scrubber.js interaction tests — cursor fraction 0/1 clamping via scrubAtLatLng endpoint
+  snapping, play/pause button toggle state (+inert with no route), and SOC/elevation interpolation
+  across MISSING samples (socTrack endpoints only; altM gaps).
+
+D1: document the path to making the emulator smoke a REQUIRED check in android-emulator-smoke.yml
+  (kept advisory; explains the skipped-path-filter caveat for ci-success). No change to ci-success
+  needs.
+
+F1: add an advisory gradle-dependency-audit job to android.yml (OSV scan, continue-on-error, not in
+  ci-success) — the Gradle-side counterpart to the existing npm audit gate.
+
+Verification: dashboard-tests 18 files / 77 tests pass; npm run lint clean; actionlint + shellcheck
+  clean on both workflows and the smoke script.
+
+* fix(android): round-7 backend/security hardening + arch docs (A2,A3,E1,E2,G1)
+
+A2: Document why ObdPollingEngine and ObdService are intentionally large (single cohesive state
+  machine / single-session lifecycle glue; splitting would thread shared mutable runtime state
+  through new race-prone seams).
+
+A3: Narrow LiveSampleReader's engine coupling behind a small SampleContext interface (sample counter
+  + supported-PID summary + session-health/location enrichers) instead of the whole engine;
+  ObdPollingEngine implements it and passes itself at the call site.
+
+E1: On restore, clear the regenerable v9 session_trip_rollups cache from the staged DB (best-effort;
+  rebuilds lazily) so a hand-edited backup can't bring a stale rollup live.
+
+E2: Token-bucket logClientError (5/sec, burst 10) so a looping dashboard client can't spam the log;
+  dropped calls are counted and surfaced on the next admitted line.
+
+G1: Cache the storage-summary result via a dirty flag. The throttled ~1Hz status path skips the full
+  recompute while clean; DB-mutating paths (telemetry row writes, prune) mark it dirty. Forced
+  transition refreshes still recompute.
+
+* fix(android): round-7 recorder/engine hardening (A1,B1,B2,G2)
+
+A1: Extract SessionRecorder's async-persistence machinery into a new ObdPersistenceWorker
+  (executors, bounded queues, discard-oldest backpressure policy, dropped-task counter,
+  drain/shutdown plumbing, lifecycle-failure visibility). SessionRecorder keeps lifecycle/log API +
+  session state and delegates persistence to the worker. Behavior-preserving; existing
+  executor-contract, materializer, and lifecycle-failure tests pass.
+
+B1: Cap status-event throttling by count, not just content+time. A flapping adapter alternating
+  between distinct details bypassed the key dedupe; add a rolling-window ring that caps absolute
+  status writes per window regardless of detail variation, keeping the content+time dedupe as the
+  fast path.
+
+B2: Cap carry-forward age for a stalled PID. Track when each command's lastRaw was set and drop it
+  past a 30s ceiling so lastRaw() returns null (sample reads "--") instead of a frozen number. Adds
+  a test-only clock seam.
+
+G2: Generalize Mode-01 batching beyond Tier-1. Any same-header broadcast Mode-01 PIDs due on the
+  same cycle (e.g. SOC + coolant on cycle 10) now share one multi-PID request, with a per-adapter
+  per-cycle fallback to per-PID on a short reply. Tier-1 behavior unchanged.
+
+Tests: 485 pass (was 473); spotlessCheck clean.
+
+* style(dashboard): spotless-format new a11y attributes + regen index.html
+
+* refactor(dashboard): type globals + enable noImplicitAny; pin trips/insights error-state (I2,C3)
+
+I2 — noImplicitAny is now ON in dashboard-tests/tsconfig.json (was 474 errors).
+
+dashboard-globals.d.ts gains real interfaces in place of the loose `any` shapes: - VoltDashboard: a
+  concrete (all-optional + index-signature) interface enumerating every member the IIFEs hang off
+  window.VoltDashboard — el, setText/setMeter, setStatus, parsePayload, renderMap,
+  formatDistance/Duration, updateValidationUi, loadTrips/loadInsights, dtcInfo, scrubber/map/drive
+  exports, etc. — each with a derived signature (members are optional because the namespace is
+  assembled incrementally across files). - VoltBridge: the @JavascriptInterface surface from
+  VoltBridge.java, names and arities matched exactly (getTrips/getInsights return string,
+  forceStopPackage returns boolean, scheduleAdapterReadyNotify(mins:number), etc.). -
+  window.VoltTrackerAndroid?: VoltBridge and window.VoltDashboard: VoltDashboard declared ambiently;
+  plus helper payload/route/dtc/status typedefs.
+
+The remaining implicit-anys are annotated file-by-file with JSDoc: inline `/** @type {T} */` casts
+  on function/arrow params (number for math helpers, real DOM element types where an el() result is
+  narrowed, `any` only for genuinely JSON-derived dynamic values), typed object-literal accumulators
+  and lookup maps (Record<...>), and `keyof ScrubPoint` for the scrubber index access.
+
+4 real TS2339s fixed (not suppressed): state.telemetry.source and state.demoSessions were
+  read/assigned but absent from the state literal — both added to the literal with honest types; the
+  clearDemoTelemetry reassignment was updated to match.
+
+C3 — trips-error-state.test.js pins panels.js#loadTrips / #loadInsights: stubs
+  VoltBridge.getTrips/getInsights to native-error payloads and asserts
+  VD.setStatus({state:"blocked"}) + logClientError fire, plus the converse (a genuinely-empty
+  successful read raises no blocked status).
+
+Verification (mobile/android/dashboard-tests): npm run typecheck → 0 errors with noImplicitAny:true;
+  npm run lint → clean; npm test → 82 passed (19 files). No // @ts-ignore / @ts-expect-error used.
+
+* fix(android): address CodeRabbit on #156 (a11y, storage-summary, OSV scan)
+
+- setMeter (core.js): drop aria-valuenow for missing/non-numeric readings so meters announce as
+  indeterminate, not a false 0; telemetry.js passes the raw (possibly NaN) SOC through instead of
+  coercing it to 0. - Trip/session rows (core.js, panels.js): wrap the interactive buttons in a
+  display:contents role="listitem" instead of overwriting the button role, so they stay announced as
+  buttons inside their role="list" containers. - Trips filter (trips.html, actions.js): replace the
+  click-only role="tab" widget with a labelled role="group" of aria-pressed toggle buttons — no fake
+  tab semantics without keyboard/tabpanel behaviour. - accessibility.test.js: assert the group +
+  aria-pressed model and the labelling attribute directly (the old check passed even if aria-label
+  was dropped, since accessibleName falls back to child text). - MainActivity: force an immediate
+  storage-summary refresh on the idle session boundary (the dirty+time gate otherwise skips it after
+  session finalize, leaving the panel stale); re-mark dirty when a summary build fails so a
+  transient error is retried. - F1 OSV scan (android.yml, build.gradle, .gitignore): OSV-Scanner
+  can't parse `gradlew dependencies` text, so enable dependency locking and scan a generated
+  gradle.lockfile instead. Lockfiles are gitignored/CI-ephemeral, so locking imposes no version
+  enforcement on normal builds.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+### Refactoring
+
+- **android**: Round-7 perf/polish (config cache, ts-check, schema split)
+  ([#155](https://github.com/jtn0123/VoltTracker/pull/155),
+  [`20b1ba0`](https://github.com/jtn0123/VoltTracker/commit/20b1ba0dd246a736896cf00be817068ff3a43b51))
+
+* build(android): enable Gradle configuration cache by default
+
+CI already ran every task with --configuration-cache; this sets it as the local default too. Warm
+  builds skip the configuration phase (~2s reuse vs ~28s cold). Verified all tasks store/reuse
+  cleanly — :app:testDebugUnitTest, lintDebug, spotlessCheck, and the file-reading verify* tasks.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* refactor(android): extract ObdStoreVehicles from ObdStoreWriter
+
+VIN-derived vehicle identity (upsertVehicleFromVin + the SHA-256/WMI/model-year decode helpers, ~135
+  LOC) is a self-contained concern unrelated to session/telemetry writes. Moved it into
+  ObdStoreVehicles; ObdLocalStore delegates upsertVehicleFromVin there. ObdStoreWriter drops 522 ->
+  385 LOC (back under the 500 guideline).
+
+Pure code movement — public ObdLocalStore API unchanged; full suite green, lint + spotless clean.
+
+* test(android): pin location-filter antimeridian + stationary-reread edges
+
+The haversine distance already handles the 180° meridian wrap correctly (sin(Δlng/2) is periodic, so
+  179.999 -> -179.999 is ~222 m, not a whole-globe teleport), and the filter has no minimum-movement
+  gate so a parked car's same-point re-read is a valid 0 m/s fix. Both were unpinned — added three
+  guard tests (filter accepts a real antimeridian crossing, accepts a stationary re-read, and a
+  direct haversine-wrap assertion) so a future "optimization" to equirectangular distance can't
+  regress them.
+
+No production change. LocationFilterTest green; spotless clean.
+
+* test(android): cover Mode-01 multi-PID batching at the engine level
+
+Multi-PID batching (probe + per-cycle batched 010D0C041149 + per-adapter fallback) is already
+  implemented and unit-tested in ObdProtocol/PidSchedule — but the engine-level integration was
+  untested, so a regression that silently stopped batching (or never fell back) wouldn't be caught.
+  Adds three ObdPollingEngineTest cases against FakeElmConnection: the 010D0C probe runs during
+  init; a supporting adapter polls Tier-1 as one batched command and never sends the individual
+  speed/RPM PIDs; an incomplete probe disables batching and falls back to per-PID.
+
+No production change. Full Java suite green; spotless clean.
+
+* refactor(dashboard): type-check core.js (// @ts-check)
+
+Migrates the foundational core.js onto tsc --checkJs. Cast the shared VD namespace once (/** @type
+  {any} */ — it's dynamically extended across files), added a typed queryAll() helper so the 9
+  querySelectorAll().forEach sites get HTMLElement (.dataset/.hidden) without per-site casts, and
+  fixed one real finding: a numeric CSS custom-property value passed to setProperty (now String(c)).
+
+No behavior change. tsc clean; ESLint + 65 vitest (which run core.js) + spotless + bundle budget all
+  green.
+
+* refactor(dashboard): type-check telemetry.js + panels.js (// @ts-check)
+
+Both already use the clean `const VD = window.VoltDashboard` alias (no `|| {}`), so with VD typed
+  loosely they checked clean out of the box — telemetry.js needed only the opt-in comment. panels.js
+  needed two NodeListOf<HTMLElement> casts on its querySelectorAll().forEach sites
+  (data-real-trip-id / data-real-trip-map) for .dataset access. Five of the six dashboard JS files
+  are now type-checked (core/telemetry/panels + the wave-6
+  connection-status/connection-tools/demo-data).
+
+No behavior change. tsc clean; ESLint + 65 vitest + spotless + bundle budget green.
+
+* test(android): make the emulator smoke prove the dashboard JS is alive
+
+The emulator smoke only scanned logcat for crashes/JS errors — but the file:// ES-module class of
+  bug logs nothing (the dashboard loads, its JS just silently never runs), so the smoke would sail
+  right past it. Added a positive check: MainActivity.onDashboardReady now logs a distinctive
+  "dashboard handshake received" line (it only fires when the JS chain executed and called
+  bridge.dashboardReady()), and the workflow polls logcat up to ~40s and fails if that handshake
+  never arrives. The existing crash/JS-error scan stays as a second gate.
+
+Also wired the (otherwise weekly/dispatch-only) job to run on PRs that touch the dashboard or
+  WebView-startup files, so the regression surface is checked pre-merge.
+
+actionlint clean; APK builds; Java suite + lint + spotless green. (The emulator run itself executes
+  in CI.)
+
+* refactor(android): extract VoltTrackerSchema (DDL) from VoltTrackerDb
+
+VoltTrackerDb was 772 LOC, ~400 of which were CREATE TABLE / CREATE INDEX statements. Moved all the
+  schema DDL — base tables, observation/diagnostic/roadmap tables + indexes, prune indexes, and the
+  v9 session_trip_rollups cache — into a new VoltTrackerSchema. VoltTrackerDb (now 286 LOC) is just
+  the SQLiteOpenHelper lifecycle + the onUpgrade migration ladder, which calls
+  VoltTrackerSchema.createX. Table-name constants stay on VoltTrackerDb (referenced across the data
+  layer); schema methods qualify them.
+
+Pure code movement (extracted by line-range copy, not retyped). The migration round-trip test +
+  every DB-backed test build the schema through VoltTrackerSchema, so the full suite passing is
+  end-to-end proof. Lint + spotless clean.
+
+The other three 700-LOC classes (ObdPollingEngine, SessionRecorder, ObdService) were intentionally
+  left whole: they are cohesive single-responsibility runtime classes (connect/poll loop,
+  persistence recorder, foreground service) where a split would thread state through new classes
+  purely for a line count — risk on remotely-tested runtime code, no behavior change.
+
+* ci(android): run the emulator smoke via android-emulator-runner
+
+The hand-rolled emulator job failed at "Prepare emulator" with `sdkmanager: command not found` — the
+  Android cmdline-tools were never on PATH, so this workflow had been failing silently on its weekly
+  schedule and never actually ran. Adding the PR trigger in the previous commit surfaced it.
+
+Switched to reactivecircus/android-emulator-runner (SHA-pinned v2.37.0), which sets up the
+  SDK/AVD/KVM and boots the emulator, then runs the same positive readiness poll ("dashboard
+  handshake received") + negative crash/JS-error scan inside it. Enables KVM for x86_64
+  acceleration. Now the smoke can actually execute the #7 assertion instead of dying in setup.
+
+actionlint clean. (The emulator run itself is validated by CI re-running this PR.)
+
+* ci(android): move emulator smoke logic into a script file
+
+android-emulator-runner executes the workflow `script:` line-by-line (each line its own `sh -c`), so
+  the multi-line readiness poll broke with "Syntax error: end of file unexpected (expecting done)".
+  Moved the install + handshake poll + crash scan into mobile/android/scripts/emulator-smoke.sh and
+  reduced the workflow step to a single `bash …` invocation. Bonus: the script is now
+  shellcheck-clean and locally testable.
+
+(Last run confirmed the emulator now boots, installs the APK, and launches the app — only the
+  inline-shell splitting was left.)
+
+shellcheck + bash -n + actionlint all clean.
+
+* fix(android): address CodeRabbit on #155 (emulator smoke + test javadoc)
+
+- emulator-smoke.sh: re-capture logcat (after a short settle) before the crash/JS- error scan. The
+  readiness loop stops the instant the handshake appears, so a crash a moment later would have been
+  missed by scanning that stale snapshot. - ObdPollingEngineTest: the batch tests I inserted had
+  stranded the "helpers" section header + openSession() javadoc above them; moved them back to sit
+  directly above openSession(). - Track scripts/emulator-smoke.sh in the emulator job's path filter
+  so script changes re-run the smoke (live-validates this fix).
+
+shellcheck + bash -n + actionlint clean; ObdPollingEngineTest + spotless green.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.4.11 (2026-06-01)
 
 ### Performance Improvements
