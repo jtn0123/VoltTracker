@@ -1,6 +1,244 @@
 # CHANGELOG
 
 
+## v0.6.0 (2026-06-02)
+
+### Chores
+
+- Remove stale Codex scratch reports from the repo
+  ([#158](https://github.com/jtn0123/VoltTracker/pull/158),
+  [`1a8c6de`](https://github.com/jtn0123/VoltTracker/commit/1a8c6de0f3b2266cadf7e7042e83caaab19be112))
+
+These were one-off agent audit/validation artifacts that got committed: .Codex/grade-report.md,
+  .Codex/graph-map-debug-checklist.md, and .codex-ui-validation/validation-report.md. They're
+  point-in-time scratch, not maintained docs, so drop them from the repo and gitignore the
+  directories so future local runs stay out of version control. The reports-index pointer now
+  directs readers to run the grade-codebase skill for a fresh report instead of a stale committed
+  one.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+### Features
+
+- **android**: Merge older backups + Trips/header/demo UI overhaul
+  ([#159](https://github.com/jtn0123/VoltTracker/pull/159),
+  [`d8d2795`](https://github.com/jtn0123/VoltTracker/commit/d8d2795d899d973b7ae9f667edb4142cff24c09d))
+
+* fix(android): restore/merge backups from older app versions
+
+A backup exported by an earlier app version carries an older schema user_version (e.g. v8, taken
+  before the v9 session_trip_rollups cache was added). Staging required the exact current version,
+  so such a backup was silently rejected during verification — the file picker returned, no
+  Replace/Merge dialog appeared, and nothing happened. This is the common case (merge an old backup
+  into current data), so the feature failed exactly when it was most needed.
+
+Fix: BackupMigrator upgrades an older staged backup to the current schema before validation, reusing
+  VoltTrackerDb's own onUpgrade path (copy to a private working name, open through the helper so
+  every migration step runs transactionally, copy back). Newer-than-app backups are refused (no safe
+  downgrade) and non-VoltTracker SQLite files are left untouched. Because this runs in
+  stageRestoreFile, both restore (replace) and merge now accept older backups.
+
+Verified on-device: a real v8 backup (14 sessions) merged into the current v9 database with zero
+  duplicate sessions, zero orphaned rows, integrity + foreign keys intact.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* fix(android): Trips UI overhaul — on-demand routes, compact chips, honest summary bars
+
+Reworks the Trips tab based on on-device review:
+
+- Route preview now works for ANY logged drive, not just the most recent few. The storage summary
+  only ships recentRoutes for the latest 8 sessions (payload size), so older drives — including ones
+  folded in from a merged backup — showed "No route shape stored" despite having thousands of GPS
+  points. Add a getTripRoute(sessionId) bridge call (ObdLocalStore.getTripRouteJson ->
+  ObdStoreReports.tripRouteJson -> existing routeForSession projection, no session cap) and fetch
+  the selected trip's route on demand in panels.js. - Compact the logged-drive chips: drop the
+  reserved minmax(96px,1fr) map row and min-height that left a large empty box for routeless drives,
+  and remove the in-chip mini-map (it rendered empty). Chips are now a compact when/meta + badge
+  row; the route renders in the enlarged detail preview (156px -> 240px). - Drive-summary bars are
+  now proportional to real values (distance/duration/ samples scaled against the user's other
+  drives; efficiency against a 5 mi/kWh ceiling) and render no bar for a "--" metric, instead of the
+  previous hardcoded widths that showed a full bar next to "--". - Clear badge labels ("N pts" / "N
+  samples") instead of the cryptic "Nx". - Card-header actions (the trailing link/button) no longer
+  clip when the title is long — fixed app-wide via .link-btn flex/nowrap + min-width:0 on the title.
+
+Tests: VoltBridge pinned-method list + trips.test.js updated for the compact chip / on-demand route
+  design; full unit suite, JaCoCo, and 83 dashboard tests pass.
+
+* fix(android): remove adapter-health pill; explain missing GPS + offer location enable
+
+- Remove the "Adapter failing (N/5)" topbar pill (connection-status.js renderAdapterHealth + the
+  adapterHealthPill in topbar.html). It rated the last 5 session outcomes, so a few test/failed
+  connects flipped it to a noisy, alarming "failing" with no real signal. Last-connected badge and
+  low-voltage hint stay. - Trips route preview now explains WHY a drive has no route instead of a
+  bare "No route shape stored": a drive that logged OBD samples but no GPS shows "No GPS recorded
+  for this drive" + the reason ("Location was off..."), and when location permission is currently
+  denied it offers an "Enable location" button (bridge.requestPermissions). This is the missing
+  signal that left recent drives silently route-less — the app captured OBD data fine but never had
+  location permission, so no GPS was recorded. Uses the resolved route geometry (post on-demand
+  fetch), not just the rollup's hasRoute flag.
+
+Verified on-device: pill gone; selecting a recent no-GPS drive shows the new empty state with the
+  Enable-location CTA; route-bearing drives still render.
+
+* fix(android): polish the shared header — clear the status bar, de-duplicate status
+
+- Raise the body top inset floor from 14px to 30px. This WebView reports no safe-area-inset-top, so
+  the title row crowded the system status bar (clock/battery); env() still wins where a real inset
+  is reported. - Replace the boxed "LAST CONNECTED / adapter / when" card with a slim one-line
+  affordance under the title (dot + adapter name + relative time), shown on every tab. Quieter,
+  single row, still tappable to reopen the last adapter. - On Drive, stop repeating the idle status:
+  the now-chips strip no longer renders the "Idle · ready / adapter remembered" chip (its state is
+  already in the top-bar pill + the slim last-connected line). The live chip still appears for
+  Recording / Connecting / Demo, and the actionable "Last drive → map" chip stays.
+
+Net: connection status reads once (top-bar pill) with a slim adapter line, instead of the same
+  adapter + state appearing two or three times in the header.
+
+drive.test.js updated for the no-redundant-idle-chip behavior; 83 dashboard tests pass; HTML
+  regenerated.
+
+* fix(android): drop the "Last drive" chip from the Drive page
+
+The Drive page is for the live drive; a backward-looking "Last drive" chip duplicated what Trips and
+  Map already show. renderDriveNowChips now only renders while a session is live (Recording /
+  Connecting / Demo) and stays empty when idle. Removed the now-dead deriveLastDriveChip and
+  drive.js's fmtChipDate (map.js keeps its own). 83 dashboard tests pass.
+
+* refactor(android): unify demo preview with the real UI
+
+Demo preview no longer swaps in a parallel mockup UI. It streams demo telemetry through the same
+  real components, so the real dashboard stays on screen and only the live numbers animate — "demo
+  should match the real UI, only drive numbers."
+
+- core.js setDemoActive: dropped the .demo-only / .non-demo-only show/hide swap; removed the dead
+  demo mockup renderers (renderTrips/renderSessions/ renderInsights + helpers) and their call sites
+  and exports. Removed setMode (drove the demo EV ratio ring only). - Deleted every .demo-only
+  mockup block across charge/drive/insights/settings/ trips partials, and stripped the
+  now-meaningless non-demo-only tokens so the real cards always show. Removed the giant EV/GAS
+  toggle + drive-mode select from the topbar. - Removed the dead data-mode / driveModeSelect /
+  tripTabs-filter handlers and the CSS that only styled the deleted mockups (mode-toggle,
+  drive-chip, mobile-controls, hour-bars, insight/cell grids, ratio-stats, etc.). - Kept the demo
+  STREAM path intact: Start/Stop demo in the Diag preview sandbox, bridge.demo(), runBrowserDemo,
+  ensureDemoData, demoActive state, demo banner.
+
+Tests updated for the unified behavior (accessibility, demo-data, state-shape, load-dashboard
+  fixtures, globals d.ts). 82 dashboard tests, full unit suite, JaCoCo all pass; regenerated
+  index.html. Verified on-device: starting demo animates the real Drive cards
+  (speed/power/SOC/RPM/pack) instead of a mockup.
+
+* refactor(android): demo drives numbers only — remove residual demo UI divergence
+
+Audit follow-up to the demo/real unification: demo must only simulate numbers through the real
+  native channels, not relabel or branch the UI.
+
+- Removed demoViewMeta: the Trips/Charge/Insights header kicker no longer flips to "Preview sandbox"
+  in demo — demo shows the same headings as real. - renderRealTrips no longer early-returns during
+  demo, so the Trips tab keeps rendering the user's real logged drives (or the empty state) instead
+  of going blank while demo numbers animate on Drive. - Dropped the now-unused demoViewMeta export
+  and its globals type decl.
+
+Kept (intentional, not UI mockery): honest data-source signals — "Demo telemetry" adapter name,
+  dataSourceState="demo", the isolated-from-real-history copy, the demo banner, and "Stop demo" on
+  the primary button — plus the data-demo-hidden hiding of connect-only controls (device picker /
+  Scan / "pick an adapter") while a demo session streams, since showing non-functional connect
+  prompts mid-demo would be more confusing, not less.
+
+Native demo path already streams via service.broadcastTelemetry/broadcastStatus (DemoPollingLoop),
+  the same channels the real poll loop uses. 82 dashboard tests pass; index.html regenerated.
+
+* feat(android): demo simulates the GPS channel too
+
+DemoPollingLoop now emits synthetic latitude/longitude/accuracy/speed/bearing on each demo sample —
+  a slow ~1 km loop — through the same broadcastTelemetry channel a real adapter+phone GPS feeds.
+  The live GPS readout now locks and the running session distance ticks during demo, exactly as on a
+  real drive.
+
+Deliberately does NOT fake a live map route: like a real drive, the Map route polyline comes from
+  STORED trips (demo is never persisted), so this drives the live GPS signals, not a fake map
+  surface the real app wouldn't show live either.
+
+Verified on-device: demo Drive shows GPS: locked + live speed/power/SOC/RPM; Trips/Map render the
+  user's real logged drives with real headings (no "Preview sandbox" relabeling). Demo is now the
+  real app UI everywhere, driven by simulated numbers over the real native channels. Unit suite
+  green.
+
+* fix(android): stop the demo "Demo stream" last-connected junk
+
+The Drive tab showed two demo indicators at once: the live "Demo preview" chip AND a slim "Demo
+  stream - Nm ago" last-connected line. The latter is junk — a demo run isn't a real adapter
+  connection, but its session was still written to the SessionSummaryStore (adapter name "Demo
+  stream"), so it surfaced as "last connected".
+
+- SessionRecorder: gate the summary recordStart/recordEnd on non-demo mode (matching the existing
+  persistence gate), so demo runs are never summarized and can't pollute last-connected or
+  recent-session history. - connection-status.js: defensively skip demo-named sessions when picking
+  the last-connected row, so any legacy "Demo stream" entry already on disk never shows. The line
+  now reflects the last real adapter (or hides when there's none).
+
+Net: one demo indicator (the "Demo preview" chip) instead of two.
+
+Tests: new SessionRecorderTest.demoSessionsAreNotSummarized (demo → 0 summary rows, real → 1). Full
+  unit suite + JaCoCo + 82 dashboard tests pass. Verified on a clean emulator: idle Drive shows no
+  stale last-connected line.
+
+* test(android): cover the session's new features
+
+Adds tests for behaviors added this branch that were thin on coverage:
+
+- ObdLocalStoreDbTest: getTripRouteJson returns a session's route geometry on demand (the Trips
+  on-demand route loader, which bypasses the recent-routes window), and returns {} for an unknown
+  session id. - TelemetryPayloadTest: fromJson->toJson preserves GPS fields (latitude/
+  longitude/accuracyM/gpsSpeedMps/bearingDeg) as extras — the channel both the live GPS readout and
+  the synthetic demo GPS ride on; a regression dropping unknown fields would silently kill route/GPS
+  UI. - trips.test.js: (1) a drive outside the recent-routes window fetches its route via
+  bridge.getTripRoute and renders the detail preview, fetching once and caching; (2) a GPS-less
+  drive shows "No GPS recorded" + an Enable-location CTA that calls requestPermissions; (3) the CTA
+  is omitted once location is granted. - voltbridge fixture: added getTripRoute to the mock + method
+  list to track VoltBridge.java.
+
+Full unit suite + JaCoCo pass; dashboard tests 82 -> 85.
+
+* test(android): merge-engine edge cases + connection-status demo filter
+
+More coverage on the riskiest paths from this branch:
+
+DatabaseMergerTest: - remapsTripSegmentSamplePointersToTheMergedTelemetryRows — a donor trip
+  segment's start/end_sample_id must resolve to the newly-inserted telemetry rows (verified by
+  joining back and matching captured_at_ms), not stale donor ids that would collide with unrelated
+  live rows. Pre-seeds live telemetry so the donor ids genuinely collide. Guards the subtlest remap
+  in the engine. - adapterHistoryUpsertKeepsMinFirstAndMaxLastSeen — the natural-key upsert keeps
+  the earliest first_seen_ms and latest last_seen_ms across both sides.
+
+connection-status.test.js (new): the "last connected" line shows the most recent REAL adapter and
+  skips demo-named sessions; hides entirely when only demo sessions exist; shows a real adapter
+  normally otherwise. Locks the demo-junk fix in JS (the harness can load connection-status.js via
+  extras).
+
+Full unit suite + JaCoCo pass; dashboard tests 85 -> 88.
+
+* test(android): drive-summary bars + migration data preservation
+
+- trips.test.js: the drive-summary bars are proportional to real values and an empty (0%) bar — not
+  a misleading full one — is rendered for a "--" metric. Asserts exact widths: selected longest
+  drive = 100% distance, ~50% duration; a distance-less drive = "--" value with a 0% bar. -
+  BackupMigratorTest.migrationPreservesExistingRows: a v8 backup with session + telemetry rows
+  upgrades non-destructively — every row survives, version becomes current, and the added rollups
+  cache starts empty.
+
+Full unit suite + JaCoCo pass; dashboard tests 88 -> 89.
+
+* fix(android): declare getTripRoute on the VoltBridge TS type
+
+The on-demand route bridge method was added to VoltBridge.java, the JS fixture, and the runtime, but
+  not to the ambient VoltBridge interface in dashboard-globals.d.ts — so tsc --checkJs (the
+  dashboard typecheck CI step) failed on panels.js's bridge.getTripRoute calls. Add the declaration.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.5.0 (2026-06-02)
 
 ### Features
