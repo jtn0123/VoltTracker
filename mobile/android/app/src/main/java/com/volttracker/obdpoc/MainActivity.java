@@ -59,6 +59,14 @@ public class MainActivity extends Activity {
     // plenty. Transitions (resume, connect, page-ready) bypass this and refresh now.
     private static final long STORAGE_SUMMARY_MIN_INTERVAL_MS = 10_000L;
     private final AtomicLong lastStorageSummaryAtMs = new AtomicLong(0L);
+    // Dirty flag for the storage summary. The summary only changes when the DB changes: a sample
+    // row is written (telemetry broadcast), a session closes, the retention prune trims rows, or a
+    // bridge action mutates the store (clear / remember / restore). During a long idle-connected
+    // session the ~1Hz status path would otherwise recompute the full summary every interval even
+    // though nothing in it moved. The throttled path skips the recompute while this is clean;
+    // forced transition refreshes (page-ready, resume, connect) ignore it and always run.
+    // Seeded dirty so the very first throttled tick after launch is allowed to publish once.
+    private final AtomicBoolean storageSummaryDirty = new AtomicBoolean(true);
 
     /** Submits {@code task} to the background executor used for heavy DB work. */
     void runOnBackground(Runnable task) {
@@ -76,12 +84,27 @@ public class MainActivity extends Activity {
                     }
                     if (ObdService.BROADCAST_TELEMETRY.equals(action)) {
                         lastTelemetry = MainActivityUtils.parseJson(json);
+                        // Each telemetry sample is persisted as a row by the service, so the
+                        // storage summary (row/session counts, DB size) has moved. Mark it dirty
+                        // so the next throttled status tick will recompute and publish it.
+                        markStorageSummaryDirty();
                         callDashboard("updateTelemetry", json);
                         publishAppState();
                     } else if (ObdService.BROADCAST_STATUS.equals(action)) {
                         lastStatus = MainActivityUtils.parseJson(json);
                         callDashboard("setStatus", json);
-                        publishStorageSummaryThrottled();
+                        if ("idle".equals(lastStatus.optString("state", ""))) {
+                            // A session that just went idle has finalized its rows (session
+                            // row, adapter history, materialized rollups) without any
+                            // DB-write path marking the summary dirty. The throttled tick
+                            // would skip the recompute on both the dirty gate and the time
+                            // interval — and idle is often the last event before the user
+                            // disconnects — leaving the storage panel stale. Force an
+                            // immediate, non-throttled refresh on the session boundary.
+                            publishStorageSummary();
+                        } else {
+                            publishStorageSummaryThrottled();
+                        }
                         publishAppState();
                         // Observe the same status broadcast feeding the dashboard so the
                         // notify-when-ready schedule can wake the user as soon as the adapter
@@ -117,6 +140,8 @@ public class MainActivity extends Activity {
                                         ObdLocalStore.DEFAULT_RAW_RETENTION_DAYS);
                         int pruned = localStore.pruneRawDataOlderThan(retentionDays);
                         if (pruned > 0) {
+                            // Prune deleted rows — the summary's counts/size moved.
+                            markStorageSummaryDirty();
                             Log.i(
                                     TAG,
                                     "Pruned "
@@ -429,7 +454,21 @@ public class MainActivity extends Activity {
         if (now - lastStorageSummaryAtMs.get() < STORAGE_SUMMARY_MIN_INTERVAL_MS) {
             return;
         }
+        // The summary only changes when the DB changes. If nothing has marked it dirty since the
+        // last refresh, the recompute would return identical numbers — skip the whole query batch.
+        if (!storageSummaryDirty.get()) {
+            return;
+        }
         publishStorageSummary();
+    }
+
+    /**
+     * Flags the storage summary as stale so the next throttled refresh recomputes it. Called from
+     * the DB-mutating paths (telemetry row writes, prune, clear/remember/restore). Forced
+     * transition refreshes recompute regardless; this only governs the throttled status-tick path.
+     */
+    void markStorageSummaryDirty() {
+        storageSummaryDirty.set(true);
     }
 
     void publishStorageSummary() {
@@ -444,7 +483,18 @@ public class MainActivity extends Activity {
     private void runStorageSummaryRefresh() {
         backgroundExecutor.execute(
                 () -> {
+                    // Clear before reading so a DB write that lands while this query runs re-marks
+                    // the summary dirty and is picked up by the next refresh, rather than being
+                    // lost.
+                    storageSummaryDirty.set(false);
                     final String storage = getStorageSummaryJson();
+                    // getStorageSummaryJson swallows a query failure and returns an error
+                    // payload; since we already cleared the dirty flag, a transient failure
+                    // would otherwise never be retried by the throttled path until another
+                    // write re-marks it. Re-mark dirty on failure so the next tick retries.
+                    if (!MainActivityUtils.parseJson(storage).optBoolean("ok", true)) {
+                        storageSummaryDirty.set(true);
+                    }
                     lastStorageSummaryAtMs.set(System.currentTimeMillis());
                     runOnUiThread(
                             () -> {

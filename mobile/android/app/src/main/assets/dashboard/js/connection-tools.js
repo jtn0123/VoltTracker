@@ -13,12 +13,14 @@
   "use strict";
   const VD = (window.VoltDashboard = window.VoltDashboard || {});
   const bridge = window.VoltTrackerAndroid || null;
-  const el = (id) => document.getElementById(id);
+  const el = (/** @type {any} */ id) => document.getElementById(id);
 
-  function safeCall(method, ...args) {
+  function safeCall(/** @type {keyof VoltBridge} */ method, /** @type {any[]} */ ...args) {
     if (!bridge || typeof bridge[method] !== "function") return;
     try {
-      return bridge[method](...args);
+      // Spread-applying a union of method signatures isn't expressible without a
+      // cast; the typeof-function guard above is the real runtime safety check.
+      return /** @type {(...a: any[]) => any} */ (bridge[method])(...args);
     } catch (ignored) {
       // Bridge calls are fire-and-forget; failures surface via the status
       // pipeline rather than throwing into the dashboard.

@@ -21,17 +21,17 @@
   // How long (ms) since the last accepted sample before we mark tiles stale.
   const STALE_THRESHOLD_MS = 3000;
 
-  function average(values) {
-    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  function average(/** @type {any} */ values) {
+    return values.length ? values.reduce((/** @type {any} */ sum, /** @type {any} */ value) => sum + value, 0) / values.length : 0;
   }
 
-  function formatDistance(meters) {
+  function formatDistance(/** @type {any} */ meters) {
     const miles = Number(meters || 0) / 1609.344;
     if (!Number.isFinite(miles) || miles <= 0) return "--";
     return miles < 10 ? `${miles.toFixed(1)} mi` : `${Math.round(miles)} mi`;
   }
 
-  function escapeHtml(value) {
+  function escapeHtml(/** @type {any} */ value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -40,7 +40,7 @@
       .replace(/'/g, "&#39;");
   }
 
-  function setStatus(payload) {
+  function setStatus(/** @type {any} */ payload) {
     const status = VD.parsePayload(payload, {});
     state.status = status;
     const badge = el("stateBadge");
@@ -54,7 +54,7 @@
     updateValidationUi();
   }
 
-  function setAppState(payload) {
+  function setAppState(/** @type {any} */ payload) {
     state.appState = VD.parsePayload(payload, {});
     const nextTelemetry = state.appState.latestTelemetry || {};
     if (shouldAcceptTelemetry(nextTelemetry)) {
@@ -74,7 +74,7 @@
     updateValidationUi();
   }
 
-  function shouldAcceptTelemetry(sample) {
+  function shouldAcceptTelemetry(/** @type {any} */ sample) {
     if (!sample || !Object.keys(sample).length) return false;
     const source = String(sample.source || "").toLowerCase();
     if (source.includes("demo")) return state.demoActive || isActiveStatus();
@@ -172,7 +172,7 @@
     }
   }
 
-  function dbRowCount(storage) {
+  function dbRowCount(/** @type {any} */ storage) {
     const keys = [
       "sampleCount",
       "eventCount",
@@ -196,7 +196,7 @@
     return state.lastDevice || {};
   }
 
-  function relativeTime(value) {
+  function relativeTime(/** @type {any} */ value) {
     const ts = Number(value);
     if (!Number.isFinite(ts) || ts <= 0) return "saved";
     const seconds = Math.max(1, Math.round((Date.now() - ts) / 1000));
@@ -208,13 +208,13 @@
     return `${Math.round(hours / 24)}d ago`;
   }
 
-  function formatWhen(value) {
+  function formatWhen(/** @type {any} */ value) {
     const ts = Number(value);
     if (!Number.isFinite(ts) || ts <= 0) return "not yet";
     return relativeTime(ts);
   }
 
-  function formatBytes(value) {
+  function formatBytes(/** @type {any} */ value) {
     const bytes = Number(value);
     if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
     if (bytes < 1024) return `${Math.round(bytes)} B`;
@@ -222,13 +222,13 @@
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  function formatShortDuration(ms) {
+  function formatShortDuration(/** @type {number} */ ms) {
     const value = Math.max(0, Number(ms) || 0);
     if (value < 1000) return `${Math.round(value)}ms`;
     return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}s`;
   }
 
-  function setOptionalLiveText(id, value) {
+  function setOptionalLiveText(/** @type {any} */ id, /** @type {any} */ value) {
     VD.setText(id, value);
     const node = el(id);
     if (!node) return;
@@ -239,15 +239,15 @@
     syncOptionalLiveGroup(cell.closest("[data-optional-live-group]"));
   }
 
-  function syncOptionalLiveGroup(group) {
+  function syncOptionalLiveGroup(/** @type {any} */ group) {
     if (!group) return;
     const cells = Array.from(group.querySelectorAll("[data-live-cell]"));
     group.classList.toggle("is-empty", cells.length > 0 && cells.every((cell) => cell.classList.contains("is-empty")));
   }
 
-  function selectDevice(address, name) {
+  function selectDevice(/** @type {any} */ address, /** @type {any} */ name) {
     if (!address) return;
-    const select = el("deviceSelect");
+    const select = /** @type {HTMLSelectElement} */ (el("deviceSelect"));
     let option = Array.from(select.options).find((item) => item.value === address);
     if (!option) {
       option = document.createElement("option");
@@ -261,7 +261,7 @@
   }
 
   function getSelectedDevice() {
-    const option = el("deviceSelect").selectedOptions[0];
+    const option = /** @type {HTMLSelectElement} */ (el("deviceSelect")).selectedOptions[0];
     if (!option || !option.value) return null;
     return {
       address: option.value,
@@ -272,7 +272,7 @@
   // Stash the latest sample; defer the heavy renders (updateLiveUi,
   // drawTrace, renderOperationalState, updateValidationUi) to the next animation
   // frame so a high-rate OBD source can't cause render thrash.
-  function updateTelemetry(payload) {
+  function updateTelemetry(/** @type {any} */ payload) {
     const sample = VD.parsePayload(payload, {});
     const source = String(sample.source || "").toLowerCase();
     const isDemoSample = source.includes("demo");
@@ -408,7 +408,7 @@
   //   live    → samples flowing and fresh
   //   stale   → samples seen but none for STALE_THRESHOLD_MS
   // `isStale` is passed in from applyStaleIndicator() so both share one clock read.
-  function updateRateChip(isStale) {
+  function updateRateChip(/** @type {any} */ isStale) {
     const chip = el("liveRateChip");
     if (!chip) return;
     const samples = hasLiveSamples();
@@ -424,6 +424,11 @@
     const mph = Number.isFinite(kph) ? Math.round(kph * 0.621371) : null;
     VD.setText("speedValue", mph);
     VD.setText("speedKph", Number.isFinite(kph) ? `${Math.round(kph)} km/h` : "-- km/h");
+    const speedMeter = el("speedValue")?.closest("[role='meter']");
+    if (speedMeter) {
+      if (Number.isFinite(mph)) speedMeter.setAttribute("aria-valuenow", String(mph));
+      else speedMeter.removeAttribute("aria-valuenow");
+    }
     setOptionalLiveText("rpmValue", t.rpm == null || t.rpm === "" ? "--" : `${t.rpm}`);
     // voltageValue is the aux 12V (ATRV from the ELM adapter), labelled accordingly
     // in the partial. The HV traction-pack voltage is rendered via drivePackVoltage below.
@@ -449,7 +454,9 @@
     const batteryTemp = t.batteryTemp == null || t.batteryTemp === "" ? NaN : Number(t.batteryTemp);
     VD.setText("packTempValue", Number.isFinite(batteryTemp) ? `${batteryTemp.toFixed(1)} °C` : "--");
     VD.setText("driveSocValue", Number.isFinite(soc) ? `${Math.round(soc)}%` : "--");
-    VD.setMeter("driveSocMeter", Number.isFinite(soc) ? soc : 0);
+    // Pass the raw (possibly NaN) value through; setMeter clears the meter to an
+    // indeterminate state for a missing reading rather than announcing a false 0%.
+    VD.setMeter("driveSocMeter", soc);
     VD.setText("drivePackTempValue", Number.isFinite(batteryTemp) ? `${Math.round(batteryTemp)} °C` : "--");
     const power = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
     VD.setText("powerValue", Number.isFinite(power) ? `${power.toFixed(1)} kW` : "--");
@@ -484,6 +491,11 @@
       fill.style.width = pct + "%";
       fill.style.left = Number.isFinite(power) && power < 0 ? (50 - pct) + "%" : "50%";
       fill.classList.toggle("is-regen", powerState === "regen");
+    }
+    const powerMeter = el("powerMeter");
+    if (powerMeter) {
+      if (Number.isFinite(power)) powerMeter.setAttribute("aria-valuenow", String(Math.round(power)));
+      else powerMeter.removeAttribute("aria-valuenow");
     }
     VD.setMeter("loadMeter", t.loadPct);
     renderOperationalState();
@@ -586,7 +598,7 @@
     VD.setText("validationSummary", okCount ? `${okCount}/5 ok` : "waiting");
   }
 
-  function setValidationRow(id, tone, label, detail, value) {
+  function setValidationRow(/** @type {any} */ id, /** @type {any} */ tone, /** @type {any} */ label, /** @type {any} */ detail, /** @type {any} */ value) {
     const row = el(id);
     if (!row) return;
     row.dataset.tone = tone;
@@ -598,20 +610,20 @@
     if (tag) tag.textContent = value;
   }
 
-  function formatAge(ms) {
+  function formatAge(/** @type {number} */ ms) {
     const clean = Math.max(0, Number(ms) || 0);
     if (clean < 1000) return "now";
     if (clean < 60000) return `${Math.round(clean / 1000)}s`;
     return `${Math.round(clean / 60000)}m`;
   }
 
-  function summarizePidLine(value) {
+  function summarizePidLine(/** @type {any} */ value) {
     const clean = String(value || "").replace(/SEARCHING\.+/gi, "").trim();
     const match = clean.match(/4100[0-9A-F]+/i);
     return match ? "01-00 ok" : (clean ? "adapter ok" : "unknown");
   }
 
-  function formatDuration(ms) {
+  function formatDuration(/** @type {number} */ ms) {
     const seconds = Math.max(0, Math.round(Number(ms) / 1000));
     if (seconds < 60) return `${seconds}s`;
     const minutes = Math.floor(seconds / 60);
@@ -619,7 +631,7 @@
   }
 
   function drawTrace() {
-    const canvas = el("speedCanvas");
+    const canvas = /** @type {HTMLCanvasElement | null} */ (el("speedCanvas"));
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -643,7 +655,7 @@
     if (samples.length < 2) return;
     const max = Math.max(120, ...samples);
     ctx.beginPath();
-    samples.forEach((value, index) => {
+    samples.forEach((/** @type {any} */ value, /** @type {any} */ index) => {
       const x = (index / (samples.length - 1)) * w;
       const y = h - (value / max) * (h - 18) - 8;
       if (index === 0) ctx.moveTo(x, y);

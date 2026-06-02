@@ -29,8 +29,20 @@ import org.json.JSONObject;
  * <p>Not {@code final}: {@code ObdPollingEngineTest} subclasses this to override {@link
  * #isBluetoothReady} and {@link #openBluetoothSocket} so the connect / poll / reconnect state
  * machine can be exercised without a real {@code BluetoothAdapter}.
+ *
+ * <p><b>Why this class is intentionally large (~700 LOC):</b> it is one cohesive state machine —
+ * connect, ELM327 init, live poll, and the failure-classification / backoff / reconnect loop are a
+ * single sequential flow over the same per-session locals ({@code attempt}, {@code everConnected},
+ * {@code consecutiveInstantDrops}, {@code wedgedMode}). Splitting the loop into separate
+ * "connector" / "reconnector" / "poller" classes would have to thread that mutable runtime state
+ * (plus {@code service.running}, {@code ioLock}, and the recorder) through new interfaces, adding
+ * indirection and a fresh set of race-window seams for no behavioral gain. The genuinely separable
+ * concerns have already been extracted ({@link DiagnosticScanRunner}, {@link DemoPollingLoop},
+ * {@link ClearDtcRunner}, {@link LiveSampleReader}, {@link SessionHealthTracker}, {@link
+ * PidPollingState}); what remains is deliberately kept together. Prefer adding small private
+ * helpers here over carving the state machine into more objects.
  */
-class ObdPollingEngine {
+class ObdPollingEngine implements LiveSampleReader.SampleContext {
 
     /**
      * Long-backoff schedule for the wedged-adapter signature: two consecutive instant drops in
@@ -73,7 +85,7 @@ class ObdPollingEngine {
         this.service = service;
         this.sessionHealth = new SessionHealthTracker(service);
         this.pidPolling = new PidPollingState(service, this);
-        this.liveSampleReader = new LiveSampleReader(service, this, speedFilter, pidPolling);
+        this.liveSampleReader = new LiveSampleReader(service, speedFilter, pidPolling);
         this.demoLoop = new DemoPollingLoop(service, this);
         this.scanRunner = new DiagnosticScanRunner(service, this);
         this.clearDtcRunner = new ClearDtcRunner(service, this);
@@ -92,7 +104,8 @@ class ObdPollingEngine {
         return sampleCount;
     }
 
-    String supportedPidsSummary() {
+    @Override
+    public String supportedPidsSummary() {
         return supportedPidsSummary;
     }
 
@@ -513,7 +526,10 @@ class ObdPollingEngine {
     // which the caller turns into a reconnect attempt).
     private void pollUntilStoppedOrBroken() throws IOException {
         while (service.running.get()) {
-            JSONObject sample = liveSampleReader.read();
+            // Pass this engine as the narrow SampleContext (sample counter + supported-PID summary
+            // + session-health / location enrichers) rather than the whole engine — the reader only
+            // needs those four operations.
+            JSONObject sample = liveSampleReader.read(this);
             if (sample == null || sample.length() == 0) {
                 // A non-fatal encoding glitch yielded no usable sample; skip it and keep
                 // the session polling rather than ending it on a transient issue.
@@ -531,7 +547,8 @@ class ObdPollingEngine {
     }
 
     /** Returns the new sample count after incrementing; used by {@link DemoPollingLoop}. */
-    int incrementSampleCount() {
+    @Override
+    public int incrementSampleCount() {
         return ++sampleCount;
     }
 
@@ -626,7 +643,8 @@ class ObdPollingEngine {
         return sendCommand(command, timeoutMs);
     }
 
-    void appendLocation(JSONObject sample) throws JSONException {
+    @Override
+    public void appendLocation(JSONObject sample) throws JSONException {
         FilteredLocation location =
                 service.locationTracker == null ? null : service.locationTracker.getLastLocation();
         if (location == null) {
@@ -658,7 +676,8 @@ class ObdPollingEngine {
         return PidPollingState.boundedRawTranscript(rawThisCycle);
     }
 
-    void appendSessionHealth(JSONObject sample) throws JSONException {
+    @Override
+    public void appendSessionHealth(JSONObject sample) throws JSONException {
         sessionHealth.append(sample);
     }
 

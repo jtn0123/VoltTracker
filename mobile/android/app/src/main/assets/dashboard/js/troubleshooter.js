@@ -1,3 +1,4 @@
+// @ts-check
 /*
  * troubleshooter.js — connection troubleshooter modal behavior and the
  * stuck-bond auto-suggest hook.
@@ -47,6 +48,7 @@
   // Map FailureClass.name() to user-facing copy. Keys MUST match the
   // string values produced by FailureClass.java; unknown / missing falls
   // through to the generic message.
+  /** @type {Record<string, { title: string, hint: string }>} */
   const FAILURE_CLASS_COPY = {
     INSTANT_DROP: {
       title: "Adapter answers but isn't talking",
@@ -101,7 +103,7 @@
     return Boolean(node && !node.hidden);
   }
 
-  function open(reason) {
+  function open(/** @type {any} */ reason) {
     const node = modal();
     if (!node) return;
     // Remember the focused element so it can be restored when the modal closes.
@@ -216,7 +218,7 @@
 
   // Render Force-stop buttons for every competing package. `csv` may be null or ""; in that case
   // the whole step stays hidden.
-  function renderCompeting(csv) {
+  function renderCompeting(/** @type {any} */ csv) {
     const stepNode = el("troubleshooterStepCompeting");
     const listNode = el("troubleshooterCompetingList");
     if (!stepNode || !listNode) return;
@@ -230,11 +232,11 @@
     listNode.replaceChildren(...packages.map(buildCompetingRow));
   }
 
-  function parsePackageCsv(csv) {
+  function parsePackageCsv(/** @type {any} */ csv) {
     if (!csv) return [];
     const raw = String(csv).split(",");
     const seen = new Set();
-    const out = [];
+    const /** @type {any[]} */ out = [];
     raw.forEach((entry) => {
       const trimmed = String(entry || "").trim();
       if (!trimmed) return;
@@ -245,7 +247,7 @@
     return out;
   }
 
-  function buildCompetingRow(pkg) {
+  function buildCompetingRow(/** @type {any} */ pkg) {
     const row = document.createElement("div");
     row.className = "troubleshooter-competing-row";
     const label = document.createElement("span");
@@ -279,7 +281,7 @@
   // payload. Shows one <li> per slow-tier PID whose *StaleMs field exceeds
   // STALE_THRESHOLD_MS. Hidden entirely when no field is stale or when the
   // adapter hasn't started reporting staleness yet.
-  function renderStaleTelemetry(payload) {
+  function renderStaleTelemetry(/** @type {any} */ payload) {
     const stepNode = el("troubleshooterStepStale");
     const listNode = el("troubleshooterStaleList");
     if (!stepNode || !listNode) return;
@@ -293,9 +295,9 @@
     listNode.replaceChildren(...stale.map(buildStaleRow));
   }
 
-  function pickStaleFields(payload) {
+  function pickStaleFields(/** @type {any} */ payload) {
     if (!payload || typeof payload !== "object") return [];
-    const out = [];
+    const /** @type {any[]} */ out = [];
     STALE_FIELDS.forEach((field) => {
       const value = Number(payload[field.key]);
       if (Number.isFinite(value) && value > STALE_THRESHOLD_MS) {
@@ -305,7 +307,7 @@
     return out;
   }
 
-  function buildStaleRow(entry) {
+  function buildStaleRow(/** @type {any} */ entry) {
     const row = document.createElement("li");
     row.className = "troubleshooter-stale-row";
     const label = document.createElement("span");
@@ -319,7 +321,7 @@
     return row;
   }
 
-  function noteTelemetry(payload) {
+  function noteTelemetry(/** @type {any} */ payload) {
     if (!payload || typeof payload !== "object") return;
     state.troubleshooter.lastTelemetry = payload;
     if (isOpen()) {
@@ -366,7 +368,7 @@
   // the actions row (cancel + help) so the banner is actionable instead of
   // a plain "Dashboard error" string. Called from noteStatus on every status
   // payload.
-  function renderErrorBannerCopy(status) {
+  function renderErrorBannerCopy(/** @type {any} */ status) {
     const titleNode = el("errorBannerTitle");
     const hintNode = el("errorBannerHint");
     const actionsNode = el("errorBannerActions");
@@ -417,7 +419,7 @@
   }
 
   // Counts a status payload toward the auto-open trigger.
-  function noteStatus(status) {
+  function noteStatus(/** @type {any} */ status) {
     if (!status) return;
     const stateName = String(status.state || "").toLowerCase();
     const detail = String(status.detail || "").toLowerCase();
@@ -485,8 +487,8 @@
   // VoltTrackerNative.setStatus or the JS side calls VD.setStatus directly
   // — flows through our observer.
   function installStatusObserver() {
-    const wrap = (prior) =>
-      function (payload) {
+    const wrap = (/** @type {any} */ prior) =>
+      function (/** @type {any} */ payload) {
         let result;
         if (typeof prior === "function") {
           result = prior(payload);
@@ -510,8 +512,8 @@
   // them out and refresh the step. Observer must never break the underlying
   // updateTelemetry call.
   function installTelemetryObserver() {
-    const wrap = (prior) =>
-      function (payload) {
+    const wrap = (/** @type {any} */ prior) =>
+      function (/** @type {any} */ payload) {
         let result;
         if (typeof prior === "function") {
           result = prior(payload);

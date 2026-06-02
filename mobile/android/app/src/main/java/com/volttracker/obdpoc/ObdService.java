@@ -26,6 +26,18 @@ import org.json.JSONObject;
  * the foreground notification, GPS tracking, and status broadcasts to the dashboard. The adapter IO
  * runs in {@link ObdPollingEngine}; the per-session record (field log + database) lives in {@link
  * SessionRecorder}.
+ *
+ * <p><b>Why this class is intentionally large (~700 LOC):</b> it is one Android {@code Service}
+ * with a single responsibility — owning the lifecycle and shared runtime state of exactly one
+ * logging session. The intent dispatch, foreground-notification management, GPS wiring, session
+ * start/stop/token handling, and status/telemetry broadcasts all read and mutate the same
+ * service-scoped fields ({@code running}, {@code ioLock}, {@code sessionToken}, {@code activeTask},
+ * the executors, the live {@code localStore}). Splitting these into helper objects would force that
+ * shared mutable state to be passed back through new interfaces, multiplying the surfaces on which
+ * a teardown can race an in-flight reconnect — the exact hazard {@code ioLock} exists to close. The
+ * separable pieces already live elsewhere ({@link ObdPollingEngine} for adapter IO, {@link
+ * SessionRecorder} for the per-session record); what stays here is the lifecycle glue and is
+ * deliberately not carved up further. Prefer small private helpers over new collaborator classes.
  */
 public class ObdService extends Service {
     public static final String ACTION_CONNECT = "com.volttracker.obdpoc.action.CONNECT";

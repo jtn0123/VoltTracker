@@ -157,6 +157,45 @@ public class PidScheduleTest {
         }
     }
 
+    // ---- G2 generalized Mode-01 same-cycle batching precondition --------------------
+
+    /**
+     * The generalized Mode-01 batching (G2) groups any same-header Mode-01 PIDs that fall due on
+     * the same cycle. This pins the schedule's precondition for that path: there exists a cycle on
+     * which two non-Tier-1 broadcast Mode-01 PIDs (SOC 015B + coolant 0105) coincide, so the engine
+     * has a real multi-tier group to batch. Tier-1 batching is a separate, dedicated path.
+     */
+    @Test
+    public void aMultiTierSameCycleMode01BatchGroupExists() {
+        boolean foundCoincidence = false;
+        for (int cycle = 0; cycle < 40 && !foundCoincidence; cycle++) {
+            List<PidSpec> due = PidSchedule.dueOnCycle(cycle);
+            List<String> broadcastMode01 = new java.util.ArrayList<>();
+            for (PidSpec spec : due) {
+                boolean tier1 = PidSchedule.MODE_01_BATCH_COMMANDS.contains(spec.command);
+                boolean broadcastMode01Cmd =
+                        spec.header == Header.BROADCAST
+                                && spec.command.length() == 4
+                                && spec.command.startsWith("01");
+                if (broadcastMode01Cmd && !tier1) {
+                    broadcastMode01.add(spec.command);
+                }
+            }
+            if (broadcastMode01.size() >= 2) {
+                foundCoincidence = true;
+                assertTrue(
+                        "expected SOC in the multi-tier group on cycle " + cycle,
+                        broadcastMode01.contains("015B"));
+                assertTrue(
+                        "expected coolant in the multi-tier group on cycle " + cycle,
+                        broadcastMode01.contains("0105"));
+            }
+        }
+        assertTrue(
+                "schedule must produce at least one multi-tier same-cycle Mode-01 batch group",
+                foundCoincidence);
+    }
+
     private static PidSpec findByCommand(String command) {
         for (PidSpec spec : PidSchedule.SPECS) {
             if (spec.command.equals(command)) {

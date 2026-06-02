@@ -1,5 +1,5 @@
 {
-  "//": "Opt-in type-checking for the dashboard JS (I3). checkJs is false, so only files that start with `// @ts-check` are type-checked — migrate a file by adding that comment and clearing the errors. tsc emits nothing; this is a checker only. Run via `npm run typecheck`.",
+  "//": "Opt-in type-checking for the dashboard JS (I3). checkJs is false, so only files that start with `// @ts-check` are type-checked — migrate a file by adding that comment and clearing the errors. noImplicitAny is ON (I2): every function param/var must have a determinable type — annotate with JSDoc rather than leaving it implicit. strict/strictNullChecks remain OFF (a separate, larger migration). tsc emits nothing; this is a checker only. Run via `npm run typecheck`.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -9,7 +9,7 @@
     "checkJs": false,
     "noEmit": true,
     "strict": false,
-    "noImplicitAny": false,
+    "noImplicitAny": true,
     "skipLibCheck": true,
     "types": []
   },

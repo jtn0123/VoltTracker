@@ -14,23 +14,38 @@ import org.json.JSONObject;
 
 /** Builds one live OBD telemetry sample from the current PID polling state. */
 final class LiveSampleReader {
+
+    /**
+     * The narrow slice of {@link ObdPollingEngine} that building one sample actually needs: the
+     * per-session sample counter, the supported-PID summary, and the two enrichers that decorate a
+     * sample with session-health and location fields. Passing this into {@link
+     * #read(SampleContext)} instead of the whole engine keeps the reader's coupling to four
+     * well-defined operations rather than the engine's entire surface, while {@link
+     * ObdPollingEngine} (which owns the runtime state these read) supplies the implementation at
+     * the call site.
+     */
+    interface SampleContext {
+        int incrementSampleCount();
+
+        String supportedPidsSummary();
+
+        void appendSessionHealth(JSONObject sample) throws JSONException;
+
+        void appendLocation(JSONObject sample) throws JSONException;
+    }
+
     private final ObdService service;
-    private final ObdPollingEngine engine;
     private final SpeedPlausibilityFilter speedFilter;
     private final PidPollingState pidPolling;
 
     LiveSampleReader(
-            ObdService service,
-            ObdPollingEngine engine,
-            SpeedPlausibilityFilter speedFilter,
-            PidPollingState pidPolling) {
+            ObdService service, SpeedPlausibilityFilter speedFilter, PidPollingState pidPolling) {
         this.service = service;
-        this.engine = engine;
         this.speedFilter = speedFilter;
         this.pidPolling = pidPolling;
     }
 
-    JSONObject read() throws IOException {
+    JSONObject read(SampleContext context) throws IOException {
         JSONObject sample = new JSONObject();
         StringBuilder rawThisCycle = new StringBuilder();
         try {
@@ -87,19 +102,19 @@ final class LiveSampleReader {
             pidPolling.putStaleMsIfTracked(sample, "coolantCStaleMs", "0105", now);
             pidPolling.putStaleMsIfTracked(sample, "batteryTempStaleMs", "22434F", now);
 
-            int sampleCount = engine.incrementSampleCount();
+            int sampleCount = context.incrementSampleCount();
             sample.put("source", "obd");
             sample.put("connected", true);
             sample.put("adapter", service.activeName);
             sample.put("sampleCount", sampleCount);
             sample.put("sessionMs", Math.max(0, now - service.sessionStartedAtMs));
-            sample.put("supportedPids", engine.supportedPidsSummary());
+            sample.put("supportedPids", context.supportedPidsSummary());
             Double packCurrentA = appendPackCurrent(sample, packCurrentRaw);
             appendVehicleState(
                     sample, acceptedSpeed, rpm, voltage, packCurrentA, chargeTransitionHint, now);
             sample.put("updatedAt", now);
-            engine.appendSessionHealth(sample);
-            engine.appendLocation(sample);
+            context.appendSessionHealth(sample);
+            context.appendLocation(sample);
             sample.put("raw", ObdPollingEngine.boundedRawTranscript(rawThisCycle));
         } catch (JSONException ex) {
             service.recorder.logError("sample_encoding_error", ex);

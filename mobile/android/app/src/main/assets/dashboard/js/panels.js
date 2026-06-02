@@ -7,11 +7,11 @@
   const bridge = VD.bridge;
   const el = VD.el;
 
-  function isNativeError(payload) {
+  function isNativeError(/** @type {any} */ payload) {
     return payload && typeof payload === "object" && payload.ok === false && payload.error;
   }
 
-  function reportNativeReadError(payload, fallbackDetail) {
+  function reportNativeReadError(/** @type {any} */ payload, /** @type {any} */ fallbackDetail) {
     const detail = payload.message || fallbackDetail || "Could not read local storage.";
     VD.setStatus({ state: "blocked", detail });
     if (bridge && typeof bridge.logClientError === "function") {
@@ -19,7 +19,7 @@
     }
   }
 
-  function setStorage(payload) {
+  function setStorage(/** @type {any} */ payload) {
     const parsed = VD.parsePayload(payload, {});
     if (isNativeError(parsed)) {
       reportNativeReadError(parsed, "Could not read local storage summary.");
@@ -110,14 +110,14 @@
   // innerHTML += template literals so storage strings can never be reinterpreted
   // as markup. Each builder returns a single root Element.
 
-  function buildStatusCopy(text) {
+  function buildStatusCopy(/** @type {any} */ text) {
     const p = document.createElement("p");
     p.className = "status-copy";
     p.textContent = text;
     return p;
   }
 
-  function buildRecentSessionRow(session) {
+  function buildRecentSessionRow(/** @type {any} */ session) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "history-row";
@@ -139,14 +139,14 @@
     const codes = Array.isArray(storage.latestDiagnosticCodes) ? storage.latestDiagnosticCodes : [];
     const list = el("dtcList");
     const summaryCounts = storage.diagnosticCodeStatusCounts || {};
-    const statusCounts = Object.keys(summaryCounts).length ? summaryCounts : codes.reduce((counts, code) => {
+    const statusCounts = Object.keys(summaryCounts).length ? summaryCounts : codes.reduce((/** @type {any} */ counts, /** @type {any} */ code) => {
       const key = String(code.status || "stored").toLowerCase();
       counts[key] = (counts[key] || 0) + 1;
       return counts;
     }, {});
     const totalCodes = Number(storage.diagnosticCodeCount ?? codes.length);
     const storedOrCurrent = Number(statusCounts.stored || 0) + Number(statusCounts.current || 0);
-    const latestSeen = codes.reduce((latest, code) => Math.max(latest, Number(code.lastSeenMs || 0)), 0);
+    const latestSeen = codes.reduce((/** @type {any} */ latest, /** @type {any} */ code) => Math.max(latest, Number(code.lastSeenMs || 0)), 0);
     const needsDtcData = codes.length > 0 && typeof VD.dtcInfo !== "function";
     VD.setText("dtcTitle", totalCodes ? `${totalCodes} code${totalCodes === 1 ? "" : "s"} saved` : "No car-code scan yet");
     VD.setText("dtcReportBadge", needsDtcData ? "loading details" : totalCodes ? "evidence saved" : "ready");
@@ -170,7 +170,7 @@
       list.replaceChildren(buildDtcEmptyState());
       return;
     }
-    list.replaceChildren(...codes.map((c) => buildDtcItem(c, false)));
+    list.replaceChildren(...codes.map((/** @type {number} */ c) => buildDtcItem(c, false)));
   }
 
   function buildDtcEmptyState() {
@@ -196,7 +196,7 @@
     return wrap;
   }
 
-  function buildDtcItem(code, isExample) {
+  function buildDtcItem(/** @type {any} */ code, /** @type {any} */ isExample) {
     const article = document.createElement("article");
     article.className = "dtc-item";
     article.dataset.status = String(code.status || "stored");
@@ -355,7 +355,7 @@
     }
   }
 
-  function buildRealInsightItem(title, detail) {
+  function buildRealInsightItem(/** @type {any} */ title, /** @type {any} */ detail) {
     const article = document.createElement("article");
     article.className = "real-insight-item";
     const strong = document.createElement("strong");
@@ -366,7 +366,7 @@
     return article;
   }
 
-  function buildWarningItem(item) {
+  function buildWarningItem(/** @type {any} */ item) {
     const article = document.createElement("article");
     article.className = "warning-item";
     const strong = document.createElement("strong");
@@ -377,7 +377,7 @@
     return article;
   }
 
-  function buildTimelineItem(item) {
+  function buildTimelineItem(/** @type {any} */ item) {
     const article = document.createElement("article");
     article.className = "timeline-item";
     const wrapper = document.createElement("span");
@@ -390,7 +390,7 @@
     return article;
   }
 
-  function buildPidFrameItem(frame) {
+  function buildPidFrameItem(/** @type {any} */ frame) {
     const article = document.createElement("article");
     article.className = "pid-frame-item";
     const cmd = document.createElement("strong");
@@ -407,7 +407,7 @@
     return article;
   }
 
-  function buildRealInsights(review) {
+  function buildRealInsights(/** @type {any} */ review) {
     const warnings = Array.isArray(review.warnings) ? review.warnings : [];
     const stateCounts = review.stateCounts || {};
     const parsed = Number(review.parsedPidCount || 0);
@@ -416,7 +416,7 @@
     const maxSpeed = Number(review.maxSpeedKph || 0);
     const backgroundSamples = Number(review.backgroundSampleCount || (review.latestHealth || {}).backgroundSampleCount || 0);
     const gapCount = Number(review.sampleGapEventCount || (review.latestHealth || {}).sampleGapCount || 0);
-    const hasChargeHint = warnings.some((item) => String(item.code || "") === "charge-speed-hint");
+    const hasChargeHint = warnings.some((/** @type {any} */ item) => String(item.code || "") === "charge-speed-hint");
     const hasDriving = Object.keys(stateCounts).some((key) => key.includes("driving"));
     return [
       {
@@ -450,7 +450,7 @@
     ];
   }
 
-  function stateCountSummary(counts) {
+  function stateCountSummary(/** @type {any} */ counts) {
     return Object.keys(counts || {})
       .filter((key) => key && key !== "unknown")
       .map((key) => `${key}: ${counts[key]}`)
@@ -490,12 +490,12 @@
     const ring = el("realPackRing");
     const ringValue = el("realPackValue");
     if (Number.isFinite(soc) && soc > 0) {
-      if (ring) ring.style.setProperty("--v", Math.max(0, Math.min(100, soc)));
+      if (ring) ring.style.setProperty("--v", String(Math.max(0, Math.min(100, soc))));
       if (ringValue) ringValue.textContent = `${Math.round(soc)}%`;
       VD.setText("realPackTitle", "Latest battery reading captured.");
       VD.setText("realPackCopy", `${Number.isFinite(power) ? power.toFixed(1) + " kW · " : ""}${latest.vehicleState || "vehicle state unknown"} · accuracy improves as more drives are logged.`);
     } else {
-      if (ring) ring.style.setProperty("--v", 0);
+      if (ring) ring.style.setProperty("--v", "0");
       if (ringValue) ringValue.textContent = "--";
       VD.setText("realPackTitle", "Waiting for battery readings.");
       VD.setText("realPackCopy", "Battery charge, power, and pack health appear here once the adapter has logged a few readings.");
@@ -514,7 +514,7 @@
     renderVehicleUi();
   }
 
-  function buildMaintenanceRow(name, detail, tag) {
+  function buildMaintenanceRow(/** @type {any} */ name, /** @type {any} */ detail, /** @type {any} */ tag) {
     const article = document.createElement("article");
     article.className = "real-insight-item";
     const center = document.createElement("span");
@@ -569,7 +569,7 @@
     VD.setText("vehicleBatteryHealth", Number.isFinite(health) ? `${health.toFixed(1)}%` : "--");
   }
 
-  function toggleHidden(id, hidden) {
+  function toggleHidden(/** @type {any} */ id, /** @type {any} */ hidden) {
     const node = el(id);
     if (node) node.hidden = Boolean(hidden);
   }
@@ -613,8 +613,8 @@
       : "Your trips");
   }
 
-  function realTripsRenderKey(trips) {
-    return trips.map((trip) => [
+  function realTripsRenderKey(/** @type {any} */ trips) {
+    return trips.map((/** @type {any} */ trip) => [
       trip.id,
       trip.hasRoute ? "route" : "samples",
       trip.pointCount || 0,
@@ -624,15 +624,15 @@
     ].join(":")).join("|");
   }
 
-  function needsMiniMapUpgrade(list) {
+  function needsMiniMapUpgrade(/** @type {any} */ list) {
     if (!list) return false;
     return Array.prototype.some.call(
       list.querySelectorAll("[data-real-trip-map-role='mini']"),
-      (slot) => !slot.querySelector(".leaflet-container")
+      (/** @type {any} */ slot) => !slot.querySelector(".leaflet-container")
     );
   }
 
-  function renderTripRow(trip) {
+  function renderTripRow(/** @type {any} */ trip) {
     const distance = VD.formatDistance(Number(trip.distanceMeters || 0));
     const duration = Number(trip.durationMs) > 0 ? VD.formatDuration(Number(trip.durationMs)) : null;
     const topMph = trip.maxSpeedKph ? Math.round(Number(trip.maxSpeedKph) * 0.621371) : 0;
@@ -662,10 +662,18 @@
     } else {
       button.append(center, right);
     }
-    return button;
+    // Wrap in a listitem so #realTripsList (role="list") has valid listitem
+    // children without overriding the chip's native button role. The wrapper is
+    // display:contents (components.css) so layout is unchanged; click delegation
+    // uses closest("[data-real-trip-id]") which still resolves to the button.
+    const item = document.createElement("div");
+    item.className = "list-row-item";
+    item.setAttribute("role", "listitem");
+    item.appendChild(button);
+    return item;
   }
 
-  function selectRealTrip(id) {
+  function selectRealTrip(/** @type {any} */ id) {
     state.selectedRealTripId = String(id || "");
     updateRealTripSelection();
     renderRealTripDetail();
@@ -678,32 +686,32 @@
     });
   }
 
-  function routeForTrip(trip) {
+  function routeForTrip(/** @type {any} */ trip) {
     const routes =
       state.storage && Array.isArray(state.storage.recentRoutes)
         ? state.storage.recentRoutes
         : [];
     const id = String(trip.id || "");
-    return routes.find((route) => String((route.session || {}).id || "") === id) || null;
+    return routes.find((/** @type {any} */ route) => String((route.session || {}).id || "") === id) || null;
   }
 
-  function buildTripRouteSpark(route) {
+  function buildTripRouteSpark(/** @type {any} */ route) {
     const points = (route && route.points || [])
-      .map((point) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
-      .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+      .map((/** @type {any} */ point) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
+      .filter((/** @type {any} */ point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
     if (points.length < 2) return document.createTextNode("");
     const ns = "http://www.w3.org/2000/svg";
     const svgNode = document.createElementNS(ns, "svg");
     svgNode.setAttribute("class", "trip-route-spark");
     svgNode.setAttribute("viewBox", "0 0 72 38");
     svgNode.setAttribute("aria-hidden", "true");
-    const minLat = Math.min.apply(null, points.map((point) => point.lat));
-    const maxLat = Math.max.apply(null, points.map((point) => point.lat));
-    const minLng = Math.min.apply(null, points.map((point) => point.lng));
-    const maxLng = Math.max.apply(null, points.map((point) => point.lng));
+    const minLat = Math.min.apply(null, points.map((/** @type {any} */ point) => point.lat));
+    const maxLat = Math.max.apply(null, points.map((/** @type {any} */ point) => point.lat));
+    const minLng = Math.min.apply(null, points.map((/** @type {any} */ point) => point.lng));
+    const maxLng = Math.max.apply(null, points.map((/** @type {any} */ point) => point.lng));
     const spanLat = maxLat - minLat || 1;
     const spanLng = maxLng - minLng || 1;
-    const coords = points.map((point) => {
+    const coords = points.map((/** @type {any} */ point) => {
       const x = 6 + ((point.lng - minLng) / spanLng) * 60;
       const y = 6 + (1 - (point.lat - minLat) / spanLat) * 26;
       return x.toFixed(1) + "," + y.toFixed(1);
@@ -729,7 +737,7 @@
     return svgNode;
   }
 
-  function buildTripMapSlot(route, role, tripId) {
+  function buildTripMapSlot(/** @type {any} */ route, /** @type {any} */ role, /** @type {any} */ tripId) {
     const slot = document.createElement("span");
     slot.className = role === "detail" ? "real-route-map" : "trip-route-map";
     slot.dataset.realTripMap = String(tripId || (route && route.session && route.session.id) || "");
@@ -738,10 +746,10 @@
     return slot;
   }
 
-  function buildTripRoutePreview(route) {
+  function buildTripRoutePreview(/** @type {any} */ route) {
     const points = (route && route.points || [])
-      .map((point) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
-      .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+      .map((/** @type {any} */ point) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
+      .filter((/** @type {any} */ point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
     const box = document.createElement("div");
     box.className = "real-route-empty";
     if (points.length < 2) {
@@ -753,13 +761,13 @@
     svgNode.setAttribute("class", "real-route-svg");
     svgNode.setAttribute("viewBox", "0 0 320 150");
     svgNode.setAttribute("aria-hidden", "true");
-    const minLat = Math.min.apply(null, points.map((point) => point.lat));
-    const maxLat = Math.max.apply(null, points.map((point) => point.lat));
-    const minLng = Math.min.apply(null, points.map((point) => point.lng));
-    const maxLng = Math.max.apply(null, points.map((point) => point.lng));
+    const minLat = Math.min.apply(null, points.map((/** @type {any} */ point) => point.lat));
+    const maxLat = Math.max.apply(null, points.map((/** @type {any} */ point) => point.lat));
+    const minLng = Math.min.apply(null, points.map((/** @type {any} */ point) => point.lng));
+    const maxLng = Math.max.apply(null, points.map((/** @type {any} */ point) => point.lng));
     const spanLat = maxLat - minLat || 1;
     const spanLng = maxLng - minLng || 1;
-    const coords = points.map((point) => {
+    const coords = points.map((/** @type {any} */ point) => {
       const x = 22 + ((point.lng - minLng) / spanLng) * 276;
       const y = 18 + (1 - (point.lat - minLat) / spanLat) * 112;
       return x.toFixed(1) + "," + y.toFixed(1);
@@ -786,7 +794,7 @@
     return svgNode;
   }
 
-  function buildEnergyRow(label, value, pct, color) {
+  function buildEnergyRow(/** @type {any} */ label, /** @type {any} */ value, /** @type {any} */ pct, /** @type {any} */ color) {
     const row = document.createElement("div");
     const span = document.createElement("span");
     span.textContent = label;
@@ -819,7 +827,7 @@
         .filter(Boolean)
         .join(" - ") || "stored drive"
     );
-    const mapBtn = el("realTripMapBtn");
+    const mapBtn = /** @type {HTMLButtonElement | null} */ (el("realTripMapBtn"));
     if (mapBtn) {
       mapBtn.dataset.tripMap = String(trip.id || "");
       mapBtn.disabled = !trip.hasRoute;
@@ -836,10 +844,10 @@
       if (!hasCurrentMap) routeBox.replaceChildren(buildTripMapSlot(route, "detail", trip.id));
     }
     const effPts = route && Array.isArray(route.points)
-      ? route.points.map((point) => Number(point.eff)).filter(Number.isFinite)
+      ? route.points.map((/** @type {any} */ point) => Number(point.eff)).filter(Number.isFinite)
       : [];
     const avgEff = effPts.length
-      ? effPts.reduce((sum, value) => sum + value, 0) / effPts.length
+      ? effPts.reduce((/** @type {any} */ sum, /** @type {any} */ value) => sum + value, 0) / effPts.length
       : 0;
     VD.setText("realTripEnergyTitle", avgEff ? `${avgEff.toFixed(1)} mi/kWh` : (avgMph ? `${avgMph} mph avg` : "Stored drive"));
     const rows = el("realTripEnergyRows");
@@ -863,13 +871,13 @@
     realTripMaps.clear();
   }
 
-  function queueRenderRealTripMaps(options) {
+  function queueRenderRealTripMaps(/** @type {any} */ options) {
     clearTimeout(realTripMapTimer);
     const detailOnly = Boolean(options && options.detailOnly);
     realTripMapTimer = setTimeout(() => renderRealTripLeafletMaps({ detailOnly }), 80);
   }
 
-  function renderRealTripLeafletMaps(options) {
+  function renderRealTripLeafletMaps(/** @type {any} */ options) {
     if (typeof L === "undefined") return;
     const detailOnly = Boolean(options && options.detailOnly);
     if (!detailOnly) {
@@ -897,8 +905,8 @@
       const role = slot.dataset.realTripMapRole || "mini";
       const route = routeForTrip({ id });
       const points = (route && route.points || [])
-        .map((point) => [Number(point.lat), Number(point.lng)])
-        .filter((pair) => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
+        .map((/** @type {any} */ point) => [Number(point.lat), Number(point.lng)])
+        .filter((/** @type {any} */ pair) => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
       const rect = slot.getBoundingClientRect();
       if (points.length < 2 || rect.width < 24 || rect.height < 24) return;
       slot.replaceChildren();
@@ -988,7 +996,7 @@
   // samples carry derived eff (which depends on the OBD loop having captured
   // battery current via the Volt 7E1 PIDs).
 
-  const haversineMetersJsLocal = (lat1, lng1, lat2, lng2) => {
+  const haversineMetersJsLocal = (/** @type {number} */ lat1, /** @type {number} */ lng1, /** @type {number} */ lat2, /** @type {number} */ lng2) => {
     const r = 6371000;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLng = ((lng2 - lng1) * Math.PI) / 180;
@@ -1000,15 +1008,15 @@
     return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
-  function enrichRouteEff(route) {
+  function enrichRouteEff(/** @type {any} */ route) {
     if (!route || route._effDone) return;
     route._effDone = true;
     const pts = route.points || [];
-    const track = (route.powerTrack || []).filter((s) =>
+    const track = (route.powerTrack || []).filter((/** @type {any} */ s) =>
       Number.isFinite(Number(s.powerKw))
     );
     if (pts.length < 2 || track.length < 2) return;
-    const powerAt = (atMs) => {
+    const powerAt = (/** @type {number} */ atMs) => {
       if (atMs <= track[0].atMs) return Number(track[0].powerKw);
       const last = track[track.length - 1];
       if (atMs >= last.atMs) return Number(last.powerKw);
@@ -1022,7 +1030,7 @@
       }
       return Number(last.powerKw);
     };
-    const mphArr = pts.map((p, i) => {
+    const mphArr = pts.map((/** @type {any} */ p, /** @type {number} */ i) => {
       let mps = Number(p.speedMps);
       if (!Number.isFinite(mps) || mps < 0) {
         const a = pts[Math.max(0, i - 1)];
@@ -1038,7 +1046,7 @@
     // misleading. Tagging them as null instead leaves the regen segments grey (the
     // mapEffColor `eff == null` branch in map.js), making downhill / regen runs visibly
     // distinct from drive efficiency.
-    const whmiInst = pts.map((p, i) => {
+    const whmiInst = pts.map((/** @type {any} */ p, /** @type {number} */ i) => {
       if (mphArr[i] <= 4) return NaN;
       const kW = powerAt(Number(p.atMs));
       if (!Number.isFinite(kW)) return NaN;
@@ -1074,8 +1082,8 @@
       state.storage && Array.isArray(state.storage.recentRoutes)
         ? state.storage.recentRoutes
         : [];
-    const pool = [];
-    routes.forEach((route) => {
+    const /** @type {any[]} */ pool = [];
+    routes.forEach((/** @type {any} */ route) => {
       enrichRouteEff(route);
       const pts = (route && route.points) || [];
       for (let i = 0; i < pts.length; i += 1) {
@@ -1124,9 +1132,9 @@
     const padR = 12;
     const padT = 14;
     const padB = 28;
-    const xOf = (mph) => padL + (mph / 75) * (w - padL - padR);
-    const yS = (e) => padT + (1 - e / 7) * (h - padT - padB);
-    const gColor = (g) =>
+    const xOf = (/** @type {any} */ mph) => padL + (mph / 75) * (w - padL - padR);
+    const yS = (/** @type {any} */ e) => padT + (1 - e / 7) * (h - padT - padB);
+    const gColor = (/** @type {number} */ g) =>
       g <= -0.006 ? "#5cc8ff" : g >= 0.006 ? "#ff6b5f" : "#b8e63b";
     let inner = "";
     for (let gx = 0; gx <= 75; gx += 15) {
@@ -1139,7 +1147,7 @@
         `<line x1="${padL}" y1="${yS(gy)}" x2="${w - padR}" y2="${yS(gy)}" stroke="rgba(255,255,255,0.06)"/>` +
         `<text x="${padL - 6}" y="${yS(gy) + 3}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">${gy}</text>`;
     }
-    const bins = [];
+    const /** @type {any[]} */ bins = [];
     pool.forEach((p) => {
       inner += `<circle cx="${xOf(p.mph).toFixed(1)}" cy="${yS(p.eff).toFixed(1)}" r="3.2" fill="${gColor(p.grade)}" fill-opacity="0.5"/>`;
       const b = Math.floor(p.mph / 10);
@@ -1151,7 +1159,7 @@
     bins.forEach((arr, b) => {
       if (!arr || arr.length < 3) return;
       const mph = b * 10 + 5;
-      const e = arr.reduce((s, x) => s + x, 0) / arr.length;
+      const e = arr.reduce((/** @type {number} */ s, /** @type {number} */ x) => s + x, 0) / arr.length;
       trend += `${started ? "L" : "M"}${xOf(mph).toFixed(1)} ${yS(e).toFixed(1)} `;
       started = true;
       if (e > best.e) best = { e: e, mph: mph };
@@ -1184,8 +1192,8 @@
     if (statsEl) {
       const hwy = pool.filter((p) => p.mph > 55).map((p) => p.eff);
       const down = pool.filter((p) => p.grade <= -0.012).map((p) => p.eff);
-      const avg = (a) =>
-        a.length ? (a.reduce((s, x) => s + x, 0) / a.length).toFixed(1) : "--";
+      const avg = (/** @type {any} */ a) =>
+        a.length ? (a.reduce((/** @type {number} */ s, /** @type {number} */ x) => s + x, 0) / a.length).toFixed(1) : "--";
       statsEl.replaceChildren(
         insightStat("Samples", String(pool.length)),
         insightStat("Highway avg", avg(hwy) + " mi/kWh"),
@@ -1194,7 +1202,7 @@
     }
   }
 
-  function insightStat(label, value) {
+  function insightStat(/** @type {any} */ label, /** @type {any} */ value) {
     const item = document.createElement("div");
     const key = document.createElement("span");
     key.className = "kicker";
@@ -1206,7 +1214,7 @@
   }
 
   // Re-render the scatter on viewport resize (SVG sized in real pixels).
-  let scatterResizeTimer = null;
+  let /** @type {any} */ scatterResizeTimer = null;
   window.addEventListener("resize", () => {
     clearTimeout(scatterResizeTimer);
     scatterResizeTimer = setTimeout(() => {
@@ -1243,7 +1251,7 @@
   // on the status state — this binding just forwards the click to the
   // bridge.
   (function bindRetryCancel() {
-    const btn = el("errorBannerCancelRetry");
+    const btn = /** @type {HTMLButtonElement | null} */ (el("errorBannerCancelRetry"));
     if (!btn) return;
     btn.addEventListener("click", () => {
       // Only enter the "Cancelling…" UI state when the bridge actually has a cancelRetry

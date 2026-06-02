@@ -1,3 +1,4 @@
+// @ts-check
 (function () {
   "use strict";
 
@@ -6,22 +7,23 @@
   const bridge = VD.bridge;
   const el = VD.el;
 
-  let mapInstance = null;
-  let remoteTileLayer = null;
+  let /** @type {any} */ mapInstance = null;
+  let /** @type {any} */ remoteTileLayer = null;
+  /** @type {Record<string, any>} */
   const mapLayerGroups = { routes: null, heat: null, stops: null, eff: null };
-  let mapFitKey = null;
+  let /** @type {any} */ mapFitKey = null;
 
   // Per-segment efficiency bucket color for the V3 "Eff" layer. Grey for
   // segments without power data yet, so the user can see at a glance which
   // parts of the drive lack derived efficiency.
-  function mapEffColor(eff) {
+  function mapEffColor(/** @type {any} */ eff) {
     if (!Number.isFinite(eff)) return "#6a6a72";
     if (eff >= 4) return "#b8e63b";
     if (eff >= 2.7) return "#ffb84a";
     return "#ff6b5f";
   }
 
-  function createRemoteTileLayer(map) {
+  function createRemoteTileLayer(/** @type {any} */ map) {
     const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       subdomains: "abcd",
       maxZoom: 19,
@@ -32,7 +34,7 @@
     // basemap is down.
     let tileErrorCount = 0;
     let fallbackActivated = false;
-    tiles.on("tileerror", (event) => {
+    tiles.on("tileerror", (/** @type {any} */ event) => {
       tileErrorCount += 1;
       const src = (event && event.tile && event.tile.src) || "unknown";
       if (tileErrorCount <= 2) {
@@ -88,7 +90,7 @@
     syncRemoteTiles();
     if (typeof VD.scrubberAttachMap === "function") VD.scrubberAttachMap(mapInstance);
     // Tap anywhere on the map → snap the scrubber to the closest route point.
-    mapInstance.on("click", (e) => {
+    mapInstance.on("click", (/** @type {any} */ e) => {
       if (e && e.latlng && typeof VD.scrubAtLatLng === "function") {
         VD.scrubAtLatLng(e.latlng.lat, e.latlng.lng);
       }
@@ -111,7 +113,8 @@
     const frame = el("mapFrame");
     if (frame) frame.dataset.layer = layer;
     VD.setText("mapStopsCount", stops.length ? String(Math.min(20, stops.length)) : "0");
-    document.querySelectorAll("[data-map-layer]").forEach((button) => {
+    document.querySelectorAll("[data-map-layer]").forEach((node) => {
+      const button = /** @type {HTMLElement} */ (node);
       const active = button.dataset.mapLayer === layer;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-selected", active ? "true" : "false");
@@ -171,13 +174,13 @@
     // Hide the Recorded Sessions card when the chip strip already covers
     // every drive. It re-appears with its empty-state message when there are
     // no logged drives yet (so the user sees the "no route" prompt).
-    const sessionsCard = document.querySelector("#view-map .map-layout");
+    const sessionsCard = /** @type {HTMLElement | null} */ (document.querySelector("#view-map .map-layout"));
     if (sessionsCard) sessionsCard.hidden = routes.length > 0;
   }
 
   // Chip date formatter: "Today 2:51 AM" / "Yesterday 6:54 PM" / "Sat 9:15 AM" /
   // "Oct 15". More skim-able than "6h ago / 30h ago / 4d ago".
-  function fmtChipDate(ms) {
+  function fmtChipDate(/** @type {number} */ ms) {
     if (!Number.isFinite(ms)) return "session";
     const now = new Date();
     const d = new Date(ms);
@@ -203,7 +206,7 @@
   // start time, distance, and a color-coded average efficiency dot — same
   // pattern as the demo's drive picker. Click delegation flows through the
   // existing [data-map-session] handler in actions.js.
-  function renderMapDriveChips(routes) {
+  function renderMapDriveChips(/** @type {any} */ routes) {
     const wrap = el("mapDriveChips");
     if (!wrap) return;
     if (!routes.length) {
@@ -213,7 +216,7 @@
     }
     wrap.hidden = false;
     const selId = String(state.selectedMapSessionId || "");
-    const chips = routes.map((route) => {
+    const chips = routes.map((/** @type {any} */ route) => {
       if (typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
       const s = sessionForRoute(route);
       const id = String(s.id || "");
@@ -230,9 +233,9 @@
       const distMi = (Number(route.distanceMeters || 0) / 1609.34).toFixed(1);
       distance.textContent = distMi + " mi";
       meta.append(distance);
-      const effPts = (route.points || []).filter((p) => Number.isFinite(Number(p.eff)));
+      const effPts = (route.points || []).filter((/** @type {any} */ p) => Number.isFinite(Number(p.eff)));
       const avgEff = effPts.length
-        ? effPts.reduce((acc, p) => acc + Number(p.eff), 0) / effPts.length
+        ? effPts.reduce((/** @type {any} */ acc, /** @type {any} */ p) => acc + Number(p.eff), 0) / effPts.length
         : 0;
       if (avgEff > 0) {
         meta.append(document.createTextNode(" · "));
@@ -253,7 +256,7 @@
   }
 
   // Draws the selected route on Leaflet as routes / heat / stops layer groups.
-  function drawMapRoute(points, hasRoute, layer, routeSession) {
+  function drawMapRoute(/** @type {any} */ points, /** @type {any} */ hasRoute, /** @type {any} */ layer, /** @type {any} */ routeSession) {
     const container = el("mapLeaflet");
     if (!container || !container.offsetWidth || !container.offsetHeight) return;
     const map = ensureMap();
@@ -266,7 +269,7 @@
       }
     });
     if (!hasRoute) return;
-    const latlngs = points.map((p) => [Number(p.lat), Number(p.lng)]);
+    const latlngs = points.map((/** @type {any} */ p) => [Number(p.lat), Number(p.lng)]);
 
     mapLayerGroups.routes = L.layerGroup([
       L.polyline(latlngs, { color: "#ff7a45", weight: 9, opacity: 0.16 }),
@@ -275,6 +278,7 @@
       L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: "#fff", weight: 2, fillColor: "#ff7141", fillOpacity: 1 })
     ]);
 
+    /** @type {Record<string, any[]>} */
     const bands = { "#ff6b4a": [], "#ffd23f": [], "#7ee06a": [] };
     for (let i = 1; i < points.length; i += 1) {
       const speed = segmentSpeedMps(points[i - 1], points[i]);
@@ -302,6 +306,7 @@
     // V3 efficiency layer — per-segment polylines bucketed by mi/kWh.
     // Segments with no power data (eff null) render grey so the user
     // can tell which portions of the drive lack derived efficiency.
+    /** @type {Record<string, any[]>} */
     const effBands = {};
     for (let i = 1; i < points.length; i += 1) {
       const color = mapEffColor(Number(points[i].eff));
@@ -328,7 +333,7 @@
     }
   }
 
-  function renderMapSessionList(routes) {
+  function renderMapSessionList(/** @type {any} */ routes) {
     const list = el("mapSessionList");
     if (!list) return;
     if (!routes.length) {
@@ -341,7 +346,7 @@
     list.replaceChildren(...routes.map(buildMapSessionRow));
   }
 
-  function buildMapSessionRow(r) {
+  function buildMapSessionRow(/** @type {any} */ r) {
     const s = sessionForRoute(r);
     const active = String(s.id || "") === String(state.selectedMapSessionId || "");
     const button = document.createElement("button");
@@ -360,19 +365,19 @@
     return button;
   }
 
-  function selectedMapRoute(storage) {
+  function selectedMapRoute(/** @type {any} */ storage) {
     const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
     if (routes.length) {
-      return routes.find((route) => String((route.session || {}).id || "") === String(state.selectedMapSessionId || "")) || routes[0];
+      return routes.find((/** @type {any} */ route) => String((route.session || {}).id || "") === String(state.selectedMapSessionId || "")) || routes[0];
     }
     return storage.latestRoute || {};
   }
 
-  function sessionForRoute(route) {
+  function sessionForRoute(/** @type {any} */ route) {
     return route && route.session ? route.session : {};
   }
 
-  function haversineMetersJs(lat1, lng1, lat2, lng2) {
+  function haversineMetersJs(/** @type {number} */ lat1, /** @type {number} */ lng1, /** @type {number} */ lat2, /** @type {number} */ lng2) {
     const r = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLng = (lng2 - lng1) * Math.PI / 180;
@@ -382,7 +387,7 @@
     return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  function routeDistanceMeters(points) {
+  function routeDistanceMeters(/** @type {any} */ points) {
     let total = 0;
     for (let i = 1; i < points.length; i += 1) {
       total += haversineMetersJs(points[i - 1].lat, points[i - 1].lng, points[i].lat, points[i].lng);
@@ -390,14 +395,14 @@
     return total;
   }
 
-  function segmentSpeedMps(a, b) {
+  function segmentSpeedMps(/** @type {any} */ a, /** @type {any} */ b) {
     const seconds = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
     return haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / seconds;
   }
 
   // A stop is a sustained run (>= 45 s) of near-zero movement between GPS points.
-  function detectStops(points) {
-    const stops = [];
+  function detectStops(/** @type {any} */ points) {
+    const /** @type {any[]} */ stops = [];
     let runStart = null;
     for (let i = 1; i < points.length; i += 1) {
       const slow = segmentSpeedMps(points[i - 1], points[i]) < 1.5;
@@ -412,7 +417,7 @@
     return stops;
   }
 
-  function addStop(stops, points, startIdx, endIdx) {
+  function addStop(/** @type {any} */ stops, /** @type {any} */ points, /** @type {any} */ startIdx, /** @type {any} */ endIdx) {
     const durationMs = Number(points[endIdx].atMs) - Number(points[startIdx].atMs);
     if (durationMs < 45000) return;
     const mid = points[Math.floor((startIdx + endIdx) / 2)];
@@ -429,9 +434,10 @@
   // own session id, start time, altitude profile, socTrack, and powerTrack so
   // the chip strip, Eff layer, scrubber, and Insights scatter all populate
   // with varied content rather than a single drive.
-  function buildSampleRoute(opts) {
+  function buildSampleRoute(/** @type {any} */ opts) {
     const slice = SAMPLE_ROUTE.slice(opts.from, opts.to);
     const baseT = slice[0][0];
+    /** @type {Array<{ atMs: number, lat: number, lng: number, altM?: number }>} */
     const points = slice.map(([t, lat, lng]) => ({
       atMs: opts.startedAtMs + (t - baseT) * 1000, lat, lng
     }));

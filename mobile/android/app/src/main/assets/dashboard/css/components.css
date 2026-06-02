@@ -487,6 +487,13 @@
     font-size: 13px;
   }
 
+  /* Accessibility wrapper: gives interactive rows a role="listitem" parent
+     inside role="list" containers without adding a layout box, so the visual
+     grid/flex of the list is exactly as if the row were a direct child. */
+  .list-row-item {
+    display: contents;
+  }
+
   .trip-row, .session-row, .history-row {
     width: 100%;
     display: grid;

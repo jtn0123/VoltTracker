@@ -274,6 +274,48 @@ public class VoltBridgeTest {
         }
     }
 
+    // ---- E2: logClientError is token-bucket rate limited -----------------------------
+
+    @Test
+    public void logClientErrorEmitsNormalVolumeUnthrottled() {
+        try (VoltBridgeUnderTest t = buildBridge()) {
+            org.robolectric.shadows.ShadowLog.clear();
+            // A handful of calls — well under the burst capacity — must all reach logcat.
+            for (int i = 0; i < 5; i++) {
+                t.bridge.logClientError("err", "detail " + i);
+            }
+            assertEquals("All normal-volume calls should log", 5, countDashboardErrorLogs());
+        }
+    }
+
+    @Test
+    public void logClientErrorDropsRunawayCallerAfterBurst() {
+        try (VoltBridgeUnderTest t = buildBridge()) {
+            org.robolectric.shadows.ShadowLog.clear();
+            // 200 instantaneous calls: only the burst capacity (10) can pass before the bucket
+            // empties; the refill is time-based and ~no time elapses in this loop. The runaway
+            // caller is throttled rather than spamming the log unbounded.
+            for (int i = 0; i < 200; i++) {
+                t.bridge.logClientError("err", "spam " + i);
+            }
+            int logged = countDashboardErrorLogs();
+            assertTrue("Burst should admit at least 1 call, was " + logged, logged >= 1);
+            assertTrue(
+                    "Runaway caller must be throttled well below 200, was " + logged, logged <= 20);
+        }
+    }
+
+    private static int countDashboardErrorLogs() {
+        int count = 0;
+        for (org.robolectric.shadows.ShadowLog.LogItem item :
+                org.robolectric.shadows.ShadowLog.getLogsForTag(MainActivity.TAG)) {
+            if (item.msg != null && item.msg.startsWith("dashboard client error")) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private static String repeat(char ch, int count) {
         char[] buffer = new char[count];
         Arrays.fill(buffer, ch);

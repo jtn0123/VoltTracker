@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -88,6 +89,56 @@ public class DataBackupTest {
             assertTrue(DataBackup.isVoltTrackerBackup(store.getDatabaseFile()));
         } finally {
             store.close();
+        }
+    }
+
+    @Test
+    public void clearsRegenerableRollupCacheFromStagedRestore() {
+        // session_trip_rollups is a v9 regenerable cache. A hand-edited backup could carry rollups
+        // that reference sessions that won't survive; the restore staging clears them as
+        // defense-in-depth (they rebuild lazily). Seed a row, clear, and confirm it is gone while
+        // the rest of the database is left intact.
+        Context context = RuntimeEnvironment.getApplication();
+        ObdLocalStore store = new ObdLocalStore(context);
+        try {
+            store.clearAllData();
+            store.checkpoint();
+            File dbFile = store.getDatabaseFile();
+
+            SQLiteDatabase db = SQLiteDatabase.openDatabase(dbFile.getPath(), null, 0);
+            try {
+                db.execSQL(
+                        "INSERT INTO obd_sessions"
+                                + " (_id, mode, started_at_ms, status, sample_count, created_at_ms)"
+                                + " VALUES (1, 'obd', 1, 'closed', 0, 1)");
+                db.execSQL(
+                        "INSERT INTO session_trip_rollups"
+                                + " (session_id, counted, distance_m, duration_ms, started_at_ms)"
+                                + " VALUES (1, 1, 100.0, 1000, 1)");
+                assertEquals(1, rowCount(db, "session_trip_rollups"));
+            } finally {
+                db.close();
+            }
+
+            DataBackup.clearRegenerableRollupCache(dbFile);
+
+            SQLiteDatabase verify = SQLiteDatabase.openDatabase(dbFile.getPath(), null, 0);
+            try {
+                assertEquals(0, rowCount(verify, "session_trip_rollups"));
+                // The originating session row must remain — only the cache is cleared.
+                assertEquals(1, rowCount(verify, "obd_sessions"));
+            } finally {
+                verify.close();
+            }
+        } finally {
+            store.close();
+        }
+    }
+
+    private static int rowCount(SQLiteDatabase db, String table) {
+        try (android.database.Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + table, null)) {
+            cursor.moveToFirst();
+            return cursor.getInt(0);
         }
     }
 

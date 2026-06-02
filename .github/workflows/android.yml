@@ -144,10 +144,65 @@ jobs:
             echo "| **dtc data (lookup + causes)** | **$dtc** / 380000 |"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  gradle-dependency-audit:
+    # ADVISORY dependency-vulnerability scan for the Gradle/Java side — the
+    # counterpart to the npm `npm audit --audit-level=high` gate in the
+    # dashboard-tests job above. The Java tree had NO CVE gate, so a known-
+    # vulnerable transitive dep could land unnoticed.
+    #
+    # Intentionally NON-BLOCKING for now: `continue-on-error: true` on the scan
+    # step means a finding is surfaced (annotations + uploaded SARIF) but does
+    # NOT fail the job, and this job is NOT in `ci-success`'s `needs:` below — so
+    # it cannot block merges yet. Promote it to gating (drop continue-on-error
+    # and/or add to ci-success) once the signal is proven low-noise.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Generate Gradle dependency lockfile
+        # OSV-Scanner cannot parse `gradlew dependencies` text output — it needs a
+        # real lockfile. dependencyLocking is enabled in app/build.gradle, so
+        # --write-locks emits app/gradle.lockfile (gitignored, CI-ephemeral) listing
+        # the resolved release-runtime coordinates+versions for the scanner to check.
+        working-directory: mobile/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:dependencies \
+            --configuration releaseRuntimeClasspath --write-locks
+      - name: OSV vulnerability scan (advisory)
+        id: osv
+        continue-on-error: true
+        # Scans the generated Gradle lockfile for dependencies with known advisories
+        # in the OSV database. Advisory-only: continue-on-error keeps a finding from
+        # failing the job while we evaluate the signal.
+        uses: google/osv-scanner-action/osv-scanner-action@e69cc6c86b31f1e7e23935bbe7031b50e51082de # v2.0.2
+        with:
+          scan-args: |-
+            --lockfile=./mobile/android/app/gradle.lockfile
+      - name: Upload dependency audit artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gradle-dependency-audit
+          path: |
+            mobile/android/app/gradle.lockfile
+            results.sarif
+          if-no-files-found: ignore
+
   ci-success:
     # Single aggregate status so branch protection only needs to require one
     # check ("ci-success") instead of enumerating every lane. Adding a new test
     # job just means adding it to `needs:` here — no branch-protection edit.
+    #
+    # NOTE: gradle-dependency-audit is intentionally NOT listed here — it is an
+    # advisory (non-blocking) scan. Add it once its findings are proven stable.
     if: always()
     needs: [unit-tests, dashboard-tests]
     runs-on: ubuntu-latest

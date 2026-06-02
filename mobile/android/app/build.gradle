@@ -132,6 +132,15 @@ dependencies {
     testImplementation libs.robolectric
 }
 
+// Dependency locking — enabled so CI can emit a Gradle lockfile that OSV-Scanner
+// can parse (the F1 gradle-dependency-audit job runs `:app:dependencies
+// --write-locks`). No lockfile is committed (app/gradle.lockfile is gitignored),
+// so locking imposes NO version enforcement on normal builds: Gradle only verifies
+// against a lockfile when one is present. The scan regenerates it fresh each run.
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 // Assembles the shipped dashboard index.html from the per-screen partials in
 // src/main/dashboard-src/. Edit the small partials; never hand-edit the generated file.
 tasks.register("generateDashboardHtml") {

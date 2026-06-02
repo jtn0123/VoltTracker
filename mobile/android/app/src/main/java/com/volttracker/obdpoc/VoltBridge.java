@@ -31,7 +31,25 @@ public final class VoltBridge {
     private static final int MAX_DTC_LEN = 16;
     private static final int MAX_PASSPHRASE_LEN = 256;
 
+    /**
+     * Token-bucket rate limit for {@link #logClientError}. The dashboard JS calls it freely (CSP
+     * violations, the global error handler, missing-tile warnings); a buggy or looping client could
+     * otherwise spam logcat. Refills one token per {@code 1000/LOG_CLIENT_ERROR_RATE_PER_SEC} ms up
+     * to {@code LOG_CLIENT_ERROR_BURST}, so normal volumes pass through untouched and only a
+     * runaway caller is throttled.
+     */
+    private static final int LOG_CLIENT_ERROR_RATE_PER_SEC = 5;
+
+    private static final int LOG_CLIENT_ERROR_BURST = 10;
+
     private final MainActivity activity;
+
+    // Token-bucket state for logClientError, guarded by clientErrorLock. The bridge can be called
+    // from multiple WebView threads, so the accounting must be synchronized.
+    private final Object clientErrorLock = new Object();
+    private double clientErrorTokens = LOG_CLIENT_ERROR_BURST;
+    private long clientErrorLastRefillMs = 0L;
+    private long clientErrorDroppedCount = 0L;
 
     VoltBridge(MainActivity activity) {
         this.activity = activity;
@@ -299,12 +317,49 @@ public final class VoltBridge {
 
     @JavascriptInterface
     public void logClientError(String label, String detail) {
+        long dropped = acquireClientErrorTokenOrCountDrop();
+        if (dropped < 0) {
+            // Rate limit exceeded — drop this call. The drop was counted; the next admitted call
+            // surfaces the accumulated total so a runaway client is visible without itself
+            // spamming.
+            return;
+        }
+        String suffix = dropped > 0 ? " (suppressed " + dropped + " over-rate calls)" : "";
         Log.e(
                 MainActivity.TAG,
                 "dashboard client error ["
                         + safe(label, MAX_LABEL_LEN)
                         + "]: "
-                        + safe(detail, MAX_DETAIL_LEN));
+                        + safe(detail, MAX_DETAIL_LEN)
+                        + suffix);
+    }
+
+    /**
+     * Token-bucket gate for {@link #logClientError}. Returns the number of calls dropped since the
+     * last admitted one (≥ 0) when a token is available — the caller folds that count into the
+     * emitted line — or {@code -1} when no token is available and this call must be dropped.
+     */
+    private long acquireClientErrorTokenOrCountDrop() {
+        synchronized (clientErrorLock) {
+            long now = System.currentTimeMillis();
+            if (clientErrorLastRefillMs == 0L) {
+                clientErrorLastRefillMs = now;
+            }
+            long elapsed = Math.max(0L, now - clientErrorLastRefillMs);
+            if (elapsed > 0L) {
+                double refill = (elapsed / 1000.0) * LOG_CLIENT_ERROR_RATE_PER_SEC;
+                clientErrorTokens = Math.min(LOG_CLIENT_ERROR_BURST, clientErrorTokens + refill);
+                clientErrorLastRefillMs = now;
+            }
+            if (clientErrorTokens < 1.0) {
+                clientErrorDroppedCount++;
+                return -1L;
+            }
+            clientErrorTokens -= 1.0;
+            long dropped = clientErrorDroppedCount;
+            clientErrorDroppedCount = 0L;
+            return dropped;
+        }
     }
 
     // ============================================================================================

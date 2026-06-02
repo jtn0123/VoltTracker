@@ -11,16 +11,6 @@ import com.volttracker.obdpoc.data.ObdLocalStore;
 import com.volttracker.obdpoc.location.FilteredLocation;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.RejectedExecutionHandler;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -35,16 +25,10 @@ import org.json.JSONObject;
  */
 final class SessionRecorder {
 
-    // Telemetry queue cap: 2000 entries × ~200 bytes/row ≈ ~400 KB worst-case backlog.
-    // Generous for normal driving (1 Hz × 30 minutes = 1800 rows) yet bounded so a stalled
-    // SQLite writer cannot grow the process heap during long scan-mode sessions or under
-    // battery-saver-induced I/O lag. On overflow we keep the most recent telemetry and drop
-    // the oldest queued row — telemetry loss is acceptable here; OOM is not.
-    static final int TELEMETRY_QUEUE_CAPACITY = 2000;
-    // Lifecycle queue cap: very small (lifecycle events fire a handful of times per session
-    // — startSession / closeSession / finalizeSession). If we ever overflow this, the existing
-    // inline-run fallback at lifecycleAsync handles the RejectedExecutionException.
-    static final int LIFECYCLE_QUEUE_CAPACITY = 64;
+    // Queue caps retained as the contract some tests assert against; the actual queues now live
+    // in ObdPersistenceWorker and are sized from these via that class's own copies.
+    static final int TELEMETRY_QUEUE_CAPACITY = ObdPersistenceWorker.TELEMETRY_QUEUE_CAPACITY;
+    static final int LIFECYCLE_QUEUE_CAPACITY = ObdPersistenceWorker.LIFECYCLE_QUEUE_CAPACITY;
 
     private final Object lock;
     private final ObdSessionLog sessionLog;
@@ -54,37 +38,10 @@ final class SessionRecorder {
     // Snapshot source for the system_snapshot event emitted at session start.
     // Held as a Context-bearing Supplier so unit tests can wire it as null.
     private final SystemSnapshotSource snapshotSource;
-    private final AtomicLong droppedTelemetryTasks = new AtomicLong();
-    // telemetryExecutor: high-volume telemetry/event/observation writes. Failures are
-    // intentionally swallowed — these rows are diagnostic-only, never block OBD polling.
-    // DiscardOldestUnlessShutdown: under sustained backpressure during normal operation,
-    // drop the oldest queued telemetry rather than block the poll thread or grow the queue
-    // without bound. AFTER shutdown, behave like AbortPolicy so awaitTelemetryDrain's
-    // RejectedExecutionException catch path runs immediately instead of waiting for a marker
-    // that will never be processed. Without the shutdown-aware branch, shutdown ↔ lifecycle
-    // ordering races can leave finalize waiting behind a marker that cannot run.
-    private final ExecutorService telemetryExecutor =
-            new ThreadPoolExecutor(
-                    1,
-                    1,
-                    0L,
-                    TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<>(TELEMETRY_QUEUE_CAPACITY),
-                    new DiscardOldestUnlessShutdownPolicy(droppedTelemetryTasks));
-    // lifecycleExecutor: session lifecycle writes (closeSession / finalizeSession).
-    // Failures are surfaced via Log.e AND a persist_failure status_events row, so a
-    // failed finalize cannot silently leave a session marked active forever.
-    // AbortPolicy: lifecycle drops are NOT acceptable — the inline-run fallback at
-    // lifecycleAsync catches RejectedExecutionException and runs the task on the
-    // caller thread instead, so the finalize still lands.
-    private final ExecutorService lifecycleExecutor =
-            new ThreadPoolExecutor(
-                    1,
-                    1,
-                    0L,
-                    TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<>(LIFECYCLE_QUEUE_CAPACITY),
-                    new ThreadPoolExecutor.AbortPolicy());
+    // Owns the async-persistence executors, bounded queues, backpressure policy, dropped-task
+    // counter, and drain/shutdown plumbing. SessionRecorder decides WHAT to persist (reading
+    // mutable session state under lock); the worker decides HOW it runs.
+    private final ObdPersistenceWorker worker;
     private ObdLocalStore localStore;
 
     private long activeSessionId;
@@ -96,30 +53,18 @@ final class SessionRecorder {
     private String lastPersistedStatusKey = "";
     private long lastPersistedStatusAtMs;
 
-    // Custom telemetry rejection handler: DiscardOldestPolicy semantics in normal operation,
-    // AbortPolicy semantics post-shutdown. See the telemetryExecutor comment for why.
-    private static final class DiscardOldestUnlessShutdownPolicy
-            implements RejectedExecutionHandler {
-        private final AtomicLong droppedCount;
-
-        DiscardOldestUnlessShutdownPolicy(AtomicLong droppedCount) {
-            this.droppedCount = droppedCount;
-        }
-
-        @Override
-        public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
-            if (executor.isShutdown()) {
-                throw new RejectedExecutionException("telemetry executor shut down");
-            }
-            if (executor.getQueue().poll() != null) {
-                long dropped = droppedCount.incrementAndGet();
-                Log.w(
-                        MainActivity.TAG,
-                        "telemetry queue full; dropped oldest telemetry task #" + dropped);
-            }
-            executor.execute(r);
-        }
-    }
+    // Content-independent status-write rate cap. The content+time dedupe above
+    // (lastPersistedStatusKey) only suppresses *identical* status events; a flapping adapter
+    // that alternates between two distinct details makes every key look "new", so the dedupe
+    // never engages and the events table bloats under a bad connection. This rolling-window ring
+    // caps the absolute number of status writes per window regardless of how the detail varies.
+    // Sized so genuine state transitions (a handful per window) pass freely while a tight
+    // flapping loop is throttled. Guarded by lock (same monitor as shouldThrottleStatus).
+    static final int STATUS_RATE_MAX_PER_WINDOW = 12;
+    static final long STATUS_RATE_WINDOW_MS = 5000L;
+    private final long[] recentStatusWriteMs = new long[STATUS_RATE_MAX_PER_WINDOW];
+    private int recentStatusWriteCount;
+    private int recentStatusWriteHead;
 
     SessionRecorder(Object lock, ObdSessionLog sessionLog, ObdLocalStore localStore) {
         this(lock, sessionLog, localStore, null, null);
@@ -136,6 +81,7 @@ final class SessionRecorder {
         this.localStore = localStore;
         this.summaryStore = summaryStore;
         this.snapshotSource = snapshotSource;
+        this.worker = new ObdPersistenceWorker(localStore);
     }
 
     /** Snapshot supplier so {@link ObdService} can hand the {@link android.content.Context} in. */
@@ -162,6 +108,8 @@ final class SessionRecorder {
             closeSession("", "", "", 0);
             lastPersistedStatusKey = "";
             lastPersistedStatusAtMs = 0L;
+            recentStatusWriteCount = 0;
+            recentStatusWriteHead = 0;
             sessionLog.open(mode);
             if (!sessionLog.isOpen()) {
                 activeSessionId = 0L;
@@ -272,10 +220,10 @@ final class SessionRecorder {
                 // could otherwise run before they land. Materializers read those rows back, so
                 // a race here would yield "trips" that are missing the last few seconds of
                 // telemetry.
-                final long droppedBeforeClose = droppedTelemetryTasks.getAndSet(0L);
-                lifecycleAsync(
+                final long droppedBeforeClose = worker.drainDroppedTelemetryCount();
+                worker.submitLifecycle(
                         () -> {
-                            awaitTelemetryDrain();
+                            worker.awaitTelemetryDrain();
                             if (droppedBeforeClose > 0) {
                                 JSONObject droppedPayload = new JSONObject();
                                 try {
@@ -437,7 +385,7 @@ final class SessionRecorder {
             // Demo telemetry is a UI preview only; keep it out of the real database.
             return;
         }
-        persistAsync(() -> localStore.recordTelemetry(sessionId, payload));
+        worker.submitTelemetry(() -> localStore.recordTelemetry(sessionId, payload));
     }
 
     void persistStatus(String state, String detail, boolean blocked, JSONObject payload) {
@@ -448,7 +396,8 @@ final class SessionRecorder {
         if (shouldThrottleStatus(state, detail, blocked)) {
             return;
         }
-        persistAsync(() -> localStore.recordStatus(sessionId, state, detail, blocked, payload));
+        worker.submitTelemetry(
+                () -> localStore.recordStatus(sessionId, state, detail, blocked, payload));
     }
 
     // Each accepted fix is persisted straight to the route on the GPS callback (not the OBD
@@ -461,7 +410,7 @@ final class SessionRecorder {
                 || ObdLocalStore.MODE_DEMO.equals(activeMode)) {
             return;
         }
-        persistAsync(
+        worker.submitTelemetry(
                 () ->
                         localStore.recordLocationSample(
                                 sessionId,
@@ -479,23 +428,12 @@ final class SessionRecorder {
 
     /** Runs {@code task} on the recording executor — off the OBD poll and main threads. */
     void runAsync(Runnable task) {
-        persistAsync(task);
+        worker.submitTelemetry(task);
     }
 
     /** Drains pending database writes and shuts both recording executors down. */
     void shutdown() {
-        telemetryExecutor.shutdown();
-        lifecycleExecutor.shutdown();
-        try {
-            telemetryExecutor.awaitTermination(2, TimeUnit.SECONDS);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-        }
-        try {
-            lifecycleExecutor.awaitTermination(2, TimeUnit.SECONDS);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-        }
+        worker.shutdown();
     }
 
     private boolean shouldThrottleStatus(String state, String detail, boolean blocked) {
@@ -507,12 +445,46 @@ final class SessionRecorder {
                             + (detail == null ? "" : detail)
                             + "|"
                             + blocked;
+            // Fast path: identical content within the window is the common repeat (a stable
+            // connection re-publishing the same status) and is suppressed without touching the
+            // rate ring — those repeats never reach persistence so they don't count against it.
             if (key.equals(lastPersistedStatusKey) && now - lastPersistedStatusAtMs < 5000L) {
                 return true;
             }
+            // Content-independent cap: a flapping adapter alternating between distinct details
+            // bypasses the key dedupe entirely (every key looks new), so cap the absolute number
+            // of status writes per rolling window regardless of content variation.
+            if (countRecentStatusWrites(now) >= STATUS_RATE_MAX_PER_WINDOW) {
+                return true;
+            }
+            recordStatusWrite(now);
             lastPersistedStatusKey = key;
             lastPersistedStatusAtMs = now;
             return false;
+        }
+    }
+
+    /** Counts accepted status writes within the trailing {@link #STATUS_RATE_WINDOW_MS}. */
+    private int countRecentStatusWrites(long now) {
+        int live = 0;
+        for (int i = 0; i < recentStatusWriteCount; i++) {
+            int idx = (recentStatusWriteHead + i) % recentStatusWriteMs.length;
+            if (now - recentStatusWriteMs[idx] < STATUS_RATE_WINDOW_MS) {
+                live++;
+            }
+        }
+        return live;
+    }
+
+    /** Appends {@code now} to the rolling ring, overwriting the oldest entry when full. */
+    private void recordStatusWrite(long now) {
+        int tail = (recentStatusWriteHead + recentStatusWriteCount) % recentStatusWriteMs.length;
+        if (recentStatusWriteCount < recentStatusWriteMs.length) {
+            recentStatusWriteMs[tail] = now;
+            recentStatusWriteCount++;
+        } else {
+            recentStatusWriteMs[recentStatusWriteHead] = now;
+            recentStatusWriteHead = (recentStatusWriteHead + 1) % recentStatusWriteMs.length;
         }
     }
 
@@ -521,7 +493,7 @@ final class SessionRecorder {
         if (sessionId <= 0 || payload == null || localStore == null) {
             return;
         }
-        persistAsync(
+        worker.submitTelemetry(
                 () -> {
                     String detail =
                             payload.optString(
@@ -556,7 +528,7 @@ final class SessionRecorder {
         ObdProtocol.ParsedPidValue parsed = ObdProtocol.parseKnownValue(safeCommand, response);
         List<ObdProtocol.DiagnosticTroubleCode> diagnosticCodes =
                 ObdProtocol.parseDiagnosticTroubleCodes(safeCommand, response, header);
-        persistAsync(
+        worker.submitTelemetry(
                 () -> {
                     JSONObject payload = new JSONObject();
                     try {
@@ -607,102 +579,6 @@ final class SessionRecorder {
             // Local values are safe.
         }
         return payload;
-    }
-
-    private void persistAsync(Runnable task) {
-        try {
-            telemetryExecutor.execute(
-                    () -> {
-                        try {
-                            task.run();
-                        } catch (RuntimeException ignored) {
-                            // Persistence is diagnostic; never interrupt OBD polling for it.
-                        }
-                    });
-        } catch (RejectedExecutionException ignored) {
-        }
-    }
-
-    // Lifecycle writes (session finalize) get visibility on failure: a Log.e plus a
-    // best-effort status_events row with kind=persist_failure so the next launch can see
-    // that the session was supposed to be finalized but wasn't.
-    //
-    // If the lifecycle executor itself rejects the task (e.g. shutdown raced with a final
-    // close), we fall back to a synchronous in-thread run: dropping the finalize silently
-    // would leave the session row marked active forever.
-    private void lifecycleAsync(Runnable task, long sessionId, String op) {
-        try {
-            lifecycleExecutor.execute(
-                    () -> {
-                        try {
-                            task.run();
-                        } catch (RuntimeException ex) {
-                            Log.e(MainActivity.TAG, "session lifecycle persist failed", ex);
-                            recordPersistFailure(sessionId, op, ex);
-                        }
-                    });
-        } catch (RejectedExecutionException ex) {
-            Log.e(MainActivity.TAG, "lifecycle executor rejected " + op + "; running inline", ex);
-            try {
-                task.run();
-            } catch (RuntimeException inner) {
-                Log.e(MainActivity.TAG, "inline lifecycle fallback failed for " + op, inner);
-                recordPersistFailure(sessionId, op, inner);
-            }
-        }
-    }
-
-    /**
-     * Submits a no-op to {@link #telemetryExecutor} and waits for it to run. Because the executor
-     * is single-threaded with FIFO ordering, by the time our marker task runs every
-     * previously-submitted telemetry write has already finished. Used before finalize/materialize
-     * so those code paths see the full session in the database.
-     */
-    private void awaitTelemetryDrain() {
-        try {
-            Future<?> marker = telemetryExecutor.submit(() -> {});
-            marker.get(30, TimeUnit.SECONDS);
-        } catch (RejectedExecutionException ex) {
-            // Submit was rejected because the executor entered shutdown. That tells us OUR
-            // marker won't run — it does NOT tell us the previously-queued telemetry tasks
-            // have finished. shutdown() is orderly: already-queued tasks continue executing
-            // until the worker drains them. So we explicitly wait for termination (which
-            // returns immediately if the executor has already terminated) before letting
-            // finalize/materialize read from the database.
-            try {
-                telemetryExecutor.awaitTermination(30, TimeUnit.SECONDS);
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-            }
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-        } catch (ExecutionException ex) {
-            Log.w(MainActivity.TAG, "telemetry drain marker failed", ex.getCause());
-        } catch (TimeoutException ex) {
-            Log.w(MainActivity.TAG, "telemetry drain timed out", ex);
-        }
-    }
-
-    // Best-effort: this itself can throw if the database is the source of the trouble,
-    // so we catch and log without escalating.
-    private void recordPersistFailure(long sessionId, String op, RuntimeException cause) {
-        if (localStore == null) {
-            return;
-        }
-        try {
-            JSONObject payload = new JSONObject();
-            try {
-                payload.put("op", op);
-                payload.put("exception", cause.getClass().getName());
-                payload.put("message", safeMessage(cause));
-                payload.put("updatedAt", System.currentTimeMillis());
-            } catch (JSONException ignored) {
-                // Local values are safe.
-            }
-            localStore.recordEvent(sessionId, "persist_failure", "", op, true, payload);
-        } catch (RuntimeException ex) {
-            Log.e(MainActivity.TAG, "recording persist_failure also failed", ex);
-        }
     }
 
     // The rollup file groups every session into one of three outcomes so the

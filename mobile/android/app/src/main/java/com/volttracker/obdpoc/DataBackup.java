@@ -238,7 +238,30 @@ final class DataBackup {
             candidate.delete();
             return null;
         }
+        clearRegenerableRollupCache(candidate);
         return candidate;
+    }
+
+    /**
+     * Drops the {@code session_trip_rollups} rows from a staged restore file before it is swapped
+     * in. That table is a v9 regenerable cache that the app lazily rebuilds; a hand-edited backup
+     * could carry rollups referencing sessions that don't survive the restore, so clearing them is
+     * low-risk defense-in-depth against a stale cache going live. Failure to clear is non-fatal —
+     * the rollups are derived data and the app rebuilds them on demand — so a swap is never blocked
+     * on this step.
+     */
+    static void clearRegenerableRollupCache(File file) {
+        SQLiteDatabase db = null;
+        try {
+            db = SQLiteDatabase.openDatabase(file.getPath(), null, SQLiteDatabase.OPEN_READWRITE);
+            db.execSQL("DELETE FROM session_trip_rollups");
+        } catch (RuntimeException ex) {
+            // Best-effort: the cache rebuilds lazily, so a failure here must not fail the restore.
+        } finally {
+            if (db != null) {
+                db.close();
+            }
+        }
     }
 
     private static void clearOldBackups(File dir) {

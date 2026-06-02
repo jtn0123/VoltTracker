@@ -127,13 +127,20 @@
       <div><span>Empty</span><strong id="dbEmptyTelemetryCount">0</strong></div>
     </div>
     <div id="dbSessionList" style="margin-top: 12px"></div>
-    <details class="db-backup-tools">
+    <details
+      class="db-backup-tools"
+      aria-label="Backup, restore, and diagnostics"
+    >
       <summary>Backup, restore, and diagnostics</summary>
       <p class="status-copy">
         Encrypted backup is safest. Restore replaces all on-phone data with a
         backup file.
       </p>
-      <div class="db-action-grid">
+      <div
+        class="db-action-grid"
+        role="group"
+        aria-label="Backup and restore actions"
+      >
         <button type="button" data-action="backupEncrypted">
           Back up encrypted
         </button>

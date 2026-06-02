@@ -335,6 +335,77 @@ public class SessionRecorderTest {
         assertEquals(1, store.telemetryCalls.size());
     }
 
+    /**
+     * B1: a flapping adapter that alternates between two DISTINCT status details bypasses the
+     * content+time dedupe (every {@code state|detail|blocked} key looks new), so without a
+     * content-independent cap the events table bloats under a bad connection. Submit far more
+     * alternating-detail statuses than the rolling-window cap allows and assert the cap engages —
+     * the number of persisted {@code recordStatus} calls is bounded by {@code
+     * STATUS_RATE_MAX_PER_WINDOW}, not by the number submitted.
+     */
+    @Test
+    public void alternatingDetailFlappingIsThrottledByCountCap() throws InterruptedException {
+        final RecordingStore store = new RecordingStore();
+        final SessionRecorder recorder = newOpenRecorder(store, "sr-flapping-test");
+
+        // Submit a tight flapping loop: each call has a distinct detail, so the content+time
+        // dedupe never fires. All happen within the same rolling window (the test thread runs
+        // far faster than STATUS_RATE_WINDOW_MS).
+        final int submitted = SessionRecorder.STATUS_RATE_MAX_PER_WINDOW * 4;
+        for (int i = 0; i < submitted; i++) {
+            JSONObject payload = new JSONObject();
+            try {
+                payload.put("seq", i);
+            } catch (org.json.JSONException ex) {
+                throw new AssertionError(ex);
+            }
+            // Alternate between two distinct details AND vary by seq so no two consecutive keys
+            // are identical — this is exactly the case the content+time dedupe cannot catch.
+            recorder.persistStatus(
+                    "connecting", (i % 2 == 0 ? "A" : "B") + "-" + i, false, payload);
+        }
+        recorder.shutdown();
+
+        assertTrue(
+                "flapping submitted "
+                        + submitted
+                        + " statuses but the rolling-window cap of "
+                        + SessionRecorder.STATUS_RATE_MAX_PER_WINDOW
+                        + " must bound persisted writes; got "
+                        + store.statusCalls.size(),
+                store.statusCalls.size() <= SessionRecorder.STATUS_RATE_MAX_PER_WINDOW);
+        assertTrue(
+                "the cap should still let the early transitions through",
+                store.statusCalls.size() >= 1);
+    }
+
+    /**
+     * Sanity check that the count cap does not over-throttle: a handful of genuine, distinct state
+     * transitions (well under the cap) all reach the store.
+     */
+    @Test
+    public void genuineStateTransitionsAreNotThrottledByCountCap() throws InterruptedException {
+        final RecordingStore store = new RecordingStore();
+        final SessionRecorder recorder = newOpenRecorder(store, "sr-transitions-test");
+
+        String[] states = {"connecting", "connected", "scanning", "scan-complete", "disconnected"};
+        for (int i = 0; i < states.length; i++) {
+            JSONObject payload = new JSONObject();
+            try {
+                payload.put("seq", i);
+            } catch (org.json.JSONException ex) {
+                throw new AssertionError(ex);
+            }
+            recorder.persistStatus(states[i], "transition-" + i, false, payload);
+        }
+        recorder.shutdown();
+
+        assertEquals(
+                "all genuine transitions (under the cap) must persist",
+                states.length,
+                store.statusCalls.size());
+    }
+
     // ---- helpers ------------------------------------------------------------------
 
     private SessionRecorder newOpenRecorder(RecordingStore store, String dirName) {

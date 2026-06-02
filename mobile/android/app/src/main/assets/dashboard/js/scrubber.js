@@ -1,3 +1,4 @@
+// @ts-check
 (function () {
   "use strict";
 
@@ -11,14 +12,29 @@
   const el = VD.el;
   const haversineMetersJs = VD.haversineMetersJs;
 
+  /**
+   * One derived scrubber sample. Built by buildScrubData from a route's GPS
+   * points; carries the per-point distance/speed/elevation/grade/soc/eff used
+   * by the readout and the mini-charts.
+   * @typedef {{
+   *   lat: number, lng: number, atMs: number, distM?: number, mph?: number,
+   *   elevM?: number, soc?: number | null, eff?: number | null, grade?: number,
+   *   frac?: number, distMi?: number, elevFt?: number,
+   * }} ScrubPoint
+   */
+
+  /** @type {any} Leaflet map handle, set via scrubberAttachMap. */
   let scrubMap = null;
+  /** @type {any} Leaflet marker that rides the route as you scrub. */
   let scrubMarker = null;
+  /** @type {ScrubPoint[]} */
   let scrubData = [];
   let scrubFrac = 0.5;
   let scrubExpanded = false;
   let scrubHasElev = false;
   let scrubHasSoc = false;
   let scrubHasEff = false;
+  /** @type {HTMLElement[]} */
   let scrubCursors = [];
 
   const SCRUB_SPEED = "#ff7a45";
@@ -26,16 +42,16 @@
   const SCRUB_SOC = "#a48cff";
   const SCRUB_EFF = "#b8e63b";
 
-  const scrubClamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const scrubClamp = (/** @type {number} */ v, /** @type {number} */ lo, /** @type {number} */ hi) => Math.max(lo, Math.min(hi, v));
 
-  function scrubberAttachMap(map) {
+  function scrubberAttachMap(/** @type {any} */ map) {
     scrubMap = map;
   }
 
   // ----- data ----------------------------------------------------------------
 
   // Nearest-by-time SOC from the session's socTrack ({atMs, soc} ascending).
-  function scrubSocAt(track, atMs) {
+  function scrubSocAt(/** @type {any} */ track, /** @type {number} */ atMs) {
     if (!track.length) return null;
     if (atMs <= track[0].atMs) return track[0].soc;
     const last = track[track.length - 1];
@@ -51,7 +67,7 @@
     return last.soc;
   }
 
-  function scrubWindowAvg(arr, i, half) {
+  function scrubWindowAvg(/** @type {any} */ arr, /** @type {number} */ i, /** @type {number} */ half) {
     let s = 0;
     let c = 0;
     for (let k = -half; k <= half; k += 1) {
@@ -64,11 +80,11 @@
     return c ? s / c : NaN;
   }
 
-  function buildScrubData(route) {
+  function buildScrubData(/** @type {any} */ route) {
     const pts = (route && route.points) || [];
     const n = pts.length;
     if (n < 2) return [];
-    const d = pts.map((p) => ({
+    const d = pts.map((/** @type {any} */ p) => ({
       lat: Number(p.lat),
       lng: Number(p.lng),
       atMs: Number(p.atMs)
@@ -82,7 +98,7 @@
     const total = d[n - 1].distM || 1;
 
     // speed — prefer the GPS-reported value, derive from geometry if missing
-    const rawMph = pts.map((p, i) => {
+    const rawMph = pts.map((/** @type {any} */ p, /** @type {number} */ i) => {
       let mps = Number(p.speedMps);
       if (!Number.isFinite(mps) || mps < 0) {
         const a = pts[Math.max(0, i - 1)];
@@ -93,9 +109,9 @@
       return mps * 2.2369363;
     });
 
-    scrubHasElev = pts.some((p) => Number.isFinite(Number(p.altM)));
-    const rawElev = pts.map((p) => Number(p.altM));
-    scrubHasEff = pts.some((p) => Number.isFinite(Number(p.eff)));
+    scrubHasElev = pts.some((/** @type {any} */ p) => Number.isFinite(Number(p.altM)));
+    const rawElev = pts.map((/** @type {any} */ p) => Number(p.altM));
+    scrubHasEff = pts.some((/** @type {any} */ p) => Number.isFinite(Number(p.eff)));
     const track = (route && route.socTrack) || [];
     scrubHasSoc = track.length >= 2;
 
@@ -128,7 +144,7 @@
     return d;
   }
 
-  function scrubSampleAt(frac) {
+  function scrubSampleAt(/** @type {number} */ frac) {
     const d = scrubData;
     const m = d.length;
     frac = scrubClamp(frac, 0, 1);
@@ -153,14 +169,14 @@
 
   // ----- SVG chart helpers --------------------------------------------------
 
-  function scrubYOf(v, lo, hi, h, padT, padB) {
+  function scrubYOf(/** @type {number} */ v, /** @type {number} */ lo, /** @type {number} */ hi, /** @type {number} */ h, /** @type {number} */ padT, /** @type {number} */ padB) {
     return padT + (1 - (v - lo) / ((hi - lo) || 1)) * (h - padT - padB);
   }
 
   // Build an SVG path that breaks on non-finite values, so the eff line
   // (which can have nulls where power data is missing) renders as separate
   // segments rather than zigzagging to 0.
-  function scrubLine(key, lo, hi, w, h, padT, padB) {
+  function scrubLine(/** @type {keyof ScrubPoint} */ key, /** @type {number} */ lo, /** @type {number} */ hi, /** @type {number} */ w, /** @type {number} */ h, /** @type {number} */ padT, /** @type {number} */ padB) {
     let started = false;
     const parts = [];
     for (let i = 0; i < scrubData.length; i += 1) {
@@ -181,7 +197,7 @@
     return parts.join(" ");
   }
 
-  function scrubExtent(key) {
+  function scrubExtent(/** @type {keyof ScrubPoint} */ key) {
     let lo = Infinity;
     let hi = -Infinity;
     scrubData.forEach((p) => {
@@ -198,7 +214,7 @@
     return { lo: lo, hi: hi };
   }
 
-  function scrubSvg(w, h, inner) {
+  function scrubSvg(/** @type {number} */ w, /** @type {number} */ h, /** @type {string} */ inner) {
     return (
       '<svg width="' +
       w +
@@ -215,7 +231,7 @@
   }
 
   // V1 combo strip — terrain silhouette as the ground, speed + efficiency on top.
-  function drawScrubCombo(w) {
+  function drawScrubCombo(/** @type {number} */ w) {
     const h = 116;
     const padT = 12;
     const padB = 9;
@@ -259,7 +275,7 @@
   }
 
   // V2 instrument stack — one thin track per signal, shared cursor.
-  function drawScrubTrack(w, key, color, fill, label, terrain) {
+  function drawScrubTrack(/** @type {number} */ w, /** @type {keyof ScrubPoint} */ key, /** @type {string} */ color, /** @type {string} */ fill, /** @type {string} */ label, /** @type {boolean} */ terrain) {
     const h = 52;
     const padT = 14;
     const padB = 8;
@@ -303,13 +319,13 @@
 
   // Grade is rendered with a typographic minus (U+2212) so the +/- glyphs have
   // identical widths — keeps the chip from twitching as the value crosses zero.
-  function scrubGrade(g) {
+  function scrubGrade(/** @type {number} */ g) {
     const pct = Math.abs(g * 100).toFixed(0);
     if (pct === "0") return "+0%";
     return (g < 0 ? "−" : "+") + pct + "%";
   }
 
-  function scrubChip(k, v, opts) {
+  function scrubChip(/** @type {string} */ k, /** @type {string | number} */ v, /** @type {any} */ opts) {
     opts = opts || {};
     const chip = document.createElement("div");
     if (opts.dim) chip.className = "scrub-dim";
@@ -318,12 +334,12 @@
     if (opts.color) label.style.color = opts.color;
     label.textContent = k;
     const value = document.createElement("strong");
-    value.textContent = v;
+    value.textContent = String(v);
     chip.append(label, value);
     return chip;
   }
 
-  function fillScrubReadout(s) {
+  function fillScrubReadout(/** @type {any} */ s) {
     const node = el("scrubReadout");
     if (!node) return;
     node.replaceChildren(
@@ -348,14 +364,14 @@
 
   // ----- render + interaction -----------------------------------------------
 
-  function paintScrub(target, markup) {
+  function paintScrub(/** @type {any} */ target, /** @type {any} */ markup) {
     const old = target.querySelector("svg");
     if (old) old.remove();
     const next = parseSvg(markup);
     if (next) target.prepend(next);
   }
 
-  function parseSvg(markup) {
+  function parseSvg(/** @type {any} */ markup) {
     const doc = new window.DOMParser().parseFromString(markup, "image/svg+xml");
     const node = doc.documentElement;
     if (!node || node.nodeName.toLowerCase() !== "svg") return null;
@@ -369,6 +385,7 @@
     const stack = el("scrubStack");
     if (stack && scrubExpanded) {
       const w = chart.clientWidth;
+      /** @type {Array<[keyof ScrubPoint, string, string, string, boolean]>} */
       const tracks = [
         ["mph", SCRUB_SPEED, "rgba(255,122,69,0.16)", "SPEED MPH", false]
       ];
@@ -422,7 +439,7 @@
       .filter(Boolean);
   }
 
-  function setScrubCursor(frac) {
+  function setScrubCursor(/** @type {number} */ frac) {
     if (!scrubData.length) return;
     scrubFrac = scrubClamp(frac, 0, 1);
     const s = scrubSampleAt(scrubFrac);
@@ -454,18 +471,18 @@
   }
 
   // Idempotent — won't double-attach handlers across re-renders.
-  function bindScrubChart(elc) {
+  function bindScrubChart(/** @type {any} */ elc) {
     if (!elc || elc.dataset.scrubBound === "1") return;
     elc.dataset.scrubBound = "1";
-    const move = (ev) => {
+    const move = (/** @type {any} */ ev) => {
       const r = elc.getBoundingClientRect();
       if (r.width) setScrubCursor((ev.clientX - r.left) / r.width);
     };
-    elc.addEventListener("pointerdown", (ev) => {
+    elc.addEventListener("pointerdown", (/** @type {any} */ ev) => {
       elc.setPointerCapture(ev.pointerId);
       move(ev);
     });
-    elc.addEventListener("pointermove", (ev) => {
+    elc.addEventListener("pointermove", (/** @type {any} */ ev) => {
       if (ev.buttons) move(ev);
     });
   }
@@ -481,7 +498,7 @@
   }
 
   // Called by map.js whenever the selected route changes.
-  function renderScrubber(route) {
+  function renderScrubber(/** @type {any} */ route) {
     if (typeof stopScrubPlay === "function") stopScrubPlay();
     scrubData = buildScrubData(route);
     const node = el("scrubber");
@@ -551,12 +568,12 @@
   // the same time as a 6 mi errand. Clamped to a sensible 8 - 22 s range.
   // A brief CSS transition on the cursors smooths the inter-frame motion
   // (toggled on only while playing so manual drags stay responsive).
-  let scrubAnim = null;
+  let /** @type {any} */ scrubAnim = null;
   const playBtn = el("scrubPlay");
   const PLAY_LABEL = "▶ Play";
   const STOP_LABEL = "■ Stop";
 
-  function setScrubAnimMode(on) {
+  function setScrubAnimMode(/** @type {any} */ on) {
     scrubCursors.forEach((c) => {
       if (!c) return;
       c.style.transition = on ? "left 90ms linear" : "";
@@ -580,7 +597,7 @@
       // very long drives still play in a watchable window.
       const dur = Math.min(22000, Math.max(8000, totalMi * 1000));
       const t0 = performance.now();
-      const step = (now) => {
+      const step = (/** @type {number} */ now) => {
         const f = (now - t0) / dur;
         if (f >= 1) { setScrubCursor(1); stopScrubPlay(); return; }
         setScrubCursor(f);
@@ -590,7 +607,7 @@
     });
   }
 
-  let scrubResizeTimer = null;
+  let /** @type {any} */ scrubResizeTimer = null;
   window.addEventListener("resize", () => {
     clearTimeout(scrubResizeTimer);
     scrubResizeTimer = setTimeout(() => {
@@ -604,7 +621,7 @@
 
   // Snap the cursor to the route point closest to a lat/lng. Used by map.js
   // so tapping anywhere on the map jumps the scrubber to that point.
-  function scrubAtLatLng(lat, lng) {
+  function scrubAtLatLng(/** @type {number} */ lat, /** @type {number} */ lng) {
     if (!scrubData.length) return;
     let bestIdx = 0;
     let bestDist = Infinity;

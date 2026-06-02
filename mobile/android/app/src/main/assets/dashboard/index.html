@@ -346,7 +346,13 @@
           ><span id="liveRateLabel">waiting</span></span
         >
       </div>
-      <div class="speed-row">
+      <div
+        class="speed-row"
+        role="meter"
+        aria-label="Vehicle speed in MPH"
+        aria-valuemin="0"
+        aria-valuemax="120"
+      >
         <div id="speedValue" class="speed-value" data-live-tile="true">--</div>
         <div class="speed-units">
           <span class="speed-unit-main">MPH</span>
@@ -378,7 +384,14 @@
             >coast</span
           >
         </div>
-        <div class="power-meter">
+        <div
+          class="power-meter"
+          role="meter"
+          aria-label="Power in kilowatts (negative is regen)"
+          aria-valuemin="-80"
+          aria-valuemax="80"
+          id="powerMeter"
+        >
           <span class="power-zero"></span>
           <span id="powerFill" class="power-fill"></span>
         </div>
@@ -405,7 +418,15 @@
           <strong id="drivePackTempValue" data-live-tile="true">--</strong>
         </div>
       </div>
-      <div class="meter battery-meter"><span id="driveSocMeter"></span></div>
+      <div class="meter battery-meter">
+        <span
+          id="driveSocMeter"
+          role="meter"
+          aria-label="HV battery state of charge"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        ></span>
+      </div>
       <div
         id="batteryPackReadout"
         class="battery-pack-readout"
@@ -740,7 +761,12 @@
       <button type="button" class="link-btn" data-nav-jump="map">map</button>
     </header>
     <p class="status-copy">Each logged OBD session with movement.</p>
-    <div id="realTripsList" class="map-drive-chips real-trip-strip"></div>
+    <div
+      id="realTripsList"
+      class="map-drive-chips real-trip-strip"
+      role="list"
+      aria-label="Logged drives"
+    ></div>
   </article>
   <section
     id="realTripDetailGrid"
@@ -783,13 +809,22 @@
         <h2>Trips</h2>
       </div>
     </header>
-    <div class="tabs" id="tripTabs">
-      <button type="button" data-filter="all" class="is-active">All</button>
-      <button type="button" data-filter="ev">EV</button>
-      <button type="button" data-filter="mixed">Mixed</button>
-      <button type="button" data-filter="gas">Gas</button>
+    <div class="tabs" id="tripTabs" role="group" aria-label="Trip filter">
+      <button
+        type="button"
+        data-filter="all"
+        class="is-active"
+        aria-pressed="true"
+      >
+        All
+      </button>
+      <button type="button" data-filter="ev" aria-pressed="false">EV</button>
+      <button type="button" data-filter="mixed" aria-pressed="false">
+        Mixed
+      </button>
+      <button type="button" data-filter="gas" aria-pressed="false">Gas</button>
     </div>
-    <div id="tripList" style="margin-top: 10px"></div>
+    <div id="tripList" style="margin-top: 10px" role="list"></div>
   </article>
 
   <section class="detail-grid demo-only" hidden>
@@ -942,7 +977,12 @@
     <div class="scrub-readout" id="scrubReadout"></div>
     <div id="scrubStack" class="scrub-stack" hidden></div>
     <div class="scrub-toolbar">
-      <button type="button" class="scrub-btn" id="scrubPlay">
+      <button
+        type="button"
+        class="scrub-btn"
+        id="scrubPlay"
+        aria-label="Play route playback"
+      >
         &#9654; Play
       </button>
       <button
@@ -950,6 +990,7 @@
         class="scrub-btn"
         id="scrubToggle"
         aria-expanded="false"
+        aria-label="Toggle route detail readout"
       >
         Details
       </button>
@@ -1034,14 +1075,23 @@
       </div>
       <button type="button" class="link-btn" id="addChargeBtn">add</button>
     </header>
-    <div id="hourBars" class="hour-bars"></div>
+    <div
+      id="hourBars"
+      class="hour-bars"
+      role="img"
+      aria-label="Charging activity by hour of day"
+    ></div>
   </article>
 
   <article class="panel list-card demo-only" hidden>
     <header>
       <span class="kicker">Recent sessions</span>
     </header>
-    <div id="sessionList"></div>
+    <div
+      id="sessionList"
+      role="list"
+      aria-label="Recent charging sessions"
+    ></div>
   </article>
 </section>
 <section id="view-insights" class="view" data-view="insights">
@@ -1383,13 +1433,20 @@
       <div><span>Empty</span><strong id="dbEmptyTelemetryCount">0</strong></div>
     </div>
     <div id="dbSessionList" style="margin-top: 12px"></div>
-    <details class="db-backup-tools">
+    <details
+      class="db-backup-tools"
+      aria-label="Backup, restore, and diagnostics"
+    >
       <summary>Backup, restore, and diagnostics</summary>
       <p class="status-copy">
         Encrypted backup is safest. Restore replaces all on-phone data with a
         backup file.
       </p>
-      <div class="db-action-grid">
+      <div
+        class="db-action-grid"
+        role="group"
+        aria-label="Backup and restore actions"
+      >
         <button type="button" data-action="backupEncrypted">
           Back up encrypted
         </button>

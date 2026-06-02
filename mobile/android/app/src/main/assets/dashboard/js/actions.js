@@ -1,3 +1,4 @@
+// @ts-check
 /*
  * actions.js — wiring + lifecycle.
  *
@@ -29,13 +30,13 @@
   let controller = new AbortController();
 
   // Element that opened the clear-DTC alertdialog, so focus can return to it.
-  let clearDtcOpener = null;
+  let /** @type {any} */ clearDtcOpener = null;
 
   // Lightweight in-flight guard for bridge-triggering buttons. The Android
   // bridge calls are sync-fire-and-forget so we can't await completion; a short
   // 600ms cooldown is enough to swallow accidental double-taps without making
   // the button feel sticky on real-device latency.
-  function withBusy(button, fn) {
+  function withBusy(/** @type {any} */ button, /** @type {any} */ fn) {
     // Programmatic callers (no button, e.g. future keyboard shortcut or test)
     // should still execute the action; we just can't paint a busy state.
     if (!button) return fn();
@@ -71,7 +72,7 @@
     if (typeof bridge.getDeviceHistory === "function") VD.setHistory(bridge.getDeviceHistory());
   }
 
-  function connectSelected(scan, button) {
+  function connectSelected(/** @type {any} */ scan, /** @type {any} */ button) {
     const selected = VD.getSelectedDevice();
     if (!selected) {
       VD.setStatus({ state: "blocked", detail: "Pick a paired or remembered OBD adapter first." });
@@ -87,7 +88,7 @@
     });
   }
 
-  function handleAction(action, button) {
+  function handleAction(/** @type {any} */ action, /** @type {any} */ button) {
     if (action === "permissions") bridge && bridge.requestPermissions();
     if (action === "refresh") bridge && bridge.refreshDevices();
     if (action === "refreshStorage") refreshStorage();
@@ -112,8 +113,8 @@
 
   function openClearDtcWarning() {
     const panel = el("dtcClearWarning");
-    const ack = el("dtcClearAckBox");
-    const confirm = el("dtcClearConfirmBtn");
+    const ack = /** @type {HTMLInputElement | null} */ (el("dtcClearAckBox"));
+    const confirm = /** @type {HTMLButtonElement | null} */ (el("dtcClearConfirmBtn"));
     if (!panel) return;
     // Remember the trigger so focus can return to it when the panel closes.
     clearDtcOpener = document.activeElement;
@@ -135,8 +136,8 @@
     clearDtcOpener = null;
   }
 
-  function confirmClearDtc(button) {
-    const ack = el("dtcClearAckBox");
+  function confirmClearDtc(/** @type {any} */ button) {
+    const ack = /** @type {HTMLInputElement | null} */ (el("dtcClearAckBox"));
     if (!ack || !ack.checked) {
       VD.setStatus({ state: "blocked", detail: "Tick the acknowledgement first." });
       return;
@@ -151,6 +152,11 @@
     });
   }
 
+  /**
+   * Stage example DTC rows into the Insights view. Lazy-loads the DTC data
+   * bundle first if needed, re-invoking itself once it resolves.
+   * @returns {any} A Promise while the DTC bundle is loading, otherwise undefined.
+   */
   function previewDtcCodes() {
     if (!Array.isArray(VD.dtcSampleCodes) && typeof VD.ensureDtcData === "function") {
       VD.setStatus({ state: "ready", detail: "Loading DTC examples..." });
@@ -180,7 +186,7 @@
     VD.setStatus({ state: "ready", detail: "DTC examples cleared." });
   }
 
-  function handleDtcSearch(event) {
+  function handleDtcSearch(/** @type {any} */ event) {
     const link = event.target.closest("[data-dtc-search]");
     if (!link) return;
     event.preventDefault();
@@ -232,7 +238,7 @@
     }
   }
 
-  function clearStorage(button) {
+  function clearStorage(/** @type {any} */ button) {
     if (!bridge || typeof bridge.clearStoredData !== "function") return;
     const confirmed = window.confirm("Clear local OBD sessions, samples, and debug events from this phone?");
     if (!confirmed) return;
@@ -244,7 +250,7 @@
     });
   }
 
-  function shareBackup(button) {
+  function shareBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.shareBackup !== "function") {
       VD.setStatus({ state: "blocked", detail: "Backup is only available inside the Android app." });
       return;
@@ -265,14 +271,14 @@
     withBusy(button, () => bridge.shareBackup());
   }
 
-  function readBackupPassphrase(message) {
+  function readBackupPassphrase(/** @type {any} */ message) {
     const passphrase = window.prompt(message);
     if (passphrase == null) return null;
     const trimmed = String(passphrase).trim();
     return trimmed.length ? trimmed : null;
   }
 
-  function shareEncryptedBackup(button) {
+  function shareEncryptedBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.shareEncryptedBackup !== "function") {
       VD.setStatus({ state: "blocked", detail: "Encrypted backup is only available inside the Android app." });
       return;
@@ -285,7 +291,7 @@
     withBusy(button, () => bridge.shareEncryptedBackup(passphrase));
   }
 
-  function restoreBackup(button) {
+  function restoreBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.restoreBackup !== "function") {
       VD.setStatus({ state: "blocked", detail: "Restore is only available inside the Android app." });
       return;
@@ -298,7 +304,7 @@
     withBusy(button, () => bridge.restoreBackup());
   }
 
-  function restoreEncryptedBackup(button) {
+  function restoreEncryptedBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.restoreEncryptedBackup !== "function") {
       VD.setStatus({ state: "blocked", detail: "Encrypted restore is only available inside the Android app." });
       return;
@@ -389,16 +395,16 @@
     ".route-box"
   ].join(",");
 
-  let pageDragScroll = null;
+  let /** @type {any} */ pageDragScroll = null;
 
-  function canStartPageDragScroll(event) {
+  function canStartPageDragScroll(/** @type {any} */ event) {
     if (event.button !== 0) return false;
     if (event.pointerType && event.pointerType !== "mouse") return false;
     if (event.target && event.target.closest(pageDragScrollBlockSelector)) return false;
     return document.documentElement.scrollHeight > window.innerHeight + 2;
   }
 
-  function bindPageDragScroll(opts) {
+  function bindPageDragScroll(/** @type {any} */ opts) {
     document.addEventListener("pointerdown", (event) => {
       if (!canStartPageDragScroll(event)) return;
       pageDragScroll = {
@@ -436,19 +442,24 @@
   function bindListeners() {
     const opts = { signal: controller.signal };
 
-    document.querySelectorAll("[data-nav]").forEach((button) => {
+    document.querySelectorAll("[data-nav]").forEach((node) => {
+      const button = /** @type {HTMLElement} */ (node);
       button.addEventListener("click", () => VD.setView(button.dataset.nav), opts);
     });
-    document.querySelectorAll("[data-nav-jump]").forEach((button) => {
+    document.querySelectorAll("[data-nav-jump]").forEach((node) => {
+      const button = /** @type {HTMLElement} */ (node);
       button.addEventListener("click", () => VD.setView(button.dataset.navJump), opts);
     });
-    document.querySelectorAll("[data-mode]").forEach((button) => {
+    document.querySelectorAll("[data-mode]").forEach((node) => {
+      const button = /** @type {HTMLElement} */ (node);
       button.addEventListener("click", () => VD.setMode(button.dataset.mode), opts);
     });
-    document.querySelectorAll("[data-action]").forEach((button) => {
+    document.querySelectorAll("[data-action]").forEach((node) => {
+      const button = /** @type {HTMLElement} */ (node);
       button.addEventListener("click", (event) => handleAction(button.dataset.action, event.currentTarget), opts);
     });
-    document.querySelectorAll("[data-map-layer]").forEach((button) => {
+    document.querySelectorAll("[data-map-layer]").forEach((node) => {
+      const button = /** @type {HTMLElement} */ (node);
       button.addEventListener("click", () => {
         state.mapLayer = button.dataset.mapLayer;
         button.blur();
@@ -458,10 +469,11 @@
     });
     // Bind through bindListenerGuarded so a renamed partial ID logs a warn + skips
     // rather than throwing and aborting every binding below it.
-    const onSessionClick = (event) => {
-      const button = event.target.closest("[data-map-session]");
+    const onSessionClick = (/** @type {Event} */ event) => {
+      const target = /** @type {Element | null} */ (event.target);
+      const button = target && target.closest("[data-map-session]");
       if (!button) return;
-      state.selectedMapSessionId = button.dataset.mapSession;
+      state.selectedMapSessionId = /** @type {HTMLElement} */ (button).dataset.mapSession;
       VD.renderMap();
     };
     VD.bindListenerGuarded("mapSessionList", "click", onSessionClick, opts);
@@ -486,23 +498,25 @@
     }, opts);
     document.addEventListener("click", handleDtcSearch, opts);
     document.addEventListener("change", (event) => {
-      if (event.target && event.target.id === "dtcClearAckBox") {
-        const confirm = el("dtcClearConfirmBtn");
-        if (confirm) confirm.disabled = !event.target.checked;
+      const target = /** @type {HTMLInputElement | null} */ (event.target);
+      if (target && target.id === "dtcClearAckBox") {
+        const confirm = /** @type {HTMLButtonElement | null} */ (el("dtcClearConfirmBtn"));
+        if (confirm) confirm.disabled = !target.checked;
       }
     }, opts);
     document.addEventListener("click", (event) => {
-      const realTripButton = event.target.closest("[data-real-trip-id]");
+      const target = /** @type {Element | null} */ (event.target);
+      const realTripButton = target && target.closest("[data-real-trip-id]");
       if (realTripButton) {
         if (typeof VD.selectRealTrip === "function") {
-          VD.selectRealTrip(realTripButton.dataset.realTripId);
+          VD.selectRealTrip(/** @type {HTMLElement} */ (realTripButton).dataset.realTripId);
         }
         return;
       }
-      const tripButton = event.target.closest("[data-trip-map]");
+      const tripButton = target && target.closest("[data-trip-map]");
       if (!tripButton) return;
-      const id = tripButton.dataset.tripMap;
-      const trip = (state.trips || []).find((t) => String(t.id) === String(id));
+      const id = /** @type {HTMLElement} */ (tripButton).dataset.tripMap;
+      const trip = (state.trips || []).find((/** @type {any} */ t) => String(t.id) === String(id));
       if (trip && trip.hasRoute) {
         state.selectedMapSessionId = id;
         VD.setView("map");
@@ -522,13 +536,21 @@
     VD.bindListenerGuarded("disconnectBtn", "click", () => handleAction("stop"), opts);
     VD.bindListenerGuarded("demoStopBtn", "click", stopDemo, opts);
     VD.bindListenerGuarded("driveModeSelect", "change", (event) => {
-      VD.setStatus({ state: "ready", detail: `Drive mode set to ${event.target.value}.` });
+      const select = /** @type {HTMLSelectElement} */ (event.target);
+      VD.setStatus({ state: "ready", detail: `Drive mode set to ${select.value}.` });
     }, opts);
     VD.bindListenerGuarded("tripTabs", "click", (event) => {
-      const button = event.target.closest("button[data-filter]");
+      const eventTarget = /** @type {Element | null} */ (event.target);
+      const button = /** @type {HTMLElement | null} */ (
+        eventTarget && eventTarget.closest("button[data-filter]")
+      );
       if (!button) return;
       state.tripFilter = button.dataset.filter;
-      document.querySelectorAll("#tripTabs button").forEach((node) => node.classList.toggle("is-active", node === button));
+      document.querySelectorAll("#tripTabs button").forEach((node) => {
+        const selected = node === button;
+        node.classList.toggle("is-active", selected);
+        node.setAttribute("aria-pressed", selected ? "true" : "false");
+      });
       VD.renderTrips();
     }, opts);
     VD.bindListenerGuarded("addChargeBtn", "click", () => {

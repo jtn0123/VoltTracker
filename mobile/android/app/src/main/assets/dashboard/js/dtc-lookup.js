@@ -1,3 +1,4 @@
+// @ts-check
 // DTC code lookup: a curated list of OBD-II + Volt-specific trouble codes
 // with human-readable descriptions. Anything not in this list gets a
 // "tap to look up" affordance that opens a Google search.
@@ -10,12 +11,13 @@
 
 (function () {
   "use strict";
-  const VD = (window.VoltDashboard = window.VoltDashboard || {});
+  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || {});
 
   // Generic SAE J2012 powertrain codes (P0xxx) - the descriptions match the
   // SAE-defined wording. Many entries follow a family pattern (e.g. P0301-P0312
   // are cylinder N misfires); only widely-seen members of each family are listed
   // to keep the bundle focused.
+  /** @type {Record<string, string>} */
   const VOLT_DTC = {
     // --- P00xx: Fuel/Air Metering, Auxiliary Emission Controls ---
     P0010: "Camshaft position 'A' actuator circuit (Bank 1)",
@@ -3706,7 +3708,7 @@
     U300E: "Ignition input on",
   };
 
-  function normalize(code) {
+  function normalize(/** @type {any} */ code) {
     return String(code || "")
       .toUpperCase()
       .trim();
@@ -3714,7 +3716,7 @@
 
   // Falls back to a category description based on the SAE prefix, so an
   // unrecognised code still gets a useful hint (e.g. P03xx => Ignition/Misfire).
-  function categoryHint(code) {
+  function categoryHint(/** @type {any} */ code) {
     const key = normalize(code);
     if (!key || key.length < 4) return null;
     const head = key.charAt(0);
@@ -3743,8 +3745,9 @@
     return null;
   }
 
-  function dtcInfo(code) {
+  function dtcInfo(/** @type {any} */ code) {
     const key = normalize(code);
+    /** @type {{ code: string, description: string | null, known: boolean, category: string | null, causes: any, severity: any }} */
     const empty = { code: "", description: null, known: false, category: null, causes: null, severity: null };
     if (!key) return empty;
     const desc = VOLT_DTC[key];
@@ -3758,7 +3761,7 @@
     return { code: key, description: null, known: false, category: categoryTag || categoryHint(key), causes, severity };
   }
 
-  function dtcSearchUrl(code) {
+  function dtcSearchUrl(/** @type {any} */ code) {
     const key = normalize(code);
     const q = encodeURIComponent((key || "OBD-II") + " Chevy Volt DTC");
     return "https://www.google.com/search?q=" + q;

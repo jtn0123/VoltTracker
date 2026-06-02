@@ -106,7 +106,12 @@
     <div class="scrub-readout" id="scrubReadout"></div>
     <div id="scrubStack" class="scrub-stack" hidden></div>
     <div class="scrub-toolbar">
-      <button type="button" class="scrub-btn" id="scrubPlay">
+      <button
+        type="button"
+        class="scrub-btn"
+        id="scrubPlay"
+        aria-label="Play route playback"
+      >
         &#9654; Play
       </button>
       <button
@@ -114,6 +119,7 @@
         class="scrub-btn"
         id="scrubToggle"
         aria-expanded="false"
+        aria-label="Toggle route detail readout"
       >
         Details
       </button>

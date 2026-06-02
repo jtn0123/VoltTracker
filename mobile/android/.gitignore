@@ -5,3 +5,7 @@ local.properties
 build/
 app/build/
 field-logs/
+# Dependency-lock files are generated on-demand by the F1 OSV scan in CI (via
+# --write-locks); never committed, so dependency locking imposes no version
+# enforcement on builds. Covers app/gradle.lockfile + settings-gradle.lockfile.
+*.lockfile

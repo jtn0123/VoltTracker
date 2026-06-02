@@ -22,7 +22,13 @@
           ><span id="liveRateLabel">waiting</span></span
         >
       </div>
-      <div class="speed-row">
+      <div
+        class="speed-row"
+        role="meter"
+        aria-label="Vehicle speed in MPH"
+        aria-valuemin="0"
+        aria-valuemax="120"
+      >
         <div id="speedValue" class="speed-value" data-live-tile="true">--</div>
         <div class="speed-units">
           <span class="speed-unit-main">MPH</span>
@@ -54,7 +60,14 @@
             >coast</span
           >
         </div>
-        <div class="power-meter">
+        <div
+          class="power-meter"
+          role="meter"
+          aria-label="Power in kilowatts (negative is regen)"
+          aria-valuemin="-80"
+          aria-valuemax="80"
+          id="powerMeter"
+        >
           <span class="power-zero"></span>
           <span id="powerFill" class="power-fill"></span>
         </div>
@@ -81,7 +94,15 @@
           <strong id="drivePackTempValue" data-live-tile="true">--</strong>
         </div>
       </div>
-      <div class="meter battery-meter"><span id="driveSocMeter"></span></div>
+      <div class="meter battery-meter">
+        <span
+          id="driveSocMeter"
+          role="meter"
+          aria-label="HV battery state of charge"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        ></span>
+      </div>
       <div
         id="batteryPackReadout"
         class="battery-pack-readout"

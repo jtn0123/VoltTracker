@@ -1,3 +1,4 @@
+// @ts-check
 // dtc-causes.js - Generic OBD-II DTC causes database
 //
 // Companion to dtc-lookup.js.  Covers universally-common codes applicable to
@@ -26,7 +27,7 @@
 
 (function () {
   "use strict";
-  const VD = (window.VoltDashboard = window.VoltDashboard || {});
+  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || {});
 
   VD.DTC_CAUSES = {
 

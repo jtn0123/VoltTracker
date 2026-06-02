@@ -1,3 +1,4 @@
+// @ts-check
 /*
  * drive.js — Drive-tab live polish.
  *
@@ -23,7 +24,7 @@
 
   // ----- shared SVG helpers -------------------------------------------------
 
-  function paintEmpty(target, label) {
+  function paintEmpty(/** @type {any} */ target, /** @type {any} */ label) {
     if (!target) return;
     const empty = document.createElement("div");
     empty.className = "live-chart-empty";
@@ -32,20 +33,20 @@
     target.replaceChildren(empty);
   }
 
-  function domNode(tag, className) {
+  function domNode(/** @type {any} */ tag, /** @type {any} */ className) {
     const node = document.createElement(tag);
     if (className) node.className = className;
     return node;
   }
 
-  function targetWidth(node) {
+  function targetWidth(/** @type {any} */ node) {
     if (!node) return 0;
     return Math.max(0, node.clientWidth || node.getBoundingClientRect().width);
   }
 
   // ----- session chip strip -------------------------------------------------
 
-  function fmtDuration(ms) {
+  function fmtDuration(/** @type {number} */ ms) {
     const s = Math.max(0, Math.round(Number(ms) / 1000));
     if (s < 60) return s + "s";
     const m = Math.floor(s / 60);
@@ -54,7 +55,7 @@
     return h + "h " + String(m % 60).padStart(2, "0") + "m";
   }
 
-  function fmtChipDate(ms) {
+  function fmtChipDate(/** @type {number} */ ms) {
     const ts = Number(ms);
     if (!Number.isFinite(ts) || ts <= 0) return "saved";
     const d = new Date(ts);
@@ -63,7 +64,7 @@
       d.getFullYear() === now.getFullYear() &&
       d.getMonth() === now.getMonth() &&
       d.getDate() === now.getDate();
-    const fmtTime = (date) =>
+    const fmtTime = (/** @type {any} */ date) =>
       date
         .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
         .toLowerCase();
@@ -75,7 +76,7 @@
       d.getDate() === y.getDate()
     )
       return "yesterday";
-    const diffDays = Math.round((now - d) / 86400000);
+    const diffDays = Math.round((now.getTime() - d.getTime()) / 86400000);
     if (diffDays < 7)
       return d.toLocaleDateString([], { weekday: "short" }).toLowerCase();
     return d.toLocaleDateString([], { month: "short", day: "numeric" });
@@ -143,7 +144,7 @@
       (state.storage && state.storage.recentRoutes) ||
       (state.storage && state.storage.latestRoute && [state.storage.latestRoute]) ||
       [];
-    const recorded = routes.filter((r) => {
+    const recorded = routes.filter((/** @type {any} */ r) => {
       const session = (r && r.session) || {};
       const id = String(session.id || (r && r.sessionId) || "");
       return id && !id.startsWith("__sample-");
@@ -167,11 +168,11 @@
   // Build via DOM APIs (textContent) instead of innerHTML string-concat so the
   // user-controlled Bluetooth `adapter.name` (which lands in `c.meta` via
   // deriveLiveChip()) can never be reinterpreted as markup.
-  function buildDriveNowChip(c) {
+  function buildDriveNowChip(/** @type {any} */ c) {
     const root = document.createElement(c.isLink ? "button" : "div");
     root.className = "map-drive-chip drive-now-chip";
     if (c.isLink) {
-      root.type = "button";
+      /** @type {HTMLButtonElement} */ (root).type = "button";
       root.dataset.navJump = "map";
     } else if (c.liveStable || c.tone === "idle" || c.tone === "ok") {
       root.setAttribute("role", "status");
@@ -188,7 +189,7 @@
 
     const metaSpan = document.createElement("span");
     metaSpan.className = "dm";
-    c.meta.forEach((m, i) => {
+    c.meta.forEach((/** @type {any} */ m, /** @type {number} */ i) => {
       if (i > 0) {
         const sep = document.createElement("span");
         sep.textContent = "·";
@@ -218,7 +219,7 @@
 
   function drawLiveSpeedTrace() {
     const host = el("liveTraceChart");
-    const canvas = el("liveTraceCanvas");
+    const canvas = /** @type {HTMLCanvasElement | null} */ (el("liveTraceCanvas"));
     if (!host || !canvas) return;
     const w = targetWidth(host);
     if (!w) return;
@@ -230,7 +231,7 @@
     canvas.height = Math.max(1, Math.round(h * dpr));
     canvas.style.height = h + "px";
     const ctx = canvas.getContext && canvas.getContext("2d");
-    const samples = state.speedHistory.map((kph) => kph * 0.621371);
+    const samples = state.speedHistory.map((/** @type {any} */ kph) => kph * 0.621371);
     host.dataset.traceState = samples.length >= 2 ? "ready" : "empty";
     host.dataset.traceLabel = samples.length >= 2
       ? Math.round(samples[samples.length - 1]) + " mph"
@@ -262,7 +263,7 @@
     const cap = Math.max(12, samples.length);
     const stride = w / Math.max(1, cap - 1);
     const offset = w - (samples.length - 1) * stride;
-    const points = samples.map((sample, index) => ({
+    const points = samples.map((/** @type {any} */ sample, /** @type {any} */ index) => ({
       x: offset + index * stride,
       y: padT + (1 - sample / maxMph) * (h - padT - padB)
     }));
@@ -271,7 +272,7 @@
     gradient.addColorStop(0, "rgba(255, 122, 69, 0.2)");
     gradient.addColorStop(1, "rgba(255, 122, 69, 0)");
     ctx.beginPath();
-    points.forEach((point, index) => {
+    points.forEach((/** @type {any} */ point, /** @type {any} */ index) => {
       if (index === 0) ctx.moveTo(point.x, point.y);
       else ctx.lineTo(point.x, point.y);
     });
@@ -282,7 +283,7 @@
     ctx.fill();
 
     ctx.beginPath();
-    points.forEach((point, index) => {
+    points.forEach((/** @type {any} */ point, /** @type {any} */ index) => {
       if (index === 0) ctx.moveTo(point.x, point.y);
       else ctx.lineTo(point.x, point.y);
     });
@@ -367,7 +368,7 @@
 
   // Typographic minus matches the +/- glyph advance width — same trick the Map
   // scrubber uses to keep the SOC delta chip from twitching as it crosses zero.
-  function fmtSocDelta(v) {
+  function fmtSocDelta(/** @type {number} */ v) {
     const abs = Math.abs(v);
     if (abs < 0.05) return "+0.0";
     return (v < 0 ? "−" : "+") + abs.toFixed(1);
@@ -413,7 +414,7 @@
     const cap = Math.max(48, samples.length);
     const stride = w / Math.max(1, cap - 1);
     const offset = w - (samples.length - 1) * stride;
-    const points = samples.map((sample, index) => ({
+    const points = samples.map((/** @type {any} */ sample, /** @type {any} */ index) => ({
       x: offset + index * stride,
       y: padT + (1 - (sample - lo) / (hi - lo)) * (h - padT - padB)
     }));
@@ -426,7 +427,7 @@
     baseline.style.top = baselineY.toFixed(1) + "px";
     chart.append(baseline);
 
-    points.forEach((point, index) => {
+    points.forEach((/** @type {any} */ point, /** @type {any} */ index) => {
       const dot = domNode("span", "live-soc-dot");
       dot.style.left = point.x.toFixed(1) + "px";
       dot.style.top = point.y.toFixed(1) + "px";
@@ -503,7 +504,7 @@
   }
 
   // Resize redraws — keep the rendered widths in sync with the container.
-  let resizeTimer = null;
+  let /** @type {any} */ resizeTimer = null;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(renderDriveLive, 160);

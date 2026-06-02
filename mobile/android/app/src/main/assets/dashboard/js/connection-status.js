@@ -9,9 +9,9 @@
   "use strict";
   const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || {});
   const bridge = window.VoltTrackerAndroid || null;
-  const el = (id) => document.getElementById(id);
+  const el = (/** @type {any} */ id) => document.getElementById(id);
 
-  function parseSessions(n) {
+  function parseSessions(/** @type {number} */ n) {
     if (!bridge || typeof bridge.getRecentSessions !== "function") return [];
     try {
       const raw = bridge.getRecentSessions(n);
@@ -22,7 +22,7 @@
     }
   }
 
-  function formatRelative(ms) {
+  function formatRelative(/** @type {number} */ ms) {
     if (!ms) return "--";
     const now = Date.now();
     const delta = now - ms;
@@ -82,7 +82,7 @@
   }
 
   // Low-voltage hint keyed off the lastVoltage field on status payloads.
-  function renderLowVoltageHint(status) {
+  function renderLowVoltageHint(/** @type {any} */ status) {
     const hint = el("lowVoltageHint");
     if (!hint || !status) return;
     const v = typeof status.lastVoltage === "number" ? status.lastVoltage : null;
@@ -114,15 +114,15 @@
 
   // Re-render on every status broadcast — session summaries can change when
   // a session ends, and lastVoltage updates inline.
-  function noteStatus(payload) {
+  function noteStatus(/** @type {any} */ payload) {
     renderLastConnected();
     renderAdapterHealth();
     renderLowVoltageHint(payload || {});
   }
 
   function installStatusObserver() {
-    const wrap = (prior) =>
-      function (payload) {
+    const wrap = (/** @type {any} */ prior) =>
+      function (/** @type {any} */ payload) {
         let result;
         if (typeof prior === "function") {
           result = prior(payload);
