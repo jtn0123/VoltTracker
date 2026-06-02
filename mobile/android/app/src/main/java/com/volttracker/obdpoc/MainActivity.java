@@ -23,6 +23,7 @@ import androidx.core.view.WindowInsetsCompat;
 import com.volttracker.obdpoc.data.ObdLocalStore;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.json.JSONException;
@@ -70,7 +71,26 @@ public class MainActivity extends Activity {
 
     /** Submits {@code task} to the background executor used for heavy DB work. */
     void runOnBackground(Runnable task) {
-        backgroundExecutor.execute(task);
+        submitBackground(task);
+    }
+
+    /**
+     * Submits to {@link #backgroundExecutor}, tolerating a shutdown executor. onDestroy calls
+     * {@code shutdownNow()}, but the WebView's {@code dashboardReady} handshake (and late status
+     * broadcasts) can still arrive afterwards and route through {@link #publishStorageSummary()} —
+     * which would otherwise throw {@link RejectedExecutionException} and crash the process. When
+     * the executor is gone the Activity is tearing down and there is no UI left to refresh, so
+     * dropping the task is the correct behaviour.
+     */
+    private void submitBackground(Runnable task) {
+        try {
+            backgroundExecutor.execute(task);
+        } catch (RejectedExecutionException ex) {
+            Log.d(
+                    TAG,
+                    "background task dropped; executor is shut down (activity tearing down)",
+                    ex);
+        }
     }
 
     private final BroadcastReceiver obdReceiver =
@@ -131,7 +151,7 @@ public class MainActivity extends Activity {
         ObdNotifications.ensureChannel(this);
         // Trim raw telemetry/location/event/PID rows older than the retention window
         // on every cold start. Cheap (indexed cutoff scan) and runs off the UI thread.
-        backgroundExecutor.execute(
+        submitBackground(
                 () -> {
                     try {
                         int retentionDays =
@@ -481,7 +501,7 @@ public class MainActivity extends Activity {
     }
 
     private void runStorageSummaryRefresh() {
-        backgroundExecutor.execute(
+        submitBackground(
                 () -> {
                     // Clear before reading so a DB write that lands while this query runs re-marks
                     // the summary dirty and is picked up by the next refresh, rather than being
