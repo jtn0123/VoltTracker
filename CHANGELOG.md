@@ -1,6 +1,63 @@
 # CHANGELOG
 
 
+## v0.5.0 (2026-06-02)
+
+### Features
+
+- **android**: Merge a backup into the live database instead of only replacing
+  ([#157](https://github.com/jtn0123/VoltTracker/pull/157),
+  [`6be018e`](https://github.com/jtn0123/VoltTracker/commit/6be018e878a2cfa389dc87ba32070fe812a25192))
+
+* feat(android): merge a backup into the live database instead of only replacing
+
+Adds an additive restore path for the "I forgot to restore and now have two databases" case: after a
+  backup file is picked and verified, the user chooses Replace all (the existing destructive swap)
+  or Merge.
+
+The merge folds the donor database's rows into the live one in dependency order, re-inserting every
+  row without its _id and rewriting foreign keys through old->new maps so the two databases'
+  colliding AUTOINCREMENT ids don't clash. Sessions are deduplicated on started_at_ms (a duplicate
+  drive's whole subtree is dropped); vehicles merge on vehicle_key so donor trips attach to the
+  existing vehicle; adapter_history and diagnostic_codes upsert on their natural keys. The whole
+  merge runs in one transaction, so a failure leaves the live database untouched. The regenerable
+  session_trip_rollups cache is skipped and rebuilt lazily.
+
+- DatabaseMerger: generic id-remapping merge engine + MergeResult summary - ObdLocalStore.mergeFrom
+  / ObdStoreMaintenance.mergeFrom: open donor read-only, run the merge against the live writable
+  connection - BackupController: stage+verify once, then a Replace/Merge/Cancel dialog - settings
+  partial + actions.js: copy now reflects merge-or-replace; the destructive warning moved to the
+  native dialog after the file is verified - DatabaseMergerTest: remap, dedup, vehicle-by-key,
+  merge-into-empty, idempotency, FK integrity
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* test(android): cover DatabaseMerger child tables and upsert branches
+
+The data-package JaCoCo line floor (0.89) dropped to 0.84 once DatabaseMerger landed. Add coverage
+  for the previously-unexercised paths: every session/vehicle child table (events, pid observations,
+  location samples, field capabilities, charge sessions, battery + cell snapshots, exports), the
+  adapter_history and diagnostic_codes natural-key upsert/merge branches, cell snapshots of a
+  skipped duplicate session being dropped, the null-handle failure path, and the plural summary
+  string.
+
+* fix(android): address CodeRabbit review on the merge feature
+
+- DatabaseMerger.summary(): a vehicle/adapter/DTC-only backup no longer reads as "Merged 0 sessions"
+  (which looked like a no-op). Now reports new sessions and new vehicles explicitly, e.g. "Merged
+  backup - no new sessions, 1 new vehicle." - ObdStoreMaintenance.mergeFrom(): enforce the
+  same-schema precondition before merging. mergeFrom is a public entry point, so guard donor schema
+  version even though BackupController already gates on it via stageRestoreFile. -
+  BackupController.applyReplace(): always delete the transient .restore-tmp / .restore-backup copies
+  on the failure path (hoisted into the finally), so a caught restore failure can't leave them next
+  to the live database. - DataBackup.deleteIfExists(): null-safe. - Tests: vehicle-only summary,
+  mergeFrom happy path, missing-file and wrong-schema-version rejection.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.4.12 (2026-06-02)
 
 ### Bug Fixes
