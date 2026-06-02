@@ -18,6 +18,7 @@ export function createVoltBridgeFixture(overrides = {}) {
     exportDebugBundle: stub('{"ok":true,"path":"/tmp/debug"}'),
     getTrips: stub('[]'),
     getInsights: stub('{}'),
+    getTripRoute: stub('{}'),
 
     // void methods that hand work off to MainActivity.
     dashboardReady: voidStub,
@@ -71,6 +72,7 @@ export const VOLT_BRIDGE_METHODS = Object.freeze([
   'restoreEncryptedBackup',
   'getTrips',
   'getInsights',
+  'getTripRoute',
   'clearStoredData',
   'rememberDevice',
   'connectLast',

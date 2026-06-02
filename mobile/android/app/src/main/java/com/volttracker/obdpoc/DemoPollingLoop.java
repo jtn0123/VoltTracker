@@ -54,6 +54,16 @@ final class DemoPollingLoop {
                 sample.put("soc", Math.max(13.4, round1(77.8 - t * 0.01)));
                 sample.put("batteryTemp", round1(24.0 + Math.sin(t / 8.0)));
                 sample.put("powerKw", round1(16.0 + Math.sin(t / 2.2) * 12.0));
+                // Synthetic GPS so the demo exercises the SAME telemetry lat/lng channel a real
+                // adapter+phone feed: a slow ~1 km loop. This makes the live GPS readout lock and
+                // the running session distance tick exactly as on a real drive. (Like a real drive,
+                // the Map route polyline still comes from STORED trips, not a live track — demo is
+                // intentionally never persisted — so this drives the live signals, not a fake map.)
+                sample.put("latitude", 32.7157 + 0.009 * Math.sin(t / 28.0));
+                sample.put("longitude", -117.1611 + 0.009 * Math.cos(t / 28.0));
+                sample.put("accuracyM", 6.0);
+                sample.put("gpsSpeedMps", round1(Math.abs(15.0 + 9.0 * Math.cos(t / 28.0))));
+                sample.put("bearingDeg", round1((Math.toDegrees(t / 28.0) % 360 + 360) % 360));
                 sample.put("updatedAt", System.currentTimeMillis());
                 engine.appendSessionHealth(sample);
                 sample.put("raw", "demo");

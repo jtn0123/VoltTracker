@@ -63,6 +63,27 @@ final class ObdStoreReports {
         }
     }
 
+    /**
+     * Full route projection for a single session, loaded on demand. Unlike the storage summary's
+     * {@code recentRoutes} (capped at the most recent few sessions for payload size), this serves
+     * any session by id so the Trips screen can preview the route of an older logged drive — e.g.
+     * one folded in from a merged backup. Returns {@code {}} when the session is unknown.
+     */
+    JSONObject tripRouteJson(long sessionId) {
+        ObdSessionRecord session = getSession(sessionId);
+        if (session == null) {
+            return new JSONObject();
+        }
+        try {
+            return ObdStoreRouteProjection.routeForSession(
+                    helper.getReadableDatabase(),
+                    session,
+                    ObdStoreRouteProjection.MAX_TRACK_POINTS);
+        } catch (JSONException ex) {
+            return new JSONObject();
+        }
+    }
+
     List<ObdSessionRecord> getRecentSessions(int limit) {
         List<ObdSessionRecord> records = new ArrayList<>();
         try (Cursor cursor =

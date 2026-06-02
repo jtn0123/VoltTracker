@@ -1,7 +1,8 @@
 // trips.js/panels.js — real trip row rendering.
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
+import { createVoltBridgeFixture } from './setup/voltbridge.fixture.js';
 
 describe('panels.js — trip route rows', () => {
   beforeEach(async () => {
@@ -12,7 +13,7 @@ describe('panels.js — trip route rows', () => {
     await loadDashboard();
   });
 
-  it('renders map-backed route preview slots for route-bearing real trips', () => {
+  it('keeps chips compact (no in-chip map) and renders the route in the large detail preview', () => {
     const VD = window.VoltDashboard;
     VD.state.storage = {
       recentRoutes: [{
@@ -31,6 +32,7 @@ describe('panels.js — trip route rows', () => {
       distanceMeters: 4200,
       maxSpeedKph: 82,
       sampleCount: 91,
+      pointCount: 3,
       hasRoute: true,
     }];
 
@@ -38,11 +40,150 @@ describe('panels.js — trip route rows', () => {
 
     const row = document.querySelector('#realTripsList .real-trip-chip');
     expect(row.classList.contains('has-route-preview')).toBe(true);
-    expect(row.querySelector('[data-real-trip-map-role="mini"]')).not.toBeNull();
-    expect(row.querySelector('.trip-route-state').textContent).toBe('GPS pts');
+    // The chip is compact: no embedded mini-map (those rendered empty); the badge is clearly
+    // labelled rather than the old cryptic "Nx".
+    expect(row.querySelector('[data-real-trip-map-role="mini"]')).toBeNull();
+    expect(row.querySelector('.trip-route-state').textContent).toBe('3 pts');
+    // The route renders in the large detail preview for the selected trip.
     expect(document.querySelector('#realTripRouteBox [data-real-trip-map-role="detail"]')).not.toBeNull();
     expect(document.getElementById('realTripMapBtn').dataset.tripMap).toBe('42');
     expect(document.getElementById('realTripRouteBox').dataset.tripMap).toBe('42');
+  });
+
+  it('shows a routeless trip badge as labelled samples, not a cryptic code', () => {
+    const VD = window.VoltDashboard;
+    VD.state.storage = { recentRoutes: [] };
+    VD.state.trips = [{
+      id: 7,
+      startedAtMs: Date.now(),
+      durationMs: 0,
+      distanceMeters: 0,
+      sampleCount: 660,
+      hasRoute: false,
+    }];
+
+    VD.renderRealTrips();
+
+    const badge = document.querySelector('#realTripsList .real-trip-chip .trip-route-state');
+    expect(badge.textContent).toBe('660 samples');
+  });
+
+  it('loads a route on demand for a drive outside the recent-routes window', async () => {
+    // A logged drive whose route isn't in storage.recentRoutes (e.g. an older drive, or one
+    // folded in from a merged backup) must fetch its route via the bridge and render the preview.
+    const getTripRoute = vi.fn(() => JSON.stringify({
+      session: { id: 77 },
+      points: [
+        { lat: 32.70, lng: -117.16 },
+        { lat: 32.74, lng: -117.12 },
+        { lat: 32.78, lng: -117.08 },
+      ],
+      pointCount: 3,
+      distanceMeters: 5000,
+    }));
+    await loadDashboard({ bridge: createVoltBridgeFixture({ getTripRoute }) });
+    const VD = window.VoltDashboard;
+    VD.state.storage = { recentRoutes: [] }; // route NOT pre-loaded
+    VD.state.trips = [{
+      id: 77,
+      startedAtMs: Date.now(),
+      durationMs: 600_000,
+      distanceMeters: 5000,
+      sampleCount: 400,
+      pointCount: 3,
+      hasRoute: true,
+    }];
+
+    VD.renderRealTrips();
+
+    expect(getTripRoute).toHaveBeenCalledWith('77');
+    expect(document.querySelector('#realTripRouteBox [data-real-trip-map-role="detail"]')).not.toBeNull();
+    expect(document.getElementById('realTripRouteBox').dataset.tripMap).toBe('77');
+    // Fetched once and cached — re-rendering must not hit the bridge again.
+    VD.renderRealTrips();
+    expect(getTripRoute).toHaveBeenCalledTimes(1);
+  });
+
+  it('explains a GPS-less drive and offers to enable location', async () => {
+    const requestPermissions = vi.fn();
+    await loadDashboard({ bridge: createVoltBridgeFixture({ requestPermissions }) });
+    const VD = window.VoltDashboard;
+    VD.state.appState = { permissions: { location: false } }; // location currently denied
+    VD.state.storage = { recentRoutes: [] };
+    VD.state.trips = [{
+      id: 9,
+      startedAtMs: Date.now(),
+      durationMs: 1_200_000,
+      distanceMeters: 0,
+      sampleCount: 660,
+      hasRoute: false,
+    }];
+
+    VD.renderRealTrips();
+
+    const box = document.getElementById('realTripRouteBox');
+    expect(box.textContent).toContain('No GPS recorded for this drive');
+    expect(box.textContent).toContain('Location was off');
+    const cta = box.querySelector('.route-empty-cta');
+    expect(cta).not.toBeNull();
+    expect(cta.textContent).toBe('Enable location');
+    cta.click();
+    expect(requestPermissions).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits the enable-location CTA once location is granted', async () => {
+    await loadDashboard();
+    const VD = window.VoltDashboard;
+    VD.state.appState = { permissions: { location: true } };
+    VD.state.storage = { recentRoutes: [] };
+    VD.state.trips = [{
+      id: 11,
+      startedAtMs: Date.now(),
+      durationMs: 1_000_000,
+      distanceMeters: 0,
+      sampleCount: 120,
+      hasRoute: false,
+    }];
+
+    VD.renderRealTrips();
+
+    const box = document.getElementById('realTripRouteBox');
+    expect(box.textContent).toContain('No GPS recorded for this drive');
+    expect(box.querySelector('.route-empty-cta')).toBeNull();
+  });
+
+  it('renders no summary bar for a "--" metric and a proportional bar for real values', () => {
+    const VD = window.VoltDashboard;
+    VD.state.storage = { recentRoutes: [] };
+    // Two drives so the bars scale against the longest. The selected drive (id 1) has the max
+    // distance (full bar); its duration is half the longest (~half bar). A drive with no distance
+    // must render a "--" value with an EMPTY bar, not a misleading full one.
+    VD.state.trips = [
+      {
+        id: 1, startedAtMs: Date.now(), durationMs: 600_000,
+        distanceMeters: 8000, sampleCount: 500, hasRoute: false,
+      },
+      {
+        id: 2, startedAtMs: Date.now() + 1, durationMs: 1_200_000,
+        distanceMeters: 0, sampleCount: 100, hasRoute: false,
+      },
+    ];
+
+    VD.selectRealTrip(1);
+    const rows = document.getElementById('realTripEnergyRows');
+    const distanceRow = rows.children[0];
+    const durationRow = rows.children[1];
+    // Distance: this drive is the longest → full bar, with a real value.
+    expect(distanceRow.querySelector('b').textContent).not.toBe('--');
+    expect(distanceRow.querySelector('i').style.width).toBe('100%');
+    // Duration: 600k of a 1.2M max → ~50% bar.
+    expect(durationRow.querySelector('i').style.width).toBe('50%');
+
+    // Now the distance-less drive: "--" value and an empty (0%) bar — the bug we fixed.
+    VD.selectRealTrip(2);
+    const distanceRow2 = document.getElementById('realTripEnergyRows').children[0];
+    expect(distanceRow2.querySelector('b').textContent).toBe('--');
+    expect(distanceRow2.querySelector('i').style.width).toBe('0%');
   });
 
   it('keeps trip strip nodes mounted when selecting another trip', () => {

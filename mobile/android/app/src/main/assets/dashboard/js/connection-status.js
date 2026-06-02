@@ -35,50 +35,29 @@
     return new Date(ms).toLocaleDateString();
   }
 
-  // Render the "last connected" badge from the single most recent session.
+  // A demo run is not a real adapter connection. New demo sessions are no longer written to the
+  // summary store, but defend against any legacy "Demo stream" rows so the last-connected line
+  // never shows the demo as if it were the last adapter (it would double up with the live
+  // "Demo preview" chip).
+  function isDemoSession(/** @type {any} */ s) {
+    return /^demo/i.test(String((s && s.adapter) || ""));
+  }
+
+  // Render the "last connected" badge from the most recent REAL session.
   function renderLastConnected() {
     const badge = el("lastConnectedBadge");
     const label = el("lastConnectedLabel");
     const at = el("lastConnectedAt");
     if (!badge || !label || !at) return;
-    const recent = parseSessions(1);
-    if (recent.length === 0) {
+    const s = parseSessions(8).find((session) => !isDemoSession(session));
+    if (!s) {
       badge.hidden = true;
       return;
     }
-    const s = recent[0];
     label.textContent = s.adapter || "OBD adapter";
     at.textContent = formatRelative(s.endMs || s.startMs);
     badge.dataset.state = s.outcome || "unknown";
     badge.hidden = false;
-  }
-
-  // Render the adapter-health pill from the last 5 sessions.
-  function renderAdapterHealth() {
-    const pill = el("adapterHealthPill");
-    const label = el("adapterHealthLabel");
-    if (!pill || !label) return;
-    const recent = parseSessions(5);
-    if (recent.length === 0) {
-      pill.hidden = true;
-      return;
-    }
-    const successes = recent.filter((s) => s.outcome === "success").length;
-    let tone, text;
-    if (successes >= 4) {
-      tone = "good";
-      text = "Adapter healthy";
-    } else if (successes >= 2) {
-      tone = "warn";
-      text = "Adapter spotty";
-    } else {
-      tone = "bad";
-      text = "Adapter failing";
-    }
-    pill.dataset.tone = tone;
-    label.textContent = text + " (" + successes + "/" + recent.length + ")";
-    pill.title = recent.map((s) => s.outcome || "?").join(" → ");
-    pill.hidden = false;
   }
 
   // Low-voltage hint keyed off the lastVoltage field on status payloads.
@@ -116,7 +95,6 @@
   // a session ends, and lastVoltage updates inline.
   function noteStatus(/** @type {any} */ payload) {
     renderLastConnected();
-    renderAdapterHealth();
     renderLowVoltageHint(payload || {});
   }
 
@@ -145,6 +123,5 @@
 
   // Initial render on load.
   renderLastConnected();
-  renderAdapterHealth();
   installStatusObserver();
 })();

@@ -178,6 +178,22 @@ public final class VoltBridge {
         return activity.getInsightsJson();
     }
 
+    /**
+     * Full route geometry for a single logged trip, by session id. Lets the Trips screen load the
+     * route of any drive on demand — including older drives outside the storage summary's
+     * recent-routes window. Non-numeric input yields an empty route payload rather than an error.
+     */
+    @JavascriptInterface
+    public String getTripRoute(String sessionId) {
+        long id;
+        try {
+            id = Long.parseLong(safe(sessionId, MAX_LABEL_LEN));
+        } catch (NumberFormatException ex) {
+            return "{}";
+        }
+        return activity.getTripRouteJson(id);
+    }
+
     @JavascriptInterface
     public void clearStoredData() {
         // clearAllData runs 11 DELETEs in one transaction — keep it off the main thread.

@@ -23,40 +23,14 @@
     <button
       id="lastConnectedBadge"
       type="button"
-      class="connection-status__badge"
+      class="connection-status__line"
       data-state="unknown"
       hidden
       aria-label="Open last connected adapter"
     >
-      <span class="kicker">Last connected</span>
+      <span class="connection-status__line-dot" aria-hidden="true"></span>
       <strong id="lastConnectedLabel">--</strong>
       <small id="lastConnectedAt">--</small>
     </button>
-    <div
-      id="adapterHealthPill"
-      class="connection-status__pill"
-      data-tone="unknown"
-      role="status"
-      aria-live="polite"
-      hidden
-    >
-      <span class="connection-status__pill-dot"></span>
-      <span id="adapterHealthLabel">Adapter health unknown</span>
-    </div>
-  </div>
-  <div class="mobile-controls demo-only" hidden>
-    <div class="mode-toggle" aria-label="Propulsion state">
-      <button type="button" data-mode="ev" class="is-active">EV</button>
-      <button type="button" data-mode="gas">GAS</button>
-    </div>
-    <label class="drive-chip">
-      <span class="kicker">Drive</span>
-      <select id="driveModeSelect">
-        <option value="normal">Normal</option>
-        <option value="sport">Sport</option>
-        <option value="mountain">Mountain</option>
-        <option value="hold">Hold</option>
-      </select>
-    </label>
   </div>
 </header>

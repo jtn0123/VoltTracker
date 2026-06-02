@@ -289,6 +289,74 @@ public class DatabaseMergerTest {
         assertForeignKeysIntact(live);
     }
 
+    @Test
+    public void adapterHistoryUpsertKeepsMinFirstAndMaxLastSeen() {
+        // live AD:1 seen [first=1, last=100]; donor AD:1 seen [first=1, last=200] (newer).
+        insertAdapterHistoryFull(live, "AD:1", 5, /*first*/ 50L, /*last*/ 100L);
+        insertAdapterHistoryFull(donor, "AD:1", 3, /*first*/ 10L, /*last*/ 200L);
+
+        assertTrue(DatabaseMerger.merge(live, donor).ok);
+
+        assertEquals(
+                "first_seen_ms must be the earliest across both",
+                10,
+                scalar(
+                        live,
+                        "SELECT first_seen_ms FROM "
+                                + VoltTrackerDb.TABLE_ADAPTER_HISTORY
+                                + " WHERE adapter_key = 'AD:1'"));
+        assertEquals(
+                "last_seen_ms must be the latest across both",
+                200,
+                scalar(
+                        live,
+                        "SELECT last_seen_ms FROM "
+                                + VoltTrackerDb.TABLE_ADAPTER_HISTORY
+                                + " WHERE adapter_key = 'AD:1'"));
+    }
+
+    @Test
+    public void remapsTripSegmentSamplePointersToTheMergedTelemetryRows() {
+        // A donor trip segment references specific donor telemetry rows via start/end_sample_id.
+        // After merge those pointers must resolve to the NEWLY-inserted telemetry rows (the donor
+        // ids would otherwise collide with unrelated live rows), and stay foreign-key valid.
+        long donorSession = insertSession(donor, 6000L);
+        long startTel = insertTelemetry(donor, donorSession, 6000L); // captured_at_ms 6000
+        insertTelemetry(donor, donorSession, 6500L);
+        long endTel = insertTelemetry(donor, donorSession, 7000L); // captured_at_ms 7000
+        insertTripSegmentWithSamples(donor, donorSession, 6000L, startTel, endTel);
+
+        // Pre-seed the live DB with unrelated telemetry so donor ids (1..3) collide with live ids.
+        long liveSession = insertSession(live, 100L);
+        insertTelemetry(live, liveSession, 100L);
+        insertTelemetry(live, liveSession, 200L);
+
+        assertTrue(DatabaseMerger.merge(live, donor).ok);
+        assertForeignKeysIntact(live);
+
+        // The merged trip segment's start/end pointers must land on telemetry rows whose
+        // captured_at_ms match the donor's start (6000) and end (7000) samples — proving the
+        // remap tracked the right rows, not stale donor ids.
+        assertEquals(
+                6000,
+                scalar(
+                        live,
+                        "SELECT t.captured_at_ms FROM "
+                                + VoltTrackerDb.TABLE_TRIP_SEGMENTS
+                                + " s JOIN "
+                                + VoltTrackerDb.TABLE_TELEMETRY
+                                + " t ON t._id = s.start_sample_id"));
+        assertEquals(
+                7000,
+                scalar(
+                        live,
+                        "SELECT t.captured_at_ms FROM "
+                                + VoltTrackerDb.TABLE_TRIP_SEGMENTS
+                                + " s JOIN "
+                                + VoltTrackerDb.TABLE_TELEMETRY
+                                + " t ON t._id = s.end_sample_id"));
+    }
+
     // ---- fixtures ---------------------------------------------------------------
 
     private static long insertSession(SQLiteDatabase db, long startedAtMs) {
@@ -301,13 +369,29 @@ public class DatabaseMergerTest {
         return db.insertOrThrow(VoltTrackerDb.TABLE_SESSIONS, null, cv);
     }
 
-    private static void insertTelemetry(SQLiteDatabase db, long sessionId, long capturedAtMs) {
+    private static long insertTelemetry(SQLiteDatabase db, long sessionId, long capturedAtMs) {
         ContentValues cv = new ContentValues();
         cv.put("session_id", sessionId);
         cv.put("captured_at_ms", capturedAtMs);
         cv.put("speed_kph", 40);
         cv.put("json", "{}");
-        db.insertOrThrow(VoltTrackerDb.TABLE_TELEMETRY, null, cv);
+        return db.insertOrThrow(VoltTrackerDb.TABLE_TELEMETRY, null, cv);
+    }
+
+    private static void insertTripSegmentWithSamples(
+            SQLiteDatabase db,
+            long sessionId,
+            long startedAtMs,
+            long startSampleId,
+            long endSampleId) {
+        ContentValues cv = new ContentValues();
+        cv.put("session_id", sessionId);
+        cv.put("started_at_ms", startedAtMs);
+        cv.put("route_available", 1);
+        cv.put("start_sample_id", startSampleId);
+        cv.put("end_sample_id", endSampleId);
+        cv.put("created_at_ms", startedAtMs);
+        db.insertOrThrow(VoltTrackerDb.TABLE_TRIP_SEGMENTS, null, cv);
     }
 
     private static long insertVehicle(SQLiteDatabase db, String key) {
@@ -416,13 +500,18 @@ public class DatabaseMergerTest {
 
     private static void insertAdapterHistory(
             SQLiteDatabase db, String key, int connectCount, long lastSeenMs) {
+        insertAdapterHistoryFull(db, key, connectCount, 1L, lastSeenMs);
+    }
+
+    private static void insertAdapterHistoryFull(
+            SQLiteDatabase db, String key, int connectCount, long firstSeenMs, long lastSeenMs) {
         ContentValues cv = new ContentValues();
         cv.put("adapter_key", key);
         cv.put("connect_count", connectCount);
         cv.put("scan_count", 0);
         cv.put("demo_count", 0);
         cv.put("sample_count", 0);
-        cv.put("first_seen_ms", 1L);
+        cv.put("first_seen_ms", firstSeenMs);
         cv.put("last_seen_ms", lastSeenMs);
         db.insertOrThrow(VoltTrackerDb.TABLE_ADAPTER_HISTORY, null, cv);
     }

@@ -60,8 +60,9 @@ final class ObdStoreRouteProjection {
 
     // Long drives can capture thousands of GPS fixes; the dashboard's polyline renderer stays
     // smooth around 500 points, so each track is downsampled evenly across the full session
-    // timespan rather than truncated to the latest 500.
-    private static final int MAX_TRACK_POINTS = 500;
+    // timespan rather than truncated to the latest 500. Package-visible so on-demand single-trip
+    // route loads (ObdStoreReports#tripRouteJson) share the same cap as the recent-routes batch.
+    static final int MAX_TRACK_POINTS = 500;
 
     static JSONArray routePointsForSessionJson(SQLiteDatabase db, long sessionId, int limit)
             throws JSONException {

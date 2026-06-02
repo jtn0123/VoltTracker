@@ -22,7 +22,6 @@
   const state = VD.state;
   const bridge = VD.bridge;
   const el = VD.el;
-  const data = VD.data;
 
   // AbortController for every listener bound below. resetListeners() aborts
   // the current set and rebinds — useful for hot-reloading WebView content or
@@ -447,10 +446,6 @@
       const button = /** @type {HTMLElement} */ (node);
       button.addEventListener("click", () => VD.setView(button.dataset.navJump), opts);
     });
-    document.querySelectorAll("[data-mode]").forEach((node) => {
-      const button = /** @type {HTMLElement} */ (node);
-      button.addEventListener("click", () => VD.setMode(button.dataset.mode), opts);
-    });
     document.querySelectorAll("[data-action]").forEach((node) => {
       const button = /** @type {HTMLElement} */ (node);
       button.addEventListener("click", (event) => handleAction(button.dataset.action, event.currentTarget), opts);
@@ -532,41 +527,6 @@
     }, opts);
     VD.bindListenerGuarded("disconnectBtn", "click", () => handleAction("stop"), opts);
     VD.bindListenerGuarded("demoStopBtn", "click", stopDemo, opts);
-    VD.bindListenerGuarded("driveModeSelect", "change", (event) => {
-      const select = /** @type {HTMLSelectElement} */ (event.target);
-      VD.setStatus({ state: "ready", detail: `Drive mode set to ${select.value}.` });
-    }, opts);
-    VD.bindListenerGuarded("tripTabs", "click", (event) => {
-      const eventTarget = /** @type {Element | null} */ (event.target);
-      const button = /** @type {HTMLElement | null} */ (
-        eventTarget && eventTarget.closest("button[data-filter]")
-      );
-      if (!button) return;
-      state.tripFilter = button.dataset.filter;
-      document.querySelectorAll("#tripTabs button").forEach((node) => {
-        const selected = node === button;
-        node.classList.toggle("is-active", selected);
-        node.setAttribute("aria-pressed", selected ? "true" : "false");
-      });
-      VD.renderTrips();
-    }, opts);
-    VD.bindListenerGuarded("addChargeBtn", "click", () => {
-      VD.ensureDemoData((error) => {
-        if (error) {
-          VD.setStatus({ state: "blocked", detail: "Demo data could not be loaded." });
-          return;
-        }
-        // Stage the row on the demo-only sessions list (state.demoSessions) instead of
-        // mutating the static `data.sessions` seed. Without this, every "add" persists
-        // across demo toggles and reappears on the next demo session.
-        if (!Array.isArray(state.demoSessions)) {
-          state.demoSessions = data.sessions.slice();
-        }
-        state.demoSessions.unshift({ date: "Today - 21:10", type: "L2", kwh: 10.8, soc: "31->90", location: "Home", cost: "$1.30" });
-        VD.renderSessions();
-        VD.setStatus({ state: "ready", detail: "Charging session staged locally." });
-      });
-    }, opts);
     bindPageDragScroll(opts);
     window.addEventListener("resize", debouncedResize, opts);
   }

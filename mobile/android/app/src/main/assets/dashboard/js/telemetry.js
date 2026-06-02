@@ -449,10 +449,7 @@
     VD.setText("updatedValue", t.updatedAt ? "now" : "waiting");
     VD.setText("rawFrames", t.raw || "Waiting for telemetry...");
     const soc = t.soc == null || t.soc === "" ? NaN : Number(t.soc);
-    VD.setText("socValue", Number.isFinite(soc) ? `${soc.toFixed(1)}%` : "--");
-    VD.setText("rangeValue", "--");
     const batteryTemp = t.batteryTemp == null || t.batteryTemp === "" ? NaN : Number(t.batteryTemp);
-    VD.setText("packTempValue", Number.isFinite(batteryTemp) ? `${batteryTemp.toFixed(1)} °C` : "--");
     VD.setText("driveSocValue", Number.isFinite(soc) ? `${Math.round(soc)}%` : "--");
     // Pass the raw (possibly NaN) value through; setMeter clears the meter to an
     // indeterminate state for a missing reading rather than announcing a false 0%.

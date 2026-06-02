@@ -540,6 +540,22 @@ public class MainActivity extends Activity {
         }
     }
 
+    String getTripRouteJson(long sessionId) {
+        if (localStore == null) {
+            return MainActivityUtils.errorPayload(
+                            "storage_unavailable", "Local storage is not ready yet.")
+                    .toString();
+        }
+        try {
+            return localStore.getTripRouteJson(sessionId).toString();
+        } catch (RuntimeException ex) {
+            Log.w(TAG, "getTripRouteJson failed", ex);
+            return MainActivityUtils.errorPayload(
+                            "trip_route_read_failed", "Could not read the trip route.")
+                    .toString();
+        }
+    }
+
     String getInsightsJson() {
         if (localStore == null) {
             return MainActivityUtils.errorPayload(

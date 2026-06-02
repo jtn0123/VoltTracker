@@ -588,7 +588,8 @@
   }
 
   function renderRealTrips() {
-    if (state.demoActive) return;
+    // No demo guard: demo only simulates live numbers, so the Trips tab keeps rendering the user's
+    // real logged drives (or the empty state) exactly as it would outside demo.
     const trips = Array.isArray(state.trips) ? state.trips : [];
     toggleHidden("realTripsCard", trips.length === 0);
     toggleHidden("tripsEmptyState", trips.length > 0);
@@ -645,8 +646,7 @@
     button.dataset.realTripId = String(trip.id);
     button.setAttribute("aria-label", `Open trip from ${whenLabel} — ${meta}`);
     button.classList.toggle("is-active", String(trip.id) === String(state.selectedRealTripId || ""));
-    const route = trip.hasRoute ? routeForTrip(trip) : null;
-    if (route) button.classList.add("has-route-preview");
+    if (trip.hasRoute) button.classList.add("has-route-preview");
     const center = document.createElement("span");
     center.className = "real-trip-chip-copy";
     const strong = document.createElement("strong");
@@ -656,12 +656,13 @@
     center.append(strong, small);
     const right = document.createElement("b");
     right.className = "trip-route-state";
-    right.textContent = trip.hasRoute ? `${Number(trip.pointCount || 0) || "GPS"} pts` : `${Number(trip.sampleCount || 0)}x`;
-    if (route) {
-      button.append(center, right, buildTripMapSlot(route, "mini", trip.id));
-    } else {
-      button.append(center, right);
-    }
+    // Clear, labelled badge instead of the cryptic "660x": GPS trips show their point count,
+    // routeless trips show the raw sample count. The route itself renders in the large preview
+    // below, so the chip stays compact (no empty in-chip mini-map).
+    right.textContent = trip.hasRoute
+      ? `${Number(trip.pointCount || 0) || "—"} pts`
+      : `${Number(trip.sampleCount || 0).toLocaleString()} samples`;
+    button.append(center, right);
     // Wrap in a listitem so #realTripsList (role="list") has valid listitem
     // children without overriding the chip's native button role. The wrapper is
     // display:contents (components.css) so layout is unchanged; click delegation
@@ -686,13 +687,45 @@
     });
   }
 
+  // Routes loaded on demand (per selected trip) for drives outside the storage summary's
+  // recent-routes window. Keyed by trip id; a cached null means "asked the bridge, no route".
+  const onDemandRoutes = new Map();
+
   function routeForTrip(/** @type {any} */ trip) {
     const routes =
       state.storage && Array.isArray(state.storage.recentRoutes)
         ? state.storage.recentRoutes
         : [];
     const id = String(trip.id || "");
-    return routes.find((/** @type {any} */ route) => String((route.session || {}).id || "") === id) || null;
+    const fromRecent = routes.find(
+      (/** @type {any} */ route) => String((route.session || {}).id || "") === id
+    );
+    if (fromRecent) return fromRecent;
+    return onDemandRoutes.has(id) ? onDemandRoutes.get(id) : null;
+  }
+
+  // Ensures the selected trip's route geometry is available, fetching it from the native bridge
+  // the first time a drive outside the recent-routes window is opened. The storage summary only
+  // ships the most recent few routes for payload size; this lets ANY logged drive (e.g. one folded
+  // in from a merged backup) preview its route. Returns the route payload or null.
+  function ensureRouteForTrip(/** @type {any} */ trip) {
+    if (!trip || !trip.hasRoute) return null;
+    const id = String(trip.id || "");
+    const cached = routeForTrip(trip);
+    if (cached) return cached;
+    if (onDemandRoutes.has(id)) return onDemandRoutes.get(id);
+    if (!(bridge && typeof bridge.getTripRoute === "function")) return null;
+    let route = null;
+    try {
+      const payload = VD.parsePayload(bridge.getTripRoute(id), null);
+      if (payload && Array.isArray(payload.points) && payload.points.length >= 2) {
+        route = payload;
+      }
+    } catch (_err) {
+      route = null;
+    }
+    onDemandRoutes.set(id, route);
+    return route;
   }
 
   function buildTripRouteSpark(/** @type {any} */ route) {
@@ -735,6 +768,45 @@
     end.setAttribute("class", "trip-route-spark-end");
     svgNode.append(halo, line, start, end);
     return svgNode;
+  }
+
+  // Context-aware empty state for the route preview. A drive that recorded OBD samples but has no
+  // GPS track almost always means location was off during the drive — so say that plainly and, if
+  // the permission is still off, offer to enable it so future drives map.
+  function buildRouteEmptyState(/** @type {any} */ trip) {
+    const box = document.createElement("div");
+    box.className = "real-route-empty route-empty-rich";
+    const sampleCount = Number((trip && trip.sampleCount) || 0);
+    const locationGranted = !!(((state.appState || {}).permissions || {}).location);
+    const title = document.createElement("strong");
+    title.className = "route-empty-title";
+    const sub = document.createElement("span");
+    sub.className = "route-empty-sub";
+    if (sampleCount > 0) {
+      title.textContent = "No GPS recorded for this drive";
+      sub.textContent = locationGranted
+        ? "This drive logged OBD data but never got a GPS fix."
+        : "Location was off, so no route could be mapped.";
+    } else {
+      title.textContent = "No route shape stored";
+      sub.textContent = "This drive has no stored GPS track.";
+    }
+    box.append(title, sub);
+    if (!locationGranted && bridge && typeof bridge.requestPermissions === "function") {
+      const cta = document.createElement("button");
+      cta.type = "button";
+      cta.className = "route-empty-cta";
+      cta.textContent = "Enable location";
+      cta.addEventListener("click", () => {
+        try {
+          bridge.requestPermissions();
+        } catch (_err) {
+          /* bridge may be unavailable outside the app */
+        }
+      });
+      box.append(cta);
+    }
+    return box;
   }
 
   function buildTripMapSlot(/** @type {any} */ route, /** @type {any} */ role, /** @type {any} */ tripId) {
@@ -799,7 +871,8 @@
     const span = document.createElement("span");
     span.textContent = label;
     const bar = document.createElement("i");
-    bar.style.width = Math.max(3, Math.min(100, Number(pct) || 0)) + "%";
+    // 0% means "no value" — render an empty track, not a sliver, so a "--" metric reads as blank.
+    bar.style.width = Math.max(0, Math.min(100, Number(pct) || 0)) + "%";
     if (color) bar.style.background = color;
     const strong = document.createElement("b");
     strong.textContent = value;
@@ -815,7 +888,7 @@
     const detail = el("realTripDetailGrid");
     if (!detail || !trip) return;
     detail.hidden = false;
-    const route = trip.hasRoute ? routeForTrip(trip) : null;
+    const route = ensureRouteForTrip(trip);
     const distance = VD.formatDistance(Number(trip.distanceMeters || 0));
     const duration = Number(trip.durationMs) > 0 ? VD.formatDuration(Number(trip.durationMs)) : "--";
     const topMph = trip.maxSpeedKph ? Math.round(Number(trip.maxSpeedKph) * 0.621371) : 0;
@@ -827,21 +900,29 @@
         .filter(Boolean)
         .join(" - ") || "stored drive"
     );
+    // Use the resolved route (after the on-demand fetch), not just trip.hasRoute — a drive can
+    // claim a route in its rollup yet have no geometry available.
+    const hasRouteGeometry = !!(route && Array.isArray(route.points) && route.points.length >= 2);
     const mapBtn = /** @type {HTMLButtonElement | null} */ (el("realTripMapBtn"));
     if (mapBtn) {
       mapBtn.dataset.tripMap = String(trip.id || "");
-      mapBtn.disabled = !trip.hasRoute;
-      mapBtn.textContent = trip.hasRoute ? "Open map" : "No route";
+      mapBtn.disabled = !hasRouteGeometry;
+      mapBtn.textContent = hasRouteGeometry ? "Open map" : "No route";
     }
     const routeBox = el("realTripRouteBox");
     if (routeBox) {
-      const nextTripMap = trip.hasRoute ? String(trip.id || "") : "";
+      const nextTripMap = hasRouteGeometry ? String(trip.id || "") : "";
       const hasCurrentMap = routeBox.dataset.tripMap === nextTripMap &&
         routeBox.querySelector("[data-real-trip-map-role='detail']");
       routeBox.dataset.tripMap = nextTripMap;
-      routeBox.setAttribute("role", trip.hasRoute ? "button" : "presentation");
-      routeBox.setAttribute("aria-label", trip.hasRoute ? "Open selected trip on map" : "No route map available");
-      if (!hasCurrentMap) routeBox.replaceChildren(buildTripMapSlot(route, "detail", trip.id));
+      routeBox.setAttribute("role", hasRouteGeometry ? "button" : "presentation");
+      routeBox.setAttribute("aria-label", hasRouteGeometry ? "Open selected trip on map" : "No route map available");
+      if (hasRouteGeometry) {
+        if (!hasCurrentMap) routeBox.replaceChildren(buildTripMapSlot(route, "detail", trip.id));
+      } else {
+        // Explain WHY there's no route (and point at the fix) instead of a bare "no route".
+        routeBox.replaceChildren(buildRouteEmptyState(trip));
+      }
     }
     const effPts = route && Array.isArray(route.points)
       ? route.points.map((/** @type {any} */ point) => Number(point.eff)).filter(Number.isFinite)
@@ -852,11 +933,24 @@
     VD.setText("realTripEnergyTitle", avgEff ? `${avgEff.toFixed(1)} mi/kWh` : (avgMph ? `${avgMph} mph avg` : "Stored drive"));
     const rows = el("realTripEnergyRows");
     if (rows) {
+      // Bars are proportional to real values, scaled against the user's other logged drives so the
+      // longest/busiest trip reads as full. A metric with no value renders no bar (width 0) rather
+      // than a misleading full bar next to a "--".
+      const allTrips = Array.isArray(state.trips) ? state.trips : [];
+      const maxOf = (/** @type {any} */ key) =>
+        allTrips.reduce((/** @type {any} */ m, /** @type {any} */ t) => Math.max(m, Number(t[key]) || 0), 0);
+      const pctOf = (/** @type {any} */ value, /** @type {any} */ max) =>
+        max > 0 && Number(value) > 0 ? Math.round((Number(value) / max) * 100) : 0;
+      const distMeters = Number(trip.distanceMeters || 0);
+      const durMs = Number(trip.durationMs || 0);
+      const sampleCount = Number(trip.sampleCount || 0);
       rows.replaceChildren(
-        buildEnergyRow("Distance", distance, 100, "var(--volt)"),
-        buildEnergyRow("Duration", duration, 68, "#a4b8ff"),
-        buildEnergyRow("Samples", `${Number(trip.sampleCount || 0).toLocaleString()}x`, 52, "rgba(255, 255, 255, 0.32)"),
-        buildEnergyRow("Efficiency", avgEff ? `${avgEff.toFixed(1)} mi/kWh` : "--", avgEff ? Math.min(100, avgEff * 16) : 8, "var(--ok)")
+        buildEnergyRow("Distance", distance, pctOf(distMeters, maxOf("distanceMeters")), "var(--volt)"),
+        buildEnergyRow("Duration", duration, pctOf(durMs, maxOf("durationMs")), "#a4b8ff"),
+        buildEnergyRow("Samples", sampleCount.toLocaleString(), pctOf(sampleCount, maxOf("sampleCount")), "rgba(255, 255, 255, 0.32)"),
+        // Efficiency scaled against a fixed 5.0 mi/kWh ceiling (a strong EV result), so the bar is
+        // comparable run-to-run rather than relative to a single trip.
+        buildEnergyRow("Efficiency", avgEff ? `${avgEff.toFixed(1)} mi/kWh` : "--", avgEff ? Math.min(100, Math.round((avgEff / 5) * 100)) : 0, "var(--ok)")
       );
     }
   }

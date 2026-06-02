@@ -92,7 +92,10 @@
   }
 
   body {
-    padding: max(14px, env(safe-area-inset-top)) 12px calc(86px + env(safe-area-inset-bottom));
+    /* Top floor raised to 30px: this WebView reports no safe-area-inset-top, so the old 14px
+       floor let the title row crowd the system status bar (clock/battery). env() still wins on
+       devices that do report a larger inset. */
+    padding: max(30px, env(safe-area-inset-top)) 12px calc(86px + env(safe-area-inset-bottom));
   }
 
   button, select, input {
@@ -284,58 +287,6 @@
   .badge[data-state="scanning"] .dot { background: var(--warn); color: var(--warn); }
   .badge[data-state="error"], .badge[data-state="blocked"] { color: var(--bad); }
   .badge[data-state="error"] .dot, .badge[data-state="blocked"] .dot { background: var(--bad); color: var(--bad); }
-
-  .mobile-controls {
-    display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.9fr);
-    gap: 9px;
-  }
-
-  .mode-toggle, .drive-chip {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    height: 44px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: rgba(255,255,255,0.045);
-    overflow: hidden;
-  }
-
-  .mode-toggle button {
-    flex: 1;
-    min-height: 100%;
-    border: 0;
-    border-radius: 10px;
-    background: transparent;
-    color: var(--muted);
-    font-weight: 800;
-  }
-
-  .mode-toggle button.is-active {
-    margin: 5px;
-    color: #101015;
-    background: var(--volt);
-  }
-
-  .drive-chip {
-    padding-left: 10px;
-    gap: 8px;
-  }
-
-  .drive-chip .kicker {
-    font-size: 9px;
-    letter-spacing: 0.13em;
-  }
-
-  .drive-chip select {
-    flex: 1;
-    height: 100%;
-    border: 0;
-    background: transparent;
-    padding-inline: 0 10px;
-    font-weight: 700;
-  }
 
   .panel {
     border: 1px solid var(--line);

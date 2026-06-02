@@ -54,33 +54,9 @@ describe('generated dashboard accessibility shell', () => {
     expect(liveRegions.some((node) => node.querySelector('#driveSocValue'))).toBe(true);
   });
 
-  it('exposes the trips filter as a labelled group of aria-pressed toggle buttons', () => {
-    const document = loadDocument();
-    const group = document.querySelector('#tripTabs');
-    expect(group).not.toBeNull();
-    // The filter is a set of toggle buttons (it filters the list in place), not
-    // a tab/tabpanel widget — so it must NOT advertise tab semantics it doesn't
-    // implement (no keyboard tab behaviour, no tabpanels).
-    expect(group.getAttribute('role')).toBe('group');
-    expect(group.querySelector('[role="tab"]')).toBeNull();
-    // Assert the labelling attribute directly: accessibleName() falls back to
-    // child text, so a dropped aria-label would otherwise slip through.
-    expect(
-      group.hasAttribute('aria-label') || group.hasAttribute('aria-labelledby'),
-    ).toBe(true);
-    const filterButtons = [...group.querySelectorAll('button[data-filter]')];
-    expect(filterButtons.length).toBeGreaterThan(0);
-    expect(filterButtons.every((button) => button.hasAttribute('aria-pressed'))).toBe(true);
-    // Exactly one filter is pressed, and it is the one carrying .is-active.
-    const pressed = filterButtons.filter((button) => button.getAttribute('aria-pressed') === 'true');
-    expect(pressed).toHaveLength(1);
-    expect(pressed[0].classList.contains('is-active')).toBe(true);
-  });
-
   it('gives the trip lists list semantics', () => {
     const document = loadDocument();
     expect(document.querySelector('#realTripsList')?.getAttribute('role')).toBe('list');
-    expect(document.querySelector('#tripList')?.getAttribute('role')).toBe('list');
   });
 
   it('gives every button an accessible name', () => {

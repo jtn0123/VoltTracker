@@ -5,8 +5,9 @@
  * Mirrors the Map-tab visual vocabulary (chip strip, scrub-chart, scrub-readout)
  * on the Drive screen so the live OBD experience feels like the same product:
  *
- *  - renderDriveNowChips(): top session chip strip (Idle / Recording / Demo)
- *    plus an optional "Last drive" chip that jumps to the Map tab.
+ *  - renderDriveNowChips(): top session chip strip, shown only while a session is
+ *    live (Recording / Connecting / Demo). Idle state and past drives are not
+ *    repeated here — the top-bar pill covers status and Trips/Map cover history.
  *  - drawLiveSpeedTrace(): canvas speed trace with a "now" cursor pinned to
  *    the right edge.
  *  - drawLivePowerBars(): +/- bars around zero for the last ~60s of power.
@@ -53,33 +54,6 @@
     if (m < 60) return m + "m " + String(s % 60).padStart(2, "0") + "s";
     const h = Math.floor(m / 60);
     return h + "h " + String(m % 60).padStart(2, "0") + "m";
-  }
-
-  function fmtChipDate(/** @type {number} */ ms) {
-    const ts = Number(ms);
-    if (!Number.isFinite(ts) || ts <= 0) return "saved";
-    const d = new Date(ts);
-    const now = new Date();
-    const sameDay =
-      d.getFullYear() === now.getFullYear() &&
-      d.getMonth() === now.getMonth() &&
-      d.getDate() === now.getDate();
-    const fmtTime = (/** @type {any} */ date) =>
-      date
-        .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-        .toLowerCase();
-    if (sameDay) return "today " + fmtTime(d);
-    const y = new Date(now.getTime() - 86400000);
-    if (
-      d.getFullYear() === y.getFullYear() &&
-      d.getMonth() === y.getMonth() &&
-      d.getDate() === y.getDate()
-    )
-      return "yesterday";
-    const diffDays = Math.round((now.getTime() - d.getTime()) / 86400000);
-    if (diffDays < 7)
-      return d.toLocaleDateString([], { weekday: "short" }).toLowerCase();
-    return d.toLocaleDateString([], { month: "short", day: "numeric" });
   }
 
   function deriveLiveChip() {
@@ -139,32 +113,6 @@
     };
   }
 
-  function deriveLastDriveChip() {
-    const routes =
-      (state.storage && state.storage.recentRoutes) ||
-      (state.storage && state.storage.latestRoute && [state.storage.latestRoute]) ||
-      [];
-    const recorded = routes.filter((/** @type {any} */ r) => {
-      const session = (r && r.session) || {};
-      const id = String(session.id || (r && r.sessionId) || "");
-      return id && !id.startsWith("__sample-");
-    });
-    if (!recorded.length) return null;
-    const r = recorded[0];
-    const session = r.session || r;
-    const mi = Number(r.distanceMeters) / 1609.34;
-    return {
-      tone: "ok",
-      label: "Last drive",
-      meta: [
-        fmtChipDate(session.endedAtMs || session.startedAtMs),
-        Number.isFinite(mi) ? mi.toFixed(1) + " mi" : "--"
-      ],
-      isLink: true,
-      liveStable: true
-    };
-  }
-
   // Build via DOM APIs (textContent) instead of innerHTML string-concat so the
   // user-controlled Bluetooth `adapter.name` (which lands in `c.meta` via
   // deriveLiveChip()) can never be reinterpreted as markup.
@@ -208,9 +156,12 @@
     const host = el("driveNowChips");
     if (!host) return;
     const chips = [];
-    chips.push(deriveLiveChip());
-    const last = deriveLastDriveChip();
-    if (last) chips.push(last);
+    // The Drive page is for the live drive. Idle / "ready · remembered" is already shown by the
+    // top-bar pill + slim last-connected line, and past drives live on Trips/Map — so the now-chips
+    // strip only surfaces the live chip while something is actually happening (Recording /
+    // Connecting / Demo). When idle it stays empty.
+    const live = deriveLiveChip();
+    if (live && live.tone !== "idle" && live.tone !== "ok") chips.push(live);
 
     host.replaceChildren(...chips.map(buildDriveNowChip));
   }

@@ -11,8 +11,6 @@ import { loadDashboard } from './setup/load-dashboard.js';
 const REQUIRED_STATE_KEYS = [
   'view',
   'mode',
-  'tripFilter',
-  'selectedTripId',
   'lastDevice',
   'deviceHistory',
   'storage',
@@ -78,7 +76,6 @@ describe('window.VoltDashboard.state shape', () => {
     const state = window.VoltDashboard.state;
     expect(state.view).toBe('drive');
     expect(state.mode).toBe('ev');
-    expect(state.tripFilter).toBe('all');
     expect(state.demoActive).toBe(false);
     // Default layer is "eff" so the route opens already colored by efficiency;
     // the user can still tap Routes / Heat / Stops in the layer tabs.

@@ -246,62 +246,6 @@
     </div>
   </article>
 
-  <article class="panel ratio-card demo-only" hidden>
-    <div id="evRing" class="ring" style="--v: 78">
-      <strong id="evRatioValue">78%</strong>
-    </div>
-    <div class="ratio-stats">
-      <div><span>Electric miles</span><b>36,064</b></div>
-      <div><span>Gas miles</span><b>2,348</b></div>
-      <div><span>$ / mile YTD</span><b>$0.087</b></div>
-      <div><span>Est. saved</span><b>$1,840</b></div>
-    </div>
-  </article>
-
-  <section class="summary-grid">
-    <article class="panel metric demo-only" hidden>
-      <header><span>Pack</span><span>Health</span></header>
-      <strong>91.3%</strong>
-      <div class="meter"><span style="width: 91%"></span></div>
-    </article>
-    <article class="panel metric demo-only" hidden>
-      <header><span>Tank MPG</span><span>30d</span></header>
-      <strong>44.1</strong>
-      <small>312 mi since Apr 23</small>
-    </article>
-    <article class="panel metric demo-only" hidden>
-      <header><span>Electric</span><span>mi/kWh</span></header>
-      <strong>4.2</strong>
-      <small>241 Wh/mi best in March</small>
-    </article>
-  </section>
-
-  <article class="panel status-card demo-only" hidden>
-    <div class="status-head">
-      <div>
-        <div class="kicker">Parked - Garage</div>
-        <h3>
-          Sparky - <span id="socValue" data-live-tile="true">--</span> SOC
-        </h3>
-      </div>
-      <button type="button" class="link-btn" data-nav-jump="settings">
-        adapter
-      </button>
-    </div>
-    <div class="status-meta">
-      <div>
-        <span>Range</span
-        ><strong id="rangeValue" data-live-tile="true">--</strong>
-      </div>
-      <div><span>Fuel</span><strong>64%</strong></div>
-      <div>
-        <span>Pack</span
-        ><strong id="packTempValue" data-live-tile="true">--</strong>
-      </div>
-      <div><span>Odo</span><strong>49,328</strong></div>
-    </div>
-  </article>
-
   <!-- Live diagnostic counters (sample count, runtime, etc.) announced
        politely so screen readers track OBD progress without barging. -->
   <article class="panel status-card" aria-live="polite">
@@ -367,7 +311,7 @@
     </div>
   </details>
 
-  <section class="real-overview-grid non-demo-only">
+  <section class="real-overview-grid">
     <article class="panel metric">
       <header><span>GPS distance</span><span>real</span></header>
       <strong id="overviewDistance">--</strong>
@@ -390,26 +334,7 @@
     </article>
   </section>
 
-  <article class="panel list-card demo-only" hidden>
-    <header>
-      <span class="kicker">Recent trips</span>
-      <button type="button" class="link-btn" data-nav-jump="trips">
-        view all
-      </button>
-    </header>
-    <div id="homeTrips"></div>
-  </article>
-
-  <article class="panel list-card demo-only" hidden>
-    <header>
-      <span class="kicker">Insights - 5 new</span>
-      <button type="button" class="link-btn" data-nav-jump="insights">
-        see all
-      </button>
-    </header>
-    <div id="homeInsights" class="insight-list"></div>
-  </article>
-  <article id="appEmptyState" class="panel empty-state non-demo-only">
+  <article id="appEmptyState" class="panel empty-state">
     <span class="kicker">App data</span>
     <h3>No trip, charging, or insight history captured on this phone yet.</h3>
     <p>

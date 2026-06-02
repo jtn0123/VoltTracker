@@ -285,41 +285,15 @@
     <button
       id="lastConnectedBadge"
       type="button"
-      class="connection-status__badge"
+      class="connection-status__line"
       data-state="unknown"
       hidden
       aria-label="Open last connected adapter"
     >
-      <span class="kicker">Last connected</span>
+      <span class="connection-status__line-dot" aria-hidden="true"></span>
       <strong id="lastConnectedLabel">--</strong>
       <small id="lastConnectedAt">--</small>
     </button>
-    <div
-      id="adapterHealthPill"
-      class="connection-status__pill"
-      data-tone="unknown"
-      role="status"
-      aria-live="polite"
-      hidden
-    >
-      <span class="connection-status__pill-dot"></span>
-      <span id="adapterHealthLabel">Adapter health unknown</span>
-    </div>
-  </div>
-  <div class="mobile-controls demo-only" hidden>
-    <div class="mode-toggle" aria-label="Propulsion state">
-      <button type="button" data-mode="ev" class="is-active">EV</button>
-      <button type="button" data-mode="gas">GAS</button>
-    </div>
-    <label class="drive-chip">
-      <span class="kicker">Drive</span>
-      <select id="driveModeSelect">
-        <option value="normal">Normal</option>
-        <option value="sport">Sport</option>
-        <option value="mountain">Mountain</option>
-        <option value="hold">Hold</option>
-      </select>
-    </label>
   </div>
 </header>
 <section id="view-drive" class="view is-active" data-view="drive">
@@ -570,62 +544,6 @@
     </div>
   </article>
 
-  <article class="panel ratio-card demo-only" hidden>
-    <div id="evRing" class="ring" style="--v: 78">
-      <strong id="evRatioValue">78%</strong>
-    </div>
-    <div class="ratio-stats">
-      <div><span>Electric miles</span><b>36,064</b></div>
-      <div><span>Gas miles</span><b>2,348</b></div>
-      <div><span>$ / mile YTD</span><b>$0.087</b></div>
-      <div><span>Est. saved</span><b>$1,840</b></div>
-    </div>
-  </article>
-
-  <section class="summary-grid">
-    <article class="panel metric demo-only" hidden>
-      <header><span>Pack</span><span>Health</span></header>
-      <strong>91.3%</strong>
-      <div class="meter"><span style="width: 91%"></span></div>
-    </article>
-    <article class="panel metric demo-only" hidden>
-      <header><span>Tank MPG</span><span>30d</span></header>
-      <strong>44.1</strong>
-      <small>312 mi since Apr 23</small>
-    </article>
-    <article class="panel metric demo-only" hidden>
-      <header><span>Electric</span><span>mi/kWh</span></header>
-      <strong>4.2</strong>
-      <small>241 Wh/mi best in March</small>
-    </article>
-  </section>
-
-  <article class="panel status-card demo-only" hidden>
-    <div class="status-head">
-      <div>
-        <div class="kicker">Parked - Garage</div>
-        <h3>
-          Sparky - <span id="socValue" data-live-tile="true">--</span> SOC
-        </h3>
-      </div>
-      <button type="button" class="link-btn" data-nav-jump="settings">
-        adapter
-      </button>
-    </div>
-    <div class="status-meta">
-      <div>
-        <span>Range</span
-        ><strong id="rangeValue" data-live-tile="true">--</strong>
-      </div>
-      <div><span>Fuel</span><strong>64%</strong></div>
-      <div>
-        <span>Pack</span
-        ><strong id="packTempValue" data-live-tile="true">--</strong>
-      </div>
-      <div><span>Odo</span><strong>49,328</strong></div>
-    </div>
-  </article>
-
   <!-- Live diagnostic counters (sample count, runtime, etc.) announced
        politely so screen readers track OBD progress without barging. -->
   <article class="panel status-card" aria-live="polite">
@@ -691,7 +609,7 @@
     </div>
   </details>
 
-  <section class="real-overview-grid non-demo-only">
+  <section class="real-overview-grid">
     <article class="panel metric">
       <header><span>GPS distance</span><span>real</span></header>
       <strong id="overviewDistance">--</strong>
@@ -714,26 +632,7 @@
     </article>
   </section>
 
-  <article class="panel list-card demo-only" hidden>
-    <header>
-      <span class="kicker">Recent trips</span>
-      <button type="button" class="link-btn" data-nav-jump="trips">
-        view all
-      </button>
-    </header>
-    <div id="homeTrips"></div>
-  </article>
-
-  <article class="panel list-card demo-only" hidden>
-    <header>
-      <span class="kicker">Insights - 5 new</span>
-      <button type="button" class="link-btn" data-nav-jump="insights">
-        see all
-      </button>
-    </header>
-    <div id="homeInsights" class="insight-list"></div>
-  </article>
-  <article id="appEmptyState" class="panel empty-state non-demo-only">
+  <article id="appEmptyState" class="panel empty-state">
     <span class="kicker">App data</span>
     <h3>No trip, charging, or insight history captured on this phone yet.</h3>
     <p>
@@ -743,7 +642,7 @@
   </article>
 </section>
 <section id="view-trips" class="view" data-view="trips">
-  <article id="tripsEmptyState" class="panel empty-state non-demo-only">
+  <article id="tripsEmptyState" class="panel empty-state">
     <span class="kicker">Trips</span>
     <h2>No real trips stored yet.</h2>
     <p>
@@ -752,7 +651,7 @@
       samples.
     </p>
   </article>
-  <article id="realTripsCard" class="panel list-card non-demo-only" hidden>
+  <article id="realTripsCard" class="panel list-card" hidden>
     <header>
       <div>
         <span class="kicker">Logged drives</span>
@@ -768,11 +667,7 @@
       aria-label="Logged drives"
     ></div>
   </article>
-  <section
-    id="realTripDetailGrid"
-    class="detail-grid real-trip-detail non-demo-only"
-    hidden
-  >
+  <section id="realTripDetailGrid" class="detail-grid real-trip-detail" hidden>
     <article class="panel route-card">
       <div class="card-head">
         <div>
@@ -800,72 +695,6 @@
         </div>
       </div>
       <div id="realTripEnergyRows" class="energy-rows"></div>
-    </article>
-  </section>
-  <article class="panel list-card demo-only" hidden>
-    <header>
-      <div>
-        <span class="kicker">April - 10 trips - 480 mi</span>
-        <h2>Trips</h2>
-      </div>
-    </header>
-    <div class="tabs" id="tripTabs" role="group" aria-label="Trip filter">
-      <button
-        type="button"
-        data-filter="all"
-        class="is-active"
-        aria-pressed="true"
-      >
-        All
-      </button>
-      <button type="button" data-filter="ev" aria-pressed="false">EV</button>
-      <button type="button" data-filter="mixed" aria-pressed="false">
-        Mixed
-      </button>
-      <button type="button" data-filter="gas" aria-pressed="false">Gas</button>
-    </div>
-    <div id="tripList" style="margin-top: 10px" role="list"></div>
-  </article>
-
-  <section class="detail-grid demo-only" hidden>
-    <article class="panel route-card">
-      <div class="card-head">
-        <div>
-          <span class="kicker">Route</span>
-          <h3 id="tripDetailTitle">Home -&gt; Office</h3>
-        </div>
-        <small id="tripDetailMeta" class="status-copy">18.4 mi</small>
-      </div>
-      <div class="route-box">
-        <span class="route-line"></span>
-        <span class="route-pin start"></span>
-        <span class="route-pin end"></span>
-      </div>
-    </article>
-
-    <article class="panel route-card">
-      <div class="card-head">
-        <div>
-          <span class="kicker">Energy</span>
-          <h3 id="tripEnergyTitle">241 Wh/mi</h3>
-        </div>
-      </div>
-      <div class="energy-rows">
-        <div><span>Propulsion</span><i style="width: 62%"></i><b>62%</b></div>
-        <div>
-          <span>HVAC</span><i style="width: 18%; background: #a4b8ff"></i
-          ><b>18%</b>
-        </div>
-        <div>
-          <span>Aux</span
-          ><i style="width: 5%; background: rgba(255, 255, 255, 0.32)"></i
-          ><b>5%</b>
-        </div>
-        <div>
-          <span>Regen</span><i style="width: 15%; background: var(--ok)"></i
-          ><b>-15%</b>
-        </div>
-      </div>
     </article>
   </section>
 </section>
@@ -1010,7 +839,7 @@
   </section>
 </section>
 <section id="view-charge" class="view" data-view="charge">
-  <article id="chargeEmptyState" class="panel empty-state non-demo-only">
+  <article id="chargeEmptyState" class="panel empty-state">
     <span class="kicker">Charging</span>
     <h2>No charging sessions yet.</h2>
     <p>
@@ -1018,11 +847,7 @@
       show up here automatically.
     </p>
   </article>
-  <section
-    class="charge-grid non-demo-only"
-    aria-label="Charging summary"
-    aria-live="polite"
-  >
+  <section class="charge-grid" aria-label="Charging summary" aria-live="polite">
     <article class="panel charge-kpi">
       <header><span>Sessions</span><span>real</span></header>
       <strong id="realChargeSessions">0</strong>
@@ -1044,58 +869,9 @@
       <small>Charge detection status</small>
     </article>
   </section>
-  <section class="charge-grid demo-only" hidden>
-    <article class="panel charge-kpi">
-      <header><span>Energy in</span><span>30d</span></header>
-      <strong id="chargeEnergy">248.6</strong>
-      <small>kWh - 24 sessions</small>
-    </article>
-    <article class="panel charge-kpi">
-      <header><span>Cost</span><span>/mo</span></header>
-      <strong>$29.83</strong>
-      <small>@ $0.12/kWh</small>
-    </article>
-    <article class="panel charge-kpi">
-      <header><span>Avg session</span><span>L2</span></header>
-      <strong>10.4</strong>
-      <small>kWh - about 3h</small>
-    </article>
-    <article class="panel charge-kpi">
-      <header><span>Gas saved</span><span>est.</span></header>
-      <strong>$104</strong>
-      <small>vs 42 MPG @ $3.85</small>
-    </article>
-  </section>
-
-  <article class="panel list-card demo-only" hidden>
-    <header>
-      <div>
-        <span class="kicker">When you charge</span>
-        <h3>Peak window - 21:00 to 23:00</h3>
-      </div>
-      <button type="button" class="link-btn" id="addChargeBtn">add</button>
-    </header>
-    <div
-      id="hourBars"
-      class="hour-bars"
-      role="img"
-      aria-label="Charging activity by hour of day"
-    ></div>
-  </article>
-
-  <article class="panel list-card demo-only" hidden>
-    <header>
-      <span class="kicker">Recent sessions</span>
-    </header>
-    <div
-      id="sessionList"
-      role="list"
-      aria-label="Recent charging sessions"
-    ></div>
-  </article>
 </section>
 <section id="view-insights" class="view" data-view="insights">
-  <article id="insightsEmptyState" class="panel empty-state non-demo-only">
+  <article id="insightsEmptyState" class="panel empty-state">
     <span class="kicker">Insights</span>
     <h2>Not enough data yet.</h2>
     <p>
@@ -1104,7 +880,7 @@
     </p>
   </article>
 
-  <article class="panel ratio-card insights-hero non-demo-only">
+  <article class="panel ratio-card insights-hero">
     <div id="realPackRing" class="ring" style="--v: 0">
       <strong id="realPackValue">--</strong>
     </div>
@@ -1118,7 +894,7 @@
     </div>
   </article>
 
-  <div class="map-sheet insights-sheet non-demo-only">
+  <div class="map-sheet insights-sheet">
     <div class="map-sheet-head">
       <div>
         <span class="kicker">Lifetime totals</span>
@@ -1146,7 +922,7 @@
   </div>
 
   <section class="map-layout">
-    <article class="panel diagnostic-report-card non-demo-only">
+    <article class="panel diagnostic-report-card">
       <header class="diagnostic-report-head">
         <div>
           <span class="kicker">Check engine</span>
@@ -1231,7 +1007,7 @@
       </div>
     </article>
 
-    <article class="panel non-demo-only" id="insightStatsCard">
+    <article class="panel" id="insightStatsCard">
       <header>
         <span class="kicker">More lifetime stats</span>
       </header>
@@ -1245,11 +1021,7 @@
       </div>
     </article>
 
-    <article
-      class="panel non-demo-only eff-scatter-card"
-      id="effScatterCard"
-      hidden
-    >
+    <article class="panel eff-scatter-card" id="effScatterCard" hidden>
       <header>
         <div>
           <span class="kicker">Efficiency vs speed - all drives</span>
@@ -1267,42 +1039,13 @@
       <div class="eff-scatter-stats" id="effScatterStats"></div>
     </article>
 
-    <article class="panel list-card non-demo-only">
+    <article class="panel list-card">
       <header>
         <span class="kicker">Maintenance</span>
       </header>
       <div id="maintenanceList" class="maintenance-list"></div>
     </article>
   </section>
-
-  <article class="panel ratio-card demo-only" hidden>
-    <div class="ring" style="--v: 91"><strong>91%</strong></div>
-    <div>
-      <span class="kicker">HV pack</span>
-      <h2>Capacity looks healthy.</h2>
-      <p class="status-copy">
-        16.8 kWh estimated usable, 8.7% loss, 684 cycles, cell 47 on watch.
-      </p>
-    </div>
-  </article>
-
-  <article class="panel list-card demo-only" hidden>
-    <header>
-      <div>
-        <span class="kicker">Cell voltage - 96 cells</span>
-        <h3>Delta 18 mV</h3>
-      </div>
-      <span class="badge"><span class="dot"></span><span>cell 47</span></span>
-    </header>
-    <div id="cellGrid" class="cell-grid"></div>
-  </article>
-
-  <article class="panel list-card demo-only" hidden>
-    <header>
-      <span class="kicker">What changed this month</span>
-    </header>
-    <div id="insightList" class="insight-list"></div>
-  </article>
 </section>
 <section id="view-settings" class="view" data-view="settings">
   <article class="panel connect-card">
@@ -1471,7 +1214,7 @@
     <pre id="rawFrames">Waiting for telemetry...</pre>
   </article>
 
-  <article class="panel setting-row non-demo-only" id="vehicleCard">
+  <article class="panel setting-row" id="vehicleCard">
     <div class="card-head">
       <div>
         <span class="kicker">Vehicle</span>
@@ -1495,16 +1238,6 @@
       </div>
       <div style="grid-column: 1 / -1">
         <span>VIN</span><strong id="vehicleVin">--</strong>
-      </div>
-    </div>
-  </article>
-
-  <article class="panel setting-row demo-only" hidden>
-    <div class="card-head">
-      <div>
-        <span class="kicker">Vehicle</span>
-        <h3>Sparky - 2017 Chevrolet Volt</h3>
-        <p class="status-copy">49,328 mi - 78% electric lifetime mix.</p>
       </div>
     </div>
   </article>

@@ -35,14 +35,14 @@ describe('drive.js', () => {
     expect(typeof VD.drawLiveSocTrace).toBe('function');
   });
 
-  it('renders an "Idle" chip when no adapter is connected and no demo is active', () => {
+  it('does not repeat an idle status chip on Drive (state lives in the top-bar pill)', () => {
     const VD = window.VoltDashboard;
     VD.renderDriveNowChips();
     const host = document.getElementById('driveNowChips');
-    expect(host.innerHTML).toContain('Idle');
-    // Tone attribute is what the CSS keys off — a missed tone would render
-    // the chip with the wrong color and not fail any other test.
-    expect(host.querySelector('[data-tone]')).not.toBeNull();
+    // Idle / "ready · remembered" is shown by the top-bar pill + slim last-connected line, so the
+    // Drive now-chips strip should not duplicate it. With no adapter and no history it is empty.
+    expect(host.innerHTML).not.toContain('Idle');
+    expect(host.children.length).toBe(0);
   });
 
   it('renders a "Demo preview" chip when state.demoActive is true', () => {

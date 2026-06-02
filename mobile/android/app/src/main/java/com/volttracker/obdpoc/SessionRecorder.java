@@ -136,7 +136,10 @@ final class SessionRecorder {
                 // Rollup row + diagnostic snapshot stamped at start. These are optional
                 // observability hooks — a failure here must not abort the core session start,
                 // since the .jsonl session row above is the source of truth for the run.
-                if (summaryStore != null) {
+                // Demo sessions are never summarized: they aren't real adapter connections, so
+                // letting them into the summary store pollutes the dashboard's "last connected"
+                // line (it would read "Demo stream - Nm ago") and recent-session history.
+                if (summaryStore != null && !ObdLocalStore.MODE_DEMO.equals(mode)) {
                     try {
                         summaryStore.recordStart(startedAtMs, activeAdapterName, activeAddress);
                     } catch (RuntimeException ex) {
@@ -191,8 +194,9 @@ final class SessionRecorder {
             String closingAddress = activeAddress;
             if (sessionLog.isOpen()) {
                 logEvent("session_end");
-                // Append a summary row for the dashboard's last-connected pill.
-                if (summaryStore != null) {
+                // Append a summary row for the dashboard's last-connected line — real sessions
+                // only; demo sessions are excluded to match the recordStart gate above.
+                if (summaryStore != null && !ObdLocalStore.MODE_DEMO.equals(closingMode)) {
                     try {
                         summaryStore.recordEnd(
                                 System.currentTimeMillis(),

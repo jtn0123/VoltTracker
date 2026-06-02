@@ -75,18 +75,8 @@ const REQUIRED_DOM = `
   <div id="screenTitle"></div>
 
   <select id="deviceSelect"></select>
-  <select id="driveModeSelect"><option value="ev">EV</option></select>
-  <div id="evRing"></div>
-  <div id="evRatioValue"></div>
 
   <div id="historyCard" hidden><div id="historyHint"></div><div id="historyList"></div></div>
-  <div id="homeTrips"></div>
-  <div id="tripList"></div>
-  <div id="hourBars"></div>
-  <div id="sessionList"></div>
-  <div id="homeInsights"></div>
-  <div id="insightList"></div>
-  <div id="cellGrid"></div>
 
   <div id="stateBadge"></div>
   <div id="stateText"></div>
@@ -242,8 +232,6 @@ const REQUIRED_DOM = `
   <button id="scanBtn"></button>
   <button id="connectBtn"></button>
   <button id="disconnectBtn"></button>
-  <button id="addChargeBtn"></button>
-  <div id="tripTabs"></div>
 
   <canvas id="speedCanvas"></canvas>
 `;

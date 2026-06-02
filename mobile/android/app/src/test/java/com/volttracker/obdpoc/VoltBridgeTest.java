@@ -51,6 +51,7 @@ public class VoltBridgeTest {
                             "restoreEncryptedBackup",
                             "getTrips",
                             "getInsights",
+                            "getTripRoute",
                             "clearStoredData",
                             "rememberDevice",
                             "connectLast",

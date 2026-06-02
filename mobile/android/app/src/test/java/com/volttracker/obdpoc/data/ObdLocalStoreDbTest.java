@@ -84,6 +84,31 @@ public class ObdLocalStoreDbTest {
     }
 
     @Test
+    public void getTripRouteJsonReturnsTheRouteForAnyStoredSession() throws Exception {
+        // The Trips screen loads a selected drive's route on demand (bypassing the recent-routes
+        // window) via getTripRouteJson — so any session with GPS must yield its route geometry.
+        long id = store.startSession("obd", "00:11", "Adapter");
+        store.recordTelemetry(id, sample(50, 1500, 32.70, -117.10, 1000));
+        store.recordTelemetry(id, sample(70, 1700, 32.74, -117.10, 2000));
+        store.recordTelemetry(id, sample(60, 1600, 32.78, -117.10, 3000));
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000, "");
+
+        JSONObject route = store.getTripRouteJson(id);
+        assertEquals(id, route.optJSONObject("session").optLong("id"));
+        assertTrue("route must carry >= 2 points", route.optInt("pointCount") >= 2);
+        assertEquals(route.optInt("pointCount"), route.optJSONArray("points").length());
+        assertTrue("route distance should be > 0", route.optDouble("distanceMeters") > 0);
+    }
+
+    @Test
+    public void getTripRouteJsonReturnsEmptyForUnknownSession() {
+        // Defensive: selecting a trip whose row is gone must not throw — it returns {} so the UI
+        // falls back to its "no route" state.
+        JSONObject route = store.getTripRouteJson(999_999L);
+        assertEquals(0, route.length());
+    }
+
+    @Test
     public void getTripsComputesDistanceAndMaxSpeed() throws Exception {
         long id = store.startSession("obd", "00:11", "Adapter");
         store.recordTelemetry(id, sample(50, 1500, 32.70, -117.10, 1000));

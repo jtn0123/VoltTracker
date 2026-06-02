@@ -28,6 +28,30 @@ public class TelemetryPayloadTest {
     }
 
     @Test
+    public void fromJsonPreservesGpsFieldsThroughSerialization() throws Exception {
+        // GPS reaches the dashboard as preserved telemetry extras (TelemetryPayload has no typed
+        // lat/lng fields). This is the channel the live GPS readout + the synthetic demo GPS both
+        // ride on, so a regression that dropped unknown fields would silently kill route/GPS UI.
+        JSONObject source =
+                new JSONObject()
+                        .put("source", "demo")
+                        .put("connected", true)
+                        .put("latitude", 32.7157)
+                        .put("longitude", -117.1611)
+                        .put("accuracyM", 6.0)
+                        .put("gpsSpeedMps", 14.2)
+                        .put("bearingDeg", 90.0);
+
+        JSONObject serialized = TelemetryPayload.fromJson(source).toJson();
+
+        assertEquals(32.7157, serialized.getDouble("latitude"), 1e-6);
+        assertEquals(-117.1611, serialized.getDouble("longitude"), 1e-6);
+        assertEquals(6.0, serialized.getDouble("accuracyM"), 1e-6);
+        assertEquals(14.2, serialized.getDouble("gpsSpeedMps"), 1e-6);
+        assertEquals(90.0, serialized.getDouble("bearingDeg"), 1e-6);
+    }
+
+    @Test
     public void fromJsonPreservesDiagnosticExtrasButDecouplesMutableSource() throws Exception {
         JSONObject source =
                 new JSONObject()

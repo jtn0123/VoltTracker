@@ -406,7 +406,47 @@ public class SessionRecorderTest {
                 store.statusCalls.size());
     }
 
+    /**
+     * Demo runs are never written to the session summary store: they aren't real adapter
+     * connections, so summarizing them would pollute the dashboard's "last connected" line (it
+     * would read "Demo stream - Nm ago"). A real session still produces exactly one summary row.
+     */
+    @Test
+    public void demoSessionsAreNotSummarized() {
+        SessionSummaryStore.resetForTests();
+        File filesDir =
+                new File(
+                        System.getProperty("java.io.tmpdir"), "summary-store-" + System.nanoTime());
+        filesDir.mkdirs();
+        SessionSummaryStore summary = SessionSummaryStore.getInstance(filesDir);
+
+        // A demo session open+close must leave the summary store empty.
+        SessionRecorder demo = newRecorderWithSummary(new RecordingStore(), "rec-demo", summary);
+        demo.openSession(ObdLocalStore.MODE_DEMO, "", "Demo stream", 1_000L);
+        demo.closeSession("complete", "demo done", "", 5);
+        demo.shutdown();
+        assertTrue(
+                "demo sessions must not appear in the summary store",
+                summary.getRecent(5).isEmpty());
+
+        // A real session must produce exactly one summary row carrying its adapter name.
+        SessionRecorder real = newRecorderWithSummary(new RecordingStore(), "rec-real", summary);
+        real.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "OBDLink MX+", 2_000L);
+        real.closeSession("complete", "ok", "0100", 42);
+        real.shutdown();
+        List<SessionSummary> recent = summary.getRecent(5);
+        assertEquals("real session must be summarized", 1, recent.size());
+        assertEquals("OBDLink MX+", recent.get(0).adapter);
+    }
+
     // ---- helpers ------------------------------------------------------------------
+
+    private SessionRecorder newRecorderWithSummary(
+            RecordingStore store, String dirName, SessionSummaryStore summary) {
+        File logsDir = new File(System.getProperty("java.io.tmpdir"), dirName + System.nanoTime());
+        logsDir.mkdirs();
+        return new SessionRecorder(new Object(), new ObdSessionLog(logsDir), store, summary, null);
+    }
 
     private SessionRecorder newOpenRecorder(RecordingStore store, String dirName) {
         File logsDir = new File(System.getProperty("java.io.tmpdir"), dirName);

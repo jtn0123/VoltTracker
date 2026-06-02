@@ -324,12 +324,6 @@
     color: var(--muted);
   }
 
-  .summary-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-  }
-
   .drive-signal-grid {
     display: grid;
     grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
@@ -396,20 +390,6 @@
     font-size: 31px;
   }
 
-  .ratio-stats {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 9px;
-  }
-
-  .ratio-stats div {
-    min-width: 0;
-    padding: 10px;
-    border-radius: var(--radius-md);
-    background: rgba(255,255,255,0.045);
-  }
-
-  .ratio-stats span,
   .status-meta span {
     display: block;
     color: var(--soft);
@@ -418,12 +398,6 @@
     font-weight: 760;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-  }
-
-  .ratio-stats b {
-    display: block;
-    margin-top: 5px;
-    font-size: 19px;
   }
 
   .status-card {
@@ -485,6 +459,20 @@
     background: transparent;
     color: var(--text);
     font-size: 13px;
+    /* A header action must keep its intrinsic width and never wrap — otherwise a long title
+       squeezes it to nothing and clips the label (e.g. the "map" link). Pairs with the
+       min-width:0 on the title block below so the title yields instead. App-wide across tabs. */
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  /* In every card header (list/charge cards and status/detail card-heads), let the leading
+     title block shrink so the trailing action stays fully visible instead of being clipped. */
+  .list-card header > :first-child,
+  .charge-card header > :first-child,
+  .status-head > :first-child,
+  .card-head > :first-child {
+    min-width: 0;
   }
 
   /* Accessibility wrapper: gives interactive rows a role="listitem" parent
@@ -494,7 +482,7 @@
     display: contents;
   }
 
-  .trip-row, .session-row, .history-row {
+  .history-row {
     width: 100%;
     display: grid;
     align-items: center;
@@ -506,17 +494,6 @@
     border-radius: 0;
     background: transparent;
     text-align: left;
-  }
-
-  .trip-row {
-    grid-template-columns: 10px minmax(0, 1fr) auto;
-  }
-
-  .session-row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
-
-  .history-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
@@ -1057,19 +1034,6 @@
     text-align: right;
   }
 
-  .trip-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--volt);
-    box-shadow: 0 0 12px var(--volt);
-  }
-
-  .trip-row[data-mode="mixed"] .trip-dot { background: var(--mixed); box-shadow: 0 0 12px var(--mixed); }
-  .trip-row[data-mode="gas"] .trip-dot { background: var(--gas); box-shadow: 0 0 12px var(--gas); }
-
-  .trip-row strong,
-  .session-row strong,
   .history-row strong {
     display: block;
     overflow: hidden;
@@ -1078,20 +1042,12 @@
     font-size: 14px;
   }
 
-  .trip-row small,
-  .session-row small,
   .history-row small {
     display: block;
     margin-top: 2px;
     color: var(--muted);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11px;
-  }
-
-  .trip-row b,
-  .session-row b {
-    font-size: 13px;
-    white-space: nowrap;
   }
 
   /* Live-tile stale indicator. Applied by telemetry.js when no fresh OBD

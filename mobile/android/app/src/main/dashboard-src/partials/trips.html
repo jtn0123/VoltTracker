@@ -1,5 +1,5 @@
 <section id="view-trips" class="view" data-view="trips">
-  <article id="tripsEmptyState" class="panel empty-state non-demo-only">
+  <article id="tripsEmptyState" class="panel empty-state">
     <span class="kicker">Trips</span>
     <h2>No real trips stored yet.</h2>
     <p>
@@ -8,7 +8,7 @@
       samples.
     </p>
   </article>
-  <article id="realTripsCard" class="panel list-card non-demo-only" hidden>
+  <article id="realTripsCard" class="panel list-card" hidden>
     <header>
       <div>
         <span class="kicker">Logged drives</span>
@@ -24,11 +24,7 @@
       aria-label="Logged drives"
     ></div>
   </article>
-  <section
-    id="realTripDetailGrid"
-    class="detail-grid real-trip-detail non-demo-only"
-    hidden
-  >
+  <section id="realTripDetailGrid" class="detail-grid real-trip-detail" hidden>
     <article class="panel route-card">
       <div class="card-head">
         <div>
@@ -56,72 +52,6 @@
         </div>
       </div>
       <div id="realTripEnergyRows" class="energy-rows"></div>
-    </article>
-  </section>
-  <article class="panel list-card demo-only" hidden>
-    <header>
-      <div>
-        <span class="kicker">April - 10 trips - 480 mi</span>
-        <h2>Trips</h2>
-      </div>
-    </header>
-    <div class="tabs" id="tripTabs" role="group" aria-label="Trip filter">
-      <button
-        type="button"
-        data-filter="all"
-        class="is-active"
-        aria-pressed="true"
-      >
-        All
-      </button>
-      <button type="button" data-filter="ev" aria-pressed="false">EV</button>
-      <button type="button" data-filter="mixed" aria-pressed="false">
-        Mixed
-      </button>
-      <button type="button" data-filter="gas" aria-pressed="false">Gas</button>
-    </div>
-    <div id="tripList" style="margin-top: 10px" role="list"></div>
-  </article>
-
-  <section class="detail-grid demo-only" hidden>
-    <article class="panel route-card">
-      <div class="card-head">
-        <div>
-          <span class="kicker">Route</span>
-          <h3 id="tripDetailTitle">Home -&gt; Office</h3>
-        </div>
-        <small id="tripDetailMeta" class="status-copy">18.4 mi</small>
-      </div>
-      <div class="route-box">
-        <span class="route-line"></span>
-        <span class="route-pin start"></span>
-        <span class="route-pin end"></span>
-      </div>
-    </article>
-
-    <article class="panel route-card">
-      <div class="card-head">
-        <div>
-          <span class="kicker">Energy</span>
-          <h3 id="tripEnergyTitle">241 Wh/mi</h3>
-        </div>
-      </div>
-      <div class="energy-rows">
-        <div><span>Propulsion</span><i style="width: 62%"></i><b>62%</b></div>
-        <div>
-          <span>HVAC</span><i style="width: 18%; background: #a4b8ff"></i
-          ><b>18%</b>
-        </div>
-        <div>
-          <span>Aux</span
-          ><i style="width: 5%; background: rgba(255, 255, 255, 0.32)"></i
-          ><b>5%</b>
-        </div>
-        <div>
-          <span>Regen</span><i style="width: 15%; background: var(--ok)"></i
-          ><b>-15%</b>
-        </div>
-      </div>
     </article>
   </section>
 </section>

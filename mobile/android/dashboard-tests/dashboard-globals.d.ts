@@ -88,17 +88,12 @@ declare global {
     setMeter?(id: string, value: unknown): boolean;
     setView?(view: string): void;
     updateViewHeading?(): void;
-    setMode?(mode: string): void;
     setDemoActive?(active: boolean, detail?: string): void;
     clearDemoTelemetry?(): void;
     ensureDemoData?(callback?: (data: any) => void): void;
     ensureDtcData?(): Promise<VoltDashboard>;
     dtcDataLoaded?(): boolean;
     dtcSearchUrl?(code: string): string;
-    renderTrips?(): void;
-    selectTrip?(id: string | number): void;
-    renderSessions?(): void;
-    renderInsights?(): void;
     setDevices?(payload: unknown): void;
     setHistory?(payload: unknown): void;
     selectDevice?(address: string, name?: string): void;
@@ -106,7 +101,6 @@ declare global {
     getSelectedDevice?(): any;
     relativeTime?(value: unknown): string;
     realViewMeta?: Record<string, [string, string]>;
-    demoViewMeta?: Record<string, [string, string]>;
 
     // ----- telemetry.js ------------------------------------------------------
     setStatus?(payload: VoltStatus): void;
@@ -179,6 +173,7 @@ declare global {
     exportDebugBundle(): string;
     getTrips(): string;
     getInsights(): string;
+    getTripRoute(sessionId: string): string;
     getRecentSessions(n: number): string;
 
     // void methods that hand work off to MainActivity / TroubleshooterBridge.

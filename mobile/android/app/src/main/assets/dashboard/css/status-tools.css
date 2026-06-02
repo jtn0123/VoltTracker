@@ -16,54 +16,66 @@
   margin-top: 6px;
 }
 
-.connection-status__badge {
+/* Slim one-line "last connected" affordance under the title: a small dot + adapter name + when,
+   on a single row, no boxed card. Replaces the old stacked .connection-status__badge so the
+   header reads as one quiet line rather than a second status block. */
+.connection-status__line {
   display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: inherit;
+  align-items: baseline;
+  gap: 7px;
+  padding: 2px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  min-height: 40px;
+  min-height: 0;
 }
 
-.connection-status__badge:focus-visible {
+.connection-status__line-dot {
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.connection-status__line[data-state="success"] .connection-status__line-dot {
+  background: var(--ok, #7ee06a);
+}
+
+.connection-status__line[data-state="failed"] .connection-status__line-dot {
+  background: var(--bad, #ff6b5f);
+}
+
+.connection-status__line:focus-visible {
   outline: 2px solid rgba(126, 224, 106, 0.7);
   outline-offset: 2px;
+  border-radius: 8px;
 }
 
-.connection-status__badge[data-state="success"] {
-  border-color: rgba(126, 224, 106, 0.35);
-}
-
-.connection-status__badge[data-state="failed"] {
-  border-color: rgba(255, 107, 95, 0.4);
-}
-
-.connection-status__badge .kicker {
-  font-size: 10px;
-  line-height: 1;
-  opacity: 0.7;
-}
-
-.connection-status__badge strong {
-  font-size: 13px;
+.connection-status__line strong {
+  font-size: 12.5px;
+  font-weight: 650;
   line-height: 1.1;
-  max-width: 180px;
+  color: var(--text);
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.connection-status__badge small {
+.connection-status__line small {
   font-size: 11px;
-  opacity: 0.65;
+  opacity: 0.7;
   line-height: 1;
+}
+
+.connection-status__line small::before {
+  content: "·";
+  margin-right: 6px;
+  opacity: 0.6;
 }
 
 .connection-status__pill {

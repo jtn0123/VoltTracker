@@ -251,6 +251,15 @@ public class ObdLocalStore implements Closeable, MaterializerData, ObdSessionSto
         return trips.insightsJson();
     }
 
+    /**
+     * Full route projection for one session, loaded on demand by session id. Lets the Trips screen
+     * preview any logged drive's route — including older drives outside the storage summary's
+     * recent-routes window. Returns {@code {}} for an unknown session.
+     */
+    public JSONObject getTripRouteJson(long sessionId) {
+        return reports.tripRouteJson(sessionId);
+    }
+
     // ---- materializer plumbing (delegated) -----------------------------------------
 
     @Override

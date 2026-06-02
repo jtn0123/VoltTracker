@@ -69,10 +69,9 @@
       .replace(/'/g, "&#39;");
   }
 
-  // Per-render AbortControllers so the listeners attached inside renderTrips()
-  // and setHistory() don't accumulate across re-renders. Each render aborts the
-  // previous batch before binding the new one.
-  let /** @type {any} */ tripsListController = null;
+  // Per-render AbortController so the listeners attached inside setHistory()
+  // don't accumulate across re-renders. Each render aborts the previous batch
+  // before binding the new one.
   let /** @type {any} */ historyController = null;
 
   function reportClientError(/** @type {any} */ label, /** @type {any} */ detail) {
@@ -245,8 +244,6 @@
   const state = {
     view: "drive",
     mode: "ev",
-    tripFilter: "all",
-    selectedTripId: 8421,
     selectedRealTripId: null,
     lastDevice: null,
     deviceHistory: [],
@@ -310,14 +307,6 @@
     charge: ["Real charging", "Charge"],
     insights: ["Vehicle health", "Insights"],
     settings: ["OBD bridge", "Diagnostics"]
-  };
-
-  /** @type {Record<string, [string, string]>} */
-  const demoViewMeta = {
-    ...realViewMeta,
-    trips: ["Preview sandbox", "Trips"],
-    charge: ["Preview sandbox", "Charge"],
-    insights: ["Preview sandbox", "Insights"]
   };
 
   /** @type {Record<string, string>} */
@@ -421,19 +410,12 @@
   }
 
   function updateViewHeading() {
-    const meta = (state.demoActive ? demoViewMeta : realViewMeta)[state.view] || realViewMeta.drive;
+    // Demo uses the same headings as real — it only simulates numbers, it doesn't relabel the UI.
+    const meta = realViewMeta[state.view] || realViewMeta.drive;
     setText("screenKicker", meta[0]);
     setText("screenTitle", meta[1]);
     const icon = el("screenTitleIcon");
     if (icon) icon.setAttribute("d", viewIconPaths[state.view] || viewIconPaths.drive);
-  }
-
-  function setMode(/** @type {any} */ mode) {
-    state.mode = mode;
-    queryAll("[data-mode]").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.mode === mode));
-    const ratio = mode === "ev" ? 78 : 22;
-    el("evRing").style.setProperty("--v", ratio);
-    setText("evRatioValue", ratio + "%");
   }
 
   function setDemoActive(/** @type {any} */ active, /** @type {any} */ detail) {
@@ -441,12 +423,9 @@
     const changed = state.demoActive !== next;
     state.demoActive = next;
     document.body.classList.toggle("demo-active", next);
-    queryAll(".demo-only").forEach((node) => {
-      node.hidden = !next;
-    });
-    queryAll(".non-demo-only").forEach((node) => {
-      node.hidden = next;
-    });
+    // Demo no longer swaps in a parallel mockup UI: it streams demo telemetry through the same
+    // real components, so the real UI stays on screen and only the live numbers animate. (The old
+    // .demo-only / .non-demo-only show/hide swap and its mockup cards have been removed.)
     const banner = el("demoBanner");
     if (banner) banner.hidden = !next;
     const bannerStop = el("demoStopBtn");
@@ -461,9 +440,6 @@
     if (detail) VD.setStatus({ state: next ? "demo" : "ready", detail });
     if (!changed) return;
     updateViewHeading();
-    renderTrips();
-    renderSessions();
-    renderInsights();
     VD.updateLiveUi();
     VD.drawTrace();
     VD.loadTrips();
@@ -496,147 +472,6 @@
     state.sessionDistanceM = 0;
     state.sessionLastLat = null;
     state.sessionLastLng = null;
-  }
-
-  function renderTrips() {
-    // Abort any listeners attached by the previous render so they don't
-    // leak when the trip list is rebuilt.
-    tripsListController?.abort();
-    tripsListController = new AbortController();
-    const home = el("homeTrips");
-    const list = el("tripList");
-    if (!state.demoActive) {
-      home.replaceChildren();
-      list.replaceChildren();
-      return;
-    }
-    home.replaceChildren(...data.trips.slice(0, 5).map(buildTripRow));
-    const filtered = data.trips.filter((trip) => state.tripFilter === "all" || trip.mode === state.tripFilter);
-    list.replaceChildren(...filtered.map(buildTripRow));
-    queryAll("[data-trip-id]").forEach((button) => {
-      button.addEventListener("click", () => selectTrip(Number(button.dataset.tripId)), { signal: tripsListController.signal });
-    });
-    selectTrip(state.selectedTripId);
-  }
-
-  // Wrap an interactive row in a listitem so a role="list" container has valid
-  // listitem children WITHOUT clobbering the inner control's native role (a
-  // <button role="listitem"> stops being announced as a button). The wrapper
-  // is display:contents (see components.css) so it adds no layout box.
-  function listItemWrap(/** @type {HTMLElement} */ node) {
-    const item = document.createElement("div");
-    item.className = "list-row-item";
-    item.setAttribute("role", "listitem");
-    item.appendChild(node);
-    return item;
-  }
-
-  // Build a demo-trip row via DOM APIs instead of innerHTML += template
-  // literals, so user-provided fields never get re-interpreted as markup.
-  function buildTripRow(/** @type {any} */ trip) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "trip-row";
-    button.dataset.tripId = String(trip.id);
-    button.dataset.mode = trip.mode;
-    const dot = document.createElement("span");
-    dot.className = "trip-dot";
-    const center = document.createElement("span");
-    const strong = document.createElement("strong");
-    strong.textContent = trip.label;
-    const small = document.createElement("small");
-    small.textContent = `${trip.date} - ${trip.miles} mi - ${trip.mins}m`;
-    center.append(strong, small);
-    const right = document.createElement("b");
-    right.textContent = trip.efficiency;
-    button.append(dot, center, right);
-    return listItemWrap(button);
-  }
-
-  function selectTrip(/** @type {any} */ id) {
-    state.selectedTripId = id;
-    const trip = data.trips.find((item) => item.id === id) || data.trips[0];
-    if (!trip) return;
-    setText("tripDetailTitle", trip.label);
-    setText("tripDetailMeta", `${trip.date} - ${trip.miles} mi - ${trip.mins} min`);
-    setText("tripEnergyTitle", trip.wh ? `${trip.wh} Wh/mi` : trip.efficiency);
-  }
-
-  function renderSessions() {
-    const bars = el("hourBars");
-    const list = el("sessionList");
-    if (!state.demoActive) {
-      bars.replaceChildren();
-      list.replaceChildren();
-      return;
-    }
-    bars.replaceChildren(...data.hourly.map((height, index) => {
-      const off = index >= 21 || index < 6;
-      const span = document.createElement("span");
-      if (off) span.className = "is-offpeak";
-      span.style.height = height + "%";
-      return span;
-    }));
-    const sessions = Array.isArray(state.demoSessions) ? state.demoSessions : data.sessions;
-    list.replaceChildren(...sessions.map(buildSessionRow));
-  }
-
-  function buildSessionRow(/** @type {any} */ s) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "session-row";
-    const badge = document.createElement("span");
-    badge.className = "session-badge";
-    badge.textContent = s.type;
-    const center = document.createElement("span");
-    const strong = document.createElement("strong");
-    strong.textContent = s.location;
-    const small = document.createElement("small");
-    small.textContent = `${s.date} - SOC ${s.soc}%`;
-    center.append(strong, small);
-    const right = document.createElement("b");
-    // Original markup was `${kwh} kWh<br>${cost}`; reproduce via a real <br>.
-    right.append(document.createTextNode(`${s.kwh} kWh`), document.createElement("br"), document.createTextNode(s.cost));
-    button.append(badge, center, right);
-    return listItemWrap(button);
-  }
-
-  function renderInsights() {
-    const home = el("homeInsights");
-    const list = el("insightList");
-    const cells = el("cellGrid");
-    if (!state.demoActive) {
-      home.replaceChildren();
-      list.replaceChildren();
-      cells.replaceChildren();
-      return;
-    }
-    list.replaceChildren(...data.insights.map((item) => buildInsightArticle(item, true)));
-    home.replaceChildren(...data.insights.slice(0, 3).map((item) => buildInsightArticle(item, false)));
-    cells.replaceChildren(...Array.from({ length: 96 }).map((_, i) => {
-      const watch = i + 1 === 47;
-      const c = watch ? 0.8 : 0.16 + ((i * 13 + 5) % 9) / 14;
-      const span = document.createElement("span");
-      span.className = "cell" + (watch ? " is-watch" : "");
-      span.style.setProperty("--c", String(c));
-      return span;
-    }));
-  }
-
-  function buildInsightArticle(/** @type {any} */ item, /** @type {any} */ includePanelClass) {
-    const article = document.createElement("article");
-    article.className = (includePanelClass ? "panel insight" : "insight") + (item.kind === "warn" ? " warn" : "");
-    const icon = document.createElement("span");
-    icon.className = "insight-icon";
-    icon.textContent = item.icon;
-    const body = document.createElement("span");
-    const strong = document.createElement("strong");
-    strong.textContent = item.title;
-    const p = document.createElement("p");
-    p.textContent = item.body;
-    body.append(strong, p);
-    article.append(icon, body);
-    return article;
   }
 
   function setDevices(/** @type {any} */ payload) {
@@ -718,20 +553,14 @@
     setMeter,
     setView,
     updateViewHeading,
-    setMode,
     setDemoActive,
     clearDemoTelemetry,
     ensureDemoData,
     ensureDtcData,
     dtcDataLoaded,
     dtcSearchUrl,
-    renderTrips,
-    selectTrip,
-    renderSessions,
-    renderInsights,
     setDevices,
     setHistory,
-    realViewMeta,
-    demoViewMeta
+    realViewMeta
   });
 })();

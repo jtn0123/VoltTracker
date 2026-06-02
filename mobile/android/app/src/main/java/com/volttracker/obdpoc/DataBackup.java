@@ -4,6 +4,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
+import com.volttracker.obdpoc.data.BackupMigrator;
 import com.volttracker.obdpoc.data.ObdLocalStore;
 import java.io.File;
 import java.io.FileInputStream;
@@ -233,6 +234,18 @@ final class DataBackup {
                 return null;
             }
             temp.delete();
+        }
+        // A backup from an older app version carries forward-compatible data but an older schema
+        // version. Upgrade it to the current schema (reusing the app's own migrations) before the
+        // strict current-version validation, so restoring/merging a pre-update backup works
+        // instead of being silently rejected. Anything newer-than-app or not-a-backup is refused.
+        BackupMigrator.Result migration =
+                BackupMigrator.migrateToCurrentVersion(context, candidate);
+        if (migration == BackupMigrator.Result.TOO_NEW
+                || migration == BackupMigrator.Result.NOT_A_BACKUP
+                || migration == BackupMigrator.Result.FAILED) {
+            candidate.delete();
+            return null;
         }
         if (!isVoltTrackerBackup(candidate)) {
             candidate.delete();
