@@ -16,6 +16,7 @@ context.
 | `archive/android-polish-30-issues.md` | 2026-05-22 | Historical backlog | Earlier Android polish list. Superseded by later polish passes where duplicated. |
 | `field-test-2026-05-19.md` | 2026-05-19 | Field-test reference | Real-world test notes and observations. |
 
-For current graded improvement IDs, use the repo-local `.Codex/grade-report.md`.
+For a fresh graded audit with addressable improvement IDs, run the
+`grade-codebase` skill; its report is written to a repo-local, gitignored path.
 Historical audit reports live under `archive/` so they stay available without
 looking like current implementation guidance.

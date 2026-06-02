@@ -53,10 +53,9 @@ receiver/logs/
 logs/
 *.log
 
-# Local Codex validation evidence
-.codex-ui-validation/*
-!.codex-ui-validation/
-!.codex-ui-validation/validation-report.md
+# Local Codex/agent scratch reports — keep on disk, out of the repo
+.codex-ui-validation/
+.Codex/
 
 # Backups
 backups/
