@@ -1,6 +1,83 @@
 # CHANGELOG
 
 
+## v0.6.1 (2026-06-02)
+
+### Bug Fixes
+
+- **android**: Drop background tasks submitted after executor shutdown
+  ([#162](https://github.com/jtn0123/VoltTracker/pull/162),
+  [`112bed6`](https://github.com/jtn0123/VoltTracker/commit/112bed647fa4c4c115043d4c524c928b77d412fb))
+
+onDestroy() calls backgroundExecutor.shutdownNow(), but the WebView's dashboardReady handshake (and
+  late status broadcasts) can still fire afterwards and route through publishStorageSummary() ->
+  runStorageSummaryRefresh(), which submitted to that executor. On a terminated executor that throws
+  RejectedExecutionException on the main thread and crashes the process — the recurring
+  emulator-smoke failure (the app booted, logged "JS is live", then crashed during teardown).
+
+Route every internal backgroundExecutor.execute(...) through a new submitBackground() helper that
+  catches RejectedExecutionException and drops the task: when the executor is gone the Activity is
+  tearing down and there's no UI left to refresh, so dropping is correct.
+
+Regression test (MainActivityTeardownTest): build the Activity, destroy it (shuts the executor
+  down), then onDashboardReady()/publishStorageSummary() and a late runOnBackground() must complete
+  without throwing. Full unit suite + JaCoCo pass.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+### Testing
+
+- **android**: Add Playwright dashboard e2e suite + CI gate
+  ([#160](https://github.com/jtn0123/VoltTracker/pull/160),
+  [`59d51b5`](https://github.com/jtn0123/VoltTracker/commit/59d51b57d62f509341b8c633f083ac055f45ab65))
+
+Adds mobile/android/dashboard-e2e/: a Playwright suite that renders the REAL generated dashboard
+  (index.html + css + js) in headless Chromium and asserts actual rendered layout + interaction —
+  the regression net for UI bugs the jsdom suite (dashboard-tests) physically can't see (box sizes,
+  clipping, real computed styles).
+
+Why a real browser: jsdom has no layout engine, so the field bugs we just fixed (a chip rendered as
+  a tall empty box, a clipped header action, a "full" bar next to a "--" value) are invisible to it.
+  These specs catch that whole class.
+
+Served over HTTP (python3 -m http.server) rather than file:// so the dashboard's `script-src 'self'`
+  CSP resolves the way the Android WebView resolves file:///android_asset (desktop Chromium blocks
+  'self' for file:// origins).
+
+Specs (9 tests, all layout/functional — deterministic across OSes): - trips: chips are compact
+  (rendered height < 96px, i.e. no reserved empty map box), summary bars proportional with a 0-width
+  bar for "--", "map" action not clipped. - header: top inset clears the status bar, adapter-health
+  pill gone, slim single-line last-connected, header actions unclipped on the Charge tab. - demo:
+  streamed telemetry renders in the real Drive cluster (incl. GPS lock), and the removed demo-mockup
+  chrome (evRing/mode-toggle/tripList) is absent.
+
+CI: new dashboard-e2e job in android.yml (npm ci + playwright install chromium + test), added to the
+  required ci-success gate. Screenshot diffs are configured but not used yet (font-sensitive; need
+  per-platform baselines) — functional/layout assertions only for now.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+- **android**: Broaden Playwright e2e to Map/Charge/Insights + interactions
+  ([#161](https://github.com/jtn0123/VoltTracker/pull/161),
+  [`9f9369d`](https://github.com/jtn0123/VoltTracker/commit/9f9369d404e3317fc3fde536723c1e43d583eba8))
+
+Extends the dashboard-e2e suite (9 -> 19 tests) across more screens and real click flows:
+
+- map.spec.js: empty state ("No GPS route yet"); a logged drive renders the route summary (point
+  badge, distance, stops) with the map canvas mounted; layer tabs switch the active layer. (Avoids
+  asserting Leaflet's internal tiles — network/ size/timing dependent, not the regression we care
+  about.) - charge-insights.spec.js: charge empty state vs KPIs from chargeSummary
+  (sessions/hints/power/status); insights "--" placeholders vs aggregate stats (trip count, top
+  speed, GPS-trip ratio). - interactions.spec.js: bottom-nav switches the active view; Start/Stop
+  demo toggles demoActive and calls bridge.demo; "Restore file" calls bridge.restoreBackup. (The
+  Replace/Merge dialog itself is a native AlertDialog, out of Playwright's reach — only the
+  web->bridge wiring is asserted here.)
+
+All functional/layout assertions (deterministic across OSes). 19/19 pass.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.6.0 (2026-06-02)
 
 ### Chores
