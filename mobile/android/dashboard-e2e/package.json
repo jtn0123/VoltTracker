@@ -1,0 +1,15 @@
+{
+  "name": "volttracker-dashboard-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright end-to-end + visual tests that render the real dashboard index.html in headless Chromium. Catches layout/rendering/interaction regressions that the jsdom unit suite (dashboard-tests) cannot see.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:update": "playwright test --update-snapshots",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1"
+  }
+}

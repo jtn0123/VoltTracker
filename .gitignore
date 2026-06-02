@@ -46,6 +46,8 @@ Thumbs.db
 e2e/node_modules/
 e2e/playwright-report/
 e2e/test-results/
+mobile/android/dashboard-e2e/playwright-report/
+mobile/android/dashboard-e2e/test-results/
 e2e/dist/
 receiver/logs/
 
