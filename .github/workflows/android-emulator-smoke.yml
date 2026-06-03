@@ -1,13 +1,11 @@
 name: Android emulator smoke
 
-# STATUS: ADVISORY (not a required check) — intentionally, for now.
+# STATUS: SUPPLEMENTAL scheduled smoke. The pull-request-required WebView smoke
+# lives in `.github/workflows/android.yml` and is included in `ci-success`.
 #
-# This job runs on dashboard/startup PRs (see the path filter below) and weekly,
-# but it is deliberately NOT part of the `ci-success` aggregate in
-# android.yml. Branch protection requires only `ci-success`, which needs
-# [unit-tests, dashboard-tests] — so a red emulator-smoke does NOT block merges
-# today. That is on purpose until the emulator lane proves stable on CI
-# hardware (emulator boots / KVM availability are historically flaky).
+# This job still runs on dashboard/startup PRs and weekly as an extra artifact
+# source, but the authoritative required lane is the `emulator-smoke` job in
+# android.yml. Keep the script contract aligned between both jobs.
 #
 # TEST CONTRACT: the smoke's pass signal is the exact logcat line
 # "dashboard handshake received" (emitted by MainActivity.onDashboardReady,
@@ -15,19 +13,6 @@ name: Android emulator smoke
 # job — change both sides in the same commit. See that script's header and
 # mobile/android/docs/data-model.md.
 #
-# PROMOTING TO REQUIRED (do this once the lane has been green/stable for a
-# stretch of dashboard PRs):
-#   1. Add `emulator-smoke` to the `needs:` list of the `ci-success` job in
-#      .github/workflows/android.yml, AND add a
-#      `needs.emulator-smoke.result == "success"` check there.
-#      NOTE: because this job is path-filtered, on a PR that does NOT touch the
-#      dashboard the job is SKIPPED, not run. A naive `!= "success"` check would
-#      then fail `ci-success` on every unrelated PR. Treat "skipped" as a pass
-#      (e.g. allow result in (success, skipped)) before wiring it in.
-#   2. Once `ci-success` reliably reflects this job, no branch-protection edit is
-#      needed — protection already requires only `ci-success`.
-# Until both are done, leave this job advisory.
-
 on:
   schedule:
     - cron: '30 14 * * 1'

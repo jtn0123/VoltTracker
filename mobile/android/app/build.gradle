@@ -123,6 +123,7 @@ android {
 apply from: "jacoco.gradle"
 
 dependencies {
+    implementation libs.androidx.activity
     // FileProvider, for handing the data-backup file to the Android share sheet.
     implementation libs.androidx.core
     testImplementation libs.junit

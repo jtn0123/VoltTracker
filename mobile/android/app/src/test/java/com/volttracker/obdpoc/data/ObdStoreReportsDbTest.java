@@ -118,6 +118,27 @@ public class ObdStoreReportsDbTest {
     }
 
     @Test
+    public void latestTelemetryIncludesStoredPackVoltageAndCurrent() throws Exception {
+        long id = store.startSession("obd", "00:11", "Adapter");
+        JSONObject sample = sample(40, 50.0, 32.70, -117.10, 1000L);
+        sample.put("packVoltage", 352.4d);
+        sample.put("packCurrentA", -8.25d);
+        store.recordTelemetry(id, sample);
+
+        JSONObject summary =
+                com.volttracker.obdpoc.StorageSummaryJson.build(store.getStorageSummaryRecord());
+        JSONObject overviewLatest =
+                summary.getJSONObject("overview").getJSONObject("latestTelemetry");
+        assertEquals(352.4d, overviewLatest.optDouble("packVoltage"), 0.001);
+        assertEquals(-8.25d, overviewLatest.optDouble("packCurrentA"), 0.001);
+
+        JSONObject batteryLatest =
+                summary.getJSONObject("batterySummary").getJSONObject("latestTelemetry");
+        assertEquals(352.4d, batteryLatest.optDouble("packVoltage"), 0.001);
+        assertEquals(-8.25d, batteryLatest.optDouble("packCurrentA"), 0.001);
+    }
+
+    @Test
     public void insightsReportsRightMaxSpeedAndDistance() throws Exception {
         long id = store.startSession("obd", "00:11", "Adapter");
         store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L));

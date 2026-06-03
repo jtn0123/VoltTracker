@@ -178,14 +178,11 @@ jobs:
           if-no-files-found: ignore
 
   dashboard-visual:
-    # ADVISORY pixel-screenshot regression for the reworked dashboard surfaces (Playwright
+    # Required pixel-screenshot regression for the reworked dashboard surfaces (Playwright
     # toHaveScreenshot). Pinned to a fixed ubuntu image so font rendering matches the committed
     # baselines; the @playwright/test pin fixes the Chromium build. Baselines are Linux-only
     # (see .gitignore) and generated here — on the first run (or a real visual change) this job
     # fails and uploads the produced *-linux.png so they can be reviewed/committed.
-    #
-    # Intentionally NOT in ci-success yet (advisory) — promote once baselines are committed and
-    # the signal is proven stable.
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -214,16 +211,10 @@ jobs:
           if-no-files-found: ignore
 
   gradle-dependency-audit:
-    # ADVISORY dependency-vulnerability scan for the Gradle/Java side — the
+    # Required dependency-vulnerability scan for the Gradle/Java side — the
     # counterpart to the npm `npm audit --audit-level=high` gate in the
-    # dashboard-tests job above. The Java tree had NO CVE gate, so a known-
-    # vulnerable transitive dep could land unnoticed.
-    #
-    # Intentionally NON-BLOCKING for now: `continue-on-error: true` on the scan
-    # step means a finding is surfaced (annotations + uploaded SARIF) but does
-    # NOT fail the job, and this job is NOT in `ci-success`'s `needs:` below — so
-    # it cannot block merges yet. Promote it to gating (drop continue-on-error
-    # and/or add to ci-success) once the signal is proven low-noise.
+    # dashboard-tests job above. A known-vulnerable transitive dependency now
+    # fails ci-success instead of landing as an advisory artifact only.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -245,12 +236,10 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon :app:dependencies \
             --configuration releaseRuntimeClasspath --write-locks
-      - name: OSV vulnerability scan (advisory)
+      - name: OSV vulnerability scan
         id: osv
-        continue-on-error: true
         # Scans the generated Gradle lockfile for dependencies with known advisories
-        # in the OSV database. Advisory-only: continue-on-error keeps a finding from
-        # failing the job while we evaluate the signal.
+        # in the OSV database.
         uses: google/osv-scanner-action/osv-scanner-action@e69cc6c86b31f1e7e23935bbe7031b50e51082de # v2.0.2
         with:
           scan-args: |-
@@ -265,23 +254,74 @@ jobs:
             results.sarif
           if-no-files-found: ignore
 
+  emulator-smoke:
+    # Required WebView startup smoke for the file:// dashboard path. It installs
+    # the debug APK on an emulator and asserts the dashboard JS reaches the
+    # native "dashboard handshake received" logcat marker.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --configuration-cache :app:assembleDebug
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Launch app and assert the dashboard JS comes alive
+        uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2.37.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect
+          script: bash mobile/android/scripts/emulator-smoke.sh
+      - name: Upload emulator smoke logcat
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: emulator-smoke-logcat
+          path: mobile/android/build/emulator-smoke-logcat.txt
+          if-no-files-found: ignore
+
   ci-success:
     # Single aggregate status so branch protection only needs to require one
     # check ("ci-success") instead of enumerating every lane. Adding a new test
     # job just means adding it to `needs:` here — no branch-protection edit.
     #
-    # NOTE: gradle-dependency-audit is intentionally NOT listed here — it is an
-    # advisory (non-blocking) scan. Add it once its findings are proven stable.
     if: always()
-    needs: [unit-tests, dashboard-tests, dashboard-e2e]
+    needs:
+      [
+        unit-tests,
+        dashboard-tests,
+        dashboard-e2e,
+        dashboard-visual,
+        gradle-dependency-audit,
+        emulator-smoke,
+      ]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required jobs passed
         run: |
           if [ "${{ needs.unit-tests.result }}" != "success" ] \
             || [ "${{ needs.dashboard-tests.result }}" != "success" ] \
-            || [ "${{ needs.dashboard-e2e.result }}" != "success" ]; then
-            echo "unit-tests=${{ needs.unit-tests.result }} dashboard-tests=${{ needs.dashboard-tests.result }} dashboard-e2e=${{ needs.dashboard-e2e.result }}"
+            || [ "${{ needs.dashboard-e2e.result }}" != "success" ] \
+            || [ "${{ needs.dashboard-visual.result }}" != "success" ] \
+            || [ "${{ needs.gradle-dependency-audit.result }}" != "success" ] \
+            || [ "${{ needs.emulator-smoke.result }}" != "success" ]; then
+            echo "unit-tests=${{ needs.unit-tests.result }} dashboard-tests=${{ needs.dashboard-tests.result }} dashboard-e2e=${{ needs.dashboard-e2e.result }} dashboard-visual=${{ needs.dashboard-visual.result }} gradle-dependency-audit=${{ needs.gradle-dependency-audit.result }} emulator-smoke=${{ needs.emulator-smoke.result }}"
             echo "::error::One or more required CI jobs did not succeed."
             exit 1
           fi

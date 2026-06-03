@@ -54,9 +54,9 @@
 
   function readRemoteTilesPreference() {
     try {
-      return window.localStorage.getItem("volttracker.map.remoteTiles") !== "0";
+      return window.localStorage.getItem("volttracker.map.remoteTiles") === "1";
     } catch (_err) {
-      return true;
+      return false;
     }
   }
 

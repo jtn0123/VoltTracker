@@ -2,8 +2,13 @@ package com.volttracker.obdpoc;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.os.Bundle;
+import java.io.File;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.After;
@@ -14,6 +19,7 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
+import org.robolectric.shadows.ShadowAlertDialog;
 
 /**
  * A1 — exercises the trivial branches of {@link TroubleshooterBridge} so the new code added by the
@@ -27,13 +33,16 @@ import org.robolectric.annotation.Config;
 @Config(sdk = 34)
 public class TroubleshooterBridgeTest {
 
-    private ActivityController<MainActivity> controller;
+    private ActivityController<HarnessActivity> controller;
     private TroubleshooterBridge bridge;
 
     @Before
     public void setUp() {
-        controller = Robolectric.buildActivity(MainActivity.class).create();
-        MainActivity activity = controller.get();
+        controller = Robolectric.buildActivity(HarnessActivity.class).create();
+        HarnessActivity activity = controller.get();
+        wipe(new File(activity.getFilesDir(), "obd-logs"));
+        wipe(new File(activity.getFilesDir(), "app-log"));
+        wipe(new File(activity.getCacheDir(), "diagnostics"));
         bridge = new TroubleshooterBridge(activity);
     }
 
@@ -43,6 +52,10 @@ public class TroubleshooterBridgeTest {
             bridge.shutdown();
         }
         if (controller != null) {
+            MainActivity activity = controller.get();
+            wipe(new File(activity.getFilesDir(), "obd-logs"));
+            wipe(new File(activity.getFilesDir(), "app-log"));
+            wipe(new File(activity.getCacheDir(), "diagnostics"));
             controller.destroy();
         }
     }
@@ -95,6 +108,20 @@ public class TroubleshooterBridgeTest {
         // DiagnosticsShareIntent returns null when no logs exist yet; bridge surfaces a
         // status broadcast rather than throwing. We just want the no-throw guarantee here.
         bridge.shareDiagnostics();
+    }
+
+    @Test
+    public void diagnosticsShareShowsDisclosureBeforeChooser() {
+        bridge.showDiagnosticsDisclosure(new Intent(Intent.ACTION_SEND));
+
+        AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
+        assertNotNull("diagnostics share should show a disclosure first", dialog);
+        assertTrue(dialog.isShowing());
+        assertEquals(
+                "Share anyway", dialog.getButton(AlertDialog.BUTTON_POSITIVE).getText().toString());
+        assertTrue(
+                "message should disclose raw telemetry/GPS contents",
+                bridge.diagnosticsDisclosureMessage().contains("Raw telemetry"));
     }
 
     @Test
@@ -172,6 +199,37 @@ public class TroubleshooterBridgeTest {
             return new JSONObject().put("state", state);
         } catch (org.json.JSONException ex) {
             throw new AssertionError(ex);
+        }
+    }
+
+    private static void wipe(File f) {
+        if (f == null || !f.exists()) {
+            return;
+        }
+        if (f.isDirectory()) {
+            File[] kids = f.listFiles();
+            if (kids != null) {
+                for (File k : kids) {
+                    wipe(k);
+                }
+            }
+        }
+        boolean ignored = f.delete();
+    }
+
+    public static class HarnessActivity extends MainActivity {
+        String lastState;
+        String lastDetail;
+
+        @Override
+        protected void onCreate(Bundle savedInstanceState) {
+            deviceCatalog = new DeviceCatalog(this, getSharedPreferences("troubleshooter-test", 0));
+        }
+
+        @Override
+        void publishStatus(String state, String detail, boolean blocked) {
+            lastState = state;
+            lastDetail = detail;
         }
     }
 }

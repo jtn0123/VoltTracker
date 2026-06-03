@@ -1,7 +1,6 @@
 package com.volttracker.obdpoc;
 
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -16,6 +15,10 @@ import android.util.Log;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
+import androidx.activity.ComponentActivity;
+import androidx.activity.result.ActivityResult;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -29,7 +32,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-public class MainActivity extends Activity {
+public class MainActivity extends ComponentActivity {
     static final String TAG = "VoltTracker";
     private static final String PREFS = "volt_obd_prefs";
 
@@ -41,6 +44,7 @@ public class MainActivity extends Activity {
     BackupController backupController;
     PermissionGate permissionGate;
     ObdLocalStore localStore;
+    private ActivityResultLauncher<Intent> restoreFilePicker;
 
     /** Troubleshooter and proactive connection helpers extracted from this Activity. */
     TroubleshooterBridge troubleshooter;
@@ -137,6 +141,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        restoreFilePicker =
+                registerForActivityResult(
+                        new ActivityResultContracts.StartActivityForResult(),
+                        this::onRestoreFilePicked);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         deviceCatalog = new DeviceCatalog(this, prefs);
         dataBackup = new DataBackup(this);
@@ -268,14 +276,26 @@ public class MainActivity extends Activity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PermissionGate.REQUEST_CODE) {
             publishDeviceList();
-            if (deviceCatalog.hasBluetoothConnectPermission()) {
-                publishStatus(
-                        "ready", "Bluetooth permission granted. Pick a paired adapter.", false);
-            } else {
+            if (!permissionGate.hasBluetoothConnect()) {
                 publishStatus(
                         "blocked",
                         "Bluetooth permission is required to talk to the OBD adapter.",
                         true);
+            } else if (!permissionGate.hasLocation()) {
+                publishStatus(
+                        "ready",
+                        "Bluetooth permission granted. Location is still off, so trips may not"
+                                + " show a route.",
+                        false);
+            } else if (!permissionGate.hasNotifications()) {
+                publishStatus(
+                        "ready",
+                        "Bluetooth permission granted. Notifications are still off, so background"
+                                + " logging may be quieter.",
+                        false);
+            } else {
+                publishStatus(
+                        "ready", "Bluetooth permission granted. Pick a paired adapter.", false);
             }
         }
     }
@@ -325,7 +345,12 @@ public class MainActivity extends Activity {
             try {
                 startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE));
             } catch (Exception ignored) {
-                startActivity(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));
+                try {
+                    startActivity(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));
+                } catch (Exception settingsIgnored) {
+                    publishStatus(
+                            "blocked", "Open Android Bluetooth settings, then try again.", true);
+                }
             }
             return;
         }
@@ -392,7 +417,14 @@ public class MainActivity extends Activity {
     void stopObdService() {
         Intent service = new Intent(this, ObdService.class);
         service.setAction(ObdService.ACTION_DISCONNECT);
-        startService(service);
+        try {
+            startService(service);
+        } catch (IllegalStateException ignored) {
+            publishStatus(
+                    "ready",
+                    "Stop request noted; reopen the app if logging is still active.",
+                    false);
+        }
     }
 
     // ===== Troubleshooter and connection-tool bridge helpers ==================
@@ -592,10 +624,12 @@ public class MainActivity extends Activity {
         }
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        backupController.onActivityResult(requestCode, resultCode, data);
+    void launchRestoreFilePicker(Intent intent) {
+        restoreFilePicker.launch(intent);
+    }
+
+    private void onRestoreFilePicked(ActivityResult result) {
+        backupController.onRestorePickerResult(result.getResultCode(), result.getData());
     }
 
     /** True while an OBD logging session is connecting or active. */

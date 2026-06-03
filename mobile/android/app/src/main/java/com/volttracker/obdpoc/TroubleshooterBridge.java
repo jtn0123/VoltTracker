@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc;
 
 import android.app.ActivityManager;
+import android.app.AlertDialog;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -230,10 +231,45 @@ final class TroubleshooterBridge {
                         true);
                 return;
             }
-            activity.startActivity(Intent.createChooser(share, "Share diagnostics"));
+            showDiagnosticsDisclosure(share);
         } catch (RuntimeException ex) {
             Log.w(MainActivity.TAG, "shareDiagnostics failed", ex);
             activity.publishStatus("blocked", "Could not build the diagnostics share.", true);
+        }
+    }
+
+    String diagnosticsDisclosureMessage() {
+        return "This diagnostics bundle may include:\n"
+                + "• Recent JSONL session logs and app logs\n"
+                + "• OBD commands, adapter state, and Bluetooth adapter addresses\n"
+                + "• Raw telemetry, diagnostic trouble codes, and GPS samples\n"
+                + "\n"
+                + "Only share it with someone you trust to debug your vehicle data.";
+    }
+
+    void showDiagnosticsDisclosure(Intent share) {
+        try {
+            new AlertDialog.Builder(activity)
+                    .setTitle("Share Volt Tracker diagnostics")
+                    .setMessage(diagnosticsDisclosureMessage())
+                    .setPositiveButton(
+                            "Share anyway",
+                            (dialog, which) ->
+                                    activity.startActivity(
+                                            Intent.createChooser(share, "Share diagnostics")))
+                    .setNegativeButton(
+                            "Cancel",
+                            (dialog, which) ->
+                                    activity.publishStatus(
+                                            "ready", "Diagnostics share cancelled.", false))
+                    .setOnCancelListener(
+                            dialog ->
+                                    activity.publishStatus(
+                                            "ready", "Diagnostics share cancelled.", false))
+                    .show();
+        } catch (RuntimeException ex) {
+            Log.w(MainActivity.TAG, "showDiagnosticsDisclosure failed", ex);
+            activity.publishStatus("blocked", "Could not show the diagnostics disclosure.", true);
         }
     }
 

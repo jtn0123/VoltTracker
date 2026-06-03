@@ -298,19 +298,20 @@ describe('actions.js — map tile controls', () => {
     await loadDashboard();
   });
 
-  it('enables remote basemap tiles by default and persists an explicit opt-out', () => {
+  it('keeps remote basemap tiles off by default and persists an explicit opt-in', () => {
     const VD = window.VoltDashboard;
     const button = document.getElementById('mapTilesBtn');
 
-    expect(VD.state.mapRemoteTilesEnabled).toBe(true);
-    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(VD.state.mapRemoteTilesEnabled).toBe(false);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.getAttribute('aria-label')).toMatch(/enable remote map tiles/i);
 
     button.click();
 
-    expect(VD.state.mapRemoteTilesEnabled).toBe(false);
-    expect(window.localStorage.getItem('volttracker.map.remoteTiles')).toBe('0');
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.getAttribute('aria-label')).toMatch(/enable remote map tiles/i);
+    expect(VD.state.mapRemoteTilesEnabled).toBe(true);
+    expect(window.localStorage.getItem('volttracker.map.remoteTiles')).toBe('1');
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(button.getAttribute('aria-label')).toMatch(/disable remote map tiles/i);
   });
 });
 

@@ -443,10 +443,6 @@
     const lon = Number(t.longitude);
     const _acc = Number(t.accuracyM);
     setOptionalLiveText("gpsValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
-    // gpsDetail / gpsMetricValue / gpsMetricSub all disappeared with the old
-    // .mini-grid + .drive-signal-grid; the GPS chip in .live-readout now
-    // carries the same signal in the unified scrub-readout style.
-    VD.setText("updatedValue", t.updatedAt ? "now" : "waiting");
     VD.setText("rawFrames", t.raw || "Waiting for telemetry...");
     const soc = t.soc == null || t.soc === "" ? NaN : Number(t.soc);
     const batteryTemp = t.batteryTemp == null || t.batteryTemp === "" ? NaN : Number(t.batteryTemp);
@@ -494,7 +490,6 @@
       if (Number.isFinite(power)) powerMeter.setAttribute("aria-valuenow", String(Math.round(power)));
       else powerMeter.removeAttribute("aria-valuenow");
     }
-    VD.setMeter("loadMeter", t.loadPct);
     renderOperationalState();
     updateDiagnostics();
     updateValidationUi();

@@ -78,9 +78,23 @@ final class DataBackup {
         },
         {"status_events", "_id", "occurred_at_ms", "kind", "payload"},
         {"adapter_history", "adapter_key", "last_seen_ms", "last_status"},
+        {"pid_observations", "_id", "session_id", "observed_at_ms", "json"},
         {"diagnostic_codes", "_id", "dtc", "status", "last_seen_ms"},
         {"location_samples", "_id", "session_id", "captured_at_ms", "latitude", "longitude"},
         {"vehicles", "_id", "vin_hash", "vin_redacted", "last_seen_ms"},
+        {"field_capabilities", "_id", "command", "first_seen_ms", "last_seen_ms"},
+        {"trip_segments", "_id", "started_at_ms", "created_at_ms"},
+        {
+            "session_trip_rollups",
+            "session_id",
+            "counted",
+            "distance_m",
+            "duration_ms",
+            "started_at_ms"
+        },
+        {"charge_sessions", "_id", "started_at_ms", "created_at_ms"},
+        {"battery_snapshots", "_id", "captured_at_ms", "created_at_ms"},
+        {"cell_snapshots", "_id", "battery_snapshot_id", "cell_index"},
         {"exports", "_id", "created_at_ms", "export_type", "status"}
     };
 
@@ -88,6 +102,8 @@ final class DataBackup {
 
     DataBackup(Context context) {
         this.context = context;
+        cleanupTransientRestoreFiles(context.getCacheDir());
+        cleanupTransientBackupFiles(new File(context.getCacheDir(), "backups"));
     }
 
     /** Writes a debug summary JSON to {@code exports/} and returns a result JSON string. */
@@ -278,6 +294,10 @@ final class DataBackup {
     }
 
     private static void clearOldBackups(File dir) {
+        cleanupTransientBackupFiles(dir);
+    }
+
+    private static void cleanupTransientBackupFiles(File dir) {
         File[] existing = dir.listFiles();
         if (existing == null) {
             return;
@@ -289,6 +309,19 @@ final class DataBackup {
             String name = file.getName();
             if (name.startsWith("volttracker-backup-")
                     && (name.endsWith(".db") || name.endsWith(".vtdb"))) {
+                file.delete();
+            }
+        }
+    }
+
+    private static void cleanupTransientRestoreFiles(File cacheDir) {
+        File[] existing = cacheDir.listFiles();
+        if (existing == null) {
+            return;
+        }
+        for (File file : existing) {
+            String name = file.getName();
+            if (name.startsWith("restore-") && (name.endsWith(".backup") || name.endsWith(".db"))) {
                 file.delete();
             }
         }
@@ -495,6 +528,12 @@ final class DataBackup {
             // file on disk. The next launch would otherwise treat the partial copy as the
             // live DB and corrupt user data on the first migration / write.
             out.getFD().sync();
+        }
+    }
+
+    static void renameFile(File source, File dest) throws IOException {
+        if (!source.renameTo(dest)) {
+            throw new IOException("Could not move " + source + " to " + dest);
         }
     }
 

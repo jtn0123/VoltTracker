@@ -105,6 +105,24 @@ public class DatabaseMergerTest {
     }
 
     @Test
+    public void importsSameTimestampSessionWhenAdapterDiffers() {
+        long liveSession = insertSession(live, 1000L, "obd", "AA:AA:AA:AA:AA:AA");
+        insertTelemetry(live, liveSession, 1000L);
+
+        long donorSession = insertSession(donor, 1000L, "obd", "BB:BB:BB:BB:BB:BB");
+        insertTelemetry(donor, donorSession, 1001L);
+
+        DatabaseMerger.MergeResult result = DatabaseMerger.merge(live, donor);
+
+        assertTrue(result.ok);
+        assertEquals(1, result.sessionsAdded);
+        assertEquals(0, result.sessionsSkipped);
+        assertEquals(2, count(live, VoltTrackerDb.TABLE_SESSIONS));
+        assertEquals(2, count(live, VoltTrackerDb.TABLE_TELEMETRY));
+        assertForeignKeysIntact(live);
+    }
+
+    @Test
     public void mergesVehicleByKeyAndRepointsTrip() {
         long liveVehicle = insertVehicle(live, "VH1");
         long donorVehicle = insertVehicle(donor, "VH1"); // same natural key -> should merge
@@ -194,6 +212,34 @@ public class DatabaseMergerTest {
         assertEquals(0, result.sessionsAdded);
         assertEquals(1, result.vehiclesAdded);
         assertEquals("Merged backup - no new sessions, 1 new vehicle.", result.summary());
+    }
+
+    @Test
+    public void summaryDoesNotReadAsNoOpForAdapterOnlyImport() {
+        insertAdapterHistory(donor, "AD:ONLY", 1, 100L);
+
+        DatabaseMerger.MergeResult result = DatabaseMerger.merge(live, donor);
+
+        assertTrue(result.ok);
+        assertEquals(0, result.sessionsAdded);
+        assertEquals(0, result.vehiclesAdded);
+        assertEquals("Merged backup - no new sessions, 1 other row imported.", result.summary());
+    }
+
+    @Test
+    public void summaryReportsMatchedExistingVehicles() {
+        long donorVehicle = insertVehicle(donor, "VH1");
+        insertVehicle(live, "VH1");
+        long donorSession = insertSession(donor, 5000L);
+        insertTripSegment(donor, donorSession, donorVehicle, 5000L);
+
+        DatabaseMerger.MergeResult result = DatabaseMerger.merge(live, donor);
+
+        assertTrue(result.ok);
+        assertEquals(1, result.sessionsAdded);
+        assertEquals(1, result.vehiclesMerged);
+        assertEquals(
+                "Merged backup - 1 new session, 1 existing vehicle matched.", result.summary());
     }
 
     @Test
@@ -316,6 +362,47 @@ public class DatabaseMergerTest {
     }
 
     @Test
+    public void adapterHistoryUpsertKeepsLiveSessionLinkWhenDonorSessionWasSkipped() {
+        long liveSession = insertSession(live, 1000L);
+        insertAdapterHistoryFull(live, "AD:1", 5, /*first*/ 50L, /*last*/ 100L, liveSession);
+
+        long duplicateDonorSession = insertSession(donor, 1000L);
+        insertAdapterHistoryFull(
+                donor, "AD:1", 3, /*first*/ 10L, /*last*/ 200L, duplicateDonorSession);
+
+        assertTrue(DatabaseMerger.merge(live, donor).ok);
+
+        assertEquals(
+                "duplicate donor parent must not null the existing live link",
+                liveSession,
+                scalar(
+                        live,
+                        "SELECT last_session_id FROM "
+                                + VoltTrackerDb.TABLE_ADAPTER_HISTORY
+                                + " WHERE adapter_key = 'AD:1'"));
+    }
+
+    @Test
+    public void diagnosticCodeUpsertKeepsLiveSessionLinkWhenDonorSessionWasSkipped() {
+        long liveSession = insertSession(live, 1000L);
+        insertDiagnosticCode(live, "MOD", "P0001", "current", 2, 100L, liveSession);
+
+        long duplicateDonorSession = insertSession(donor, 1000L);
+        insertDiagnosticCode(donor, "MOD", "P0001", "current", 4, 300L, duplicateDonorSession);
+
+        assertTrue(DatabaseMerger.merge(live, donor).ok);
+
+        assertEquals(
+                "duplicate donor parent must not null the existing live link",
+                liveSession,
+                scalar(
+                        live,
+                        "SELECT last_session_id FROM "
+                                + VoltTrackerDb.TABLE_DIAGNOSTIC_CODES
+                                + " WHERE dtc = 'P0001'"));
+    }
+
+    @Test
     public void remapsTripSegmentSamplePointersToTheMergedTelemetryRows() {
         // A donor trip segment references specific donor telemetry rows via start/end_sample_id.
         // After merge those pointers must resolve to the NEWLY-inserted telemetry rows (the donor
@@ -360,8 +447,16 @@ public class DatabaseMergerTest {
     // ---- fixtures ---------------------------------------------------------------
 
     private static long insertSession(SQLiteDatabase db, long startedAtMs) {
+        return insertSession(db, startedAtMs, "obd", null);
+    }
+
+    private static long insertSession(
+            SQLiteDatabase db, long startedAtMs, String mode, String adapterAddress) {
         ContentValues cv = new ContentValues();
-        cv.put("mode", "obd");
+        cv.put("mode", mode);
+        if (adapterAddress != null) {
+            cv.put("adapter_address", adapterAddress);
+        }
         cv.put("started_at_ms", startedAtMs);
         cv.put("status", "complete");
         cv.put("sample_count", 0);
@@ -505,6 +600,16 @@ public class DatabaseMergerTest {
 
     private static void insertAdapterHistoryFull(
             SQLiteDatabase db, String key, int connectCount, long firstSeenMs, long lastSeenMs) {
+        insertAdapterHistoryFull(db, key, connectCount, firstSeenMs, lastSeenMs, null);
+    }
+
+    private static void insertAdapterHistoryFull(
+            SQLiteDatabase db,
+            String key,
+            int connectCount,
+            long firstSeenMs,
+            long lastSeenMs,
+            Long lastSessionId) {
         ContentValues cv = new ContentValues();
         cv.put("adapter_key", key);
         cv.put("connect_count", connectCount);
@@ -513,6 +618,9 @@ public class DatabaseMergerTest {
         cv.put("sample_count", 0);
         cv.put("first_seen_ms", firstSeenMs);
         cv.put("last_seen_ms", lastSeenMs);
+        if (lastSessionId != null) {
+            cv.put("last_session_id", lastSessionId);
+        }
         db.insertOrThrow(VoltTrackerDb.TABLE_ADAPTER_HISTORY, null, cv);
     }
 
@@ -523,6 +631,17 @@ public class DatabaseMergerTest {
             String status,
             int seenCount,
             long lastSeenMs) {
+        insertDiagnosticCode(db, moduleKey, dtc, status, seenCount, lastSeenMs, null);
+    }
+
+    private static void insertDiagnosticCode(
+            SQLiteDatabase db,
+            String moduleKey,
+            String dtc,
+            String status,
+            int seenCount,
+            long lastSeenMs,
+            Long lastSessionId) {
         ContentValues cv = new ContentValues();
         cv.put("module_key", moduleKey);
         cv.put("dtc", dtc);
@@ -531,6 +650,9 @@ public class DatabaseMergerTest {
         cv.put("first_seen_ms", 1L);
         cv.put("last_seen_ms", lastSeenMs);
         cv.put("json", "{}");
+        if (lastSessionId != null) {
+            cv.put("last_session_id", lastSessionId);
+        }
         db.insertOrThrow(VoltTrackerDb.TABLE_DIAGNOSTIC_CODES, null, cv);
     }
 

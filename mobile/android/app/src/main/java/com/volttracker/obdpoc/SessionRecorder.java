@@ -440,6 +440,10 @@ final class SessionRecorder {
         worker.shutdown();
     }
 
+    long drainFailedTelemetryCount() {
+        return worker.drainFailedTelemetryCount();
+    }
+
     private boolean shouldThrottleStatus(String state, String detail, boolean blocked) {
         synchronized (lock) {
             long now = System.currentTimeMillis();

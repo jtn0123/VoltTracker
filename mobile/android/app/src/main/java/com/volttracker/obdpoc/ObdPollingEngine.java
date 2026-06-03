@@ -512,13 +512,21 @@ class ObdPollingEngine implements LiveSampleReader.SampleContext {
     @SuppressLint("MissingPermission")
     void openBluetoothSocket(String address) throws IOException {
         BluetoothAdapter adapter = BluetoothAdapters.get(service);
+        if (adapter == null) {
+            throw new IOException("Bluetooth adapter unavailable");
+        }
         if (service.hasBluetoothScanPermission()) {
             adapter.cancelDiscovery();
         } else {
             service.recorder.logEvent(
                     "cancel_discovery_skipped", "reason", "missing BLUETOOTH_SCAN");
         }
-        BluetoothDevice device = adapter.getRemoteDevice(address);
+        BluetoothDevice device;
+        try {
+            device = adapter.getRemoteDevice(address);
+        } catch (IllegalArgumentException ex) {
+            throw new IOException("Invalid Bluetooth adapter address", ex);
+        }
         connection.open(device, ObdProbes.ELM327_SPP_UUID, ObdProbes.CONNECT_TIMEOUT_MS);
     }
 

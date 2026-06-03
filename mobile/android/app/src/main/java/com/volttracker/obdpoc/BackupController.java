@@ -19,7 +19,8 @@ import java.util.concurrent.ExecutorService;
 final class BackupController {
 
     static final int REQUEST_RESTORE = 4202;
-    private static final long RESTORE_STOP_TIMEOUT_MS = 2_000L;
+    private static final long RESTORE_STOP_TIMEOUT_MS = 30_000L;
+    private static final long BACKUP_SHARE_CLEANUP_DELAY_MS = 60L * 60L * 1000L;
 
     private final MainActivity activity;
     private final DataBackup dataBackup;
@@ -125,6 +126,7 @@ final class BackupController {
                                     activity.startActivity(
                                             Intent.createChooser(
                                                     share, "Back up Volt Tracker data"));
+                                    scheduleBackupCleanup(backup);
                                     activity.publishStatus(
                                             "ready",
                                             encrypted
@@ -139,11 +141,8 @@ final class BackupController {
                 });
     }
 
-    /** Handles the SAF result for {@link #REQUEST_RESTORE}; a no-op for other requests. */
-    void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode != REQUEST_RESTORE) {
-            return;
-        }
+    /** Handles the SAF result from the Activity Result launcher. */
+    void onRestorePickerResult(int resultCode, Intent data) {
         if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
             String passphrase = pendingRestorePassphrase;
             pendingRestorePassphrase = null;
@@ -175,9 +174,16 @@ final class BackupController {
         try {
             Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             pick.addCategory(Intent.CATEGORY_OPENABLE);
-            pick.setType("*/*");
+            pick.setType("application/octet-stream");
+            pick.putExtra(
+                    Intent.EXTRA_MIME_TYPES,
+                    new String[] {
+                        "application/octet-stream",
+                        "application/vnd.sqlite3",
+                        "application/x-sqlite3"
+                    });
             pendingRestorePassphrase = passphrase;
-            activity.startActivityForResult(pick, REQUEST_RESTORE);
+            activity.launchRestoreFilePicker(pick);
         } catch (RuntimeException ex) {
             pendingRestorePassphrase = null;
             activity.publishStatus("blocked", "Could not open the file picker.", true);
@@ -343,25 +349,26 @@ final class BackupController {
                 return RestoreResult.LOGGING_ACTIVE;
             }
             if (activity.localStore != null) {
+                activity.localStore.checkpoint();
                 activity.localStore.close();
                 activity.localStore = null;
             }
-            restoreTemp = new File(dbFile.getPath() + ".restore-tmp");
+            restoreTemp = new File(dbFile.getPath() + ".restore-new");
             restoreBackup = new File(dbFile.getPath() + ".restore-backup");
             DataBackup.deleteIfExists(restoreTemp);
             DataBackup.deleteIfExists(restoreBackup);
             DataBackup.copyFile(staged, restoreTemp);
+            DataBackup.deleteIfExists(new File(dbFile.getPath() + "-wal"));
+            DataBackup.deleteIfExists(new File(dbFile.getPath() + "-shm"));
             if (dbFile.exists()) {
-                DataBackup.copyFile(dbFile, restoreBackup);
+                DataBackup.renameFile(dbFile, restoreBackup);
             }
             try {
-                DataBackup.copyFile(restoreTemp, dbFile);
+                DataBackup.renameFile(restoreTemp, dbFile);
             } catch (IOException | RuntimeException ex) {
                 restoreOriginalDatabase(dbFile, restoreBackup);
                 throw ex;
             }
-            DataBackup.deleteIfExists(new File(dbFile.getPath() + "-wal"));
-            DataBackup.deleteIfExists(new File(dbFile.getPath() + "-shm"));
             try {
                 activity.localStore = new ObdLocalStore(activity);
             } catch (RuntimeException ex) {
@@ -395,7 +402,8 @@ final class BackupController {
             return;
         }
         try {
-            DataBackup.copyFile(restoreBackup, dbFile);
+            DataBackup.deleteIfExists(dbFile);
+            DataBackup.renameFile(restoreBackup, dbFile);
             DataBackup.deleteIfExists(new File(dbFile.getPath() + "-wal"));
             DataBackup.deleteIfExists(new File(dbFile.getPath() + "-shm"));
         } catch (IOException | RuntimeException ignored) {
@@ -422,5 +430,11 @@ final class BackupController {
             }
         }
         return !activity.isLoggingActive();
+    }
+
+    private void scheduleBackupCleanup(File backup) {
+        new android.os.Handler(android.os.Looper.getMainLooper())
+                .postDelayed(
+                        () -> DataBackup.deleteIfExists(backup), BACKUP_SHARE_CLEANUP_DELAY_MS);
     }
 }

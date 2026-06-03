@@ -36,6 +36,7 @@ final class ObdPersistenceWorker {
     // battery-saver-induced I/O lag. On overflow we keep the most recent telemetry and drop
     // the oldest queued row — telemetry loss is acceptable here; OOM is not.
     static final int TELEMETRY_QUEUE_CAPACITY = 2000;
+    static final long SHUTDOWN_DRAIN_TIMEOUT_SECONDS = 30L;
     // Lifecycle queue cap: very small (lifecycle events fire a handful of times per session
     // — startSession / closeSession / finalizeSession). If we ever overflow this, the existing
     // inline-run fallback at submitLifecycle handles the RejectedExecutionException.
@@ -43,6 +44,7 @@ final class ObdPersistenceWorker {
 
     private final ObdLocalStore localStore;
     private final AtomicLong droppedTelemetryTasks = new AtomicLong();
+    private final AtomicLong failedTelemetryTasks = new AtomicLong();
 
     // telemetryExecutor: high-volume telemetry/event/observation writes. Failures are
     // intentionally swallowed — these rows are diagnostic-only, never block OBD polling.
@@ -111,6 +113,10 @@ final class ObdPersistenceWorker {
         return droppedTelemetryTasks.getAndSet(0L);
     }
 
+    long drainFailedTelemetryCount() {
+        return failedTelemetryTasks.getAndSet(0L);
+    }
+
     /** Runs {@code task} on the telemetry executor — off the OBD poll and main threads. */
     void submitTelemetry(Runnable task) {
         try {
@@ -118,11 +124,15 @@ final class ObdPersistenceWorker {
                     () -> {
                         try {
                             task.run();
-                        } catch (RuntimeException ignored) {
+                        } catch (RuntimeException ex) {
+                            long failed = failedTelemetryTasks.incrementAndGet();
+                            Log.w(MainActivity.TAG, "telemetry persistence failed #" + failed, ex);
                             // Persistence is diagnostic; never interrupt OBD polling for it.
                         }
                     });
-        } catch (RejectedExecutionException ignored) {
+        } catch (RejectedExecutionException ex) {
+            long failed = failedTelemetryTasks.incrementAndGet();
+            Log.w(MainActivity.TAG, "telemetry persistence rejected #" + failed, ex);
         }
     }
 
@@ -213,12 +223,12 @@ final class ObdPersistenceWorker {
         telemetryExecutor.shutdown();
         lifecycleExecutor.shutdown();
         try {
-            telemetryExecutor.awaitTermination(2, TimeUnit.SECONDS);
+            telemetryExecutor.awaitTermination(SHUTDOWN_DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }
         try {
-            lifecycleExecutor.awaitTermination(2, TimeUnit.SECONDS);
+            lifecycleExecutor.awaitTermination(SHUTDOWN_DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }

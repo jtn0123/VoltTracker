@@ -403,7 +403,14 @@ public class ObdService extends Service {
             refreshCompetingAppsAsync();
         }
         long token = sessionToken.incrementAndGet();
-        startForegroundSession(request.foregroundText);
+        if (!startForegroundSession(request.foregroundText)) {
+            broadcastStatus(
+                    "blocked",
+                    "Android blocked foreground logging. Check notification and nearby-device"
+                            + " permissions, then try again.",
+                    true);
+            return;
+        }
         sessionStartedAtMs = System.currentTimeMillis();
         sessionStateMachine.start(request.phase, request.phaseDetail);
         engine.beginSession(request.engineMode);
@@ -548,17 +555,25 @@ public class ObdService extends Service {
      */
     private int activeForegroundServiceType = 0;
 
-    private void startForegroundSession(String text) {
+    private boolean startForegroundSession(String text) {
         Notification notification = notifications.build(text);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            int serviceType = currentForegroundServiceType();
-            startForeground(ObdNotifications.NOTIFICATION_ID, notification, serviceType);
-            activeForegroundServiceType = serviceType;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                int serviceType = currentForegroundServiceType();
+                startForeground(ObdNotifications.NOTIFICATION_ID, notification, serviceType);
+                activeForegroundServiceType = serviceType;
+                foregroundServiceActive = true;
+                return true;
+            }
+            startForeground(ObdNotifications.NOTIFICATION_ID, notification);
             foregroundServiceActive = true;
-            return;
+            return true;
+        } catch (SecurityException ex) {
+            Log.w(MainActivity.TAG, "startForegroundSession refused", ex);
+            foregroundServiceActive = false;
+            activeForegroundServiceType = 0;
+            return false;
         }
-        startForeground(ObdNotifications.NOTIFICATION_ID, notification);
-        foregroundServiceActive = true;
     }
 
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)

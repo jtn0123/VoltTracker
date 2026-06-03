@@ -85,8 +85,7 @@ public class BackupControllerDialogTest {
     private AlertDialog openRestoreDialog(Uri uri) {
         Intent data = new Intent();
         data.setData(uri);
-        activity.backupController.onActivityResult(
-                BackupController.REQUEST_RESTORE, Activity.RESULT_OK, data);
+        activity.backupController.onRestorePickerResult(Activity.RESULT_OK, data);
         AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
         assertNotNull("a verified backup must offer the restore-mode dialog", dialog);
         return dialog;
@@ -151,8 +150,7 @@ public class BackupControllerDialogTest {
         Intent data = new Intent();
         data.setData(uri);
 
-        activity.backupController.onActivityResult(
-                BackupController.REQUEST_RESTORE, Activity.RESULT_OK, data);
+        activity.backupController.onRestorePickerResult(Activity.RESULT_OK, data);
 
         assertEquals("blocked", activity.lastState);
         assertTrue(activity.lastDetail.contains("not a valid Volt Tracker backup"));

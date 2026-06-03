@@ -500,6 +500,8 @@ final class ObdStoreReports {
                             "soc",
                             "battery_temp",
                             "power_kw",
+                            "pack_voltage",
+                            "pack_current_a",
                             "json"
                         },
                         USEFUL_TELEMETRY_WHERE,
@@ -526,6 +528,8 @@ final class ObdStoreReports {
             item.put("soc", boxedOrNull(nullableDoubleBoxed(cursor, "soc")));
             item.put("batteryTemp", boxedOrNull(nullableDoubleBoxed(cursor, "battery_temp")));
             item.put("powerKw", boxedOrNull(nullableDoubleBoxed(cursor, "power_kw")));
+            item.put("packVoltage", boxedOrNull(nullableDoubleBoxed(cursor, "pack_voltage")));
+            item.put("packCurrentA", boxedOrNull(nullableDoubleBoxed(cursor, "pack_current_a")));
             return item;
         }
     }

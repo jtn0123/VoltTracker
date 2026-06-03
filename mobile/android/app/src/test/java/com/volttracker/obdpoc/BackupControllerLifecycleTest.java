@@ -1,18 +1,18 @@
 package com.volttracker.obdpoc;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
+import android.content.ComponentName;
 import android.content.Intent;
 import android.os.Bundle;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
-import org.robolectric.Shadows;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
-import org.robolectric.shadows.ShadowActivity;
 
 @RunWith(org.robolectric.RobolectricTestRunner.class)
 @Config(sdk = 34)
@@ -25,11 +25,10 @@ public class BackupControllerLifecycleTest {
         try {
             HarnessActivity activity = controller.get();
             activity.loggingActive = true;
-            Shadows.shadowOf(activity).getNextStartedActivityForResult();
 
             activity.backupController.launchRestorePicker();
 
-            assertNull(Shadows.shadowOf(activity).getNextStartedActivityForResult());
+            assertNull(activity.launchedRestoreIntent);
             assertEquals("blocked", activity.lastState);
             assertEquals("Stop logging before restoring a backup.", activity.lastDetail);
         } finally {
@@ -47,11 +46,36 @@ public class BackupControllerLifecycleTest {
 
             activity.backupController.launchRestorePicker();
 
-            ShadowActivity.IntentForResult started =
-                    Shadows.shadowOf(activity).getNextStartedActivityForResult();
+            Intent started = activity.launchedRestoreIntent;
             assertNotNull(started);
-            assertEquals(BackupController.REQUEST_RESTORE, started.requestCode);
-            assertEquals(Intent.ACTION_OPEN_DOCUMENT, started.intent.getAction());
+            assertEquals(Intent.ACTION_OPEN_DOCUMENT, started.getAction());
+            assertEquals("application/octet-stream", started.getType());
+            assertArrayEquals(
+                    new String[] {
+                        "application/octet-stream",
+                        "application/vnd.sqlite3",
+                        "application/x-sqlite3"
+                    },
+                    started.getStringArrayExtra(Intent.EXTRA_MIME_TYPES));
+        } finally {
+            destroyQuietly(controller);
+        }
+    }
+
+    @Test
+    public void stopObdServiceSurfacesRejectedServiceStart() {
+        ActivityController<HarnessActivity> controller =
+                Robolectric.buildActivity(HarnessActivity.class).create();
+        try {
+            HarnessActivity activity = controller.get();
+            activity.rejectStartService = true;
+
+            activity.stopObdService();
+
+            assertEquals("ready", activity.lastState);
+            assertEquals(
+                    "Stop request noted; reopen the app if logging is still active.",
+                    activity.lastDetail);
         } finally {
             destroyQuietly(controller);
         }
@@ -67,6 +91,8 @@ public class BackupControllerLifecycleTest {
 
     public static class HarnessActivity extends MainActivity {
         boolean loggingActive;
+        boolean rejectStartService;
+        Intent launchedRestoreIntent;
         String lastState;
         String lastDetail;
 
@@ -84,6 +110,19 @@ public class BackupControllerLifecycleTest {
         void publishStatus(String state, String detail, boolean blocked) {
             lastState = state;
             lastDetail = detail;
+        }
+
+        @Override
+        void launchRestoreFilePicker(Intent intent) {
+            launchedRestoreIntent = intent;
+        }
+
+        @Override
+        public ComponentName startService(Intent service) {
+            if (rejectStartService) {
+                throw new IllegalStateException("background service start blocked");
+            }
+            return new ComponentName(this, ObdService.class);
         }
     }
 }

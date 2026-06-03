@@ -185,6 +185,19 @@ public class SessionRecorderTest {
         assertTrue(dropped.detail.contains("queued telemetry writes"));
     }
 
+    @Test
+    public void telemetryPersistenceFailureIsCountedAndDoesNotCrash() {
+        final RecordingStore store = new RecordingStore();
+        store.failTelemetryWrites = true;
+        final SessionRecorder recorder = newOpenRecorder(store, "sr-telemetry-failure-test");
+
+        recorder.persistTelemetry(taggedTelemetry(0, 0));
+        recorder.shutdown();
+
+        assertEquals(1L, recorder.drainFailedTelemetryCount());
+        assertEquals(0, store.telemetryCalls.size());
+    }
+
     /**
      * Telemetry submitted AFTER {@code closeSession} is dropped — it cannot leak into the
      * just-closed session id. {@code SessionRecorder.persistTelemetry} guards on {@code
@@ -487,6 +500,7 @@ public class SessionRecorderTest {
         final List<RecordedEvent> eventCalls = new ArrayList<>();
         final AtomicLong arrivalCounter = new AtomicLong();
         volatile boolean blockTelemetryWrites;
+        volatile boolean failTelemetryWrites;
         final CountDownLatch firstTelemetryEntered = new CountDownLatch(1);
         final CountDownLatch releaseTelemetryWrites = new CountDownLatch(1);
 
@@ -503,6 +517,9 @@ public class SessionRecorderTest {
 
         @Override
         public long recordTelemetry(long sessionId, JSONObject sample) {
+            if (failTelemetryWrites) {
+                throw new RuntimeException("simulated telemetry write failure");
+            }
             if (blockTelemetryWrites) {
                 firstTelemetryEntered.countDown();
                 try {

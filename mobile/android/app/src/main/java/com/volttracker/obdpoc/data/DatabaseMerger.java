@@ -23,13 +23,13 @@ import java.util.Set;
  *
  * <h2>Dedup</h2>
  *
- * Sessions are deduplicated on {@code started_at_ms} — a millisecond-precise drive start time is
- * effectively unique per session. A donor session whose start time already exists live is
- * <em>not</em> added to the session map, and any donor row that references a non-mapped session is
- * dropped. That cleanly skips a duplicate drive's entire subtree (telemetry, GPS, events, trips,
- * charge sessions) instead of importing it a second time. Vehicles dedup differently: a matching
- * {@code vehicle_key} maps the donor vehicle onto the existing live one so the donor's trips attach
- * to it rather than creating a duplicate vehicle.
+ * Sessions are deduplicated on {@code started_at_ms + mode + adapter_address}. A donor session
+ * whose composite key already exists live is <em>not</em> added to the session map, and any donor
+ * row that references a non-mapped session is dropped. That cleanly skips a duplicate drive's
+ * entire subtree (telemetry, GPS, events, trips, charge sessions) instead of importing it a second
+ * time, without treating two different adapters that started in the same millisecond as the same
+ * drive. Vehicles dedup differently: a matching {@code vehicle_key} maps the donor vehicle onto the
+ * existing live one so the donor's trips attach to it rather than creating a duplicate vehicle.
  *
  * <h2>Atomicity</h2>
  *
@@ -94,6 +94,22 @@ public final class DatabaseMerger {
                 sb.append(", ")
                         .append(vehiclesAdded)
                         .append(vehiclesAdded == 1 ? " new vehicle" : " new vehicles");
+            }
+            if (vehiclesMerged > 0) {
+                sb.append(", ")
+                        .append(vehiclesMerged)
+                        .append(
+                                vehiclesMerged == 1
+                                        ? " existing vehicle matched"
+                                        : " existing vehicles matched");
+            }
+            if (sessionsAdded == 0
+                    && vehiclesAdded == 0
+                    && vehiclesMerged == 0
+                    && rowsImported > 0) {
+                sb.append(", ")
+                        .append(rowsImported)
+                        .append(rowsImported == 1 ? " other row imported" : " other rows imported");
             }
             if (sessionsSkipped > 0) {
                 sb.append(" (")
@@ -276,15 +292,17 @@ public final class DatabaseMerger {
         return inserted;
     }
 
-    /** Merges sessions, deduplicating on {@code started_at_ms}. */
+    /** Merges sessions, deduplicating on {@code started_at_ms + mode + adapter_address}. */
     private static long copySessions(
             SQLiteDatabase target, SQLiteDatabase donor, Map<Long, Long> sessionMap, int[] counts) {
-        Set<Long> existingStartTimes = new HashSet<>();
+        Set<String> existingKeys = new HashSet<>();
         try (Cursor c =
                 target.rawQuery(
-                        "SELECT started_at_ms FROM " + VoltTrackerDb.TABLE_SESSIONS, null)) {
+                        "SELECT started_at_ms, mode, adapter_address FROM "
+                                + VoltTrackerDb.TABLE_SESSIONS,
+                        null)) {
             while (c.moveToNext()) {
-                existingStartTimes.add(c.getLong(0));
+                existingKeys.add(sessionKey(c.getLong(0), c.getString(1), c.getString(2)));
             }
         }
         long inserted = 0L;
@@ -296,14 +314,19 @@ public final class DatabaseMerger {
                 if (oldId == null || startedAt == null) {
                     continue;
                 }
-                if (existingStartTimes.contains(startedAt)) {
+                String key =
+                        sessionKey(
+                                startedAt,
+                                cv.getAsString("mode"),
+                                cv.getAsString("adapter_address"));
+                if (existingKeys.contains(key)) {
                     counts[1]++; // duplicate: leave out of the map so its subtree is dropped
                     continue;
                 }
                 cv.remove("_id");
                 long newId = target.insertOrThrow(VoltTrackerDb.TABLE_SESSIONS, null, cv);
                 sessionMap.put(oldId, newId);
-                existingStartTimes.add(startedAt);
+                existingKeys.add(key);
                 counts[0]++;
                 inserted++;
             }
@@ -390,6 +413,8 @@ public final class DatabaseMerger {
                 if (key == null) {
                     continue;
                 }
+                boolean canCopyLastSession =
+                        canCopyMappedReference(cv, "last_session_id", sessionMap);
                 remap(cv, "last_session_id", sessionMap);
                 ContentValues existing =
                         queryOne(
@@ -418,7 +443,9 @@ public final class DatabaseMerger {
                     if (donorLast >= liveLast) {
                         copyIfPresent(merged, cv, "address");
                         copyIfPresent(merged, cv, "name");
-                        copyIfPresent(merged, cv, "last_session_id");
+                        if (canCopyLastSession) {
+                            copyIfPresent(merged, cv, "last_session_id");
+                        }
                         copyIfPresent(merged, cv, "last_mode");
                         copyIfPresent(merged, cv, "last_status");
                         copyIfPresent(merged, cv, "supported_pids");
@@ -451,6 +478,8 @@ public final class DatabaseMerger {
                     continue;
                 }
                 cv.remove("_id");
+                boolean canCopyLastSession =
+                        canCopyMappedReference(cv, "last_session_id", sessionMap);
                 remap(cv, "last_session_id", sessionMap);
                 String where = "module_key = ? AND dtc = ? AND status = ?";
                 String[] args = {moduleKey, dtc, status};
@@ -473,7 +502,9 @@ public final class DatabaseMerger {
                         copyIfPresent(merged, cv, "status_label");
                         copyIfPresent(merged, cv, "module_name");
                         copyIfPresent(merged, cv, "header");
-                        copyIfPresent(merged, cv, "last_session_id");
+                        if (canCopyLastSession) {
+                            copyIfPresent(merged, cv, "last_session_id");
+                        }
                         copyIfPresent(merged, cv, "raw_response");
                         copyIfPresent(merged, cv, "json");
                     }
@@ -533,6 +564,23 @@ public final class DatabaseMerger {
         } else {
             cv.put(column, mapped);
         }
+    }
+
+    private static boolean canCopyMappedReference(
+            ContentValues cv, String column, Map<Long, Long> map) {
+        if (!cv.containsKey(column)) {
+            return false;
+        }
+        Long old = cv.getAsLong(column);
+        return old == null || map.containsKey(old);
+    }
+
+    private static String sessionKey(long startedAtMs, String mode, String adapterAddress) {
+        return startedAtMs + "|" + normalizeKeyPart(mode) + "|" + normalizeKeyPart(adapterAddress);
+    }
+
+    private static String normalizeKeyPart(String value) {
+        return value == null ? "" : value;
     }
 
     private static ContentValues queryOne(

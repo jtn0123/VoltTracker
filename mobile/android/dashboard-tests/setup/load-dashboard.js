@@ -43,8 +43,19 @@ const DASHBOARD_MODULE_LOADERS = {
   'troubleshooter.js': () => import('../../app/src/main/assets/dashboard/js/troubleshooter.js'),
 };
 
-// Loaded in the exact order that index.template.html lists them.
-const DASHBOARD_JS_FILES = ['core.js', 'panels.js', 'map.js', 'telemetry.js', 'actions.js'];
+// Loaded in the exact order that index.template.html lists the production scripts.
+const DASHBOARD_JS_FILES = [
+  'core.js',
+  'panels.js',
+  'map.js',
+  'scrubber.js',
+  'drive.js',
+  'telemetry.js',
+  'actions.js',
+  'troubleshooter.js',
+  'connection-status.js',
+  'connection-tools.js',
+];
 
 function dashboardDomHtml() {
   const html = readFileSync(DASHBOARD_INDEX_HTML, 'utf8');
@@ -274,7 +285,7 @@ function installCanvasShim() {
 
 /**
  * Install the bridge fixture, mount the minimal DOM, and execute the
- * 5 dashboard JS files in load order. Returns the bridge so tests can
+ * production dashboard JS files in load order. Returns the bridge so tests can
  * assert what the bootstrap path called.
  *
  * Re-entrant: tests typically call this from `beforeEach`. We track every
@@ -285,8 +296,7 @@ function installCanvasShim() {
  * Opts:
  *   `bridge` — custom VoltBridge fixture (defaults to createVoltBridgeFixture())
  *   `extras` — additional JS files (filename relative to dashboard/js/) to
- *              execute AFTER the standard 5-file bundle. Use for tests that need
- *              drive.js / scrubber.js / troubleshooter.js etc.
+ *              execute AFTER the standard production bundle.
  *   `extraDom` — HTML appended to REQUIRED_DOM. Use for tests that need
  *                additional fixture nodes (chart hosts, etc.) without losing
  *                the bootstrap-required tiles.

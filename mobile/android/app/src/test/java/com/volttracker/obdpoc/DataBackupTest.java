@@ -135,6 +135,42 @@ public class DataBackupTest {
         }
     }
 
+    @Test
+    public void constructorClearsTransientRestoreFilesFromPriorRuns() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        File restoreDb = new File(context.getCacheDir(), "restore-stale.db");
+        File restoreBackup = new File(context.getCacheDir(), "restore-stale.backup");
+        writeFile(restoreDb, "plain decrypted restore cache");
+        writeFile(restoreBackup, "encrypted staging cache");
+        assertTrue(restoreDb.exists());
+        assertTrue(restoreBackup.exists());
+
+        new DataBackup(context);
+
+        assertFalse(restoreDb.exists());
+        assertFalse(restoreBackup.exists());
+    }
+
+    @Test
+    public void constructorClearsTransientBackupShareFilesFromPriorRuns() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        File backups = new File(context.getCacheDir(), "backups");
+        assertTrue(backups.mkdirs() || backups.isDirectory());
+        File plaintext = new File(backups, "volttracker-backup-stale.db");
+        File encrypted = new File(backups, "volttracker-backup-stale.vtdb");
+        File unrelated = new File(backups, "notes.txt");
+        writeFile(plaintext, "plaintext backup handoff");
+        writeFile(encrypted, "encrypted backup handoff");
+        writeFile(unrelated, "keep me");
+
+        new DataBackup(context);
+
+        assertFalse(plaintext.exists());
+        assertFalse(encrypted.exists());
+        assertTrue(unrelated.exists());
+        unrelated.delete();
+    }
+
     private static int rowCount(SQLiteDatabase db, String table) {
         try (android.database.Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + table, null)) {
             cursor.moveToFirst();
@@ -170,9 +206,19 @@ public class DataBackupTest {
         return file;
     }
 
+    private static void writeFile(File file, String contents) throws IOException {
+        File parent = file.getParentFile();
+        if (parent != null) {
+            parent.mkdirs();
+        }
+        try (FileWriter writer = new FileWriter(file, false)) {
+            writer.write(contents);
+        }
+    }
+
     private static void createMinimalVoltSchema(
             SQLiteDatabase db, boolean includeHvPackColumns, boolean includeForeignKey) {
-        db.setVersion(8);
+        db.setVersion(9);
         db.execSQL(
                 "CREATE TABLE obd_sessions ("
                         + "_id INTEGER PRIMARY KEY,"
@@ -203,7 +249,11 @@ public class DataBackupTest {
                         + "last_seen_ms INTEGER NOT NULL,"
                         + "last_status TEXT)");
         db.execSQL(
-                "CREATE TABLE pid_observations (_id INTEGER PRIMARY KEY, observed_at_ms INTEGER)");
+                "CREATE TABLE pid_observations ("
+                        + "_id INTEGER PRIMARY KEY,"
+                        + "session_id INTEGER,"
+                        + "observed_at_ms INTEGER,"
+                        + "json TEXT)");
         db.execSQL(
                 "CREATE TABLE diagnostic_codes ("
                         + "_id INTEGER PRIMARY KEY,"
@@ -223,11 +273,39 @@ public class DataBackupTest {
                         + "vin_hash TEXT,"
                         + "vin_redacted TEXT,"
                         + "last_seen_ms INTEGER NOT NULL)");
-        db.execSQL("CREATE TABLE field_capabilities (_id INTEGER PRIMARY KEY)");
-        db.execSQL("CREATE TABLE trip_segments (_id INTEGER PRIMARY KEY)");
-        db.execSQL("CREATE TABLE charge_sessions (_id INTEGER PRIMARY KEY)");
-        db.execSQL("CREATE TABLE battery_snapshots (_id INTEGER PRIMARY KEY)");
-        db.execSQL("CREATE TABLE cell_snapshots (_id INTEGER PRIMARY KEY)");
+        db.execSQL(
+                "CREATE TABLE field_capabilities ("
+                        + "_id INTEGER PRIMARY KEY,"
+                        + "command TEXT NOT NULL,"
+                        + "first_seen_ms INTEGER NOT NULL,"
+                        + "last_seen_ms INTEGER NOT NULL)");
+        db.execSQL(
+                "CREATE TABLE trip_segments ("
+                        + "_id INTEGER PRIMARY KEY,"
+                        + "started_at_ms INTEGER NOT NULL,"
+                        + "created_at_ms INTEGER NOT NULL)");
+        db.execSQL(
+                "CREATE TABLE session_trip_rollups ("
+                        + "session_id INTEGER PRIMARY KEY,"
+                        + "counted INTEGER NOT NULL,"
+                        + "distance_m REAL NOT NULL,"
+                        + "duration_ms INTEGER NOT NULL,"
+                        + "started_at_ms INTEGER NOT NULL)");
+        db.execSQL(
+                "CREATE TABLE charge_sessions ("
+                        + "_id INTEGER PRIMARY KEY,"
+                        + "started_at_ms INTEGER NOT NULL,"
+                        + "created_at_ms INTEGER NOT NULL)");
+        db.execSQL(
+                "CREATE TABLE battery_snapshots ("
+                        + "_id INTEGER PRIMARY KEY,"
+                        + "captured_at_ms INTEGER NOT NULL,"
+                        + "created_at_ms INTEGER NOT NULL)");
+        db.execSQL(
+                "CREATE TABLE cell_snapshots ("
+                        + "_id INTEGER PRIMARY KEY,"
+                        + "battery_snapshot_id INTEGER NOT NULL,"
+                        + "cell_index INTEGER NOT NULL)");
         db.execSQL(
                 "CREATE TABLE exports ("
                         + "_id INTEGER PRIMARY KEY,"

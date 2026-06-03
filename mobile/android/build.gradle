@@ -14,6 +14,7 @@ tasks.named("dependencyUpdates").configure {
 }
 
 def dashboardTestsDir = file("dashboard-tests")
+def dashboardE2eDir = file("dashboard-e2e")
 def dashboardAssetDir = file("app/src/main/assets/dashboard")
 // Split budget (C2): the *core* bundle (boot + interactive JS/CSS) is what affects
 // startup and responsiveness, so it gets a tight budget. The DTC lookup tables
@@ -53,6 +54,22 @@ tasks.register("dashboardTypecheck", Exec) {
     dependsOn("dashboardNpmCi")
     workingDir = dashboardTestsDir
     commandLine "npm", "run", "typecheck"
+}
+
+tasks.register("dashboardE2eNpmCi", Exec) {
+    description = "Installs Playwright dashboard e2e dependencies from package-lock.json."
+    workingDir = dashboardE2eDir
+    commandLine "npm", "ci"
+    inputs.file(file("${dashboardE2eDir}/package.json"))
+    inputs.file(file("${dashboardE2eDir}/package-lock.json"))
+    outputs.dir(file("${dashboardE2eDir}/node_modules"))
+}
+
+tasks.register("dashboardE2e", Exec) {
+    description = "Runs Playwright functional tests against the shipped dashboard."
+    dependsOn("dashboardE2eNpmCi")
+    workingDir = dashboardE2eDir
+    commandLine "npm", "test"
 }
 
 tasks.register("verifyGeneratedDashboardClean") {
@@ -121,6 +138,7 @@ tasks.register("verifyActiveApp") {
             "dashboardLint",
             "dashboardTypecheck",
             "dashboardTest",
+            "dashboardE2e",
             "verifyDashboardBundleSize",
             "verifyGeneratedDashboardClean")
 }

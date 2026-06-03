@@ -120,6 +120,17 @@ public class ObdPollingEngineTest {
         assertTrue("connection must be closed at session end", fake.closeCalls.get() >= 1);
     }
 
+    @Test
+    public void openBluetoothSocketRejectsInvalidAddressAsIOException() {
+        ObdPollingEngine realEngine = new ObdPollingEngine(service);
+        try {
+            realEngine.openBluetoothSocket("not-a-mac-address");
+            fail("invalid Bluetooth addresses should be reported as IOException");
+        } catch (IOException ex) {
+            assertTrue(ex.getMessage().contains("Invalid Bluetooth adapter address"));
+        }
+    }
+
     // ---- 2. Mid-session drop → backoff → reconnect → session continues -------------
 
     @Test
