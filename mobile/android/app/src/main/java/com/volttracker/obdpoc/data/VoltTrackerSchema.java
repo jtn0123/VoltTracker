@@ -147,6 +147,7 @@ final class VoltTrackerSchema {
                         + "max_speed_kph INTEGER,"
                         + "has_route INTEGER NOT NULL DEFAULT 0,"
                         + "started_at_ms INTEGER NOT NULL DEFAULT 0,"
+                        + "rollup_version INTEGER NOT NULL DEFAULT 0,"
                         + "FOREIGN KEY(session_id) REFERENCES "
                         + VoltTrackerDb.TABLE_SESSIONS
                         + "(_id) ON DELETE CASCADE"

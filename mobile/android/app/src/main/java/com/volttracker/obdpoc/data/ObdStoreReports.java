@@ -84,6 +84,28 @@ final class ObdStoreReports {
         }
     }
 
+    JSONObject tripRouteJson(String routeKey) {
+        DriveWindowDetector.RouteKey parsed = DriveWindowDetector.parseRouteKey(routeKey);
+        if (parsed == null) {
+            return new JSONObject();
+        }
+        ObdSessionRecord session = getSession(parsed.sessionId);
+        if (session == null) {
+            return new JSONObject();
+        }
+        try {
+            return ObdStoreRouteProjection.routeForSession(
+                    helper.getReadableDatabase(),
+                    session,
+                    ObdStoreRouteProjection.MAX_TRACK_POINTS,
+                    parsed.startedAtMs,
+                    parsed.endedAtMs,
+                    routeKey);
+        } catch (JSONException ex) {
+            return new JSONObject();
+        }
+    }
+
     List<ObdSessionRecord> getRecentSessions(int limit) {
         List<ObdSessionRecord> records = new ArrayList<>();
         try (Cursor cursor =

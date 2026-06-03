@@ -88,6 +88,77 @@ public class TripMaterializerTest {
     }
 
     @Test
+    public void sustainedInactiveTelemetryTrimsParkedTail() {
+        StubData data = new StubData();
+        double startLat = 32.700000;
+        for (int i = 0; i <= 5; i++) {
+            long atMs = T_BASE + i * ONE_MINUTE_MS;
+            data.locations.add(loc(atMs, startLat + i * 0.002, -117.100000));
+            data.telemetry.add(tel(atMs, 35.0));
+        }
+        for (int i = 6; i <= 16; i++) {
+            long atMs = T_BASE + i * ONE_MINUTE_MS;
+            data.locations.add(loc(atMs, startLat + 5 * 0.002, -117.100000));
+            data.telemetry.add(inactiveTel(atMs));
+        }
+
+        List<Trip> trips = TripMaterializer.materialize(input(data), data);
+
+        assertEquals(1, trips.size());
+        Trip trip = trips.get(0);
+        assertEquals(T_BASE, trip.startedAtMs);
+        assertEquals(T_BASE + 5 * ONE_MINUTE_MS, trip.endedAtMs);
+        assertEquals(5 * ONE_MINUTE_MS, trip.durationMs);
+    }
+
+    @Test
+    public void gpsStopBoundariesProduceMultipleTrips() {
+        StubData data = new StubData();
+        addMovingRun(data, T_BASE, 0, 5, 32.700000);
+        addStoppedRun(data, T_BASE, 6, 12, 32.710000);
+        addMovingRun(data, T_BASE, 13, 18, 32.720000);
+        addStoppedRun(data, T_BASE, 19, 23, 32.730000);
+        addMovingRun(data, T_BASE, 24, 29, 32.740000);
+        addStoppedRun(data, T_BASE, 30, 40, 32.750000);
+
+        List<Trip> trips = TripMaterializer.materialize(input(data), data);
+
+        assertEquals(3, trips.size());
+        assertEquals(T_BASE, trips.get(0).startedAtMs);
+        assertEquals(T_BASE + 5 * ONE_MINUTE_MS, trips.get(0).endedAtMs);
+        assertEquals(T_BASE + 13 * ONE_MINUTE_MS, trips.get(1).startedAtMs);
+        assertEquals(T_BASE + 18 * ONE_MINUTE_MS, trips.get(1).endedAtMs);
+        assertEquals(T_BASE + 24 * ONE_MINUTE_MS, trips.get(2).startedAtMs);
+        assertEquals(T_BASE + 29 * ONE_MINUTE_MS, trips.get(2).endedAtMs);
+    }
+
+    @Test
+    public void shortInactivePauseStaysInsideTrip() {
+        StubData data = new StubData();
+        double startLat = 32.700000;
+        for (int i = 0; i <= 3; i++) {
+            long atMs = T_BASE + i * ONE_MINUTE_MS;
+            data.locations.add(loc(atMs, startLat + i * 0.002, -117.100000));
+            data.telemetry.add(tel(atMs, 35.0));
+        }
+        for (int i = 4; i <= 6; i++) {
+            long atMs = T_BASE + i * ONE_MINUTE_MS;
+            data.locations.add(loc(atMs, startLat + 3 * 0.002, -117.100000));
+            data.telemetry.add(inactiveTel(atMs));
+        }
+        for (int i = 7; i <= 10; i++) {
+            long atMs = T_BASE + i * ONE_MINUTE_MS;
+            data.locations.add(loc(atMs, startLat + i * 0.002, -117.100000));
+            data.telemetry.add(tel(atMs, 35.0));
+        }
+
+        List<Trip> trips = TripMaterializer.materialize(input(data), data);
+
+        assertEquals(1, trips.size());
+        assertEquals(T_BASE + 10 * ONE_MINUTE_MS, trips.get(0).endedAtMs);
+    }
+
+    @Test
     public void confidenceTracksSampleCount() {
         // Six samples → WEAK (>=5 has route, <10 still WEAK).
         StubData few = new StubData();
@@ -316,6 +387,28 @@ public class TripMaterializerTest {
     private static TelemetrySample telWithPower(long atMs, double speedKph, double powerKw) {
         // 8-arg constructor lets us provide powerKw directly so the energy integration runs.
         return new TelemetrySample(atMs, speedKph, 1500, 12.4, 360.0, 0.0, powerKw, null);
+    }
+
+    private static TelemetrySample inactiveTel(long atMs) {
+        return new TelemetrySample(atMs, 0.0, 0, 0.0, 360.0, 0.0, 0.0, null);
+    }
+
+    private static void addMovingRun(
+            StubData data, long baseMs, int startMinute, int endMinute, double startLat) {
+        for (int minute = startMinute; minute <= endMinute; minute++) {
+            long atMs = baseMs + minute * ONE_MINUTE_MS;
+            data.locations.add(loc(atMs, startLat + (minute - startMinute) * 0.002, -117.100000));
+            data.telemetry.add(tel(atMs, 35.0));
+        }
+    }
+
+    private static void addStoppedRun(
+            StubData data, long baseMs, int startMinute, int endMinute, double lat) {
+        for (int minute = startMinute; minute <= endMinute; minute++) {
+            long atMs = baseMs + minute * ONE_MINUTE_MS;
+            data.locations.add(loc(atMs, lat, -117.100000));
+            data.telemetry.add(inactiveTel(atMs));
+        }
     }
 
     static final class StubData implements MaterializerData {

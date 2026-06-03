@@ -260,6 +260,10 @@ public class ObdLocalStore implements Closeable, MaterializerData, ObdSessionSto
         return reports.tripRouteJson(sessionId);
     }
 
+    public JSONObject getTripRouteJson(String routeKey) {
+        return reports.tripRouteJson(routeKey);
+    }
+
     // ---- materializer plumbing (delegated) -----------------------------------------
 
     @Override

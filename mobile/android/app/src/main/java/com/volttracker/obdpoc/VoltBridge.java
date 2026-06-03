@@ -179,19 +179,13 @@ public final class VoltBridge {
     }
 
     /**
-     * Full route geometry for a single logged trip, by session id. Lets the Trips screen load the
-     * route of any drive on demand — including older drives outside the storage summary's
-     * recent-routes window. Non-numeric input yields an empty route payload rather than an error.
+     * Full route geometry for a logged trip. Accepts either a plain session id or a split-drive
+     * route key ({@code sessionId:startMs:endMs}) so the Trips screen can preview one drive slice
+     * from a longer OBD session.
      */
     @JavascriptInterface
     public String getTripRoute(String sessionId) {
-        long id;
-        try {
-            id = Long.parseLong(safe(sessionId, MAX_LABEL_LEN));
-        } catch (NumberFormatException ex) {
-            return "{}";
-        }
-        return activity.getTripRouteJson(id);
+        return activity.getTripRouteJson(safe(sessionId, MAX_LABEL_LEN));
     }
 
     @JavascriptInterface

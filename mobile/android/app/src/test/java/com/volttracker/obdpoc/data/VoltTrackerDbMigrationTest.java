@@ -187,6 +187,56 @@ public class VoltTrackerDbMigrationTest {
         context.deleteDatabase(name);
     }
 
+    @Test
+    public void upgradeFromV9_addsRollupVersionColumn() {
+        Context context = RuntimeEnvironment.getApplication();
+        String name = "volttracker_migration_v9_v10.db";
+        context.deleteDatabase(name);
+
+        SQLiteOpenHelper v9Helper =
+                new SQLiteOpenHelper(context.getApplicationContext(), name, null, 9) {
+                    @Override
+                    public void onCreate(SQLiteDatabase db) {
+                        db.execSQL(
+                                "CREATE TABLE "
+                                        + VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS
+                                        + " (session_id INTEGER PRIMARY KEY,"
+                                        + " counted INTEGER NOT NULL,"
+                                        + " distance_m REAL NOT NULL DEFAULT 0,"
+                                        + " duration_ms INTEGER NOT NULL DEFAULT 0,"
+                                        + " max_speed_kph INTEGER,"
+                                        + " has_route INTEGER NOT NULL DEFAULT 0,"
+                                        + " started_at_ms INTEGER NOT NULL DEFAULT 0)");
+                    }
+
+                    @Override
+                    public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+                        /* unused */
+                    }
+                };
+        SQLiteDatabase v9Db = v9Helper.getWritableDatabase();
+        assertFalse(
+                "v9 schema must not pre-contain rollup_version",
+                readColumnNames(v9Db, VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS)
+                        .contains("rollup_version"));
+        v9Helper.close();
+
+        newHelper = new VoltTrackerDb(context, name);
+        SQLiteDatabase newDb = newHelper.getWritableDatabase();
+        assertEquals(
+                "Reopened DB should be at the current schema version after onUpgrade.",
+                VoltTrackerDb.DATABASE_VERSION,
+                newDb.getVersion());
+        assertTrue(
+                "After v9->v10 upgrade, rollup_version must exist.",
+                readColumnNames(newDb, VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS)
+                        .contains("rollup_version"));
+
+        newHelper.close();
+        newHelper = null;
+        context.deleteDatabase(name);
+    }
+
     private static Set<String> readIndexNames(SQLiteDatabase db) {
         Set<String> names = new HashSet<>();
         try (Cursor cursor =

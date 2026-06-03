@@ -3,7 +3,10 @@ package com.volttracker.obdpoc.data;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import android.content.ContentValues;
 import android.content.Context;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
@@ -88,6 +91,44 @@ public class ObdStoreTripsRollupDbTest {
         JSONObject afterTwo = store.getInsightsJson();
         assertEquals(2, afterTwo.getInt("tripCount"));
         assertTrue(afterTwo.getDouble("totalDistanceMeters") > distanceOne);
+    }
+
+    @Test
+    public void staleRollupVersionIsRefreshedOnRead() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        long session = seedClosedTrip(32.70, -117.10, 32.72, -117.10, 1000L);
+        try (VoltTrackerDb helper = new VoltTrackerDb(context)) {
+            SQLiteDatabase db = helper.getWritableDatabase();
+            ContentValues stale = new ContentValues();
+            stale.put("session_id", session);
+            stale.put("counted", 1);
+            stale.put("distance_m", 1.0);
+            stale.put("duration_ms", 1L);
+            stale.put("max_speed_kph", 1);
+            stale.put("has_route", 0);
+            stale.put("started_at_ms", 1000L);
+            stale.put("rollup_version", 0);
+            db.insertWithOnConflict(
+                    VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS,
+                    null,
+                    stale,
+                    SQLiteDatabase.CONFLICT_REPLACE);
+        }
+
+        JSONObject insights = store.getInsightsJson();
+
+        assertTrue(insights.getDouble("totalDistanceMeters") > 1.0);
+        try (VoltTrackerDb helper = new VoltTrackerDb(context);
+                Cursor cursor =
+                        helper.getReadableDatabase()
+                                .rawQuery(
+                                        "SELECT rollup_version FROM "
+                                                + VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS
+                                                + " WHERE session_id = ?",
+                                        new String[] {String.valueOf(session)})) {
+            assertTrue(cursor.moveToFirst());
+            assertEquals(2, cursor.getInt(0));
+        }
     }
 
     @Test

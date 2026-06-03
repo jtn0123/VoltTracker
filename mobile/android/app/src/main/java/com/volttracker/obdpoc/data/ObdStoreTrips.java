@@ -6,15 +6,14 @@ import static com.volttracker.obdpoc.data.ObdStoreSupport.countRowsWhere;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.distanceMeters;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.getAllSessions;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.getRecentSessions;
-import static com.volttracker.obdpoc.data.ObdStoreSupport.maxIntForSessionBoxed;
 
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -26,6 +25,8 @@ import org.json.JSONObject;
  */
 final class ObdStoreTrips {
 
+    private static final int ROLLUP_CACHE_VERSION = 2;
+
     private final VoltTrackerDb helper;
 
     ObdStoreTrips(VoltTrackerDb helper) {
@@ -35,22 +36,31 @@ final class ObdStoreTrips {
     // ---- trips & insights ----------------------------------------------------------
 
     /**
-     * Real trip list, one entry per logged OBD driving session. Distance, duration and speeds are
-     * computed on read; no separate trip table is required. Demo and scan sessions are excluded.
+     * Real trip list, one entry per detected drive window. A single long OBD session can surface
+     * multiple rows when GPS/OBD evidence shows the car stopped for several minutes.
      */
     JSONArray tripsJson(int limit) {
         JSONArray payload = new JSONArray();
         SQLiteDatabase db = helper.getReadableDatabase();
         try {
-            for (ObdSessionRecord session :
-                    getRecentSessions(db, Math.max(1, Math.min(limit, 100)))) {
+            List<JSONObject> allTrips = new ArrayList<>();
+            for (ObdSessionRecord session : getRecentSessions(db, 100)) {
                 if (!ObdLocalStore.MODE_OBD.equals(session.mode)) {
                     continue;
                 }
-                JSONObject trip = tripJson(db, session);
-                if (trip != null) {
-                    payload.put(trip);
-                }
+                allTrips.addAll(tripJsons(db, session));
+            }
+            Collections.sort(
+                    allTrips,
+                    new Comparator<JSONObject>() {
+                        @Override
+                        public int compare(JSONObject left, JSONObject right) {
+                            return Long.compare(
+                                    right.optLong("endedAtMs", 0L), left.optLong("endedAtMs", 0L));
+                        }
+                    });
+            for (int i = 0; i < allTrips.size() && payload.length() < limit; i++) {
+                payload.put(allTrips.get(i));
             }
         } catch (JSONException ignored) {
             // Local numeric/string values are safe.
@@ -58,33 +68,62 @@ final class ObdStoreTrips {
         return payload;
     }
 
-    private JSONObject tripJson(SQLiteDatabase db, ObdSessionRecord session) throws JSONException {
+    private List<JSONObject> tripJsons(SQLiteDatabase db, ObdSessionRecord session)
+            throws JSONException {
+        List<JSONObject> trips = new ArrayList<>();
+        for (DriveWindowDetector.DriveWindow window :
+                DriveWindowDetector.windowsForSession(db, session)) {
+            JSONObject trip = tripJson(db, session, window);
+            if (trip != null) {
+                trips.add(trip);
+            }
+        }
+        return trips;
+    }
+
+    private JSONObject tripJson(
+            SQLiteDatabase db, ObdSessionRecord session, DriveWindowDetector.DriveWindow window)
+            throws JSONException {
         long usefulSamples =
                 countRowsWhere(
                         db,
                         VoltTrackerDb.TABLE_TELEMETRY,
-                        "session_id = ? AND " + USEFUL_TELEMETRY_WHERE,
-                        new String[] {String.valueOf(session.id)});
+                        "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? AND "
+                                + USEFUL_TELEMETRY_WHERE,
+                        new String[] {
+                            String.valueOf(session.id),
+                            String.valueOf(window.startedAtMs),
+                            String.valueOf(window.endedAtMs)
+                        });
         if (usefulSamples <= 0) {
             // A session with no useful telemetry was a failed connection, not a trip.
             return null;
         }
-        JSONArray points = ObdStoreRouteProjection.routePointsForSessionJson(db, session.id, 1000);
-        long endedAtMs = session.endedAtMs > 0 ? session.endedAtMs : session.lastEventAtMs;
-        long durationMs = endedAtMs > session.startedAtMs ? endedAtMs - session.startedAtMs : 0L;
+        JSONArray points =
+                ObdStoreRouteProjection.routePointsForSessionJson(
+                        db, session.id, 1000, window.startedAtMs, window.endedAtMs);
+        long startedAtMs = window.startedAtMs;
+        long endedAtMs = window.endedAtMs;
+        if (points.length() > 0) {
+            startedAtMs = points.getJSONObject(0).optLong("atMs", startedAtMs);
+            endedAtMs = points.getJSONObject(points.length() - 1).optLong("atMs", endedAtMs);
+        }
+        String routeKey = session.id + ":" + startedAtMs + ":" + endedAtMs;
         JSONObject trip = new JSONObject();
-        trip.put("id", session.id);
-        trip.put("startedAtMs", session.startedAtMs);
+        trip.put("id", routeKey);
+        trip.put("sessionId", session.id);
+        trip.put("segmentIndex", window.index);
+        trip.put("startedAtMs", startedAtMs);
         trip.put("endedAtMs", endedAtMs);
-        trip.put("durationMs", durationMs);
+        trip.put("durationMs", Math.max(0L, endedAtMs - startedAtMs));
         trip.put("distanceMeters", distanceMeters(points));
         // Boxed so a trip with no accepted speed samples (e.g. all-sentinel charging session)
         // projects as JSON null instead of 0, letting the dashboard render "--" instead of
         // "0 mph". Numeric callers like insightsJson use optInt with a 0 default, so the
         // existing math still degrades gracefully.
-        Integer maxSpeed = maxIntForSessionBoxed(db, "speed_kph", session.id);
+        Integer maxSpeed = maxIntForWindowBoxed(db, "speed_kph", session.id, window);
         trip.put("maxSpeedKph", maxSpeed == null ? JSONObject.NULL : maxSpeed);
-        trip.put("avgMovingSpeedKph", avgMovingSpeedKph(db, session.id));
+        trip.put("avgMovingSpeedKph", avgMovingSpeedKph(db, session.id, window));
         trip.put("sampleCount", usefulSamples);
         trip.put("pointCount", points.length());
         trip.put("hasRoute", points.length() >= 2);
@@ -93,14 +132,44 @@ final class ObdStoreTrips {
         return trip;
     }
 
-    private static double avgMovingSpeedKph(SQLiteDatabase db, long sessionId) {
+    private static Integer maxIntForWindowBoxed(
+            SQLiteDatabase db,
+            String column,
+            long sessionId,
+            DriveWindowDetector.DriveWindow window) {
+        try (Cursor cursor =
+                db.rawQuery(
+                        "SELECT MAX("
+                                + column
+                                + ") FROM "
+                                + VoltTrackerDb.TABLE_TELEMETRY
+                                + " WHERE session_id = ? AND captured_at_ms >= ?"
+                                + " AND captured_at_ms <= ? AND "
+                                + column
+                                + " IS NOT NULL",
+                        new String[] {
+                            String.valueOf(sessionId),
+                            String.valueOf(window.startedAtMs),
+                            String.valueOf(window.endedAtMs)
+                        })) {
+            return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getInt(0) : null;
+        }
+    }
+
+    private static double avgMovingSpeedKph(
+            SQLiteDatabase db, long sessionId, DriveWindowDetector.DriveWindow window) {
         try (Cursor cursor =
                 db.rawQuery(
                         "SELECT AVG(speed_kph) FROM "
                                 + VoltTrackerDb.TABLE_TELEMETRY
-                                + " WHERE session_id = ? AND speed_kph > 0 AND "
+                                + " WHERE session_id = ? AND captured_at_ms >= ?"
+                                + " AND captured_at_ms <= ? AND speed_kph > 0 AND "
                                 + USEFUL_TELEMETRY_WHERE,
-                        new String[] {String.valueOf(sessionId)})) {
+                        new String[] {
+                            String.valueOf(sessionId),
+                            String.valueOf(window.startedAtMs),
+                            String.valueOf(window.endedAtMs)
+                        })) {
             return cursor.moveToFirst() && !cursor.isNull(0) ? cursor.getDouble(0) : 0d;
         }
     }
@@ -110,11 +179,8 @@ final class ObdStoreTrips {
         JSONObject payload = new JSONObject();
         SQLiteDatabase db = helper.getWritableDatabase();
         try {
-            // O(1) steady state: closed sessions are read from the cached per-session rollup (one
-            // scalar query, no GPS walk); only the at-most-one open session is computed live. The
-            // folding below is byte-for-byte the same one-session-=-one-trip math the old
-            // per-session
-            // loop did, so the published numbers are unchanged.
+            // Closed-session rollups are refreshed with the current split heuristic so Insights
+            // does not keep stale "one session = one drive" totals after an app update.
             List<ObdSessionRecord> active = ensureRollupsAndCollectActive(db);
             TripAggregate agg = new TripAggregate();
             try (Cursor cursor =
@@ -143,17 +209,16 @@ final class ObdStoreTrips {
                 }
             }
             for (ObdSessionRecord session : active) {
-                JSONObject trip = tripJson(db, session);
-                if (trip == null) {
-                    continue;
+                for (JSONObject trip : tripJsons(db, session)) {
+                    Integer maxSpeed =
+                            trip.isNull("maxSpeedKph") ? null : trip.optInt("maxSpeedKph");
+                    agg.addTrip(
+                            trip.optDouble("distanceMeters", 0d),
+                            trip.optLong("durationMs", 0L),
+                            maxSpeed,
+                            trip.optBoolean("hasRoute", false),
+                            trip.optLong("startedAtMs", 0L));
                 }
-                Integer maxSpeed = trip.isNull("maxSpeedKph") ? null : trip.optInt("maxSpeedKph");
-                agg.addTrip(
-                        trip.optDouble("distanceMeters", 0d),
-                        trip.optLong("durationMs", 0L),
-                        maxSpeed,
-                        trip.optBoolean("hasRoute", false),
-                        trip.optLong("startedAtMs", 0L));
             }
             payload.put("tripCount", agg.tripCount);
             payload.put("totalDistanceMeters", agg.totalDistance);
@@ -203,27 +268,11 @@ final class ObdStoreTrips {
     }
 
     /**
-     * Backfills the per-session rollup cache for every closed OBD session that lacks a row, and
-     * returns the open (active) OBD sessions. Active sessions are recomputed live on each read
-     * since their data is still growing, so they are never cached. Steady state this inserts
-     * nothing and returns at most one session — the bulk of the work moves into a single scalar
-     * query by the callers. The first read after an upgrade backfills the whole history once.
+     * Refreshes the per-session rollup cache for every closed OBD session and returns the active
+     * OBD sessions. Active sessions are recomputed live on each read since their data is still
+     * growing, so they are never cached.
      */
     private List<ObdSessionRecord> ensureRollupsAndCollectActive(SQLiteDatabase db) {
-        Set<Long> rolled = new HashSet<>();
-        try (Cursor cursor =
-                db.query(
-                        VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS,
-                        new String[] {"session_id"},
-                        null,
-                        null,
-                        null,
-                        null,
-                        null)) {
-            while (cursor.moveToNext()) {
-                rolled.add(cursor.getLong(0));
-            }
-        }
         List<ObdSessionRecord> active = new ArrayList<>();
         for (ObdSessionRecord session : getAllSessions(db)) {
             if (!ObdLocalStore.MODE_OBD.equals(session.mode)) {
@@ -231,11 +280,24 @@ final class ObdStoreTrips {
             }
             if (session.endedAtMs <= 0) {
                 active.add(session);
-            } else if (!rolled.contains(session.id)) {
+            } else if (!hasFreshRollup(db, session.id)) {
                 insertRollup(db, session);
             }
         }
         return active;
+    }
+
+    private boolean hasFreshRollup(SQLiteDatabase db, long sessionId) {
+        try (Cursor cursor =
+                db.rawQuery(
+                        "SELECT rollup_version FROM "
+                                + VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS
+                                + " WHERE session_id = ?",
+                        new String[] {String.valueOf(sessionId)})) {
+            return cursor.moveToFirst()
+                    && !cursor.isNull(0)
+                    && cursor.getInt(0) >= ROLLUP_CACHE_VERSION;
+        }
     }
 
     /** Computes and caches the rollup scalar for one closed session, reusing the tripJson math. */
@@ -246,13 +308,23 @@ final class ObdStoreTrips {
         long durationMs;
         boolean counted;
         try {
-            JSONObject trip = tripJson(db, session);
-            counted = trip != null;
+            List<JSONObject> trips = tripJsons(db, session);
+            counted = !trips.isEmpty();
             if (counted) {
-                distance = trip.optDouble("distanceMeters", 0d);
-                hasRoute = trip.optBoolean("hasRoute", false);
-                maxSpeed = trip.isNull("maxSpeedKph") ? null : trip.optInt("maxSpeedKph");
-                durationMs = trip.optLong("durationMs", 0L);
+                distance = 0d;
+                durationMs = 0L;
+                hasRoute = false;
+                maxSpeed = null;
+                for (JSONObject trip : trips) {
+                    distance += trip.optDouble("distanceMeters", 0d);
+                    hasRoute = hasRoute || trip.optBoolean("hasRoute", false);
+                    Integer tripMax =
+                            trip.isNull("maxSpeedKph") ? null : trip.optInt("maxSpeedKph");
+                    if (tripMax != null) {
+                        maxSpeed = maxSpeed == null ? tripMax : Math.max(maxSpeed, tripMax);
+                    }
+                    durationMs += trip.optLong("durationMs", 0L);
+                }
             } else {
                 // Failed connection (no useful telemetry): not a counted trip, but the storage
                 // summary still sums its route distance, so compute that once here.
@@ -278,11 +350,12 @@ final class ObdStoreTrips {
         }
         values.put("has_route", hasRoute ? 1 : 0);
         values.put("started_at_ms", session.startedAtMs);
+        values.put("rollup_version", ROLLUP_CACHE_VERSION);
         db.insertWithOnConflict(
                 VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS,
                 null,
                 values,
-                SQLiteDatabase.CONFLICT_IGNORE);
+                SQLiteDatabase.CONFLICT_REPLACE);
     }
 
     /** Mutable accumulator mirroring the original insightsJson per-trip folding exactly. */

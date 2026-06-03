@@ -63,6 +63,30 @@ public class ObdStoreTripsDbTest {
         return sample;
     }
 
+    private static JSONObject inactiveGpsSample(double lat, double lng, long atMs)
+            throws Exception {
+        JSONObject sample = new JSONObject();
+        sample.put("source", "obd");
+        sample.put("speedKph", 0);
+        sample.put("rpm", 0);
+        sample.put("voltage", 0.0);
+        sample.put("powerKw", 0.0);
+        sample.put("latitude", lat);
+        sample.put("longitude", lng);
+        sample.put("accuracyM", 5.0);
+        sample.put("updatedAt", atMs);
+        return sample;
+    }
+
+    private static JSONObject obdSampleNoGps(int speedKph, long atMs) throws Exception {
+        JSONObject sample = new JSONObject();
+        sample.put("source", "obd");
+        sample.put("speedKph", speedKph);
+        sample.put("rpm", 1500);
+        sample.put("updatedAt", atMs);
+        return sample;
+    }
+
     /** Haversine distance between two lat/lng points, in meters. Mirrors the production formula. */
     private static double haversineMeters(double lat1, double lng1, double lat2, double lng2) {
         double earthMeters = 6371000d;
@@ -75,6 +99,31 @@ public class ObdStoreTripsDbTest {
                                 * Math.sin(dLng / 2d)
                                 * Math.sin(dLng / 2d);
         return earthMeters * 2d * Math.atan2(Math.sqrt(a), Math.sqrt(1d - a));
+    }
+
+    private void addMovingTelemetryRun(
+            long sessionId, long baseMs, int startMinute, int endMinute, double startLat)
+            throws Exception {
+        long minuteMs = 60_000L;
+        for (int minute = startMinute; minute <= endMinute; minute++) {
+            store.recordTelemetry(
+                    sessionId,
+                    gpsSample(
+                            35,
+                            startLat + (minute - startMinute) * 0.002,
+                            -117.1000,
+                            baseMs + minute * minuteMs));
+        }
+    }
+
+    private void addStoppedTelemetryRun(
+            long sessionId, long baseMs, int startMinute, int endMinute, double lat)
+            throws Exception {
+        long minuteMs = 60_000L;
+        for (int minute = startMinute; minute <= endMinute; minute++) {
+            store.recordTelemetry(
+                    sessionId, inactiveGpsSample(lat, -117.1000, baseMs + minute * minuteMs));
+        }
     }
 
     // ---- empty store ---------------------------------------------------------------
@@ -162,6 +211,114 @@ public class ObdStoreTripsDbTest {
     }
 
     @Test
+    public void tripDurationExcludesSustainedInactiveTail() throws Exception {
+        long startMs = 1_000_000L;
+        long minuteMs = 60_000L;
+        long id = store.startSession("obd", "00:11", "Adapter", startMs);
+        double startLat = 32.7000;
+        for (int i = 0; i <= 5; i++) {
+            store.recordTelemetry(
+                    id, gpsSample(35, startLat + i * 0.002, -117.1000, startMs + i * minuteMs));
+        }
+        for (int i = 6; i <= 16; i++) {
+            store.recordTelemetry(
+                    id, inactiveGpsSample(startLat + 5 * 0.002, -117.1000, startMs + i * minuteMs));
+        }
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, startMs + 17 * minuteMs, "");
+
+        JSONArray trips = store.getTripsJson(40);
+
+        assertEquals(1, trips.length());
+        JSONObject trip = trips.getJSONObject(0);
+        assertEquals(startMs, trip.optLong("startedAtMs"));
+        assertEquals(startMs + 5 * minuteMs, trip.optLong("endedAtMs"));
+        assertEquals(5 * minuteMs, trip.optLong("durationMs"));
+    }
+
+    @Test
+    public void getTripsSplitsOneSessionIntoMultipleDriveWindows() throws Exception {
+        long startMs = 2_000_000L;
+        long minuteMs = 60_000L;
+        long id = store.startSession("obd", "00:11", "Adapter", startMs);
+        addMovingTelemetryRun(id, startMs, 0, 5, 32.7000);
+        addStoppedTelemetryRun(id, startMs, 6, 12, 32.7100);
+        addMovingTelemetryRun(id, startMs, 13, 18, 32.7200);
+        addStoppedTelemetryRun(id, startMs, 19, 23, 32.7300);
+        addMovingTelemetryRun(id, startMs, 24, 29, 32.7400);
+        addStoppedTelemetryRun(id, startMs, 30, 40, 32.7500);
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, startMs + 41 * minuteMs, "");
+
+        JSONArray trips = store.getTripsJson(40);
+
+        assertEquals(3, trips.length());
+        JSONObject newest = trips.getJSONObject(0);
+        JSONObject middle = trips.getJSONObject(1);
+        JSONObject oldest = trips.getJSONObject(2);
+        assertEquals(startMs + 24 * minuteMs, newest.optLong("startedAtMs"));
+        assertEquals(startMs + 29 * minuteMs, newest.optLong("endedAtMs"));
+        assertEquals(startMs + 13 * minuteMs, middle.optLong("startedAtMs"));
+        assertEquals(startMs + 18 * minuteMs, middle.optLong("endedAtMs"));
+        assertEquals(startMs, oldest.optLong("startedAtMs"));
+        assertEquals(startMs + 5 * minuteMs, oldest.optLong("endedAtMs"));
+        assertEquals(id, newest.optLong("sessionId"));
+
+        JSONObject route = store.getTripRouteJson(newest.optString("id"));
+        JSONArray points = route.optJSONArray("points");
+        assertNotNull(points);
+        assertTrue(points.length() >= 2);
+        assertEquals(startMs + 24 * minuteMs, points.getJSONObject(0).optLong("atMs"));
+        assertEquals(
+                startMs + 29 * minuteMs, points.getJSONObject(points.length() - 1).optLong("atMs"));
+    }
+
+    @Test
+    public void telemetryOnlyTripDurationUsesSampleBounds() throws Exception {
+        long id = store.startSession("obd", "00:11", "Adapter", 1000L);
+        store.recordTelemetry(id, obdSampleNoGps(30, 2000L));
+        store.recordTelemetry(id, obdSampleNoGps(35, 3000L));
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 1_000_000L, "");
+
+        JSONArray trips = store.getTripsJson(40);
+
+        assertEquals(1, trips.length());
+        JSONObject trip = trips.getJSONObject(0);
+        assertEquals(2000L, trip.optLong("startedAtMs"));
+        assertEquals(3000L, trip.optLong("endedAtMs"));
+        assertEquals(1000L, trip.optLong("durationMs"));
+        assertEquals(0, trip.optInt("pointCount"));
+    }
+
+    @Test
+    public void getTripsSortsSplitWindowsGloballyBeforeApplyingLimit() throws Exception {
+        long baseMs = 3_000_000L;
+        long minuteMs = 60_000L;
+        long sessionA = store.startSession("obd", "00:11", "Adapter A", baseMs);
+        store.recordTelemetry(sessionA, gpsSample(35, 32.7000, -117.1000, baseMs));
+        store.recordTelemetry(sessionA, gpsSample(35, 32.7020, -117.1000, baseMs + minuteMs));
+        store.recordTelemetry(
+                sessionA, inactiveGpsSample(32.7020, -117.1000, baseMs + 2 * minuteMs));
+        store.recordTelemetry(
+                sessionA, inactiveGpsSample(32.7020, -117.1000, baseMs + 7 * minuteMs));
+        store.recordTelemetry(sessionA, gpsSample(35, 32.7200, -117.1000, baseMs + 10 * minuteMs));
+        store.recordTelemetry(sessionA, gpsSample(35, 32.7220, -117.1000, baseMs + 11 * minuteMs));
+        store.finishSession(sessionA, ObdLocalStore.STATUS_COMPLETE, baseMs + 12 * minuteMs, "");
+
+        long sessionB = store.startSession("obd", "00:22", "Adapter B", baseMs - 1000L);
+        store.recordTelemetry(sessionB, gpsSample(35, 33.0000, -118.0000, baseMs + 9 * minuteMs));
+        store.recordTelemetry(
+                sessionB, gpsSample(35, 33.0020, -118.0000, baseMs + 9 * minuteMs + 30_000L));
+        store.finishSession(sessionB, ObdLocalStore.STATUS_COMPLETE, baseMs + 10 * minuteMs, "");
+
+        JSONArray trips = store.getTripsJson(2);
+
+        assertEquals(2, trips.length());
+        assertEquals(sessionA, trips.getJSONObject(0).optLong("sessionId"));
+        assertEquals(baseMs + 11 * minuteMs, trips.getJSONObject(0).optLong("endedAtMs"));
+        assertEquals(sessionB, trips.getJSONObject(1).optLong("sessionId"));
+        assertEquals(baseMs + 9 * minuteMs + 30_000L, trips.getJSONObject(1).optLong("endedAtMs"));
+    }
+
+    @Test
     public void twoSessionsBothAppearInTripsJson() throws Exception {
         long first = store.startSession("obd", "00:11", "Adapter A");
         store.recordTelemetry(first, gpsSample(40, 32.70, -117.10, 1000L));
@@ -180,7 +337,7 @@ public class ObdStoreTripsDbTest {
         boolean sawFirst = false;
         boolean sawSecond = false;
         for (int i = 0; i < trips.length(); i++) {
-            long tripId = trips.getJSONObject(i).optLong("id");
+            long tripId = trips.getJSONObject(i).optLong("sessionId");
             if (tripId == first) sawFirst = true;
             if (tripId == second) sawSecond = true;
         }

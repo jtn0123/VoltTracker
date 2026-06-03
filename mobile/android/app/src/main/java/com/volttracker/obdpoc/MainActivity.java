@@ -212,7 +212,9 @@ public class MainActivity extends ComponentActivity {
                         webView, () -> !isFinishing() && !isDestroyed(), this::runOnUiThread);
         WebViewBootstrap.configure(webView, new VoltBridge(this));
 
-        permissionGate.ensureConnectPermissions();
+        // Android shows dangerous permissions only at runtime; ask on first launch so GPS-backed
+        // route logging is enabled before the user starts a drive.
+        permissionGate.ensureGranted();
     }
 
     void onDashboardReady() {
@@ -593,13 +595,17 @@ public class MainActivity extends ComponentActivity {
     }
 
     String getTripRouteJson(long sessionId) {
+        return getTripRouteJson(String.valueOf(sessionId));
+    }
+
+    String getTripRouteJson(String routeKey) {
         if (localStore == null) {
             return MainActivityUtils.errorPayload(
                             "storage_unavailable", "Local storage is not ready yet.")
                     .toString();
         }
         try {
-            return localStore.getTripRouteJson(sessionId).toString();
+            return localStore.getTripRouteJson(routeKey).toString();
         } catch (RuntimeException ex) {
             Log.w(TAG, "getTripRouteJson failed", ex);
             return MainActivityUtils.errorPayload(

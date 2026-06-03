@@ -104,6 +104,44 @@ describe('panels.js — trip route rows', () => {
     expect(getTripRoute).toHaveBeenCalledTimes(1);
   });
 
+  it('uses split trip keys when loading and opening a route slice on the map', async () => {
+    const splitId = '29:1780437013000:1780438133000';
+    const getTripRoute = vi.fn(() => JSON.stringify({
+      session: { id: splitId, sessionId: 29, startedAtMs: 1780437013000, endedAtMs: 1780438133000 },
+      points: [
+        { atMs: 1780437013000, lat: 32.70, lng: -117.16 },
+        { atMs: 1780437600000, lat: 32.71, lng: -117.14 },
+        { atMs: 1780438133000, lat: 32.72, lng: -117.12 },
+      ],
+      pointCount: 3,
+      distanceMeters: 3200,
+    }));
+    await loadDashboard({ bridge: createVoltBridgeFixture({ getTripRoute }) });
+    const VD = window.VoltDashboard;
+    VD.state.storage = { recentRoutes: [] };
+    VD.state.trips = [{
+      id: splitId,
+      sessionId: 29,
+      segmentIndex: 1,
+      startedAtMs: 1780437013000,
+      durationMs: 1_120_000,
+      distanceMeters: 3200,
+      sampleCount: 320,
+      pointCount: 3,
+      hasRoute: true,
+    }];
+
+    VD.renderRealTrips();
+
+    expect(getTripRoute).toHaveBeenCalledWith(splitId);
+    expect(document.getElementById('realTripRouteBox').dataset.tripMap).toBe(splitId);
+    VD.state.storage.recentRoutes = [{ session: { id: splitId }, points: [{ lat: 0, lng: 0 }] }];
+    document.getElementById('realTripMapBtn').click();
+    expect(VD.state.selectedMapSessionId).toBe(splitId);
+    expect(VD.state.storage.recentRoutes[0].session.id).toBe(splitId);
+    expect(VD.state.storage.recentRoutes).toHaveLength(1);
+  });
+
   it('explains a GPS-less drive and offers to enable location', async () => {
     const requestPermissions = vi.fn();
     await loadDashboard({ bridge: createVoltBridgeFixture({ requestPermissions }) });

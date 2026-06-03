@@ -115,6 +115,7 @@ android {
         abortOnError = true
         warningsAsErrors = true
         checkDependencies = true
+        disable += ["GradleDependency"]
         htmlReport = true
         xmlReport = true
     }

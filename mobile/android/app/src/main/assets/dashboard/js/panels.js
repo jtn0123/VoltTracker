@@ -696,12 +696,16 @@
       state.storage && Array.isArray(state.storage.recentRoutes)
         ? state.storage.recentRoutes
         : [];
-    const id = String(trip.id || "");
+    const id = tripRouteKey(trip);
     const fromRecent = routes.find(
       (/** @type {any} */ route) => String((route.session || {}).id || "") === id
     );
     if (fromRecent) return fromRecent;
     return onDemandRoutes.has(id) ? onDemandRoutes.get(id) : null;
+  }
+
+  function tripRouteKey(/** @type {any} */ trip) {
+    return String((trip && (trip.routeId || trip.id || trip.sessionId)) || "");
   }
 
   // Ensures the selected trip's route geometry is available, fetching it from the native bridge
@@ -710,7 +714,7 @@
   // in from a merged backup) preview its route. Returns the route payload or null.
   function ensureRouteForTrip(/** @type {any} */ trip) {
     if (!trip || !trip.hasRoute) return null;
-    const id = String(trip.id || "");
+    const id = tripRouteKey(trip);
     const cached = routeForTrip(trip);
     if (cached) return cached;
     if (onDemandRoutes.has(id)) return onDemandRoutes.get(id);
@@ -720,6 +724,7 @@
       const payload = VD.parsePayload(bridge.getTripRoute(id), null);
       if (payload && Array.isArray(payload.points) && payload.points.length >= 2) {
         route = payload;
+        if (route.session && !route.session.id) route.session.id = id;
       }
     } catch (_err) {
       route = null;
@@ -1331,6 +1336,7 @@
     renderRealTrips,
     renderTripRow,
     selectRealTrip,
+    ensureRouteForTrip,
     renderRealTripDetail,
     renderRealTripLeafletMaps,
     loadInsights,

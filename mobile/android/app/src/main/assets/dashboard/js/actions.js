@@ -510,6 +510,20 @@
       const id = /** @type {HTMLElement} */ (tripButton).dataset.tripMap;
       const trip = (state.trips || []).find((/** @type {any} */ t) => String(t.id) === String(id));
       if (trip && trip.hasRoute) {
+        const route = typeof VD.ensureRouteForTrip === "function" ? VD.ensureRouteForTrip(trip) : null;
+        if (route && route.session) {
+          const routeKey = String(route.session.id || "");
+          const routes = Array.isArray((state.storage || {}).recentRoutes)
+            ? state.storage.recentRoutes
+            : [];
+          state.storage = state.storage || {};
+          state.storage.recentRoutes = [
+            route,
+            ...routes.filter((/** @type {any} */ existing) =>
+              String((existing.session || {}).id || "") !== routeKey
+            )
+          ];
+        }
         state.selectedMapSessionId = id;
         VD.setView("map");
       } else {

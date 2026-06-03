@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.data;
 
 import android.content.Context;
+import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.util.Log;
@@ -11,7 +12,7 @@ import java.util.Set;
 
 final class VoltTrackerDb extends SQLiteOpenHelper {
     static final String DATABASE_NAME = "volttracker_obd_poc.db";
-    static final int DATABASE_VERSION = 9;
+    static final int DATABASE_VERSION = 10;
 
     static final String TABLE_SESSIONS = "obd_sessions";
     static final String TABLE_TELEMETRY = "telemetry_samples";
@@ -226,6 +227,32 @@ final class VoltTrackerDb extends SQLiteOpenHelper {
                     "session-trip-rollups",
                     VoltTrackerSchema::createSessionTripRollups);
         }
+        if (oldVersion < 10) {
+            runMigrationStep(
+                    db,
+                    oldVersion,
+                    10,
+                    "session-trip-rollup-version",
+                    target -> {
+                        if (!hasColumn(target, TABLE_SESSION_TRIP_ROLLUPS, "rollup_version")) {
+                            target.execSQL(
+                                    "ALTER TABLE "
+                                            + TABLE_SESSION_TRIP_ROLLUPS
+                                            + " ADD COLUMN rollup_version INTEGER NOT NULL DEFAULT 0");
+                        }
+                    });
+        }
+    }
+
+    private static boolean hasColumn(SQLiteDatabase db, String table, String column) {
+        try (Cursor cursor = db.rawQuery("PRAGMA table_info(" + table + ")", null)) {
+            while (cursor.moveToNext()) {
+                if (column.equals(cursor.getString(1))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

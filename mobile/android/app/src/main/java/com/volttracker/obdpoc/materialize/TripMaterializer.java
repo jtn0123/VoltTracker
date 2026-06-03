@@ -1,6 +1,9 @@
 package com.volttracker.obdpoc.materialize;
 
+import com.volttracker.obdpoc.VehicleActivityThresholds;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -17,6 +20,33 @@ public final class TripMaterializer {
     static final class Tunables {
         /** Two samples farther apart than this end the current trip window. */
         static final long MAX_GAP_MS = 5L * 60_000L;
+
+        /** Sustained no-motion/no-ready telemetry past this point is treated as car-off dwell. */
+        static final long MAX_INACTIVE_MS = 5L * 60_000L;
+
+        /** A low-speed GPS run past this duration is a stop boundary, not drive time. */
+        static final long MIN_STOP_SPLIT_MS = 3L * 60_000L;
+
+        /** GPS segment speed below this is treated as stopped/crawling. */
+        static final double STOP_SPEED_MPS = 2.5;
+
+        /** Split only compact stops; long slow movement remains one drive. */
+        static final double MAX_STOP_DRIFT_METERS = 300.0;
+
+        /** OBD speed above this is enough evidence that the vehicle is in a drive window. */
+        static final double MOVING_SPEED_KPH = VehicleActivityThresholds.MOVING_SPEED_KPH;
+
+        /** RPM above this means the car is awake even if the GPS speed is momentarily zero. */
+        static final int ENGINE_READY_RPM = VehicleActivityThresholds.ENGINE_READY_RPM;
+
+        /** 12V bus above this suggests the DC-DC converter is active, not a sleeping adapter. */
+        static final double READY_VOLTAGE = VehicleActivityThresholds.READY_VOLTAGE;
+
+        /** Small pack-power noise is ignored; above this the car is doing real drivetrain work. */
+        static final double ACTIVE_POWER_KW = VehicleActivityThresholds.ACTIVE_POWER_KW;
+
+        /** Pack-current fallback for rows where power_kw is unavailable. */
+        static final double ACTIVE_PACK_CURRENT_A = VehicleActivityThresholds.ACTIVE_PACK_CURRENT_A;
 
         /**
          * Hard upper bound on a single trip window. Protects against pathological
@@ -63,9 +93,15 @@ public final class TripMaterializer {
             return result;
         }
         List<TelemetrySample> telemetry = data.readTelemetrySamples(in.sessionId);
+        List<InactiveSpan> inactiveSpans = splitSpans(samples, telemetry);
 
         List<LocationSample> window = new ArrayList<>();
         for (LocationSample sample : samples) {
+            if (insideInactiveSpan(sample.capturedAtMs, inactiveSpans)) {
+                appendTripsCapped(result, window, telemetry);
+                window = new ArrayList<>();
+                continue;
+            }
             if (!window.isEmpty()) {
                 long gap = sample.capturedAtMs - window.get(window.size() - 1).capturedAtMs;
                 if (gap > Tunables.MAX_GAP_MS) {
@@ -79,6 +115,153 @@ public final class TripMaterializer {
             appendTripsCapped(result, window, telemetry);
         }
         return result;
+    }
+
+    private static List<InactiveSpan> splitSpans(
+            List<LocationSample> samples, List<TelemetrySample> telemetry) {
+        List<InactiveSpan> spans = new ArrayList<>(gpsStopSpans(samples));
+        spans.addAll(inactiveSpans(telemetry));
+        Collections.sort(
+                spans,
+                new Comparator<InactiveSpan>() {
+                    @Override
+                    public int compare(InactiveSpan left, InactiveSpan right) {
+                        return Long.compare(left.startMs, right.startMs);
+                    }
+                });
+        List<InactiveSpan> merged = new ArrayList<>();
+        for (InactiveSpan span : spans) {
+            if (merged.isEmpty()) {
+                merged.add(span);
+                continue;
+            }
+            InactiveSpan last = merged.get(merged.size() - 1);
+            if (span.startMs <= last.endMs) {
+                merged.set(
+                        merged.size() - 1,
+                        new InactiveSpan(last.startMs, Math.max(last.endMs, span.endMs)));
+            } else {
+                merged.add(span);
+            }
+        }
+        return merged;
+    }
+
+    private static List<InactiveSpan> gpsStopSpans(List<LocationSample> samples) {
+        List<InactiveSpan> spans = new ArrayList<>();
+        if (samples == null || samples.size() < 2) {
+            return spans;
+        }
+        int runStart = -1;
+        for (int i = 1; i < samples.size(); i++) {
+            LocationSample previous = samples.get(i - 1);
+            LocationSample sample = samples.get(i);
+            double seconds = Math.max(1.0, (sample.capturedAtMs - previous.capturedAtMs) / 1000.0);
+            double speedMps =
+                    haversineMeters(
+                                    previous.latitude,
+                                    previous.longitude,
+                                    sample.latitude,
+                                    sample.longitude)
+                            / seconds;
+            if (speedMps < Tunables.STOP_SPEED_MPS) {
+                if (runStart < 0) {
+                    runStart = i - 1;
+                }
+            } else if (runStart >= 0) {
+                appendGpsStopSpan(spans, samples, runStart, i - 1);
+                runStart = -1;
+            }
+        }
+        if (runStart >= 0) {
+            appendGpsStopSpan(spans, samples, runStart, samples.size() - 1);
+        }
+        return spans;
+    }
+
+    private static void appendGpsStopSpan(
+            List<InactiveSpan> spans, List<LocationSample> samples, int startIndex, int endIndex) {
+        long startMs = samples.get(startIndex).capturedAtMs;
+        long endMs = samples.get(endIndex).capturedAtMs;
+        long stoppedAtMs = samples.get(Math.min(startIndex + 1, endIndex)).capturedAtMs;
+        if (endMs - stoppedAtMs >= Tunables.MIN_STOP_SPLIT_MS
+                && pathMeters(samples, startIndex, endIndex) <= Tunables.MAX_STOP_DRIFT_METERS) {
+            spans.add(new InactiveSpan(startMs, endMs));
+        }
+    }
+
+    private static double pathMeters(List<LocationSample> samples, int startIndex, int endIndex) {
+        double meters = 0.0;
+        for (int i = startIndex + 1; i <= endIndex; i++) {
+            LocationSample previous = samples.get(i - 1);
+            LocationSample sample = samples.get(i);
+            meters +=
+                    haversineMeters(
+                            previous.latitude,
+                            previous.longitude,
+                            sample.latitude,
+                            sample.longitude);
+        }
+        return meters;
+    }
+
+    private static List<InactiveSpan> inactiveSpans(List<TelemetrySample> telemetry) {
+        List<InactiveSpan> spans = new ArrayList<>();
+        if (telemetry == null || telemetry.isEmpty()) {
+            return spans;
+        }
+        long inactiveStart = -1L;
+        long inactiveEnd = -1L;
+        for (TelemetrySample sample : telemetry) {
+            if (isActiveVehicleSample(sample)) {
+                appendInactiveSpanIfLongEnough(spans, inactiveStart, inactiveEnd);
+                inactiveStart = -1L;
+                inactiveEnd = -1L;
+            } else {
+                if (inactiveStart < 0L) {
+                    inactiveStart = sample.capturedAtMs;
+                }
+                inactiveEnd = sample.capturedAtMs;
+            }
+        }
+        appendInactiveSpanIfLongEnough(spans, inactiveStart, inactiveEnd);
+        return spans;
+    }
+
+    private static void appendInactiveSpanIfLongEnough(
+            List<InactiveSpan> spans, long startMs, long endMs) {
+        if (startMs >= 0L && endMs >= startMs && endMs - startMs > Tunables.MAX_INACTIVE_MS) {
+            spans.add(new InactiveSpan(startMs, endMs));
+        }
+    }
+
+    private static boolean insideInactiveSpan(long atMs, List<InactiveSpan> spans) {
+        for (InactiveSpan span : spans) {
+            if (atMs > span.startMs && atMs <= span.endMs) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isActiveVehicleSample(TelemetrySample sample) {
+        if (sample == null) {
+            return false;
+        }
+        if (sample.speedKph != null && sample.speedKph > Tunables.MOVING_SPEED_KPH) {
+            return true;
+        }
+        if (sample.rpm != null && sample.rpm > Tunables.ENGINE_READY_RPM) {
+            return true;
+        }
+        if (sample.adapterVoltage != null && sample.adapterVoltage > Tunables.READY_VOLTAGE) {
+            return true;
+        }
+        if (sample.powerKw != null && Math.abs(sample.powerKw) > Tunables.ACTIVE_POWER_KW) {
+            return true;
+        }
+        return sample.packCurrentA != null
+                && Math.abs(sample.packCurrentA) > Tunables.ACTIVE_PACK_CURRENT_A;
     }
 
     /**
@@ -282,5 +465,15 @@ public final class TripMaterializer {
                                 * Math.sin(dLng / 2.0)
                                 * Math.sin(dLng / 2.0);
         return earthMeters * 2.0 * Math.atan2(Math.sqrt(a), Math.sqrt(1.0 - a));
+    }
+
+    private static final class InactiveSpan {
+        final long startMs;
+        final long endMs;
+
+        InactiveSpan(long startMs, long endMs) {
+            this.startMs = startMs;
+            this.endMs = endMs;
+        }
     }
 }

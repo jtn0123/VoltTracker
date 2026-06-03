@@ -39,8 +39,8 @@ final class DataBackup {
 
     private static final long MAX_RESTORE_BYTES = 128L * 1024L * 1024L;
     // Must track VoltTrackerDb.DATABASE_VERSION (package-private there, so mirrored here). Bump on
-    // every schema migration. v9 added session_trip_rollups.
-    private static final int CURRENT_RESTORE_SCHEMA_VERSION = 9;
+    // every schema migration. v10 versioned the regenerable trip-rollup cache.
+    private static final int CURRENT_RESTORE_SCHEMA_VERSION = 10;
     private static final int IO_BUFFER_BYTES = 8192;
     private static final byte[] ENCRYPTED_BACKUP_MAGIC =
             new byte[] {'V', 'T', 'B', 'K', 'E', 'N', '1', '\n'};
@@ -90,7 +90,8 @@ final class DataBackup {
             "counted",
             "distance_m",
             "duration_ms",
-            "started_at_ms"
+            "started_at_ms",
+            "rollup_version"
         },
         {"charge_sessions", "_id", "started_at_ms", "created_at_ms"},
         {"battery_snapshots", "_id", "captured_at_ms", "created_at_ms"},

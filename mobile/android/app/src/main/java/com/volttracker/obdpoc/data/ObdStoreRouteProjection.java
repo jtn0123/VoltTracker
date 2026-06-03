@@ -25,15 +25,40 @@ final class ObdStoreRouteProjection {
 
     static JSONObject routeForSession(SQLiteDatabase db, ObdSessionRecord session, int limit)
             throws JSONException {
+        return routeForSession(db, session, limit, null, null, null);
+    }
+
+    static JSONObject routeForSession(
+            SQLiteDatabase db,
+            ObdSessionRecord session,
+            int limit,
+            Long windowStartMs,
+            Long windowEndMs,
+            String routeId)
+            throws JSONException {
         JSONObject payload = new JSONObject();
-        JSONArray points = routePointsForSessionJson(db, session.id, limit);
-        payload.put("session", sessionToJson(session));
+        JSONArray points =
+                routePointsForSessionJson(db, session.id, limit, windowStartMs, windowEndMs);
+        JSONObject sessionJson = sessionToJson(session);
+        if (routeId != null && !routeId.isEmpty()) {
+            sessionJson.put("id", routeId);
+            sessionJson.put("sessionId", session.id);
+        }
+        if (windowStartMs != null && windowEndMs != null) {
+            sessionJson.put("startedAtMs", windowStartMs.longValue());
+            sessionJson.put("endedAtMs", windowEndMs.longValue());
+        }
+        payload.put("session", sessionJson);
         payload.put("points", points);
         payload.put("pointCount", points.length());
         payload.put("distanceMeters", distanceMeters(points));
         payload.put("bounds", boundsFor(points));
-        payload.put("socTrack", socTrackForSessionJson(db, session.id, limit));
-        payload.put("powerTrack", powerTrackForSessionJson(db, session.id, limit));
+        payload.put(
+                "socTrack",
+                socTrackForSessionJson(db, session.id, limit, windowStartMs, windowEndMs));
+        payload.put(
+                "powerTrack",
+                powerTrackForSessionJson(db, session.id, limit, windowStartMs, windowEndMs));
         return payload;
     }
 
@@ -51,8 +76,9 @@ final class ObdStoreRouteProjection {
             route.put("pointCount", points.length());
             route.put("distanceMeters", distanceMeters(points));
             route.put("bounds", boundsFor(points));
-            route.put("socTrack", socTrackForSessionJson(db, session.id, pointLimit));
-            route.put("powerTrack", powerTrackForSessionJson(db, session.id, pointLimit));
+            route.put("socTrack", socTrackForSessionJson(db, session.id, pointLimit, null, null));
+            route.put(
+                    "powerTrack", powerTrackForSessionJson(db, session.id, pointLimit, null, null));
             payload.put(route);
         }
         return payload;
@@ -66,13 +92,31 @@ final class ObdStoreRouteProjection {
 
     static JSONArray routePointsForSessionJson(SQLiteDatabase db, long sessionId, int limit)
             throws JSONException {
+        return routePointsForSessionJson(db, sessionId, limit, null, null);
+    }
+
+    static JSONArray routePointsForSessionJson(
+            SQLiteDatabase db, long sessionId, int limit, Long windowStartMs, Long windowEndMs)
+            throws JSONException {
         int target = Math.max(1, Math.min(limit, MAX_TRACK_POINTS));
-        String[] sessionArg = {String.valueOf(sessionId)};
+        boolean bounded = windowStartMs != null && windowEndMs != null;
+        String[] sessionArg =
+                bounded
+                        ? new String[] {
+                            String.valueOf(sessionId),
+                            String.valueOf(windowStartMs.longValue()),
+                            String.valueOf(windowEndMs.longValue())
+                        }
+                        : new String[] {String.valueOf(sessionId)};
+        String sessionWhere =
+                bounded
+                        ? "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ?"
+                        : "session_id = ?";
 
         long total =
-                countRowsWhere(
-                        db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, "session_id = ?", sessionArg);
-        String telemetryWhere = "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL";
+                countRowsWhere(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, sessionWhere, sessionArg);
+        String telemetryWhere =
+                sessionWhere + " AND latitude IS NOT NULL AND longitude IS NOT NULL";
         long telemetryTotal =
                 countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, telemetryWhere, sessionArg);
         if (total > 0) {
@@ -89,7 +133,7 @@ final class ObdStoreRouteProjection {
                                 "bearing_deg",
                                 "altitude_m"
                             },
-                            "session_id = ?",
+                            sessionWhere,
                             sessionArg,
                             total,
                             target,
@@ -184,38 +228,60 @@ final class ObdStoreRouteProjection {
      * SOC samples for a session, ascending by time, evenly downsampled across the whole session so
      * the track lines up visually with the full route polyline (not just its tail).
      */
-    private static JSONArray socTrackForSessionJson(SQLiteDatabase db, long sessionId, int limit)
+    private static JSONArray socTrackForSessionJson(
+            SQLiteDatabase db, long sessionId, int limit, Long windowStartMs, Long windowEndMs)
             throws JSONException {
+        String where = "session_id = ? AND soc IS NOT NULL";
+        String[] args = {String.valueOf(sessionId)};
+        if (windowStartMs != null && windowEndMs != null) {
+            where =
+                    "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ?"
+                            + " AND soc IS NOT NULL";
+            args =
+                    new String[] {
+                        String.valueOf(sessionId),
+                        String.valueOf(windowStartMs.longValue()),
+                        String.valueOf(windowEndMs.longValue())
+                    };
+        }
         return downsampledScalarTrack(
-                db,
-                sessionId,
-                "soc",
-                "session_id = ? AND soc IS NOT NULL",
-                "soc",
-                Math.max(1, Math.min(limit, MAX_TRACK_POINTS)));
+                db, args, "soc", where, "soc", Math.max(1, Math.min(limit, MAX_TRACK_POINTS)));
     }
 
     /** Power-kW samples for a session, downsampled the same way as the SOC and route tracks. */
-    private static JSONArray powerTrackForSessionJson(SQLiteDatabase db, long sessionId, int limit)
+    private static JSONArray powerTrackForSessionJson(
+            SQLiteDatabase db, long sessionId, int limit, Long windowStartMs, Long windowEndMs)
             throws JSONException {
+        String where = "session_id = ? AND power_kw IS NOT NULL";
+        String[] args = {String.valueOf(sessionId)};
+        if (windowStartMs != null && windowEndMs != null) {
+            where =
+                    "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ?"
+                            + " AND power_kw IS NOT NULL";
+            args =
+                    new String[] {
+                        String.valueOf(sessionId),
+                        String.valueOf(windowStartMs.longValue()),
+                        String.valueOf(windowEndMs.longValue())
+                    };
+        }
         return downsampledScalarTrack(
                 db,
-                sessionId,
+                args,
                 "power_kw",
-                "session_id = ? AND power_kw IS NOT NULL",
+                where,
                 "powerKw",
                 Math.max(1, Math.min(limit, MAX_TRACK_POINTS)));
     }
 
     private static JSONArray downsampledScalarTrack(
             SQLiteDatabase db,
-            long sessionId,
+            String[] args,
             String column,
             String where,
             String jsonKey,
             int target)
             throws JSONException {
-        String[] args = {String.valueOf(sessionId)};
         long total = countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, where, args);
         if (total == 0) {
             return new JSONArray();
