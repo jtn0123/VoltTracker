@@ -55,10 +55,15 @@ function installMockBridge() {
 /**
  * Loads the dashboard and waits until window.VoltDashboard is wired up.
  * @param {import('@playwright/test').Page} page
+ * @param {{ fixedTime?: string | number | Date }} [opts] when fixedTime is set, Date.now()/new
+ *   Date() return that instant for the whole page — required for visual snapshots so relative
+ *   timestamps ("2 days ago") don't drift the baseline. Must be set before the page renders.
  */
-async function openDashboard(page) {
+async function openDashboard(page, opts = {}) {
+  if (opts.fixedTime !== undefined) {
+    await page.clock.setFixedTime(new Date(opts.fixedTime));
+  }
   await page.addInitScript(installMockBridge);
-  // Silence dashboard client-error logging from blowing up the page during tests.
   await page.goto('/index.html');
   await page.waitForFunction(
     () =>

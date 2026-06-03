@@ -30,7 +30,16 @@ module.exports = defineConfig({
   },
   projects: [
     {
+      // Functional / layout assertions — deterministic everywhere, run on every PR.
       name: 'chromium',
+      testIgnore: /visual\.spec\.js/,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 412, height: 915 } },
+    },
+    {
+      // Pixel screenshots — baselines are Linux/CI-only (font-sensitive). Run via the dedicated
+      // dashboard-visual CI job; locally use `npm run test:visual:update` to preview.
+      name: 'visual',
+      testMatch: /visual\.spec\.js/,
       use: { ...devices['Desktop Chrome'], viewport: { width: 412, height: 915 } },
     },
   ],

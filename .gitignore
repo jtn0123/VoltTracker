@@ -48,6 +48,12 @@ e2e/playwright-report/
 e2e/test-results/
 mobile/android/dashboard-e2e/playwright-report/
 mobile/android/dashboard-e2e/test-results/
+# Visual baselines are generated + committed for Linux/CI only; never commit a dev box's own
+# (darwin/win) baselines or Playwright's transient actual/diff captures.
+mobile/android/dashboard-e2e/**/*-darwin.png
+mobile/android/dashboard-e2e/**/*-win32.png
+mobile/android/dashboard-e2e/**/*-actual.png
+mobile/android/dashboard-e2e/**/*-diff.png
 e2e/dist/
 receiver/logs/
 

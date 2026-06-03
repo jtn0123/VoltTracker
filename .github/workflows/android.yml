@@ -166,13 +166,51 @@ jobs:
       - name: Install Playwright Chromium + OS deps
         run: npx playwright install --with-deps chromium
       - name: Run dashboard Playwright tests
-        run: npx playwright test
+        # Functional/layout project only — the visual (screenshot) project runs in the separate,
+        # advisory dashboard-visual job so missing/changed baselines never block this gate.
+        run: npx playwright test --project=chromium
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dashboard-e2e-report
           path: mobile/android/dashboard-e2e/playwright-report/
+          if-no-files-found: ignore
+
+  dashboard-visual:
+    # ADVISORY pixel-screenshot regression for the reworked dashboard surfaces (Playwright
+    # toHaveScreenshot). Pinned to a fixed ubuntu image so font rendering matches the committed
+    # baselines; the @playwright/test pin fixes the Chromium build. Baselines are Linux-only
+    # (see .gitignore) and generated here — on the first run (or a real visual change) this job
+    # fails and uploads the produced *-linux.png so they can be reviewed/committed.
+    #
+    # Intentionally NOT in ci-success yet (advisory) — promote once baselines are committed and
+    # the signal is proven stable.
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: mobile/android/dashboard-e2e
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '20'
+      - name: Install e2e deps
+        run: npm ci
+      - name: Install Playwright Chromium + OS deps
+        run: npx playwright install --with-deps chromium
+      - name: Run visual screenshot tests
+        run: npx playwright test --project=visual
+      - name: Upload visual baselines + diffs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dashboard-visual-snapshots
+          path: |
+            mobile/android/dashboard-e2e/visual.spec.js-snapshots/
+            mobile/android/dashboard-e2e/test-results/
           if-no-files-found: ignore
 
   gradle-dependency-audit:
