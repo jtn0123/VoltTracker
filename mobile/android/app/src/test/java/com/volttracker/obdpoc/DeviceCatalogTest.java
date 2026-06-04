@@ -9,9 +9,14 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.annotation.Config;
 
 /** Tests the OBD-adapter name heuristic in {@link DeviceCatalog}. */
 @RunWith(RobolectricTestRunner.class)
+// Pin the Robolectric SDK like the rest of the suite: the app's targetSdk is 36,
+// which Robolectric only runs under Java 21, but CI builds on Java 17. SDK 34
+// runs on 17 and exercises the same code path.
+@Config(sdk = 34)
 public class DeviceCatalogTest {
 
     @Test
