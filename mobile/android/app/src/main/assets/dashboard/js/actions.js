@@ -550,6 +550,14 @@
       const button = /** @type {HTMLElement} */ (node);
       button.addEventListener("click", (event) => handleAction(button.dataset.action, event.currentTarget), opts);
     });
+    document.querySelectorAll("[data-scenario]").forEach((node) => {
+      const button = /** @type {HTMLElement} */ (node);
+      button.addEventListener("click", () => {
+        if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(button.dataset.scenario);
+        const picker = el("demoScenarioPicker");
+        if (picker) picker.querySelectorAll("[data-scenario]").forEach((b) => b.classList.toggle("is-active", b === button));
+      }, opts);
+    });
     document.querySelectorAll("[data-map-layer]").forEach((node) => {
       const button = /** @type {HTMLElement} */ (node);
       button.addEventListener("click", () => {

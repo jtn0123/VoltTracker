@@ -734,14 +734,97 @@
       gpsTripCount: routes.length
     };
     state.appState = Object.assign({}, state.appState, { vehicle: sampleVehicle });
-    // Render the storage-backed surfaces too (DB summary, Signals, DTC, vehicle),
-    // not just the map/trips/insights, so the demo lights up every tab.
+    state.demoScenario = "typical";
+    renderDemoSurfaces();
+    VD.setStatus({ state: "ready", detail: "Preview sample drive loaded (real logged route)." });
+  }
+
+  // Re-renders every demo-backed surface (DB summary, Signals, DTC, vehicle, map,
+  // trips, insights) from the current state.storage. Shared by loadSampleData and
+  // the scenario switcher so a mutated payload paints everywhere consistently.
+  function renderDemoSurfaces() {
     VD.updateStorageUi();
     VD.renderRealV2Ui();
     renderMap();
     VD.renderRealTrips();
     VD.renderInsightStats();
-    VD.setStatus({ state: "ready", detail: "Preview sample drive loaded (real logged route)." });
+  }
+
+  /**
+   * Named demo scenarios for systematic dogfooding. "typical" is the rich
+   * happy-path dataset (loadSampleData); the rest mutate that base (or clear it)
+   * to exercise empty states, dense data, fault/error states, and layout
+   * extremes. Browser-only — never runs with a native bridge.
+   * @param {string} name
+   */
+  function loadDemoScenario(name) {
+    const scenario = String(name || "typical");
+    if (scenario === "empty") {
+      VD.setDemoActive(false);
+      state.storage = {
+        database: "volttracker_obd_poc.db",
+        databaseBytes: 4096,
+        sessionCount: 0, sampleCount: 0, rawTelemetryCount: 0,
+        recentRoutes: [], recentSessions: [],
+        chargeSummary: { chargeSessionCount: 0, chargingHintCount: 0 },
+        batterySummary: {}, detailedSignalCatalog: [], enhancedCapabilities: [],
+        latestDiagnosticCodes: [], diagnosticCodeCount: 0
+      };
+      state.insights = { tripCount: 0 };
+      state.appState = Object.assign({}, state.appState, { vehicle: null });
+      state.demoScenario = "empty";
+      renderDemoSurfaces();
+      VD.setStatus({ state: "idle", detail: "Demo scenario: empty (no logged data yet)." });
+      return;
+    }
+
+    // Every other scenario builds on the rich typical dataset.
+    loadSampleData();
+    const now = Date.now();
+    const hour = 3600 * 1000;
+    const s = state.storage;
+    if (scenario === "power-user") {
+      const charges = [];
+      for (let i = 0; i < 14; i++) {
+        charges.push({
+          id: 100 - i, startedAtMs: now - (i * 26 + 4) * hour, endedAtMs: now - (i * 26 + 4) * hour + Math.round((2.4 + (i % 4) * 0.6) * hour),
+          chargerType: i % 5 === 0 ? "level1" : "level2",
+          startSoc: 22 + (i % 6) * 6, endSoc: 88 + (i % 3) * 3, powerKw: i % 5 === 0 ? 1.3 : 7.0 + (i % 3) * 0.2, energyKwh: 8 + (i % 7)
+        });
+      }
+      s.chargeSummary.recentSessions = charges;
+      s.chargeSummary.chargeSessionCount = charges.length;
+      s.chargeSessionCount = charges.length;
+      s.sampleCount = 184213; s.rawTelemetryCount = 184213; s.pidObservationCount = 184213;
+      s.eventCount = 312; s.sessionCount = 96;
+      VD.setStatus({ state: "ready", detail: "Demo scenario: power user (months of data)." });
+    } else if (scenario === "fault") {
+      s.latestDiagnosticCodes = [
+        { dtc: "P0420", status: "current", statusLabel: "current", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 72 * hour, lastSeenMs: now - hour, seenCount: 9 },
+        { dtc: "P0301", status: "permanent", statusLabel: "permanent", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 50 * hour, lastSeenMs: now - 2 * hour, seenCount: 5 },
+        { dtc: "P0128", status: "freeze-frame", statusLabel: "freeze-frame", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 30 * hour, lastSeenMs: now - 3 * hour, seenCount: 2 },
+        { dtc: "P0011", status: "pending", statusLabel: "pending", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 12 * hour, lastSeenMs: now - hour, seenCount: 1 }
+      ];
+      s.diagnosticCodeCount = 4;
+      s.diagnosticCodeStatusCounts = { current: 1, permanent: 1, "freeze-frame": 1, pending: 1 };
+      state.demoScenario = "fault";
+      renderDemoSurfaces();
+      VD.setStatus({ state: "blocked", detail: "Adapter handshake failed after 3 retries — check the OBD dongle is seated." });
+      return;
+    } else if (scenario === "extreme") {
+      state.appState = Object.assign({}, state.appState, {
+        vehicle: { year: 2017, make: "Chevrolet", model: "Volt Premier Long-Range Special Edition", vin: "1G1RC6S52HU1234567", odometerMiles: 1234567, evSharePct: 99.9, batteryHealthPct: 87.654 }
+      });
+      s.sampleCount = 9999999; s.rawTelemetryCount = 9999999; s.pidObservationCount = 9999999; s.sessionCount = 4096;
+      if (s.chargeSummary && Array.isArray(s.chargeSummary.recentSessions) && s.chargeSummary.recentSessions[1]) {
+        s.chargeSummary.recentSessions[1].chargerType = "DC fast (CCS, 150 kW pedestal)";
+        s.chargeSummary.recentSessions[1].energyKwh = 53.219;
+      }
+      s.overview = Object.assign({}, s.overview, { maxSpeedKph: 257 });
+    }
+    state.demoScenario = scenario;
+    renderDemoSurfaces();
+    VD.setStatus({ state: "ready", detail: `Demo scenario: ${scenario}.` });
   }
 
   Object.assign(VD, {
@@ -758,6 +841,7 @@
     addStop,
     updateLivePosition,
     clearLivePosition,
-    loadSampleData
+    loadSampleData,
+    loadDemoScenario
   });
 })();

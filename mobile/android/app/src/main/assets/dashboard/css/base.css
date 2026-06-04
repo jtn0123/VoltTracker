@@ -532,6 +532,18 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* Scenario picker: flex-wrap (≈3 per row) so an odd count doesn't orphan the
+     last chip the way a fixed 2-col grid would. */
+  .sandbox-tools #demoScenarioPicker {
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .sandbox-tools #demoScenarioPicker button {
+    flex: 1 1 30%;
+  }
+
   .demo-link {
     display: block;
     margin-top: 8px;
