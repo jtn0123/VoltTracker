@@ -186,56 +186,244 @@ final class ObdStoreReports {
         return records;
     }
 
+    JSONArray enhancedCapabilitiesJson(int limit) {
+        JSONArray items = new JSONArray();
+        try (Cursor cursor =
+                helper.getReadableDatabase()
+                        .query(
+                                VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                "last_seen_ms DESC",
+                                boundedLimit(limit))) {
+            while (cursor.moveToNext()) {
+                try {
+                    JSONObject item = capabilityJsonFromCursor(cursor);
+                    items.put(item);
+                } catch (JSONException ignored) {
+                    // Skip malformed rows instead of breaking the dashboard/debug payload.
+                }
+            }
+        }
+        return items;
+    }
+
+    JSONObject enhancedCapabilityJson(long id) {
+        try (Cursor cursor =
+                helper.getReadableDatabase()
+                        .query(
+                                VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
+                                null,
+                                "_id = ?",
+                                new String[] {String.valueOf(id)},
+                                null,
+                                null,
+                                null,
+                                "1")) {
+            if (!cursor.moveToFirst()) {
+                return notFound("detailed signal log not found");
+            }
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("ok", true);
+                payload.put("kind", "detailed-signal-log");
+                payload.put("item", capabilityJsonFromCursor(cursor));
+                return payload;
+            } catch (JSONException ex) {
+                return error("detailed signal log could not be exported");
+            }
+        }
+    }
+
+    JSONObject enhancedCapabilitiesExportJson(int limit) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("ok", true);
+            payload.put("kind", "detailed-signal-logs");
+            payload.put("exportedAtMs", System.currentTimeMillis());
+            payload.put("items", enhancedCapabilitiesJson(limit));
+        } catch (JSONException ignored) {
+            // Local keys are safe.
+        }
+        return payload;
+    }
+
+    boolean hasRecentEnhancedCapability(
+            String adapterAddress, String header, String command, long minAgeMs) {
+        String adapterKey = ObdStoreSupport.adapterKey(adapterAddress, ObdLocalStore.MODE_OBD);
+        long cutoff = System.currentTimeMillis() - Math.max(0L, minAgeMs);
+        try (Cursor cursor =
+                helper.getReadableDatabase()
+                        .query(
+                                VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
+                                new String[] {"last_seen_ms"},
+                                "adapter_key = ? AND header = ? AND command = ? AND last_seen_ms >= ?",
+                                new String[] {
+                                    adapterKey,
+                                    clean(header),
+                                    clean(command),
+                                    String.valueOf(cutoff)
+                                },
+                                null,
+                                null,
+                                "last_seen_ms DESC",
+                                "1")) {
+            return cursor.moveToFirst();
+        }
+    }
+
+    int deleteEnhancedCapability(long id) {
+        return helper.getWritableDatabase()
+                .delete(
+                        VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
+                        "_id = ?",
+                        new String[] {String.valueOf(id)});
+    }
+
+    boolean hasRejectedEnhancedCapability(String adapterAddress, String header, String command) {
+        String adapterKey = ObdStoreSupport.adapterKey(adapterAddress, ObdLocalStore.MODE_OBD);
+        try (Cursor cursor =
+                helper.getReadableDatabase()
+                        .query(
+                                VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
+                                new String[] {"supported", "response_count"},
+                                "adapter_key = ? AND header = ? AND command = ?",
+                                new String[] {adapterKey, clean(header), clean(command)},
+                                null,
+                                null,
+                                "last_seen_ms DESC",
+                                "1")) {
+            if (!cursor.moveToFirst()) {
+                return false;
+            }
+            boolean supported = cursor.getInt(cursor.getColumnIndexOrThrow("supported")) == 1;
+            long responseCount = cursor.getLong(cursor.getColumnIndexOrThrow("response_count"));
+            return !supported && responseCount <= 0L;
+        }
+    }
+
+    private static JSONObject capabilityJsonFromCursor(Cursor cursor) throws JSONException {
+        JSONObject item = new JSONObject();
+        item.put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
+        item.put(
+                "adapterKey", clean(cursor.getString(cursor.getColumnIndexOrThrow("adapter_key"))));
+        item.put("protocol", clean(cursor.getString(cursor.getColumnIndexOrThrow("protocol"))));
+        item.put("header", clean(cursor.getString(cursor.getColumnIndexOrThrow("header"))));
+        item.put("command", clean(cursor.getString(cursor.getColumnIndexOrThrow("command"))));
+        item.put("pid", clean(cursor.getString(cursor.getColumnIndexOrThrow("pid"))));
+        item.put("name", clean(cursor.getString(cursor.getColumnIndexOrThrow("name"))));
+        item.put("unit", clean(cursor.getString(cursor.getColumnIndexOrThrow("unit"))));
+        item.put("supported", cursor.getInt(cursor.getColumnIndexOrThrow("supported")) == 1);
+        item.put("responseCount", cursor.getLong(cursor.getColumnIndexOrThrow("response_count")));
+        item.put("firstSeenMs", cursor.getLong(cursor.getColumnIndexOrThrow("first_seen_ms")));
+        item.put("lastSeenMs", cursor.getLong(cursor.getColumnIndexOrThrow("last_seen_ms")));
+        item.put(
+                "sample",
+                parseObject(cursor.getString(cursor.getColumnIndexOrThrow("sample_json"))));
+        return item;
+    }
+
+    private static JSONObject notFound(String message) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("ok", false);
+            payload.put("error", "not_found");
+            payload.put("message", message);
+        } catch (JSONException ignored) {
+            // Local strings are safe.
+        }
+        return payload;
+    }
+
+    private static JSONObject error(String message) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("ok", false);
+            payload.put("error", "export_failed");
+            payload.put("message", message);
+        } catch (JSONException ignored) {
+            // Local strings are safe.
+        }
+        return payload;
+    }
+
     // ---- storage summary -----------------------------------------------------------
 
     StorageSummaryRecord storageSummaryRecord(File databaseFile) {
         SQLiteDatabase db = helper.getReadableDatabase();
+        long rawTelemetryCount = countRows(db, VoltTrackerDb.TABLE_TELEMETRY);
+        long usefulTelemetryCount =
+                countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, USEFUL_TELEMETRY_WHERE, null);
+        ObdSessionRecord latest = firstOrNull(getRecentSessions(1));
+        ObdSessionRecord reviewSession = ObdStoreSessionReview.latestReviewableSession(db);
+        return new StorageSummaryRecord(
+                VoltTrackerDb.DATABASE_NAME,
+                databaseFile.length(),
+                countRows(db, VoltTrackerDb.TABLE_SESSIONS),
+                rawTelemetryCount,
+                usefulTelemetryCount,
+                Math.max(0L, rawTelemetryCount - usefulTelemetryCount),
+                countRows(db, VoltTrackerDb.TABLE_EVENTS),
+                countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY),
+                countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS),
+                countRows(db, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES),
+                diagnosticCodeStatusCounts(db),
+                countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES),
+                countRows(db, VoltTrackerDb.TABLE_VEHICLES),
+                countRows(db, VoltTrackerDb.TABLE_FIELD_CAPABILITIES),
+                countRows(db, VoltTrackerDb.TABLE_TRIP_SEGMENTS),
+                countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS),
+                countRows(db, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS),
+                countRows(db, VoltTrackerDb.TABLE_CELL_SNAPSHOTS),
+                countRows(db, VoltTrackerDb.TABLE_EXPORTS),
+                latest,
+                recentSessionSummaries(db, 6),
+                getAdapterHistory(6),
+                latestDiagnosticCodeReports(db, 12),
+                reviewSession == null
+                        ? new JSONObject()
+                        : safeJson(() -> ObdStoreSessionReview.sessionReview(db, reviewSession)),
+                reviewSession == null
+                        ? new JSONObject()
+                        : safeJson(
+                                () ->
+                                        ObdStoreRouteProjection.routeForSession(
+                                                db, reviewSession, 240)),
+                safeArray(() -> ObdStoreRouteProjection.recentRoutes(db, 8, 500)),
+                safeJson(() -> overviewJson(db)),
+                safeJson(() -> chargeSummaryJson(db)),
+                safeJson(() -> batterySummaryJson(db)),
+                safeJson(() -> latestVehicleJson(db)),
+                safeArray(() -> enhancedCapabilitiesJson(24)));
+    }
+
+    private interface JsonSupplier {
+        JSONObject get() throws JSONException;
+    }
+
+    private interface ArraySupplier {
+        JSONArray get() throws JSONException;
+    }
+
+    private static JSONObject safeJson(JsonSupplier supplier) {
         try {
-            long rawTelemetryCount = countRows(db, VoltTrackerDb.TABLE_TELEMETRY);
-            long usefulTelemetryCount =
-                    countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, USEFUL_TELEMETRY_WHERE, null);
-            ObdSessionRecord latest = firstOrNull(getRecentSessions(1));
-            ObdSessionRecord reviewSession = ObdStoreSessionReview.latestReviewableSession(db);
-            return new StorageSummaryRecord(
-                    VoltTrackerDb.DATABASE_NAME,
-                    databaseFile.length(),
-                    countRows(db, VoltTrackerDb.TABLE_SESSIONS),
-                    rawTelemetryCount,
-                    usefulTelemetryCount,
-                    Math.max(0L, rawTelemetryCount - usefulTelemetryCount),
-                    countRows(db, VoltTrackerDb.TABLE_EVENTS),
-                    countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY),
-                    countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS),
-                    countRows(db, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES),
-                    diagnosticCodeStatusCounts(db),
-                    countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES),
-                    countRows(db, VoltTrackerDb.TABLE_VEHICLES),
-                    countRows(db, VoltTrackerDb.TABLE_FIELD_CAPABILITIES),
-                    countRows(db, VoltTrackerDb.TABLE_TRIP_SEGMENTS),
-                    countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS),
-                    countRows(db, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS),
-                    countRows(db, VoltTrackerDb.TABLE_CELL_SNAPSHOTS),
-                    countRows(db, VoltTrackerDb.TABLE_EXPORTS),
-                    latest,
-                    recentSessionSummaries(db, 6),
-                    getAdapterHistory(6),
-                    latestDiagnosticCodeReports(db, 12),
-                    reviewSession == null
-                            ? new JSONObject()
-                            : ObdStoreSessionReview.sessionReview(db, reviewSession),
-                    reviewSession == null
-                            ? new JSONObject()
-                            : ObdStoreRouteProjection.routeForSession(db, reviewSession, 240),
-                    ObdStoreRouteProjection.recentRoutes(db, 8, 500),
-                    overviewJson(db),
-                    chargeSummaryJson(db),
-                    batterySummaryJson(db),
-                    latestVehicleJson(db));
-        } catch (JSONException ignored) {
-            // Local numeric/string values are safe; fall back to a usable empty projection if a
-            // nested JSON helper ever rejects one of its static keys.
+            JSONObject value = supplier.get();
+            return value == null ? new JSONObject() : value;
+        } catch (JSONException ex) {
+            return new JSONObject();
         }
-        return emptyStorageSummary(databaseFile);
+    }
+
+    private static JSONArray safeArray(ArraySupplier supplier) {
+        try {
+            JSONArray value = supplier.get();
+            return value == null ? new JSONArray() : value;
+        } catch (JSONException ex) {
+            return new JSONArray();
+        }
     }
 
     private StorageSummaryRecord emptyStorageSummary(File databaseFile) {
@@ -269,7 +457,8 @@ final class ObdStoreReports {
                 new JSONObject(),
                 new JSONObject(),
                 new JSONObject(),
-                new JSONObject());
+                new JSONObject(),
+                new JSONArray());
     }
 
     private List<RecentSessionSummaryRecord> recentSessionSummaries(SQLiteDatabase db, int limit) {
@@ -497,6 +686,7 @@ final class ObdStoreReports {
                         db, VoltTrackerDb.TABLE_TELEMETRY, "charge_transition_hint = 1", null));
         payload.put("maxPowerKw", maxDouble(db, VoltTrackerDb.TABLE_TELEMETRY, "power_kw"));
         payload.put("latest", latestChargeSessionJson(db));
+        payload.put("recentSessions", recentChargeSessionsJson(db, 12));
         return payload;
     }
 
@@ -563,43 +753,68 @@ final class ObdStoreReports {
         return value == null ? JSONObject.NULL : value;
     }
 
+    private static final String[] CHARGE_SESSION_COLUMNS = {
+        "_id",
+        "started_at_ms",
+        "ended_at_ms",
+        "charger_type",
+        "start_soc",
+        "end_soc",
+        "power_kw",
+        "energy_kwh",
+        "confidence"
+    };
+
+    /** Maps one {@code charge_sessions} cursor row to the JSON shape the dashboard renders. */
+    private static JSONObject chargeSessionRowJson(Cursor cursor) throws JSONException {
+        JSONObject item = new JSONObject();
+        item.put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
+        item.put("startedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("started_at_ms")));
+        item.put("endedAtMs", boxedOrNull(nullableLongBoxed(cursor, "ended_at_ms")));
+        String chargerType = cursor.getString(cursor.getColumnIndexOrThrow("charger_type"));
+        item.put("chargerType", chargerType == null ? JSONObject.NULL : clean(chargerType));
+        item.put("startSoc", boxedOrNull(nullableDoubleBoxed(cursor, "start_soc")));
+        item.put("endSoc", boxedOrNull(nullableDoubleBoxed(cursor, "end_soc")));
+        item.put("powerKw", boxedOrNull(nullableDoubleBoxed(cursor, "power_kw")));
+        item.put("energyKwh", boxedOrNull(nullableDoubleBoxed(cursor, "energy_kwh")));
+        item.put("confidence", boxedOrNull(nullableDoubleBoxed(cursor, "confidence")));
+        return item;
+    }
+
     private static JSONObject latestChargeSessionJson(SQLiteDatabase db) throws JSONException {
         try (Cursor cursor =
                 db.query(
                         VoltTrackerDb.TABLE_CHARGE_SESSIONS,
-                        new String[] {
-                            "_id",
-                            "started_at_ms",
-                            "ended_at_ms",
-                            "charger_type",
-                            "start_soc",
-                            "end_soc",
-                            "power_kw",
-                            "energy_kwh",
-                            "confidence"
-                        },
+                        CHARGE_SESSION_COLUMNS,
                         null,
                         null,
                         null,
                         null,
                         "started_at_ms DESC",
                         "1")) {
-            if (!cursor.moveToFirst()) {
-                return new JSONObject();
-            }
-            JSONObject item = new JSONObject();
-            item.put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
-            item.put("startedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("started_at_ms")));
-            item.put("endedAtMs", boxedOrNull(nullableLongBoxed(cursor, "ended_at_ms")));
-            String chargerType = cursor.getString(cursor.getColumnIndexOrThrow("charger_type"));
-            item.put("chargerType", chargerType == null ? JSONObject.NULL : clean(chargerType));
-            item.put("startSoc", boxedOrNull(nullableDoubleBoxed(cursor, "start_soc")));
-            item.put("endSoc", boxedOrNull(nullableDoubleBoxed(cursor, "end_soc")));
-            item.put("powerKw", boxedOrNull(nullableDoubleBoxed(cursor, "power_kw")));
-            item.put("energyKwh", boxedOrNull(nullableDoubleBoxed(cursor, "energy_kwh")));
-            item.put("confidence", boxedOrNull(nullableDoubleBoxed(cursor, "confidence")));
-            return item;
+            return cursor.moveToFirst() ? chargeSessionRowJson(cursor) : new JSONObject();
         }
+    }
+
+    /** Most recent charge sessions (newest first), capped at {@code limit}, for the Charge tab. */
+    private static JSONArray recentChargeSessionsJson(SQLiteDatabase db, int limit)
+            throws JSONException {
+        JSONArray out = new JSONArray();
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_CHARGE_SESSIONS,
+                        CHARGE_SESSION_COLUMNS,
+                        null,
+                        null,
+                        null,
+                        null,
+                        "started_at_ms DESC",
+                        String.valueOf(Math.max(1, limit)))) {
+            while (cursor.moveToNext()) {
+                out.put(chargeSessionRowJson(cursor));
+            }
+        }
+        return out;
     }
 
     private static JSONObject latestBatterySnapshotJson(SQLiteDatabase db) throws JSONException {

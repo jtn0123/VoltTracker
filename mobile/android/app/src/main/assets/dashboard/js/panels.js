@@ -6,6 +6,25 @@
   const state = VD.state;
   const bridge = VD.bridge;
   const el = VD.el;
+  let enhancedSignalFilter = "all";
+  const signalStageMeta = {
+    passive: {
+      label: "Passive",
+      hint: "Only logs adapter state and passive targets; no active enhanced PID requests."
+    },
+    "low-risk": {
+      label: "Low-risk",
+      hint: "Standard optional and known low-risk enhanced reads; avoids DTC and freeze-frame reads."
+    },
+    tires: {
+      label: "Tires",
+      hint: "Narrow tire receiver candidates; avoids DTC and freeze-frame reads."
+    },
+    experimental: {
+      label: "Experimental",
+      hint: "Higher-value enhanced candidates with cooldowns; keep this for short controlled tests."
+    }
+  };
 
   function isNativeError(/** @type {any} */ payload) {
     return payload && typeof payload === "object" && payload.ok === false && payload.error;
@@ -93,10 +112,11 @@
     VD.setText("dbEmptyTelemetryCount", Number(storage.emptyTelemetryCount || 0));
     VD.setText("dbState", VD.dbRowCount(storage) ? `${VD.dbRowCount(storage)} rows` : "ready");
     const last = storage.lastEventAtMs || storage.lastStartedAtMs;
-    VD.setText("dbSummaryTitle", sessions ? `${samples} samples - ${VD.formatWhen(last)}` : "No stored sessions yet");
+    VD.setText("dbSummaryTitle", sessions ? (last ? `${samples} samples · ${VD.formatWhen(last)}` : `${samples} samples`) : "No stored sessions yet");
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     const list = el("dbSessionList");
     updateDiagnosticCodeUi();
+    updateEnhancedCapabilityUi();
     if (!recent.length) {
       list.replaceChildren(buildStatusCopy("Connect or scan to create local SQLite rows. Preview data stays isolated in the sandbox."));
       updateReviewUi();
@@ -123,13 +143,15 @@
     button.className = "history-row";
     const center = document.createElement("span");
     const strong = document.createElement("strong");
-    strong.textContent = `${session.mode || "session"} - ${session.adapterName || "OBD adapter"}`;
+    strong.textContent = `${session.mode || "session"} · ${session.adapterName || "OBD adapter"}`;
     const small = document.createElement("small");
-    small.textContent = `${VD.formatWhen(session.startedAtMs)} - ${session.status || "active"} - ${Number(session.usefulSampleCount ?? session.sampleCount ?? 0)} useful`;
+    small.textContent = `${VD.formatWhen(session.startedAtMs)} · ${session.status || "active"} · ${Number(session.usefulSampleCount ?? session.sampleCount ?? 0)} useful`;
     center.append(strong, small);
     const right = document.createElement("b");
     const empty = Number(session.emptySampleCount || 0);
-    right.textContent = empty ? `${empty} empty` : `${Number(session.sampleCount || 0)}x`;
+    // The subtitle already states the useful-sample count, so the badge calls
+    // out data quality instead of repeating it: empties if any, else "clean".
+    right.textContent = empty ? `${empty} empty` : "clean";
     button.append(center, right);
     return button;
   }
@@ -171,6 +193,226 @@
       return;
     }
     list.replaceChildren(...codes.map((/** @type {number} */ c) => buildDtcItem(c, false)));
+  }
+
+  function enhancedCapabilityStatus(/** @type {any} */ capability) {
+    const sample = capability && typeof capability.sample === "object" ? capability.sample : {};
+    const lane = String(sample.pollLane || capability.pollLane || "").toLowerCase();
+    if (lane === "passive") return "deferred";
+    if (capability.supported === true) return "confirmed";
+    if (capability.supported === false && Number(capability.responseCount || 0) <= 0) return "rejected";
+    const validation = String(sample.validationStatus || capability.validationStatus || "").toLowerCase();
+    if (validation === "confirmed") return "confirmed";
+    if (validation === "rejected_on_this_vehicle") return "rejected";
+    return "candidate";
+  }
+
+  function updateEnhancedCapabilityUi() {
+    const storage = state.storage || {};
+    const rows = detailedSignalRows(storage);
+    const counts = rows.reduce((/** @type {any} */ tally, /** @type {any} */ row) => {
+      const status = row._status;
+      tally[status] = (tally[status] || 0) + 1;
+      const category = String(row.category || (row.sample || {}).category || "").toLowerCase();
+      if (category === "tpms") tally.tpms = (tally.tpms || 0) + 1;
+      return tally;
+    }, { confirmed: 0, rejected: 0, candidate: 0, deferred: 0, tpms: 0 });
+    const total = rows.length || Number(storage.fieldCapabilityCount || 0);
+    const list = el("enhancedCapabilityList");
+    VD.setText("enhancedTitle", total ? `${total} detailed signal${total === 1 ? "" : "s"} tracked` : "No detailed signal results yet");
+    VD.setText("enhancedBadge", counts.confirmed ? "working data" : total ? "evidence saved" : "ready");
+    // The scoreboard counts and the status filter chips share one control now,
+    // so each count is written once to the chip that also filters by it.
+    VD.setText("enhancedAllCount", total);
+    VD.setText("enhancedConfirmedCount", counts.confirmed || 0);
+    VD.setText("enhancedCandidateCount", counts.candidate || 0);
+    VD.setText("enhancedRejectedCount", counts.rejected || 0);
+    VD.setText("enhancedDeferredCount", counts.deferred || 0);
+    VD.setText("enhancedTiresTabCount", counts.tpms || 0);
+    updateSignalStageUi(rows);
+    updateEnhancedFilterButtons();
+    updateEnhancedNextList(rows);
+    if (!list) return;
+    if (!rows.length) {
+      list.replaceChildren(buildStatusCopy("Run Scan or Detail Probe once to collect detailed signal evidence."));
+      return;
+    }
+    const visible = rows.filter((/** @type {any} */ row) => matchesEnhancedFilter(row));
+    if (!visible.length) {
+      list.replaceChildren(buildStatusCopy("No detailed signals match this filter yet."));
+      return;
+    }
+    list.replaceChildren(...visible.slice(0, 18).map(buildEnhancedCapabilityRow));
+  }
+
+  function detailedSignalRows(/** @type {any} */ storage) {
+    const capabilities = Array.isArray(storage.enhancedCapabilities) ? storage.enhancedCapabilities : [];
+    const catalog = Array.isArray(storage.detailedSignalCatalog) ? storage.detailedSignalCatalog : [];
+    const evidenceByKey = new Map();
+    capabilities.forEach((/** @type {any} */ capability) => {
+      evidenceByKey.set(signalKey(capability), capability);
+    });
+    const rows = catalog.map((/** @type {any} */ profile) => {
+      const evidence = evidenceByKey.get(signalKey(profile));
+      if (evidence) evidenceByKey.delete(signalKey(profile));
+      const merged = { ...profile, ...(evidence || {}) };
+      merged._hasEvidence = Boolean(evidence);
+      merged._status = evidence ? enhancedCapabilityStatus(merged) : catalogSignalStatus(profile);
+      return merged;
+    });
+    evidenceByKey.forEach((/** @type {any} */ evidence) => {
+      rows.push({ ...evidence, _hasEvidence: true, _status: enhancedCapabilityStatus(evidence) });
+    });
+    return rows;
+  }
+
+  function signalKey(/** @type {any} */ item) {
+    return `${String(item.header || "").toUpperCase()}|${String(item.command || item.pid || "").toUpperCase()}`;
+  }
+
+  function catalogSignalStatus(/** @type {any} */ profile) {
+    const lane = String(profile.pollLane || "").toLowerCase();
+    if (lane === "passive") return "deferred";
+    const validation = String(profile.validationStatus || "").toLowerCase();
+    if (validation === "confirmed") return "confirmed";
+    if (validation === "rejected_on_this_vehicle") return "rejected";
+    return "candidate";
+  }
+
+  function matchesEnhancedFilter(/** @type {any} */ row) {
+    if (enhancedSignalFilter === "all") return true;
+    if (enhancedSignalFilter === "tpms") {
+      return String(row.category || (row.sample || {}).category || "").toLowerCase() === "tpms";
+    }
+    return row._status === enhancedSignalFilter;
+  }
+
+  function updateEnhancedFilterButtons() {
+    const bar = el("enhancedFilterBar");
+    if (!bar) return;
+    bar.querySelectorAll("[data-signal-filter]").forEach((/** @type {any} */ button) => {
+      button.classList.toggle("is-active", button.dataset.signalFilter === enhancedSignalFilter);
+    });
+  }
+
+  function updateEnhancedNextList(/** @type {any[]} */ rows) {
+    const list = el("enhancedNextList");
+    const label = el("signalNextLabel");
+    if (!list) return;
+    const stage = state.signalProbeStage || "tires";
+    const next = rows
+      .filter((row) => row._status === "candidate" && !row._hasEvidence)
+      .filter((row) => String(row.scanStage || (row.sample || {}).scanStage || "tires") === stage)
+      .slice(0, 3);
+    // Hide the whole section (label + list) when this probe mode has no fresh
+    // candidates, rather than showing a loud full-width empty message.
+    const hasNext = next.length > 0;
+    if (label) label.hidden = !hasNext;
+    list.hidden = !hasNext;
+    if (!hasNext) {
+      list.replaceChildren();
+      return;
+    }
+    list.replaceChildren(...next.map(buildEnhancedNextItem));
+  }
+
+  function buildEnhancedNextItem(/** @type {any} */ row) {
+    const item = document.createElement("article");
+    item.className = "enhanced-next-item";
+    const strong = document.createElement("strong");
+    strong.textContent = row.name || row.command || "Detailed signal";
+    const small = document.createElement("small");
+    small.textContent = [row.category || "catalog", row.pollLane || "probe", row.header || "standard"].filter(Boolean).join(" · ");
+    item.append(strong, small);
+    return item;
+  }
+
+  function updateSignalStageUi(/** @type {any[]} */ rows) {
+    const stage = String(state.signalProbeStage || "tires");
+    const meta = /** @type {Record<string, {label: string, hint: string}>} */ (signalStageMeta)[stage] || signalStageMeta.tires;
+    VD.setText("signalStageLabel", meta.label);
+    VD.setText("signalStageHint", meta.hint);
+    const bar = el("signalStageBar");
+    if (bar) {
+      bar.querySelectorAll("[data-signal-stage]").forEach((/** @type {any} */ button) => {
+        button.classList.toggle("is-active", button.dataset.signalStage === stage);
+      });
+    }
+    const count = rows.filter((row) => String(row.scanStage || (row.sample || {}).scanStage || "") === stage).length;
+    const button = /** @type {HTMLButtonElement | null} */ (el("detailProbeBtn"));
+    if (button) {
+      button.textContent = count ? `Run ${meta.label} (${count})` : `Run ${meta.label}`;
+    }
+  }
+
+  function buildSignalChip(/** @type {string} */ text, /** @type {string} */ kind, /** @type {string} */ value) {
+    const chip = document.createElement("span");
+    chip.className = "signal-chip";
+    if (kind) chip.dataset[kind] = String(value || text).toLowerCase();
+    chip.textContent = text;
+    return chip;
+  }
+
+  function buildEnhancedCapabilityRow(/** @type {any} */ capability) {
+    const row = document.createElement("article");
+    row.className = "enhanced-capability-item";
+    row.dataset.status = capability._status || enhancedCapabilityStatus(capability);
+    const center = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = capability.name || capability.pid || capability.command || "Enhanced PID";
+
+    const sample = capability && typeof capability.sample === "object" ? capability.sample : {};
+    // Classification chips — quick-scan tags. Technical evidence (header,
+    // command, last-seen, raw bytes) drops to the mono line below so the row
+    // reads top-to-bottom instead of as one long " - " run.
+    const chips = document.createElement("div");
+    chips.className = "signal-chips";
+    const category = capability.category || sample.category || "catalog";
+    const stage = capability.scanStage || sample.scanStage || "probe";
+    const risk = capability.risk || sample.risk || "";
+    chips.append(buildSignalChip(category, "category", category));
+    // Risk chip only (the scan-stage used to sit here too, but "low-risk" stage
+    // next to "low risk" risk read as a duplicate). Stage now lives in the detail
+    // line below. "safe" reads oddly with " risk", so show it bare.
+    if (risk) chips.append(buildSignalChip(risk === "safe" ? "safe" : `${risk} risk`, "risk", risk));
+
+    const small = document.createElement("small");
+    small.textContent = [
+      stage ? `${stage} probe` : null,
+      capability.header || "no header",
+      capability.command || capability.pid || "no command",
+      capability._hasEvidence && capability.lastSeenMs ? VD.formatWhen(capability.lastSeenMs) : "not tried",
+      sample.rawResponse || capability.notes || capability.source || ""
+    ].filter(Boolean).join(" · ");
+    center.append(strong, chips, small);
+    const status = document.createElement("b");
+    status.textContent = enhancedStatusLabel(capability._status || enhancedCapabilityStatus(capability));
+    row.append(center, status);
+    if (capability._hasEvidence && capability.id) {
+      const actions = document.createElement("span");
+      actions.className = "signal-log-actions";
+      const exportBtn = document.createElement("button");
+      exportBtn.type = "button";
+      exportBtn.className = "icon-link-btn";
+      exportBtn.dataset.signalExport = String(capability.id);
+      exportBtn.title = "Export this log";
+      exportBtn.textContent = "Export";
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "icon-link-btn danger";
+      deleteBtn.dataset.signalDelete = String(capability.id);
+      deleteBtn.title = "Delete this saved evidence row";
+      deleteBtn.textContent = "Delete";
+      actions.append(exportBtn, deleteBtn);
+      row.append(actions);
+    }
+    return row;
+  }
+
+  function enhancedStatusLabel(/** @type {string} */ status) {
+    if (status === "confirmed") return "working";
+    if (status === "rejected") return "no hit";
+    return status || "candidate";
   }
 
   function buildDtcEmptyState() {
@@ -228,14 +470,14 @@
 
     if (info && info.description) {
       const small = document.createElement("small");
-      const headerLabel = code.header ? `header ${code.header} - ` : "";
-      small.textContent = `${code.moduleName || "generic OBD-II"} - ${headerLabel}first ${VD.formatWhen(code.firstSeenMs)}`;
+      const headerLabel = code.header ? `header ${code.header} · ` : "";
+      small.textContent = `${code.moduleName || "generic OBD-II"} · ${headerLabel}first ${VD.formatWhen(code.firstSeenMs)}`;
       moduleBlock.append(small);
     } else {
       const small = document.createElement("small");
-      const headerLabel = code.header ? `header ${code.header} - ` : "";
-      const moduleLabel = info && info.category ? (code.moduleName || "generic OBD-II") + " - " : "";
-      small.textContent = `${moduleLabel}${headerLabel}first ${VD.formatWhen(code.firstSeenMs)} - last ${VD.formatWhen(code.lastSeenMs)}`;
+      const headerLabel = code.header ? `header ${code.header} · ` : "";
+      const moduleLabel = info && info.category ? (code.moduleName || "generic OBD-II") + " · " : "";
+      small.textContent = `${moduleLabel}${headerLabel}first ${VD.formatWhen(code.firstSeenMs)} · last ${VD.formatWhen(code.lastSeenMs)}`;
       moduleBlock.append(small);
     }
 
@@ -244,7 +486,7 @@
       causesWrap.className = "dtc-causes";
       const header = document.createElement("span");
       header.className = "dtc-causes-head";
-      const tag = info.category ? ` - ${info.category}` : "";
+      const tag = info.category ? ` · ${info.category}` : "";
       header.textContent = `Likely causes${tag}`;
       causesWrap.append(header);
       const list = document.createElement("ul");
@@ -265,15 +507,22 @@
     searchLink.setAttribute("role", "button");
     moduleBlock.append(searchLink);
 
-    const repeatBlock = document.createElement("span");
-    repeatBlock.className = "dtc-repeat-block";
-    const repeatB = document.createElement("b");
-    repeatB.textContent = `${Number(code.seenCount || 0)}x`;
-    const repeatSmall = document.createElement("small");
-    repeatSmall.textContent = "seen";
-    repeatBlock.append(repeatB, repeatSmall);
-
-    article.append(codeBlock, moduleBlock, repeatBlock);
+    // Occurrence count, only when we actually have one. A stored/pending code
+    // seen 0 times is contradictory, so suppress the badge rather than print
+    // "0x seen".
+    const seenCount = Number(code.seenCount || 0);
+    if (seenCount > 0) {
+      const repeatBlock = document.createElement("span");
+      repeatBlock.className = "dtc-repeat-block";
+      const repeatB = document.createElement("b");
+      repeatB.textContent = `${seenCount}x`;
+      const repeatSmall = document.createElement("small");
+      repeatSmall.textContent = "seen";
+      repeatBlock.append(repeatB, repeatSmall);
+      article.append(codeBlock, moduleBlock, repeatBlock);
+    } else {
+      article.append(codeBlock, moduleBlock);
+    }
     return article;
   }
 
@@ -297,7 +546,7 @@
     if (reviewCard) reviewCard.classList.toggle("has-session", hasSession);
 
     VD.setText("reviewTitle", hasSession
-      ? `${session.mode || "session"} - ${session.adapterName || "OBD adapter"}`
+      ? `${session.mode || "session"} · ${session.adapterName || "OBD adapter"}`
       : "No real session yet");
     VD.setText("reviewMaxSpeed", maxSpeed ? `${Math.round(maxSpeed * 0.621371)} mph` : "--");
     VD.setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
@@ -370,7 +619,7 @@
     const article = document.createElement("article");
     article.className = "warning-item";
     const strong = document.createElement("strong");
-    strong.textContent = `${item.code || "warning"}${item.count ? ` - ${item.count}` : ""}`;
+    strong.textContent = `${item.code || "warning"}${item.count ? ` · ${item.count}` : ""}`;
     const small = document.createElement("small");
     small.textContent = item.detail || "";
     article.append(strong, small);
@@ -384,7 +633,7 @@
     const strong = document.createElement("strong");
     strong.textContent = item.detail || item.state || item.kind || "event";
     const small = document.createElement("small");
-    small.textContent = `${item.kind || "event"} - ${VD.formatWhen(item.atMs)}`;
+    small.textContent = `${item.kind || "event"} · ${VD.formatWhen(item.atMs)}`;
     wrapper.append(strong, small);
     article.append(wrapper);
     return article;
@@ -485,7 +734,10 @@
     VD.setText("realChargeSessions", Number(charge.chargeSessionCount || 0));
     VD.setText("realChargeHints", Number(charge.chargingHintCount || 0));
     VD.setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
-    VD.setText("realChargeStatus", charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data"));
+    const chargingNow = (Array.isArray(charge.recentSessions) ? charge.recentSessions : [])
+      .some(isChargeInProgress);
+    VD.setText("realChargeStatus", chargingNow ? "charging" : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data")));
+    renderChargeSessions(charge);
 
     const ring = el("realPackRing");
     const ringValue = el("realPackValue");
@@ -500,6 +752,7 @@
       VD.setText("realPackTitle", "Waiting for battery readings.");
       VD.setText("realPackCopy", "Battery charge, power, and pack health appear here once the adapter has logged a few readings.");
     }
+    renderPackStats(latest);
 
     const maintenance = el("maintenanceList");
     if (maintenance) {
@@ -524,15 +777,143 @@
     small.textContent = detail;
     center.append(strong, small);
     const right = document.createElement("b");
+    right.className = "maint-tag";
+    right.dataset.tag = String(tag || "").toLowerCase();
     right.textContent = tag;
     article.append(center, right);
     return article;
   }
 
+  // A charge row counts as "in progress" only when it has no end time AND a
+  // live signal (start SOC or power). A row missing all fields is "details
+  // pending", not charging — so the active-charge badge never fires on a stub.
+  function isChargeInProgress(/** @type {any} */ session) {
+    return Boolean(
+      session && session.endedAtMs == null && session.startedAtMs &&
+        (session.startSoc != null || session.powerKw != null),
+    );
+  }
+
+  // Per-session charge history for the Charge tab. The native chargeSummary now
+  // ships a `recentSessions` array (newest first); the card stays hidden until
+  // at least one real session exists so the empty tab keeps its first-run guide.
+  function renderChargeSessions(/** @type {any} */ charge) {
+    const card = el("chargeSessionsCard");
+    const list = el("chargeSessionsList");
+    const sessions = Array.isArray(charge.recentSessions) ? charge.recentSessions : [];
+    if (card) card.hidden = sessions.length === 0;
+    if (!list) return;
+    if (!sessions.length) {
+      list.replaceChildren();
+      return;
+    }
+    VD.setText("chargeSessionsTitle", `${sessions.length} recent charge${sessions.length === 1 ? "" : "s"}`);
+    list.replaceChildren(...sessions.slice(0, 12).map(buildChargeSessionRow));
+  }
+
+  function chargeNum(/** @type {any} */ value) {
+    // Native sends JSON null for missing fields; coerce those to NaN so a real
+    // 0 reading and "no data" don't both render as "0".
+    return value == null || value === "" ? NaN : Number(value);
+  }
+
+  function chargerLabel(/** @type {any} */ type) {
+    const raw = String(type == null ? "" : type).trim();
+    const key = raw.toLowerCase().replace(/[\s-]+/g, "_");
+    if (!key || key === "unknown" || key === "null") return "";
+    const known = /** @type {Record<string, string>} */ ({
+      level1: "Level 1",
+      level2: "Level 2",
+      dc_fast: "DC fast",
+      dcfast: "DC fast"
+    });
+    return known[key] || raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+
+  function buildChargeSessionRow(/** @type {any} */ session) {
+    const row = document.createElement("article");
+    row.className = "charge-session-row";
+    const inProgress = isChargeInProgress(session);
+    if (inProgress) row.dataset.charging = "1";
+    const center = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = [VD.formatWhen(session.startedAtMs), chargerLabel(session.chargerType)]
+      .filter(Boolean)
+      .join(" · ");
+    const small = document.createElement("small");
+    const startSoc = chargeNum(session.startSoc);
+    const endSoc = chargeNum(session.endSoc);
+    const power = chargeNum(session.powerKw);
+    const endedAtMs = chargeNum(session.endedAtMs);
+    const durationMs = Number.isFinite(endedAtMs) ? endedAtMs - Number(session.startedAtMs) : NaN;
+    const parts = [];
+    if (Number.isFinite(startSoc) && Number.isFinite(endSoc)) parts.push(`${Math.round(startSoc)}% → ${Math.round(endSoc)}%${inProgress ? " now" : ""}`);
+    if (Number.isFinite(power) && power > 0) parts.push(`${power.toFixed(1)} kW`);
+    if (inProgress) parts.push("charging now");
+    else if (Number.isFinite(durationMs) && durationMs > 0 && typeof VD.formatDuration === "function") parts.push(VD.formatDuration(durationMs));
+    small.textContent = parts.length ? parts.join(" · ") : "charge details pending";
+    center.append(strong, small);
+    const right = document.createElement("b");
+    const energy = chargeNum(session.energyKwh);
+    const socGain = Number.isFinite(startSoc) && Number.isFinite(endSoc) ? endSoc - startSoc : NaN;
+    if (Number.isFinite(energy) && energy > 0) right.textContent = `${energy.toFixed(1)} kWh`;
+    else if (Number.isFinite(socGain) && socGain > 0) right.textContent = `+${Math.round(socGain)}%`;
+    else right.textContent = "--";
+    row.append(center, right);
+    return row;
+  }
+
+  function firstNum(/** @type {any[]} */ values) {
+    for (const v of values) {
+      if (v == null || v === "") continue;
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+    return NaN;
+  }
+
+  // HV-pack detail. The battery snapshot already rides in the storage payload —
+  // surface voltage / temp / health / power as a stat row beneath the SOC ring
+  // so the Insights hero shows the pack, not just a charge percentage. Hidden
+  // until at least one field is real.
+  function renderPackStats(/** @type {any} */ latest) {
+    const row = el("realPackStats");
+    if (!row) return;
+    const voltage = firstNum([latest.packVoltage]);
+    const temp = firstNum([latest.batteryTempC, latest.batteryTemp]);
+    const soh = firstNum([latest.sohPct]);
+    const packPower = firstNum([latest.packPowerKw, latest.powerKw]);
+    const stats = [
+      ["Pack", Number.isFinite(voltage) ? `${Math.round(voltage)} V` : null],
+      ["Temp", Number.isFinite(temp) ? `${Math.round(temp)}°C` : null],
+      ["Health", Number.isFinite(soh) && soh > 0 ? `${Math.round(soh)}%` : null],
+      ["Power", Number.isFinite(packPower) && packPower !== 0 ? `${packPower.toFixed(1)} kW` : null]
+    ].filter((pair) => pair[1] != null);
+    if (!stats.length) {
+      row.hidden = true;
+      row.replaceChildren();
+      return;
+    }
+    row.hidden = false;
+    row.replaceChildren(...stats.map((pair) => buildPackStat(pair[0], String(pair[1]))));
+  }
+
+  function buildPackStat(/** @type {string} */ label, /** @type {string} */ value) {
+    const cell = document.createElement("div");
+    const span = document.createElement("span");
+    span.textContent = label;
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    cell.append(span, strong);
+    return cell;
+  }
+
   // Vehicle identity card. Reads state.appState.vehicle once the OBD bridge can
   // supply it; every field degrades to "--" until its PID/source is validated.
   // Expected vehicle fields: name, vin, year, make, model, odometerMiles (or
-  // odometerKm), evSharePct, batteryHealthPct.
+  // odometerKm). (Electric-mix % and battery-health % were dropped: no PID
+  // captures state-of-health and there's no EV/engine distance split, so the
+  // native layer can't populate them — see demo-native-contract.test.js.)
   function renderVehicleUi() {
     const vehicle = (state.appState || {}).vehicle || {};
     const insights = state.insights || {};
@@ -561,12 +942,6 @@
 
     const loggedMeters = Number(insights.totalDistanceMeters || 0);
     VD.setText("vehicleLoggedDistance", loggedMeters > 0 ? VD.formatDistance(loggedMeters) : "--");
-
-    const evMix = Number(vehicle.evSharePct != null ? vehicle.evSharePct : vehicle.electricSharePct);
-    VD.setText("vehicleEvMix", Number.isFinite(evMix) ? `${Math.round(evMix)}% electric` : "--");
-
-    const health = Number(vehicle.batteryHealthPct != null ? vehicle.batteryHealthPct : vehicle.packHealthPct);
-    VD.setText("vehicleBatteryHealth", Number.isFinite(health) ? `${health.toFixed(1)}%` : "--");
   }
 
   function toggleHidden(/** @type {any} */ id, /** @type {any} */ hidden) {
@@ -621,7 +996,12 @@
       trip.pointCount || 0,
       trip.sampleCount || 0,
       trip.startedAtMs || 0,
-      trip.distanceMeters || 0
+      trip.endedAtMs || 0,
+      trip.durationMs || 0,
+      trip.distanceMeters || 0,
+      trip.avgMovingSpeedKph || 0,
+      trip.status || "",
+      trip.adapterName || ""
     ].join(":")).join("|");
   }
 
@@ -688,7 +1068,8 @@
   }
 
   // Routes loaded on demand (per selected trip) for drives outside the storage summary's
-  // recent-routes window. Keyed by trip id; a cached null means "asked the bridge, no route".
+  // recent-routes window. Successful routes are cached; misses are retried on future renders so a
+  // route that arrives after a storage refresh is not hidden forever.
   const onDemandRoutes = new Map();
 
   function routeForTrip(/** @type {any} */ trip) {
@@ -701,7 +1082,7 @@
       (/** @type {any} */ route) => String((route.session || {}).id || "") === id
     );
     if (fromRecent) return fromRecent;
-    return onDemandRoutes.has(id) ? onDemandRoutes.get(id) : null;
+    return onDemandRoutes.get(id) || null;
   }
 
   function tripRouteKey(/** @type {any} */ trip) {
@@ -717,7 +1098,6 @@
     const id = tripRouteKey(trip);
     const cached = routeForTrip(trip);
     if (cached) return cached;
-    if (onDemandRoutes.has(id)) return onDemandRoutes.get(id);
     if (!(bridge && typeof bridge.getTripRoute === "function")) return null;
     let route = null;
     try {
@@ -729,7 +1109,7 @@
     } catch (_err) {
       route = null;
     }
-    onDemandRoutes.set(id, route);
+    if (route) onDemandRoutes.set(id, route);
     return route;
   }
 
@@ -903,7 +1283,7 @@
       "realTripRouteMeta",
       [distance !== "--" ? distance : null, duration !== "--" ? duration : null, topMph ? `top ${topMph} mph` : null]
         .filter(Boolean)
-        .join(" - ") || "stored drive"
+        .join(" · ") || "stored drive"
     );
     // Use the resolved route (after the on-demand fetch), not just trip.hasRoute — a drive can
     // claim a route in its rollup yet have no geometry available.
@@ -1109,12 +1489,12 @@
 
   function enrichRouteEff(/** @type {any} */ route) {
     if (!route || route._effDone) return;
-    route._effDone = true;
     const pts = route.points || [];
     const track = (route.powerTrack || []).filter((/** @type {any} */ s) =>
       Number.isFinite(Number(s.powerKw))
     );
     if (pts.length < 2 || track.length < 2) return;
+    route._effDone = true;
     const powerAt = (/** @type {number} */ atMs) => {
       if (atMs <= track[0].atMs) return Number(track[0].powerKw);
       const last = track[track.length - 1];
@@ -1239,12 +1619,12 @@
     for (let gx = 0; gx <= 75; gx += 15) {
       inner +=
         `<line x1="${xOf(gx)}" y1="${padT}" x2="${xOf(gx)}" y2="${h - padB}" stroke="rgba(255,255,255,0.06)"/>` +
-        `<text x="${xOf(gx)}" y="${h - padB + 15}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="middle">${gx}</text>`;
+        `<text x="${xOf(gx)}" y="${h - padB + 15}" fill="#8b8c99" font-size="9" font-family="ui-monospace,monospace" text-anchor="middle">${gx}</text>`;
     }
     for (let gy = 0; gy <= 7; gy += 1) {
       inner +=
         `<line x1="${padL}" y1="${yS(gy)}" x2="${w - padR}" y2="${yS(gy)}" stroke="rgba(255,255,255,0.06)"/>` +
-        `<text x="${padL - 6}" y="${yS(gy) + 3}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">${gy}</text>`;
+        `<text x="${padL - 6}" y="${yS(gy) + 3}" fill="#8b8c99" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">${gy}</text>`;
     }
     const /** @type {any[]} */ bins = [];
     pool.forEach((p) => {
@@ -1265,7 +1645,7 @@
     });
     inner +=
       `<path d="${trend}" fill="none" stroke="#ff7a45" stroke-width="2.5" stroke-linejoin="round"/>` +
-      `<text x="${w - padR}" y="${h - 4}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">speed (mph) -></text>`;
+      `<text x="${w - padR}" y="${h - 4}" fill="#8b8c99" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">speed (mph) -></text>`;
     // SAFE SINK: `inner` is composed exclusively from computed numbers (chart
     // geometry via xOf/yS/.toFixed, loop integers, and the fixed gColor palette) —
     // never from telemetry strings or any user/bridge input, so no markup can be
@@ -1344,6 +1724,30 @@
     renderInsightScatter,
     enrichRouteEff
   });
+
+  (function bindEnhancedSignalFilters() {
+    const bar = el("enhancedFilterBar");
+    if (!bar) return;
+    bar.addEventListener("click", (event) => {
+      const target = /** @type {any} */ (event.target);
+      const button = /** @type {HTMLElement | null} */ (target ? target.closest("[data-signal-filter]") : null);
+      if (!button) return;
+      enhancedSignalFilter = button.dataset.signalFilter || "all";
+      updateEnhancedCapabilityUi();
+    });
+  })();
+
+  (function bindSignalStages() {
+    const bar = el("signalStageBar");
+    if (!bar) return;
+    bar.addEventListener("click", (event) => {
+      const target = /** @type {any} */ (event.target);
+      const button = /** @type {HTMLElement | null} */ (target ? target.closest("[data-signal-stage]") : null);
+      if (!button) return;
+      state.signalProbeStage = button.dataset.signalStage || "tires";
+      updateEnhancedCapabilityUi();
+    });
+  })();
 
   // Retry-cancel button in the error banner. Wired here instead of in
   // actions.js so the surgical addition stays inside the panels file the

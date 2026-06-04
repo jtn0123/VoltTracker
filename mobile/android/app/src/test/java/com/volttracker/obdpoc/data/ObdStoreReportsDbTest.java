@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
@@ -226,5 +227,62 @@ public class ObdStoreReportsDbTest {
         assertEquals(JSONObject.NULL, latestBattery.get("packCurrentA"));
         assertEquals(JSONObject.NULL, latestBattery.get("packPowerKw"));
         assertEquals(JSONObject.NULL, latestBattery.get("batteryTempC"));
+    }
+
+    @Test
+    public void summaryListsRecentChargeSessionsNewestFirst() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        VoltTrackerDb helper = new VoltTrackerDb(context);
+        try {
+            SQLiteDatabase db = helper.getWritableDatabase();
+            db.insertOrThrow(
+                    VoltTrackerDb.TABLE_CHARGE_SESSIONS,
+                    null,
+                    chargeRow(1_000L, "level1", 20.0, 55.0, 1.4, 4.0));
+            db.insertOrThrow(
+                    VoltTrackerDb.TABLE_CHARGE_SESSIONS,
+                    null,
+                    chargeRow(9_000L, "level2", 40.0, 90.0, 7.2, 9.6));
+        } finally {
+            helper.close();
+        }
+
+        JSONObject charge =
+                com.volttracker.obdpoc.StorageSummaryJson.build(store.getStorageSummaryRecord())
+                        .getJSONObject("chargeSummary");
+        assertEquals(2, charge.getInt("chargeSessionCount"));
+
+        JSONArray recent = charge.getJSONArray("recentSessions");
+        assertEquals(2, recent.length());
+
+        // Newest first: the level2 session started at 9_000 leads.
+        JSONObject newest = recent.getJSONObject(0);
+        assertEquals(9_000L, newest.getLong("startedAtMs"));
+        assertEquals("level2", newest.getString("chargerType"));
+        assertEquals(40.0, newest.getDouble("startSoc"), 0.001);
+        assertEquals(90.0, newest.getDouble("endSoc"), 0.001);
+        assertEquals(9.6, newest.getDouble("energyKwh"), 0.001);
+
+        assertEquals(1_000L, recent.getJSONObject(1).getLong("startedAtMs"));
+    }
+
+    private static ContentValues chargeRow(
+            long startedAtMs,
+            String chargerType,
+            double startSoc,
+            double endSoc,
+            double powerKw,
+            double energyKwh) {
+        ContentValues row = new ContentValues();
+        row.put("started_at_ms", startedAtMs);
+        row.put("ended_at_ms", startedAtMs + 3_600_000L);
+        row.put("charger_type", chargerType);
+        row.put("start_soc", startSoc);
+        row.put("end_soc", endSoc);
+        row.put("power_kw", powerKw);
+        row.put("energy_kwh", energyKwh);
+        row.put("confidence", 0.9);
+        row.put("created_at_ms", startedAtMs);
+        return row;
     }
 }

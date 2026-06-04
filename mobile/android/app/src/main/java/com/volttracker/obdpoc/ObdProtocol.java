@@ -107,9 +107,9 @@ final class ObdProtocol {
      * ["0D","0C","04"]} → {@code "010D0C04"}). ELM327 v1.4+ accepts up to 6 PIDs in a single
      * Mode-01 request and replies with the concatenated frames in one response.
      *
-     * <p>Collapses the per-cycle Tier-1 PID set from 5 round-trips into 1 when the adapter supports
-     * it. Falls back to per-PID polling when {@link #responseContainsAllMode01Pids} reports the
-     * probe response doesn't include every requested PID.
+     * <p>Collapses a same-cycle Mode-01 PID set into 1 round-trip when the adapter supports it.
+     * Falls back to per-PID polling when {@link #responseContainsAllMode01Pids} reports the probe
+     * response doesn't include every requested PID.
      */
     static String buildMode01MultiCommand(List<String> pidHex) {
         StringBuilder sb = new StringBuilder("01");
@@ -232,11 +232,33 @@ final class ObdProtocol {
             Float rpm = parseRpm(response);
             return rpm == null ? null : value("engine rpm", rpm.doubleValue(), "rpm", 0);
         }
+        if ("0142".equals(cleanCommand)) {
+            Double voltage = parseControlModuleVoltage(response);
+            return voltage == null ? null : value("control module voltage", voltage, "V", 3);
+        }
+        if ("011F".equals(cleanCommand)) {
+            Integer seconds = parseUnsignedMode01Word(response, "1F");
+            return seconds == null ? null : value("engine run time", seconds.doubleValue(), "s", 0);
+        }
+        if ("01A6".equals(cleanCommand)) {
+            Double odometer = parseOdometerKm(response);
+            return odometer == null ? null : value("odometer", odometer, "km", 1);
+        }
         if ("0105".equals(cleanCommand)) {
             Integer coolant = parseCoolantC(response);
             return coolant == null
                     ? null
                     : value("coolant temperature", coolant.doubleValue(), "deg C", 0);
+        }
+        if ("010F".equals(cleanCommand)) {
+            Integer intake = parseOffsetMode01Byte(response, "0F", -40);
+            return intake == null
+                    ? null
+                    : value("intake air temperature", intake.doubleValue(), "deg C", 0);
+        }
+        if ("012F".equals(cleanCommand)) {
+            Integer fuel = parsePercentMode01Byte(response, "2F");
+            return fuel == null ? null : value("fuel level", fuel.doubleValue(), "%", 0);
         }
         if ("0104".equals(cleanCommand)) {
             Integer load = parseEngineLoadPct(response);
@@ -258,6 +280,12 @@ final class ObdProtocol {
             Integer soc = parseStateOfChargePct(response);
             return soc == null ? null : value("state of charge", soc.doubleValue(), "%", 0);
         }
+        if ("015C".equals(cleanCommand)) {
+            Integer oilTemp = parseOffsetMode01Byte(response, "5C", -40);
+            return oilTemp == null
+                    ? null
+                    : value("engine oil temperature", oilTemp.doubleValue(), "deg C", 0);
+        }
         if ("222429".equals(cleanCommand)) {
             Double voltage = voltWordValue(response, cleanCommand, 64.0, true);
             return voltage == null ? null : value("hv pack voltage", voltage, "V", 1);
@@ -265,6 +293,45 @@ final class ObdProtocol {
         if ("222414".equals(cleanCommand)) {
             Double current = voltWordValue(response, cleanCommand, 20.0, true);
             return current == null ? null : value("hv pack current", current, "A", 2);
+        }
+        if ("22119F".equals(cleanCommand) || "22119F01".equals(cleanCommand)) {
+            Double oilLife = voltByteValue(response, cleanCommand, 100.0 / 255.0, 0.0);
+            return oilLife == null ? null : value("engine oil life", oilLife, "%", 0);
+        }
+        if ("221154".equals(cleanCommand)) {
+            Double temp = voltByteValue(response, cleanCommand, 1.0, -40.0);
+            return temp == null ? null : value("engine oil temperature", temp, "deg C", 0);
+        }
+        if ("22203F".equals(cleanCommand)) {
+            Double torque = voltWordValue(response, cleanCommand, 4.0, false);
+            return torque == null ? null : value("engine torque", torque, "Nm", 1);
+        }
+        if ("222883".equals(cleanCommand)) {
+            Double current = voltWordValue(response, cleanCommand, 20.0, true);
+            return current == null ? null : value("motor A current", current, "A", 2);
+        }
+        if ("222884".equals(cleanCommand)) {
+            Double current = voltWordValue(response, cleanCommand, 20.0, true);
+            return current == null ? null : value("motor B current", current, "A", 2);
+        }
+        if ("222885".equals(cleanCommand)) {
+            Double voltage = voltWordValue(response, cleanCommand, 100.0, false);
+            return voltage == null ? null : value("motor A voltage", voltage, "V", 2);
+        }
+        if ("222886".equals(cleanCommand)) {
+            Double voltage = voltWordValue(response, cleanCommand, 100.0, false);
+            return voltage == null ? null : value("motor B voltage", voltage, "V", 2);
+        }
+        if ("222487".equals(cleanCommand)) {
+            Double distance = voltWordValue(response, cleanCommand, 100.0, true);
+            return distance == null ? null : value("ev distance this cycle", distance, "km", 2);
+        }
+        if ("222889".equals(cleanCommand)) {
+            return rawByteValue(response, cleanCommand, "prndl state", "");
+        }
+        if ("221940".equals(cleanCommand) || "22194001".equals(cleanCommand)) {
+            Double temp = voltByteValue(response, cleanCommand, 1.0, -40.0);
+            return temp == null ? null : value("transmission temperature", temp, "deg C", 0);
         }
         if ("22434F".equals(cleanCommand)) {
             Double temp = voltByteValue(response, cleanCommand, 1.0, -40.0);
@@ -287,13 +354,48 @@ final class ObdProtocol {
             return current == null ? null : value("charger hv current", current, "A", 2);
         }
         if ("224373".equals(cleanCommand)) {
-            Double power = voltWordValue(response, cleanCommand, 1.0, true);
-            return power == null ? null : value("charger hv power", power, "W", 0);
+            return chargeModeValue(response, cleanCommand);
         }
         if ("22437D".equals(cleanCommand)) {
             // Community formula is (A*256+B)*10 Wh; dividing by 0.1 applies the x10 scale.
             Double energy = voltWordValue(response, cleanCommand, 0.1, false);
             return energy == null ? null : value("last charge energy", energy, "Wh", 0);
+        }
+        if ("2243A5".equals(cleanCommand)) {
+            Double count = voltWordValue(response, cleanCommand, 1.0, false);
+            return count == null ? null : value("hv battery charge count", count, "count", 0);
+        }
+        if ("2243AF".equals(cleanCommand)) {
+            Double soc = voltWordPercentValue(response, cleanCommand);
+            return soc == null ? null : value("hv battery raw soc", soc, "%", 2);
+        }
+        if ("224531".equals(cleanCommand)) {
+            return chargeLevelValue(response, cleanCommand);
+        }
+        if ("228334".equals(cleanCommand)) {
+            Double soc = voltByteValue(response, cleanCommand, 100.0 / 255.0, 0.0);
+            return soc == null ? null : value("hv battery displayed soc", soc, "%", 2);
+        }
+        if ("2241B2".equals(cleanCommand)) {
+            Double rpm = voltWordValue(response, cleanCommand, 1.0, true);
+            return rpm == null ? null : value("battery coolant pump rpm", rpm, "rpm", 0);
+        }
+        if ("2241B4".equals(cleanCommand)) {
+            return rawByteValue(response, cleanCommand, "battery coolant valve", "raw");
+        }
+        if ("2241B6".equals(cleanCommand)) {
+            Double watts = voltWordValue(response, cleanCommand, 1.0, true);
+            return watts == null ? null : value("battery heater power", watts, "W", 0);
+        }
+        if ("22801E".equals(cleanCommand)) {
+            Double temp = voltByteValue(response, cleanCommand, 0.125, -5.0);
+            return temp == null ? null : value("outside air temperature raw", temp, "deg C", 1);
+        }
+        if ("22801F".equals(cleanCommand)) {
+            Double temp = voltByteValue(response, cleanCommand, 0.125, -5.0);
+            return temp == null
+                    ? null
+                    : value("outside air temperature filtered", temp, "deg C", 1);
         }
         return null;
     }
@@ -440,6 +542,39 @@ final class ObdProtocol {
             return null;
         }
         return voltage.valueNumeric * current.valueNumeric / 1000.0;
+    }
+
+    private static Double parseControlModuleVoltage(String response) {
+        int[] bytes = mode01Bytes(response, "42", 2);
+        return bytes == null ? null : ((bytes[0] * 256.0) + bytes[1]) / 1000.0;
+    }
+
+    private static Integer parseUnsignedMode01Word(String response, String pid) {
+        int[] bytes = mode01Bytes(response, pid, 2);
+        return bytes == null ? null : bytes[0] * 256 + bytes[1];
+    }
+
+    private static Double parseOdometerKm(String response) {
+        int[] bytes = mode01Bytes(response, "A6", 4);
+        if (bytes == null) {
+            return null;
+        }
+        long raw =
+                ((long) bytes[0] << 24)
+                        | ((long) bytes[1] << 16)
+                        | ((long) bytes[2] << 8)
+                        | bytes[3];
+        return raw / 10.0;
+    }
+
+    private static Integer parsePercentMode01Byte(String response, String pid) {
+        int[] bytes = mode01Bytes(response, pid, 1);
+        return bytes == null ? null : Math.round(bytes[0] * 100f / 255f);
+    }
+
+    private static Integer parseOffsetMode01Byte(String response, String pid, int offset) {
+        int[] bytes = mode01Bytes(response, pid, 1);
+        return bytes == null ? null : bytes[0] + offset;
     }
 
     private static int[] mode01Bytes(String response, String pid, int expectedBytes) {
@@ -631,6 +766,59 @@ final class ObdProtocol {
             word -= 0x10000;
         }
         return word / divisor;
+    }
+
+    private static Double voltWordPercentValue(String response, String command) {
+        int[] payload = mode22Payload(response, command);
+        if (payload == null || payload.length < 2) {
+            return null;
+        }
+        int word = payload[0] * 256 + payload[1];
+        return word * 100.0 / 65535.0;
+    }
+
+    private static ParsedPidValue chargeModeValue(String response, String command) {
+        int[] payload = mode22Payload(response, command);
+        if (payload == null || payload.length < 2) {
+            return null;
+        }
+        int word = payload[0] * 256 + payload[1];
+        String text = word == 0 ? "NOT_CHARGING" : (word == 0xFFFF ? "CHARGING" : "UNKNOWN");
+        return new ParsedPidValue("charging mode", text, Double.valueOf(word), "");
+    }
+
+    private static ParsedPidValue chargeLevelValue(String response, String command) {
+        int[] payload = mode22Payload(response, command);
+        if (payload == null || payload.length < 1) {
+            return null;
+        }
+        int value = payload[0];
+        String text;
+        switch (value) {
+            case 0:
+                text = "NOT_CHARGING";
+                break;
+            case 1:
+                text = "AC_1";
+                break;
+            case 2:
+                text = "AC_2";
+                break;
+            default:
+                text = "UNKNOWN";
+                break;
+        }
+        return new ParsedPidValue("charging level", text, Double.valueOf(value), "");
+    }
+
+    private static ParsedPidValue rawByteValue(
+            String response, String command, String name, String unit) {
+        int[] payload = mode22Payload(response, command);
+        if (payload == null || payload.length < 1) {
+            return null;
+        }
+        int raw = payload[0];
+        return new ParsedPidValue(name, "RAW_" + raw, Double.valueOf(raw), unit);
     }
 
     private static int[] mode22Payload(String response, String command) {

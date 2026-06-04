@@ -90,6 +90,26 @@ final class DiagnosticScanRunner {
         for (String probe : ObdProbes.VOLT_7E1_PROBES) {
             probeCommand(probe, 4200, raw);
         }
+        appendProbeLine(raw, "volt-discovery", "ATSH7E0 maintenance and engine probes");
+        probeCommand("ATSH7E0", 1800, raw);
+        for (String probe : ObdProbes.VOLT_7E0_PROBES) {
+            probeCommand(probe, 4200, raw);
+        }
+        appendProbeLine(raw, "volt-discovery", "ATSH7E2 transmission probes");
+        probeCommand("ATSH7E2", 1800, raw);
+        for (String probe : ObdProbes.VOLT_7E2_PROBES) {
+            probeCommand(probe, 4200, raw);
+        }
+        appendProbeLine(raw, "tpms-discovery", "ATSH7E0 candidate tire-pressure probes");
+        probeCommand("ATSH7E0", 1800, raw);
+        for (String probe : ObdProbes.TPMS_7E0_DISCOVERY_PROBES) {
+            probeCommand(probe, 4200, raw);
+        }
+        appendProbeLine(raw, "tpms-discovery", "ATSH760 candidate TPMS receiver probes");
+        probeCommand("ATSH760", 1800, raw);
+        for (String probe : ObdProbes.TPMS_760_DISCOVERY_PROBES) {
+            probeCommand(probe, 4200, raw);
+        }
         probeCommand("ATSH7DF", 1800, raw);
 
         // If any 0902 frame in the sweep yielded a parseable VIN, write the vehicle row off
@@ -101,7 +121,11 @@ final class DiagnosticScanRunner {
             final String vin = ObdProtocol.parseVin(vinResponse);
             final com.volttracker.obdpoc.data.ObdLocalStore store = service.localStore;
             if (vin != null && store != null) {
-                service.recorder.runAsync(() -> store.upsertVehicleFromVin(vin));
+                try {
+                    store.upsertVehicleFromVin(vin);
+                } catch (RuntimeException ex) {
+                    service.recorder.logError("vin_persist_failed", ex);
+                }
             }
         }
 

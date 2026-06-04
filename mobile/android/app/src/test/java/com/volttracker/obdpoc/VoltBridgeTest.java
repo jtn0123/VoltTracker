@@ -41,6 +41,8 @@ public class VoltBridgeTest {
                             "refreshDevices",
                             "connect",
                             "scan",
+                            "tpmsScan",
+                            "detailProbe",
                             "getLastDevice",
                             "getDeviceHistory",
                             "getStorageSummary",
@@ -56,6 +58,11 @@ public class VoltBridgeTest {
                             "rememberDevice",
                             "connectLast",
                             "scanLast",
+                            "tpmsScanLast",
+                            "detailProbeLast",
+                            "exportDetailedSignalLog",
+                            "exportDetailedSignalLogs",
+                            "deleteDetailedSignalLog",
                             "demo",
                             "disconnect",
                             "logClientError",
@@ -125,6 +132,21 @@ public class VoltBridgeTest {
     }
 
     @Test
+    public void tpmsScanMethodSignatureIsTwoStrings() throws NoSuchMethodException {
+        Method method = VoltBridge.class.getMethod("tpmsScan", String.class, String.class);
+        assertEquals(void.class, method.getReturnType());
+        assertNotNull(method.getAnnotation(JavascriptInterface.class));
+    }
+
+    @Test
+    public void detailProbeMethodSignatureIsThreeStrings() throws NoSuchMethodException {
+        Method method =
+                VoltBridge.class.getMethod("detailProbe", String.class, String.class, String.class);
+        assertEquals(void.class, method.getReturnType());
+        assertNotNull(method.getAnnotation(JavascriptInterface.class));
+    }
+
+    @Test
     public void rememberDeviceMethodSignatureIsTwoStrings() throws NoSuchMethodException {
         Method method = VoltBridge.class.getMethod("rememberDevice", String.class, String.class);
         assertEquals(void.class, method.getReturnType());
@@ -163,6 +185,7 @@ public class VoltBridgeTest {
                     "getDeviceHistory",
                     "getStorageSummary",
                     "exportDebugBundle",
+                    "exportDetailedSignalLogs",
                     "getTrips",
                     "getInsights"
                 }) {
@@ -172,6 +195,21 @@ public class VoltBridgeTest {
                     getter + " must be @JavascriptInterface",
                     method.getAnnotation(JavascriptInterface.class));
         }
+    }
+
+    @Test
+    public void signalLogBridgeMethodsUseStableSignatures() throws NoSuchMethodException {
+        Method exportOne = VoltBridge.class.getMethod("exportDetailedSignalLog", String.class);
+        assertEquals(String.class, exportOne.getReturnType());
+        assertNotNull(exportOne.getAnnotation(JavascriptInterface.class));
+
+        Method deleteOne = VoltBridge.class.getMethod("deleteDetailedSignalLog", String.class);
+        assertEquals(void.class, deleteOne.getReturnType());
+        assertNotNull(deleteOne.getAnnotation(JavascriptInterface.class));
+
+        Method probeLast = VoltBridge.class.getMethod("detailProbeLast", String.class);
+        assertEquals(void.class, probeLast.getReturnType());
+        assertNotNull(probeLast.getAnnotation(JavascriptInterface.class));
     }
 
     @Test
@@ -185,6 +223,7 @@ public class VoltBridgeTest {
                     "clearStoredData",
                     "connectLast",
                     "scanLast",
+                    "tpmsScanLast",
                     "demo",
                     "disconnect",
                     "clearVehicleDtcCodes"

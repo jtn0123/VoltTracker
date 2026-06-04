@@ -105,23 +105,29 @@ final class DriveWindowDetector {
                     runStart = i - 1;
                 }
             } else if (runStart >= 0) {
-                addStopSpan(spans, samples, runStart, i - 1);
+                addStopSpan(db, sessionId, spans, samples, runStart, i - 1);
                 runStart = -1;
             }
         }
         if (runStart >= 0) {
-            addStopSpan(spans, samples, runStart, samples.size() - 1);
+            addStopSpan(db, sessionId, spans, samples, runStart, samples.size() - 1);
         }
         return spans;
     }
 
     private static void addStopSpan(
-            List<SplitSpan> spans, List<RouteSample> samples, int startIndex, int endIndex) {
+            SQLiteDatabase db,
+            long sessionId,
+            List<SplitSpan> spans,
+            List<RouteSample> samples,
+            int startIndex,
+            int endIndex) {
         long startMs = samples.get(startIndex).atMs;
         long endMs = samples.get(endIndex).atMs;
         long stoppedAtMs = samples.get(Math.min(startIndex + 1, endIndex)).atMs;
         if (endMs - stoppedAtMs >= MIN_STOP_SPLIT_MS
-                && pathMeters(samples, startIndex, endIndex) <= MAX_STOP_DRIFT_METERS) {
+                && pathMeters(samples, startIndex, endIndex) <= MAX_STOP_DRIFT_METERS
+                && !hasActiveTelemetryInSpan(db, sessionId, stoppedAtMs, endMs)) {
             spans.add(new SplitSpan(startMs, endMs));
         }
     }
@@ -129,9 +135,6 @@ final class DriveWindowDetector {
     private static DataBounds dataBounds(SQLiteDatabase db, long sessionId) {
         DataBounds route =
                 boundsFor(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, "session_id = ?", sessionId);
-        if (route != null) {
-            return route;
-        }
         DataBounds geoTelemetry =
                 boundsFor(
                         db,
@@ -139,9 +142,21 @@ final class DriveWindowDetector {
                         "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL",
                         sessionId);
         if (geoTelemetry != null) {
-            return geoTelemetry;
+            return mergeBounds(route, geoTelemetry);
         }
-        return boundsFor(db, VoltTrackerDb.TABLE_TELEMETRY, "session_id = ?", sessionId);
+        return mergeBounds(
+                route, boundsFor(db, VoltTrackerDb.TABLE_TELEMETRY, "session_id = ?", sessionId));
+    }
+
+    private static DataBounds mergeBounds(DataBounds left, DataBounds right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return new DataBounds(
+                Math.min(left.firstMs, right.firstMs), Math.max(left.lastMs, right.lastMs));
     }
 
     private static DataBounds boundsFor(
@@ -169,20 +184,21 @@ final class DriveWindowDetector {
     }
 
     private static List<RouteSample> readRouteSamples(SQLiteDatabase db, long sessionId) {
-        List<RouteSample> samples =
+        List<RouteSample> locationSamples =
                 readRouteSamplesFromTable(
                         db,
                         VoltTrackerDb.TABLE_LOCATION_SAMPLES,
                         "session_id = ?",
                         new String[] {String.valueOf(sessionId)});
-        if (!samples.isEmpty()) {
-            return samples;
-        }
-        return readRouteSamplesFromTable(
-                db,
-                VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL",
-                new String[] {String.valueOf(sessionId)});
+        List<RouteSample> telemetrySamples =
+                readRouteSamplesFromTable(
+                        db,
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL",
+                        new String[] {String.valueOf(sessionId)});
+        return locationSamples.size() >= telemetrySamples.size()
+                ? locationSamples
+                : telemetrySamples;
     }
 
     private static List<RouteSample> readRouteSamplesFromTable(
@@ -250,6 +266,30 @@ final class DriveWindowDetector {
         if (startMs >= 0L && endMs >= startMs && endMs - startMs > MAX_INACTIVE_MS) {
             spans.add(new SplitSpan(startMs, endMs));
         }
+    }
+
+    private static boolean hasActiveTelemetryInSpan(
+            SQLiteDatabase db, long sessionId, long startMs, long endMs) {
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        new String[] {"speed_kph", "rpm", "voltage", "power_kw", "pack_current_a"},
+                        "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ?",
+                        new String[] {
+                            String.valueOf(sessionId),
+                            String.valueOf(startMs),
+                            String.valueOf(endMs)
+                        },
+                        null,
+                        null,
+                        "captured_at_ms ASC")) {
+            while (cursor.moveToNext()) {
+                if (isActiveVehicleSample(cursor)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static List<SplitSpan> mergeSpans(List<SplitSpan> raw) {

@@ -177,6 +177,34 @@ const REQUIRED_DOM = `
   <div id="realInsightList"></div>
   <div id="reviewTimeline"></div>
   <div id="pidFrameList"></div>
+  <div id="enhancedTitle"></div>
+  <div id="enhancedBadge"></div>
+  <div id="signalStageBar">
+    <button data-signal-stage="passive"></button>
+    <button data-signal-stage="low-risk"></button>
+    <button data-signal-stage="tires" class="is-active"></button>
+    <button data-signal-stage="experimental"></button>
+  </div>
+  <div id="signalStageLabel"></div>
+  <div id="signalStageHint"></div>
+  <button id="detailProbeBtn" data-action="detailProbe"></button>
+  <button id="exportSignalLogsBtn"></button>
+  <div id="enhancedConfirmedCount"></div>
+  <div id="enhancedRejectedCount"></div>
+  <div id="enhancedCandidateCount"></div>
+  <div id="enhancedDeferredCount"></div>
+  <div id="enhancedFilterBar">
+    <button data-signal-filter="all"></button>
+    <button data-signal-filter="confirmed"></button>
+    <button data-signal-filter="candidate"></button>
+    <button data-signal-filter="rejected"></button>
+    <button data-signal-filter="deferred"></button>
+    <button data-signal-filter="tpms"></button>
+  </div>
+  <div id="enhancedAllCount"></div>
+  <div id="enhancedTiresTabCount"></div>
+  <div id="enhancedNextList"></div>
+  <div id="enhancedCapabilityList"></div>
 
   <div id="appEmptyState"></div>
   <div id="chargeEmptyState"></div>
@@ -191,10 +219,12 @@ const REQUIRED_DOM = `
   <div id="realChargeHints"></div>
   <div id="realChargePower"></div>
   <div id="realChargeStatus"></div>
+  <div id="chargeSessionsCard"><div id="chargeSessionsTitle"></div><div id="chargeSessionsList"></div></div>
   <div id="realPackRing"></div>
   <div id="realPackValue"></div>
   <div id="realPackTitle"></div>
   <div id="realPackCopy"></div>
+  <div id="realPackStats"></div>
   <div id="maintenanceList"></div>
 
   <div id="vehicleName"></div>
@@ -203,8 +233,6 @@ const REQUIRED_DOM = `
   <div id="vehicleYear"></div>
   <div id="vehicleOdometer"></div>
   <div id="vehicleLoggedDistance"></div>
-  <div id="vehicleEvMix"></div>
-  <div id="vehicleBatteryHealth"></div>
 
   <div id="realTripsCard"></div>
   <div id="tripsEmptyState"></div>

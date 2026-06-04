@@ -81,10 +81,27 @@
     // Guard the bridge call so a quick double-tap doesn't issue two
     // overlapping connect/scan invocations against the adapter.
     withBusy(button, () => {
-      bridge.rememberDevice(selected.address, selected.name);
       if (scan && typeof bridge.scan === "function") bridge.scan(selected.address, selected.name);
       else bridge.connect(selected.address, selected.name);
     });
+  }
+
+  function tpmsScanSelected(/** @type {any} */ button) {
+    detailProbeSelected(button);
+  }
+
+  function detailProbeSelected(/** @type {any} */ button) {
+    const selected = VD.getSelectedDevice();
+    if (!selected) {
+      VD.setStatus({ state: "blocked", detail: "Pick a paired or remembered OBD adapter first." });
+      return;
+    }
+    if (!bridge || typeof bridge.detailProbe !== "function") {
+      VD.setStatus({ state: "idle", detail: "Detail Probe is only available inside the Android app." });
+      return;
+    }
+    const stage = String(state.signalProbeStage || "tires");
+    withBusy(button, () => bridge.detailProbe(selected.address, selected.name, stage));
   }
 
   function handleAction(/** @type {any} */ action, /** @type {any} */ button) {
@@ -99,6 +116,8 @@
     if (action === "restoreEncrypted") restoreEncryptedBackup(button);
     if (action === "last") bridge && bridge.connectLast();
     if (action === "scan") connectSelected(true, button);
+    if (action === "tpmsScan") tpmsScanSelected(button);
+    if (action === "detailProbe") detailProbeSelected(button);
     if (action === "connect") connectSelected(false, button);
     if (action === "demo") startDemo();
     if (action === "stopDemo") stopDemo();
@@ -142,7 +161,7 @@
       return;
     }
     if (!bridge || typeof bridge.clearVehicleDtcCodes !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Clear-codes is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Clear-codes is only available inside the Android app." });
       return;
     }
     withBusy(button, () => {
@@ -215,6 +234,7 @@
     window.clearInterval(window.__voltDemoTimer);
     if (bridge && state.demoActive) bridge.disconnect();
     VD.clearDemoTelemetry();
+    if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     VD.setDemoActive(false);
     VD.updateLiveUi();
     VD.drawTrace();
@@ -225,6 +245,7 @@
     window.clearInterval(window.__voltDemoTimer);
     if (bridge) bridge.disconnect();
     VD.clearDemoTelemetry();
+    if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     VD.setDemoActive(false);
     VD.updateLiveUi();
     VD.drawTrace();
@@ -245,13 +266,12 @@
     // wipe is still propagating.
     withBusy(button, () => {
       bridge.clearStoredData();
-      setTimeout(refreshStorage, 250);
     });
   }
 
   function shareBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.shareBackup !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Backup is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Backup is only available inside the Android app." });
       return;
     }
     // Plaintext backup is an advanced compatibility escape hatch. The primary
@@ -279,7 +299,7 @@
 
   function shareEncryptedBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.shareEncryptedBackup !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Encrypted backup is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Encrypted backup is only available inside the Android app." });
       return;
     }
     const passphrase = readBackupPassphrase("Choose a passphrase for this encrypted backup. You will need it to restore.");
@@ -292,7 +312,7 @@
 
   function restoreBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.restoreBackup !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Restore is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Restore is only available inside the Android app." });
       return;
     }
     // The merge-vs-replace choice (and the destructive-replace warning) is shown
@@ -303,7 +323,7 @@
 
   function restoreEncryptedBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.restoreEncryptedBackup !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Encrypted restore is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Encrypted restore is only available inside the Android app." });
       return;
     }
     const passphrase = readBackupPassphrase("Enter the passphrase for this encrypted backup.");
@@ -318,7 +338,7 @@
 
   function exportDebugBundle() {
     if (!bridge || typeof bridge.exportDebugBundle !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Debug export is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Debug export is only available inside the Android app." });
       return;
     }
     const result = VD.parsePayload(bridge.exportDebugBundle(), {});
@@ -329,31 +349,108 @@
     }
   }
 
+  function writeClipboard(/** @type {any} */ text) {
+    const nav = window.navigator;
+    if (nav.clipboard && typeof nav.clipboard.writeText === "function") {
+      return nav.clipboard.writeText(String(text));
+    }
+    const area = document.createElement("textarea");
+    area.value = String(text);
+    area.setAttribute("readonly", "true");
+    area.style.position = "fixed";
+    area.style.left = "-9999px";
+    document.body.append(area);
+    area.select();
+    try {
+      document.execCommand("copy");
+    } finally {
+      area.remove();
+    }
+    return Promise.resolve();
+  }
+
+  function exportSignalLog(/** @type {any} */ id) {
+    if (!bridge || typeof bridge.exportDetailedSignalLog !== "function") {
+      VD.setStatus({ state: "idle", detail: "Signal log export is only available inside the Android app." });
+      return;
+    }
+    const result = bridge.exportDetailedSignalLog(String(id || ""));
+    const parsed = VD.parsePayload(result, {});
+    if (parsed.ok === false) {
+      VD.setStatus({ state: "blocked", detail: parsed.message || "Signal log export failed." });
+      return;
+    }
+    writeClipboard(JSON.stringify(parsed, null, 2))
+      .then(() => VD.setStatus({ state: "ready", detail: "Detailed signal log copied." }))
+      .catch(() => VD.setStatus({ state: "blocked", detail: "Could not copy detailed signal log." }));
+  }
+
+  function exportSignalLogs() {
+    if (!bridge || typeof bridge.exportDetailedSignalLogs !== "function") {
+      VD.setStatus({ state: "idle", detail: "Signal log export is only available inside the Android app." });
+      return;
+    }
+    const result = bridge.exportDetailedSignalLogs();
+    const parsed = VD.parsePayload(result, {});
+    if (parsed.ok === false) {
+      VD.setStatus({ state: "blocked", detail: parsed.message || "Signal log export failed." });
+      return;
+    }
+    writeClipboard(JSON.stringify(parsed, null, 2))
+      .then(() => VD.setStatus({ state: "ready", detail: "Detailed signal logs copied." }))
+      .catch(() => VD.setStatus({ state: "blocked", detail: "Could not copy detailed signal logs." }));
+  }
+
+  function deleteSignalLog(/** @type {any} */ id) {
+    if (!bridge || typeof bridge.deleteDetailedSignalLog !== "function") {
+      VD.setStatus({ state: "idle", detail: "Signal log cleanup is only available inside the Android app." });
+      return;
+    }
+    const ok = window.confirm("Delete this saved detailed signal evidence row?");
+    if (!ok) return;
+    bridge.deleteDetailedSignalLog(String(id || ""));
+  }
+
   function runBrowserDemo() {
     let t = 0;
     VD.setStatus({ state: "connected", detail: "Browser-only demo is running." });
     window.clearInterval(window.__voltDemoTimer);
     window.__voltDemoTimer = window.setInterval(() => {
       t += 1;
+      // Alternate EV and gas every ~30s so both drivetrain states (RPM, gas
+      // power, electric power) get exercised without a manual toggle.
+      const gas = Math.floor(t / 30) % 2 === 1;
+      state.mode = gas ? "gas" : "ev";
+      // Electric power swings through regen (negative) so the regen state and
+      // the negative half of the power meter are exercised too.
+      const powerKw = gas ? 30 + Math.sin(t / 3) * 9 : 9 + Math.sin(t / 2.2) * 22;
+      const lat = 42.3601 + Math.sin(t / 40) * 0.012;
+      const lng = -71.0589 + Math.cos(t / 40) * 0.012;
       VD.updateTelemetry({
         source: "demo",
         connected: true,
         sampleCount: t,
         sessionMs: t * 1000,
         supportedPids: "browser demo",
-        vehicleState: "demo-preview",
+        vehicleState: powerKw < -0.5 ? "regen" : (gas ? "driving (gas)" : "driving"),
         speedKph: Math.round(54 + 23 * Math.sin(t / 3.4)),
-        rpm: state.mode === "gas" ? Math.round(1260 + 420 * Math.sin(t / 2.1)) : 0,
+        rpm: gas ? Math.round(1260 + 420 * Math.sin(t / 2.1)) : 0,
         coolantC: Math.round(82 + 4 * Math.sin(t / 8)),
         loadPct: Math.round(34 + 18 * Math.sin(t / 4.4)),
         throttlePct: Math.round(18 + 14 * Math.sin(t / 2.7)),
         voltage: 13.8,
         soc: Math.max(13.4, 77.8 - t * 0.01),
         batteryTemp: 72 + Math.sin(t / 8),
-        powerKw: state.mode === "gas" ? 32 + Math.sin(t / 3) * 8 : 16 + Math.sin(t / 2.2) * 12,
+        powerKw: powerKw,
+        // A slowly drifting coordinate so the demo also exercises the GPS lock
+        // indicator and the live map position instead of sitting on "waiting".
+        latitude: lat,
+        longitude: lng,
         updatedAt: Date.now(),
         raw: "browser demo"
       });
+      // Drop a live "you are here" breadcrumb on the map if it's mounted.
+      if (typeof VD.updateLivePosition === "function") VD.updateLivePosition(lat, lng);
     }, 1000);
   }
 
@@ -379,6 +476,9 @@
     "[role='button']",
     "[data-nav]",
     "[data-action]",
+    "[data-signal-stage]",
+    "[data-signal-export]",
+    "[data-signal-delete]",
     "[data-map-layer]",
     "[data-real-trip-id]",
     "[data-trip-map]",
@@ -450,6 +550,14 @@
       const button = /** @type {HTMLElement} */ (node);
       button.addEventListener("click", (event) => handleAction(button.dataset.action, event.currentTarget), opts);
     });
+    document.querySelectorAll("[data-scenario]").forEach((node) => {
+      const button = /** @type {HTMLElement} */ (node);
+      button.addEventListener("click", () => {
+        if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(button.dataset.scenario);
+        const picker = el("demoScenarioPicker");
+        if (picker) picker.querySelectorAll("[data-scenario]").forEach((b) => b.classList.toggle("is-active", b === button));
+      }, opts);
+    });
     document.querySelectorAll("[data-map-layer]").forEach((node) => {
       const button = /** @type {HTMLElement} */ (node);
       button.addEventListener("click", () => {
@@ -498,6 +606,16 @@
     }, opts);
     document.addEventListener("click", (event) => {
       const target = /** @type {Element | null} */ (event.target);
+      const signalExport = target && target.closest("[data-signal-export]");
+      if (signalExport) {
+        exportSignalLog(/** @type {HTMLElement} */ (signalExport).dataset.signalExport);
+        return;
+      }
+      const signalDelete = target && target.closest("[data-signal-delete]");
+      if (signalDelete) {
+        deleteSignalLog(/** @type {HTMLElement} */ (signalDelete).dataset.signalDelete);
+        return;
+      }
       const realTripButton = target && target.closest("[data-real-trip-id]");
       if (realTripButton) {
         if (typeof VD.selectRealTrip === "function") {
@@ -534,6 +652,8 @@
     VD.bindListenerGuarded("refreshBtn", "click", () => handleAction("refresh"), opts);
     VD.bindListenerGuarded("lastBtn", "click", () => handleAction("last"), opts);
     VD.bindListenerGuarded("scanBtn", "click", (event) => handleAction("scan", event.currentTarget), opts);
+    VD.bindListenerGuarded("tpmsScanBtn", "click", (event) => handleAction("tpmsScan", event.currentTarget), opts);
+    VD.bindListenerGuarded("exportSignalLogsBtn", "click", exportSignalLogs, opts);
     VD.bindListenerGuarded("connectBtn", "click", (event) => {
       const btn = el("connectBtn");
       const action = (btn && btn.dataset.primaryAction) || "connect";
@@ -557,6 +677,8 @@
   VD.actions = {
     refreshDevices,
     connectSelected,
+    tpmsScanSelected,
+    detailProbeSelected,
     handleAction,
     startDemo,
     stopDemo,
@@ -568,6 +690,9 @@
     restoreBackup,
     restoreEncryptedBackup,
     exportDebugBundle,
+    exportSignalLog,
+    exportSignalLogs,
+    deleteSignalLog,
     runBrowserDemo,
     previewDtcCodes,
     clearPreviewDtcCodes,
@@ -576,6 +701,8 @@
   Object.assign(VD, {
     refreshDevices,
     connectSelected,
+    tpmsScanSelected,
+    detailProbeSelected,
     handleAction,
     startDemo,
     stopDemo,
@@ -587,6 +714,9 @@
     restoreBackup,
     restoreEncryptedBackup,
     exportDebugBundle,
+    exportSignalLog,
+    exportSignalLogs,
+    deleteSignalLog,
     runBrowserDemo,
     previewDtcCodes,
     clearPreviewDtcCodes

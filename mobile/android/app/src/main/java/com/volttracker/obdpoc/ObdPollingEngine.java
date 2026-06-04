@@ -74,12 +74,14 @@ class ObdPollingEngine implements LiveSampleReader.SampleContext {
     private final SpeedPlausibilityFilter speedFilter = new SpeedPlausibilityFilter();
     private final DemoPollingLoop demoLoop;
     private final DiagnosticScanRunner scanRunner;
+    private final TpmsDiscoveryRunner tpmsDiscoveryRunner;
     private final ClearDtcRunner clearDtcRunner;
     private final SessionHealthTracker sessionHealth;
     private final PidPollingState pidPolling;
     private final LiveSampleReader liveSampleReader;
     private int sampleCount;
     private String supportedPidsSummary = "";
+    private String redactedVin = "";
 
     ObdPollingEngine(ObdService service) {
         this.service = service;
@@ -88,6 +90,7 @@ class ObdPollingEngine implements LiveSampleReader.SampleContext {
         this.liveSampleReader = new LiveSampleReader(service, speedFilter, pidPolling);
         this.demoLoop = new DemoPollingLoop(service, this);
         this.scanRunner = new DiagnosticScanRunner(service, this);
+        this.tpmsDiscoveryRunner = new TpmsDiscoveryRunner(service, this);
         this.clearDtcRunner = new ClearDtcRunner(service, this);
     }
 
@@ -97,6 +100,7 @@ class ObdPollingEngine implements LiveSampleReader.SampleContext {
         resetSessionHealth();
         speedFilter.reset();
         supportedPidsSummary = supportedPidsSeed;
+        redactedVin = "";
         pidPolling.reset();
     }
 
@@ -107,6 +111,11 @@ class ObdPollingEngine implements LiveSampleReader.SampleContext {
     @Override
     public String supportedPidsSummary() {
         return supportedPidsSummary;
+    }
+
+    @Override
+    public String redactedVin() {
+        return redactedVin;
     }
 
     int backgroundSampleCount() {
@@ -166,6 +175,16 @@ class ObdPollingEngine implements LiveSampleReader.SampleContext {
 
     @SuppressLint("MissingPermission")
     void runBluetoothLoop(String address, boolean scanMode, boolean clearDtcMode) {
+        runBluetoothLoop(address, scanMode, clearDtcMode, false, "");
+    }
+
+    @SuppressLint("MissingPermission")
+    private void runBluetoothLoop(
+            String address,
+            boolean scanMode,
+            boolean clearDtcMode,
+            boolean tpmsScanMode,
+            String detailProbeStage) {
         if (address == null || address.trim().isEmpty()) {
             service.broadcastStatus("error", "No adapter selected.", true);
             service.closeSessionLog();
@@ -232,6 +251,14 @@ class ObdPollingEngine implements LiveSampleReader.SampleContext {
                     }
                     if (scanMode) {
                         scanRunner.run();
+                        return;
+                    }
+                    if (tpmsScanMode) {
+                        tpmsDiscoveryRunner.run(address, EnhancedPidProfiles.STAGE_TIRES);
+                        return;
+                    }
+                    if (detailProbeStage != null && !detailProbeStage.trim().isEmpty()) {
+                        tpmsDiscoveryRunner.run(address, detailProbeStage);
                         return;
                     }
                     attempt = 0;
@@ -400,12 +427,21 @@ class ObdPollingEngine implements LiveSampleReader.SampleContext {
             Log.w(MainActivity.TAG, "OBD loop runtime failure for " + service.activeName, ex);
             service.recorder.logError("connection_failure", ex);
             service.broadcastStatus("error", friendlyConnectionMessage(ex), true);
+            service.stopSelf();
         } finally {
             service.recorder.logEvent("socket_closing");
             closeSocket();
             service.closeSessionLog();
             service.markSessionInactive();
         }
+    }
+
+    void runTpmsScanLoop(String address) {
+        runBluetoothLoop(address, false, false, true, "");
+    }
+
+    void runDetailProbeLoop(String address, String stage) {
+        runBluetoothLoop(address, false, false, false, stage);
     }
 
     @SuppressLint("MissingPermission")
@@ -605,19 +641,76 @@ class ObdPollingEngine implements LiveSampleReader.SampleContext {
                 sendEscape(600);
                 sendCommand("ATPC", 1400);
                 sendCommand("ATSP0", 1400);
+                throw new IOException("Adapter did not answer the standard OBD PID probe.");
             }
         }
         OBDLog.event("ObdPollingEngine", "protocol_init", Map.of("ok", true));
+        probeAndPersistVin();
         probeMode01Batch();
         service.maybeRunVoltageProbe(this);
+    }
+
+    private void probeAndPersistVin() {
+        String storedRedactedVin = storedRedactedVin();
+        if (!storedRedactedVin.isEmpty()) {
+            redactedVin = storedRedactedVin;
+            service.recorder.logEvent("vin_probe", "skipped", "stored_vehicle");
+            return;
+        }
+        try {
+            String response = sendCommand("0902", 6000);
+            String vin = ObdProtocol.parseVin(response);
+            if (vin == null) {
+                service.recorder.logEvent(
+                        "vin_probe",
+                        "parsed",
+                        "false",
+                        "responseLength",
+                        String.valueOf(response == null ? 0 : response.length()));
+                return;
+            }
+            redactedVin = redactedVin(vin);
+            service.recorder.logEvent("vin_probe", "parsed", "true", "vin", redactedVin);
+            com.volttracker.obdpoc.data.ObdLocalStore store = service.localStore;
+            if (store != null) {
+                try {
+                    store.upsertVehicleFromVin(vin);
+                } catch (RuntimeException ex) {
+                    service.recorder.logError("vin_persist_failed", ex);
+                }
+            }
+        } catch (IOException ex) {
+            service.recorder.logEvent("vin_probe_failed", "error", String.valueOf(ex.getMessage()));
+        }
+    }
+
+    private String storedRedactedVin() {
+        com.volttracker.obdpoc.data.ObdLocalStore store = service.localStore;
+        if (store == null) {
+            return "";
+        }
+        try {
+            JSONObject latestVehicle = store.getStorageSummaryRecord().latestVehicle;
+            return latestVehicle == null ? "" : latestVehicle.optString("vin", "");
+        } catch (RuntimeException ex) {
+            service.recorder.logError("vin_cache_read_failed", ex);
+            return "";
+        }
+    }
+
+    private static String redactedVin(String vin) {
+        if (vin == null || vin.length() < 4) {
+            return "";
+        }
+        return "…" + vin.substring(vin.length() - 4);
     }
 
     /**
      * Probes whether the adapter accepts a Mode-01 multi-PID request. Sends {@code 010D0C} (speed +
      * RPM in one shot) and checks the response contains both {@code 410D} and {@code 410C} markers.
      * ELM327 v1.4+ supports this; many cheap clones don't. Result is cached in {@link
-     * {@link PidPollingState}; subsequent live poll cycles read the flag and batch
-     * all 5 Tier-1 broadcast Mode-01 PIDs into one command when set.
+     * {@link PidPollingState}; subsequent live poll cycles read the flag and batch the hot-lane
+     * broadcast Mode-01 PIDs into one command when set.
      *
      * <p>Always safe to call: a failed probe leaves the flag false (the existing per-PID path runs
      * unchanged). Logs the result so field-test logs can confirm which path is active.

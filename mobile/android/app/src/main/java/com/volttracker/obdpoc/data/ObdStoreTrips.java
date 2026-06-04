@@ -5,7 +5,6 @@ import static com.volttracker.obdpoc.data.ObdStoreSupport.countRows;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.countRowsWhere;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.distanceMeters;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.getAllSessions;
-import static com.volttracker.obdpoc.data.ObdStoreSupport.getRecentSessions;
 
 import android.content.ContentValues;
 import android.database.Cursor;
@@ -44,7 +43,7 @@ final class ObdStoreTrips {
         SQLiteDatabase db = helper.getReadableDatabase();
         try {
             List<JSONObject> allTrips = new ArrayList<>();
-            for (ObdSessionRecord session : getRecentSessions(db, 100)) {
+            for (ObdSessionRecord session : getAllSessions(db)) {
                 if (!ObdLocalStore.MODE_OBD.equals(session.mode)) {
                     continue;
                 }
@@ -274,30 +273,28 @@ final class ObdStoreTrips {
      */
     private List<ObdSessionRecord> ensureRollupsAndCollectActive(SQLiteDatabase db) {
         List<ObdSessionRecord> active = new ArrayList<>();
-        for (ObdSessionRecord session : getAllSessions(db)) {
-            if (!ObdLocalStore.MODE_OBD.equals(session.mode)) {
-                continue;
-            }
-            if (session.endedAtMs <= 0) {
-                active.add(session);
-            } else if (!hasFreshRollup(db, session.id)) {
-                insertRollup(db, session);
+        try (Cursor cursor =
+                db.rawQuery(
+                        "SELECT s.* FROM "
+                                + VoltTrackerDb.TABLE_SESSIONS
+                                + " s LEFT JOIN "
+                                + VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS
+                                + " r ON r.session_id = s._id WHERE s.mode = ? AND "
+                                + "(s.ended_at_ms <= 0 OR r.session_id IS NULL"
+                                + " OR r.rollup_version < ?) ORDER BY s.started_at_ms DESC",
+                        new String[] {
+                            ObdLocalStore.MODE_OBD, String.valueOf(ROLLUP_CACHE_VERSION)
+                        })) {
+            while (cursor.moveToNext()) {
+                ObdSessionRecord session = ObdStoreSupport.readSession(cursor);
+                if (session.endedAtMs <= 0) {
+                    active.add(session);
+                } else {
+                    insertRollup(db, session);
+                }
             }
         }
         return active;
-    }
-
-    private boolean hasFreshRollup(SQLiteDatabase db, long sessionId) {
-        try (Cursor cursor =
-                db.rawQuery(
-                        "SELECT rollup_version FROM "
-                                + VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS
-                                + " WHERE session_id = ?",
-                        new String[] {String.valueOf(sessionId)})) {
-            return cursor.moveToFirst()
-                    && !cursor.isNull(0)
-                    && cursor.getInt(0) >= ROLLUP_CACHE_VERSION;
-        }
     }
 
     /** Computes and caches the rollup scalar for one closed session, reusing the tripJson math. */

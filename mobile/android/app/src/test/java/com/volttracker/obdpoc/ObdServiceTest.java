@@ -32,6 +32,9 @@ public class ObdServiceTest {
         assertEquals("vehicle speed", ObdElmDecode.nameForCommand("010D"));
         assertEquals("engine rpm", ObdElmDecode.nameForCommand("010C"));
         assertEquals("adapter voltage", ObdElmDecode.nameForCommand("ATRV"));
+        assertEquals("control module voltage", ObdElmDecode.nameForCommand("0142"));
+        assertEquals("hv battery raw soc", ObdElmDecode.nameForCommand("2243AF"));
+        assertEquals("candidate tire pressure front-left", ObdElmDecode.nameForCommand("22248E"));
         assertEquals("vin", ObdElmDecode.nameForCommand("0902"));
         assertEquals("", ObdElmDecode.nameForCommand("0199"));
     }

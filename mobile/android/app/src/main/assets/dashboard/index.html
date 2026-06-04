@@ -527,6 +527,9 @@
         <button id="permissionBtn" type="button">Permissions</button>
         <button id="lastBtn" type="button">Last</button>
         <button id="scanBtn" type="button" class="scan">Scan</button>
+        <button id="tpmsScanBtn" type="button" data-action="tpmsScan">
+          Detail Probe
+        </button>
         <button id="disconnectBtn" type="button" class="danger">Stop</button>
       </div>
     </details>
@@ -639,6 +642,25 @@
       Use Connect or Scan for real OBD telemetry. Preview screens are tucked
       away in Diagnostics so test drives stay focused on real data.
     </p>
+    <ol class="empty-hints" aria-label="How to start logging">
+      <li>
+        <b>1</b
+        ><span>Grant Bluetooth and location permissions when prompted.</span>
+      </li>
+      <li>
+        <b>2</b
+        ><span
+          >Connect your OBD adapter — or tap Scan to test the link first.</span
+        >
+      </li>
+      <li>
+        <b>3</b
+        ><span
+          >Drive: speed, power, and battery stream in live and save
+          automatically.</span
+        >
+      </li>
+    </ol>
   </article>
 </section>
 <section id="view-trips" class="view" data-view="trips">
@@ -657,7 +679,7 @@
         <span class="kicker">Logged drives</span>
         <h2 id="realTripsTitle">Your trips</h2>
       </div>
-      <button type="button" class="link-btn" data-nav-jump="map">map</button>
+      <button type="button" class="link-btn" data-nav-jump="map">Map</button>
     </header>
     <p class="status-copy">Each logged OBD session with movement.</p>
     <div
@@ -831,7 +853,7 @@
       <header>
         <span class="kicker">Recorded sessions</span>
         <button type="button" class="link-btn" data-action="refreshStorage">
-          refresh
+          Refresh
         </button>
       </header>
       <div id="mapSessionList" class="map-list"></div>
@@ -846,6 +868,29 @@
       Plug in your Volt with the adapter connected and charging sessions will
       show up here automatically.
     </p>
+    <ol class="empty-hints" aria-label="How charge tracking works">
+      <li>
+        <b>1</b
+        ><span
+          >Connect the OBD adapter and keep the app open while the car
+          charges.</span
+        >
+      </li>
+      <li>
+        <b>2</b
+        ><span
+          >Each plug-in is detected automatically — there's no button to
+          press.</span
+        >
+      </li>
+      <li>
+        <b>3</b
+        ><span
+          >Sessions, peak power, and detection status fill in the cards
+          below.</span
+        >
+      </li>
+    </ol>
   </article>
   <section class="charge-grid" aria-label="Charging summary" aria-live="polite">
     <article class="panel charge-kpi">
@@ -869,6 +914,24 @@
       <small>Charge detection status</small>
     </article>
   </section>
+
+  <article
+    id="chargeSessionsCard"
+    class="panel list-card charge-sessions-card"
+    hidden
+  >
+    <header>
+      <div>
+        <span class="kicker">Recent charges</span>
+        <h3 id="chargeSessionsTitle">Charge sessions</h3>
+      </div>
+    </header>
+    <div
+      id="chargeSessionsList"
+      class="charge-session-list"
+      aria-live="polite"
+    ></div>
+  </article>
 </section>
 <section id="view-insights" class="view" data-view="insights">
   <article id="insightsEmptyState" class="panel empty-state">
@@ -878,6 +941,27 @@
       Pack health, savings, and monthly insights appear here once you've logged
       a few drives with the adapter connected.
     </p>
+    <ol class="empty-hints" aria-label="How insights build up">
+      <li>
+        <b>1</b
+        ><span
+          >Connect the adapter and log a few drives — even short ones.</span
+        >
+      </li>
+      <li>
+        <b>2</b
+        ><span
+          >Pack health, efficiency, and lifetime totals build up
+          automatically.</span
+        >
+      </li>
+      <li>
+        <b>3</b
+        ><span
+          >Run a car-code scan anytime to check for stored diagnostics.</span
+        >
+      </li>
+    </ol>
   </article>
 
   <article class="panel ratio-card insights-hero">
@@ -891,6 +975,12 @@
         Battery charge, power, and pack health appear here once the adapter has
         logged a few readings.
       </p>
+      <div
+        id="realPackStats"
+        class="pack-stat-row"
+        aria-label="Pack detail"
+        hidden
+      ></div>
     </div>
   </article>
 
@@ -1074,6 +1164,25 @@
       Demo preview is isolated here for UI debugging. Keep it off during real
       car tests.
     </p>
+    <div class="signal-section-label">Demo scenario</div>
+    <div
+      id="demoScenarioPicker"
+      class="signal-stage-tabs"
+      role="group"
+      aria-label="Demo scenario"
+    >
+      <button type="button" data-scenario="typical" class="is-active">
+        <span>Typical</span>
+      </button>
+      <button type="button" data-scenario="empty"><span>Empty</span></button>
+      <button type="button" data-scenario="power-user">
+        <span>Power user</span>
+      </button>
+      <button type="button" data-scenario="fault"><span>Fault</span></button>
+      <button type="button" data-scenario="extreme">
+        <span>Extremes</span>
+      </button>
+    </div>
     <div class="button-grid">
       <button
         type="button"
@@ -1113,7 +1222,7 @@
         <h3 id="reviewTitle">No real session yet</h3>
       </div>
       <button type="button" class="link-btn" data-action="exportDebug">
-        export
+        Export
       </button>
     </header>
     <div class="review-grid">
@@ -1156,7 +1265,7 @@
         <h3 id="dbSummaryTitle">No stored sessions yet</h3>
       </div>
       <button type="button" class="link-btn" data-action="refreshStorage">
-        refresh
+        Refresh
       </button>
     </header>
     <div class="status-meta">
@@ -1232,10 +1341,6 @@
         <span>Logged distance</span
         ><strong id="vehicleLoggedDistance">--</strong>
       </div>
-      <div><span>Electric mix</span><strong id="vehicleEvMix">--</strong></div>
-      <div>
-        <span>Battery health</span><strong id="vehicleBatteryHealth">--</strong>
-      </div>
       <div style="grid-column: 1 / -1">
         <span>VIN</span><strong id="vehicleVin">--</strong>
       </div>
@@ -1249,6 +1354,113 @@
   >
     Volt Tracker
   </p>
+</section>
+<section id="view-signals" class="view" data-view="signals">
+  <article id="enhancedCard" class="panel list-card signal-console">
+    <header class="signal-console-head">
+      <div class="signal-console-title">
+        <span class="kicker">Enhanced discovery</span>
+        <h2 id="enhancedTitle">No detailed signal results yet</h2>
+        <small class="signal-console-sub">
+          Probe the car for signals beyond the standard dashboard — tire
+          pressure, battery internals, and other hidden PIDs.
+        </small>
+      </div>
+      <span id="enhancedBadge" class="signal-status-pill">ready</span>
+    </header>
+
+    <div class="signal-stage-panel">
+      <div class="signal-stage-copy">
+        <span class="kicker">Probe mode</span>
+        <strong id="signalStageLabel">Tires</strong>
+        <small id="signalStageHint">
+          Narrow tire receiver candidates; avoids DTC and freeze-frame reads.
+        </small>
+      </div>
+      <div
+        id="signalStageBar"
+        class="signal-stage-tabs"
+        role="group"
+        aria-label="Detail probe mode"
+      >
+        <button type="button" data-signal-stage="passive">
+          <span>Passive</span>
+        </button>
+        <button type="button" data-signal-stage="low-risk">
+          <span>Low-risk</span>
+        </button>
+        <button type="button" data-signal-stage="tires" class="is-active">
+          <span>Tires</span>
+        </button>
+        <button type="button" data-signal-stage="experimental">
+          <span>Experimental</span>
+        </button>
+      </div>
+      <div class="signal-stage-actions">
+        <button
+          id="detailProbeBtn"
+          type="button"
+          class="primary-action signal-probe-btn"
+          data-action="detailProbe"
+        >
+          Run probe
+        </button>
+        <button id="exportSignalLogsBtn" type="button" class="signal-ghost-btn">
+          Export logs
+        </button>
+      </div>
+    </div>
+
+    <div
+      id="enhancedFilterBar"
+      class="signal-filter-grid"
+      role="group"
+      aria-label="Filter detailed signals by status"
+    >
+      <button type="button" data-signal-filter="all" class="is-active">
+        <b id="enhancedAllCount">0</b><span>All</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="confirmed"
+        data-status="confirmed"
+      >
+        <b id="enhancedConfirmedCount">0</b><span>Working</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="candidate"
+        data-status="candidate"
+      >
+        <b id="enhancedCandidateCount">0</b><span>Candidate</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="rejected"
+        data-status="rejected"
+      >
+        <b id="enhancedRejectedCount">0</b><span>No hit</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="deferred"
+        data-status="deferred"
+      >
+        <b id="enhancedDeferredCount">0</b><span>Deferred</span>
+      </button>
+      <button type="button" data-signal-filter="tpms" data-status="tpms">
+        <b id="enhancedTiresTabCount">0</b><span>Tires</span>
+      </button>
+    </div>
+
+    <div class="signal-section-label" id="signalNextLabel">
+      Suggested next probes
+    </div>
+    <div id="enhancedNextList" class="enhanced-next-list"></div>
+
+    <div class="signal-section-label">Signal evidence</div>
+    <div id="enhancedCapabilityList" class="enhanced-capability-list"></div>
+  </article>
 </section>
 <!--
   Proactive adapter tools: test connection, send diagnostics, low-voltage hint,
@@ -1413,6 +1625,18 @@
               stroke-linecap="round"
             /></svg></i
         ><span>Diag</span>
+      </button>
+      <button type="button" data-nav="signals" aria-label="Detailed Signals">
+        <i
+          ><svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M4 6h4m4 0h8M4 12h10m4 0h2M4 18h6m4 0h6M8 4v4m6 8v4m4-10v4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            /></svg></i
+        ><span>Signals</span>
       </button>
     </nav>
 

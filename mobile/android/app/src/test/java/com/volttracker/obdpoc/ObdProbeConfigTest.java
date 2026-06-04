@@ -16,10 +16,12 @@ public class ObdProbeConfigTest {
 
     @Test
     public void voltProbesAreWellFormedModeTwentyTwoRequests() {
-        // A valid mode-22 request is "22" + a 2-byte PID = exactly 6 hex chars. The
-        // original guessed probes (e.g. "2243AF1") were 7 chars and could never answer.
+        // Most mode-22 requests are "22" + a 2-byte PID. Some GM enhanced requests include a
+        // trailing selector byte (e.g. 22119F01) after the PID.
         for (String probe : allVoltProbes()) {
-            assertTrue("malformed mode-22 probe: " + probe, probe.matches("^22[0-9A-F]{4}$"));
+            assertTrue(
+                    "malformed mode-22 probe: " + probe,
+                    probe.matches("^22[0-9A-F]{4}([0-9A-F]{2})?$"));
         }
     }
 
@@ -41,6 +43,29 @@ public class ObdProbeConfigTest {
                     "malformed live probe: " + probe,
                     probe.matches("^AT[A-Z0-9]+$") || probe.matches("^01[0-9A-F]{2}$"));
         }
+    }
+
+    @Test
+    public void tpmsDiscoveryProbesAreWellFormedModeTwentyTwoRequests() {
+        for (String probe : ObdProbes.TPMS_7E0_DISCOVERY_PROBES) {
+            assertTrue("malformed TPMS 7E0 probe: " + probe, probe.matches("^22[0-9A-F]{4}$"));
+        }
+        for (String probe : ObdProbes.TPMS_760_DISCOVERY_PROBES) {
+            assertTrue("malformed TPMS 760 probe: " + probe, probe.matches("^22[0-9A-F]{4}$"));
+        }
+    }
+
+    @Test
+    public void tpmsDiscoveryIncludesKnownChevroletCandidates() {
+        assertTrue(
+                "front-left tire-pressure candidate missing",
+                contains(ObdProbes.TPMS_7E0_DISCOVERY_PROBES, "22248E"));
+        assertTrue(
+                "grouped tire-pressure candidate missing",
+                contains(ObdProbes.TPMS_7E0_DISCOVERY_PROBES, "22C901"));
+        assertTrue(
+                "TPMS receiver slot candidate missing",
+                contains(ObdProbes.TPMS_760_DISCOVERY_PROBES, "224051"));
     }
 
     @Test
@@ -67,14 +92,45 @@ public class ObdProbeConfigTest {
         assertTrue(
                 "standard SOC PID 015B missing from live probes",
                 contains(ObdProbes.LIVE_PROBES, "015B"));
+        assertTrue(
+                "validated raw SOC PID 2243AF missing",
+                contains(ObdProbes.VOLT_7E4_PROBES, "2243AF"));
+        assertTrue(
+                "validated displayed SOC PID 228334 missing",
+                contains(ObdProbes.VOLT_7E4_PROBES, "228334"));
+        assertTrue(
+                "motor A current PID 222883 missing",
+                contains(ObdProbes.VOLT_7E1_PROBES, "222883"));
+        assertTrue(
+                "battery coolant pump PID 2241B2 missing",
+                contains(ObdProbes.VOLT_7E4_PROBES, "2241B2"));
+        assertTrue(
+                "engine oil life PID 22119F missing",
+                contains(ObdProbes.VOLT_7E0_PROBES, "22119F"));
+        assertTrue(
+                "engine oil life selector PID 22119F01 missing",
+                contains(ObdProbes.VOLT_7E0_PROBES, "22119F01"));
+        assertTrue(
+                "engine oil temperature PID 221154 missing",
+                contains(ObdProbes.VOLT_7E0_PROBES, "221154"));
+        assertTrue(
+                "transmission temperature PID 221940 missing",
+                contains(ObdProbes.VOLT_7E2_PROBES, "221940"));
+        assertTrue(
+                "transmission temperature selector PID 22194001 missing",
+                contains(ObdProbes.VOLT_7E2_PROBES, "22194001"));
     }
 
     private static String[] allVoltProbes() {
-        String[] a = ObdProbes.VOLT_7E1_PROBES;
-        String[] b = ObdProbes.VOLT_7E4_PROBES;
-        String[] all = new String[a.length + b.length];
+        String[] a = ObdProbes.VOLT_7E0_PROBES;
+        String[] b = ObdProbes.VOLT_7E1_PROBES;
+        String[] c = ObdProbes.VOLT_7E2_PROBES;
+        String[] d = ObdProbes.VOLT_7E4_PROBES;
+        String[] all = new String[a.length + b.length + c.length + d.length];
         System.arraycopy(a, 0, all, 0, a.length);
         System.arraycopy(b, 0, all, a.length, b.length);
+        System.arraycopy(c, 0, all, a.length + b.length, c.length);
+        System.arraycopy(d, 0, all, a.length + b.length + c.length, d.length);
         return all;
     }
 

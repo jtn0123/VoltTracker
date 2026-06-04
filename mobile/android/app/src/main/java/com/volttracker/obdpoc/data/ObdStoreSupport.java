@@ -265,7 +265,9 @@ final class ObdStoreSupport {
                 || sample.has("longitude")
                 || sample.has("soc")
                 || sample.has("batteryTemp")
-                || sample.has("powerKw");
+                || sample.has("powerKw")
+                || sample.has("clearDtcOk")
+                || sample.has("clearDtcCode");
     }
 
     static String clean(String value) {

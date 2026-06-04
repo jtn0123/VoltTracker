@@ -44,6 +44,15 @@ public class PermissionGateTest {
     }
 
     @Test
+    public void fullPermissionRequestDoesNotReAskFineWhenCoarseIsGranted() {
+        Activity activity = activityWithConnectionPermissions();
+        Shadows.shadowOf(activity).grantPermissions(Manifest.permission.ACCESS_COARSE_LOCATION);
+
+        assertTrue(new PermissionGate(activity).ensureGranted());
+        assertTrue(Shadows.shadowOf(activity).getLastRequestedPermission() == null);
+    }
+
+    @Test
     public void permissionResultMentionsLocationWhenOnlyBluetoothWasGranted() {
         HarnessActivity activity = Robolectric.buildActivity(HarnessActivity.class).create().get();
         Shadows.shadowOf(activity)

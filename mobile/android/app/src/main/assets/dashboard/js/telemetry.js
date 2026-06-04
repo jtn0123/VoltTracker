@@ -41,11 +41,13 @@
   }
 
   function setStatus(/** @type {any} */ payload) {
+    const wasActive = isActiveStatus();
     const status = VD.parsePayload(payload, {});
     state.status = status;
     const badge = el("stateBadge");
     const next = status.state || "idle";
-    badge.dataset.state = next;
+    if (badge) badge.dataset.state = next;
+    if (!wasActive && isActiveStatus() && !state.demoActive) resetTelemetry();
     VD.setText("stateText", next);
     VD.setText("statusCopy", status.detail || "Ready.");
     if (status.lastAddress) state.lastDevice = { address: status.lastAddress, name: status.lastName || "" };
@@ -80,7 +82,7 @@
     if (source.includes("demo")) return state.demoActive || isActiveStatus();
     const updatedAt = Number(sample.updatedAt || 0);
     const ageMs = updatedAt > 0 ? Date.now() - updatedAt : Number.POSITIVE_INFINITY;
-    return isActiveStatus() || ageMs < 30000 || dbRowCount(state.storage || {}) > 0;
+    return isActiveStatus() || ageMs < 30000;
   }
 
   function isActiveStatus() {
@@ -143,7 +145,10 @@
             (remembered ? "Ready to resume the remembered adapter." : "Pick a paired adapter to start logging.")
           )
     );
-    VD.setText("loggingState", connected ? (samples ? `${samples} samples` : sessionState) : "idle");
+    // Compact status word, not a sample count — this tile is ~76px wide so
+    // "1,911 samples" just clips to "1,911 sa…". The live count is shown in the
+    // drive pill, the OBD-session card, and the database card.
+    VD.setText("loggingState", connected ? (samples ? "live" : (sessionState || "ready")) : "idle");
     VD.setText("gpsState", gps.state || (state.telemetry.latitude ? "locked" : "waiting"));
     VD.setText("dataSourceState", state.demoActive ? "demo" : "real");
     VD.setText("dbState", dbRowCount(storage) ? `${dbRowCount(storage)} rows` : "ready");
@@ -253,7 +258,7 @@
       option = document.createElement("option");
       option.value = address;
       option.dataset.name = name || "OBD adapter";
-      option.textContent = `${name || "OBD adapter"} - remembered`;
+      option.textContent = `${name || "OBD adapter"} · remembered`;
       select.append(option);
     }
     select.value = address;
@@ -280,6 +285,18 @@
     if (sample.source && !isDemoSample && state.demoActive) {
       VD.clearDemoTelemetry();
       VD.setDemoActive(false);
+    }
+    const sampleCount = Number(sample.sampleCount);
+    const previousCount = Number(state.telemetry && state.telemetry.sampleCount);
+    if (
+      sample.source &&
+      !isDemoSample &&
+      Number.isFinite(sampleCount) &&
+      sampleCount > 0 &&
+      Number.isFinite(previousCount) &&
+      previousCount > sampleCount
+    ) {
+      resetTelemetry();
     }
     state.telemetry = { ...state.telemetry, ...sample };
     state.lastSampleAt = Date.now();
@@ -619,7 +636,11 @@
     const seconds = Math.max(0, Math.round(Number(ms) / 1000));
     if (seconds < 60) return `${seconds}s`;
     const minutes = Math.floor(seconds / 60);
-    return `${minutes}m ${String(seconds % 60).padStart(2, "0")}s`;
+    if (minutes < 60) return `${minutes}m ${String(seconds % 60).padStart(2, "0")}s`;
+    // Roll into hours so multi-hour spans (e.g. charge sessions) read "3h 24m"
+    // instead of "204m 00s".
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${String(minutes % 60).padStart(2, "0")}m`;
   }
 
   function drawTrace() {

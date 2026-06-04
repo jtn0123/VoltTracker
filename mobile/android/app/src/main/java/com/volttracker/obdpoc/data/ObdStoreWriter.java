@@ -10,7 +10,11 @@ import static com.volttracker.obdpoc.data.ObdStoreSupport.optTimestamp;
 import static com.volttracker.obdpoc.data.ObdStoreSupport.updateSessionLastEvent;
 
 import android.content.ContentValues;
+import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import com.volttracker.obdpoc.EnhancedPidProfile;
+import com.volttracker.obdpoc.EnhancedPidProfiles;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
@@ -175,6 +179,7 @@ final class ObdStoreWriter {
             ContentValues values =
                     snapshots.pidObservationValues(sessionId, safeObservation, observedAtMs);
             long id = db.insertOrThrow(VoltTrackerDb.TABLE_PID_OBSERVATIONS, null, values);
+            upsertFieldCapability(db, sessionId, safeObservation, observedAtMs);
             updateSessionLastEvent(db, sessionId, observedAtMs);
             db.setTransactionSuccessful();
             return id;
@@ -208,6 +213,113 @@ final class ObdStoreWriter {
                         rawRequest,
                         rawResponse);
         return recordPidObservation(sessionId, payload, observedAtMs);
+    }
+
+    private void upsertFieldCapability(
+            SQLiteDatabase db, long sessionId, JSONObject observation, long observedAtMs) {
+        String command = clean(observation.optString("command", ""));
+        String header = clean(observation.optString("header", ""));
+        EnhancedPidProfile profile = EnhancedPidProfiles.find(header, command);
+        if (profile == null) {
+            return;
+        }
+
+        String adapterKey = adapterKeyForSession(db, sessionId);
+        String pid = clean(observation.optString("pid", profile.pid));
+        String protocol = clean(profile.protocol);
+        String rawResponse = clean(observation.optString("rawResponse", ""));
+        boolean positive = EnhancedPidProfiles.isPositiveResponse(command, rawResponse);
+
+        long existingId = -1L;
+        long firstSeenMs = observedAtMs;
+        long responseCount = 0L;
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
+                        new String[] {"_id", "first_seen_ms", "response_count"},
+                        "adapter_key = ? AND protocol = ? AND header = ? AND command = ? AND pid = ?",
+                        new String[] {adapterKey, protocol, header, command, pid},
+                        null,
+                        null,
+                        null,
+                        "1")) {
+            if (cursor.moveToFirst()) {
+                existingId = cursor.getLong(cursor.getColumnIndexOrThrow("_id"));
+                firstSeenMs = cursor.getLong(cursor.getColumnIndexOrThrow("first_seen_ms"));
+                responseCount = cursor.getLong(cursor.getColumnIndexOrThrow("response_count"));
+            }
+        }
+
+        long nextResponseCount = responseCount + (positive ? 1L : 0L);
+        ContentValues values = new ContentValues();
+        values.put("adapter_key", adapterKey);
+        values.put("protocol", protocol);
+        values.put("header", header);
+        values.put("command", command);
+        values.put("pid", pid);
+        values.put("name", clean(profile.name));
+        values.put("unit", clean(profile.unit));
+        values.put("supported", positive || responseCount > 0 ? 1 : 0);
+        values.put("response_count", nextResponseCount);
+        values.put("first_seen_ms", firstSeenMs);
+        values.put("last_seen_ms", observedAtMs);
+        values.put("sample_json", capabilitySampleJson(profile, observation, positive).toString());
+
+        if (existingId > 0) {
+            db.update(
+                    VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
+                    values,
+                    "_id = ?",
+                    new String[] {String.valueOf(existingId)});
+            return;
+        }
+        db.insertOrThrow(VoltTrackerDb.TABLE_FIELD_CAPABILITIES, null, values);
+    }
+
+    private static JSONObject capabilitySampleJson(
+            EnhancedPidProfile profile, JSONObject observation, boolean positive) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("profileKey", profile.key);
+            payload.put("category", profile.category);
+            payload.put("network", profile.network);
+            payload.put("pollLane", profile.pollLane);
+            payload.put("scanStage", profile.scanStage);
+            payload.put("risk", profile.risk);
+            payload.put("retryAfterMs", profile.retryAfterMs);
+            payload.put("validationStatus", profile.validationStatus);
+            payload.put("source", profile.source);
+            payload.put("notes", profile.notes);
+            payload.put("positiveResponse", positive);
+            payload.put("rawResponse", clean(observation.optString("rawResponse", "")));
+            payload.put("valueText", clean(observation.optString("valueText", "")));
+            if (observation.has("valueNumeric")) {
+                payload.put("valueNumeric", observation.optDouble("valueNumeric"));
+            }
+        } catch (JSONException ignored) {
+            // Local strings/numbers are safe.
+        }
+        return payload;
+    }
+
+    private static String adapterKeyForSession(SQLiteDatabase db, long sessionId) {
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_SESSIONS,
+                        new String[] {"adapter_address", "mode"},
+                        "_id = ?",
+                        new String[] {String.valueOf(sessionId)},
+                        null,
+                        null,
+                        null,
+                        "1")) {
+            if (cursor.moveToFirst()) {
+                String address = cursor.getString(cursor.getColumnIndexOrThrow("adapter_address"));
+                String mode = cursor.getString(cursor.getColumnIndexOrThrow("mode"));
+                return adapterKey(address, mode);
+            }
+        }
+        return adapterKey("", "");
     }
 
     long recordDiagnosticCode(long sessionId, JSONObject diagnosticCode) {

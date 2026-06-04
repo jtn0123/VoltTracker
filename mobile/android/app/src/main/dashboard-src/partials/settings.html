@@ -25,6 +25,25 @@
       Demo preview is isolated here for UI debugging. Keep it off during real
       car tests.
     </p>
+    <div class="signal-section-label">Demo scenario</div>
+    <div
+      id="demoScenarioPicker"
+      class="signal-stage-tabs"
+      role="group"
+      aria-label="Demo scenario"
+    >
+      <button type="button" data-scenario="typical" class="is-active">
+        <span>Typical</span>
+      </button>
+      <button type="button" data-scenario="empty"><span>Empty</span></button>
+      <button type="button" data-scenario="power-user">
+        <span>Power user</span>
+      </button>
+      <button type="button" data-scenario="fault"><span>Fault</span></button>
+      <button type="button" data-scenario="extreme">
+        <span>Extremes</span>
+      </button>
+    </div>
     <div class="button-grid">
       <button
         type="button"
@@ -64,7 +83,7 @@
         <h3 id="reviewTitle">No real session yet</h3>
       </div>
       <button type="button" class="link-btn" data-action="exportDebug">
-        export
+        Export
       </button>
     </header>
     <div class="review-grid">
@@ -107,7 +126,7 @@
         <h3 id="dbSummaryTitle">No stored sessions yet</h3>
       </div>
       <button type="button" class="link-btn" data-action="refreshStorage">
-        refresh
+        Refresh
       </button>
     </header>
     <div class="status-meta">
@@ -182,10 +201,6 @@
       <div>
         <span>Logged distance</span
         ><strong id="vehicleLoggedDistance">--</strong>
-      </div>
-      <div><span>Electric mix</span><strong id="vehicleEvMix">--</strong></div>
-      <div>
-        <span>Battery health</span><strong id="vehicleBatteryHealth">--</strong>
       </div>
       <div style="grid-column: 1 / -1">
         <span>VIN</span><strong id="vehicleVin">--</strong>

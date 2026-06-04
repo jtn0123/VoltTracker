@@ -24,7 +24,7 @@ data gets its own (larger) ceiling, and neither can grow unchecked.
 
 | Bucket | Files | Budget | Roughly today |
 |--------|-------|--------|---------------|
-| Core | `js/**/*.js` + `css/**/*.css`, excl. `lib/**` and the DTC data files | **360,000 B** | ~314 KB |
+| Core | `js/**/*.js` + `css/**/*.css`, excl. `lib/**` and the DTC data files | **400,000 B** | ~377 KB |
 | DTC data | `js/dtc-lookup.js`, `js/dtc-causes.js` | **380,000 B** | ~337 KB |
 
 `lib/**` (vendored Leaflet) is excluded from both — it's third-party code we don't

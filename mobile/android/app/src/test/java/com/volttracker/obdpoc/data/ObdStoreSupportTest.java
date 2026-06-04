@@ -73,6 +73,7 @@ public class ObdStoreSupportTest {
         assertTrue(ObdStoreSupport.isUsefulTelemetry(new JSONObject().put("speedKph", 40)));
         assertTrue(ObdStoreSupport.isUsefulTelemetry(new JSONObject().put("voltage", 13.8)));
         assertTrue(ObdStoreSupport.isUsefulTelemetry(new JSONObject().put("latitude", 32.7)));
+        assertTrue(ObdStoreSupport.isUsefulTelemetry(new JSONObject().put("clearDtcOk", true)));
     }
 
     @Test

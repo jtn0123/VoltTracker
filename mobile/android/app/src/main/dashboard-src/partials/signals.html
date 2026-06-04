@@ -1,0 +1,107 @@
+<section id="view-signals" class="view" data-view="signals">
+  <article id="enhancedCard" class="panel list-card signal-console">
+    <header class="signal-console-head">
+      <div class="signal-console-title">
+        <span class="kicker">Enhanced discovery</span>
+        <h2 id="enhancedTitle">No detailed signal results yet</h2>
+        <small class="signal-console-sub">
+          Probe the car for signals beyond the standard dashboard — tire
+          pressure, battery internals, and other hidden PIDs.
+        </small>
+      </div>
+      <span id="enhancedBadge" class="signal-status-pill">ready</span>
+    </header>
+
+    <div class="signal-stage-panel">
+      <div class="signal-stage-copy">
+        <span class="kicker">Probe mode</span>
+        <strong id="signalStageLabel">Tires</strong>
+        <small id="signalStageHint">
+          Narrow tire receiver candidates; avoids DTC and freeze-frame reads.
+        </small>
+      </div>
+      <div
+        id="signalStageBar"
+        class="signal-stage-tabs"
+        role="group"
+        aria-label="Detail probe mode"
+      >
+        <button type="button" data-signal-stage="passive">
+          <span>Passive</span>
+        </button>
+        <button type="button" data-signal-stage="low-risk">
+          <span>Low-risk</span>
+        </button>
+        <button type="button" data-signal-stage="tires" class="is-active">
+          <span>Tires</span>
+        </button>
+        <button type="button" data-signal-stage="experimental">
+          <span>Experimental</span>
+        </button>
+      </div>
+      <div class="signal-stage-actions">
+        <button
+          id="detailProbeBtn"
+          type="button"
+          class="primary-action signal-probe-btn"
+          data-action="detailProbe"
+        >
+          Run probe
+        </button>
+        <button id="exportSignalLogsBtn" type="button" class="signal-ghost-btn">
+          Export logs
+        </button>
+      </div>
+    </div>
+
+    <div
+      id="enhancedFilterBar"
+      class="signal-filter-grid"
+      role="group"
+      aria-label="Filter detailed signals by status"
+    >
+      <button type="button" data-signal-filter="all" class="is-active">
+        <b id="enhancedAllCount">0</b><span>All</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="confirmed"
+        data-status="confirmed"
+      >
+        <b id="enhancedConfirmedCount">0</b><span>Working</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="candidate"
+        data-status="candidate"
+      >
+        <b id="enhancedCandidateCount">0</b><span>Candidate</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="rejected"
+        data-status="rejected"
+      >
+        <b id="enhancedRejectedCount">0</b><span>No hit</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="deferred"
+        data-status="deferred"
+      >
+        <b id="enhancedDeferredCount">0</b><span>Deferred</span>
+      </button>
+      <button type="button" data-signal-filter="tpms" data-status="tpms">
+        <b id="enhancedTiresTabCount">0</b><span>Tires</span>
+      </button>
+    </div>
+
+    <div class="signal-section-label" id="signalNextLabel">
+      Suggested next probes
+    </div>
+    <div id="enhancedNextList" class="enhanced-next-list"></div>
+
+    <div class="signal-section-label">Signal evidence</div>
+    <div id="enhancedCapabilityList" class="enhanced-capability-list"></div>
+  </article>
+</section>

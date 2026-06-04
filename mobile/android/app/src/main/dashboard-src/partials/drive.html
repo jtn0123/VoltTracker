@@ -229,6 +229,9 @@
         <button id="permissionBtn" type="button">Permissions</button>
         <button id="lastBtn" type="button">Last</button>
         <button id="scanBtn" type="button" class="scan">Scan</button>
+        <button id="tpmsScanBtn" type="button" data-action="tpmsScan">
+          Detail Probe
+        </button>
         <button id="disconnectBtn" type="button" class="danger">Stop</button>
       </div>
     </details>
@@ -341,5 +344,24 @@
       Use Connect or Scan for real OBD telemetry. Preview screens are tucked
       away in Diagnostics so test drives stay focused on real data.
     </p>
+    <ol class="empty-hints" aria-label="How to start logging">
+      <li>
+        <b>1</b
+        ><span>Grant Bluetooth and location permissions when prompted.</span>
+      </li>
+      <li>
+        <b>2</b
+        ><span
+          >Connect your OBD adapter — or tap Scan to test the link first.</span
+        >
+      </li>
+      <li>
+        <b>3</b
+        ><span
+          >Drive: speed, power, and battery stream in live and save
+          automatically.</span
+        >
+      </li>
+    </ol>
   </article>
 </section>

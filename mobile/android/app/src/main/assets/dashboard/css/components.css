@@ -24,6 +24,62 @@
     padding: 16px;
   }
 
+  /* Numbered first-run guidance for sparse/empty tabs. Shown only while the
+     empty-state card is visible, so it fills the void without crowding the
+     populated view. Badges pick up the active tab's accent. */
+  .empty-hints {
+    display: grid;
+    gap: 9px;
+    margin: 16px 0 2px;
+    padding: 0;
+    list-style: none;
+  }
+
+  .empty-hints li {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    align-items: center;
+    gap: 11px;
+  }
+
+  .empty-hints b {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .empty-hints span {
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.4;
+  }
+
+  body[data-active-view="charge"] .empty-hints b {
+    border-color: rgba(184,230,59,0.34);
+    background: rgba(184,230,59,0.1);
+    color: #d8f57e;
+  }
+
+  body[data-active-view="drive"] .empty-hints b {
+    border-color: rgba(255,122,69,0.34);
+    background: rgba(255,122,69,0.1);
+    color: #ffc0a6;
+  }
+
+  body[data-active-view="insights"] .empty-hints b {
+    border-color: rgba(164,140,255,0.34);
+    background: rgba(164,140,255,0.1);
+    color: #d6ccff;
+  }
+
   .hero {
     display: grid;
     gap: var(--space-md);
@@ -324,6 +380,87 @@
     color: var(--muted);
   }
 
+  /* HV-pack detail stats beneath the SOC ring on the Insights hero. */
+  .pack-stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin-top: 13px;
+  }
+
+  .pack-stat-row span {
+    display: block;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .pack-stat-row strong {
+    display: block;
+    margin-top: 3px;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Per-session charge history. Green to match the Charge tab accent. */
+  .charge-session-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .charge-session-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid rgba(184,230,59,0.18);
+    border-radius: 12px;
+    background: rgba(184,230,59,0.05);
+  }
+
+  .charge-session-row strong {
+    display: block;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+  }
+
+  .charge-session-row small {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .charge-session-row > b {
+    flex: 0 0 auto;
+    padding: 5px 10px;
+    border: 1px solid rgba(184,230,59,0.3);
+    border-radius: 999px;
+    background: rgba(184,230,59,0.1);
+    color: #e7ff9a;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  /* In-progress (still plugged in) — brighter so it reads as live. */
+  .charge-session-row[data-charging="1"] {
+    border-color: rgba(184,230,59,0.55);
+    background: rgba(184,230,59,0.12);
+  }
+
+  .charge-session-row[data-charging="1"] > b {
+    border-color: rgba(184,230,59,0.5);
+    background: rgba(184,230,59,0.2);
+  }
+
   .drive-signal-grid {
     display: grid;
     grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
@@ -453,9 +590,17 @@
   }
 
   .link-btn {
-    min-height: auto;
-    padding: 0;
+    /* Padded so the tap target clears ~34px (was a 15px text-only hit area).
+       margin-inline-end offsets the right padding so the label stays flush with
+       the card's right edge. The card header is taller than this, so it doesn't
+       grow the header. */
+    min-height: 34px;
+    padding: 7px 9px;
+    margin-inline-end: -9px;
+    display: inline-flex;
+    align-items: center;
     border: 0;
+    border-radius: 10px;
     background: transparent;
     color: var(--text);
     font-size: 13px;
@@ -464,7 +609,14 @@
        min-width:0 on the title block below so the title yields instead. App-wide across tabs. */
     flex: 0 0 auto;
     white-space: nowrap;
+    transition: background-color 140ms ease;
   }
+
+  @media (hover: hover) and (pointer: fine) {
+    .link-btn:hover { background: rgba(255,255,255,0.06); }
+  }
+
+  .link-btn:active { background: rgba(255,255,255,0.1); }
 
   /* In every card header (list/charge cards and status/detail card-heads), let the leading
      title block shrink so the trailing action stays fully visible instead of being clipped. */
@@ -694,7 +846,9 @@
 
   .warning-list,
   .timeline-list,
+  .enhanced-next-list,
   .pid-frame-list,
+  .enhanced-capability-list,
   .dtc-list,
   .real-insight-list {
     display: grid;
@@ -702,9 +856,273 @@
     margin-top: 12px;
   }
 
+  .signal-console {
+    padding: 12px 14px;
+    border-color: rgba(53,230,160,0.18);
+    border-radius: 16px;
+    background:
+      linear-gradient(180deg, rgba(53,230,160,0.055), transparent 42%),
+      rgba(20,20,27,0.92);
+  }
+
+  /* `header.` prefix raises specificity to beat `.list-card header`'s
+     align-items:center, so the status pill tops-aligns with the title. */
+  header.signal-console-head {
+    align-items: flex-start;
+    gap: 12px;
+    padding-bottom: 13px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .signal-console-title {
+    min-width: 0;
+  }
+
+  .signal-console-head h2 {
+    margin-top: 3px;
+    font-size: 20px;
+    line-height: 1.1;
+  }
+
+  .signal-console-sub {
+    display: block;
+    max-width: 46ch;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.42;
+  }
+
+  .signal-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 0 11px;
+    border: 1px solid rgba(53,230,160,0.3);
+    border-radius: 999px;
+    background: rgba(53,230,160,0.1);
+    color: #a9ffd7;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .signal-status-pill::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 10px rgba(53,230,160,0.85);
+  }
+
+  /* Quiet section dividers inside the signal console so the next-probe and
+     evidence lists read as distinct groups rather than one long scroll. */
+  .signal-section-label {
+    margin: 16px 0 -2px;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .signal-stage-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,0.075);
+    border-radius: 8px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), transparent 64%),
+      rgba(0,0,0,0.14);
+  }
+
+  .signal-stage-panel strong {
+    display: block;
+    margin-top: 3px;
+    font-size: 18px;
+  }
+
+  .signal-stage-panel small {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    line-height: 1.35;
+  }
+
+  /* Probe-mode picker: a 2x2 segmented control. Own styling (green accent) so
+     it matches the Signals tab rather than inheriting the orange map layer pills. */
+  .signal-stage-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .signal-stage-tabs button {
+    min-height: 40px;
+    padding: 0 10px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.03);
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 740;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    transition:
+      border-color 140ms ease,
+      background-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .signal-stage-tabs button span {
+    pointer-events: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .signal-stage-tabs button:hover {
+      border-color: rgba(53,230,160,0.26);
+      color: var(--text);
+    }
+  }
+
+  .signal-stage-tabs button.is-active {
+    border-color: rgba(53,230,160,0.42);
+    color: #c8ffe7;
+    background:
+      linear-gradient(180deg, rgba(53,230,160,0.18), rgba(53,230,160,0.06)),
+      rgba(255,255,255,0.03);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 6px 16px rgba(53,230,160,0.12);
+  }
+
+  .signal-stage-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .signal-stage-actions .primary-action {
+    min-height: 44px;
+    border-radius: 999px;
+  }
+
+  /* Run-probe = the page's primary action, so it carries the tab's green fill. */
+  .signal-probe-btn {
+    flex: 1 1 auto;
+    border-color: rgba(53,230,160,0.45);
+    color: #06231a;
+    background: linear-gradient(180deg, #74f2c2, var(--ok));
+    font-weight: 800;
+    letter-spacing: 0.01em;
+  }
+
+  .signal-ghost-btn {
+    min-height: 44px;
+    padding: 0 16px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.04);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .signal-ghost-btn:hover {
+      border-color: rgba(255,255,255,0.2);
+      color: var(--text);
+    }
+  }
+
+  /* Scoreboard + status filter in one control: each tile shows a live count and
+     filters the evidence list when tapped. Replaces the old duplicated KPI strip
+     and separate filter row. */
+  .signal-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 7px;
+    margin-top: 14px;
+  }
+
+  .signal-filter-grid button {
+    display: grid;
+    gap: 2px;
+    min-height: 60px;
+    padding: 8px 6px;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 13px;
+    background: rgba(255,255,255,0.025);
+    color: var(--muted);
+    text-align: center;
+    transition:
+      border-color 140ms ease,
+      background-color 140ms ease,
+      transform 140ms ease;
+  }
+
+  .signal-filter-grid button:active {
+    transform: translateY(1px);
+  }
+
+  .signal-filter-grid button b {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--text);
+  }
+
+  .signal-filter-grid button span {
+    font-size: 10px;
+    font-weight: 740;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .signal-filter-grid button[data-status="confirmed"] b { color: #a9ffd7; }
+  .signal-filter-grid button[data-status="candidate"] b { color: #ffd37f; }
+  .signal-filter-grid button[data-status="rejected"] b { color: #ffc0bb; }
+  .signal-filter-grid button[data-status="deferred"] b { color: var(--soft); }
+  .signal-filter-grid button[data-status="tpms"] b { color: #8ee4ff; }
+
+  @media (hover: hover) and (pointer: fine) {
+    .signal-filter-grid button:hover {
+      border-color: rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.05);
+    }
+  }
+
+  .signal-filter-grid button.is-active {
+    border-color: rgba(53,230,160,0.45);
+    background:
+      linear-gradient(180deg, rgba(53,230,160,0.14), rgba(53,230,160,0.04)),
+      rgba(255,255,255,0.03);
+    color: var(--text);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.07),
+      0 6px 16px rgba(53,230,160,0.1);
+  }
+
+  .signal-filter-grid button.is-active span {
+    color: #c8ffe7;
+  }
+
   .warning-item,
   .timeline-item,
+  .enhanced-next-item,
   .pid-frame-item,
+  .enhanced-capability-item,
   .dtc-item,
   .real-insight-item {
     min-width: 0;
@@ -719,6 +1137,153 @@
     background: rgba(255,184,74,0.08);
   }
 
+  .enhanced-capability-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: start;
+    gap: 10px 12px;
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  /* Classification tags on each evidence row: category / stage / risk. */
+  .signal-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 7px;
+  }
+
+  .signal-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 0 8px;
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.045);
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: lowercase;
+    white-space: nowrap;
+  }
+
+  .signal-chip[data-risk="low"],
+  .signal-chip[data-risk="safe"] {
+    border-color: rgba(53,230,160,0.26);
+    color: #a9ffd7;
+    background: rgba(53,230,160,0.08);
+  }
+
+  .signal-chip[data-risk="medium"] {
+    border-color: rgba(255,184,74,0.26);
+    color: #ffd37f;
+    background: rgba(255,184,74,0.08);
+  }
+
+  .signal-chip[data-risk="high"] {
+    border-color: rgba(255,107,95,0.28);
+    color: #ffc0bb;
+    background: rgba(255,107,95,0.08);
+  }
+
+  .enhanced-next-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .enhanced-next-item {
+    border-style: dashed;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.035);
+  }
+
+  .signal-log-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .icon-link-btn {
+    min-height: 38px;
+    padding: 0 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    font-size: 11px;
+    font-weight: 760;
+    text-transform: uppercase;
+  }
+
+  .icon-link-btn.danger {
+    color: #ff9f9f;
+    border-color: rgba(255,112,112,0.18);
+    background: rgba(255,112,112,0.06);
+  }
+
+  .enhanced-capability-item > b {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 74px;
+    padding: 5px 9px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.045);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .enhanced-capability-item > b::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+  }
+
+  .enhanced-capability-item[data-status="confirmed"] {
+    border-color: rgba(53,230,160,0.24);
+    background: rgba(53,230,160,0.055);
+  }
+
+  .enhanced-capability-item[data-status="confirmed"] > b {
+    border-color: rgba(53,230,160,0.24);
+    color: #a9ffd7;
+    background: rgba(53,230,160,0.08);
+  }
+
+  .enhanced-capability-item[data-status="rejected"] {
+    border-color: rgba(255,107,95,0.18);
+  }
+
+  .enhanced-capability-item[data-status="rejected"] > b {
+    border-color: rgba(255,107,95,0.2);
+    color: #ffc0bb;
+    background: rgba(255,107,95,0.08);
+  }
+
+  .enhanced-capability-item[data-status="candidate"] > b {
+    border-color: rgba(255,184,74,0.22);
+    color: #ffd37f;
+    background: rgba(255,184,74,0.08);
+  }
+
+  .enhanced-capability-item[data-status="deferred"] {
+    border-style: dashed;
+  }
+
   .pid-frame-item {
     display: grid;
     grid-template-columns: minmax(58px, auto) minmax(0, 1fr) auto;
@@ -729,7 +1294,7 @@
   .dtc-item {
     display: grid;
     grid-template-columns: minmax(78px, auto) minmax(0, 1fr) auto;
-    align-items: center;
+    align-items: start;
     gap: 12px;
   }
 
@@ -785,9 +1350,11 @@
   }
 
   .dtc-search {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
     margin-top: 6px;
-    padding: 3px 9px;
+    padding: 7px 13px;
     border: 1px solid rgba(92,200,255,0.34);
     border-radius: 999px;
     background: rgba(92,200,255,0.08);
@@ -955,6 +1522,8 @@
   }
 
   .pid-frame-item strong,
+  .enhanced-next-item strong,
+  .enhanced-capability-item strong,
   .dtc-item strong,
   .timeline-item strong,
   .warning-item strong,
@@ -965,6 +1534,8 @@
   }
 
   .pid-frame-item small,
+  .enhanced-next-item small,
+  .enhanced-capability-item small,
   .dtc-item small,
   .timeline-item small,
   .warning-item small,
@@ -1065,4 +1636,40 @@
   button.busy {
     opacity: 0.55;
     pointer-events: none;
+  }
+
+  @media (min-width: 640px) {
+    .signal-stage-panel {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+    }
+
+    .signal-stage-tabs {
+      grid-column: 1 / -1;
+    }
+
+    .signal-stage-actions {
+      justify-content: flex-end;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .enhanced-next-list {
+      grid-template-columns: 1fr;
+    }
+
+    .enhanced-capability-item {
+      grid-template-columns: minmax(0, 1fr);
+      align-items: stretch;
+    }
+
+    .enhanced-capability-item > b,
+    .signal-log-actions {
+      justify-content: flex-start;
+      text-align: left;
+    }
+
+    .enhanced-capability-item > b {
+      width: fit-content;
+    }
   }

@@ -65,6 +65,9 @@ final class PermissionGate {
     }
 
     private void addMissingLocationPermissions(List<String> missing) {
+        if (hasLocation()) {
+            return;
+        }
         if (!granted(Manifest.permission.ACCESS_FINE_LOCATION)) {
             missing.add(Manifest.permission.ACCESS_FINE_LOCATION);
         }

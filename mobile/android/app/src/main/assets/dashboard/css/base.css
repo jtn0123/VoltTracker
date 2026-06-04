@@ -8,7 +8,7 @@
     --line-strong: rgba(255,255,255,0.16);
     --text: #f5f3ec;
     --muted: #aaaab4;
-    --soft: #747582;
+    --soft: #8b8c99;
     --volt: #ff7a45;
     --volt-deep: #e85a1f;
     --ev: #b8e63b;
@@ -212,6 +212,14 @@
       linear-gradient(145deg, rgba(255, 184, 74, 0.2), rgba(255, 122, 69, 0.08));
   }
 
+  body[data-active-view="signals"] .drive-title-mark {
+    border-color: rgba(53, 230, 160, 0.32);
+    color: #a9ffd7;
+    background:
+      radial-gradient(circle at 35% 20%, rgba(53, 230, 160, 0.26), transparent 38%),
+      linear-gradient(145deg, rgba(53, 230, 160, 0.15), rgba(255, 122, 69, 0.1));
+  }
+
   #screenKicker {
     display: none;
   }
@@ -287,6 +295,30 @@
   .badge[data-state="scanning"] .dot { background: var(--warn); color: var(--warn); }
   .badge[data-state="error"], .badge[data-state="blocked"] { color: var(--bad); }
   .badge[data-state="error"] .dot, .badge[data-state="blocked"] .dot { background: var(--bad); color: var(--bad); }
+
+  /* Per-tab accent for the status badge — but ONLY in its resting states
+     (ready/idle). Semantic states (connected=green, scanning=amber,
+     blocked=red) keep their meaning via the rules above. The accent is carried
+     in vars set per active view so the dot + text echo the tab colour. */
+  body { --status-accent: var(--soft); --status-accent-soft: var(--muted); }
+  body[data-active-view="drive"],
+  body[data-active-view="trips"] { --status-accent: var(--volt); --status-accent-soft: #ffc0a6; }
+  body[data-active-view="map"] { --status-accent: #4cc4ff; --status-accent-soft: #c7edff; }
+  body[data-active-view="charge"] { --status-accent: var(--ev); --status-accent-soft: #d8f57e; }
+  body[data-active-view="insights"] { --status-accent: var(--mixed); --status-accent-soft: #d6ccff; }
+  body[data-active-view="settings"] { --status-accent: var(--warn); --status-accent-soft: #ffe0a3; }
+  body[data-active-view="signals"] { --status-accent: var(--ok); --status-accent-soft: #b9ffe1; }
+
+  #stateBadge[data-state="ready"],
+  #stateBadge[data-state="idle"] {
+    color: var(--status-accent-soft);
+    border-color: var(--line-strong);
+  }
+  #stateBadge[data-state="ready"] .dot,
+  #stateBadge[data-state="idle"] .dot {
+    background: var(--status-accent);
+    color: var(--status-accent);
+  }
 
   .panel {
     border: 1px solid var(--line);
@@ -498,6 +530,18 @@
 
   .sandbox-tools .button-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Scenario picker: flex-wrap (≈3 per row) so an odd count doesn't orphan the
+     last chip the way a fixed 2-col grid would. */
+  .sandbox-tools #demoScenarioPicker {
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .sandbox-tools #demoScenarioPicker button {
+    flex: 1 1 30%;
   }
 
   .demo-link {

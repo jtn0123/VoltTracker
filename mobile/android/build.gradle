@@ -22,7 +22,10 @@ def dashboardAssetDir = file("app/src/main/assets/dashboard")
 // a user drills into a specific diagnostic code — so they get their own, larger
 // budget instead of crowding the core number. Both are still bounded; neither can
 // grow unchecked. See docs/bundle-budget.md.
-def dashboardCoreBudgetBytes = 360_000L
+// Raised 360_000 -> 400_000 for the enhanced-signals workspace: the Signals tab,
+// per-session charge list, HV-pack stats, demo-scenario system, and the per-tab
+// polish add ~66 KB of legitimate feature JS/CSS. ~14 KB headroom remains.
+def dashboardCoreBudgetBytes = 400_000L
 def dashboardDtcDataBudgetBytes = 380_000L
 def dashboardDtcDataFiles = ["js/dtc-lookup.js", "js/dtc-causes.js"]
 

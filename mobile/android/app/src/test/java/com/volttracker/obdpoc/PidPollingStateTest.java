@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -19,8 +20,8 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 /**
- * Behavior tests for {@link PidPollingState}: carry-forward age capping (B2) and generalized
- * Mode-01 same-cycle batching beyond Tier-1 (G2).
+ * Behavior tests for {@link PidPollingState}: carry-forward age capping and generalized Mode-01
+ * same-cycle batching beyond the hot lane.
  *
  * <p>The state object is driven through a {@link CapturingEngine} subclass of {@link
  * ObdPollingEngine} that scripts adapter responses and records every command issued, so a test can
@@ -93,6 +94,26 @@ public class PidPollingStateTest {
     }
 
     @Test
+    public void slowLaneValueIsServedAcrossItsScheduledCadence() throws IOException {
+        final long[] nowMs = {1_000L};
+        state.setClockForTesting(() -> nowMs[0]);
+        engine.responses.put("221154", "62 11 54 60\r>");
+
+        state.runScheduledPolls(specs("221154"), new StringBuilder());
+        assertNotNull("value should be present immediately after polling", state.lastRaw("221154"));
+
+        nowMs[0] += PidPollingState.CARRY_FORWARD_MAX_AGE_MS + 1;
+        assertNotNull(
+                "slow scheduled values must not blink out before their next normal poll",
+                state.lastRaw("221154"));
+
+        nowMs[0] = 1_000L + PidPollingState.carryForwardMaxAgeMsFor("221154") + 1;
+        assertNull(
+                "slow values still expire after their command-specific cap",
+                state.lastRaw("221154"));
+    }
+
+    @Test
     public void resetClearsCarryForwardTracking() throws IOException {
         final long[] nowMs = {1_000L};
         state.setClockForTesting(() -> nowMs[0]);
@@ -106,59 +127,74 @@ public class PidPollingStateTest {
         assertNull(state.lastRaw("010D"));
     }
 
-    // ---- G2: generalized Mode-01 same-cycle batching --------------------------------
+    @Test
+    public void staleMsForReportsLastSuccessfulPollAge() throws IOException {
+        final long[] nowMs = {1_000L};
+        state.setClockForTesting(() -> nowMs[0]);
+        engine.responses.put("222429", "62 24 29 58 06\r>");
+
+        state.runScheduledPolls(specs("222429"), new StringBuilder());
+
+        nowMs[0] += 250L;
+        assertEquals(Long.valueOf(250L), state.staleMsFor("222429", nowMs[0]));
+        assertNull(
+                "unknown commands should not report stale age",
+                state.staleMsFor("222414", nowMs[0]));
+    }
+
+    // ---- Generalized Mode-01 same-cycle batching ------------------------------------
 
     @Test
     public void multiTierSameCycleMode01PidsAreBatchedIntoOneRequest() throws IOException {
         state.setMode01BatchSupported(true);
-        // SOC (015B, Tier 2) and coolant (0105, Tier 3) both fall due on the same broadcast cycle
-        // (cycle 10). They are NOT in the Tier-1 batch set, so the generalized path must group them
-        // into a single 01 5B 05 request rather than two separate per-PID reads.
-        engine.responses.put("015B05", "41 5B 80 41 05 7B\r>");
+        // Load (0104, warm lane) and SOC (015B, slow lane) fall due together on some broadcast
+        // cycles. They are NOT in the hot-lane batch set, so the generalized path must group them
+        // into a single 01 04 5B request rather than two separate per-PID reads.
+        engine.responses.put("01045B", "41 04 80 41 5B 80\r>");
 
-        List<PidSpec> due = specs("015B", "0105");
+        List<PidSpec> due = specs("0104", "015B");
         state.runScheduledPolls(due, new StringBuilder());
 
         assertTrue(
-                "SOC + coolant must be requested as one batched command, got " + engine.commandLog,
-                engine.commandLog.contains("015B05"));
+                "load + SOC must be requested as one batched command, got " + engine.commandLog,
+                engine.commandLog.contains("01045B"));
+        assertFalse(
+                "a batched extra cycle must not also send load per-PID",
+                engine.commandLog.contains("0104"));
         assertFalse(
                 "a batched extra cycle must not also send SOC per-PID",
                 engine.commandLog.contains("015B"));
-        assertFalse(
-                "a batched extra cycle must not also send coolant per-PID",
-                engine.commandLog.contains("0105"));
         // Both values are carried forward from the single batched response.
+        assertNotNull(state.lastRaw("0104"));
         assertNotNull(state.lastRaw("015B"));
-        assertNotNull(state.lastRaw("0105"));
     }
 
     @Test
     public void incompleteExtraBatchFallsBackToPerPidWithoutDisablingTier1() throws IOException {
         state.setMode01BatchSupported(true);
-        // The batched reply is missing the coolant (05) frame, so the group batch must fail and the
+        // The batched reply is missing the SOC (5B) frame, so the group batch must fail and the
         // caller must poll both PIDs per-PID. The adapter capability flag must stay enabled — a
         // short reply here is a per-cycle fallback, not a permanent verdict.
-        engine.responses.put("015B05", "41 5B 80\r>");
+        engine.responses.put("01045B", "41 04 80\r>");
+        engine.responses.put("0104", "41 04 80\r>");
         engine.responses.put("015B", "41 5B 80\r>");
-        engine.responses.put("0105", "41 05 7B\r>");
 
-        List<PidSpec> due = specs("015B", "0105");
+        List<PidSpec> due = specs("0104", "015B");
         state.runScheduledPolls(due, new StringBuilder());
 
-        assertTrue("must attempt the batched request", engine.commandLog.contains("015B05"));
+        assertTrue("must attempt the batched request", engine.commandLog.contains("01045B"));
+        assertTrue(
+                "incomplete batch must fall back to per-PID load",
+                engine.commandLog.contains("0104"));
         assertTrue(
                 "incomplete batch must fall back to per-PID SOC",
                 engine.commandLog.contains("015B"));
+        // Hot-lane batching support must remain enabled.
+        engine.responses.put("010D0C49", "41 0D 28 41 0C 0F A0 41 49 7F\r>");
+        state.runScheduledPolls(specs("010D", "010C", "0149"), new StringBuilder());
         assertTrue(
-                "incomplete batch must fall back to per-PID coolant",
-                engine.commandLog.contains("0105"));
-        // Tier-1 batching support must remain enabled.
-        engine.responses.put("010D0C041149", "41 0D 28 41 0C 0F A0 41 04 80 41 11 33 41 49 7F\r>");
-        state.runScheduledPolls(specs("010D", "010C", "0104", "0111", "0149"), new StringBuilder());
-        assertTrue(
-                "Tier-1 batching must still engage after an extra-batch fallback",
-                engine.commandLog.contains("010D0C041149"));
+                "hot-lane batching must still engage after an extra-batch fallback",
+                engine.commandLog.contains("010D0C49"));
     }
 
     @Test
@@ -175,13 +211,13 @@ public class PidPollingStateTest {
     }
 
     @Test
-    public void tier1BatchingIsUnchanged() throws IOException {
+    public void hotLaneBatchingUsesTheNarrowFastSet() throws IOException {
         state.setMode01BatchSupported(true);
-        engine.responses.put("010D0C041149", "41 0D 28 41 0C 0F A0 41 04 80 41 11 33 41 49 7F\r>");
-        state.runScheduledPolls(specs("010D", "010C", "0104", "0111", "0149"), new StringBuilder());
+        engine.responses.put("010D0C49", "41 0D 28 41 0C 0F A0 41 49 7F\r>");
+        state.runScheduledPolls(specs("010D", "010C", "0149"), new StringBuilder());
         assertTrue(
-                "Tier-1 PIDs must batch into one command",
-                engine.commandLog.contains("010D0C041149"));
+                "hot-lane Mode-01 PIDs must batch into one command",
+                engine.commandLog.contains("010D0C49"));
         assertFalse("must not also poll speed per-PID", engine.commandLog.contains("010D"));
     }
 

@@ -6,6 +6,29 @@
       Plug in your Volt with the adapter connected and charging sessions will
       show up here automatically.
     </p>
+    <ol class="empty-hints" aria-label="How charge tracking works">
+      <li>
+        <b>1</b
+        ><span
+          >Connect the OBD adapter and keep the app open while the car
+          charges.</span
+        >
+      </li>
+      <li>
+        <b>2</b
+        ><span
+          >Each plug-in is detected automatically — there's no button to
+          press.</span
+        >
+      </li>
+      <li>
+        <b>3</b
+        ><span
+          >Sessions, peak power, and detection status fill in the cards
+          below.</span
+        >
+      </li>
+    </ol>
   </article>
   <section class="charge-grid" aria-label="Charging summary" aria-live="polite">
     <article class="panel charge-kpi">
@@ -29,4 +52,22 @@
       <small>Charge detection status</small>
     </article>
   </section>
+
+  <article
+    id="chargeSessionsCard"
+    class="panel list-card charge-sessions-card"
+    hidden
+  >
+    <header>
+      <div>
+        <span class="kicker">Recent charges</span>
+        <h3 id="chargeSessionsTitle">Charge sessions</h3>
+      </div>
+    </header>
+    <div
+      id="chargeSessionsList"
+      class="charge-session-list"
+      aria-live="polite"
+    ></div>
+  </article>
 </section>

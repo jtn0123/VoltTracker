@@ -59,7 +59,12 @@ final class DeviceCatalog {
             return devices.toString();
         }
 
-        Set<BluetoothDevice> bonded = adapter.getBondedDevices();
+        Set<BluetoothDevice> bonded;
+        try {
+            bonded = adapter.getBondedDevices();
+        } catch (SecurityException ex) {
+            return devices.toString();
+        }
         List<BluetoothDevice> sorted = new ArrayList<>(bonded);
         Collections.sort(
                 sorted,
@@ -78,12 +83,12 @@ final class DeviceCatalog {
             JSONObject item = new JSONObject();
             try {
                 item.put("name", safeName(device));
-                item.put("address", device.getAddress());
-                item.put("type", device.getType());
-                item.put("bondState", device.getBondState());
+                item.put("address", safeAddress(device));
+                item.put("type", safeType(device));
+                item.put("bondState", safeBondState(device));
                 item.put("obdCandidate", isLikelyObdDevice(device));
                 devices.put(item);
-            } catch (JSONException ignored) {
+            } catch (JSONException | SecurityException ignored) {
                 // Skip malformed device entries. Android-provided addresses should be valid.
             }
         }
@@ -98,7 +103,12 @@ final class DeviceCatalog {
             return candidates;
         }
 
-        List<BluetoothDevice> sorted = new ArrayList<>(adapter.getBondedDevices());
+        List<BluetoothDevice> sorted;
+        try {
+            sorted = new ArrayList<>(adapter.getBondedDevices());
+        } catch (SecurityException ex) {
+            return candidates;
+        }
         Collections.sort(
                 sorted,
                 (left, right) ->
@@ -111,13 +121,13 @@ final class DeviceCatalog {
             }
             JSONObject item = new JSONObject();
             try {
-                item.put("address", device.getAddress());
+                item.put("address", safeAddress(device));
                 item.put("name", safeName(device));
                 item.put("lastSeen", 0);
                 item.put("connectCount", 0);
                 item.put("candidate", true);
                 candidates.put(item);
-            } catch (JSONException ignored) {
+            } catch (JSONException | SecurityException ignored) {
                 // Skip malformed device entries.
             }
         }
@@ -125,8 +135,41 @@ final class DeviceCatalog {
     }
 
     @SuppressLint("MissingPermission")
+    private static String safeAddress(BluetoothDevice device) {
+        try {
+            String address = device.getAddress();
+            return address == null ? "" : address;
+        } catch (SecurityException ex) {
+            return "";
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private static int safeType(BluetoothDevice device) {
+        try {
+            return device.getType();
+        } catch (SecurityException ex) {
+            return BluetoothDevice.DEVICE_TYPE_UNKNOWN;
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private static int safeBondState(BluetoothDevice device) {
+        try {
+            return device.getBondState();
+        } catch (SecurityException ex) {
+            return BluetoothDevice.BOND_NONE;
+        }
+    }
+
+    @SuppressLint("MissingPermission")
     private static String safeName(BluetoothDevice device) {
-        String name = device.getName();
+        String name;
+        try {
+            name = device.getName();
+        } catch (SecurityException ex) {
+            return "OBD adapter";
+        }
         if (name == null || name.trim().isEmpty()) {
             return "OBD adapter";
         }
@@ -159,6 +202,9 @@ final class DeviceCatalog {
             return "";
         }
         String cleanAddress = address.trim();
+        if (!BluetoothAdapter.checkBluetoothAddress(cleanAddress)) {
+            return "";
+        }
         String cleanName = name == null ? "" : name.trim();
         JSONArray history = updatedDeviceHistory(cleanAddress, cleanName);
         prefs.edit()

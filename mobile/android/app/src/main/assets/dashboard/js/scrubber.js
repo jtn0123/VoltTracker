@@ -81,7 +81,7 @@
   }
 
   function buildScrubData(/** @type {any} */ route) {
-    const pts = (route && route.points) || [];
+    const pts = ((route && route.points) || []).filter(isValidScrubPoint);
     const n = pts.length;
     if (n < 2) return [];
     const d = pts.map((/** @type {any} */ p) => ({
@@ -142,6 +142,12 @@
       d[i].elevFt = d[i].elevM * 3.28084;
     }
     return d;
+  }
+
+  function isValidScrubPoint(/** @type {any} */ point) {
+    const lat = Number(point && point.lat);
+    const lng = Number(point && point.lng);
+    return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
   }
 
   function scrubSampleAt(/** @type {number} */ frac) {
@@ -344,7 +350,7 @@
     if (!node) return;
     node.replaceChildren(
       scrubChip("Dist mi", s.distMi.toFixed(1)),
-      scrubChip("Speed", Math.round(s.mph), { color: SCRUB_SPEED }),
+      scrubChip("Speed mph", Math.round(s.mph), { color: SCRUB_SPEED }),
       scrubChip("Elev ft", scrubHasElev ? Math.round(s.elevFt) : "--", {
         color: scrubHasElev ? SCRUB_ELEV : null
       }),

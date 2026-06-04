@@ -92,6 +92,29 @@ public class AppStateJsonTest {
     }
 
     @Test
+    public void buildCopiesLiveRedactedVinIntoVehicle() throws JSONException {
+        JSONObject telemetry = new JSONObject();
+        telemetry.put("vin", "…2020");
+
+        JSONObject payload =
+                new JSONObject(
+                        AppStateJson.build(
+                                "1.0",
+                                true,
+                                true,
+                                true,
+                                "",
+                                "",
+                                telemetry,
+                                new JSONObject(),
+                                new JSONObject()));
+
+        JSONObject vehicle = payload.getJSONObject("vehicle");
+        assertEquals("…2020", vehicle.getString("vin"));
+        assertTrue(vehicle.getBoolean("vinStored"));
+    }
+
+    @Test
     public void buildEmitsEmptyReasonsArrayWhenAbsent() throws JSONException {
         JSONObject payload =
                 new JSONObject(
@@ -131,6 +154,29 @@ public class AppStateJsonTest {
         assertTrue(adapter.getBoolean("remembered"));
         assertTrue(adapter.getBoolean("connected"));
         assertEquals("...44:55", adapter.getString("address"));
+    }
+
+    @Test
+    public void vehiclePayloadIncludesTelemetryOdometerWhenPresent() throws JSONException {
+        JSONObject telemetry =
+                new JSONObject().put("odometerKm", 123456.7).put("odometerMiles", 76712.4);
+
+        JSONObject payload =
+                new JSONObject(
+                        AppStateJson.build(
+                                "1.0",
+                                true,
+                                true,
+                                true,
+                                "00:11:22:33:44:55",
+                                "OBDLink",
+                                telemetry,
+                                new JSONObject(),
+                                new JSONObject()));
+
+        JSONObject vehicle = payload.getJSONObject("vehicle");
+        assertEquals(123456.7, vehicle.getDouble("odometerKm"), 0.01);
+        assertEquals(76712.4, vehicle.getDouble("odometerMiles"), 0.01);
     }
 
     @Test
