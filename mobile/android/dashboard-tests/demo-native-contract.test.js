@@ -91,14 +91,6 @@ const NATIVE_VEHICLE = union(
   putKeys(methodBody(reportsJava, 'JSONObject latestVehicleJson(SQLiteDatabase db)')),
 );
 
-// Fields the Vehicle card (panels.js#renderVehicleUi) renders but NO native
-// builder emits yet: electric-mix % and battery-health %. The demo previews the
-// intended card; until a PID/derivation feeds these the real app shows "--".
-// Listed here so the gap is explicit and reviewed — a NEW demo-only field still
-// fails the contract. Tracked separately to either compute these natively or
-// drop them from the card.
-const VEHICLE_FORWARD_LOOKING = new Set(['evSharePct', 'batteryHealthPct']);
-
 function loadVD() {
   const VD = window.VoltDashboard;
   return VD;
@@ -157,21 +149,15 @@ describe('demo ↔ native shape contract', () => {
     });
   }
 
-  it('demo vehicle keys are native, except documented forward-looking fields', () => {
+  it('demo vehicle keys are all emitted by the native vehicle payload', () => {
     const VD = loadVD();
     VD.loadDemoScenario('typical');
     const vehicle = (VD.state.appState || {}).vehicle || {};
-    const fabricated = Object.keys(vehicle).filter(
-      (k) => !NATIVE_VEHICLE.has(k) && !VEHICLE_FORWARD_LOOKING.has(k),
-    );
-    expect(fabricated, 'vehicle keys neither native nor in the forward-looking allowlist').toEqual([]);
-  });
-
-  it('forward-looking vehicle allowlist stays minimal (no longer-needed entries)', () => {
-    // If native ever starts emitting one of these, this fails so we delete the
-    // allowlist entry instead of letting it mask a now-real field.
-    const stale = [...VEHICLE_FORWARD_LOOKING].filter((k) => NATIVE_VEHICLE.has(k));
-    expect(stale, 'allowlisted fields native now emits — remove from VEHICLE_FORWARD_LOOKING').toEqual([]);
+    // No allowlist: the demo must not show a vehicle field the app can't emit.
+    // (electric-mix % / battery-health % were dropped from the card because no
+    // PID captures state-of-health and there's no EV/engine distance split.)
+    const fabricated = Object.keys(vehicle).filter((k) => !NATIVE_VEHICLE.has(k));
+    expect(fabricated, 'vehicle keys not emitted by AppStatePayload/latestVehicle').toEqual([]);
   });
 
   // The other direction: the demo must keep exercising the load-bearing fields

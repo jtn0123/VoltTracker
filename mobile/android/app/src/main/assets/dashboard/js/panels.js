@@ -911,7 +911,9 @@
   // Vehicle identity card. Reads state.appState.vehicle once the OBD bridge can
   // supply it; every field degrades to "--" until its PID/source is validated.
   // Expected vehicle fields: name, vin, year, make, model, odometerMiles (or
-  // odometerKm), evSharePct, batteryHealthPct.
+  // odometerKm). (Electric-mix % and battery-health % were dropped: no PID
+  // captures state-of-health and there's no EV/engine distance split, so the
+  // native layer can't populate them — see demo-native-contract.test.js.)
   function renderVehicleUi() {
     const vehicle = (state.appState || {}).vehicle || {};
     const insights = state.insights || {};
@@ -940,12 +942,6 @@
 
     const loggedMeters = Number(insights.totalDistanceMeters || 0);
     VD.setText("vehicleLoggedDistance", loggedMeters > 0 ? VD.formatDistance(loggedMeters) : "--");
-
-    const evMix = Number(vehicle.evSharePct != null ? vehicle.evSharePct : vehicle.electricSharePct);
-    VD.setText("vehicleEvMix", Number.isFinite(evMix) ? `${Math.round(evMix)}% electric` : "--");
-
-    const health = Number(vehicle.batteryHealthPct != null ? vehicle.batteryHealthPct : vehicle.packHealthPct);
-    VD.setText("vehicleBatteryHealth", Number.isFinite(health) ? `${health.toFixed(1)}%` : "--");
   }
 
   function toggleHidden(/** @type {any} */ id, /** @type {any} */ hidden) {

@@ -233,8 +233,6 @@ const REQUIRED_DOM = `
   <div id="vehicleYear"></div>
   <div id="vehicleOdometer"></div>
   <div id="vehicleLoggedDistance"></div>
-  <div id="vehicleEvMix"></div>
-  <div id="vehicleBatteryHealth"></div>
 
   <div id="realTripsCard"></div>
   <div id="tripsEmptyState"></div>
