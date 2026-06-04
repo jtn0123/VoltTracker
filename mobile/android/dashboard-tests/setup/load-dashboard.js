@@ -219,6 +219,7 @@ const REQUIRED_DOM = `
   <div id="realChargeHints"></div>
   <div id="realChargePower"></div>
   <div id="realChargeStatus"></div>
+  <div id="chargeSessionsCard"><div id="chargeSessionsTitle"></div><div id="chargeSessionsList"></div></div>
   <div id="realPackRing"></div>
   <div id="realPackValue"></div>
   <div id="realPackTitle"></div>

@@ -686,6 +686,7 @@ final class ObdStoreReports {
                         db, VoltTrackerDb.TABLE_TELEMETRY, "charge_transition_hint = 1", null));
         payload.put("maxPowerKw", maxDouble(db, VoltTrackerDb.TABLE_TELEMETRY, "power_kw"));
         payload.put("latest", latestChargeSessionJson(db));
+        payload.put("recentSessions", recentChargeSessionsJson(db, 12));
         return payload;
     }
 
@@ -752,43 +753,68 @@ final class ObdStoreReports {
         return value == null ? JSONObject.NULL : value;
     }
 
+    private static final String[] CHARGE_SESSION_COLUMNS = {
+        "_id",
+        "started_at_ms",
+        "ended_at_ms",
+        "charger_type",
+        "start_soc",
+        "end_soc",
+        "power_kw",
+        "energy_kwh",
+        "confidence"
+    };
+
+    /** Maps one {@code charge_sessions} cursor row to the JSON shape the dashboard renders. */
+    private static JSONObject chargeSessionRowJson(Cursor cursor) throws JSONException {
+        JSONObject item = new JSONObject();
+        item.put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
+        item.put("startedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("started_at_ms")));
+        item.put("endedAtMs", boxedOrNull(nullableLongBoxed(cursor, "ended_at_ms")));
+        String chargerType = cursor.getString(cursor.getColumnIndexOrThrow("charger_type"));
+        item.put("chargerType", chargerType == null ? JSONObject.NULL : clean(chargerType));
+        item.put("startSoc", boxedOrNull(nullableDoubleBoxed(cursor, "start_soc")));
+        item.put("endSoc", boxedOrNull(nullableDoubleBoxed(cursor, "end_soc")));
+        item.put("powerKw", boxedOrNull(nullableDoubleBoxed(cursor, "power_kw")));
+        item.put("energyKwh", boxedOrNull(nullableDoubleBoxed(cursor, "energy_kwh")));
+        item.put("confidence", boxedOrNull(nullableDoubleBoxed(cursor, "confidence")));
+        return item;
+    }
+
     private static JSONObject latestChargeSessionJson(SQLiteDatabase db) throws JSONException {
         try (Cursor cursor =
                 db.query(
                         VoltTrackerDb.TABLE_CHARGE_SESSIONS,
-                        new String[] {
-                            "_id",
-                            "started_at_ms",
-                            "ended_at_ms",
-                            "charger_type",
-                            "start_soc",
-                            "end_soc",
-                            "power_kw",
-                            "energy_kwh",
-                            "confidence"
-                        },
+                        CHARGE_SESSION_COLUMNS,
                         null,
                         null,
                         null,
                         null,
                         "started_at_ms DESC",
                         "1")) {
-            if (!cursor.moveToFirst()) {
-                return new JSONObject();
-            }
-            JSONObject item = new JSONObject();
-            item.put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")));
-            item.put("startedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("started_at_ms")));
-            item.put("endedAtMs", boxedOrNull(nullableLongBoxed(cursor, "ended_at_ms")));
-            String chargerType = cursor.getString(cursor.getColumnIndexOrThrow("charger_type"));
-            item.put("chargerType", chargerType == null ? JSONObject.NULL : clean(chargerType));
-            item.put("startSoc", boxedOrNull(nullableDoubleBoxed(cursor, "start_soc")));
-            item.put("endSoc", boxedOrNull(nullableDoubleBoxed(cursor, "end_soc")));
-            item.put("powerKw", boxedOrNull(nullableDoubleBoxed(cursor, "power_kw")));
-            item.put("energyKwh", boxedOrNull(nullableDoubleBoxed(cursor, "energy_kwh")));
-            item.put("confidence", boxedOrNull(nullableDoubleBoxed(cursor, "confidence")));
-            return item;
+            return cursor.moveToFirst() ? chargeSessionRowJson(cursor) : new JSONObject();
         }
+    }
+
+    /** Most recent charge sessions (newest first), capped at {@code limit}, for the Charge tab. */
+    private static JSONArray recentChargeSessionsJson(SQLiteDatabase db, int limit)
+            throws JSONException {
+        JSONArray out = new JSONArray();
+        try (Cursor cursor =
+                db.query(
+                        VoltTrackerDb.TABLE_CHARGE_SESSIONS,
+                        CHARGE_SESSION_COLUMNS,
+                        null,
+                        null,
+                        null,
+                        null,
+                        "started_at_ms DESC",
+                        String.valueOf(Math.max(1, limit)))) {
+            while (cursor.moveToNext()) {
+                out.put(chargeSessionRowJson(cursor));
+            }
+        }
+        return out;
     }
 
     private static JSONObject latestBatterySnapshotJson(SQLiteDatabase db) throws JSONException {

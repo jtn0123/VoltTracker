@@ -717,6 +717,7 @@
     VD.setText("realChargeHints", Number(charge.chargingHintCount || 0));
     VD.setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
     VD.setText("realChargeStatus", charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data"));
+    renderChargeSessions(charge);
 
     const ring = el("realPackRing");
     const ringValue = el("realPackValue");
@@ -760,6 +761,72 @@
     right.textContent = tag;
     article.append(center, right);
     return article;
+  }
+
+  // Per-session charge history for the Charge tab. The native chargeSummary now
+  // ships a `recentSessions` array (newest first); the card stays hidden until
+  // at least one real session exists so the empty tab keeps its first-run guide.
+  function renderChargeSessions(/** @type {any} */ charge) {
+    const card = el("chargeSessionsCard");
+    const list = el("chargeSessionsList");
+    const sessions = Array.isArray(charge.recentSessions) ? charge.recentSessions : [];
+    if (card) card.hidden = sessions.length === 0;
+    if (!list) return;
+    if (!sessions.length) {
+      list.replaceChildren();
+      return;
+    }
+    VD.setText("chargeSessionsTitle", `${sessions.length} recent charge${sessions.length === 1 ? "" : "s"}`);
+    list.replaceChildren(...sessions.slice(0, 12).map(buildChargeSessionRow));
+  }
+
+  function chargeNum(/** @type {any} */ value) {
+    // Native sends JSON null for missing fields; coerce those to NaN so a real
+    // 0 reading and "no data" don't both render as "0".
+    return value == null || value === "" ? NaN : Number(value);
+  }
+
+  function chargerLabel(/** @type {any} */ type) {
+    const raw = String(type == null ? "" : type).trim();
+    const key = raw.toLowerCase().replace(/[\s-]+/g, "_");
+    if (!key || key === "unknown" || key === "null") return "";
+    const known = /** @type {Record<string, string>} */ ({
+      level1: "Level 1",
+      level2: "Level 2",
+      dc_fast: "DC fast",
+      dcfast: "DC fast"
+    });
+    return known[key] || raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+
+  function buildChargeSessionRow(/** @type {any} */ session) {
+    const row = document.createElement("article");
+    row.className = "charge-session-row";
+    const center = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = [VD.formatWhen(session.startedAtMs), chargerLabel(session.chargerType)]
+      .filter(Boolean)
+      .join(" · ");
+    const small = document.createElement("small");
+    const startSoc = chargeNum(session.startSoc);
+    const endSoc = chargeNum(session.endSoc);
+    const power = chargeNum(session.powerKw);
+    const endedAtMs = chargeNum(session.endedAtMs);
+    const durationMs = Number.isFinite(endedAtMs) ? endedAtMs - Number(session.startedAtMs) : NaN;
+    const parts = [];
+    if (Number.isFinite(startSoc) && Number.isFinite(endSoc)) parts.push(`${Math.round(startSoc)}% → ${Math.round(endSoc)}%`);
+    if (Number.isFinite(power) && power > 0) parts.push(`${power.toFixed(1)} kW`);
+    if (Number.isFinite(durationMs) && durationMs > 0 && typeof VD.formatDuration === "function") parts.push(VD.formatDuration(durationMs));
+    small.textContent = parts.length ? parts.join(" · ") : "charge details pending";
+    center.append(strong, small);
+    const right = document.createElement("b");
+    const energy = chargeNum(session.energyKwh);
+    const socGain = Number.isFinite(startSoc) && Number.isFinite(endSoc) ? endSoc - startSoc : NaN;
+    if (Number.isFinite(energy) && energy > 0) right.textContent = `${energy.toFixed(1)} kWh`;
+    else if (Number.isFinite(socGain) && socGain > 0) right.textContent = `+${Math.round(socGain)}%`;
+    else right.textContent = "--";
+    row.append(center, right);
+    return row;
   }
 
   // Vehicle identity card. Reads state.appState.vehicle once the OBD bridge can

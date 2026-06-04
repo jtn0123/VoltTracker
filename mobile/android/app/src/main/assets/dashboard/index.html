@@ -883,6 +883,20 @@
       <small>Charge detection status</small>
     </article>
   </section>
+
+  <article id="chargeSessionsCard" class="panel list-card charge-sessions-card" hidden>
+    <header>
+      <div>
+        <span class="kicker">Recent charges</span>
+        <h3 id="chargeSessionsTitle">Charge sessions</h3>
+      </div>
+    </header>
+    <div
+      id="chargeSessionsList"
+      class="charge-session-list"
+      aria-live="polite"
+    ></div>
+  </article>
 </section>
 <section id="view-insights" class="view" data-view="insights">
   <article id="insightsEmptyState" class="panel empty-state">
