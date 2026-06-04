@@ -296,6 +296,30 @@
   .badge[data-state="error"], .badge[data-state="blocked"] { color: var(--bad); }
   .badge[data-state="error"] .dot, .badge[data-state="blocked"] .dot { background: var(--bad); color: var(--bad); }
 
+  /* Per-tab accent for the status badge — but ONLY in its resting states
+     (ready/idle). Semantic states (connected=green, scanning=amber,
+     blocked=red) keep their meaning via the rules above. The accent is carried
+     in vars set per active view so the dot + text echo the tab colour. */
+  body { --status-accent: var(--soft); --status-accent-soft: var(--muted); }
+  body[data-active-view="drive"],
+  body[data-active-view="trips"] { --status-accent: var(--volt); --status-accent-soft: #ffc0a6; }
+  body[data-active-view="map"] { --status-accent: #4cc4ff; --status-accent-soft: #c7edff; }
+  body[data-active-view="charge"] { --status-accent: var(--ev); --status-accent-soft: #d8f57e; }
+  body[data-active-view="insights"] { --status-accent: var(--mixed); --status-accent-soft: #d6ccff; }
+  body[data-active-view="settings"] { --status-accent: var(--warn); --status-accent-soft: #ffe0a3; }
+  body[data-active-view="signals"] { --status-accent: var(--ok); --status-accent-soft: #b9ffe1; }
+
+  #stateBadge[data-state="ready"],
+  #stateBadge[data-state="idle"] {
+    color: var(--status-accent-soft);
+    border-color: var(--line-strong);
+  }
+  #stateBadge[data-state="ready"] .dot,
+  #stateBadge[data-state="idle"] .dot {
+    background: var(--status-accent);
+    color: var(--status-accent);
+  }
+
   .panel {
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
