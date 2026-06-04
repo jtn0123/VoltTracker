@@ -586,6 +586,31 @@
       0
     );
 
+    // Demo charge history, a battery snapshot, and enhanced-signal evidence so the
+    // browser preview / demo exercises every feature surface — Charge session list,
+    // Insights HV-pack detail, and the Signals workspace — not just map + trips.
+    // Only ever runs without a native bridge, so it never touches real-device data.
+    const sampleCharges = [
+      { id: 3, startedAtMs: now - 24 * hour, endedAtMs: now - 24 * hour + Math.round(3.4 * hour), chargerType: "level2", startSoc: 24, endSoc: 91, powerKw: 7.2, energyKwh: 11.8 },
+      { id: 2, startedAtMs: now - 48 * hour, endedAtMs: now - 48 * hour + Math.round(3.0 * hour), chargerType: "level2", startSoc: 36, endSoc: 90, powerKw: 7.0, energyKwh: 9.6 },
+      { id: 1, startedAtMs: now - 96 * hour, endedAtMs: now - 96 * hour + Math.round(4.6 * hour), chargerType: "level1", startSoc: 58, endSoc: 88, powerKw: 1.3, energyKwh: 5.2 }
+    ];
+    const sampleBattery = { id: 1, capturedAtMs: now - 6 * hour, soc: 64, capacityAh: 42.1, sohPct: 91, packVoltage: 364, packCurrentA: -5.8, packPowerKw: -2.1, batteryTempC: 23 };
+    const sampleSignalCatalog = [
+      { key: "batt.soc", category: "battery", header: "ATSH7E4", command: "225B", pid: "5B", name: "hybrid battery state of charge", unit: "%", pollLane: "fast", scanStage: "low-risk", risk: "low", validationStatus: "confirmed", source: "Volt community PID sheet" },
+      { key: "maint.oil", category: "maintenance", header: "ATSH7E0", command: "221154", pid: "1154", name: "engine oil temperature", unit: "C", pollLane: "thermal", scanStage: "low-risk", risk: "low", validationStatus: "confirmed", source: "Volt community PID sheet" },
+      { key: "tpms.fl", category: "tpms", header: "ATSH760", command: "224050", pid: "4050", name: "tire pressure front-left", unit: "kPa", pollLane: "slow", scanStage: "tires", risk: "medium", validationStatus: "candidate", source: "TPMS probe" },
+      { key: "tpms.fr", category: "tpms", header: "ATSH760", command: "224051", pid: "4051", name: "tire pressure front-right", unit: "kPa", pollLane: "slow", scanStage: "tires", risk: "medium", validationStatus: "candidate", source: "TPMS probe" },
+      { key: "odo", category: "odometer", header: "CAN:120", command: "CAN:120", pid: "CAN:120", name: "odometer", unit: "km", pollLane: "passive", scanStage: "passive", risk: "safe", validationStatus: "candidate", source: "GM Volt wiki" },
+      { key: "batt.coolant", category: "battery", header: "ATSH7E4", command: "22F00A", pid: "F00A", name: "battery coolant pump RPM", unit: "rpm", pollLane: "diagnostic_only", scanStage: "experimental", risk: "medium", validationStatus: "candidate", source: "research candidate" }
+    ];
+    const sampleCapabilities = [
+      { header: "ATSH7E4", id: 11, command: "225B", pid: "5B", name: "hybrid battery state of charge", supported: true, responseCount: 120, lastSeenMs: now - 6 * hour, sample: { pollLane: "fast", scanStage: "low-risk", risk: "low", validationStatus: "confirmed", rawResponse: "62 5B 63", category: "battery" } },
+      { header: "ATSH7E0", id: 10, command: "221154", pid: "1154", name: "engine oil temperature", supported: true, responseCount: 42, lastSeenMs: now - 6 * hour, sample: { pollLane: "thermal", scanStage: "low-risk", risk: "low", validationStatus: "confirmed", rawResponse: "62 11 54 60", category: "maintenance" } },
+      { header: "ATSH760", id: 12, command: "224050", pid: "4050", name: "tire pressure front-left", supported: true, responseCount: 3, lastSeenMs: now - 6 * hour, sample: { pollLane: "slow", scanStage: "tires", risk: "medium", validationStatus: "confirmed", rawResponse: "62 40 50 D2", category: "tpms" } },
+      { header: "ATSH760", id: 13, command: "224051", pid: "4051", name: "tire pressure front-right", supported: false, responseCount: 0, lastSeenMs: now - 7 * hour, sample: { pollLane: "slow", scanStage: "tires", risk: "medium", validationStatus: "candidate", rawResponse: "NO DATA", category: "tpms" } }
+    ];
+
     state.storage = {
       database: "volttracker_obd_poc.db",
       databaseBytes: 21086208,
@@ -593,9 +618,38 @@
       sampleCount: routes.reduce((s, r) => s + r.session.sampleCount, 0),
       rawTelemetryCount: routes.reduce((s, r) => s + r.session.sampleCount, 0),
       locationSampleCount: routes.reduce((s, r) => s + r.points.length, 0),
+      tripSegmentCount: routes.length,
+      chargeSessionCount: sampleCharges.length,
+      batterySnapshotCount: 1,
+      fieldCapabilityCount: sampleCapabilities.length,
       recentRoutes: routes,
       latestRoute: today,
-      recentSessions: []
+      recentSessions: routes.map((r) => ({
+        id: r.session.id,
+        mode: "drive",
+        adapterName: r.session.adapterName,
+        startedAtMs: r.session.startedAtMs,
+        status: "complete",
+        sampleCount: r.session.sampleCount,
+        usefulSampleCount: r.session.sampleCount,
+        emptySampleCount: 0
+      })),
+      overview: {
+        distanceMeters: totalDistance,
+        maxSpeedKph: 105,
+        chargingHints: 6,
+        latestTelemetry: { soc: sampleBattery.soc, powerKw: sampleBattery.packPowerKw, vehicleState: "idle" }
+      },
+      chargeSummary: {
+        chargeSessionCount: sampleCharges.length,
+        chargingHintCount: 6,
+        maxPowerKw: 7.2,
+        latest: sampleCharges[0],
+        recentSessions: sampleCharges
+      },
+      batterySummary: { snapshotCount: 1, cellSnapshotCount: 0, latestBatterySnapshot: sampleBattery },
+      detailedSignalCatalog: sampleSignalCatalog,
+      enhancedCapabilities: sampleCapabilities
     };
     state.insights = {
       tripCount: routes.length,
@@ -605,6 +659,9 @@
       maxSpeedKph: 105,
       gpsTripCount: routes.length
     };
+    // Render the storage-backed surfaces too (DB summary, Signals, DTC), not just
+    // the map/trips/insights, so the demo lights up every tab.
+    VD.updateStorageUi();
     VD.renderRealV2Ui();
     renderMap();
     VD.renderRealTrips();
