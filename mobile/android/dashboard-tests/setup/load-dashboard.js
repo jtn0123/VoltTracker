@@ -224,6 +224,7 @@ const REQUIRED_DOM = `
   <div id="realPackValue"></div>
   <div id="realPackTitle"></div>
   <div id="realPackCopy"></div>
+  <div id="realPackStats"></div>
   <div id="maintenanceList"></div>
 
   <div id="vehicleName"></div>

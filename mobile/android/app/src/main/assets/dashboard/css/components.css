@@ -68,6 +68,18 @@
     color: #d8f57e;
   }
 
+  body[data-active-view="drive"] .empty-hints b {
+    border-color: rgba(255,122,69,0.34);
+    background: rgba(255,122,69,0.1);
+    color: #ffc0a6;
+  }
+
+  body[data-active-view="insights"] .empty-hints b {
+    border-color: rgba(164,140,255,0.34);
+    background: rgba(164,140,255,0.1);
+    color: #d6ccff;
+  }
+
   .hero {
     display: grid;
     gap: var(--space-md);
@@ -366,6 +378,31 @@
   .metric small,
   .charge-kpi small {
     color: var(--muted);
+  }
+
+  /* HV-pack detail stats beneath the SOC ring on the Insights hero. */
+  .pack-stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin-top: 13px;
+  }
+
+  .pack-stat-row span {
+    display: block;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .pack-stat-row strong {
+    display: block;
+    margin-top: 3px;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
   }
 
   /* Per-session charge history. Green to match the Charge tab accent. */

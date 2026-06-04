@@ -732,6 +732,7 @@
       VD.setText("realPackTitle", "Waiting for battery readings.");
       VD.setText("realPackCopy", "Battery charge, power, and pack health appear here once the adapter has logged a few readings.");
     }
+    renderPackStats(latest);
 
     const maintenance = el("maintenanceList");
     if (maintenance) {
@@ -827,6 +828,51 @@
     else right.textContent = "--";
     row.append(center, right);
     return row;
+  }
+
+  function firstNum(/** @type {any[]} */ values) {
+    for (const v of values) {
+      if (v == null || v === "") continue;
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+    return NaN;
+  }
+
+  // HV-pack detail. The battery snapshot already rides in the storage payload —
+  // surface voltage / temp / health / power as a stat row beneath the SOC ring
+  // so the Insights hero shows the pack, not just a charge percentage. Hidden
+  // until at least one field is real.
+  function renderPackStats(/** @type {any} */ latest) {
+    const row = el("realPackStats");
+    if (!row) return;
+    const voltage = firstNum([latest.packVoltage]);
+    const temp = firstNum([latest.batteryTempC, latest.batteryTemp]);
+    const soh = firstNum([latest.sohPct]);
+    const packPower = firstNum([latest.packPowerKw, latest.powerKw]);
+    const stats = [
+      ["Pack", Number.isFinite(voltage) ? `${Math.round(voltage)} V` : null],
+      ["Temp", Number.isFinite(temp) ? `${Math.round(temp)}°C` : null],
+      ["Health", Number.isFinite(soh) && soh > 0 ? `${Math.round(soh)}%` : null],
+      ["Power", Number.isFinite(packPower) && packPower !== 0 ? `${packPower.toFixed(1)} kW` : null]
+    ].filter((pair) => pair[1] != null);
+    if (!stats.length) {
+      row.hidden = true;
+      row.replaceChildren();
+      return;
+    }
+    row.hidden = false;
+    row.replaceChildren(...stats.map((pair) => buildPackStat(pair[0], String(pair[1]))));
+  }
+
+  function buildPackStat(/** @type {string} */ label, /** @type {string} */ value) {
+    const cell = document.createElement("div");
+    const span = document.createElement("span");
+    span.textContent = label;
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    cell.append(span, strong);
+    return cell;
   }
 
   // Vehicle identity card. Reads state.appState.vehicle once the OBD bridge can
