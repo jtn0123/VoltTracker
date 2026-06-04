@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.7.0 (2026-06-04)
+
+### Features
+
+- Add enhanced signal discovery workspace ([#168](https://github.com/jtn0123/VoltTracker/pull/168),
+  [`fd2649c`](https://github.com/jtn0123/VoltTracker/commit/fd2649c3c2a2b2b8aa5b8706b8a213916f991b60))
+
+Enhanced signal discovery workspace (Signals tab, PID profiles, TPMS discovery, live sampling) plus
+  dashboard polish across all tabs, a per-session charge list, HV-pack stats, and a demo-scenario
+  system. Adds supporting tests — a11y gate, demo↔native shape contract, tab×scenario visual matrix
+  — and aligns CI to Java 21.
+
+
 ## v0.6.2 (2026-06-03)
 
 ### Bug Fixes
