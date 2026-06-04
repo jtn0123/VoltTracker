@@ -735,7 +735,7 @@
     VD.setText("realChargeHints", Number(charge.chargingHintCount || 0));
     VD.setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
     const chargingNow = (Array.isArray(charge.recentSessions) ? charge.recentSessions : [])
-      .some((/** @type {any} */ s) => s && s.endedAtMs == null && s.startedAtMs && (s.startSoc != null || s.powerKw != null));
+      .some(isChargeInProgress);
     VD.setText("realChargeStatus", chargingNow ? "charging" : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data")));
     renderChargeSessions(charge);
 
@@ -784,6 +784,16 @@
     return article;
   }
 
+  // A charge row counts as "in progress" only when it has no end time AND a
+  // live signal (start SOC or power). A row missing all fields is "details
+  // pending", not charging — so the active-charge badge never fires on a stub.
+  function isChargeInProgress(/** @type {any} */ session) {
+    return Boolean(
+      session && session.endedAtMs == null && session.startedAtMs &&
+        (session.startSoc != null || session.powerKw != null),
+    );
+  }
+
   // Per-session charge history for the Charge tab. The native chargeSummary now
   // ships a `recentSessions` array (newest first); the card stays hidden until
   // at least one real session exists so the empty tab keeps its first-run guide.
@@ -823,10 +833,7 @@
   function buildChargeSessionRow(/** @type {any} */ session) {
     const row = document.createElement("article");
     row.className = "charge-session-row";
-    // No end time + real live signal (start SOC or power) = still plugged in.
-    // A row that's simply missing all fields is "details pending", not charging.
-    const inProgress = session.endedAtMs == null && session.startedAtMs &&
-      (session.startSoc != null || session.powerKw != null);
+    const inProgress = isChargeInProgress(session);
     if (inProgress) row.dataset.charging = "1";
     const center = document.createElement("span");
     const strong = document.createElement("strong");
