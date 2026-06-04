@@ -595,7 +595,14 @@
       { id: 2, startedAtMs: now - 48 * hour, endedAtMs: now - 48 * hour + Math.round(3.0 * hour), chargerType: "level2", startSoc: 36, endSoc: 90, powerKw: 7.0, energyKwh: 9.6 },
       { id: 1, startedAtMs: now - 96 * hour, endedAtMs: now - 96 * hour + Math.round(4.6 * hour), chargerType: "level1", startSoc: 58, endSoc: 88, powerKw: 1.3, energyKwh: 5.2 }
     ];
-    const sampleBattery = { id: 1, capturedAtMs: now - 6 * hour, soc: 64, capacityAh: 42.1, sohPct: 91, packVoltage: 364, packCurrentA: -5.8, packPowerKw: -2.1, batteryTempC: 23 };
+    // SOC kept close to the live browser-demo stream (~77%) so Drive's live tile
+    // and the Insights HV-pack ring tell the same story in the demo.
+    const sampleBattery = { id: 1, capturedAtMs: now - 6 * hour, soc: 77, capacityAh: 42.1, sohPct: 91, packVoltage: 364, packCurrentA: -5.8, packPowerKw: -2.1, batteryTempC: 23 };
+    const sampleVehicle = { year: 2017, make: "Chevrolet", model: "Volt", vin: "1G1RC6S52HU123456", odometerMiles: 48213, evSharePct: 78, batteryHealthPct: 91.3 };
+    const sampleDtcs = [
+      { dtc: "P0420", status: "stored", statusLabel: "stored", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 72 * hour, lastSeenMs: now - 24 * hour },
+      { dtc: "P0011", status: "pending", statusLabel: "pending", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 12 * hour, lastSeenMs: now - 2 * hour }
+    ];
     const sampleSignalCatalog = [
       { key: "batt.soc", category: "battery", header: "ATSH7E4", command: "225B", pid: "5B", name: "hybrid battery state of charge", unit: "%", pollLane: "fast", scanStage: "low-risk", risk: "low", validationStatus: "confirmed", source: "Volt community PID sheet" },
       { key: "maint.oil", category: "maintenance", header: "ATSH7E0", command: "221154", pid: "1154", name: "engine oil temperature", unit: "C", pollLane: "thermal", scanStage: "low-risk", risk: "low", validationStatus: "confirmed", source: "Volt community PID sheet" },
@@ -622,6 +629,9 @@
       chargeSessionCount: sampleCharges.length,
       batterySnapshotCount: 1,
       fieldCapabilityCount: sampleCapabilities.length,
+      diagnosticCodeCount: sampleDtcs.length,
+      diagnosticCodeStatusCounts: { stored: 1, pending: 1 },
+      latestDiagnosticCodes: sampleDtcs,
       recentRoutes: routes,
       latestRoute: today,
       recentSessions: routes.map((r) => ({
@@ -659,8 +669,9 @@
       maxSpeedKph: 105,
       gpsTripCount: routes.length
     };
-    // Render the storage-backed surfaces too (DB summary, Signals, DTC), not just
-    // the map/trips/insights, so the demo lights up every tab.
+    state.appState = Object.assign({}, state.appState, { vehicle: sampleVehicle });
+    // Render the storage-backed surfaces too (DB summary, Signals, DTC, vehicle),
+    // not just the map/trips/insights, so the demo lights up every tab.
     VD.updateStorageUi();
     VD.renderRealV2Ui();
     renderMap();

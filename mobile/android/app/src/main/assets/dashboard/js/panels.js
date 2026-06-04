@@ -295,14 +295,20 @@
 
   function updateEnhancedNextList(/** @type {any[]} */ rows) {
     const list = el("enhancedNextList");
+    const label = el("signalNextLabel");
     if (!list) return;
     const stage = state.signalProbeStage || "tires";
     const next = rows
       .filter((row) => row._status === "candidate" && !row._hasEvidence)
       .filter((row) => String(row.scanStage || (row.sample || {}).scanStage || "tires") === stage)
       .slice(0, 3);
-    if (!next.length) {
-      list.replaceChildren(buildStatusCopy("No fresh catalog candidates are waiting in this probe mode."));
+    // Hide the whole section (label + list) when this probe mode has no fresh
+    // candidates, rather than showing a loud full-width empty message.
+    const hasNext = next.length > 0;
+    if (label) label.hidden = !hasNext;
+    list.hidden = !hasNext;
+    if (!hasNext) {
+      list.replaceChildren();
       return;
     }
     list.replaceChildren(...next.map(buildEnhancedNextItem));

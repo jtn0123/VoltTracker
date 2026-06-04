@@ -949,8 +949,8 @@
     grid-template-columns: 1fr auto;
     align-items: center;
     gap: 2px 10px;
-    min-width: min(232px, 72vw);
-    max-width: 268px;
+    min-width: min(264px, 82vw);
+    max-width: 300px;
     padding: 11px 13px;
     border-color: rgba(255, 255, 255, 0.14);
     background: rgba(14, 15, 20, 0.78);
@@ -1220,8 +1220,8 @@
     grid-template-columns: 1fr auto;
     align-items: center;
     gap: 2px 10px;
-    min-width: min(232px, 72vw);
-    max-width: 268px;
+    min-width: min(264px, 82vw);
+    max-width: 300px;
     min-height: 0;
     padding: 11px 13px;
     border-color: rgba(255, 255, 255, 0.14);

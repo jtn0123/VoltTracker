@@ -97,7 +97,7 @@
       return;
     }
     if (!bridge || typeof bridge.detailProbe !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Detail Probe is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Detail Probe is only available inside the Android app." });
       return;
     }
     const stage = String(state.signalProbeStage || "tires");
@@ -161,7 +161,7 @@
       return;
     }
     if (!bridge || typeof bridge.clearVehicleDtcCodes !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Clear-codes is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Clear-codes is only available inside the Android app." });
       return;
     }
     withBusy(button, () => {
@@ -269,7 +269,7 @@
 
   function shareBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.shareBackup !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Backup is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Backup is only available inside the Android app." });
       return;
     }
     // Plaintext backup is an advanced compatibility escape hatch. The primary
@@ -297,7 +297,7 @@
 
   function shareEncryptedBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.shareEncryptedBackup !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Encrypted backup is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Encrypted backup is only available inside the Android app." });
       return;
     }
     const passphrase = readBackupPassphrase("Choose a passphrase for this encrypted backup. You will need it to restore.");
@@ -310,7 +310,7 @@
 
   function restoreBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.restoreBackup !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Restore is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Restore is only available inside the Android app." });
       return;
     }
     // The merge-vs-replace choice (and the destructive-replace warning) is shown
@@ -321,7 +321,7 @@
 
   function restoreEncryptedBackup(/** @type {any} */ button) {
     if (!bridge || typeof bridge.restoreEncryptedBackup !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Encrypted restore is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Encrypted restore is only available inside the Android app." });
       return;
     }
     const passphrase = readBackupPassphrase("Enter the passphrase for this encrypted backup.");
@@ -336,7 +336,7 @@
 
   function exportDebugBundle() {
     if (!bridge || typeof bridge.exportDebugBundle !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Debug export is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Debug export is only available inside the Android app." });
       return;
     }
     const result = VD.parsePayload(bridge.exportDebugBundle(), {});
@@ -369,7 +369,7 @@
 
   function exportSignalLog(/** @type {any} */ id) {
     if (!bridge || typeof bridge.exportDetailedSignalLog !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Signal log export is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Signal log export is only available inside the Android app." });
       return;
     }
     const result = bridge.exportDetailedSignalLog(String(id || ""));
@@ -385,7 +385,7 @@
 
   function exportSignalLogs() {
     if (!bridge || typeof bridge.exportDetailedSignalLogs !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Signal log export is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Signal log export is only available inside the Android app." });
       return;
     }
     const result = bridge.exportDetailedSignalLogs();
@@ -401,7 +401,7 @@
 
   function deleteSignalLog(/** @type {any} */ id) {
     if (!bridge || typeof bridge.deleteDetailedSignalLog !== "function") {
-      VD.setStatus({ state: "blocked", detail: "Signal log cleanup is only available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Signal log cleanup is only available inside the Android app." });
       return;
     }
     const ok = window.confirm("Delete this saved detailed signal evidence row?");
@@ -431,6 +431,10 @@
         soc: Math.max(13.4, 77.8 - t * 0.01),
         batteryTemp: 72 + Math.sin(t / 8),
         powerKw: state.mode === "gas" ? 32 + Math.sin(t / 3) * 8 : 16 + Math.sin(t / 2.2) * 12,
+        // A slowly drifting coordinate so the demo also exercises the GPS lock
+        // indicator and live position instead of sitting on "waiting" forever.
+        latitude: 42.3601 + Math.sin(t / 40) * 0.012,
+        longitude: -71.0589 + Math.cos(t / 40) * 0.012,
         updatedAt: Date.now(),
         raw: "browser demo"
       });
