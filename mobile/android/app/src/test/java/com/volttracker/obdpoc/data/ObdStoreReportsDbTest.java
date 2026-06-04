@@ -236,9 +236,13 @@ public class ObdStoreReportsDbTest {
         try {
             SQLiteDatabase db = helper.getWritableDatabase();
             db.insertOrThrow(
-                    VoltTrackerDb.TABLE_CHARGE_SESSIONS, null, chargeRow(1_000L, "level1", 20.0, 55.0, 1.4, 4.0));
+                    VoltTrackerDb.TABLE_CHARGE_SESSIONS,
+                    null,
+                    chargeRow(1_000L, "level1", 20.0, 55.0, 1.4, 4.0));
             db.insertOrThrow(
-                    VoltTrackerDb.TABLE_CHARGE_SESSIONS, null, chargeRow(9_000L, "level2", 40.0, 90.0, 7.2, 9.6));
+                    VoltTrackerDb.TABLE_CHARGE_SESSIONS,
+                    null,
+                    chargeRow(9_000L, "level2", 40.0, 90.0, 7.2, 9.6));
         } finally {
             helper.close();
         }
