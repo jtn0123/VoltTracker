@@ -202,10 +202,6 @@ const REQUIRED_DOM = `
     <button data-signal-filter="tpms"></button>
   </div>
   <div id="enhancedAllCount"></div>
-  <div id="enhancedWorkingTabCount"></div>
-  <div id="enhancedCandidateTabCount"></div>
-  <div id="enhancedRejectedTabCount"></div>
-  <div id="enhancedDeferredTabCount"></div>
   <div id="enhancedTiresTabCount"></div>
   <div id="enhancedNextList"></div>
   <div id="enhancedCapabilityList"></div>

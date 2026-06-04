@@ -1,27 +1,19 @@
 <section id="view-signals" class="view" data-view="signals">
-  <div class="map-sheet signal-sheet">
-    <div class="map-sheet-head">
-      <div>
-        <span class="kicker">Enhanced discovery</span>
-        <h2>Signals workspace</h2>
-      </div>
-      <span class="badge" data-state="scanning">
-        <span class="dot"></span><span>catalog</span>
-      </span>
-    </div>
-  </div>
-
   <article id="enhancedCard" class="panel list-card signal-console">
     <header class="signal-console-head">
-      <div>
-        <span class="kicker">Detailed signals</span>
-        <h3 id="enhancedTitle">No detailed signal results yet</h3>
+      <div class="signal-console-title">
+        <span class="kicker">Enhanced discovery</span>
+        <h2 id="enhancedTitle">No detailed signal results yet</h2>
+        <small class="signal-console-sub">
+          Probe the car for signals beyond the standard dashboard — tire
+          pressure, battery internals, and other hidden PIDs.
+        </small>
       </div>
-      <span id="enhancedBadge" class="status-copy">ready</span>
+      <span id="enhancedBadge" class="signal-status-pill">ready</span>
     </header>
 
     <div class="signal-stage-panel">
-      <div>
+      <div class="signal-stage-copy">
         <span class="kicker">Probe mode</span>
         <strong id="signalStageLabel">Tires</strong>
         <small id="signalStageHint">
@@ -30,9 +22,9 @@
       </div>
       <div
         id="signalStageBar"
-        class="map-layer-tabs signal-stage-tabs"
+        class="signal-stage-tabs"
         role="group"
-        aria-label="Detail Probe mode"
+        aria-label="Detail probe mode"
       >
         <button type="button" data-signal-stage="passive">
           <span>Passive</span>
@@ -51,59 +43,47 @@
         <button
           id="detailProbeBtn"
           type="button"
-          class="primary-action"
+          class="primary-action signal-probe-btn"
           data-action="detailProbe"
         >
           Run probe
         </button>
-        <button id="exportSignalLogsBtn" type="button" class="link-btn">
-          export logs
+        <button id="exportSignalLogsBtn" type="button" class="signal-ghost-btn">
+          Export logs
         </button>
-      </div>
-    </div>
-
-    <div class="status-meta signal-kpis">
-      <div>
-        <span>Working</span><strong id="enhancedConfirmedCount">0</strong>
-      </div>
-      <div>
-        <span>No hit</span><strong id="enhancedRejectedCount">0</strong>
-      </div>
-      <div>
-        <span>Candidate</span><strong id="enhancedCandidateCount">0</strong>
-      </div>
-      <div>
-        <span>Deferred</span><strong id="enhancedDeferredCount">0</strong>
       </div>
     </div>
 
     <div
       id="enhancedFilterBar"
-      class="map-layer-tabs signal-filter-tabs"
+      class="signal-filter-grid"
       role="group"
-      aria-label="Detailed signal filters"
+      aria-label="Filter detailed signals by status"
     >
       <button type="button" data-signal-filter="all" class="is-active">
-        <span>All</span><b id="enhancedAllCount">0</b>
+        <b id="enhancedAllCount">0</b><span>All</span>
       </button>
-      <button type="button" data-signal-filter="confirmed">
-        <span>Working</span><b id="enhancedWorkingTabCount">0</b>
+      <button type="button" data-signal-filter="confirmed" data-status="confirmed">
+        <b id="enhancedConfirmedCount">0</b><span>Working</span>
       </button>
-      <button type="button" data-signal-filter="candidate">
-        <span>Candidate</span><b id="enhancedCandidateTabCount">0</b>
+      <button type="button" data-signal-filter="candidate" data-status="candidate">
+        <b id="enhancedCandidateCount">0</b><span>Candidate</span>
       </button>
-      <button type="button" data-signal-filter="rejected">
-        <span>No hit</span><b id="enhancedRejectedTabCount">0</b>
+      <button type="button" data-signal-filter="rejected" data-status="rejected">
+        <b id="enhancedRejectedCount">0</b><span>No hit</span>
       </button>
-      <button type="button" data-signal-filter="deferred">
-        <span>Deferred</span><b id="enhancedDeferredTabCount">0</b>
+      <button type="button" data-signal-filter="deferred" data-status="deferred">
+        <b id="enhancedDeferredCount">0</b><span>Deferred</span>
       </button>
-      <button type="button" data-signal-filter="tpms">
-        <span>Tires</span><b id="enhancedTiresTabCount">0</b>
+      <button type="button" data-signal-filter="tpms" data-status="tpms">
+        <b id="enhancedTiresTabCount">0</b><span>Tires</span>
       </button>
     </div>
 
+    <div class="signal-section-label">Suggested next probes</div>
     <div id="enhancedNextList" class="enhanced-next-list"></div>
+
+    <div class="signal-section-label">Signal evidence</div>
     <div id="enhancedCapabilityList" class="enhanced-capability-list"></div>
   </article>
 </section>

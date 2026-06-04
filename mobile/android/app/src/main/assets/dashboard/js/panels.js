@@ -219,15 +219,13 @@
     const list = el("enhancedCapabilityList");
     VD.setText("enhancedTitle", total ? `${total} detailed signal${total === 1 ? "" : "s"} tracked` : "No detailed signal results yet");
     VD.setText("enhancedBadge", counts.confirmed ? "working data" : total ? "evidence saved" : "ready");
-    VD.setText("enhancedConfirmedCount", counts.confirmed || 0);
-    VD.setText("enhancedRejectedCount", counts.rejected || 0);
-    VD.setText("enhancedCandidateCount", counts.candidate || 0);
-    VD.setText("enhancedDeferredCount", counts.deferred || 0);
+    // The scoreboard counts and the status filter chips share one control now,
+    // so each count is written once to the chip that also filters by it.
     VD.setText("enhancedAllCount", total);
-    VD.setText("enhancedWorkingTabCount", counts.confirmed || 0);
-    VD.setText("enhancedCandidateTabCount", counts.candidate || 0);
-    VD.setText("enhancedRejectedTabCount", counts.rejected || 0);
-    VD.setText("enhancedDeferredTabCount", counts.deferred || 0);
+    VD.setText("enhancedConfirmedCount", counts.confirmed || 0);
+    VD.setText("enhancedCandidateCount", counts.candidate || 0);
+    VD.setText("enhancedRejectedCount", counts.rejected || 0);
+    VD.setText("enhancedDeferredCount", counts.deferred || 0);
     VD.setText("enhancedTiresTabCount", counts.tpms || 0);
     updateSignalStageUi(rows);
     updateEnhancedFilterButtons();
@@ -316,7 +314,7 @@
     const strong = document.createElement("strong");
     strong.textContent = row.name || row.command || "Detailed signal";
     const small = document.createElement("small");
-    small.textContent = [row.category || "catalog", row.pollLane || "probe", row.header || "standard"].filter(Boolean).join(" - ");
+    small.textContent = [row.category || "catalog", row.pollLane || "probe", row.header || "standard"].filter(Boolean).join(" · ");
     item.append(strong, small);
     return item;
   }
@@ -339,6 +337,14 @@
     }
   }
 
+  function buildSignalChip(/** @type {string} */ text, /** @type {string} */ kind, /** @type {string} */ value) {
+    const chip = document.createElement("span");
+    chip.className = "signal-chip";
+    if (kind) chip.dataset[kind] = String(value || text).toLowerCase();
+    chip.textContent = text;
+    return chip;
+  }
+
   function buildEnhancedCapabilityRow(/** @type {any} */ capability) {
     const row = document.createElement("article");
     row.className = "enhanced-capability-item";
@@ -346,19 +352,28 @@
     const center = document.createElement("span");
     const strong = document.createElement("strong");
     strong.textContent = capability.name || capability.pid || capability.command || "Enhanced PID";
-    const small = document.createElement("small");
+
     const sample = capability && typeof capability.sample === "object" ? capability.sample : {};
-    const pieces = [
-      capability.category || sample.category || "catalog",
-      capability.scanStage || sample.scanStage || "probe",
-      capability.risk || sample.risk || "",
+    // Classification chips — quick-scan tags. Technical evidence (header,
+    // command, last-seen, raw bytes) drops to the mono line below so the row
+    // reads top-to-bottom instead of as one long " - " run.
+    const chips = document.createElement("div");
+    chips.className = "signal-chips";
+    const category = capability.category || sample.category || "catalog";
+    const stage = capability.scanStage || sample.scanStage || "probe";
+    const risk = capability.risk || sample.risk || "";
+    chips.append(buildSignalChip(category, "category", category));
+    chips.append(buildSignalChip(stage, "stage", stage));
+    if (risk) chips.append(buildSignalChip(`${risk} risk`, "risk", risk));
+
+    const small = document.createElement("small");
+    small.textContent = [
       capability.header || "no header",
       capability.command || capability.pid || "no command",
       capability._hasEvidence && capability.lastSeenMs ? VD.formatWhen(capability.lastSeenMs) : "not tried",
       sample.rawResponse || capability.notes || capability.source || ""
-    ].filter(Boolean);
-    small.textContent = pieces.join(" - ");
-    center.append(strong, small);
+    ].filter(Boolean).join(" · ");
+    center.append(strong, chips, small);
     const status = document.createElement("b");
     status.textContent = enhancedStatusLabel(capability._status || enhancedCapabilityStatus(capability));
     row.append(center, status);
