@@ -350,7 +350,7 @@
     if (!node) return;
     node.replaceChildren(
       scrubChip("Dist mi", s.distMi.toFixed(1)),
-      scrubChip("Speed", Math.round(s.mph), { color: SCRUB_SPEED }),
+      scrubChip("Speed mph", Math.round(s.mph), { color: SCRUB_SPEED }),
       scrubChip("Elev ft", scrubHasElev ? Math.round(s.elevFt) : "--", {
         color: scrubHasElev ? SCRUB_ELEV : null
       }),

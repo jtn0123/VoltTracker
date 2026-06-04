@@ -112,7 +112,7 @@
     VD.setText("dbEmptyTelemetryCount", Number(storage.emptyTelemetryCount || 0));
     VD.setText("dbState", VD.dbRowCount(storage) ? `${VD.dbRowCount(storage)} rows` : "ready");
     const last = storage.lastEventAtMs || storage.lastStartedAtMs;
-    VD.setText("dbSummaryTitle", sessions ? `${samples} samples · ${VD.formatWhen(last)}` : "No stored sessions yet");
+    VD.setText("dbSummaryTitle", sessions ? (last ? `${samples} samples · ${VD.formatWhen(last)}` : `${samples} samples`) : "No stored sessions yet");
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     const list = el("dbSessionList");
     updateDiagnosticCodeUi();
@@ -149,7 +149,9 @@
     center.append(strong, small);
     const right = document.createElement("b");
     const empty = Number(session.emptySampleCount || 0);
-    right.textContent = empty ? `${empty} empty` : `${Number(session.sampleCount || 0)}x`;
+    // The subtitle already states the useful-sample count, so the badge calls
+    // out data quality instead of repeating it: empties if any, else "clean".
+    right.textContent = empty ? `${empty} empty` : "clean";
     button.append(center, right);
     return button;
   }
@@ -369,11 +371,14 @@
     const stage = capability.scanStage || sample.scanStage || "probe";
     const risk = capability.risk || sample.risk || "";
     chips.append(buildSignalChip(category, "category", category));
-    chips.append(buildSignalChip(stage, "stage", stage));
-    if (risk) chips.append(buildSignalChip(`${risk} risk`, "risk", risk));
+    // Risk chip only (the scan-stage used to sit here too, but "low-risk" stage
+    // next to "low risk" risk read as a duplicate). Stage now lives in the detail
+    // line below. "safe" reads oddly with " risk", so show it bare.
+    if (risk) chips.append(buildSignalChip(risk === "safe" ? "safe" : `${risk} risk`, "risk", risk));
 
     const small = document.createElement("small");
     small.textContent = [
+      stage ? `${stage} probe` : null,
       capability.header || "no header",
       capability.command || capability.pid || "no command",
       capability._hasEvidence && capability.lastSeenMs ? VD.formatWhen(capability.lastSeenMs) : "not tried",
@@ -391,13 +396,13 @@
       exportBtn.className = "icon-link-btn";
       exportBtn.dataset.signalExport = String(capability.id);
       exportBtn.title = "Export this log";
-      exportBtn.textContent = "export";
+      exportBtn.textContent = "Export";
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
       deleteBtn.className = "icon-link-btn danger";
       deleteBtn.dataset.signalDelete = String(capability.id);
       deleteBtn.title = "Delete this saved evidence row";
-      deleteBtn.textContent = "delete";
+      deleteBtn.textContent = "Delete";
       actions.append(exportBtn, deleteBtn);
       row.append(actions);
     }
@@ -502,15 +507,22 @@
     searchLink.setAttribute("role", "button");
     moduleBlock.append(searchLink);
 
-    const repeatBlock = document.createElement("span");
-    repeatBlock.className = "dtc-repeat-block";
-    const repeatB = document.createElement("b");
-    repeatB.textContent = `${Number(code.seenCount || 0)}x`;
-    const repeatSmall = document.createElement("small");
-    repeatSmall.textContent = "seen";
-    repeatBlock.append(repeatB, repeatSmall);
-
-    article.append(codeBlock, moduleBlock, repeatBlock);
+    // Occurrence count, only when we actually have one. A stored/pending code
+    // seen 0 times is contradictory, so suppress the badge rather than print
+    // "0x seen".
+    const seenCount = Number(code.seenCount || 0);
+    if (seenCount > 0) {
+      const repeatBlock = document.createElement("span");
+      repeatBlock.className = "dtc-repeat-block";
+      const repeatB = document.createElement("b");
+      repeatB.textContent = `${seenCount}x`;
+      const repeatSmall = document.createElement("small");
+      repeatSmall.textContent = "seen";
+      repeatBlock.append(repeatB, repeatSmall);
+      article.append(codeBlock, moduleBlock, repeatBlock);
+    } else {
+      article.append(codeBlock, moduleBlock);
+    }
     return article;
   }
 

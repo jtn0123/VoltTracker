@@ -1197,10 +1197,10 @@
   }
 
   .icon-link-btn {
-    min-height: 34px;
-    padding: 0 10px;
+    min-height: 38px;
+    padding: 0 12px;
     border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 7px;
+    border-radius: 8px;
     color: var(--muted);
     background: rgba(255,255,255,0.04);
     font-size: 11px;
@@ -1283,7 +1283,7 @@
   .dtc-item {
     display: grid;
     grid-template-columns: minmax(78px, auto) minmax(0, 1fr) auto;
-    align-items: center;
+    align-items: start;
     gap: 12px;
   }
 
@@ -1339,9 +1339,11 @@
   }
 
   .dtc-search {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
     margin-top: 6px;
-    padding: 3px 9px;
+    padding: 7px 13px;
     border: 1px solid rgba(92,200,255,0.34);
     border-radius: 999px;
     background: rgba(92,200,255,0.08);

@@ -267,7 +267,10 @@
   }
 
   .map-full-btn {
-    min-height: 32px;
+    display: inline-grid;
+    place-items: center;
+    min-height: 40px;
+    min-width: 40px;
     padding: 0 12px;
     border: 1px solid var(--line-strong);
     border-radius: 999px;
@@ -281,8 +284,8 @@
 
   .map-full-btn[aria-pressed="true"] {
     border-color: transparent;
-    background: var(--volt);
-    color: var(--on-volt);
+    background: #4cc4ff;
+    color: #04222e;
     font-weight: 850;
   }
 
@@ -1260,7 +1263,7 @@
 
   .scrub-btn {
     flex: 1;
-    min-height: 36px;
+    min-height: 40px;
     padding: 0 14px;
     border: 1px solid var(--line-strong);
     border-radius: 999px;
@@ -1271,9 +1274,10 @@
     cursor: pointer;
   }
 
+  /* Primary scrubber action carries the Map tab's blue accent (not global orange). */
   .scrub-btn:first-child {
-    background: var(--volt);
-    color: var(--on-volt);
+    background: #4cc4ff;
+    color: #04222e;
     border-color: transparent;
     font-weight: 800;
   }

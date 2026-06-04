@@ -145,7 +145,10 @@
             (remembered ? "Ready to resume the remembered adapter." : "Pick a paired adapter to start logging.")
           )
     );
-    VD.setText("loggingState", connected ? (samples ? `${samples} samples` : sessionState) : "idle");
+    // Compact status word, not a sample count — this tile is ~76px wide so
+    // "1,911 samples" just clips to "1,911 sa…". The live count is shown in the
+    // drive pill, the OBD-session card, and the database card.
+    VD.setText("loggingState", connected ? (samples ? "live" : (sessionState || "ready")) : "idle");
     VD.setText("gpsState", gps.state || (state.telemetry.latitude ? "locked" : "waiting"));
     VD.setText("dataSourceState", state.demoActive ? "demo" : "real");
     VD.setText("dbState", dbRowCount(storage) ? `${dbRowCount(storage)} rows` : "ready");
