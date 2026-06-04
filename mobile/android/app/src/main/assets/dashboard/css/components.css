@@ -497,9 +497,17 @@
   }
 
   .link-btn {
-    min-height: auto;
-    padding: 0;
+    /* Padded so the tap target clears ~34px (was a 15px text-only hit area).
+       margin-inline-end offsets the right padding so the label stays flush with
+       the card's right edge. The card header is taller than this, so it doesn't
+       grow the header. */
+    min-height: 34px;
+    padding: 7px 9px;
+    margin-inline-end: -9px;
+    display: inline-flex;
+    align-items: center;
     border: 0;
+    border-radius: 10px;
     background: transparent;
     color: var(--text);
     font-size: 13px;
@@ -508,7 +516,14 @@
        min-width:0 on the title block below so the title yields instead. App-wide across tabs. */
     flex: 0 0 auto;
     white-space: nowrap;
+    transition: background-color 140ms ease;
   }
+
+  @media (hover: hover) and (pointer: fine) {
+    .link-btn:hover { background: rgba(255,255,255,0.06); }
+  }
+
+  .link-btn:active { background: rgba(255,255,255,0.1); }
 
   /* In every card header (list/charge cards and status/detail card-heads), let the leading
      title block shrink so the trailing action stays fully visible instead of being clipped. */
@@ -1100,8 +1115,8 @@
   }
 
   .icon-link-btn {
-    min-height: 28px;
-    padding: 0 8px;
+    min-height: 34px;
+    padding: 0 10px;
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 7px;
     color: var(--muted);

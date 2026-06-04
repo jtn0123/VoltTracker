@@ -255,7 +255,7 @@
       option = document.createElement("option");
       option.value = address;
       option.dataset.name = name || "OBD adapter";
-      option.textContent = `${name || "OBD adapter"} - remembered`;
+      option.textContent = `${name || "OBD adapter"} · remembered`;
       select.append(option);
     }
     select.value = address;

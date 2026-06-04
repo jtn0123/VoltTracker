@@ -493,7 +493,7 @@
       const option = document.createElement("option");
       option.value = device.address;
       option.dataset.name = device.name || "OBD adapter";
-      option.textContent = `${device.name || "OBD adapter"} - ${device.address}`;
+      option.textContent = `${device.name || "OBD adapter"} · ${device.address}`;
       select.append(option);
     });
     if (preferred.address) {
@@ -540,7 +540,7 @@
     const strong = document.createElement("strong");
     strong.textContent = device.name || "OBD adapter";
     const small = document.createElement("small");
-    small.textContent = `${device.address || "unknown"} - ${meta}`;
+    small.textContent = `${device.address || "unknown"} · ${meta}`;
     center.append(strong, small);
     const right = document.createElement("b");
     right.textContent = count;

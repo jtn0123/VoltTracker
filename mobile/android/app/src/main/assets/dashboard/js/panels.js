@@ -112,7 +112,7 @@
     VD.setText("dbEmptyTelemetryCount", Number(storage.emptyTelemetryCount || 0));
     VD.setText("dbState", VD.dbRowCount(storage) ? `${VD.dbRowCount(storage)} rows` : "ready");
     const last = storage.lastEventAtMs || storage.lastStartedAtMs;
-    VD.setText("dbSummaryTitle", sessions ? `${samples} samples - ${VD.formatWhen(last)}` : "No stored sessions yet");
+    VD.setText("dbSummaryTitle", sessions ? `${samples} samples · ${VD.formatWhen(last)}` : "No stored sessions yet");
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     const list = el("dbSessionList");
     updateDiagnosticCodeUi();
@@ -143,9 +143,9 @@
     button.className = "history-row";
     const center = document.createElement("span");
     const strong = document.createElement("strong");
-    strong.textContent = `${session.mode || "session"} - ${session.adapterName || "OBD adapter"}`;
+    strong.textContent = `${session.mode || "session"} · ${session.adapterName || "OBD adapter"}`;
     const small = document.createElement("small");
-    small.textContent = `${VD.formatWhen(session.startedAtMs)} - ${session.status || "active"} - ${Number(session.usefulSampleCount ?? session.sampleCount ?? 0)} useful`;
+    small.textContent = `${VD.formatWhen(session.startedAtMs)} · ${session.status || "active"} · ${Number(session.usefulSampleCount ?? session.sampleCount ?? 0)} useful`;
     center.append(strong, small);
     const right = document.createElement("b");
     const empty = Number(session.emptySampleCount || 0);
@@ -459,14 +459,14 @@
 
     if (info && info.description) {
       const small = document.createElement("small");
-      const headerLabel = code.header ? `header ${code.header} - ` : "";
-      small.textContent = `${code.moduleName || "generic OBD-II"} - ${headerLabel}first ${VD.formatWhen(code.firstSeenMs)}`;
+      const headerLabel = code.header ? `header ${code.header} · ` : "";
+      small.textContent = `${code.moduleName || "generic OBD-II"} · ${headerLabel}first ${VD.formatWhen(code.firstSeenMs)}`;
       moduleBlock.append(small);
     } else {
       const small = document.createElement("small");
-      const headerLabel = code.header ? `header ${code.header} - ` : "";
-      const moduleLabel = info && info.category ? (code.moduleName || "generic OBD-II") + " - " : "";
-      small.textContent = `${moduleLabel}${headerLabel}first ${VD.formatWhen(code.firstSeenMs)} - last ${VD.formatWhen(code.lastSeenMs)}`;
+      const headerLabel = code.header ? `header ${code.header} · ` : "";
+      const moduleLabel = info && info.category ? (code.moduleName || "generic OBD-II") + " · " : "";
+      small.textContent = `${moduleLabel}${headerLabel}first ${VD.formatWhen(code.firstSeenMs)} · last ${VD.formatWhen(code.lastSeenMs)}`;
       moduleBlock.append(small);
     }
 
@@ -475,7 +475,7 @@
       causesWrap.className = "dtc-causes";
       const header = document.createElement("span");
       header.className = "dtc-causes-head";
-      const tag = info.category ? ` - ${info.category}` : "";
+      const tag = info.category ? ` · ${info.category}` : "";
       header.textContent = `Likely causes${tag}`;
       causesWrap.append(header);
       const list = document.createElement("ul");
@@ -528,7 +528,7 @@
     if (reviewCard) reviewCard.classList.toggle("has-session", hasSession);
 
     VD.setText("reviewTitle", hasSession
-      ? `${session.mode || "session"} - ${session.adapterName || "OBD adapter"}`
+      ? `${session.mode || "session"} · ${session.adapterName || "OBD adapter"}`
       : "No real session yet");
     VD.setText("reviewMaxSpeed", maxSpeed ? `${Math.round(maxSpeed * 0.621371)} mph` : "--");
     VD.setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
@@ -601,7 +601,7 @@
     const article = document.createElement("article");
     article.className = "warning-item";
     const strong = document.createElement("strong");
-    strong.textContent = `${item.code || "warning"}${item.count ? ` - ${item.count}` : ""}`;
+    strong.textContent = `${item.code || "warning"}${item.count ? ` · ${item.count}` : ""}`;
     const small = document.createElement("small");
     small.textContent = item.detail || "";
     article.append(strong, small);
@@ -615,7 +615,7 @@
     const strong = document.createElement("strong");
     strong.textContent = item.detail || item.state || item.kind || "event";
     const small = document.createElement("small");
-    small.textContent = `${item.kind || "event"} - ${VD.formatWhen(item.atMs)}`;
+    small.textContent = `${item.kind || "event"} · ${VD.formatWhen(item.atMs)}`;
     wrapper.append(strong, small);
     article.append(wrapper);
     return article;
@@ -1141,7 +1141,7 @@
       "realTripRouteMeta",
       [distance !== "--" ? distance : null, duration !== "--" ? duration : null, topMph ? `top ${topMph} mph` : null]
         .filter(Boolean)
-        .join(" - ") || "stored drive"
+        .join(" · ") || "stored drive"
     );
     // Use the resolved route (after the on-demand fetch), not just trip.hasRoute — a drive can
     // claim a route in its rollup yet have no geometry available.
@@ -1477,12 +1477,12 @@
     for (let gx = 0; gx <= 75; gx += 15) {
       inner +=
         `<line x1="${xOf(gx)}" y1="${padT}" x2="${xOf(gx)}" y2="${h - padB}" stroke="rgba(255,255,255,0.06)"/>` +
-        `<text x="${xOf(gx)}" y="${h - padB + 15}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="middle">${gx}</text>`;
+        `<text x="${xOf(gx)}" y="${h - padB + 15}" fill="#8b8c99" font-size="9" font-family="ui-monospace,monospace" text-anchor="middle">${gx}</text>`;
     }
     for (let gy = 0; gy <= 7; gy += 1) {
       inner +=
         `<line x1="${padL}" y1="${yS(gy)}" x2="${w - padR}" y2="${yS(gy)}" stroke="rgba(255,255,255,0.06)"/>` +
-        `<text x="${padL - 6}" y="${yS(gy) + 3}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">${gy}</text>`;
+        `<text x="${padL - 6}" y="${yS(gy) + 3}" fill="#8b8c99" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">${gy}</text>`;
     }
     const /** @type {any[]} */ bins = [];
     pool.forEach((p) => {
@@ -1503,7 +1503,7 @@
     });
     inner +=
       `<path d="${trend}" fill="none" stroke="#ff7a45" stroke-width="2.5" stroke-linejoin="round"/>` +
-      `<text x="${w - padR}" y="${h - 4}" fill="#747582" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">speed (mph) -></text>`;
+      `<text x="${w - padR}" y="${h - 4}" fill="#8b8c99" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">speed (mph) -></text>`;
     // SAFE SINK: `inner` is composed exclusively from computed numbers (chart
     // geometry via xOf/yS/.toFixed, loop integers, and the fixed gColor palette) —
     // never from telemetry strings or any user/bridge input, so no markup can be

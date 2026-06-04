@@ -152,7 +152,7 @@
     );
     VD.setText(
       "mapKicker",
-      hasRoute ? `GPS map - ${VD.formatWhen(routeSession.startedAtMs)}` : "GPS map"
+      hasRoute ? `GPS map · ${VD.formatWhen(routeSession.startedAtMs)}` : "GPS map"
     );
     VD.setText("mapDistance", hasRoute ? VD.formatDistance(route.distanceMeters || 0) : "--");
     const session = route.session || {};
@@ -379,9 +379,9 @@
     button.dataset.mapSession = String(s.id || "");
     const center = document.createElement("span");
     const strong = document.createElement("strong");
-    strong.textContent = `${s.mode || "session"} - ${s.adapterName || "OBD adapter"}`;
+    strong.textContent = `${s.mode || "session"} · ${s.adapterName || "OBD adapter"}`;
     const small = document.createElement("small");
-    small.textContent = `${VD.formatWhen(s.startedAtMs)} - ${VD.formatDistance(Number(r.distanceMeters || 0))} - ${Number(r.pointCount || 0)} pts`;
+    small.textContent = `${VD.formatWhen(s.startedAtMs)} · ${VD.formatDistance(Number(r.distanceMeters || 0))} · ${Number(r.pointCount || 0)} pts`;
     center.append(strong, small);
     const right = document.createElement("b");
     right.textContent = s.status || "stored";

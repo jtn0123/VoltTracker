@@ -216,7 +216,7 @@
   }
 
   .map-layer-tabs button {
-    min-height: 36px;
+    min-height: 40px;
     padding: 0 14px;
     border: 0;
     border-radius: 999px;
@@ -248,14 +248,16 @@
     letter-spacing: 0;
   }
 
+  /* Map is the blue-themed tab, so its active layer pill + drive picker carry
+     the map's blue accent instead of the global orange. */
   .map-layer-tabs button.is-active {
-    background: var(--volt);
-    color: var(--on-volt);
+    background: #4cc4ff;
+    color: #04222e;
   }
 
   .map-layer-tabs button.is-active b {
-    background: rgba(25, 10, 4, 0.18);
-    color: var(--on-volt);
+    background: rgba(4, 34, 46, 0.2);
+    color: #04222e;
   }
 
   .map-top-right {
@@ -1165,17 +1167,17 @@
 
   .map-drive-chip:hover,
   .map-drive-chip:focus-visible {
-    border-color: rgba(255, 122, 69, 0.55);
+    border-color: rgba(76, 196, 255, 0.55);
   }
 
   .map-drive-chip.is-active {
-    border-color: var(--volt);
-    background: rgba(255, 122, 69, 0.18);
-    box-shadow: 0 6px 14px rgba(255, 122, 69, 0.18);
+    border-color: #4cc4ff;
+    background: rgba(76, 196, 255, 0.18);
+    box-shadow: 0 6px 14px rgba(76, 196, 255, 0.18);
   }
 
   .map-drive-chip.is-active .dl {
-    color: #ffd9c4;
+    color: #c7edff;
   }
 
   .map-drive-chip .dl {
