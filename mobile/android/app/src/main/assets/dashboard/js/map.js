@@ -12,6 +12,45 @@
   /** @type {Record<string, any>} */
   const mapLayerGroups = { routes: null, heat: null, stops: null, eff: null };
   let /** @type {any} */ mapFitKey = null;
+  // Live "you are here" marker + breadcrumb, driven by the demo (or real) GPS
+  // stream. Separate from the route layer groups so a route re-render leaves it.
+  let /** @type {any} */ livePositionMarker = null;
+  let /** @type {any} */ liveBreadcrumb = null;
+  let /** @type {any[]} */ liveBreadcrumbPts = [];
+
+  /** Move/draw the live position marker + breadcrumb. No-op until the map is mounted. */
+  function updateLivePosition(/** @type {any} */ lat, /** @type {any} */ lng) {
+    if (!mapInstance || typeof L === "undefined") return;
+    const la = Number(lat);
+    const ln = Number(lng);
+    if (!Number.isFinite(la) || !Number.isFinite(ln)) return;
+    const ll = [la, ln];
+    liveBreadcrumbPts.push(ll);
+    if (liveBreadcrumbPts.length > 240) liveBreadcrumbPts.shift();
+    if (!liveBreadcrumb) {
+      liveBreadcrumb = L.polyline(liveBreadcrumbPts, { color: "#4cc4ff", weight: 4, opacity: 0.75 }).addTo(mapInstance);
+    } else {
+      liveBreadcrumb.setLatLngs(liveBreadcrumbPts);
+    }
+    if (!livePositionMarker) {
+      livePositionMarker = L.circleMarker(ll, { radius: 7, color: "#fff", weight: 2, fillColor: "#4cc4ff", fillOpacity: 1 }).addTo(mapInstance);
+      // Center once on first fix; afterwards just move the dot so the user can pan freely.
+      mapInstance.setView(ll, 14);
+    } else {
+      livePositionMarker.setLatLng(ll);
+    }
+  }
+
+  /** Remove the live marker + breadcrumb (e.g. when the demo stops). */
+  function clearLivePosition() {
+    if (mapInstance) {
+      if (livePositionMarker) mapInstance.removeLayer(livePositionMarker);
+      if (liveBreadcrumb) mapInstance.removeLayer(liveBreadcrumb);
+    }
+    livePositionMarker = null;
+    liveBreadcrumb = null;
+    liveBreadcrumbPts = [];
+  }
 
   // Per-segment efficiency bucket color for the V3 "Eff" layer. Grey for
   // segments without power data yet, so the user can see at a glance which
@@ -591,6 +630,8 @@
     // Insights HV-pack detail, and the Signals workspace — not just map + trips.
     // Only ever runs without a native bridge, so it never touches real-device data.
     const sampleCharges = [
+      // Newest is in-progress (no end time) so the active-charge state renders.
+      { id: 4, startedAtMs: now - 38 * 60 * 1000, endedAtMs: null, chargerType: "level2", startSoc: 54, endSoc: 71, powerKw: 7.1, energyKwh: 3.0 },
       { id: 3, startedAtMs: now - 24 * hour, endedAtMs: now - 24 * hour + Math.round(3.4 * hour), chargerType: "level2", startSoc: 24, endSoc: 91, powerKw: 7.2, energyKwh: 11.8 },
       { id: 2, startedAtMs: now - 48 * hour, endedAtMs: now - 48 * hour + Math.round(3.0 * hour), chargerType: "level2", startSoc: 36, endSoc: 90, powerKw: 7.0, energyKwh: 9.6 },
       { id: 1, startedAtMs: now - 96 * hour, endedAtMs: now - 96 * hour + Math.round(4.6 * hour), chargerType: "level1", startSoc: 58, endSoc: 88, powerKw: 1.3, energyKwh: 5.2 }
@@ -600,9 +641,28 @@
     const sampleBattery = { id: 1, capturedAtMs: now - 6 * hour, soc: 77, capacityAh: 42.1, sohPct: 91, packVoltage: 364, packCurrentA: -5.8, packPowerKw: -2.1, batteryTempC: 23 };
     const sampleVehicle = { year: 2017, make: "Chevrolet", model: "Volt", vin: "1G1RC6S52HU123456", odometerMiles: 48213, evSharePct: 78, batteryHealthPct: 91.3 };
     const sampleDtcs = [
-      { dtc: "P0420", status: "stored", statusLabel: "stored", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 72 * hour, lastSeenMs: now - 24 * hour },
-      { dtc: "P0011", status: "pending", statusLabel: "pending", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 12 * hour, lastSeenMs: now - 2 * hour }
+      { dtc: "P0420", status: "stored", statusLabel: "stored", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 72 * hour, lastSeenMs: now - 24 * hour, seenCount: 4 },
+      { dtc: "P0011", status: "pending", statusLabel: "pending", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 12 * hour, lastSeenMs: now - 2 * hour, seenCount: 1 }
     ];
+    // A post-drive review (last-session card) + recent PID frames so those
+    // surfaces render instead of staying on "Waiting for scan data".
+    const sampleReview = {
+      session: { id: today.session.id, mode: "drive", adapterName: today.session.adapterName },
+      maxSpeedKph: 105,
+      locationSampleCount: today.points.length,
+      parsedPidCount: 1840,
+      unknownPidCount: 71,
+      avgSampleIntervalMs: 1000,
+      usefulTelemetryCount: today.session.sampleCount,
+      emptyTelemetryCount: 12,
+      recentPidFrames: [
+        { command: "010D", name: "Vehicle speed", valueText: "34 mph", parsed: true },
+        { command: "0105", name: "Coolant temp", valueText: "85 °C", parsed: true },
+        { command: "221154", name: "Engine oil temperature", valueText: "96 °C", parsed: true },
+        { command: "225B", name: "Hybrid battery SOC", valueText: "77 %", parsed: true },
+        { command: "22415B", name: "Unparsed response", rawResponse: "7F 22 31", parsed: false }
+      ]
+    };
     const sampleSignalCatalog = [
       { key: "batt.soc", category: "battery", header: "ATSH7E4", command: "225B", pid: "5B", name: "hybrid battery state of charge", unit: "%", pollLane: "fast", scanStage: "low-risk", risk: "low", validationStatus: "confirmed", source: "Volt community PID sheet" },
       { key: "maint.oil", category: "maintenance", header: "ATSH7E0", command: "221154", pid: "1154", name: "engine oil temperature", unit: "C", pollLane: "thermal", scanStage: "low-risk", risk: "low", validationStatus: "confirmed", source: "Volt community PID sheet" },
@@ -626,12 +686,16 @@
       rawTelemetryCount: routes.reduce((s, r) => s + r.session.sampleCount, 0),
       locationSampleCount: routes.reduce((s, r) => s + r.points.length, 0),
       tripSegmentCount: routes.length,
+      eventCount: 7,
+      pidObservationCount: 1911,
+      lastEventAtMs: today.session.endedAtMs,
       chargeSessionCount: sampleCharges.length,
       batterySnapshotCount: 1,
       fieldCapabilityCount: sampleCapabilities.length,
       diagnosticCodeCount: sampleDtcs.length,
       diagnosticCodeStatusCounts: { stored: 1, pending: 1 },
       latestDiagnosticCodes: sampleDtcs,
+      latestReview: sampleReview,
       recentRoutes: routes,
       latestRoute: today,
       recentSessions: routes.map((r) => ({
@@ -692,6 +756,8 @@
     segmentSpeedMps,
     detectStops,
     addStop,
+    updateLivePosition,
+    clearLivePosition,
     loadSampleData
   });
 })();

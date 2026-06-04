@@ -450,6 +450,17 @@
     white-space: nowrap;
   }
 
+  /* In-progress (still plugged in) — brighter so it reads as live. */
+  .charge-session-row[data-charging="1"] {
+    border-color: rgba(184,230,59,0.55);
+    background: rgba(184,230,59,0.12);
+  }
+
+  .charge-session-row[data-charging="1"] > b {
+    border-color: rgba(184,230,59,0.5);
+    background: rgba(184,230,59,0.2);
+  }
+
   .drive-signal-grid {
     display: grid;
     grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);

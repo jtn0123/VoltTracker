@@ -65,4 +65,20 @@ describe('dashboard charge session history', () => {
     expect(rows[1].textContent).toContain('charge details pending');
     expect(rows[1].querySelector('b').textContent).toBe('--');
   });
+
+  it('marks an in-progress (still plugged in) charge as charging', () => {
+    window.VoltDashboard.setStorage({
+      chargeSummary: {
+        chargeSessionCount: 1,
+        recentSessions: [
+          { id: 9, startedAtMs: Date.now() - 30 * 60 * 1000, endedAtMs: null, chargerType: 'level2', startSoc: 54, endSoc: 71, powerKw: 7.1, energyKwh: 3.0 },
+        ],
+      },
+    });
+    const rows = document.querySelectorAll('#chargeSessionsList .charge-session-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].dataset.charging).toBe('1');
+    expect(rows[0].textContent).toContain('charging now');
+    expect(document.getElementById('realChargeStatus').textContent).toBe('charging');
+  });
 });

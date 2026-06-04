@@ -234,6 +234,7 @@
     window.clearInterval(window.__voltDemoTimer);
     if (bridge && state.demoActive) bridge.disconnect();
     VD.clearDemoTelemetry();
+    if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     VD.setDemoActive(false);
     VD.updateLiveUi();
     VD.drawTrace();
@@ -244,6 +245,7 @@
     window.clearInterval(window.__voltDemoTimer);
     if (bridge) bridge.disconnect();
     VD.clearDemoTelemetry();
+    if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     VD.setDemoActive(false);
     VD.updateLiveUi();
     VD.drawTrace();
@@ -415,29 +417,40 @@
     window.clearInterval(window.__voltDemoTimer);
     window.__voltDemoTimer = window.setInterval(() => {
       t += 1;
+      // Alternate EV and gas every ~30s so both drivetrain states (RPM, gas
+      // power, electric power) get exercised without a manual toggle.
+      const gas = Math.floor(t / 30) % 2 === 1;
+      state.mode = gas ? "gas" : "ev";
+      // Electric power swings through regen (negative) so the regen state and
+      // the negative half of the power meter are exercised too.
+      const powerKw = gas ? 30 + Math.sin(t / 3) * 9 : 9 + Math.sin(t / 2.2) * 22;
+      const lat = 42.3601 + Math.sin(t / 40) * 0.012;
+      const lng = -71.0589 + Math.cos(t / 40) * 0.012;
       VD.updateTelemetry({
         source: "demo",
         connected: true,
         sampleCount: t,
         sessionMs: t * 1000,
         supportedPids: "browser demo",
-        vehicleState: "demo-preview",
+        vehicleState: powerKw < -0.5 ? "regen" : (gas ? "driving (gas)" : "driving"),
         speedKph: Math.round(54 + 23 * Math.sin(t / 3.4)),
-        rpm: state.mode === "gas" ? Math.round(1260 + 420 * Math.sin(t / 2.1)) : 0,
+        rpm: gas ? Math.round(1260 + 420 * Math.sin(t / 2.1)) : 0,
         coolantC: Math.round(82 + 4 * Math.sin(t / 8)),
         loadPct: Math.round(34 + 18 * Math.sin(t / 4.4)),
         throttlePct: Math.round(18 + 14 * Math.sin(t / 2.7)),
         voltage: 13.8,
         soc: Math.max(13.4, 77.8 - t * 0.01),
         batteryTemp: 72 + Math.sin(t / 8),
-        powerKw: state.mode === "gas" ? 32 + Math.sin(t / 3) * 8 : 16 + Math.sin(t / 2.2) * 12,
+        powerKw: powerKw,
         // A slowly drifting coordinate so the demo also exercises the GPS lock
-        // indicator and live position instead of sitting on "waiting" forever.
-        latitude: 42.3601 + Math.sin(t / 40) * 0.012,
-        longitude: -71.0589 + Math.cos(t / 40) * 0.012,
+        // indicator and the live map position instead of sitting on "waiting".
+        latitude: lat,
+        longitude: lng,
         updatedAt: Date.now(),
         raw: "browser demo"
       });
+      // Drop a live "you are here" breadcrumb on the map if it's mounted.
+      if (typeof VD.updateLivePosition === "function") VD.updateLivePosition(lat, lng);
     }, 1000);
   }
 

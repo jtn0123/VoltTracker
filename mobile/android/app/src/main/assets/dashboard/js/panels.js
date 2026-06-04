@@ -734,7 +734,9 @@
     VD.setText("realChargeSessions", Number(charge.chargeSessionCount || 0));
     VD.setText("realChargeHints", Number(charge.chargingHintCount || 0));
     VD.setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
-    VD.setText("realChargeStatus", charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data"));
+    const chargingNow = (Array.isArray(charge.recentSessions) ? charge.recentSessions : [])
+      .some((/** @type {any} */ s) => s && s.endedAtMs == null && s.startedAtMs && (s.startSoc != null || s.powerKw != null));
+    VD.setText("realChargeStatus", chargingNow ? "charging" : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data")));
     renderChargeSessions(charge);
 
     const ring = el("realPackRing");
@@ -821,6 +823,11 @@
   function buildChargeSessionRow(/** @type {any} */ session) {
     const row = document.createElement("article");
     row.className = "charge-session-row";
+    // No end time + real live signal (start SOC or power) = still plugged in.
+    // A row that's simply missing all fields is "details pending", not charging.
+    const inProgress = session.endedAtMs == null && session.startedAtMs &&
+      (session.startSoc != null || session.powerKw != null);
+    if (inProgress) row.dataset.charging = "1";
     const center = document.createElement("span");
     const strong = document.createElement("strong");
     strong.textContent = [VD.formatWhen(session.startedAtMs), chargerLabel(session.chargerType)]
@@ -833,9 +840,10 @@
     const endedAtMs = chargeNum(session.endedAtMs);
     const durationMs = Number.isFinite(endedAtMs) ? endedAtMs - Number(session.startedAtMs) : NaN;
     const parts = [];
-    if (Number.isFinite(startSoc) && Number.isFinite(endSoc)) parts.push(`${Math.round(startSoc)}% → ${Math.round(endSoc)}%`);
+    if (Number.isFinite(startSoc) && Number.isFinite(endSoc)) parts.push(`${Math.round(startSoc)}% → ${Math.round(endSoc)}%${inProgress ? " now" : ""}`);
     if (Number.isFinite(power) && power > 0) parts.push(`${power.toFixed(1)} kW`);
-    if (Number.isFinite(durationMs) && durationMs > 0 && typeof VD.formatDuration === "function") parts.push(VD.formatDuration(durationMs));
+    if (inProgress) parts.push("charging now");
+    else if (Number.isFinite(durationMs) && durationMs > 0 && typeof VD.formatDuration === "function") parts.push(VD.formatDuration(durationMs));
     small.textContent = parts.length ? parts.join(" · ") : "charge details pending";
     center.append(strong, small);
     const right = document.createElement("b");
