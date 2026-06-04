@@ -519,8 +519,38 @@
 
   .maintenance-list .real-insight-item {
     display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
+  }
+
+  /* Maintenance status as a pill (matches the app's badge language) instead of
+     a bare bold word. watch = warn, pending = the Insights purple, manual = neutral. */
+  .maint-tag {
+    flex: 0 0 auto;
+    padding: 5px 11px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.05);
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .maint-tag[data-tag="watch"] {
+    border-color: rgba(255,184,74,0.3);
+    background: rgba(255,184,74,0.1);
+    color: #ffd37f;
+  }
+
+  .maint-tag[data-tag="pending"] {
+    border-color: rgba(164,140,255,0.3);
+    background: rgba(164,140,255,0.1);
+    color: #d6ccff;
   }
 
   .setting-stack {

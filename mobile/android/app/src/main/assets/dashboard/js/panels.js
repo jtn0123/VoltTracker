@@ -755,6 +755,8 @@
     small.textContent = detail;
     center.append(strong, small);
     const right = document.createElement("b");
+    right.className = "maint-tag";
+    right.dataset.tag = String(tag || "").toLowerCase();
     right.textContent = tag;
     article.append(center, right);
     return article;
