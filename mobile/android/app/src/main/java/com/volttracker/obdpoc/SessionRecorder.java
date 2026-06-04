@@ -110,11 +110,6 @@ final class SessionRecorder {
             lastPersistedStatusAtMs = 0L;
             recentStatusWriteCount = 0;
             recentStatusWriteHead = 0;
-            sessionLog.open(mode);
-            if (!sessionLog.isOpen()) {
-                activeSessionId = 0L;
-                return;
-            }
             try {
                 activeMode = mode == null ? "" : mode;
                 activeAdapterName = adapterName == null ? "" : adapterName;
@@ -125,6 +120,10 @@ final class SessionRecorder {
                                 ? 0L
                                 : localStore.startSession(
                                         activeMode, activeAddress, activeAdapterName, startedAtMs);
+                sessionLog.open(mode);
+                if (!sessionLog.isOpen()) {
+                    logEvent("session_log_unavailable", "mode", activeMode);
+                }
                 logEvent(
                         "session_start",
                         "mode",

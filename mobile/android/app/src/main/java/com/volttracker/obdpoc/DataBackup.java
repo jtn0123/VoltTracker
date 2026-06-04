@@ -244,7 +244,7 @@ final class DataBackup {
             }
             candidate = new File(context.getCacheDir(), "restore-" + UUID.randomUUID() + ".db");
             try {
-                decryptFile(temp, candidate, passphrase);
+                decryptFile(temp, candidate, passphrase, MAX_RESTORE_BYTES);
             } catch (IOException | GeneralSecurityException | RuntimeException ex) {
                 temp.delete();
                 candidate.delete();
@@ -457,7 +457,8 @@ final class DataBackup {
         }
     }
 
-    private static void decryptFile(File source, File dest, String passphrase)
+    private static void decryptFile(
+            File source, File dest, String passphrase, long maxPlaintextBytes)
             throws IOException, GeneralSecurityException {
         byte[] magic = new byte[ENCRYPTED_BACKUP_MAGIC.length];
         byte[] salt = new byte[ENCRYPTION_SALT_BYTES];
@@ -476,7 +477,7 @@ final class DataBackup {
                     new GCMParameterSpec(128, iv));
             try (CipherInputStream in = new CipherInputStream(fileIn, cipher);
                     FileOutputStream out = new FileOutputStream(dest)) {
-                copyStream(in, out);
+                copyStream(in, out, maxPlaintextBytes);
                 out.getFD().sync();
             }
         }
@@ -514,9 +515,19 @@ final class DataBackup {
     }
 
     private static void copyStream(InputStream in, java.io.OutputStream out) throws IOException {
+        copyStream(in, out, Long.MAX_VALUE);
+    }
+
+    private static void copyStream(InputStream in, java.io.OutputStream out, long maxBytes)
+            throws IOException {
         byte[] buffer = new byte[IO_BUFFER_BYTES];
         int read;
+        long total = 0L;
         while ((read = in.read(buffer)) > 0) {
+            total += read;
+            if (total > maxBytes) {
+                throw new IOException("Restore file exceeds size limit");
+            }
             out.write(buffer, 0, read);
         }
     }

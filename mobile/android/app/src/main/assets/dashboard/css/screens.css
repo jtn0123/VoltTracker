@@ -554,50 +554,252 @@
     right: max(8px, env(safe-area-inset-right));
     bottom: max(8px, env(safe-area-inset-bottom));
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 4px;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
     max-width: 760px;
     margin: 0 auto;
     padding: 7px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-xl);
-    background: rgba(17,18,24,0.94);
-    box-shadow: 0 16px 42px rgba(0,0,0,0.45);
-    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 22px;
+    background:
+      linear-gradient(180deg, rgba(36,38,48,0.94), rgba(13,14,20,0.96)),
+      rgba(17,18,24,0.94);
+    box-shadow:
+      0 18px 46px rgba(0,0,0,0.52),
+      inset 0 1px 0 rgba(255,255,255,0.08);
+    backdrop-filter: blur(18px) saturate(1.25);
+    -webkit-backdrop-filter: blur(18px) saturate(1.25);
   }
 
   .bottom-nav button {
+    position: relative;
+    min-width: 0;
     min-height: 54px;
     display: grid;
     place-items: center;
-    gap: 3px;
-    border: 0;
-    border-radius: 14px;
+    align-content: center;
+    gap: 4px;
+    overflow: hidden;
+    border: 1px solid transparent;
+    border-radius: 16px;
     background: transparent;
     color: var(--muted);
-    font-size: 11px;
-    font-weight: 760;
+    font-size: 10px;
+    font-weight: 780;
+    line-height: 1;
+    padding: 6px 3px 5px;
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease,
+      transform 160ms ease;
+  }
+
+  .bottom-nav button::before {
+    content: "";
+    position: absolute;
+    inset: 5px 7px auto;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 160ms ease, transform 160ms ease;
   }
 
   .bottom-nav button i,
   .bottom-nav button svg {
     display: block;
-    width: 19px;
-    height: 19px;
+    width: 18px;
+    height: 18px;
   }
 
   .bottom-nav button i {
+    display: grid;
+    width: 30px;
+    height: 25px;
+    place-items: center;
     font-style: normal;
     line-height: 1;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.04);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    transition:
+      background-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
+  }
+
+  .bottom-nav button span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .bottom-nav button.is-active {
-    background: transparent;
-    color: var(--volt);
+    border-color: rgba(255,122,69,0.28);
+    background:
+      linear-gradient(180deg, rgba(255,122,69,0.17), rgba(255,122,69,0.06)),
+      rgba(255,255,255,0.035);
+    color: #ffd3bf;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 7px 18px rgba(255,122,69,0.12);
+  }
+
+  .bottom-nav button.is-active::before {
+    opacity: 0.9;
+    transform: translateY(0);
+  }
+
+  .bottom-nav button.is-active i {
+    background:
+      radial-gradient(circle at 50% 25%, rgba(255,210,125,0.34), transparent 48%),
+      rgba(255,122,69,0.2);
+    box-shadow:
+      inset 0 0 0 1px rgba(255,122,69,0.24),
+      0 7px 18px rgba(255,122,69,0.14);
   }
 
   .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 6px rgba(255,122,69,0.55));
+    filter: drop-shadow(0 0 7px rgba(255,122,69,0.5));
+  }
+
+  body[data-active-view="map"] .bottom-nav button.is-active {
+    border-color: rgba(76,196,255,0.28);
+    background:
+      linear-gradient(180deg, rgba(76,196,255,0.16), rgba(76,196,255,0.055)),
+      rgba(255,255,255,0.035);
+    color: #c7edff;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 7px 18px rgba(76,196,255,0.12);
+  }
+
+  body[data-active-view="map"] .bottom-nav button.is-active i {
+    background:
+      radial-gradient(circle at 50% 25%, rgba(142,228,255,0.32), transparent 48%),
+      rgba(76,196,255,0.18);
+    box-shadow:
+      inset 0 0 0 1px rgba(76,196,255,0.24),
+      0 7px 18px rgba(76,196,255,0.13);
+  }
+
+  body[data-active-view="map"] .bottom-nav button.is-active svg {
+    filter: drop-shadow(0 0 7px rgba(76,196,255,0.46));
+  }
+
+  body[data-active-view="charge"] .bottom-nav button.is-active {
+    border-color: rgba(184,230,59,0.28);
+    background:
+      linear-gradient(180deg, rgba(184,230,59,0.16), rgba(184,230,59,0.052)),
+      rgba(255,255,255,0.035);
+    color: #e7ff9a;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 7px 18px rgba(184,230,59,0.1);
+  }
+
+  body[data-active-view="charge"] .bottom-nav button.is-active i {
+    background:
+      radial-gradient(circle at 50% 25%, rgba(230,255,135,0.3), transparent 48%),
+      rgba(184,230,59,0.16);
+    box-shadow:
+      inset 0 0 0 1px rgba(184,230,59,0.22),
+      0 7px 18px rgba(184,230,59,0.12);
+  }
+
+  body[data-active-view="charge"] .bottom-nav button.is-active svg {
+    filter: drop-shadow(0 0 7px rgba(184,230,59,0.42));
+  }
+
+  body[data-active-view="insights"] .bottom-nav button.is-active {
+    border-color: rgba(164,140,255,0.3);
+    background:
+      linear-gradient(180deg, rgba(164,140,255,0.17), rgba(164,140,255,0.055)),
+      rgba(255,255,255,0.035);
+    color: #ddd5ff;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 7px 18px rgba(164,140,255,0.12);
+  }
+
+  body[data-active-view="insights"] .bottom-nav button.is-active i {
+    background:
+      radial-gradient(circle at 50% 25%, rgba(205,192,255,0.32), transparent 48%),
+      rgba(164,140,255,0.18);
+    box-shadow:
+      inset 0 0 0 1px rgba(164,140,255,0.24),
+      0 7px 18px rgba(164,140,255,0.13);
+  }
+
+  body[data-active-view="insights"] .bottom-nav button.is-active svg {
+    filter: drop-shadow(0 0 7px rgba(164,140,255,0.45));
+  }
+
+  body[data-active-view="settings"] .bottom-nav button.is-active {
+    border-color: rgba(255,184,74,0.3);
+    background:
+      linear-gradient(180deg, rgba(255,184,74,0.16), rgba(255,184,74,0.055)),
+      rgba(255,255,255,0.035);
+    color: #ffe0a3;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 7px 18px rgba(255,184,74,0.12);
+  }
+
+  body[data-active-view="settings"] .bottom-nav button.is-active i {
+    background:
+      radial-gradient(circle at 50% 25%, rgba(255,219,142,0.32), transparent 48%),
+      rgba(255,184,74,0.18);
+    box-shadow:
+      inset 0 0 0 1px rgba(255,184,74,0.24),
+      0 7px 18px rgba(255,184,74,0.13);
+  }
+
+  body[data-active-view="settings"] .bottom-nav button.is-active svg {
+    filter: drop-shadow(0 0 7px rgba(255,184,74,0.43));
+  }
+
+  body[data-active-view="signals"] .bottom-nav button.is-active {
+    border-color: rgba(53,230,160,0.3);
+    background:
+      linear-gradient(180deg, rgba(53,230,160,0.16), rgba(53,230,160,0.055)),
+      rgba(255,255,255,0.035);
+    color: #b9ffe1;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 7px 18px rgba(53,230,160,0.11);
+  }
+
+  body[data-active-view="signals"] .bottom-nav button.is-active i {
+    background:
+      radial-gradient(circle at 50% 25%, rgba(142,255,205,0.3), transparent 48%),
+      rgba(53,230,160,0.17);
+    box-shadow:
+      inset 0 0 0 1px rgba(53,230,160,0.23),
+      0 7px 18px rgba(53,230,160,0.12);
+  }
+
+  body[data-active-view="signals"] .bottom-nav button.is-active svg {
+    filter: drop-shadow(0 0 7px rgba(53,230,160,0.43));
+  }
+
+  .bottom-nav button:active {
+    transform: translateY(1px) scale(0.98);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .bottom-nav button:hover {
+      color: var(--text);
+      background: rgba(255,255,255,0.055);
+    }
+
+    .bottom-nav button:hover i {
+      background: rgba(255,255,255,0.07);
+    }
   }
 
   body.map-full-active {
@@ -628,7 +830,33 @@
     .dtc-item { grid-template-columns: 1fr; }
     .dtc-repeat-block b,
     .dtc-repeat-block small { text-align: left; }
-    .bottom-nav button span { font-size: 10px; }
+    .bottom-nav {
+      gap: 3px;
+      padding: 6px;
+      border-radius: 20px;
+    }
+    .bottom-nav button {
+      min-height: 50px;
+      border-radius: 14px;
+      font-size: 9px;
+      padding-inline: 2px;
+    }
+    .bottom-nav button i {
+      width: 28px;
+      height: 24px;
+    }
+  }
+
+  @media (max-width: 340px) {
+    .bottom-nav button {
+      min-height: 47px;
+      gap: 3px;
+      font-size: 8px;
+      padding-inline: 1px;
+    }
+    .bottom-nav button span {
+      font-size: 8px;
+    }
   }
 
   .eff-scatter-card { padding: 14px 16px; }

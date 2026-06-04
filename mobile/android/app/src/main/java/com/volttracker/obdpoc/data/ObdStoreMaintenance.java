@@ -67,9 +67,8 @@ final class ObdStoreMaintenance {
     /**
      * Prunes raw rows older than {@code keepDays} days from the high-cardinality tables: {@code
      * telemetry_samples}, {@code location_samples}, {@code status_events}, {@code
-     * pid_observations}. Per-session summary rows in {@code obd_sessions} and derived rows (trips,
-     * charge sessions, battery snapshots, adapter history) are NOT touched — they're the long-term
-     * history the user wants kept.
+     * pid_observations}. Per-session summary rows in {@code obd_sessions} are kept, but trip
+     * rollups/segments are cleared because they are derived from the raw rows being pruned.
      *
      * <p>Run on a background thread; this method is safe to call repeatedly (it's just a DELETE
      * WHERE captured_at_ms &lt; cutoff). Indexes on these tables make the cutoff scan cheap.
@@ -93,6 +92,8 @@ final class ObdStoreMaintenance {
             // status_events uses occurred_at_ms (not captured_at_ms) — see VoltTrackerDb schema.
             deleted += db.delete(VoltTrackerDb.TABLE_EVENTS, "occurred_at_ms < ?", args);
             deleted += db.delete(VoltTrackerDb.TABLE_PID_OBSERVATIONS, "observed_at_ms < ?", args);
+            db.delete(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, null, null);
+            db.delete(VoltTrackerDb.TABLE_TRIP_SEGMENTS, null, null);
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();

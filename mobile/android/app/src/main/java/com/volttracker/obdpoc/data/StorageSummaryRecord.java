@@ -38,6 +38,7 @@ public final class StorageSummaryRecord {
     public final JSONObject chargeSummary;
     public final JSONObject batterySummary;
     public final JSONObject latestVehicle;
+    public final JSONArray enhancedCapabilities;
 
     StorageSummaryRecord(
             String database,
@@ -69,7 +70,8 @@ public final class StorageSummaryRecord {
             JSONObject overview,
             JSONObject chargeSummary,
             JSONObject batterySummary,
-            JSONObject latestVehicle) {
+            JSONObject latestVehicle,
+            JSONArray enhancedCapabilities) {
         this.database = database == null ? "" : database;
         this.databaseBytes = databaseBytes;
         this.sessionCount = sessionCount;
@@ -107,6 +109,7 @@ public final class StorageSummaryRecord {
         this.chargeSummary = copy(chargeSummary);
         this.batterySummary = copy(batterySummary);
         this.latestVehicle = copy(latestVehicle);
+        this.enhancedCapabilities = copy(enhancedCapabilities);
     }
 
     private static JSONObject copy(JSONObject source) {

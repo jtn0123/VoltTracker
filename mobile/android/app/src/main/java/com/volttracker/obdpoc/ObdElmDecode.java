@@ -69,6 +69,9 @@ final class ObdElmDecode {
         if ("0105".equals(clean)) {
             return "coolant temperature";
         }
+        if ("010F".equals(clean)) {
+            return "intake air temperature";
+        }
         if ("0104".equals(clean)) {
             return "engine load";
         }
@@ -77,6 +80,132 @@ final class ObdElmDecode {
         }
         if ("0149".equals(clean)) {
             return "accelerator pedal position";
+        }
+        if ("0142".equals(clean)) {
+            return "control module voltage";
+        }
+        if ("011F".equals(clean)) {
+            return "engine run time";
+        }
+        if ("01A6".equals(clean)) {
+            return "odometer";
+        }
+        if ("012F".equals(clean)) {
+            return "fuel level";
+        }
+        if ("015C".equals(clean)) {
+            return "engine oil temperature";
+        }
+        if ("22119F".equals(clean) || "22119F01".equals(clean)) {
+            return "engine oil life";
+        }
+        if ("221154".equals(clean)) {
+            return "engine oil temperature";
+        }
+        if ("22203F".equals(clean)) {
+            return "engine torque";
+        }
+        if ("015B".equals(clean)) {
+            return "state of charge";
+        }
+        if ("222429".equals(clean)) {
+            return "hv pack voltage";
+        }
+        if ("222414".equals(clean)) {
+            return "hv pack current";
+        }
+        if ("222883".equals(clean)) {
+            return "motor A current";
+        }
+        if ("222884".equals(clean)) {
+            return "motor B current";
+        }
+        if ("222885".equals(clean)) {
+            return "motor A voltage";
+        }
+        if ("222886".equals(clean)) {
+            return "motor B voltage";
+        }
+        if ("222487".equals(clean)) {
+            return "ev distance this cycle";
+        }
+        if ("222889".equals(clean)) {
+            return "prndl state";
+        }
+        if ("221940".equals(clean) || "22194001".equals(clean)) {
+            return "transmission temperature";
+        }
+        if ("22434F".equals(clean)) {
+            return "hv battery temperature";
+        }
+        if ("224368".equals(clean)) {
+            return "charger ac voltage";
+        }
+        if ("224369".equals(clean)) {
+            return "charger ac current";
+        }
+        if ("22436B".equals(clean)) {
+            return "charger hv voltage";
+        }
+        if ("22436C".equals(clean)) {
+            return "charger hv current";
+        }
+        if ("224373".equals(clean)) {
+            return "charging mode";
+        }
+        if ("22437D".equals(clean)) {
+            return "last charge energy";
+        }
+        if ("2243A5".equals(clean)) {
+            return "hv battery charge count";
+        }
+        if ("2243AF".equals(clean)) {
+            return "hv battery raw soc";
+        }
+        if ("224531".equals(clean)) {
+            return "charging level";
+        }
+        if ("228334".equals(clean)) {
+            return "hv battery displayed soc";
+        }
+        if ("2241B2".equals(clean)) {
+            return "battery coolant pump rpm";
+        }
+        if ("2241B4".equals(clean)) {
+            return "battery coolant valve";
+        }
+        if ("2241B6".equals(clean)) {
+            return "battery heater power";
+        }
+        if ("22801E".equals(clean)) {
+            return "outside air temperature raw";
+        }
+        if ("22801F".equals(clean)) {
+            return "outside air temperature filtered";
+        }
+        if ("22248E".equals(clean)) {
+            return "candidate tire pressure front-left";
+        }
+        if ("22248F".equals(clean)) {
+            return "candidate tire pressure front-right";
+        }
+        if ("222490".equals(clean)) {
+            return "candidate tire pressure rear-right";
+        }
+        if ("222491".equals(clean)) {
+            return "candidate tire pressure rear-left";
+        }
+        if ("22C901".equals(clean)) {
+            return "candidate tire pressures";
+        }
+        if ("22C902".equals(clean)) {
+            return "candidate tire temperatures";
+        }
+        if ("224051".equals(clean)
+                || "224052".equals(clean)
+                || "224053".equals(clean)
+                || "224054".equals(clean)) {
+            return "candidate tire receiver slot " + clean.substring(clean.length() - 1);
         }
         if ("0902".equals(clean)) {
             return "vin";

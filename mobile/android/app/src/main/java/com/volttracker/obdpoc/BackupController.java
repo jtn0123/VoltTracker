@@ -20,7 +20,6 @@ final class BackupController {
 
     static final int REQUEST_RESTORE = 4202;
     private static final long RESTORE_STOP_TIMEOUT_MS = 30_000L;
-    private static final long BACKUP_SHARE_CLEANUP_DELAY_MS = 60L * 60L * 1000L;
 
     private final MainActivity activity;
     private final DataBackup dataBackup;
@@ -43,6 +42,10 @@ final class BackupController {
     // Produces a complete on-device data backup and hands it to the Android share sheet
     // so the user can save it anywhere (cloud, PC) — no server involved.
     void launchShare() {
+        if (activity.isLoggingActive()) {
+            activity.publishStatus("blocked", "Stop logging before creating a backup.", true);
+            return;
+        }
         // Explicit PII disclosure before any file is built: the user needs to know what
         // they're about to hand to the share sheet (and from there, potentially to a third
         // party). The list mirrors what DataBackup.buildBackupFile actually exports.
@@ -52,6 +55,10 @@ final class BackupController {
     void launchEncryptedShare(String passphrase) {
         if (!hasPassphrase(passphrase)) {
             activity.publishStatus("blocked", "Enter a backup passphrase first.", true);
+            return;
+        }
+        if (activity.isLoggingActive()) {
+            activity.publishStatus("blocked", "Stop logging before creating a backup.", true);
             return;
         }
         showShareDisclosure(() -> performBackupAndShare(true, passphrase));
@@ -94,6 +101,10 @@ final class BackupController {
     }
 
     private void performBackupAndShare(boolean encrypted, String passphrase) {
+        if (activity.isLoggingActive()) {
+            activity.publishStatus("blocked", "Stop logging before creating a backup.", true);
+            return;
+        }
         activity.publishStatus(
                 "ready",
                 encrypted ? "Preparing encrypted data backup..." : "Preparing data backup...",
@@ -126,7 +137,6 @@ final class BackupController {
                                     activity.startActivity(
                                             Intent.createChooser(
                                                     share, "Back up Volt Tracker data"));
-                                    scheduleBackupCleanup(backup);
                                     activity.publishStatus(
                                             "ready",
                                             encrypted
@@ -430,11 +440,5 @@ final class BackupController {
             }
         }
         return !activity.isLoggingActive();
-    }
-
-    private void scheduleBackupCleanup(File backup) {
-        new android.os.Handler(android.os.Looper.getMainLooper())
-                .postDelayed(
-                        () -> DataBackup.deleteIfExists(backup), BACKUP_SHARE_CLEANUP_DELAY_MS);
     }
 }

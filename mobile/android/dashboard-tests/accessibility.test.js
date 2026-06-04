@@ -41,6 +41,7 @@ describe('generated dashboard accessibility shell', () => {
       'charge',
       'insights',
       'settings',
+      'signals',
     ]);
     expect(navButtons.every((button) => accessibleName(button).length > 0)).toBe(true);
     expect(navButtons.filter((button) => button.getAttribute('aria-current') === 'page')).toHaveLength(1);

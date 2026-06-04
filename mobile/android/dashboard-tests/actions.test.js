@@ -43,6 +43,11 @@ describe('actions.js — bridge dispatch', () => {
     bridge = createVoltBridgeFixture({
       connect: vi.fn(),
       scan: vi.fn(),
+      tpmsScan: vi.fn(),
+      detailProbe: vi.fn(),
+      exportDetailedSignalLog: vi.fn(() => '{"ok":true,"item":{"id":5}}'),
+      exportDetailedSignalLogs: vi.fn(() => '{"ok":true,"items":[]}'),
+      deleteDetailedSignalLog: vi.fn(),
       rememberDevice: vi.fn(),
       clearStoredData: vi.fn(),
       shareBackup: vi.fn(),
@@ -70,9 +75,9 @@ describe('actions.js — bridge dispatch', () => {
     expect(bridge.connect).toHaveBeenCalledTimes(1);
     expect(bridge.connect).toHaveBeenCalledWith(device.address, device.name);
     expect(bridge.scan).not.toHaveBeenCalled();
-    // rememberDevice always fires before the connect/scan so the adapter
-    // shows up in history even if the connection attempt fails.
-    expect(bridge.rememberDevice).toHaveBeenCalledWith(device.address, device.name);
+    // Native connect/scan remembers the adapter once; JS must not pre-remember or
+    // history counts inflate on a single click.
+    expect(bridge.rememberDevice).not.toHaveBeenCalled();
   });
 
   it('connectSelected(true) routes to bridge.scan, not bridge.connect', () => {
@@ -83,6 +88,23 @@ describe('actions.js — bridge dispatch', () => {
     expect(bridge.connect).not.toHaveBeenCalled();
   });
 
+  it('tpmsScanSelected() routes to staged bridge.detailProbe with the selected adapter', () => {
+    const device = seedSelectedDevice(VD);
+    VD.actions.tpmsScanSelected(button);
+    expect(bridge.detailProbe).toHaveBeenCalledTimes(1);
+    expect(bridge.detailProbe).toHaveBeenCalledWith(device.address, device.name, 'tires');
+    expect(bridge.tpmsScan).not.toHaveBeenCalled();
+    expect(bridge.scan).not.toHaveBeenCalled();
+    expect(bridge.connect).not.toHaveBeenCalled();
+  });
+
+  it('detailProbeSelected() sends the selected stage', () => {
+    const device = seedSelectedDevice(VD);
+    VD.state.signalProbeStage = 'experimental';
+    VD.actions.detailProbeSelected(button);
+    expect(bridge.detailProbe).toHaveBeenCalledWith(device.address, device.name, 'experimental');
+  });
+
   it('connectSelected with no device sets a blocked status and skips the bridge call', () => {
     // setDevices([]) renders the "No paired adapters found" placeholder
     // option whose value is "" — getSelectedDevice() then returns null.
@@ -90,8 +112,30 @@ describe('actions.js — bridge dispatch', () => {
     VD.actions.connectSelected(false, button);
     expect(bridge.connect).not.toHaveBeenCalled();
     expect(bridge.scan).not.toHaveBeenCalled();
+    expect(bridge.tpmsScan).not.toHaveBeenCalled();
+    expect(bridge.detailProbe).not.toHaveBeenCalled();
     expect(VD.state.status).toMatchObject({ state: 'blocked' });
     expect(VD.state.status.detail).toMatch(/adapter/i);
+  });
+
+  it('deleteSignalLog() asks for confirmation before deleting one evidence row', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    VD.actions.deleteSignalLog(5);
+    expect(bridge.deleteDetailedSignalLog).toHaveBeenCalledWith('5');
+  });
+
+  it('exportSignalLog() copies one exported evidence row', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    VD.actions.exportSignalLog(5);
+    await Promise.resolve();
+
+    expect(bridge.exportDetailedSignalLog).toHaveBeenCalledWith('5');
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"id"'));
   });
 
   it('clearStorage() bails when the user cancels the confirm dialog', () => {

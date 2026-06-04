@@ -121,6 +121,32 @@ public class ObdProtocolTest {
         assertEquals(12.0f, ObdProtocol.parseVoltage("12.0V"), 0.001f);
     }
 
+    @Test
+    public void controlModuleVoltageDecodes() {
+        ParsedPidValue voltage = ObdProtocol.parseKnownValue("0142", "414236B0");
+        assertNotNull(voltage);
+        assertEquals("control module voltage", voltage.name);
+        assertEquals(14.000, voltage.valueNumeric, 0.001);
+        assertEquals("V", voltage.unit);
+    }
+
+    @Test
+    public void standardUtilityModeOnePidsDecode() {
+        ParsedPidValue runTime = ObdProtocol.parseKnownValue("011F", "411F003C");
+        assertNotNull(runTime);
+        assertEquals(60.0, runTime.valueNumeric, 0.01);
+        assertEquals("s", runTime.unit);
+
+        ParsedPidValue fuel = ObdProtocol.parseKnownValue("012F", "412F80");
+        assertNotNull(fuel);
+        assertEquals(50.0, fuel.valueNumeric, 0.01);
+
+        ParsedPidValue oilTemp = ObdProtocol.parseKnownValue("015C", "415C64");
+        assertNotNull(oilTemp);
+        assertEquals(60.0, oilTemp.valueNumeric, 0.01);
+        assertEquals("deg C", oilTemp.unit);
+    }
+
     // ---- Volt mode-22 PIDs (synthesised from community formulas) --------------------
 
     @Test
@@ -179,11 +205,26 @@ public class ObdProtocolTest {
         ParsedPidValue current = ObdProtocol.parseKnownValue("22436C", "62436C00A0");
         assertNotNull(current);
         assertEquals(8.0, current.valueNumeric, 0.01);
+    }
 
-        // 224373 = signed (A*256+B) W. 0x0BB8 = 3000 -> 3000 W.
-        ParsedPidValue power = ObdProtocol.parseKnownValue("224373", "6243730BB8");
-        assertNotNull(power);
-        assertEquals(3000.0, power.valueNumeric, 0.01);
+    @Test
+    public void chargerModeAndLevelDecode() {
+        ParsedPidValue notCharging = ObdProtocol.parseKnownValue("224373", "7EC 05 62 43 73 00 00");
+        assertNotNull(notCharging);
+        assertEquals("charging mode", notCharging.name);
+        assertEquals("NOT_CHARGING", notCharging.valueText);
+        assertEquals(0.0, notCharging.valueNumeric, 0.01);
+
+        ParsedPidValue charging = ObdProtocol.parseKnownValue("224373", "7EC05624373FFFF");
+        assertNotNull(charging);
+        assertEquals("CHARGING", charging.valueText);
+        assertEquals(65535.0, charging.valueNumeric, 0.01);
+
+        ParsedPidValue level = ObdProtocol.parseKnownValue("224531", "7EC0462453102");
+        assertNotNull(level);
+        assertEquals("charging level", level.name);
+        assertEquals("AC_2", level.valueText);
+        assertEquals(2.0, level.valueNumeric, 0.01);
     }
 
     @Test
@@ -196,12 +237,136 @@ public class ObdProtocolTest {
     }
 
     @Test
+    public void chargeAndSocDetailPidsDecode() {
+        ParsedPidValue count = ObdProtocol.parseKnownValue("2243A5", "7EC056243A506C9");
+        assertNotNull(count);
+        assertEquals("hv battery charge count", count.name);
+        assertEquals(1737.0, count.valueNumeric, 0.01);
+
+        ParsedPidValue rawSoc = ObdProtocol.parseKnownValue("2243AF", "7EC056243AF89F9");
+        assertNotNull(rawSoc);
+        assertEquals("hv battery raw soc", rawSoc.name);
+        assertEquals(53.89639, rawSoc.valueNumeric, 0.01);
+
+        ParsedPidValue displaySoc = ObdProtocol.parseKnownValue("228334", "7EC0462833479");
+        assertNotNull(displaySoc);
+        assertEquals("hv battery displayed soc", displaySoc.name);
+        assertEquals(47.45098, displaySoc.valueNumeric, 0.01);
+    }
+
+    @Test
+    public void enhancedMaintenanceAndEnginePidsDecode() {
+        ParsedPidValue oilLife = ObdProtocol.parseKnownValue("22119F", "62119FCC");
+        assertNotNull(oilLife);
+        assertEquals("engine oil life", oilLife.name);
+        assertEquals(80.0, oilLife.valueNumeric, 0.5);
+        assertEquals("%", oilLife.unit);
+
+        ParsedPidValue oilLifeSelector = ObdProtocol.parseKnownValue("22119F01", "62119F01CC");
+        assertNotNull(oilLifeSelector);
+        assertEquals("engine oil life", oilLifeSelector.name);
+        assertEquals(80.0, oilLifeSelector.valueNumeric, 0.5);
+
+        ParsedPidValue oilLifeSelectorShortEcho =
+                ObdProtocol.parseKnownValue("22119F01", "62119FCC");
+        assertNotNull(oilLifeSelectorShortEcho);
+        assertEquals(80.0, oilLifeSelectorShortEcho.valueNumeric, 0.5);
+
+        ParsedPidValue voltOilTemp = ObdProtocol.parseKnownValue("221154", "6211545A");
+        assertNotNull(voltOilTemp);
+        assertEquals("engine oil temperature", voltOilTemp.name);
+        assertEquals(50.0, voltOilTemp.valueNumeric, 0.01);
+        assertEquals("deg C", voltOilTemp.unit);
+
+        ParsedPidValue torque = ObdProtocol.parseKnownValue("22203F", "62203F012C");
+        assertNotNull(torque);
+        assertEquals("engine torque", torque.name);
+        assertEquals(75.0, torque.valueNumeric, 0.01);
+
+        ParsedPidValue transTemp = ObdProtocol.parseKnownValue("221940", "6219405A");
+        assertNotNull(transTemp);
+        assertEquals("transmission temperature", transTemp.name);
+        assertEquals(50.0, transTemp.valueNumeric, 0.01);
+
+        ParsedPidValue transTempSelector = ObdProtocol.parseKnownValue("22194001", "621940015A");
+        assertNotNull(transTempSelector);
+        assertEquals("transmission temperature", transTempSelector.name);
+        assertEquals(50.0, transTempSelector.valueNumeric, 0.01);
+
+        ParsedPidValue transTempSelectorShortEcho =
+                ObdProtocol.parseKnownValue("22194001", "6219405A");
+        assertNotNull(transTempSelectorShortEcho);
+        assertEquals(50.0, transTempSelectorShortEcho.valueNumeric, 0.01);
+    }
+
+    @Test
+    public void motorAndCycleDistancePidsDecode() {
+        ParsedPidValue motorACurrent = ObdProtocol.parseKnownValue("222883", "62288303E8");
+        assertNotNull(motorACurrent);
+        assertEquals("motor A current", motorACurrent.name);
+        assertEquals(50.0, motorACurrent.valueNumeric, 0.01);
+
+        ParsedPidValue motorBCurrent = ObdProtocol.parseKnownValue("222884", "622884FDA8");
+        assertNotNull(motorBCurrent);
+        assertEquals("motor B current", motorBCurrent.name);
+        assertEquals(-30.0, motorBCurrent.valueNumeric, 0.01);
+
+        ParsedPidValue motorAVoltage = ObdProtocol.parseKnownValue("222885", "62288588B8");
+        assertNotNull(motorAVoltage);
+        assertEquals("motor A voltage", motorAVoltage.name);
+        assertEquals(350.0, motorAVoltage.valueNumeric, 0.01);
+
+        ParsedPidValue motorBVoltage = ObdProtocol.parseKnownValue("222886", "6228867530");
+        assertNotNull(motorBVoltage);
+        assertEquals("motor B voltage", motorBVoltage.name);
+        assertEquals(300.0, motorBVoltage.valueNumeric, 0.01);
+
+        ParsedPidValue evKm = ObdProtocol.parseKnownValue("222487", "62248704D2");
+        assertNotNull(evKm);
+        assertEquals("ev distance this cycle", evKm.name);
+        assertEquals(12.34, evKm.valueNumeric, 0.01);
+    }
+
+    @Test
+    public void batteryThermalAccessoryPidsDecode() {
+        ParsedPidValue pump = ObdProtocol.parseKnownValue("2241B2", "6241B203E8");
+        assertNotNull(pump);
+        assertEquals("battery coolant pump rpm", pump.name);
+        assertEquals(1000.0, pump.valueNumeric, 0.01);
+
+        ParsedPidValue valve = ObdProtocol.parseKnownValue("2241B4", "6241B407");
+        assertNotNull(valve);
+        assertEquals("battery coolant valve", valve.name);
+        assertEquals("RAW_7", valve.valueText);
+        assertEquals(7.0, valve.valueNumeric, 0.01);
+
+        ParsedPidValue heater = ObdProtocol.parseKnownValue("2241B6", "6241B607D0");
+        assertNotNull(heater);
+        assertEquals("battery heater power", heater.name);
+        assertEquals(2000.0, heater.valueNumeric, 0.01);
+
+        ParsedPidValue outside = ObdProtocol.parseKnownValue("22801F", "62801FC8");
+        assertNotNull(outside);
+        assertEquals("outside air temperature filtered", outside.name);
+        assertEquals(20.0, outside.valueNumeric, 0.01);
+    }
+
+    @Test
     public void socThroughParseKnownValue() {
         ParsedPidValue v = ObdProtocol.parseKnownValue("015B", "415B7F");
         assertNotNull(v);
         assertEquals("state of charge", v.name);
         assertEquals(50.0, v.valueNumeric, 0.01);
         assertEquals("%", v.unit);
+    }
+
+    @Test
+    public void odometerThroughParseKnownValue() {
+        ParsedPidValue v = ObdProtocol.parseKnownValue("01A6", "41A60012D687");
+        assertNotNull(v);
+        assertEquals("odometer", v.name);
+        assertEquals(123456.7, v.valueNumeric, 0.01);
+        assertEquals("km", v.unit);
     }
 
     // ---- parsePackPowerKw (HV pack power for the live poll) -------------------------
@@ -493,9 +658,9 @@ public class ObdProtocolTest {
     @Test
     public void buildMode01MultiCommand_concatenatesPidHexAfterModeByte() {
         assertEquals(
-                "010D0C041149 — 5 PIDs in a single Mode-01 round-trip",
-                "010D0C041149",
-                ObdProtocol.buildMode01MultiCommand(List.of("0D", "0C", "04", "11", "49")));
+                "010D0C49 — 3 hot-lane PIDs in a single Mode-01 round-trip",
+                "010D0C49",
+                ObdProtocol.buildMode01MultiCommand(List.of("0D", "0C", "49")));
         assertEquals(
                 "uppercases hex on the way in",
                 "010D0C",

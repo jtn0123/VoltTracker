@@ -25,6 +25,7 @@ trims, and truncates. The bounds are `MAX_ADDRESS_LEN=64`, `MAX_NAME_LEN=256`,
 | `refreshDevices()` | — | void | — | Re-publishes device list + storage summary on UI thread. |
 | `connect(address, name)` | `String, String` | void | `safe(address, 64)`, `safe(name, 256)` | Remembers device, starts `ObdService` with `ACTION_CONNECT`. |
 | `scan(address, name)` | `String, String` | void | `safe(address, 64)`, `safe(name, 256)` | Remembers device, starts `ObdService` with `ACTION_SCAN`. |
+| `tpmsScan(address, name)` | `String, String` | void | `safe(address, 64)`, `safe(name, 256)` | Remembers device, starts the user-facing Detail Probe flow with `ACTION_TPMS_SCAN`; method name is retained for ABI stability. |
 | `getLastDevice()` | — | `String` (JSON object) | — | Returns `DeviceCatalog.getLastDeviceJson()`. |
 | `getDeviceHistory()` | — | `String` (JSON array) | — | Returns `DeviceCatalog.getDeviceHistoryJson()`. |
 | `getStorageSummary()` | — | `String` (JSON object) | — | Synchronous; calls `MainActivity.getStorageSummaryJson()`. |
@@ -37,6 +38,7 @@ trims, and truncates. The bounds are `MAX_ADDRESS_LEN=64`, `MAX_NAME_LEN=256`,
 | `rememberDevice(address, name)` | `String, String` | void | `safe(address, 64)`, `safe(name, 256)` | Updates `DeviceCatalog` without starting the service. |
 | `connectLast()` | — | void | bounds applied to cached values from SharedPreferences | Connects to remembered/candidate adapter; `publishStatus("blocked", …)` if none. |
 | `scanLast()` | — | void | bounds applied to cached values from SharedPreferences | Scans against remembered/candidate adapter; `publishStatus("blocked", …)` if none. |
+| `tpmsScanLast()` | — | void | bounds applied to cached values from SharedPreferences | Runs the user-facing Detail Probe flow against the remembered/candidate adapter; `publishStatus("blocked", …)` if none. |
 | `demo()` | — | void | — | Starts `ObdService` with `ACTION_DEMO`. |
 | `disconnect()` | — | void | — | Calls `MainActivity.stopObdService()`. |
 | `logClientError(label, detail)` | `String, String` | void | `safe(label, 128)`, `safe(detail, 4096)` | Writes a single `Log.e` line; the dashboard uses this for window-level errors, unhandled rejections, and CSP violations. |

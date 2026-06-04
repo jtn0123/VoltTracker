@@ -182,6 +182,11 @@ declare global {
     refreshDevices(): void;
     connect(address: string, name: string): void;
     scan(address: string, name: string): void;
+    tpmsScan(address: string, name: string): void;
+    detailProbe(address: string, name: string, stage: string): void;
+    exportDetailedSignalLog(id: string): string;
+    exportDetailedSignalLogs(): string;
+    deleteDetailedSignalLog(id: string): void;
     shareBackup(): void;
     shareEncryptedBackup(passphrase: string): void;
     restoreBackup(): void;
@@ -190,6 +195,8 @@ declare global {
     rememberDevice(address: string, name: string): void;
     connectLast(): void;
     scanLast(): void;
+    tpmsScanLast(): void;
+    detailProbeLast(stage: string): void;
     demo(): void;
     disconnect(): void;
     logClientError(label: string, detail: string): void;

@@ -13,14 +13,11 @@ import org.json.JSONObject;
 /** Owns live-poll PID scheduling, batching, carry-forward raw values, and stale timers. */
 final class PidPollingState {
 
-    // Carry-forward age ceiling. A PID that stops responding keeps serving its last raw value via
-    // lastRawByCommand indefinitely, so the dashboard would render a frozen number forever (its own
-    // *StaleMs rendering is advisory and can be ignored by other consumers). Past this ceiling we
-    // drop the carried value so lastRaw(command) returns null and the sample reads "--" instead.
-    // The ceiling sits comfortably above the slowest scheduled cadence — Tier 3 PIDs poll every 10
-    // cycles (~17s at the live-poll rate) — so a value that is merely slow but still responding is
-    // never dropped; only a truly stalled command ages out.
+    // Carry-forward age ceiling for hot/unknown PIDs. Scheduled slow/deep PIDs get a command
+    // specific ceiling derived from their period below, so a valid 48/120/240-cycle value does not
+    // blink out between normal refreshes.
     static final long CARRY_FORWARD_MAX_AGE_MS = 30_000L;
+    private static final long CARRY_FORWARD_MS_PER_SCHEDULE_CYCLE = 2_500L;
 
     private final ObdService service;
     private final ObdPollingEngine engine;
@@ -75,7 +72,7 @@ final class PidPollingState {
 
     String lastRaw(String command) {
         Long setAtMs = lastRawSetAtMsByCommand.get(command);
-        if (setAtMs != null && clock.nowMs() - setAtMs > CARRY_FORWARD_MAX_AGE_MS) {
+        if (setAtMs != null && clock.nowMs() - setAtMs > carryForwardMaxAgeMsFor(command)) {
             // The carried value has aged past the ceiling — a command that stopped responding.
             // Drop it so the sample reads "--" rather than a frozen number. Cleared eagerly so
             // repeated reads don't keep re-checking a permanently stale entry.
@@ -86,6 +83,18 @@ final class PidPollingState {
         return lastRawByCommand.get(command);
     }
 
+    static long carryForwardMaxAgeMsFor(String command) {
+        int periodCycles = 1;
+        for (PidSpec spec : PidSchedule.SPECS) {
+            if (spec.command.equals(command)) {
+                periodCycles = Math.max(periodCycles, spec.periodCycles);
+                break;
+            }
+        }
+        return Math.max(
+                CARRY_FORWARD_MAX_AGE_MS, periodCycles * CARRY_FORWARD_MS_PER_SCHEDULE_CYCLE);
+    }
+
     private void putLastRaw(String command, String response, long nowMs) {
         lastRawByCommand.put(command, response);
         lastRawSetAtMsByCommand.put(command, nowMs);
@@ -93,10 +102,15 @@ final class PidPollingState {
 
     void putStaleMsIfTracked(JSONObject sample, String key, String command, long now)
             throws JSONException {
-        Long polledAtMs = lastPolledAtMsByCommand.get(command);
-        if (polledAtMs != null) {
-            sample.put(key, Math.max(0L, now - polledAtMs));
+        Long staleMs = staleMsFor(command, now);
+        if (staleMs != null) {
+            sample.put(key, staleMs);
         }
+    }
+
+    Long staleMsFor(String command, long now) {
+        Long polledAtMs = lastPolledAtMsByCommand.get(command);
+        return polledAtMs == null ? null : Math.max(0L, now - polledAtMs);
     }
 
     /**
@@ -121,8 +135,9 @@ final class PidPollingState {
                 lastHeaderSet = header;
             }
             // Generalized Mode-01 batching: any same-header Mode-01 PIDs due together on this cycle
-            // (beyond the Tier-1 set handled above) can share a single multi-PID request, saving
-            // round-trips. Tier-1 keeps its dedicated probe-gated path — these are the *other*
+            // (beyond the hot-lane set handled above) can share a single multi-PID request, saving
+            // round-trips. The hot lane keeps its dedicated probe-gated path — these are the
+            // *other*
             // tiers' Mode-01 PIDs that happen to coincide on a cycle (e.g. SOC + coolant on cycle
             // 10). Falls back to per-PID on this adapter if the batched reply is short.
             List<PidSpec> extraBatch =
@@ -186,11 +201,11 @@ final class PidPollingState {
 
     /**
      * Selects the Mode-01 PIDs in {@code headerSpecs} eligible for ad-hoc same-cycle batching: a
-     * 4-char {@code 01XX} command on the broadcast header that is NOT already covered by the Tier-1
-     * batch (when that batch fired). Mode-01 PIDs reply with self-describing {@code 41XX} frames,
-     * so the engine can assemble several into one request and let each parser pick out its own
-     * marker. Non-broadcast headers (HV pack, Mode-22) are never batched here — those use mode-22
-     * framing.
+     * 4-char {@code 01XX} command on the broadcast header that is NOT already covered by the
+     * hot-lane batch (when that batch fired). Mode-01 PIDs reply with self-describing {@code 41XX}
+     * frames, so the engine can assemble several into one request and let each parser pick out its
+     * own marker. Non-broadcast headers (HV pack, Mode-22) are never batched here — those use
+     * mode-22 framing.
      */
     private static List<PidSpec> batchableMode01(
             List<PidSpec> headerSpecs, boolean batchedTier1, Header header) {
@@ -203,7 +218,7 @@ final class PidPollingState {
                 continue;
             }
             if (batchedTier1 && PidSchedule.MODE_01_BATCH_COMMANDS.contains(spec.command)) {
-                // Already served by the Tier-1 batch this cycle — don't request it twice.
+                // Already served by the hot-lane batch this cycle — don't request it twice.
                 continue;
             }
             out.add(spec);
@@ -218,9 +233,9 @@ final class PidPollingState {
     /**
      * Batches an arbitrary group of same-header Mode-01 PIDs into one multi-PID request. Returns
      * true and records each command's carry-forward value on success; returns false (so the caller
-     * polls them per-PID) if the adapter's reply is missing any requested frame. Unlike the Tier-1
-     * path this does NOT flip {@code mode01BatchSupported} — a short reply here is treated as a
-     * per-cycle fallback for this group, not a permanent adapter capability verdict.
+     * polls them per-PID) if the adapter's reply is missing any requested frame. Unlike the
+     * hot-lane path this does NOT flip {@code mode01BatchSupported} — a short reply here is treated
+     * as a per-cycle fallback for this group, not a permanent adapter capability verdict.
      */
     private boolean tryBatchMode01Group(List<PidSpec> group, StringBuilder rawThisCycle)
             throws IOException {

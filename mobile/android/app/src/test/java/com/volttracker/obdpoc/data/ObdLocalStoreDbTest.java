@@ -204,6 +204,141 @@ public class ObdLocalStoreDbTest {
         assertEquals(1200L, code.optLong("lastSeenMs"));
     }
 
+    @Test
+    public void enhancedPidObservationsUpdateFieldCapabilities() throws Exception {
+        long id = store.startSession("scan", "00:11", "Adapter");
+        store.recordPidObservation(
+                id,
+                pidObservation(
+                        1000L,
+                        "221154",
+                        "ATSH7E0",
+                        "1154",
+                        "engine oil temperature",
+                        "56",
+                        56.0,
+                        "C",
+                        "62115460"),
+                1000L);
+
+        JSONArray capabilities = store.getEnhancedCapabilitiesJson(10);
+        assertEquals(1, capabilities.length());
+        JSONObject capability = capabilities.getJSONObject(0);
+        assertEquals("221154", capability.optString("command"));
+        assertEquals("ATSH7E0", capability.optString("header"));
+        assertTrue(capability.optBoolean("supported"));
+        assertEquals(1L, capability.optLong("responseCount"));
+        assertEquals("confirmed", capability.getJSONObject("sample").optString("validationStatus"));
+        assertEquals("low-risk", capability.getJSONObject("sample").optString("scanStage"));
+        assertEquals("low", capability.getJSONObject("sample").optString("risk"));
+
+        JSONObject summary = StorageSummaryJson.build(store.getStorageSummaryRecord());
+        JSONArray summaryCapabilities = summary.getJSONArray("enhancedCapabilities");
+        assertEquals(1, summaryCapabilities.length());
+        assertEquals("221154", summaryCapabilities.getJSONObject(0).optString("command"));
+        assertTrue(summaryCapabilities.getJSONObject(0).optBoolean("supported"));
+        assertTrue(summary.getJSONArray("detailedSignalCatalog").length() >= 10);
+    }
+
+    @Test
+    public void enhancedCapabilityKeepsSupportAfterLaterNoData() throws Exception {
+        long id = store.startSession("scan", "00:11", "Adapter");
+        store.recordPidObservation(
+                id,
+                pidObservation(
+                        1000L,
+                        "221154",
+                        "ATSH7E0",
+                        "1154",
+                        "engine oil temperature",
+                        "56",
+                        56.0,
+                        "C",
+                        "62115460"),
+                1000L);
+        store.recordPidObservation(
+                id,
+                pidObservation(
+                        2000L,
+                        "221154",
+                        "ATSH7E0",
+                        "1154",
+                        "engine oil temperature",
+                        "",
+                        null,
+                        "C",
+                        "NO DATA"),
+                2000L);
+
+        JSONObject capability = store.getEnhancedCapabilitiesJson(10).getJSONObject(0);
+        assertTrue(capability.optBoolean("supported"));
+        assertEquals(1L, capability.optLong("responseCount"));
+        assertEquals(2000L, capability.optLong("lastSeenMs"));
+        assertFalse(capability.getJSONObject("sample").optBoolean("positiveResponse"));
+    }
+
+    @Test
+    public void rejectedEnhancedCapabilityCanBeReadForDiscoverySkip() throws Exception {
+        long id = store.startSession("tpms-scan", "00:11", "Adapter");
+        store.recordPidObservation(
+                id,
+                pidObservation(
+                        1000L,
+                        "224051",
+                        "ATSH760",
+                        "4051",
+                        "candidate tire receiver slot 1",
+                        "",
+                        null,
+                        "",
+                        "NO DATA"),
+                1000L);
+
+        assertTrue(store.hasRejectedEnhancedCapability("00:11", "ATSH760", "224051"));
+        assertFalse(store.hasRejectedEnhancedCapability("00:11", "ATSH760", "224052"));
+        assertTrue(
+                store.hasRecentEnhancedCapability(
+                        "00:11", "ATSH760", "224051", Long.MAX_VALUE / 2L));
+        assertFalse(
+                store.hasRecentEnhancedCapability(
+                        "00:11", "ATSH760", "224052", Long.MAX_VALUE / 2L));
+    }
+
+    @Test
+    public void enhancedCapabilityCanBeExportedAndDeletedIndividually() throws Exception {
+        long id = store.startSession("scan", "00:11", "Adapter");
+        store.recordPidObservation(
+                id,
+                pidObservation(
+                        1000L,
+                        "221154",
+                        "ATSH7E0",
+                        "1154",
+                        "engine oil temperature",
+                        "56",
+                        56.0,
+                        "C",
+                        "62115460"),
+                1000L);
+
+        JSONObject capability = store.getEnhancedCapabilitiesJson(10).getJSONObject(0);
+        long rowId = capability.optLong("id");
+        assertTrue(rowId > 0L);
+
+        JSONObject one = store.getEnhancedCapabilityExportJson(rowId);
+        assertTrue(one.optBoolean("ok"));
+        assertEquals("detailed-signal-log", one.optString("kind"));
+        assertEquals("221154", one.getJSONObject("item").optString("command"));
+
+        JSONObject all = store.getEnhancedCapabilitiesExportJson(10);
+        assertTrue(all.optBoolean("ok"));
+        assertEquals(1, all.getJSONArray("items").length());
+
+        assertEquals(1, store.deleteEnhancedCapability(rowId));
+        assertEquals(0, store.getEnhancedCapabilitiesJson(10).length());
+        assertFalse(store.getEnhancedCapabilityExportJson(rowId).optBoolean("ok"));
+    }
+
     // ---- GPS route building (the data the map renders) -----------------------------
 
     private void locationSample(
@@ -223,6 +358,33 @@ public class ObdLocalStoreDbTest {
         code.put("seenAtMs", seenAtMs);
         code.put("rawResponse", "43 25 A2 00 00");
         return code;
+    }
+
+    private static JSONObject pidObservation(
+            long observedAtMs,
+            String command,
+            String header,
+            String pid,
+            String name,
+            String valueText,
+            Double valueNumeric,
+            String unit,
+            String rawResponse)
+            throws Exception {
+        JSONObject observation = new JSONObject();
+        observation.put("observedAtMs", observedAtMs);
+        observation.put("command", command);
+        observation.put("header", header);
+        observation.put("pid", pid);
+        observation.put("name", name);
+        observation.put("valueText", valueText);
+        if (valueNumeric != null) {
+            observation.put("valueNumeric", valueNumeric.doubleValue());
+        }
+        observation.put("unit", unit);
+        observation.put("rawRequest", command);
+        observation.put("rawResponse", rawResponse);
+        return observation;
     }
 
     @Test

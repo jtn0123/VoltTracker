@@ -116,6 +116,17 @@ final class AppStatePayload {
                 vehicle.put(key, latestVehicle.opt(key));
             }
         }
+        String liveVin = telemetry.optString("vin", "");
+        if (!liveVin.isEmpty()) {
+            vehicle.put("vin", liveVin);
+            vehicle.put("vinStored", true);
+        }
+        if (telemetry.has("odometerKm")) {
+            vehicle.put("odometerKm", telemetry.optDouble("odometerKm"));
+        }
+        if (telemetry.has("odometerMiles")) {
+            vehicle.put("odometerMiles", telemetry.optDouble("odometerMiles"));
+        }
         return vehicle;
     }
 

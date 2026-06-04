@@ -243,6 +243,32 @@ public class ObdLocalStore implements Closeable, MaterializerData, ObdSessionSto
         return reports.adapterHistoryJson(limit);
     }
 
+    public JSONArray getEnhancedCapabilitiesJson(int limit) {
+        return reports.enhancedCapabilitiesJson(limit);
+    }
+
+    public boolean hasRejectedEnhancedCapability(
+            String adapterAddress, String header, String command) {
+        return reports.hasRejectedEnhancedCapability(adapterAddress, header, command);
+    }
+
+    public boolean hasRecentEnhancedCapability(
+            String adapterAddress, String header, String command, long minAgeMs) {
+        return reports.hasRecentEnhancedCapability(adapterAddress, header, command, minAgeMs);
+    }
+
+    public JSONObject getEnhancedCapabilityExportJson(long id) {
+        return reports.enhancedCapabilityJson(id);
+    }
+
+    public JSONObject getEnhancedCapabilitiesExportJson(int limit) {
+        return reports.enhancedCapabilitiesExportJson(limit);
+    }
+
+    public int deleteEnhancedCapability(long id) {
+        return reports.deleteEnhancedCapability(id);
+    }
+
     public JSONArray getTripsJson(int limit) {
         return trips.tripsJson(limit);
     }

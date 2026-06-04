@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc;
 
+import android.bluetooth.BluetoothAdapter;
 import android.content.Intent;
 import android.net.Uri;
 import android.util.Log;
@@ -27,6 +28,7 @@ public final class VoltBridge {
 
     private static final int MAX_NAME_LEN = 256;
     private static final int MAX_LABEL_LEN = 128;
+    private static final int MAX_STAGE_LEN = 32;
     private static final int MAX_DETAIL_LEN = 4096;
     private static final int MAX_DTC_LEN = 16;
     private static final int MAX_PASSPHRASE_LEN = 256;
@@ -82,6 +84,10 @@ public final class VoltBridge {
         return trimmed.substring(0, cut);
     }
 
+    private static boolean validBluetoothAddress(String address) {
+        return address != null && BluetoothAdapter.checkBluetoothAddress(address.trim());
+    }
+
     @JavascriptInterface
     public String listDevices() {
         return activity.deviceCatalog.getBondedDevicesJson();
@@ -108,6 +114,11 @@ public final class VoltBridge {
         activity.runOnUiThread(
                 () -> {
                     activity.rememberDevice(cleanAddress, cleanName);
+                    if (!validBluetoothAddress(cleanAddress)) {
+                        activity.publishStatus(
+                                "blocked", "Choose a valid Bluetooth adapter.", true);
+                        return;
+                    }
                     activity.startObdService(ObdService.ACTION_CONNECT, cleanAddress, cleanName);
                 });
     }
@@ -119,7 +130,35 @@ public final class VoltBridge {
         activity.runOnUiThread(
                 () -> {
                     activity.rememberDevice(cleanAddress, cleanName);
+                    if (!validBluetoothAddress(cleanAddress)) {
+                        activity.publishStatus(
+                                "blocked", "Choose a valid Bluetooth adapter.", true);
+                        return;
+                    }
                     activity.startObdService(ObdService.ACTION_SCAN, cleanAddress, cleanName);
+                });
+    }
+
+    @JavascriptInterface
+    public void tpmsScan(String address, String name) {
+        detailProbe(address, name, EnhancedPidProfiles.STAGE_TIRES);
+    }
+
+    @JavascriptInterface
+    public void detailProbe(String address, String name, String stage) {
+        final String cleanAddress = safe(address, MAX_ADDRESS_LEN);
+        final String cleanName = safe(name, MAX_NAME_LEN);
+        final String cleanStage = EnhancedPidProfiles.normalizeStage(safe(stage, MAX_STAGE_LEN));
+        activity.runOnUiThread(
+                () -> {
+                    activity.rememberDevice(cleanAddress, cleanName);
+                    if (!validBluetoothAddress(cleanAddress)) {
+                        activity.publishStatus(
+                                "blocked", "Choose a valid Bluetooth adapter.", true);
+                        return;
+                    }
+                    activity.startObdService(
+                            ObdService.ACTION_TPMS_SCAN, cleanAddress, cleanName, cleanStage);
                 });
     }
 
@@ -190,9 +229,25 @@ public final class VoltBridge {
 
     @JavascriptInterface
     public void clearStoredData() {
+        if (activity.isLoggingActive()) {
+            activity.runOnUiThread(
+                    () ->
+                            activity.publishStatus(
+                                    "blocked", "Stop logging before clearing stored data.", true));
+            return;
+        }
         // clearAllData runs 11 DELETEs in one transaction — keep it off the main thread.
         activity.runOnBackground(
                 () -> {
+                    if (activity.isLoggingActive()) {
+                        activity.runOnUiThread(
+                                () ->
+                                        activity.publishStatus(
+                                                "blocked",
+                                                "Stop logging before clearing stored data.",
+                                                true));
+                        return;
+                    }
                     try {
                         if (activity.localStore != null) {
                             activity.localStore.clearAllData();
@@ -232,7 +287,7 @@ public final class VoltBridge {
         final String name = safe(device.optString("name", ""), MAX_NAME_LEN);
         activity.runOnUiThread(
                 () -> {
-                    if (address.isEmpty()) {
+                    if (!validBluetoothAddress(address)) {
                         activity.publishStatus(
                                 "blocked",
                                 "No remembered adapter yet. Connect once to save it.",
@@ -256,7 +311,7 @@ public final class VoltBridge {
         final String name = safe(device.optString("name", ""), MAX_NAME_LEN);
         activity.runOnUiThread(
                 () -> {
-                    if (address.isEmpty()) {
+                    if (!validBluetoothAddress(address)) {
                         activity.publishStatus(
                                 "blocked",
                                 "No remembered adapter yet. Connect once to save it.",
@@ -315,6 +370,83 @@ public final class VoltBridge {
     }
 
     @JavascriptInterface
+    public void tpmsScanLast() {
+        detailProbeLast(EnhancedPidProfiles.STAGE_TIRES);
+    }
+
+    @JavascriptInterface
+    public void detailProbeLast(String stage) {
+        JSONObject device = activity.deviceCatalog.getLastOrCandidateDevice();
+        final String address = safe(device.optString("address", ""), MAX_ADDRESS_LEN);
+        final String name = safe(device.optString("name", ""), MAX_NAME_LEN);
+        final String cleanStage = EnhancedPidProfiles.normalizeStage(safe(stage, MAX_STAGE_LEN));
+        activity.runOnUiThread(
+                () -> {
+                    if (!validBluetoothAddress(address)) {
+                        activity.publishStatus(
+                                "blocked",
+                                "No remembered adapter yet. Connect once to save it.",
+                                true);
+                        return;
+                    }
+                    activity.rememberDevice(address, name);
+                    activity.startObdService(
+                            ObdService.ACTION_TPMS_SCAN, address, name, cleanStage);
+                });
+    }
+
+    @JavascriptInterface
+    public String exportDetailedSignalLog(String id) {
+        long rowId = parsePositiveId(id);
+        if (rowId <= 0L || activity.localStore == null) {
+            return "{\"ok\":false,\"error\":\"invalid_id\",\"message\":\"Choose a saved detailed signal log.\"}";
+        }
+        return activity.localStore.getEnhancedCapabilityExportJson(rowId).toString();
+    }
+
+    @JavascriptInterface
+    public String exportDetailedSignalLogs() {
+        if (activity.localStore == null) {
+            return "{\"ok\":false,\"error\":\"storage_unavailable\",\"message\":\"Local storage is not ready.\"}";
+        }
+        return activity.localStore.getEnhancedCapabilitiesExportJson(250).toString();
+    }
+
+    @JavascriptInterface
+    public void deleteDetailedSignalLog(String id) {
+        final long rowId = parsePositiveId(id);
+        if (rowId <= 0L) {
+            activity.runOnUiThread(
+                    () ->
+                            activity.publishStatus(
+                                    "blocked", "Choose a saved detailed signal log.", true));
+            return;
+        }
+        activity.runOnBackground(
+                () -> {
+                    int deleted = 0;
+                    try {
+                        if (activity.localStore != null) {
+                            deleted = activity.localStore.deleteEnhancedCapability(rowId);
+                        }
+                    } catch (RuntimeException ex) {
+                        Log.w(MainActivity.TAG, "deleteDetailedSignalLog failed", ex);
+                    }
+                    final int deletedRows = deleted;
+                    activity.runOnUiThread(
+                            () -> {
+                                activity.publishStorageSummary();
+                                activity.publishStatus(
+                                        deletedRows > 0 ? "ready" : "blocked",
+                                        deletedRows > 0
+                                                ? "Detailed signal log removed."
+                                                : "Detailed signal log was already gone.",
+                                        deletedRows <= 0);
+                            });
+                });
+    }
+
+    @JavascriptInterface
     public void demo() {
         activity.runOnUiThread(
                 () -> activity.startObdService(ObdService.ACTION_DEMO, null, "Demo stream"));
@@ -369,6 +501,15 @@ public final class VoltBridge {
             long dropped = clientErrorDroppedCount;
             clientErrorDroppedCount = 0L;
             return dropped;
+        }
+    }
+
+    private static long parsePositiveId(String value) {
+        try {
+            long parsed = Long.parseLong(safe(value, MAX_LABEL_LEN));
+            return parsed > 0L ? parsed : -1L;
+        } catch (RuntimeException ex) {
+            return -1L;
         }
     }
 

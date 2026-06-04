@@ -41,11 +41,13 @@
   }
 
   function setStatus(/** @type {any} */ payload) {
+    const wasActive = isActiveStatus();
     const status = VD.parsePayload(payload, {});
     state.status = status;
     const badge = el("stateBadge");
     const next = status.state || "idle";
-    badge.dataset.state = next;
+    if (badge) badge.dataset.state = next;
+    if (!wasActive && isActiveStatus() && !state.demoActive) resetTelemetry();
     VD.setText("stateText", next);
     VD.setText("statusCopy", status.detail || "Ready.");
     if (status.lastAddress) state.lastDevice = { address: status.lastAddress, name: status.lastName || "" };
@@ -80,7 +82,7 @@
     if (source.includes("demo")) return state.demoActive || isActiveStatus();
     const updatedAt = Number(sample.updatedAt || 0);
     const ageMs = updatedAt > 0 ? Date.now() - updatedAt : Number.POSITIVE_INFINITY;
-    return isActiveStatus() || ageMs < 30000 || dbRowCount(state.storage || {}) > 0;
+    return isActiveStatus() || ageMs < 30000;
   }
 
   function isActiveStatus() {
@@ -280,6 +282,18 @@
     if (sample.source && !isDemoSample && state.demoActive) {
       VD.clearDemoTelemetry();
       VD.setDemoActive(false);
+    }
+    const sampleCount = Number(sample.sampleCount);
+    const previousCount = Number(state.telemetry && state.telemetry.sampleCount);
+    if (
+      sample.source &&
+      !isDemoSample &&
+      Number.isFinite(sampleCount) &&
+      sampleCount > 0 &&
+      Number.isFinite(previousCount) &&
+      previousCount > sampleCount
+    ) {
+      resetTelemetry();
     }
     state.telemetry = { ...state.telemetry, ...sample };
     state.lastSampleAt = Date.now();

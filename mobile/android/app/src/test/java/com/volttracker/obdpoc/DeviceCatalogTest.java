@@ -1,11 +1,17 @@
 package com.volttracker.obdpoc;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import android.content.Context;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 
 /** Tests the OBD-adapter name heuristic in {@link DeviceCatalog}. */
+@RunWith(RobolectricTestRunner.class)
 public class DeviceCatalogTest {
 
     @Test
@@ -31,5 +37,16 @@ public class DeviceCatalogTest {
         assertFalse(DeviceCatalog.isLikelyObdName("Galaxy Buds"));
         assertFalse(DeviceCatalog.isLikelyObdName(""));
         assertFalse(DeviceCatalog.isLikelyObdName(null));
+    }
+
+    @Test
+    public void rememberRejectsInvalidBluetoothAddress() {
+        Context context = RuntimeEnvironment.getApplication();
+        DeviceCatalog catalog =
+                new DeviceCatalog(context, context.getSharedPreferences("device-catalog-test", 0));
+        context.getSharedPreferences("device-catalog-test", 0).edit().clear().commit();
+
+        assertEquals("", catalog.remember("not-a-mac", "Bad adapter"));
+        assertEquals("", catalog.lastAddress());
     }
 }

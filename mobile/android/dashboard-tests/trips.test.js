@@ -104,6 +104,63 @@ describe('panels.js — trip route rows', () => {
     expect(getTripRoute).toHaveBeenCalledTimes(1);
   });
 
+  it('retries an on-demand route miss instead of caching null forever', async () => {
+    const getTripRoute = vi
+      .fn()
+      .mockReturnValueOnce(JSON.stringify({ session: { id: 78 }, points: [] }))
+      .mockReturnValueOnce(JSON.stringify({
+        session: { id: 78 },
+        points: [
+          { lat: 32.70, lng: -117.16 },
+          { lat: 32.75, lng: -117.10 },
+        ],
+        pointCount: 2,
+        distanceMeters: 4200,
+      }));
+    await loadDashboard({ bridge: createVoltBridgeFixture({ getTripRoute }) });
+    const VD = window.VoltDashboard;
+    VD.state.storage = { recentRoutes: [] };
+    VD.state.trips = [{
+      id: 78,
+      startedAtMs: Date.now(),
+      durationMs: 500_000,
+      distanceMeters: 4200,
+      sampleCount: 200,
+      pointCount: 2,
+      hasRoute: true,
+    }];
+
+    VD.renderRealTrips();
+    expect(getTripRoute).toHaveBeenCalledTimes(1);
+
+    VD.renderRealTrips();
+    expect(getTripRoute).toHaveBeenCalledTimes(2);
+    expect(document.getElementById('realTripRouteBox').dataset.tripMap).toBe('78');
+  });
+
+  it('waits for enough power samples before marking route efficiency enriched', () => {
+    const VD = window.VoltDashboard;
+    const route = {
+      points: [
+        { atMs: 1, lat: 32.70, lng: -117.16, speedMps: 10 },
+        { atMs: 2, lat: 32.71, lng: -117.15, speedMps: 10 },
+      ],
+      powerTrack: [],
+    };
+
+    VD.enrichRouteEff(route);
+    expect(route._effDone).toBeUndefined();
+
+    route.powerTrack = [
+      { atMs: 1, powerKw: 8 },
+      { atMs: 2, powerKw: 9 },
+    ];
+    VD.enrichRouteEff(route);
+
+    expect(route._effDone).toBe(true);
+    expect(route.points.some((point) => Number.isFinite(point.eff))).toBe(true);
+  });
+
   it('uses split trip keys when loading and opening a route slice on the map', async () => {
     const splitId = '29:1780437013000:1780438133000';
     const getTripRoute = vi.fn(() => JSON.stringify({

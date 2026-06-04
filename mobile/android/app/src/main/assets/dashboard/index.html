@@ -527,6 +527,9 @@
         <button id="permissionBtn" type="button">Permissions</button>
         <button id="lastBtn" type="button">Last</button>
         <button id="scanBtn" type="button" class="scan">Scan</button>
+        <button id="tpmsScanBtn" type="button" data-action="tpmsScan">
+          Detail Probe
+        </button>
         <button id="disconnectBtn" type="button" class="danger">Stop</button>
       </div>
     </details>
@@ -1055,6 +1058,7 @@
       <button type="button" data-action="refresh">Refresh</button>
       <button type="button" data-action="last">Last</button>
       <button type="button" data-action="scan" class="scan">Scan</button>
+      <button type="button" data-action="tpmsScan">Detail Probe</button>
       <button type="button" data-action="connect" class="primary">
         Connect
       </button>
@@ -1250,6 +1254,115 @@
     Volt Tracker
   </p>
 </section>
+<section id="view-signals" class="view" data-view="signals">
+  <div class="map-sheet signal-sheet">
+    <div class="map-sheet-head">
+      <div>
+        <span class="kicker">Enhanced discovery</span>
+        <h2>Signals workspace</h2>
+      </div>
+      <span class="badge" data-state="scanning">
+        <span class="dot"></span><span>catalog</span>
+      </span>
+    </div>
+  </div>
+
+  <article id="enhancedCard" class="panel list-card signal-console">
+    <header class="signal-console-head">
+      <div>
+        <span class="kicker">Detailed signals</span>
+        <h3 id="enhancedTitle">No detailed signal results yet</h3>
+      </div>
+      <span id="enhancedBadge" class="status-copy">ready</span>
+    </header>
+
+    <div class="signal-stage-panel">
+      <div>
+        <span class="kicker">Probe mode</span>
+        <strong id="signalStageLabel">Tires</strong>
+        <small id="signalStageHint">
+          Narrow tire receiver candidates; avoids DTC and freeze-frame reads.
+        </small>
+      </div>
+      <div
+        id="signalStageBar"
+        class="map-layer-tabs signal-stage-tabs"
+        role="group"
+        aria-label="Detail Probe mode"
+      >
+        <button type="button" data-signal-stage="passive">
+          <span>Passive</span>
+        </button>
+        <button type="button" data-signal-stage="low-risk">
+          <span>Low-risk</span>
+        </button>
+        <button type="button" data-signal-stage="tires" class="is-active">
+          <span>Tires</span>
+        </button>
+        <button type="button" data-signal-stage="experimental">
+          <span>Experimental</span>
+        </button>
+      </div>
+      <div class="signal-stage-actions">
+        <button
+          id="detailProbeBtn"
+          type="button"
+          class="primary-action"
+          data-action="detailProbe"
+        >
+          Run probe
+        </button>
+        <button id="exportSignalLogsBtn" type="button" class="link-btn">
+          export logs
+        </button>
+      </div>
+    </div>
+
+    <div class="status-meta signal-kpis">
+      <div>
+        <span>Working</span><strong id="enhancedConfirmedCount">0</strong>
+      </div>
+      <div>
+        <span>No hit</span><strong id="enhancedRejectedCount">0</strong>
+      </div>
+      <div>
+        <span>Candidate</span><strong id="enhancedCandidateCount">0</strong>
+      </div>
+      <div>
+        <span>Deferred</span><strong id="enhancedDeferredCount">0</strong>
+      </div>
+    </div>
+
+    <div
+      id="enhancedFilterBar"
+      class="map-layer-tabs signal-filter-tabs"
+      role="group"
+      aria-label="Detailed signal filters"
+    >
+      <button type="button" data-signal-filter="all" class="is-active">
+        <span>All</span><b id="enhancedAllCount">0</b>
+      </button>
+      <button type="button" data-signal-filter="confirmed">
+        <span>Working</span><b id="enhancedWorkingTabCount">0</b>
+      </button>
+      <button type="button" data-signal-filter="candidate">
+        <span>Candidate</span><b id="enhancedCandidateTabCount">0</b>
+      </button>
+      <button type="button" data-signal-filter="rejected">
+        <span>No hit</span><b id="enhancedRejectedTabCount">0</b>
+      </button>
+      <button type="button" data-signal-filter="deferred">
+        <span>Deferred</span><b id="enhancedDeferredTabCount">0</b>
+      </button>
+      <button type="button" data-signal-filter="tpms">
+        <span>Tires</span><b id="enhancedTiresTabCount">0</b>
+      </button>
+    </div>
+
+    <div id="enhancedNextList" class="enhanced-next-list"></div>
+    <div id="enhancedCapabilityList" class="enhanced-capability-list"></div>
+  </article>
+</section>
 <!--
   Proactive adapter tools: test connection, send diagnostics, low-voltage hint,
   and notify-when-ready. Lives at the bottom of <main> but is declared as
@@ -1413,6 +1526,18 @@
               stroke-linecap="round"
             /></svg></i
         ><span>Diag</span>
+      </button>
+      <button type="button" data-nav="signals" aria-label="Detailed Signals">
+        <i
+          ><svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M4 6h4m4 0h8M4 12h10m4 0h2M4 18h6m4 0h6M8 4v4m6 8v4m4-10v4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            /></svg></i
+        ><span>Signals</span>
       </button>
     </nav>
 

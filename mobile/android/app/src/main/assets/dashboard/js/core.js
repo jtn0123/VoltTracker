@@ -245,6 +245,7 @@
     view: "drive",
     mode: "ev",
     selectedRealTripId: null,
+    signalProbeStage: "tires",
     lastDevice: null,
     deviceHistory: [],
     storage: {},
@@ -306,7 +307,8 @@
     map: ["GPS route", "Map"],
     charge: ["Real charging", "Charge"],
     insights: ["Vehicle health", "Insights"],
-    settings: ["OBD bridge", "Diagnostics"]
+    settings: ["OBD bridge", "Diagnostics"],
+    signals: ["Enhanced discovery", "Detailed Signals"]
   };
 
   /** @type {Record<string, string>} */
@@ -316,7 +318,8 @@
     map: "M15 4 9 2 3 4v18l6-2 6 2 6-2V2l-6 2zm-1 15-4-1.35V5l4 1.35V19z",
     charge: "M14 2v7h5l-9 13v-7H5l9-13z",
     insights: "M4 19h16v2H2V3h2v16zm3-2V9h3v8H7zm5 0V5h3v12h-3zm5 0v-6h3v6h-3z",
-    settings: "M12 2a3 3 0 0 1 3 3v1h2.2l1.1 1.9-1.6 1.6c.2.5.3 1 .3 1.5s-.1 1-.3 1.5l1.6 1.6-1.1 1.9H15v1a3 3 0 0 1-6 0v-1H6.8l-1.1-1.9 1.6-1.6A4.2 4.2 0 0 1 7 11c0-.5.1-1 .3-1.5L5.7 7.9 6.8 6H9V5a3 3 0 0 1 3-3zm0 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"
+    settings: "M12 2a3 3 0 0 1 3 3v1h2.2l1.1 1.9-1.6 1.6c.2.5.3 1 .3 1.5s-.1 1-.3 1.5l1.6 1.6-1.1 1.9H15v1a3 3 0 0 1-6 0v-1H6.8l-1.1-1.9 1.6-1.6A4.2 4.2 0 0 1 7 11c0-.5.1-1 .3-1.5L5.7 7.9 6.8 6H9V5a3 3 0 0 1 3-3zm0 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
+    signals: "M4 6h4m4 0h8M4 12h10m4 0h2M4 18h6m4 0h6M8 4v4m6 8v4m4-10v4"
   };
 
   function parsePayload(/** @type {any} */ payload, /** @type {any} */ fallback) {

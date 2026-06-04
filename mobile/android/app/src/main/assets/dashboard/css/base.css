@@ -212,6 +212,14 @@
       linear-gradient(145deg, rgba(255, 184, 74, 0.2), rgba(255, 122, 69, 0.08));
   }
 
+  body[data-active-view="signals"] .drive-title-mark {
+    border-color: rgba(53, 230, 160, 0.32);
+    color: #a9ffd7;
+    background:
+      radial-gradient(circle at 35% 20%, rgba(53, 230, 160, 0.26), transparent 38%),
+      linear-gradient(145deg, rgba(53, 230, 160, 0.15), rgba(255, 122, 69, 0.1));
+  }
+
   #screenKicker {
     display: none;
   }

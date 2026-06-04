@@ -101,8 +101,11 @@
   function renderMap() {
     const storage = state.storage || {};
     const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
-    if (!state.selectedMapSessionId && routes.length) {
-      state.selectedMapSessionId = (routes[0].session || {}).id || null;
+    if (routes.length) {
+      const selectedExists = routes.some((/** @type {any} */ route) =>
+        String((route.session || {}).id || "") === String(state.selectedMapSessionId || "")
+      );
+      if (!selectedExists) state.selectedMapSessionId = (routes[0].session || {}).id || null;
     }
     const route = selectedMapRoute(storage);
     const points = Array.isArray(route.points) ? route.points : [];
@@ -269,7 +272,9 @@
       }
     });
     if (!hasRoute) return;
-    const latlngs = points.map((/** @type {any} */ p) => [Number(p.lat), Number(p.lng)]);
+    const drawable = points.filter(isValidRoutePoint);
+    if (drawable.length < 2) return;
+    const latlngs = drawable.map((/** @type {any} */ p) => [Number(p.lat), Number(p.lng)]);
 
     mapLayerGroups.routes = L.layerGroup([
       L.polyline(latlngs, { color: "#ff7a45", weight: 9, opacity: 0.16 }),
@@ -280,8 +285,8 @@
 
     /** @type {Record<string, any[]>} */
     const bands = { "#ff6b4a": [], "#ffd23f": [], "#7ee06a": [] };
-    for (let i = 1; i < points.length; i += 1) {
-      const speed = segmentSpeedMps(points[i - 1], points[i]);
+    for (let i = 1; i < drawable.length; i += 1) {
+      const speed = segmentSpeedMps(drawable[i - 1], drawable[i]);
       const color = speed < 8 ? "#ff6b4a" : (speed < 18 ? "#ffd23f" : "#7ee06a");
       bands[color].push([latlngs[i - 1], latlngs[i]]);
     }
@@ -295,7 +300,7 @@
     mapLayerGroups.stops = L.layerGroup([
       L.polyline(latlngs, { color: "#ff7a45", weight: 2.5, opacity: 0.4 })
     ]);
-    const stops = detectStops(points).slice(0, 20);
+    const stops = detectStops(drawable).slice(0, 20);
     stops.forEach((stop) => {
       const radius = Math.min(13, 7 + stop.durationMs / 120000);
       L.circleMarker([stop.lat, stop.lng], {
@@ -308,8 +313,8 @@
     // can tell which portions of the drive lack derived efficiency.
     /** @type {Record<string, any[]>} */
     const effBands = {};
-    for (let i = 1; i < points.length; i += 1) {
-      const color = mapEffColor(Number(points[i].eff));
+    for (let i = 1; i < drawable.length; i += 1) {
+      const color = mapEffColor(Number(drawable[i].eff));
       (effBands[color] = effBands[color] || []).push([latlngs[i - 1], latlngs[i]]);
     }
     mapLayerGroups.eff = L.layerGroup();
@@ -326,11 +331,30 @@
 
     (mapLayerGroups[layer] || mapLayerGroups.routes).addTo(map);
 
-    const fitKey = `${(routeSession || {}).id || ""}:${points.length}`;
+    const fitKey = routeFitKey(routeSession, drawable);
     if (fitKey !== mapFitKey) {
       map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
       mapFitKey = fitKey;
     }
+  }
+
+  function isValidRoutePoint(/** @type {any} */ point) {
+    const lat = Number(point && point.lat);
+    const lng = Number(point && point.lng);
+    return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  }
+
+  function routeFitKey(/** @type {any} */ routeSession, /** @type {any[]} */ points) {
+    const first = points[0] || {};
+    const last = points[points.length - 1] || {};
+    return [
+      (routeSession || {}).id || "",
+      points.length,
+      Number(first.lat).toFixed(5),
+      Number(first.lng).toFixed(5),
+      Number(last.lat).toFixed(5),
+      Number(last.lng).toFixed(5)
+    ].join(":");
   }
 
   function renderMapSessionList(/** @type {any} */ routes) {
@@ -368,7 +392,10 @@
   function selectedMapRoute(/** @type {any} */ storage) {
     const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
     if (routes.length) {
-      return routes.find((/** @type {any} */ route) => String((route.session || {}).id || "") === String(state.selectedMapSessionId || "")) || routes[0];
+      const selected = routes.find((/** @type {any} */ route) => String((route.session || {}).id || "") === String(state.selectedMapSessionId || ""));
+      if (selected) return selected;
+      state.selectedMapSessionId = (routes[0].session || {}).id || null;
+      return routes[0];
     }
     return storage.latestRoute || {};
   }

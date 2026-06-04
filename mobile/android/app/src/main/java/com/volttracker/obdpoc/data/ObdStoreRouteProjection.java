@@ -65,21 +65,28 @@ final class ObdStoreRouteProjection {
     static JSONArray recentRoutes(SQLiteDatabase db, int sessionLimit, int pointLimit)
             throws JSONException {
         JSONArray payload = new JSONArray();
-        for (ObdSessionRecord session : getRecentSessions(db, sessionLimit)) {
-            JSONArray points = routePointsForSessionJson(db, session.id, pointLimit);
-            if (points.length() < 2) {
+        for (ObdSessionRecord session : getRecentSessions(db, Math.max(100, sessionLimit))) {
+            if (!ObdLocalStore.MODE_OBD.equals(session.mode)) {
                 continue;
             }
-            JSONObject route = new JSONObject();
-            route.put("session", sessionToJson(session));
-            route.put("points", points);
-            route.put("pointCount", points.length());
-            route.put("distanceMeters", distanceMeters(points));
-            route.put("bounds", boundsFor(points));
-            route.put("socTrack", socTrackForSessionJson(db, session.id, pointLimit, null, null));
-            route.put(
-                    "powerTrack", powerTrackForSessionJson(db, session.id, pointLimit, null, null));
-            payload.put(route);
+            for (DriveWindowDetector.DriveWindow window :
+                    DriveWindowDetector.windowsForSession(db, session)) {
+                JSONObject route =
+                        routeForSession(
+                                db,
+                                session,
+                                pointLimit,
+                                window.startedAtMs,
+                                window.endedAtMs,
+                                window.routeKey());
+                if (route.optJSONArray("points").length() < 2) {
+                    continue;
+                }
+                payload.put(route);
+                if (payload.length() >= sessionLimit) {
+                    return payload;
+                }
+            }
         }
         return payload;
     }
@@ -113,13 +120,13 @@ final class ObdStoreRouteProjection {
                         ? "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ?"
                         : "session_id = ?";
 
-        long total =
+        long locationTotal =
                 countRowsWhere(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, sessionWhere, sessionArg);
         String telemetryWhere =
                 sessionWhere + " AND latitude IS NOT NULL AND longitude IS NOT NULL";
         long telemetryTotal =
                 countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, telemetryWhere, sessionArg);
-        if (total > 0) {
+        if (locationTotal > 0 && locationTotal >= telemetryTotal) {
             JSONArray locationPoints =
                     downsampledRoutePoints(
                             db,
@@ -135,7 +142,7 @@ final class ObdStoreRouteProjection {
                             },
                             sessionWhere,
                             sessionArg,
-                            total,
+                            locationTotal,
                             target,
                             /* fromLocationSamples= */ true);
             if (locationPoints.length() >= 2 || telemetryTotal == 0) {

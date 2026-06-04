@@ -333,6 +333,11 @@ public class MainActivity extends ComponentActivity {
 
     @SuppressLint("MissingPermission")
     void startObdService(String action, String address, String name) {
+        startObdService(action, address, name, null);
+    }
+
+    @SuppressLint("MissingPermission")
+    void startObdService(String action, String address, String name, String detailStage) {
         if (!permissionGate.ensureConnectPermissions()) {
             publishStatus("blocked", "Grant Bluetooth permission, then connect again.", true);
             return;
@@ -373,6 +378,9 @@ public class MainActivity extends ComponentActivity {
         }
         if (name != null) {
             service.putExtra(ObdService.EXTRA_NAME, name);
+        }
+        if (detailStage != null) {
+            service.putExtra(ObdService.EXTRA_DETAIL_STAGE, detailStage);
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(service);

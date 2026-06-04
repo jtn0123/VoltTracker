@@ -81,10 +81,27 @@
     // Guard the bridge call so a quick double-tap doesn't issue two
     // overlapping connect/scan invocations against the adapter.
     withBusy(button, () => {
-      bridge.rememberDevice(selected.address, selected.name);
       if (scan && typeof bridge.scan === "function") bridge.scan(selected.address, selected.name);
       else bridge.connect(selected.address, selected.name);
     });
+  }
+
+  function tpmsScanSelected(/** @type {any} */ button) {
+    detailProbeSelected(button);
+  }
+
+  function detailProbeSelected(/** @type {any} */ button) {
+    const selected = VD.getSelectedDevice();
+    if (!selected) {
+      VD.setStatus({ state: "blocked", detail: "Pick a paired or remembered OBD adapter first." });
+      return;
+    }
+    if (!bridge || typeof bridge.detailProbe !== "function") {
+      VD.setStatus({ state: "blocked", detail: "Detail Probe is only available inside the Android app." });
+      return;
+    }
+    const stage = String(state.signalProbeStage || "tires");
+    withBusy(button, () => bridge.detailProbe(selected.address, selected.name, stage));
   }
 
   function handleAction(/** @type {any} */ action, /** @type {any} */ button) {
@@ -99,6 +116,8 @@
     if (action === "restoreEncrypted") restoreEncryptedBackup(button);
     if (action === "last") bridge && bridge.connectLast();
     if (action === "scan") connectSelected(true, button);
+    if (action === "tpmsScan") tpmsScanSelected(button);
+    if (action === "detailProbe") detailProbeSelected(button);
     if (action === "connect") connectSelected(false, button);
     if (action === "demo") startDemo();
     if (action === "stopDemo") stopDemo();
@@ -245,7 +264,6 @@
     // wipe is still propagating.
     withBusy(button, () => {
       bridge.clearStoredData();
-      setTimeout(refreshStorage, 250);
     });
   }
 
@@ -329,6 +347,68 @@
     }
   }
 
+  function writeClipboard(/** @type {any} */ text) {
+    const nav = window.navigator;
+    if (nav.clipboard && typeof nav.clipboard.writeText === "function") {
+      return nav.clipboard.writeText(String(text));
+    }
+    const area = document.createElement("textarea");
+    area.value = String(text);
+    area.setAttribute("readonly", "true");
+    area.style.position = "fixed";
+    area.style.left = "-9999px";
+    document.body.append(area);
+    area.select();
+    try {
+      document.execCommand("copy");
+    } finally {
+      area.remove();
+    }
+    return Promise.resolve();
+  }
+
+  function exportSignalLog(/** @type {any} */ id) {
+    if (!bridge || typeof bridge.exportDetailedSignalLog !== "function") {
+      VD.setStatus({ state: "blocked", detail: "Signal log export is only available inside the Android app." });
+      return;
+    }
+    const result = bridge.exportDetailedSignalLog(String(id || ""));
+    const parsed = VD.parsePayload(result, {});
+    if (parsed.ok === false) {
+      VD.setStatus({ state: "blocked", detail: parsed.message || "Signal log export failed." });
+      return;
+    }
+    writeClipboard(JSON.stringify(parsed, null, 2))
+      .then(() => VD.setStatus({ state: "ready", detail: "Detailed signal log copied." }))
+      .catch(() => VD.setStatus({ state: "blocked", detail: "Could not copy detailed signal log." }));
+  }
+
+  function exportSignalLogs() {
+    if (!bridge || typeof bridge.exportDetailedSignalLogs !== "function") {
+      VD.setStatus({ state: "blocked", detail: "Signal log export is only available inside the Android app." });
+      return;
+    }
+    const result = bridge.exportDetailedSignalLogs();
+    const parsed = VD.parsePayload(result, {});
+    if (parsed.ok === false) {
+      VD.setStatus({ state: "blocked", detail: parsed.message || "Signal log export failed." });
+      return;
+    }
+    writeClipboard(JSON.stringify(parsed, null, 2))
+      .then(() => VD.setStatus({ state: "ready", detail: "Detailed signal logs copied." }))
+      .catch(() => VD.setStatus({ state: "blocked", detail: "Could not copy detailed signal logs." }));
+  }
+
+  function deleteSignalLog(/** @type {any} */ id) {
+    if (!bridge || typeof bridge.deleteDetailedSignalLog !== "function") {
+      VD.setStatus({ state: "blocked", detail: "Signal log cleanup is only available inside the Android app." });
+      return;
+    }
+    const ok = window.confirm("Delete this saved detailed signal evidence row?");
+    if (!ok) return;
+    bridge.deleteDetailedSignalLog(String(id || ""));
+  }
+
   function runBrowserDemo() {
     let t = 0;
     VD.setStatus({ state: "connected", detail: "Browser-only demo is running." });
@@ -379,6 +459,9 @@
     "[role='button']",
     "[data-nav]",
     "[data-action]",
+    "[data-signal-stage]",
+    "[data-signal-export]",
+    "[data-signal-delete]",
     "[data-map-layer]",
     "[data-real-trip-id]",
     "[data-trip-map]",
@@ -498,6 +581,16 @@
     }, opts);
     document.addEventListener("click", (event) => {
       const target = /** @type {Element | null} */ (event.target);
+      const signalExport = target && target.closest("[data-signal-export]");
+      if (signalExport) {
+        exportSignalLog(/** @type {HTMLElement} */ (signalExport).dataset.signalExport);
+        return;
+      }
+      const signalDelete = target && target.closest("[data-signal-delete]");
+      if (signalDelete) {
+        deleteSignalLog(/** @type {HTMLElement} */ (signalDelete).dataset.signalDelete);
+        return;
+      }
       const realTripButton = target && target.closest("[data-real-trip-id]");
       if (realTripButton) {
         if (typeof VD.selectRealTrip === "function") {
@@ -534,6 +627,8 @@
     VD.bindListenerGuarded("refreshBtn", "click", () => handleAction("refresh"), opts);
     VD.bindListenerGuarded("lastBtn", "click", () => handleAction("last"), opts);
     VD.bindListenerGuarded("scanBtn", "click", (event) => handleAction("scan", event.currentTarget), opts);
+    VD.bindListenerGuarded("tpmsScanBtn", "click", (event) => handleAction("tpmsScan", event.currentTarget), opts);
+    VD.bindListenerGuarded("exportSignalLogsBtn", "click", exportSignalLogs, opts);
     VD.bindListenerGuarded("connectBtn", "click", (event) => {
       const btn = el("connectBtn");
       const action = (btn && btn.dataset.primaryAction) || "connect";
@@ -557,6 +652,8 @@
   VD.actions = {
     refreshDevices,
     connectSelected,
+    tpmsScanSelected,
+    detailProbeSelected,
     handleAction,
     startDemo,
     stopDemo,
@@ -568,6 +665,9 @@
     restoreBackup,
     restoreEncryptedBackup,
     exportDebugBundle,
+    exportSignalLog,
+    exportSignalLogs,
+    deleteSignalLog,
     runBrowserDemo,
     previewDtcCodes,
     clearPreviewDtcCodes,
@@ -576,6 +676,8 @@
   Object.assign(VD, {
     refreshDevices,
     connectSelected,
+    tpmsScanSelected,
+    detailProbeSelected,
     handleAction,
     startDemo,
     stopDemo,
@@ -587,6 +689,9 @@
     restoreBackup,
     restoreEncryptedBackup,
     exportDebugBundle,
+    exportSignalLog,
+    exportSignalLogs,
+    deleteSignalLog,
     runBrowserDemo,
     previewDtcCodes,
     clearPreviewDtcCodes

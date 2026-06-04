@@ -361,6 +361,39 @@ public class ObdPollingEngineTest {
                 fake.commandLog.isEmpty());
     }
 
+    @Test
+    public void tpmsScanOnlyRunsTpmsDiscoveryCommands() throws Exception {
+        fake.defaultResponse = ">";
+        fake.responses.put("0100", "41 00 00 00 00 00>");
+        fake.responses.put("ATRV", "13.8V\r>");
+        fake.responses.put("22248E", "7F2231\r>");
+        fake.responses.put("224051", "NO DATA\r>");
+
+        openSession();
+        runEngineUntilFinished(() -> engine.runTpmsScanLoop("AA:BB:CC:DD:EE:FF"));
+
+        assertTrue("TPMS 7E0 header must be selected", fake.commandLog.contains("ATSH7E0"));
+        assertTrue("TPMS receiver header must be selected", fake.commandLog.contains("ATSH760"));
+        assertTrue(
+                "known 7E0 TPMS candidate must be probed",
+                fake.commandLog.contains(ObdProbes.TPMS_7E0_DISCOVERY_PROBES[0]));
+        assertTrue(
+                "known 760 TPMS candidate must be probed",
+                fake.commandLog.contains(ObdProbes.TPMS_760_DISCOVERY_PROBES[0]));
+        assertFalse("TPMS-only scan must not read stored DTCs", fake.commandLog.contains("03"));
+        assertFalse("TPMS-only scan must not read pending DTCs", fake.commandLog.contains("07"));
+        assertFalse("TPMS-only scan must not read permanent DTCs", fake.commandLog.contains("0A"));
+        assertFalse(
+                "TPMS-only scan must not read freeze-frame index",
+                fake.commandLog.contains("0200"));
+        assertFalse(
+                "TPMS-only scan must not cycle CAN protocol 6", fake.commandLog.contains("ATSP6"));
+        assertFalse(
+                "TPMS-only scan must not cycle CAN protocol 7", fake.commandLog.contains("ATSP7"));
+        assertFalse(
+                "TPMS-only scan must not cycle CAN protocol 8", fake.commandLog.contains("ATSP8"));
+    }
+
     // ---- Mode-01 multi-PID batching (probe + per-cycle batch + per-adapter fallback) ----
 
     @Test
@@ -368,7 +401,7 @@ public class ObdPollingEngineTest {
         fake.defaultResponse = ">";
         fake.responses.put("0100", "41 00 00 00 00 00>");
         fake.responses.put("010D0C", "41 0D 28 41 0C 0F A0\r>");
-        fake.responses.put("010D0C041149", "41 0D 28 41 0C 0F A0 41 04 80 41 11 33 41 49 7F\r>");
+        fake.responses.put("010D0C49", "41 0D 28 41 0C 0F A0 41 49 7F\r>");
         fake.afterCommand("ATSH7DF", () -> service.running.set(false));
 
         openSession();
@@ -380,20 +413,51 @@ public class ObdPollingEngineTest {
     }
 
     @Test
-    public void supportedAdapterPollsTier1AsOneBatchedCommand() throws Exception {
+    public void liveConnectReadsVinDuringInit() throws Exception {
         fake.defaultResponse = ">";
         fake.responses.put("0100", "41 00 00 00 00 00>");
-        // Probe returns both PIDs -> batching is supported for the session.
-        fake.responses.put("010D0C", "41 0D 28 41 0C 0F A0\r>");
-        fake.responses.put("010D0C041149", "41 0D 28 41 0C 0F A0 41 04 80 41 11 33 41 49 7F\r>");
+        fake.responses.put("0902", mode09VinResponse("1G1ZD5ST8JF202020"));
         fake.afterCommand("ATSH7DF", () -> service.running.set(false));
 
         openSession();
         runEngineUntilFinished(() -> engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false));
 
         assertTrue(
-                "Tier-1 PIDs must be polled as one batched command when the adapter supports it",
-                fake.commandLog.contains("010D0C041149"));
+                "live init must request VIN via Mode 09 PID 02", fake.commandLog.contains("0902"));
+        assertEquals("…2020", engine.redactedVin());
+    }
+
+    @Test
+    public void liveConnectSkipsVinProbeWhenVehicleIsAlreadyStored() throws Exception {
+        fake.defaultResponse = ">";
+        fake.responses.put("0100", "41 00 00 00 00 00>");
+        fake.afterCommand("ATSH7DF", () -> service.running.set(false));
+        service.localStore.upsertVehicleFromVin("1G1ZD5ST8JF202020");
+
+        openSession();
+        runEngineUntilFinished(() -> engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false));
+
+        assertFalse(
+                "stored vehicle identity should skip another 0902 VIN probe",
+                fake.commandLog.contains("0902"));
+        assertEquals("…2020", engine.redactedVin());
+    }
+
+    @Test
+    public void supportedAdapterPollsHotLaneAsOneBatchedCommand() throws Exception {
+        fake.defaultResponse = ">";
+        fake.responses.put("0100", "41 00 00 00 00 00>");
+        // Probe returns both PIDs -> batching is supported for the session.
+        fake.responses.put("010D0C", "41 0D 28 41 0C 0F A0\r>");
+        fake.responses.put("010D0C49", "41 0D 28 41 0C 0F A0 41 49 7F\r>");
+        fake.afterCommand("ATSH7DF", () -> service.running.set(false));
+
+        openSession();
+        runEngineUntilFinished(() -> engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false));
+
+        assertTrue(
+                "hot-lane PIDs must be polled as one batched command when the adapter supports it",
+                fake.commandLog.contains("010D0C49"));
         assertFalse(
                 "a batched cycle must not also send the individual speed PID",
                 fake.commandLog.contains("010D"));
@@ -416,8 +480,7 @@ public class ObdPollingEngineTest {
         runEngineUntilFinished(() -> engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false));
 
         assertFalse(
-                "an incomplete probe must disable batching",
-                fake.commandLog.contains("010D0C041149"));
+                "an incomplete probe must disable batching", fake.commandLog.contains("010D0C49"));
         assertTrue("fallback must poll speed per-PID", fake.commandLog.contains("010D"));
         assertTrue("fallback must poll RPM per-PID", fake.commandLog.contains("010C"));
     }
@@ -450,6 +513,14 @@ public class ObdPollingEngineTest {
                 fail("engine worker did not exit within " + ENGINE_JOIN_TIMEOUT_MS + " ms");
             }
         }
+    }
+
+    private static String mode09VinResponse(String vin) {
+        StringBuilder hex = new StringBuilder("490201");
+        for (char c : vin.toCharArray()) {
+            hex.append(String.format("%02X", (int) c));
+        }
+        return hex.append("\r>").toString();
     }
 
     /**

@@ -6,6 +6,25 @@
   const state = VD.state;
   const bridge = VD.bridge;
   const el = VD.el;
+  let enhancedSignalFilter = "all";
+  const signalStageMeta = {
+    passive: {
+      label: "Passive",
+      hint: "Only logs adapter state and passive targets; no active enhanced PID requests."
+    },
+    "low-risk": {
+      label: "Low-risk",
+      hint: "Standard optional and known low-risk enhanced reads; avoids DTC and freeze-frame reads."
+    },
+    tires: {
+      label: "Tires",
+      hint: "Narrow tire receiver candidates; avoids DTC and freeze-frame reads."
+    },
+    experimental: {
+      label: "Experimental",
+      hint: "Higher-value enhanced candidates with cooldowns; keep this for short controlled tests."
+    }
+  };
 
   function isNativeError(/** @type {any} */ payload) {
     return payload && typeof payload === "object" && payload.ok === false && payload.error;
@@ -97,6 +116,7 @@
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     const list = el("dbSessionList");
     updateDiagnosticCodeUi();
+    updateEnhancedCapabilityUi();
     if (!recent.length) {
       list.replaceChildren(buildStatusCopy("Connect or scan to create local SQLite rows. Preview data stays isolated in the sandbox."));
       updateReviewUi();
@@ -171,6 +191,202 @@
       return;
     }
     list.replaceChildren(...codes.map((/** @type {number} */ c) => buildDtcItem(c, false)));
+  }
+
+  function enhancedCapabilityStatus(/** @type {any} */ capability) {
+    const sample = capability && typeof capability.sample === "object" ? capability.sample : {};
+    const lane = String(sample.pollLane || capability.pollLane || "").toLowerCase();
+    if (lane === "passive") return "deferred";
+    if (capability.supported === true) return "confirmed";
+    if (capability.supported === false && Number(capability.responseCount || 0) <= 0) return "rejected";
+    const validation = String(sample.validationStatus || capability.validationStatus || "").toLowerCase();
+    if (validation === "confirmed") return "confirmed";
+    if (validation === "rejected_on_this_vehicle") return "rejected";
+    return "candidate";
+  }
+
+  function updateEnhancedCapabilityUi() {
+    const storage = state.storage || {};
+    const rows = detailedSignalRows(storage);
+    const counts = rows.reduce((/** @type {any} */ tally, /** @type {any} */ row) => {
+      const status = row._status;
+      tally[status] = (tally[status] || 0) + 1;
+      const category = String(row.category || (row.sample || {}).category || "").toLowerCase();
+      if (category === "tpms") tally.tpms = (tally.tpms || 0) + 1;
+      return tally;
+    }, { confirmed: 0, rejected: 0, candidate: 0, deferred: 0, tpms: 0 });
+    const total = rows.length || Number(storage.fieldCapabilityCount || 0);
+    const list = el("enhancedCapabilityList");
+    VD.setText("enhancedTitle", total ? `${total} detailed signal${total === 1 ? "" : "s"} tracked` : "No detailed signal results yet");
+    VD.setText("enhancedBadge", counts.confirmed ? "working data" : total ? "evidence saved" : "ready");
+    VD.setText("enhancedConfirmedCount", counts.confirmed || 0);
+    VD.setText("enhancedRejectedCount", counts.rejected || 0);
+    VD.setText("enhancedCandidateCount", counts.candidate || 0);
+    VD.setText("enhancedDeferredCount", counts.deferred || 0);
+    VD.setText("enhancedAllCount", total);
+    VD.setText("enhancedWorkingTabCount", counts.confirmed || 0);
+    VD.setText("enhancedCandidateTabCount", counts.candidate || 0);
+    VD.setText("enhancedRejectedTabCount", counts.rejected || 0);
+    VD.setText("enhancedDeferredTabCount", counts.deferred || 0);
+    VD.setText("enhancedTiresTabCount", counts.tpms || 0);
+    updateSignalStageUi(rows);
+    updateEnhancedFilterButtons();
+    updateEnhancedNextList(rows);
+    if (!list) return;
+    if (!rows.length) {
+      list.replaceChildren(buildStatusCopy("Run Scan or Detail Probe once to collect detailed signal evidence."));
+      return;
+    }
+    const visible = rows.filter((/** @type {any} */ row) => matchesEnhancedFilter(row));
+    if (!visible.length) {
+      list.replaceChildren(buildStatusCopy("No detailed signals match this filter yet."));
+      return;
+    }
+    list.replaceChildren(...visible.slice(0, 18).map(buildEnhancedCapabilityRow));
+  }
+
+  function detailedSignalRows(/** @type {any} */ storage) {
+    const capabilities = Array.isArray(storage.enhancedCapabilities) ? storage.enhancedCapabilities : [];
+    const catalog = Array.isArray(storage.detailedSignalCatalog) ? storage.detailedSignalCatalog : [];
+    const evidenceByKey = new Map();
+    capabilities.forEach((/** @type {any} */ capability) => {
+      evidenceByKey.set(signalKey(capability), capability);
+    });
+    const rows = catalog.map((/** @type {any} */ profile) => {
+      const evidence = evidenceByKey.get(signalKey(profile));
+      if (evidence) evidenceByKey.delete(signalKey(profile));
+      const merged = { ...profile, ...(evidence || {}) };
+      merged._hasEvidence = Boolean(evidence);
+      merged._status = evidence ? enhancedCapabilityStatus(merged) : catalogSignalStatus(profile);
+      return merged;
+    });
+    evidenceByKey.forEach((/** @type {any} */ evidence) => {
+      rows.push({ ...evidence, _hasEvidence: true, _status: enhancedCapabilityStatus(evidence) });
+    });
+    return rows;
+  }
+
+  function signalKey(/** @type {any} */ item) {
+    return `${String(item.header || "").toUpperCase()}|${String(item.command || item.pid || "").toUpperCase()}`;
+  }
+
+  function catalogSignalStatus(/** @type {any} */ profile) {
+    const lane = String(profile.pollLane || "").toLowerCase();
+    if (lane === "passive") return "deferred";
+    const validation = String(profile.validationStatus || "").toLowerCase();
+    if (validation === "confirmed") return "confirmed";
+    if (validation === "rejected_on_this_vehicle") return "rejected";
+    return "candidate";
+  }
+
+  function matchesEnhancedFilter(/** @type {any} */ row) {
+    if (enhancedSignalFilter === "all") return true;
+    if (enhancedSignalFilter === "tpms") {
+      return String(row.category || (row.sample || {}).category || "").toLowerCase() === "tpms";
+    }
+    return row._status === enhancedSignalFilter;
+  }
+
+  function updateEnhancedFilterButtons() {
+    const bar = el("enhancedFilterBar");
+    if (!bar) return;
+    bar.querySelectorAll("[data-signal-filter]").forEach((/** @type {any} */ button) => {
+      button.classList.toggle("is-active", button.dataset.signalFilter === enhancedSignalFilter);
+    });
+  }
+
+  function updateEnhancedNextList(/** @type {any[]} */ rows) {
+    const list = el("enhancedNextList");
+    if (!list) return;
+    const stage = state.signalProbeStage || "tires";
+    const next = rows
+      .filter((row) => row._status === "candidate" && !row._hasEvidence)
+      .filter((row) => String(row.scanStage || (row.sample || {}).scanStage || "tires") === stage)
+      .slice(0, 3);
+    if (!next.length) {
+      list.replaceChildren(buildStatusCopy("No fresh catalog candidates are waiting in this probe mode."));
+      return;
+    }
+    list.replaceChildren(...next.map(buildEnhancedNextItem));
+  }
+
+  function buildEnhancedNextItem(/** @type {any} */ row) {
+    const item = document.createElement("article");
+    item.className = "enhanced-next-item";
+    const strong = document.createElement("strong");
+    strong.textContent = row.name || row.command || "Detailed signal";
+    const small = document.createElement("small");
+    small.textContent = [row.category || "catalog", row.pollLane || "probe", row.header || "standard"].filter(Boolean).join(" - ");
+    item.append(strong, small);
+    return item;
+  }
+
+  function updateSignalStageUi(/** @type {any[]} */ rows) {
+    const stage = String(state.signalProbeStage || "tires");
+    const meta = /** @type {Record<string, {label: string, hint: string}>} */ (signalStageMeta)[stage] || signalStageMeta.tires;
+    VD.setText("signalStageLabel", meta.label);
+    VD.setText("signalStageHint", meta.hint);
+    const bar = el("signalStageBar");
+    if (bar) {
+      bar.querySelectorAll("[data-signal-stage]").forEach((/** @type {any} */ button) => {
+        button.classList.toggle("is-active", button.dataset.signalStage === stage);
+      });
+    }
+    const count = rows.filter((row) => String(row.scanStage || (row.sample || {}).scanStage || "") === stage).length;
+    const button = /** @type {HTMLButtonElement | null} */ (el("detailProbeBtn"));
+    if (button) {
+      button.textContent = count ? `Run ${meta.label} (${count})` : `Run ${meta.label}`;
+    }
+  }
+
+  function buildEnhancedCapabilityRow(/** @type {any} */ capability) {
+    const row = document.createElement("article");
+    row.className = "enhanced-capability-item";
+    row.dataset.status = capability._status || enhancedCapabilityStatus(capability);
+    const center = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = capability.name || capability.pid || capability.command || "Enhanced PID";
+    const small = document.createElement("small");
+    const sample = capability && typeof capability.sample === "object" ? capability.sample : {};
+    const pieces = [
+      capability.category || sample.category || "catalog",
+      capability.scanStage || sample.scanStage || "probe",
+      capability.risk || sample.risk || "",
+      capability.header || "no header",
+      capability.command || capability.pid || "no command",
+      capability._hasEvidence && capability.lastSeenMs ? VD.formatWhen(capability.lastSeenMs) : "not tried",
+      sample.rawResponse || capability.notes || capability.source || ""
+    ].filter(Boolean);
+    small.textContent = pieces.join(" - ");
+    center.append(strong, small);
+    const status = document.createElement("b");
+    status.textContent = enhancedStatusLabel(capability._status || enhancedCapabilityStatus(capability));
+    row.append(center, status);
+    if (capability._hasEvidence && capability.id) {
+      const actions = document.createElement("span");
+      actions.className = "signal-log-actions";
+      const exportBtn = document.createElement("button");
+      exportBtn.type = "button";
+      exportBtn.className = "icon-link-btn";
+      exportBtn.dataset.signalExport = String(capability.id);
+      exportBtn.title = "Export this log";
+      exportBtn.textContent = "export";
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "icon-link-btn danger";
+      deleteBtn.dataset.signalDelete = String(capability.id);
+      deleteBtn.title = "Delete this saved evidence row";
+      deleteBtn.textContent = "delete";
+      actions.append(exportBtn, deleteBtn);
+      row.append(actions);
+    }
+    return row;
+  }
+
+  function enhancedStatusLabel(/** @type {string} */ status) {
+    if (status === "confirmed") return "working";
+    if (status === "rejected") return "no hit";
+    return status || "candidate";
   }
 
   function buildDtcEmptyState() {
@@ -621,7 +837,12 @@
       trip.pointCount || 0,
       trip.sampleCount || 0,
       trip.startedAtMs || 0,
-      trip.distanceMeters || 0
+      trip.endedAtMs || 0,
+      trip.durationMs || 0,
+      trip.distanceMeters || 0,
+      trip.avgMovingSpeedKph || 0,
+      trip.status || "",
+      trip.adapterName || ""
     ].join(":")).join("|");
   }
 
@@ -688,7 +909,8 @@
   }
 
   // Routes loaded on demand (per selected trip) for drives outside the storage summary's
-  // recent-routes window. Keyed by trip id; a cached null means "asked the bridge, no route".
+  // recent-routes window. Successful routes are cached; misses are retried on future renders so a
+  // route that arrives after a storage refresh is not hidden forever.
   const onDemandRoutes = new Map();
 
   function routeForTrip(/** @type {any} */ trip) {
@@ -701,7 +923,7 @@
       (/** @type {any} */ route) => String((route.session || {}).id || "") === id
     );
     if (fromRecent) return fromRecent;
-    return onDemandRoutes.has(id) ? onDemandRoutes.get(id) : null;
+    return onDemandRoutes.get(id) || null;
   }
 
   function tripRouteKey(/** @type {any} */ trip) {
@@ -717,7 +939,6 @@
     const id = tripRouteKey(trip);
     const cached = routeForTrip(trip);
     if (cached) return cached;
-    if (onDemandRoutes.has(id)) return onDemandRoutes.get(id);
     if (!(bridge && typeof bridge.getTripRoute === "function")) return null;
     let route = null;
     try {
@@ -729,7 +950,7 @@
     } catch (_err) {
       route = null;
     }
-    onDemandRoutes.set(id, route);
+    if (route) onDemandRoutes.set(id, route);
     return route;
   }
 
@@ -1109,12 +1330,12 @@
 
   function enrichRouteEff(/** @type {any} */ route) {
     if (!route || route._effDone) return;
-    route._effDone = true;
     const pts = route.points || [];
     const track = (route.powerTrack || []).filter((/** @type {any} */ s) =>
       Number.isFinite(Number(s.powerKw))
     );
     if (pts.length < 2 || track.length < 2) return;
+    route._effDone = true;
     const powerAt = (/** @type {number} */ atMs) => {
       if (atMs <= track[0].atMs) return Number(track[0].powerKw);
       const last = track[track.length - 1];
@@ -1344,6 +1565,30 @@
     renderInsightScatter,
     enrichRouteEff
   });
+
+  (function bindEnhancedSignalFilters() {
+    const bar = el("enhancedFilterBar");
+    if (!bar) return;
+    bar.addEventListener("click", (event) => {
+      const target = /** @type {any} */ (event.target);
+      const button = /** @type {HTMLElement | null} */ (target ? target.closest("[data-signal-filter]") : null);
+      if (!button) return;
+      enhancedSignalFilter = button.dataset.signalFilter || "all";
+      updateEnhancedCapabilityUi();
+    });
+  })();
+
+  (function bindSignalStages() {
+    const bar = el("signalStageBar");
+    if (!bar) return;
+    bar.addEventListener("click", (event) => {
+      const target = /** @type {any} */ (event.target);
+      const button = /** @type {HTMLElement | null} */ (target ? target.closest("[data-signal-stage]") : null);
+      if (!button) return;
+      state.signalProbeStage = button.dataset.signalStage || "tires";
+      updateEnhancedCapabilityUi();
+    });
+  })();
 
   // Retry-cancel button in the error banner. Wired here instead of in
   // actions.js so the surgical addition stays inside the panels file the

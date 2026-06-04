@@ -49,6 +49,8 @@ public final class StorageSummaryJson {
             payload.put("chargeSummary", copy(record.chargeSummary));
             payload.put("batterySummary", copy(record.batterySummary));
             payload.put("latestVehicle", copy(record.latestVehicle));
+            payload.put("enhancedCapabilities", copy(record.enhancedCapabilities));
+            payload.put("detailedSignalCatalog", EnhancedPidProfiles.catalogJson());
         } catch (JSONException ignored) {
             // Static keys and already-normalized local values are safe.
         }

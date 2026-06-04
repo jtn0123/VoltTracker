@@ -42,6 +42,7 @@ import org.json.JSONObject;
 public class ObdService extends Service {
     public static final String ACTION_CONNECT = "com.volttracker.obdpoc.action.CONNECT";
     public static final String ACTION_SCAN = "com.volttracker.obdpoc.action.SCAN";
+    public static final String ACTION_TPMS_SCAN = "com.volttracker.obdpoc.action.TPMS_SCAN";
     public static final String ACTION_CLEAR_DTC = "com.volttracker.obdpoc.action.CLEAR_DTC";
     public static final String ACTION_DEMO = "com.volttracker.obdpoc.action.DEMO";
     public static final String ACTION_DISCONNECT = "com.volttracker.obdpoc.action.DISCONNECT";
@@ -57,6 +58,7 @@ public class ObdService extends Service {
     public static final String EXTRA_ADDRESS = "address";
     public static final String EXTRA_NAME = "name";
     public static final String EXTRA_JSON = "json";
+    public static final String EXTRA_DETAIL_STAGE = "detail_stage";
     private static final AtomicBoolean SESSION_ACTIVE = new AtomicBoolean(false);
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -278,6 +280,12 @@ public class ObdService extends Service {
             startObdSession(address, true);
             return START_STICKY;
         }
+        if (ACTION_TPMS_SCAN.equals(action)) {
+            String address = intent.getStringExtra(EXTRA_ADDRESS);
+            activeName = adapterNameFrom(intent);
+            startTpmsScanSession(address, intent.getStringExtra(EXTRA_DETAIL_STAGE));
+            return START_STICKY;
+        }
         if (ACTION_CLEAR_DTC.equals(action)) {
             String address = intent.getStringExtra(EXTRA_ADDRESS);
             activeName = adapterNameFrom(intent);
@@ -341,6 +349,22 @@ public class ObdService extends Service {
                         true,
                         true,
                         () -> engine.runBluetoothLoop(address, scanMode)));
+    }
+
+    private void startTpmsScanSession(String address, String stage) {
+        String normalizedStage = EnhancedPidProfiles.normalizeStage(stage);
+        startSession(
+                new SessionStartRequest(
+                        "tpms-scan",
+                        address,
+                        "Detail Probe (" + normalizedStage + ") on " + activeName,
+                        SessionStateMachine.Phase.SCANNING,
+                        "Starting detailed signal probe.",
+                        "detail-probe:" + normalizedStage,
+                        true,
+                        true,
+                        false,
+                        () -> engine.runDetailProbeLoop(address, normalizedStage)));
     }
 
     private void startClearDtcSession(String address) {
@@ -420,7 +444,16 @@ public class ObdService extends Service {
         }
         running.set(true);
         SESSION_ACTIVE.set(true);
-        activeTask = executor.submit(() -> runSessionTask(token, request.runner));
+        try {
+            activeTask = executor.submit(() -> runSessionTask(token, request.runner));
+        } catch (RuntimeException ex) {
+            Log.w(MainActivity.TAG, "session task submit failed", ex);
+            broadcastStatus("error", "Could not start the OBD logging worker.", true);
+            stopCurrentSession(null);
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);
+            foregroundServiceActive = false;
+            stopSelf();
+        }
     }
 
     private void runSessionTask(long token, Runnable runner) {
