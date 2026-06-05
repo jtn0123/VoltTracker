@@ -16,7 +16,8 @@
   },
   "include": [
     "dashboard-globals.d.ts",
-    "../app/src/main/dashboard-src/js/**/*.js"
+    "../app/src/main/dashboard-src/js/**/*.js",
+    "../app/src/main/dashboard-src/js/**/*.ts"
   ],
   "exclude": ["../app/src/main/assets/dashboard/lib/**"]
 }

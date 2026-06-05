@@ -1,9 +1,39 @@
-// @ts-check
-(function () {
-  "use strict";
+type DemoTrip = {
+  id: number;
+  label: string;
+  date: string;
+  miles: number;
+  mins: number;
+  efficiency: string;
+  mode: "ev" | "gas" | "mixed";
+  wh: number;
+};
 
-  window.VoltDashboardDemoData = function voltDashboardDemoData() {
-    return {
+type DemoSession = {
+  date: string;
+  type: string;
+  kwh: number;
+  soc: string;
+  location: string;
+  cost: string;
+};
+
+type DemoInsight = {
+  kind: "good" | "warn" | "info";
+  icon: string;
+  title: string;
+  body: string;
+};
+
+type DemoDashboardData = {
+  trips: DemoTrip[];
+  sessions: DemoSession[];
+  hourly: number[];
+  insights: DemoInsight[];
+};
+
+export function voltDashboardDemoData(): DemoDashboardData {
+  return {
       trips: [
         { id: 8421, label: "Home -> Office", date: "Apr 30 - 08:14", miles: 18.4, mins: 28, efficiency: "4.1 mi/kWh", mode: "ev", wh: 241 },
         { id: 8420, label: "Office -> Trader Joe's", date: "Apr 29 - 17:42", miles: 6.1, mins: 14, efficiency: "3.9 mi/kWh", mode: "ev", wh: 256 },
@@ -27,5 +57,6 @@
         { kind: "good", icon: "EV", title: "Tahoe trip MPG within 4% of route avg", body: "Apr 28's 184 mile roundtrip hit 41.7 MPG for that elevation profile." }
       ]
     };
-  };
-})();
+}
+
+window.VoltDashboardDemoData = voltDashboardDemoData;

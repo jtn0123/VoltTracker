@@ -234,7 +234,7 @@ declare global {
     VoltTrackerAndroid?: VoltBridge;
     /** Test seam: lets the Vitest harness intercept lazy script loads. */
     __VoltDashboardLoadScript?: (src: string) => unknown;
-    /** Demo telemetry fixture factory (demo-data.js). */
+    /** Demo telemetry fixture factory (demo-data.ts source, shipped as demo-data.js). */
     VoltDashboardDemoData?: (() => any) | any;
     /** Interval handle for the demo-preview ticker (actions.js). */
     __voltDemoTimer?: ReturnType<typeof setInterval> | null;

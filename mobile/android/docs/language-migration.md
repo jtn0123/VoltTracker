@@ -15,7 +15,7 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 > | Kotlin files converted | 22 | 0 | 1 (BackupController) | K0–K3 done (5 of 6 K3; BackupController stays Java) |
 > | Kotlin waves complete | K0–K3 | — | K4 (deferred) | K3 done except untested BackupController |
 > | Dashboard JS type-safety | checkJs + full `strict` ✅ | — | full TS (T2) | max checking, zero build |
-> | Dashboard build step | esbuild bundle ✅ (T2a) | — | `.ts` modules (T2b) | source in `dashboard-src/js`, built `app.js` shipped |
+> | Dashboard build step | esbuild bundle ✅ (T2a) | T2b canary | `.ts` modules | source in `dashboard-src/js`, built `app.js` shipped |
 
 **Status legend:** `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` won't do / deferred indefinitely.
 
@@ -51,6 +51,40 @@ communicate only across the WebView bridge (a string/JSON ABI, not a code bounda
   Spotless/ktlint already targets it). Don't rewrite passing Java tests.
 - Dashboard: tests stay `.js` at State 0/1; they become `.ts` only if/when the source
   migrates to TS in Wave T2 (Vitest + Playwright run TS natively once esbuild is in play).
+
+## Conversion ownership map
+
+Use this map before converting a file. The goal is modernizing the codebase without
+turning stable runtime plumbing into language-only churn.
+
+### TypeScript-owned files
+All first-party dashboard behavior under `app/src/main/dashboard-src/js/` should move to
+`.ts` modules during Wave T2b. The emitted WebView assets remain classic `.js` files in
+`app/src/main/assets/dashboard/js/`; source filenames and shipped filenames intentionally
+diverge.
+
+| Status | Files |
+|---|---|
+| Converted | `demo-data.ts`, `connection-tools.ts`, `connection-status.ts`, `dtc-causes.ts`, `dtc-lookup.ts` |
+| Next low/medium risk | `drive.js`, `troubleshooter.js`, `scrubber.js` |
+| Next higher risk | `telemetry.js`, `map.js` |
+| Leave until late | `core.js`, `actions.js`, `panels.js` |
+
+### Kotlin-owned files
+New Android app code should be Kotlin. Existing Java should convert only when the file has a
+clear test safety net or is already being substantially reworked. Good future Kotlin
+candidates are small, tested helpers/payload utilities such as `ConnectionFailureClassifier`,
+`BluetoothStateReporter`, `DeviceCatalog`, `DiagnosticsShareIntent`, `PermissionGate`,
+`RollingAppLog`, `WebViewBootstrap`, `SpeedPlausibilityFilter`, `StorageSummaryJson`,
+`AppStateJson`, `DiagnosticCodeReport`, and narrowly-scoped `ObdStore*` helpers when their
+database tests cover the behavior.
+
+### Java-for-now files
+These files are intentionally not Kotlin targets for a language-only pass:
+`MainActivity.java`, `VoltBridge.java`, `ObdService.java`, `ObdPollingEngine.java`,
+`SessionRecorder.java`, `ObdProtocol.java`, and `BackupController.java`. Convert them only
+during a real refactor with focused tests, because they own UI lifecycle, WebView bridge ABI,
+threads, Bluetooth/service control, session persistence, or destructive backup/restore flows.
 
 ---
 
@@ -263,12 +297,18 @@ existing IIFE files bundle as-is, which is lower-risk and immediately useful.
 - [x] Verified locally: `npm run build`, Vitest 122/122, **Playwright e2e 30/30 against the bundle**,
       `assembleDebug` (preBuild builds + packages the bundle), budget, spotless, typecheck, lint
 
-### Wave T2b — Convert source to `.ts` ES modules (future)
+### Wave T2b — Convert source to `.ts` ES modules `[~]`
 Now that a bundler is in place, files can migrate from IIFE + `window.VoltDashboard` to real
 `.ts` with `import`/`export`, one at a time (esbuild bundles mixed IIFE/module). End state: drop
 the global-namespace shim; types replace the `dashboard-globals.d.ts` ambient declarations.
-- [ ] Migrate files incrementally to `.ts` modules; keep the public API attached to
+- [~] Migrate files incrementally to `.ts` modules; keep the public API attached to
       `window.VoltDashboard` for the native bridge ABI until all consumers are modules
+      - [x] `demo-data.js` -> `demo-data.ts` canary: real exported function, typed fixture rows,
+            still shipped/lazy-loaded as `js/demo-data.js`
+      - [x] `connection-tools.js` / `connection-status.js` -> `.ts`: typed DOM/bridge helpers
+            and status observer while preserving eager bundle order
+      - [x] `dtc-causes.js` / `dtc-lookup.js` -> `.ts`: lazy DTC data/lookup modules still
+            build to classic `js/dtc-causes.js` and `js/dtc-lookup.js`
 - [ ] (Optional) source maps for on-device debugging, with a `*.map` packaging exclude
 - [ ] (Optional, T3) debug-only WebView → vite dev server hook for on-device live reload
 
@@ -301,3 +341,6 @@ the global-namespace shim; types replace the `dashboard-globals.d.ts` ambient de
 | 2026-06-04 | Added `noImplicitReturns` + `noFallthroughCasesInSwitch` (both 0 errors — free guards against missing returns / switch fallthrough). `noUncheckedIndexedAccess` measured at 56 errors (map.js/scrubber.js/core.js) — deferred as low-ROI defensive churn; revisit if those files are reworked. |
 | 2026-06-04 | Wave T2a landed: esbuild build pipeline. JS source moved to `dashboard-src/js`; eager files bundle into a single classic-IIFE `app.js` + lazy chunks; output gitignored, built by Gradle `buildDashboardJs` in preBuild. Kept IIFE source (no `.ts` rewrite yet — that's T2b) for low risk. Minification → core 240 KB / DTC 273 KB (big budget headroom). Verified: build, Vitest 122, **Playwright 30 against the bundle**, assembleDebug, budget, spotless, typecheck, lint. CI: Node added to APK jobs + build steps to dashboard jobs. |
 | 2026-06-04 | Audited all 56 `noUncheckedIndexedAccess` sites as a bug hunt: every one is provably-safe — `core.js` relies on the guaranteed `realViewMeta.drive` fallback, `map.js` 505-560 is `buildSampleRoute` over hardcoded `SAMPLE_ROUTE` slices with bounded loop indices, `scrubber.js` `scrubSampleAt` is only called after a `scrubData.length` check. No real bugs found → flag stays off (would be 56 assertion-churn sites + permanent friction for zero caught bugs). Whole branch validated locally: Android unit/lint/coverage, dashboard typecheck/ESLint/Vitest(121), and **Playwright e2e (30 passed)**. |
+| 2026-06-04 | T2b takeover canary: dashboard build/test tooling now accepts mixed `.js`/`.ts` source and `demo-data` moved to a real `.ts` module with typed fixture rows. The public lazy asset remains `js/demo-data.js`, preserving the WebView/native contract while proving esbuild, Vitest, `tsc`, and ESLint all understand the next migration shape. |
+| 2026-06-05 | T2b small eager-module slice: `connection-tools` and `connection-status` moved to `.ts` modules. They keep the same bundle order and public behavior, but bridge calls, recent-session parsing, low-voltage status rendering, and the `setStatus` observer now use explicit TS annotations instead of JSDoc comments. |
+| 2026-06-05 | T2b lazy-data slice: `dtc-causes` and `dtc-lookup` moved to `.ts` modules. The big curated tables stayed structurally unchanged; the wrapper now uses TS signatures and still emits the same lazy classic script filenames for the WebView. |

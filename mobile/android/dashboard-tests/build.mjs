@@ -16,7 +16,7 @@
 //   core.js) keep their own filenames so the existing loadDashboardScript() paths
 //   resolve unchanged.
 import { build } from "esbuild";
-import { mkdirSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -49,6 +49,14 @@ const EAGER = [
 
 const LAZY = ["dtc-lookup", "dtc-causes", "demo-data"];
 
+function sourceFor(name) {
+  for (const ext of [".ts", ".js"]) {
+    const file = `${SRC}/${name}${ext}`;
+    if (existsSync(file)) return file;
+  }
+  throw new Error(`Missing dashboard source for ${name}`);
+}
+
 const shared = {
   bundle: true,
   format: "iife",
@@ -69,7 +77,7 @@ const shared = {
 await build({
   ...shared,
   stdin: {
-    contents: EAGER.map((n) => `import "${SRC}/${n}.js";`).join("\n"),
+    contents: EAGER.map((n) => `import "${sourceFor(n)}";`).join("\n"),
     resolveDir: SRC,
     sourcefile: "_eager-entry.js",
   },
@@ -80,7 +88,7 @@ await build({
 for (const name of LAZY) {
   await build({
     ...shared,
-    entryPoints: [`${SRC}/${name}.js`],
+    entryPoints: [sourceFor(name)],
     outfile: `${OUT}/${name}.js`,
   });
 }
