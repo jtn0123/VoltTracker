@@ -31,7 +31,7 @@ public class BluetoothStateReporterTest {
         }
 
         @Override
-        boolean trigger(String address) {
+        public boolean trigger(String address) {
             triggered.add(address == null ? "" : address);
             return true;
         }

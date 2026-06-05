@@ -12,8 +12,8 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 76 | 0 | K4 staged core | K0–K3 + K5–K9 done; lifecycle/service core remains |
-> | Kotlin waves complete | K0–K3, K5–K9 | — | K4 staged behind tests | large stateful core converts only with focused coverage |
+> | Kotlin files converted | 86 | 0 | K4 staged core | K0–K3 + K5–K10 done; lifecycle/service core remains |
+> | Kotlin waves complete | K0–K3, K5–K10 | — | K4 staged behind tests | large stateful core converts only with focused coverage |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
 
@@ -82,9 +82,10 @@ database tests cover the behavior.
 ### Java-for-now files
 These files are intentionally not Kotlin targets for a language-only pass:
 `MainActivity.java`, `VoltBridge.java`, `ObdService.java`, `ObdPollingEngine.java`,
-`SessionRecorder.java`, `ObdProtocol.java`, and `BackupController.java`. Convert them only
-during a real refactor with focused tests, because they own UI lifecycle, WebView bridge ABI,
-threads, Bluetooth/service control, session persistence, or destructive backup/restore flows.
+`SessionRecorder.java`, `ObdProtocol.java`, `BackupController.java`, `DataBackup.java`,
+and `TroubleshooterBridge.java`. Convert them only during a real refactor with focused tests,
+because they own UI lifecycle, WebView bridge ABI, threads, Bluetooth/service control,
+session persistence, or destructive backup/restore flows.
 
 ---
 
@@ -303,6 +304,32 @@ and the detail-probe runner.
 | [x] | `DemoPollingLoop.kt` | synthetic demo telemetry loop |
 | [x] | `TpmsDiscoveryRunner.kt` | staged detail-probe runner |
 
+### Wave K10 — Data facade, store projections, and typed runtime seams ✅ done
+Converted ten more files, favoring helpers with direct DB/runtime test coverage and avoiding
+the still-large service/activity/bridge classes. This wave moved the local-store facade and
+schema helper into Kotlin, which gives the remaining Java callers typed constants and helper
+contracts without changing the SQLite or WebView wire formats.
+
+| # | File | Notes |
+|---|---|---|
+| [x] | `SdpProbe.kt` | SDP retry/cooldown helper; `open` Java test seam and default constants preserved |
+| [x] | `SessionHealthTracker.kt` | session health JSON enricher; synchronized IO-lock behavior preserved |
+| [x] | `ObdPersistenceWorker.kt` | bounded async persistence queues; lifecycle/telemetry rejection behavior preserved |
+| [x] | `data/ObdStoreSupport.kt` | shared DB/query/JSON helpers; static Java call surface preserved |
+| [x] | `data/ObdStoreRouteProjection.kt` | route projection/downsampling helper |
+| [x] | `data/ObdLocalStore.kt` | main store facade; interface overrides preserved for Java/Kotlin callers |
+| [x] | `data/ObdStoreTrips.kt` | trips/insights read model and rollup cache helper |
+| [x] | `data/ObdStoreSessionReview.kt` | diagnostic session-review projection and warnings |
+| [x] | `data/VoltTrackerDb.kt` | SQLiteOpenHelper, table constants, and migration transaction wrapper |
+| [x] | `LiveSampleReader.kt` | live telemetry sample builder; Java-facing `SampleContext` interop preserved |
+
+Remaining Java after K10: **13 files**.
+
+| Bucket | Files | Next action |
+|---|---|---|
+| Data helpers still reasonable | `data/DatabaseMerger.java`, `data/ObdStoreReports.java`, `data/ObdStoreWriter.java`, `data/VoltTrackerSchema.java` | Convert one or two at a time with DB/migration focused tests. Watch Kotlin public signatures that expose helper-only types. |
+| Runtime/lifecycle late-stage | `MainActivity.java`, `ObdService.java`, `ObdPollingEngine.java`, `SessionRecorder.java`, `ObdProtocol.java`, `VoltBridge.java`, `TroubleshooterBridge.java`, `BackupController.java`, `DataBackup.java` | Convert only as part of a behavior refactor or after adding focused seams/tests; these own lifecycle, threads, bridge ABI, protocol parsing, or destructive restore paths. |
+
 ---
 
 # Part B — TypeScript / dashboard build
@@ -468,3 +495,4 @@ namespace shim with explicit imports after the runtime surface is fully modeled.
 | 2026-06-05 | T2b map slice: `map` moved to a `.ts` module. Leaflet remains a runtime global for the WebView; local types now cover route points, stop rows, demo route options, live breadcrumb coordinates, and route/session helper signatures. |
 | 2026-06-05 | T2b core slice: `core` moved to a `.ts` module while keeping the `VoltDashboard` namespace and lazy classic script paths intact. Types now cover the bootstrap data bag, demo-data callbacks, history devices, guarded listeners, DOM setters, and lazy DTC/demo script promises. |
 | 2026-06-05 | T2b actions slice: `actions` moved to a `.ts` module while preserving the `VoltTrackerNative` callback ABI. Types now cover bridge-command buttons, busy cooldowns, clear-DTC focus state, signal export/delete IDs, page drag-scroll state, delegated click handlers, and demo timer wiring. |
+| 2026-06-05 | Wave K10 landed: converted 10 more Android helpers (`SdpProbe`, `SessionHealthTracker`, `ObdPersistenceWorker`, `LiveSampleReader`, `ObdLocalStore`, `ObdStoreSupport`, `ObdStoreTrips`, `ObdStoreRouteProjection`, `ObdStoreSessionReview`, `VoltTrackerDb`). Java main files now 13, Kotlin 86. Remaining reasonable data targets are `DatabaseMerger`, `ObdStoreReports`, `ObdStoreWriter`, and `VoltTrackerSchema`; service/activity/bridge/restore flows stay late-stage. |
