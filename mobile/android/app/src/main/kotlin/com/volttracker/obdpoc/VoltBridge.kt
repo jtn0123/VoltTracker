@@ -25,11 +25,11 @@ class VoltBridge(
     }
 
     @JavascriptInterface
-    fun listDevices(): String = activity.deviceCatalog.getBondedDevicesJson()
+    fun listDevices(): String = activity.requireDeviceCatalog().getBondedDevicesJson()
 
     @JavascriptInterface
     fun requestPermissions() {
-        activity.runOnUiThread(activity.permissionGate::ensureGranted)
+        activity.runOnUiThread(activity.requirePermissionGate()::ensureGranted)
     }
 
     @JavascriptInterface
@@ -102,40 +102,41 @@ class VoltBridge(
     }
 
     @JavascriptInterface
-    fun getLastDevice(): String = activity.deviceCatalog.getLastDeviceJson()
+    fun getLastDevice(): String = activity.requireDeviceCatalog().getLastDeviceJson()
 
     @JavascriptInterface
-    fun getDeviceHistory(): String = activity.deviceCatalog.getDeviceHistoryJson()
+    fun getDeviceHistory(): String = activity.requireDeviceCatalog().getDeviceHistoryJson()
 
     @JavascriptInterface
     fun getStorageSummary(): String = activity.getStorageSummaryJson()
 
     @JavascriptInterface
-    fun exportDebugBundle(): String = activity.dataBackup.exportDebugBundle(activity.getAppStateJson(), activity.getStorageSummaryJson())
+    fun exportDebugBundle(): String =
+        activity.requireDataBackup().exportDebugBundle(activity.getAppStateJson(), activity.getStorageSummaryJson())
 
     @JavascriptInterface
     fun shareBackup() {
-        activity.runOnUiThread(activity.backupController::launchShare)
+        activity.runOnUiThread(activity.requireBackupController()::launchShare)
     }
 
     @JavascriptInterface
     fun shareEncryptedBackup(passphrase: String?) {
         val cleanPassphrase = safe(passphrase, MAX_PASSPHRASE_LEN)
         activity.runOnUiThread {
-            activity.backupController.launchEncryptedShare(cleanPassphrase)
+            activity.requireBackupController().launchEncryptedShare(cleanPassphrase)
         }
     }
 
     @JavascriptInterface
     fun restoreBackup() {
-        activity.runOnUiThread(activity.backupController::launchRestorePicker)
+        activity.runOnUiThread(activity.requireBackupController()::launchRestorePicker)
     }
 
     @JavascriptInterface
     fun restoreEncryptedBackup(passphrase: String?) {
         val cleanPassphrase = safe(passphrase, MAX_PASSPHRASE_LEN)
         activity.runOnUiThread {
-            activity.backupController.launchEncryptedRestorePicker(cleanPassphrase)
+            activity.requireBackupController().launchEncryptedRestorePicker(cleanPassphrase)
         }
     }
 
@@ -196,7 +197,7 @@ class VoltBridge(
 
     @JavascriptInterface
     fun connectLast() {
-        val device = activity.deviceCatalog.getLastOrCandidateDevice()
+        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
         val address = safe(device.optString("address", ""), MAX_ADDRESS_LEN)
         val name = safe(device.optString("name", ""), MAX_NAME_LEN)
         activity.runOnUiThread {
@@ -211,7 +212,7 @@ class VoltBridge(
 
     @JavascriptInterface
     fun clearVehicleDtcCodes() {
-        val device = activity.deviceCatalog.getLastOrCandidateDevice()
+        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
         val address = safe(device.optString("address", ""), MAX_ADDRESS_LEN)
         val name = safe(device.optString("name", ""), MAX_NAME_LEN)
         activity.runOnUiThread {
@@ -244,7 +245,7 @@ class VoltBridge(
 
     @JavascriptInterface
     fun scanLast() {
-        val device = activity.deviceCatalog.getLastOrCandidateDevice()
+        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
         val address = safe(device.optString("address", ""), MAX_ADDRESS_LEN)
         val name = safe(device.optString("name", ""), MAX_NAME_LEN)
         activity.runOnUiThread {
@@ -264,7 +265,7 @@ class VoltBridge(
 
     @JavascriptInterface
     fun detailProbeLast(stage: String?) {
-        val device = activity.deviceCatalog.getLastOrCandidateDevice()
+        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
         val address = safe(device.optString("address", ""), MAX_ADDRESS_LEN)
         val name = safe(device.optString("name", ""), MAX_NAME_LEN)
         val cleanStage = EnhancedPidProfiles.normalizeStage(safe(stage, MAX_STAGE_LEN))
@@ -281,18 +282,20 @@ class VoltBridge(
     @JavascriptInterface
     fun exportDetailedSignalLog(id: String?): String {
         val rowId = parsePositiveId(id)
-        if (rowId <= 0L || activity.localStore == null) {
+        val store = activity.localStore
+        if (rowId <= 0L || store == null) {
             return "{\"ok\":false,\"error\":\"invalid_id\",\"message\":\"Choose a saved detailed signal log.\"}"
         }
-        return activity.localStore.getEnhancedCapabilityExportJson(rowId).toString()
+        return store.getEnhancedCapabilityExportJson(rowId).toString()
     }
 
     @JavascriptInterface
     fun exportDetailedSignalLogs(): String {
-        if (activity.localStore == null) {
+        val store = activity.localStore
+        if (store == null) {
             return "{\"ok\":false,\"error\":\"storage_unavailable\",\"message\":\"Local storage is not ready.\"}"
         }
-        return activity.localStore.getEnhancedCapabilitiesExportJson(250).toString()
+        return store.getEnhancedCapabilitiesExportJson(250).toString()
     }
 
     @JavascriptInterface
@@ -394,7 +397,7 @@ class VoltBridge(
 
     @JavascriptInterface
     fun tryReconnectNow() {
-        val device = activity.deviceCatalog.getLastOrCandidateDevice()
+        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
         val address = safe(device.optString("address", ""), MAX_ADDRESS_LEN)
         val name = safe(device.optString("name", ""), MAX_NAME_LEN)
         activity.runOnUiThread {

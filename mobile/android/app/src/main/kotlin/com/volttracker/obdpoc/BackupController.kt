@@ -270,13 +270,14 @@ class BackupController(
 
     private fun applyMerge(staged: File): MergeOutcome {
         try {
-            if (activity.localStore == null) {
+            val store = activity.localStore
+            if (store == null) {
                 return MergeOutcome(RestoreResult.OTHER, null)
             }
             if (!stopLoggingForRestore()) {
                 return MergeOutcome(RestoreResult.LOGGING_ACTIVE, null)
             }
-            val merged = activity.localStore.mergeFrom(staged)
+            val merged = store.mergeFrom(staged)
             if (!merged.ok) {
                 return MergeOutcome(RestoreResult.OTHER, merged.summary())
             }
@@ -296,9 +297,10 @@ class BackupController(
             if (!stopLoggingForRestore()) {
                 return RestoreResult.LOGGING_ACTIVE
             }
-            if (activity.localStore != null) {
-                activity.localStore.checkpoint()
-                activity.localStore.close()
+            val activeStore = activity.localStore
+            if (activeStore != null) {
+                activeStore.checkpoint()
+                activeStore.close()
                 activity.localStore = null
             }
             restoreTemp = File(dbFile.path + ".restore-new")

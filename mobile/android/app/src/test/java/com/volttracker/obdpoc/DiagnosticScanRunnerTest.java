@@ -55,17 +55,17 @@ public class DiagnosticScanRunnerTest {
         }
 
         @Override
-        void broadcastTelemetry(JSONObject payload) {
+        public void broadcastTelemetry(JSONObject payload) {
             telemetry = payload;
         }
 
         @Override
-        void broadcastStatus(String state, String detail, boolean blocked) {
+        public void broadcastStatus(String state, String detail, boolean blocked) {
             statuses.add(state);
         }
 
         @Override
-        void updateNotification(String text) {
+        public void updateNotification(String text) {
             notifications.add(text);
         }
 
@@ -90,7 +90,7 @@ public class DiagnosticScanRunnerTest {
         }
 
         @Override
-        String sendRecoverableCommand(String command, long timeoutMs) throws IOException {
+        public String sendRecoverableCommand(String command, long timeoutMs) throws IOException {
             commands.add(command);
             return "OK>";
         }

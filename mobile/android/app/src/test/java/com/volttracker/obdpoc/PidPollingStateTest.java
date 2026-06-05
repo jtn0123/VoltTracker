@@ -254,13 +254,13 @@ public class PidPollingStateTest {
         }
 
         @Override
-        String sendRecoverableCommand(String command, long timeoutMs) {
+        public String sendRecoverableCommand(String command, long timeoutMs) {
             commandLog.add(command);
             return responses.getOrDefault(command, ">");
         }
 
         @Override
-        String sendCommand(String command, long timeoutMs) {
+        public String sendCommand(String command, long timeoutMs) {
             commandLog.add(command);
             return responses.getOrDefault(command, ">");
         }

@@ -203,7 +203,7 @@ class TroubleshooterBridge(
      * Start a one-shot probe session against the last-known adapter and schedule a stop.
      */
     fun startTestConnection() {
-        val device = activity.deviceCatalog.getLastOrCandidateDevice()
+        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
         val address = device.optString("address", "")
         val name = device.optString("name", "Test connection")
         if (address.isEmpty()) {

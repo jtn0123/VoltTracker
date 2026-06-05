@@ -205,23 +205,23 @@ public class BackupControllerDialogTest {
         }
 
         @Override
-        boolean isLoggingActive() {
+        public boolean isLoggingActive() {
             return false;
         }
 
         @Override
-        void publishStatus(String state, String detail, boolean blocked) {
+        public void publishStatus(String state, String detail, boolean blocked) {
             lastState = state;
             lastDetail = detail;
         }
 
         @Override
-        void publishDeviceList() {
+        public void publishDeviceList() {
             // No WebView in the harness.
         }
 
         @Override
-        void publishStorageSummary() {
+        public void publishStorageSummary() {
             // No WebView in the harness.
         }
     }

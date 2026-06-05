@@ -107,10 +107,10 @@ public class PermissionGateTest {
         }
 
         @Override
-        void publishDeviceList() {}
+        public void publishDeviceList() {}
 
         @Override
-        void publishStatus(String state, String detail, boolean blocked) {
+        public void publishStatus(String state, String detail, boolean blocked) {
             lastState = state;
             lastDetail = detail;
         }

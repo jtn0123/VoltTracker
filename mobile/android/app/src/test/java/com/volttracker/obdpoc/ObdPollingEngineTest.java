@@ -546,12 +546,12 @@ public class ObdPollingEngineTest {
         }
 
         @Override
-        boolean isBluetoothReady() {
+        public boolean isBluetoothReady() {
             return true; // bypass the real BluetoothAdapter — see file-level javadoc
         }
 
         @Override
-        void openBluetoothSocket(String address) throws IOException {
+        public void openBluetoothSocket(String address) throws IOException {
             int n = openCount.incrementAndGet();
             // Record the active session id on the first reconnect (the second open) so the
             // mid-session-drop test can assert that the session id did NOT change.

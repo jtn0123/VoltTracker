@@ -89,18 +89,18 @@ public class ClearDtcRunnerTest {
         }
 
         @Override
-        void broadcastTelemetry(JSONObject payload) {
+        public void broadcastTelemetry(JSONObject payload) {
             telemetry = payload;
         }
 
         @Override
-        void broadcastStatus(String state, String detail, boolean blocked) {
+        public void broadcastStatus(String state, String detail, boolean blocked) {
             statuses.add(state);
             details.add(detail);
         }
 
         @Override
-        void updateNotification(String text) {
+        public void updateNotification(String text) {
             notifications.add(text);
         }
 
@@ -132,7 +132,7 @@ public class ClearDtcRunnerTest {
         }
 
         @Override
-        String sendRecoverableCommand(String command, long timeoutMs) throws IOException {
+        public String sendRecoverableCommand(String command, long timeoutMs) throws IOException {
             this.command = command;
             this.timeoutMs = timeoutMs;
             return response;

@@ -102,18 +102,18 @@ public class BackupControllerLifecycleTest {
         }
 
         @Override
-        boolean isLoggingActive() {
+        public boolean isLoggingActive() {
             return loggingActive;
         }
 
         @Override
-        void publishStatus(String state, String detail, boolean blocked) {
+        public void publishStatus(String state, String detail, boolean blocked) {
             lastState = state;
             lastDetail = detail;
         }
 
         @Override
-        void launchRestoreFilePicker(Intent intent) {
+        public void launchRestoreFilePicker(Intent intent) {
             launchedRestoreIntent = intent;
         }
 
