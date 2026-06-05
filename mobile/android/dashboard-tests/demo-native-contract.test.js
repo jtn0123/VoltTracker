@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -14,28 +14,38 @@ import { loadDashboard } from './setup/load-dashboard.js';
 // fiction; if it drops a load-bearing field, dogfooding silently stops covering
 // a real surface.
 //
-// Rather than hand-copy the native shape (which rots), this test reads the Java
+// Rather than hand-copy the native shape (which rots), this test reads the native
 // emitters at run time and extracts their `.put("key", …)` literals. The
 // contract is therefore always whatever the source of truth currently emits —
-// add a key in Java and this test starts requiring the demo to stay a subset of
+// add a key in Java/Kotlin and this test starts requiring the demo to stay a subset of
 // it; rename an emitter and the locator below fails loudly instead of passing
 // vacuously.
 const JAVA_ROOT = resolve('../app/src/main/java/com/volttracker/obdpoc');
+const KOTLIN_ROOT = resolve('../app/src/main/kotlin/com/volttracker/obdpoc');
 
-function readJava(relPath) {
-  return readFileSync(resolve(JAVA_ROOT, relPath), 'utf8');
+function readNativeSource(relPath) {
+  const candidates = [resolve(JAVA_ROOT, relPath)];
+  if (relPath.endsWith('.java')) {
+    candidates.push(resolve(KOTLIN_ROOT, relPath.replace(/\.java$/, '.kt')));
+  }
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return readFileSync(candidate, 'utf8');
+  }
+  throw new Error(`contract: could not locate native source for ${relPath}`);
 }
 
-// Captures one Java method body by brace-matching from a unique signature
+// Captures one native method body by brace-matching from a unique signature
 // fragment. Throws if the fragment isn't found or the braces never balance, so
 // a refactor that moves/renames an emitter surfaces as a hard failure here.
 function methodBody(src, signatureFragment) {
-  const start = src.indexOf(signatureFragment);
+  const fragments = Array.isArray(signatureFragment) ? signatureFragment : [signatureFragment];
+  const fragment = fragments.find((entry) => src.includes(entry));
+  const start = fragment ? src.indexOf(fragment) : -1;
   if (start === -1) {
-    throw new Error(`contract: could not locate method "${signatureFragment}" — did the Java emitter move/rename?`);
+    throw new Error(`contract: could not locate method "${fragments.join(' or ')}" — did the native emitter move/rename?`);
   }
   const open = src.indexOf('{', start);
-  if (open === -1) throw new Error(`contract: no body brace after "${signatureFragment}"`);
+  if (open === -1) throw new Error(`contract: no body brace after "${fragment}"`);
   let depth = 0;
   for (let i = open; i < src.length; i += 1) {
     if (src[i] === '{') depth += 1;
@@ -44,7 +54,7 @@ function methodBody(src, signatureFragment) {
       if (depth === 0) return src.slice(open + 1, i);
     }
   }
-  throw new Error(`contract: unbalanced braces for "${signatureFragment}"`);
+  throw new Error(`contract: unbalanced braces for "${fragment}"`);
 }
 
 // All distinct string-literal keys passed to `.put("…", …)` in a method body.
@@ -62,33 +72,33 @@ function union(...sets) {
   return out;
 }
 
-// ---- Native contracts, derived live from the Java source of truth ----------
-const storageJava = readJava('StorageSummaryJson.java');
-const reportsJava = readJava('data/ObdStoreReports.java');
-const appStateJava = readJava('AppStatePayload.java');
-const dtcJava = readJava('data/DiagnosticCodeReport.java');
+// ---- Native contracts, derived live from the Java/Kotlin source of truth ---
+const storageSource = readNativeSource('StorageSummaryJson.java');
+const reportsSource = readNativeSource('data/ObdStoreReports.java');
+const appStateSource = readNativeSource('AppStatePayload.java');
+const dtcSource = readNativeSource('data/DiagnosticCodeReport.java');
 
 // state.storage top level = the keys build() puts directly, plus the flattened
 // "last*" keys putLatestSession() merges onto the same payload object.
 const NATIVE_STORAGE = union(
-  putKeys(methodBody(storageJava, 'JSONObject build(StorageSummaryRecord record)')),
-  putKeys(methodBody(storageJava, 'putLatestSession(JSONObject payload, ObdSessionRecord latest)')),
+  putKeys(methodBody(storageSource, 'JSONObject build(StorageSummaryRecord record)')),
+  putKeys(methodBody(storageSource, 'putLatestSession(JSONObject payload, ObdSessionRecord latest)')),
 );
 const NATIVE_RECENT_SESSION = putKeys(
-  methodBody(storageJava, 'JSONArray recentSessionsJson(StorageSummaryRecord record)'),
+  methodBody(storageSource, 'JSONArray recentSessionsJson(StorageSummaryRecord record)'),
 );
 const NATIVE_CHARGE_SUMMARY = putKeys(
-  methodBody(reportsJava, 'JSONObject chargeSummaryJson(SQLiteDatabase db)'),
+  methodBody(reportsSource, 'JSONObject chargeSummaryJson(SQLiteDatabase db)'),
 );
 const NATIVE_CHARGE_ROW = putKeys(
-  methodBody(reportsJava, 'JSONObject chargeSessionRowJson(Cursor cursor)'),
+  methodBody(reportsSource, 'JSONObject chargeSessionRowJson(Cursor cursor)'),
 );
-const NATIVE_DTC = putKeys(methodBody(dtcJava, 'JSONObject toJson()'));
+const NATIVE_DTC = putKeys(methodBody(dtcSource, ['JSONObject toJson()', 'fun toJson(): JSONObject']));
 // appState.vehicle = vehicleJson()'s own keys plus the latestVehicle row it
 // merges in key-by-key (storage.optJSONObject("latestVehicle")).
 const NATIVE_VEHICLE = union(
-  putKeys(methodBody(appStateJava, 'JSONObject vehicleJson()')),
-  putKeys(methodBody(reportsJava, 'JSONObject latestVehicleJson(SQLiteDatabase db)')),
+  putKeys(methodBody(appStateSource, 'JSONObject vehicleJson()')),
+  putKeys(methodBody(reportsSource, 'JSONObject latestVehicleJson(SQLiteDatabase db)')),
 );
 
 function loadVD() {
