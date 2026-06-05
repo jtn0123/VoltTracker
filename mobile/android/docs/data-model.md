@@ -2,7 +2,7 @@
 
 One-page reference for the on-device SQLite schema. Source of truth is the DDL
 in
-[`app/src/main/java/com/volttracker/obdpoc/data/VoltTrackerSchema.java`](../app/src/main/java/com/volttracker/obdpoc/data/VoltTrackerSchema.java)
+[`app/src/main/kotlin/com/volttracker/obdpoc/data/VoltTrackerSchema.kt`](../app/src/main/kotlin/com/volttracker/obdpoc/data/VoltTrackerSchema.kt)
 (the `CREATE TABLE` / `CREATE INDEX` statements) plus the migration orchestration
 in `VoltTrackerDb`. If this doc and the DDL disagree, the DDL wins — update this
 doc to match.

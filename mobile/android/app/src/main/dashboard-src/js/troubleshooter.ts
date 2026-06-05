@@ -62,7 +62,7 @@
   ];
 
   // Map FailureClass.name() to user-facing copy. Keys MUST match the
-  // string values produced by FailureClass.java; unknown / missing falls
+  // string values produced by FailureClass.kt; unknown / missing falls
   // through to the generic message.
   const FAILURE_CLASS_COPY: Record<string, FailureCopy> = {
     INSTANT_DROP: {

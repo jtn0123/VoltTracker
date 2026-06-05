@@ -175,7 +175,7 @@ declare global {
 
   /**
    * Dashboard -> native bridge: the `@JavascriptInterface` methods exposed on
-   * `VoltBridge.java` (+ the troubleshooter/proactive helpers it delegates to).
+   * `VoltBridge.kt` (+ the troubleshooter/proactive helpers it delegates to).
    * Names and arities mirror that file exactly — keep them in sync.
    */
   interface VoltBridge {

@@ -1,4 +1,4 @@
-// telemetry.js derives LIVE_TILE_IDS from `[data-live-tile="true"]` in the
+// telemetry.ts derives LIVE_TILE_IDS from `[data-live-tile="true"]` in the
 // DOM at boot. This test pins the source-of-truth: the count must match.
 // A new live tile in a partial without the attribute will fail here (and the
 // stale indicator wouldn't bind to it in prod either).
@@ -12,9 +12,8 @@ import { loadDashboard } from './setup/load-dashboard.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 function sourceFor(name) {
   const ts = resolve(HERE, `../app/src/main/dashboard-src/js/${name}.ts`);
-  return existsSync(ts)
-    ? ts
-    : resolve(HERE, `../app/src/main/dashboard-src/js/${name}.js`);
+  if (existsSync(ts)) return ts;
+  throw new Error(`Could not locate dashboard source ${name}.ts`);
 }
 
 const TELEMETRY_SOURCE = sourceFor('telemetry');
@@ -28,7 +27,7 @@ describe('LIVE_TILE_IDS is DOM-derived', () => {
     await loadDashboard();
   });
 
-  it('telemetry.js no longer pins a static LIVE_TILE_IDS array', () => {
+  it('telemetry.ts no longer pins a static LIVE_TILE_IDS array', () => {
     // Guard against accidental re-introduction of the hardcoded array. The previous
     // version of this check only matched if the array contained "speedValue", so a
     // refactor that swapped to a different ID set would slip through. Match ANY
@@ -56,7 +55,7 @@ describe('LIVE_TILE_IDS is DOM-derived', () => {
 
   it('every DOM tile gets the .stale class once the stale loop fires', async () => {
     // Drive the stale tick with fake timers so we can prove the derived list and
-    // the DOM nodes the loop touches are the same set. If telemetry.js's derived
+    // the DOM nodes the loop touches are the same set. If telemetry.ts's derived
     // LIVE_TILE_IDS didn't match the data-live-tile elements, some tiles would
     // miss the .stale class.
     vi.useFakeTimers();

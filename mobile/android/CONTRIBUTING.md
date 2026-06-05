@@ -37,7 +37,7 @@ Under `app/src/main/assets/dashboard/`, both `index.html` **and** `js/` are
 **generated** — edit the sources, not the generated files:
 
 - Markup: `app/src/main/dashboard-src/partials/*.html`
-- Behavior (JS): `app/src/main/dashboard-src/js/*.js`
+- Behavior (TypeScript): `app/src/main/dashboard-src/js/*.ts`
 - Styles: `app/src/main/assets/dashboard/css/*.css` (CSS loads directly — no build)
 
 **The dashboard JS is bundled.** `dashboard-tests/build.mjs` (esbuild) compiles the
@@ -47,7 +47,7 @@ classic-IIFE `app.js` (the eager scripts, in dependency order) plus the lazy
 build artifact). It stays a classic IIFE, never an ES module: the WebView serves the
 dashboard from `file://`, where `<script type=module>` silently never runs.
 
-After editing a JS source file, rebuild the bundle:
+After editing a TypeScript source file, rebuild the bundle:
 
 ```sh
 npm --prefix dashboard-tests run build
@@ -72,43 +72,37 @@ so you don't need to rebuild to run them. Playwright e2e serves the real `index.
 brew install lefthook && lefthook install
 ```
 
-The **pre-commit** hook runs Spotless and ESLint on staged dashboard JS. Install
+The **pre-commit** hook runs Spotless and ESLint on staged dashboard TypeScript. Install
 dashboard Node dependencies once with `npm --prefix dashboard-tests ci`;
 otherwise the local ESLint hook prints a warning and CI becomes the first strict
 check.
 
-The **pre-push** hook runs the Java unit tests and the dashboard Vitest suite so
+The **pre-push** hook runs the Android unit tests and the dashboard Vitest suite so
 a broken push is caught in ~30-60s instead of ~8min later in CI.
 
 To bypass in an emergency: `git commit --no-verify` / `git push --no-verify`
 (use sparingly; CI will catch it).
 
-## Dashboard JS type-checking
+## Dashboard TypeScript type-checking
 
-`npm --prefix dashboard-tests run typecheck` runs `tsc --checkJs` over the dashboard
-JS, and the check is gated in CI. `checkJs` is `true`, so **every** file under
-`assets/dashboard/js/` is type-checked and any new `.js` file is covered automatically — no
-`// @ts-check` line required. **Full `strict` is on** (noImplicitAny + strictNullChecks +
-strictFunctionTypes + useUnknownInCatchVariables + …), so: annotate every param/var (JSDoc);
-handle every possibly-null/undefined value — guard it, narrow it (`x?.y`, `value ?? fallback`),
-or cast it (`/** @type {HTMLInputElement} */ (el("id"))`); and in `catch` blocks the variable
-is `unknown`, so narrow before use (`err instanceof Error ? err.message : String(err)`). Shared
-globals are declared in `dashboard-tests/dashboard-globals.d.ts`; the `VoltDashboard` members an
-eager script always attaches are typed **required**, so a new cross-file helper should be added
-there with a real signature (not left optional).
+`npm --prefix dashboard-tests run typecheck` runs `tsc` over the dashboard TypeScript
+source, and the check is gated in CI. **Full `strict` is on** (noImplicitAny +
+strictNullChecks + strictFunctionTypes + useUnknownInCatchVariables + …), so: annotate
+every value whose type cannot be inferred, handle every possibly-null/undefined value by
+guarding or narrowing it (`x?.y`, `value ?? fallback`), and narrow `catch` variables before
+use (`err instanceof Error ? err.message : String(err)`). Shared globals are declared in
+`dashboard-tests/dashboard-globals.d.ts`; the `VoltDashboard` members an eager script
+always attaches are typed **required**, so a new cross-file helper should be added there
+with a real signature (not left optional).
 
 ## Android: Kotlin for new code
 
-The Android module is set up for **Kotlin-first new code**. Java and Kotlin interop freely
-in the same module, so:
+The Android module is **Kotlin-first**. Production Android source is now Kotlin-complete,
+and existing Java tests remain as legacy coverage unless they are being materially reworked.
 
-- **Write new classes in Kotlin** (`.kt`) — put them in `app/src/main/kotlin/…` (or alongside
-  Java in `app/src/main/java/…`; both source roots compile Kotlin). Tests go in
+- **Write new classes in Kotlin** (`.kt`) — put them in `app/src/main/kotlin/…`. Tests go in
   `app/src/test/java/…` or `app/src/test/kotlin/…`. No Kotlin plugin is applied — AGP 9.0+
   compiles Kotlin via its built-in support.
-- **Leave existing Java as-is.** This is not a migration — don't rewrite working Java just to
-  change the language. Convert a Java file to Kotlin only when you're already substantially
-  reworking it and the change is independently justified.
 - Bytecode target is Java 17, set once via `compileOptions` in `app/build.gradle`; AGP's
   built-in Kotlin inherits the same `jvmTarget` from it automatically.
 - **Formatting:** Spotless runs ktlint on `.kt` (`./gradlew :app:spotlessApply` to fix,
@@ -126,9 +120,9 @@ PR as the work.
 
 | Layer    | Files                                                                       | Entry point                |
 |----------|-----------------------------------------------------------------------------|----------------------------|
-| UI       | `MainActivity.java`, `VoltBridge.java`, `assets/dashboard/*`                | `MainActivity.onCreate`    |
-| Service  | `ObdService.java`, `ObdNotifications.java`, `PermissionGate.java`           | `ObdService.onStartCommand`|
-| Engine   | `ObdPollingEngine.java`, `SessionRecorder.java`, `ObdProtocol.java`, …      | `ObdPollingEngine.runBluetoothLoop` |
+| UI       | `MainActivity.kt`, `VoltBridge.kt`, `assets/dashboard/*`                    | `MainActivity.onCreate`    |
+| Service  | `ObdService.kt`, `ObdNotifications.kt`, `PermissionGate.kt`                 | `ObdService.onStartCommand`|
+| Engine   | `ObdPollingEngine.kt`, `SessionRecorder.kt`, `ObdProtocol.kt`, …            | `ObdPollingEngine.runBluetoothLoop` |
 | Data     | `data/*` (`ObdLocalStore`, `VoltTrackerDb`, `ObdStore*`, record DTOs)       | `ObdLocalStore`            |
 
 Calls flow downward only (UI → Service → Engine → Data). See

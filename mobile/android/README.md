@@ -12,13 +12,13 @@ The app also includes a demo telemetry mode so the UI can be tested without a sc
 
 ## Codebase Map
 
-Source layout under `app/src/main/java/com/volttracker/obdpoc/`:
+Production source layout under `app/src/main/kotlin/com/volttracker/obdpoc/`:
 
 | Layer    | Files                                                                       | What it does                                                      | Entry point                |
 |----------|-----------------------------------------------------------------------------|-------------------------------------------------------------------|----------------------------|
-| UI       | `MainActivity.java`, `VoltBridge.java`, `assets/dashboard/*`                | Hosts the WebView; bridges JS calls back to the service           | `MainActivity.onCreate`    |
-| Service  | `ObdService.java`, `ObdNotifications.java`, `PermissionGate.java`           | Foreground lifecycle, status broadcasts, runtime permissions       | `ObdService.onStartCommand`|
-| Engine   | `ObdPollingEngine.java`, `SessionRecorder.java`, `ObdProtocol.java`, `ElmConnection.java`, `ObdElmDecode.java`, `ObdProbes.java`, `location/*` | Bluetooth IO, ELM327 init, polling loop, parsing, GPS         | `ObdPollingEngine.runBluetoothLoop` |
+| UI       | `MainActivity.kt`, `VoltBridge.kt`, `assets/dashboard/*`                    | Hosts the WebView; bridges TypeScript calls back to the service   | `MainActivity.onCreate`    |
+| Service  | `ObdService.kt`, `ObdNotifications.kt`, `PermissionGate.kt`                 | Foreground lifecycle, status broadcasts, runtime permissions       | `ObdService.onStartCommand`|
+| Engine   | `ObdPollingEngine.kt`, `SessionRecorder.kt`, `ObdProtocol.kt`, `ElmConnection.kt`, `ObdElmDecode.kt`, `ObdProbes.kt`, `location/*` | Bluetooth IO, ELM327 init, polling loop, parsing, GPS | `ObdPollingEngine.runBluetoothLoop` |
 | Data     | `data/*` (`ObdLocalStore`, `VoltTrackerDb`, `ObdStoreReports`, `ObdStoreTrips`, `ObdStoreSupport`, record DTOs) | SQLite schema, writes, queries, JSON projections for the dashboard | `ObdLocalStore`            |
 
 Calls flow downward only (UI → Service → Engine → Data). See

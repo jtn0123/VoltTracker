@@ -24,7 +24,7 @@
     <!-- On Android 11+ PackageManager only returns packages the caller can "see". We list every
          BT-OBD app the detector watches for so the competing-app UX works without the
          Play-Store-restricted QUERY_ALL_PACKAGES permission. Keep this list in sync with
-         CompetingAppDetector.java. -->
+         CompetingAppDetector.kt. -->
     <queries>
         <package android:name="io.tripovan.voltage" />
         <package android:name="com.gretio.obd" />

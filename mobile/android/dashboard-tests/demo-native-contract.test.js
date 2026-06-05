@@ -17,17 +17,13 @@ import { loadDashboard } from './setup/load-dashboard.js';
 // Rather than hand-copy the native shape (which rots), this test reads the native
 // emitters at run time and extracts their `.put("key", …)` literals. The
 // contract is therefore always whatever the source of truth currently emits —
-// add a key in Java/Kotlin and this test starts requiring the demo to stay a subset of
+// add a key in Kotlin and this test starts requiring the demo to stay a subset of
 // it; rename an emitter and the locator below fails loudly instead of passing
 // vacuously.
-const JAVA_ROOT = resolve('../app/src/main/java/com/volttracker/obdpoc');
 const KOTLIN_ROOT = resolve('../app/src/main/kotlin/com/volttracker/obdpoc');
 
 function readNativeSource(relPath) {
-  const candidates = [resolve(JAVA_ROOT, relPath)];
-  if (relPath.endsWith('.java')) {
-    candidates.push(resolve(KOTLIN_ROOT, relPath.replace(/\.java$/, '.kt')));
-  }
+  const candidates = [resolve(KOTLIN_ROOT, relPath)];
   for (const candidate of candidates) {
     if (existsSync(candidate)) return readFileSync(candidate, 'utf8');
   }
@@ -78,11 +74,11 @@ function union(...sets) {
   return out;
 }
 
-// ---- Native contracts, derived live from the Java/Kotlin source of truth ---
-const storageSource = readNativeSource('StorageSummaryJson.java');
-const reportsSource = readNativeSource('data/ObdStoreReports.java');
-const appStateSource = readNativeSource('AppStatePayload.java');
-const dtcSource = readNativeSource('data/DiagnosticCodeReport.java');
+// ---- Native contracts, derived live from the Kotlin source of truth ---
+const storageSource = readNativeSource('StorageSummaryJson.kt');
+const reportsSource = readNativeSource('data/ObdStoreReports.kt');
+const appStateSource = readNativeSource('AppStatePayload.kt');
+const dtcSource = readNativeSource('data/DiagnosticCodeReport.kt');
 
 // state.storage top level = the keys build() puts directly, plus the flattened
 // "last*" keys putLatestSession() merges onto the same payload object.

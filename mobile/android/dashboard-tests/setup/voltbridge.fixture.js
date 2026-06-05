@@ -1,7 +1,7 @@
 // Fake of the `VoltTrackerAndroid` JS bridge that the WebView normally gets
 // from `MainActivity#addJavascriptInterface`. Each method here mirrors a
-// `@JavascriptInterface` method on `VoltBridge.java`. Keep this list in sync
-// with that file — if Java adds or renames a method, update both places.
+// `@JavascriptInterface` method on `VoltBridge.kt`. Keep this list in sync
+// with that file — if Android adds or renames a method, update both places.
 //
 // Return values default to JSON strings (the real bridge returns Strings),
 // or `undefined` for void methods. Test code can override any method with
@@ -59,9 +59,9 @@ export function createVoltBridgeFixture(overrides = {}) {
   return { ...base, ...overrides };
 }
 
-// Names of every method the real VoltBridge.java exposes via
+// Names of every method the real VoltBridge.kt exposes via
 // @JavascriptInterface. The ABI test cross-references this list with what
-// VoltBridge.java actually advertises.
+// VoltBridge.kt actually advertises.
 export const VOLT_BRIDGE_METHODS = Object.freeze([
   'listDevices',
   'dashboardReady',

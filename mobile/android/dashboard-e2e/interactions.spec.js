@@ -1,6 +1,6 @@
 // Real click interactions: bottom-nav, demo start/stop, backup/restore -> bridge wiring.
 //
-// NOTE: the restore Replace/Merge dialog is a NATIVE Android AlertDialog (BackupController.java),
+// NOTE: the restore Replace/Merge dialog is a NATIVE Android AlertDialog (BackupController.kt),
 // not web — Playwright can only verify that the web layer calls the bridge; the dialog itself is
 // covered by the JVM/instrumented side.
 const { test, expect } = require('@playwright/test');

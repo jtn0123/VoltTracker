@@ -41,7 +41,7 @@ Completed:
 - Migration regression test (`VoltTrackerDbMigrationTest`) that round-trips every schema version.
 - Backup round-trip test (`BackupRoundTripTest`) covering the full export/import cycle.
 - GPS decoupling: location tracking now runs independently of the OBD adapter with auto-reconnect and outlier filtering (PR #96).
-- **Tiered/staggered PID polling** (`PidSchedule.java`): drive-critical PIDs (speed, RPM, throttle, load, pack V, pack I) poll every cycle (~1.7s); medium-rate PIDs (ATRV, SOC) every 4 cycles (~7s) on staggered phases; slow PIDs (coolant temp, HV battery temp) every 10 cycles (~17s) on staggered phases. Carry-forward of last-known raw responses means every sample still contains every key. `ATSH 7E4` header switch only fires on the rare cycle where battery temp is due. Per-cycle ELM transactions: 13 → 8 baseline (~30% reduction); cycle-time spent on slow PIDs no longer bounds speed/RPM refresh. Tracked as B6 in `.claude/grade-report.md`.
+- **Tiered/staggered PID polling** (`PidSchedule.kt`): drive-critical PIDs (speed, RPM, throttle, load, pack V, pack I) poll every cycle (~1.7s); medium-rate PIDs (ATRV, SOC) every 4 cycles (~7s) on staggered phases; slow PIDs (coolant temp, HV battery temp) every 10 cycles (~17s) on staggered phases. Carry-forward of last-known raw responses means every sample still contains every key. `ATSH 7E4` header switch only fires on the rare cycle where battery temp is due. Per-cycle ELM transactions: 13 → 8 baseline (~30% reduction); cycle-time spent on slow PIDs no longer bounds speed/RPM refresh. Tracked as B6 in `.claude/grade-report.md`.
 
 In progress:
 
