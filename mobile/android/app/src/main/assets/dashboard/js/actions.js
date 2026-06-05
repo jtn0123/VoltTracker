@@ -104,7 +104,7 @@
     withBusy(button, () => bridge.detailProbe(selected.address, selected.name, stage));
   }
 
-  function handleAction(/** @type {any} */ action, /** @type {any} */ button) {
+  function handleAction(/** @type {any} */ action, /** @type {any} */ button = null) {
     if (action === "permissions") bridge && bridge.requestPermissions();
     if (action === "refresh") bridge && bridge.refreshDevices();
     if (action === "refreshStorage") refreshStorage();
@@ -231,7 +231,7 @@
   }
 
   function stopDemo() {
-    window.clearInterval(window.__voltDemoTimer);
+    window.clearInterval(window.__voltDemoTimer ?? undefined);
     if (bridge && state.demoActive) bridge.disconnect();
     VD.clearDemoTelemetry();
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
@@ -242,7 +242,7 @@
   }
 
   function stopAll() {
-    window.clearInterval(window.__voltDemoTimer);
+    window.clearInterval(window.__voltDemoTimer ?? undefined);
     if (bridge) bridge.disconnect();
     VD.clearDemoTelemetry();
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
@@ -414,7 +414,7 @@
   function runBrowserDemo() {
     let t = 0;
     VD.setStatus({ state: "connected", detail: "Browser-only demo is running." });
-    window.clearInterval(window.__voltDemoTimer);
+    window.clearInterval(window.__voltDemoTimer ?? undefined);
     window.__voltDemoTimer = window.setInterval(() => {
       t += 1;
       // Alternate EV and gas every ~30s so both drivetrain states (RPM, gas
@@ -540,11 +540,11 @@
 
     document.querySelectorAll("[data-nav]").forEach((node) => {
       const button = /** @type {HTMLElement} */ (node);
-      button.addEventListener("click", () => VD.setView(button.dataset.nav), opts);
+      button.addEventListener("click", () => VD.setView(button.dataset.nav ?? ""), opts);
     });
     document.querySelectorAll("[data-nav-jump]").forEach((node) => {
       const button = /** @type {HTMLElement} */ (node);
-      button.addEventListener("click", () => VD.setView(button.dataset.navJump), opts);
+      button.addEventListener("click", () => VD.setView(button.dataset.navJump ?? ""), opts);
     });
     document.querySelectorAll("[data-action]").forEach((node) => {
       const button = /** @type {HTMLElement} */ (node);
@@ -619,7 +619,7 @@
       const realTripButton = target && target.closest("[data-real-trip-id]");
       if (realTripButton) {
         if (typeof VD.selectRealTrip === "function") {
-          VD.selectRealTrip(/** @type {HTMLElement} */ (realTripButton).dataset.realTripId);
+          VD.selectRealTrip(/** @type {HTMLElement} */ (realTripButton).dataset.realTripId ?? "");
         }
         return;
       }

@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || {});
+  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || /** @type {VoltDashboard} */ ({}));
   VD.bridge = window.VoltTrackerAndroid || null;
   VD.el = (/** @type {any} */ id) => document.getElementById(id);
 
@@ -199,7 +199,7 @@
       script.src = src;
       script.async = false;
       script.dataset.dashboardLazy = "true";
-      script.onload = () => resolve();
+      script.onload = () => resolve(undefined);
       script.onerror = () => reject(new Error("Unable to load " + src));
       document.head.append(script);
     });

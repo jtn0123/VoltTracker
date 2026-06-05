@@ -118,11 +118,11 @@
     updateDiagnosticCodeUi();
     updateEnhancedCapabilityUi();
     if (!recent.length) {
-      list.replaceChildren(buildStatusCopy("Connect or scan to create local SQLite rows. Preview data stays isolated in the sandbox."));
+      list?.replaceChildren(buildStatusCopy("Connect or scan to create local SQLite rows. Preview data stays isolated in the sandbox."));
       updateReviewUi();
       return;
     }
-    list.replaceChildren(...recent.map(buildRecentSessionRow));
+    list?.replaceChildren(...recent.map(buildRecentSessionRow));
     updateReviewUi();
   }
 
@@ -895,7 +895,7 @@
       return;
     }
     row.hidden = false;
-    row.replaceChildren(...stats.map((pair) => buildPackStat(pair[0], String(pair[1]))));
+    row.replaceChildren(...stats.map((pair) => buildPackStat(String(pair[0]), String(pair[1]))));
   }
 
   function buildPackStat(/** @type {string} */ label, /** @type {string} */ value) {

@@ -14,7 +14,7 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 > |---|---:|---:|---:|---|
 > | Kotlin files converted | 17 | 0 | ~14 candidates | K0 canary + K1 (constants/enums) + K2 (11 DTOs) |
 > | Kotlin waves complete | K0–K2 | — | K3–K4 | K3 (opportunistic) or T1 (strictNullChecks) next |
-> | Dashboard JS type-safety | checkJs ✅ | — | strictNullChecks, full TS | `checkJs:true`, whole dir checked |
+> | Dashboard JS type-safety | checkJs + strictNullChecks ✅ | — | full TS (T2) | whole dir, null-safe, zero build |
 > | Dashboard build step | none | — | esbuild/vite (proposed) | zero-build today |
 
 **Status legend:** `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` won't do / deferred indefinitely.
@@ -218,13 +218,20 @@ same way — not auto-split chunks.
 
 ## Waves
 
-### Wave T1 — `strictNullChecks` (zero build) — **recommended next**
-- [ ] Flip `strictNullChecks: true` in `dashboard-tests/tsconfig.json`
-- [ ] Run `npm --prefix dashboard-tests run typecheck`; triage the error list
-- [ ] Fix file-by-file (guards, `?.`, JSDoc `@type` narrowing); large files can be
-      temporarily excluded and ratcheted in, but **track exclusions here** — no silent skips
-- [ ] Update `CONTRIBUTING.md` "Dashboard JS type-checking" once fully on
-- [ ] CI already gates `typecheck`, so no workflow change needed
+### Wave T1 — `strictNullChecks` (zero build) ✅ done
+- [x] Flip `strictNullChecks: true` in `dashboard-tests/tsconfig.json`
+- [x] Triage: 709 raw errors → **656 were noise** from the `VoltDashboard` interface declaring
+      every member optional. Root-cause fix: model the eager-script API as **required** and keep
+      only genuinely-absent members optional (`bridge` is null off-WebView; the lazy dtc-* members
+      load via `ensureDtcData()`). That left **53 real errors**.
+- [x] Fix the 53: `telemetry.js` canvas `ctx` null-guard (19); 5 bootstrap `|| {}` casts;
+      `core.js` Promise `resolve(undefined)`; `panels.js` `list?.` + `String(pair[0])`;
+      `scrubber.js` tightened the `ScrubPoint` typedef (frac/distMi/grade/etc. are always built),
+      optional `scrubChip` opts, `filter(Boolean)` cast, `Number(s.eff)`; `actions.js`
+      `clearInterval(... ?? undefined)`, `dataset.x ?? ""`, optional `handleAction` 2nd arg.
+- [x] No exclusions / no `@ts-nocheck` — every file is fully strict-clean.
+- [x] Verified: `typecheck` 0 errors, ESLint clean, Vitest 121/121, `spotlessCheck` clean.
+- [x] `CONTRIBUTING.md` + tsconfig header updated. CI already gates `typecheck` — no workflow change.
 
 ### Wave T2 — Full `.ts` + bundler (proposed; pending go-ahead `[ ]`)
 Tooling decision: **esbuild** for the production bundle (fast, trivial config, emits
@@ -276,3 +283,4 @@ top *only* for the dev server / HMR against the browser preview. Sub-steps:
 | 2026-06-04 | Dashboard `checkJs` rollout completed (`checkJs:true`). Next: `strictNullChecks` (T1); full TS+bundler (T2) proposed, pending decision. |
 | 2026-06-04 | Wave K1 landed: `VehicleActivityThresholds` + 4 enums (`FailureClass`, `classify/VehicleState`, `classify/Confidence`, `materialize/Confidence`) converted to Kotlin. Zero call-site changes; all gates green. Next: K2 (DTOs) or T1. |
 | 2026-06-04 | Wave K2 landed: all 11 DTO/value classes converted. Chose **plain `class` + `@JvmField`** over `data class` (ctor normalization + identity-equality preservation + `data` coverage floor). Zero call-site changes; `data` 90.5%/project 76.7%. Java main files now 82, Kotlin 17. Next: K3 (opportunistic) or T1. |
+| 2026-06-04 | Wave T1 landed: `strictNullChecks` ON, dashboard fully null-safe. Root-cause fix (required vs optional `VoltDashboard` members) cleared 656 of 709 noise errors; fixed the 53 real ones with no exclusions. typecheck/ESLint/Vitest(121)/spotless all green. Remaining: K3 and T2 (full TS+bundler). |

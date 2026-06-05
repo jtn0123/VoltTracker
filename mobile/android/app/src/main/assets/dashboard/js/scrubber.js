@@ -16,10 +16,13 @@
    * One derived scrubber sample. Built by buildScrubData from a route's GPS
    * points; carries the per-point distance/speed/elevation/grade/soc/eff used
    * by the readout and the mini-charts.
+   * `buildScrubData` populates every field below for every returned point, so the
+   * derived numerics are required; only `soc`/`eff` stay nullable (missing power/SoC
+   * samples remain null so the chart skips them rather than drawing a 0).
    * @typedef {{
-   *   lat: number, lng: number, atMs: number, distM?: number, mph?: number,
-   *   elevM?: number, soc?: number | null, eff?: number | null, grade?: number,
-   *   frac?: number, distMi?: number, elevFt?: number,
+   *   lat: number, lng: number, atMs: number, distM: number, mph: number,
+   *   elevM: number, soc?: number | null, eff?: number | null, grade: number,
+   *   frac: number, distMi: number, elevFt: number,
    * }} ScrubPoint
    */
 
@@ -331,7 +334,7 @@
     return (g < 0 ? "−" : "+") + pct + "%";
   }
 
-  function scrubChip(/** @type {string} */ k, /** @type {string | number} */ v, /** @type {any} */ opts) {
+  function scrubChip(/** @type {string} */ k, /** @type {string | number} */ v, /** @type {any} */ opts = {}) {
     opts = opts || {};
     const chip = document.createElement("div");
     if (opts.dim) chip.className = "scrub-dim";
@@ -434,15 +437,17 @@
         stack.appendChild(track);
       });
     }
-    scrubCursors = [el("scrubCursor")]
-      .concat(
-        scrubExpanded
-          ? Array.prototype.slice.call(
-              document.querySelectorAll("#scrubStack .scrub-cursor")
-            )
-          : []
-      )
-      .filter(Boolean);
+    scrubCursors = /** @type {HTMLElement[]} */ (
+      [el("scrubCursor")]
+        .concat(
+          scrubExpanded
+            ? Array.prototype.slice.call(
+                document.querySelectorAll("#scrubStack .scrub-cursor")
+              )
+            : []
+        )
+        .filter(Boolean)
+    );
   }
 
   function setScrubCursor(/** @type {number} */ frac) {
@@ -459,7 +464,7 @@
       // it shows speed + efficiency at the current scrubbed position.
       const eff =
         scrubHasEff && Number.isFinite(s.eff)
-          ? s.eff.toFixed(1) + " mi/kWh"
+          ? Number(s.eff).toFixed(1) + " mi/kWh"
           : null;
       const grade = scrubHasElev ? scrubGrade(s.grade) : null;
       const lines = [Math.round(s.mph) + " mph"];

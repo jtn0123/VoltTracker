@@ -11,7 +11,7 @@
 // connection-status.js (it observes every status broadcast for `lastVoltage`).
 (function () {
   "use strict";
-  const VD = (window.VoltDashboard = window.VoltDashboard || {});
+  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || /** @type {VoltDashboard} */ ({}));
   const bridge = window.VoltTrackerAndroid || null;
   const el = (/** @type {any} */ id) => document.getElementById(id);
 

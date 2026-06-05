@@ -74,14 +74,15 @@ To bypass in an emergency: `git commit --no-verify` / `git push --no-verify`
 ## Dashboard JS type-checking
 
 `npm --prefix dashboard-tests run typecheck` runs `tsc --checkJs` over the dashboard
-JS, and the check is gated in CI. The opt-in rollout is **complete**: `checkJs` is now
-`true`, so **every** file under `assets/dashboard/js/` is type-checked and any new `.js`
-file is covered automatically — no `// @ts-check` line required (the existing ones are
-harmless). `noImplicitAny` is on, so annotate with JSDoc rather than leaving an implicit
-`any` — usually a cast like `/** @type {HTMLInputElement} */ (el("id"))` or `/** @type
-{any} */ (window.VoltDashboard ...)`. Shared globals are declared in
-`dashboard-tests/dashboard-globals.d.ts`. `strict`/`strictNullChecks` remain off; turning
-`strictNullChecks` on is the next (separate) hardening step.
+JS, and the check is gated in CI. `checkJs` is `true`, so **every** file under
+`assets/dashboard/js/` is type-checked and any new `.js` file is covered automatically — no
+`// @ts-check` line required. Both `noImplicitAny` **and `strictNullChecks` are on**, so:
+annotate every param/var (JSDoc), and handle every possibly-null/undefined value — guard
+it, narrow it (`x?.y`, `value ?? fallback`), or cast it (`/** @type {HTMLInputElement} */
+(el("id"))`). Shared globals are declared in `dashboard-tests/dashboard-globals.d.ts`; the
+`VoltDashboard` members an eager script always attaches are typed **required**, so a new
+cross-file helper should be added there with a real signature (not left optional). Only full
+`strict` remains off.
 
 ## Android: Kotlin for new code
 

@@ -7,7 +7,7 @@
 // connection-tools.html but the status payload is the same).
 (function () {
   "use strict";
-  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || {});
+  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || /** @type {VoltDashboard} */ ({}));
   const bridge = window.VoltTrackerAndroid || null;
   const el = (/** @type {any} */ id) => document.getElementById(id);
 

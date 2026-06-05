@@ -651,6 +651,7 @@
     canvas.width = Math.max(1, rect.width * dpr);
     canvas.height = Math.max(1, rect.height * dpr);
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;
     ctx.scale(dpr, dpr);
     const w = rect.width;
     const h = rect.height;

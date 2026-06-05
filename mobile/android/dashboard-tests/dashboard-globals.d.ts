@@ -3,9 +3,16 @@
 // The dashboard is not a module graph: each js/*.js file is an IIFE that hangs its
 // API off `window.VoltDashboard` (aliased `VD`) and talks to the native side via
 // `window.VoltTrackerAndroid`. These shapes are concrete interfaces (not `any`) so
-// that `noImplicitAny` can stay ON: every cross-file `VD.<name>` and bridge call is
-// type-checked against a real signature, and the JS files annotate their own params
-// with JSDoc. Tighten these further as `strict`/`strictNullChecks` come on later.
+// that `noImplicitAny` and `strictNullChecks` can both stay ON: every cross-file
+// `VD.<name>` and bridge call is type-checked against a real signature.
+//
+// Member optionality models RUNTIME nullability, not load order. The eagerly-loaded
+// scripts (core/panels/map/scrubber/drive/telemetry/actions/troubleshooter + the two
+// connection-* files, loaded in order by index.html) have all attached their members
+// by the time any user-triggered call runs, so their API is declared REQUIRED. Only
+// genuinely-absent-at-call-time members stay optional: `bridge` is null outside the
+// WebView, and the dtc-lookup.js / dtc-causes.js members exist only after the lazy
+// `ensureDtcData()` load resolves (call sites guard with `dtcDataLoaded()`).
 
 export {};
 
@@ -48,18 +55,17 @@ declare global {
   /**
    * Shared dashboard namespace every IIFE extends. Members are attached across
    * core.js (most helpers), telemetry.js, panels.js, map.js, scrubber.js,
-   * drive.js, dtc-lookup.js and dtc-causes.js. Optional because a given file may
-   * run before the file that defines a member; call sites guard with
-   * `typeof VD.foo === "function"` accordingly.
+   * drive.js, dtc-lookup.js and dtc-causes.js. Eager-script members are required;
+   * the lazy dtc-* members are optional (see file header).
    */
   interface VoltDashboard {
     // ----- core.js -----------------------------------------------------------
     /** Dashboard -> native bridge handle (null when running outside the WebView). */
-    bridge?: VoltBridge | null;
+    bridge: VoltBridge | null;
     /** `document.getElementById` wrapper. */
-    el?(id: string): HTMLElement | null;
+    el(id: string): HTMLElement | null;
     /** Bind a listener by element id; returns false (and warns) if the id is missing. */
-    bindListenerGuarded?(
+    bindListenerGuarded(
       id: string,
       event: string,
       handler: EventListenerOrEventListenerObject,
@@ -68,7 +74,7 @@ declare global {
     /** Tears down the window-level error/rejection listeners on reset. */
     errorController?: AbortController;
     /** Mutable in-memory dashboard data (trips/sessions/hourly/insights). */
-    data?: {
+    data: {
       trips: any[];
       sessions: any[];
       hourly: any[];
@@ -77,73 +83,73 @@ declare global {
       [key: string]: any;
     };
     /** Mutable UI/runtime state bag. */
-    state?: Record<string, any>;
-    reportClientError?(label: string, detail?: string): void;
-    escapeHtml?(value: unknown): string;
+    state: Record<string, any>;
+    reportClientError(label: string, detail?: string): void;
+    escapeHtml(value: unknown): string;
     /** Parse a native payload (JSON string or object); returns `fallback` on failure. */
-    parsePayload?(payload: unknown, fallback?: any): any;
+    parsePayload(payload: unknown, fallback?: any): any;
     /** Set an element's text (with "--" fallback); returns whether the node existed. */
-    setText?(id: string, value: unknown): boolean;
+    setText(id: string, value: unknown): boolean;
     /** Set a meter element's fill width (0-100); returns whether the node existed. */
-    setMeter?(id: string, value: unknown): boolean;
-    setView?(view: string): void;
-    updateViewHeading?(): void;
-    setDemoActive?(active: boolean, detail?: string): void;
-    clearDemoTelemetry?(): void;
-    ensureDemoData?(callback?: (data: any) => void): void;
-    ensureDtcData?(): Promise<VoltDashboard>;
-    dtcDataLoaded?(): boolean;
-    dtcSearchUrl?(code: string): string;
-    setDevices?(payload: unknown): void;
-    setHistory?(payload: unknown): void;
-    selectDevice?(address: string, name?: string): void;
-    getLastDevice?(): any;
-    getSelectedDevice?(): any;
-    relativeTime?(value: unknown): string;
-    realViewMeta?: Record<string, [string, string]>;
+    setMeter(id: string, value: unknown): boolean;
+    setView(view: string): void;
+    updateViewHeading(): void;
+    setDemoActive(active: boolean, detail?: string): void;
+    clearDemoTelemetry(): void;
+    ensureDemoData(callback?: (data: any) => void): void;
+    ensureDtcData(): Promise<VoltDashboard>;
+    dtcDataLoaded(): boolean;
+    dtcSearchUrl(code: string): string;
+    setDevices(payload: unknown): void;
+    setHistory(payload: unknown): void;
+    selectDevice(address: string, name?: string): void;
+    getLastDevice(): any;
+    getSelectedDevice(): any;
+    relativeTime(value: unknown): string;
+    realViewMeta: Record<string, [string, string]>;
 
     // ----- telemetry.js ------------------------------------------------------
-    setStatus?(payload: VoltStatus): void;
-    setAppState?(payload: unknown): void;
-    updateTelemetry?(payload: VoltPayload): void;
-    updateLiveUi?(): void;
-    drawTrace?(): void;
-    renderOperationalState?(): void;
-    updateValidationUi?(): void;
-    formatDistance?(meters: unknown): string;
-    formatDuration?(ms: unknown): string;
-    formatShortDuration?(ms: unknown): string;
-    formatWhen?(value: unknown): string;
-    formatBytes?(value: unknown): string;
-    dbRowCount?(storage: unknown): number;
+    setStatus(payload: VoltStatus): void;
+    setAppState(payload: unknown): void;
+    updateTelemetry(payload: VoltPayload): void;
+    updateLiveUi(): void;
+    drawTrace(): void;
+    renderOperationalState(): void;
+    updateValidationUi(): void;
+    formatDistance(meters: unknown): string;
+    formatDuration(ms: unknown): string;
+    formatShortDuration(ms: unknown): string;
+    formatWhen(value: unknown): string;
+    formatBytes(value: unknown): string;
+    dbRowCount(storage: unknown): number;
 
     // ----- panels.js ---------------------------------------------------------
-    setStorage?(payload: unknown): void;
-    loadTrips?(): void;
-    loadInsights?(): void;
-    renderRealTrips?(): void;
-    renderInsightStats?(): void;
-    selectRealTrip?(id: string | number): void;
-    updateDiagnosticCodeUi?(): void;
-    enrichRouteEff?(route: VoltRoute): void;
+    setStorage(payload: unknown): void;
+    loadTrips(): void;
+    loadInsights(): void;
+    renderRealTrips(): void;
+    renderInsightStats(): void;
+    selectRealTrip(id: string | number): void;
+    updateDiagnosticCodeUi(): void;
+    enrichRouteEff(route: VoltRoute): void;
 
     // ----- map.js ------------------------------------------------------------
-    renderMap?(): void;
-    loadSampleData?(): void;
-    haversineMetersJs?(lat1: number, lng1: number, lat2: number, lng2: number): number;
+    renderMap(): void;
+    loadSampleData(): void;
+    haversineMetersJs(lat1: number, lng1: number, lat2: number, lng2: number): number;
     /** Resolve the route for the currently-selected map session from a storage payload. */
-    selectedMapRoute?(storage: any): VoltRoute;
+    selectedMapRoute(storage: any): VoltRoute;
 
     // ----- scrubber.js -------------------------------------------------------
-    renderScrubber?(route: VoltRoute): void;
-    hideScrubber?(): void;
-    scrubberAttachMap?(map: any): void;
-    scrubAtLatLng?(lat: number, lng: number): void;
+    renderScrubber(route: VoltRoute): void;
+    hideScrubber(): void;
+    scrubberAttachMap(map: any): void;
+    scrubAtLatLng(lat: number, lng: number): void;
 
     // ----- drive.js ----------------------------------------------------------
-    renderDriveLive?(): void;
+    renderDriveLive(): void;
 
-    // ----- dtc-lookup.js / dtc-causes.js -------------------------------------
+    // ----- dtc-lookup.js / dtc-causes.js (lazy: present only after ensureDtcData) ----
     dtcInfo?(code: string): VoltDtcInfo | null;
     dtcSampleCodes?: any[];
     dtcLookupCodes?: ReadonlyArray<string>;
@@ -151,8 +157,8 @@ declare global {
     DTC_CAUSES?: Record<string, any>;
 
     // ----- actions.js / troubleshooter.js ------------------------------------
-    actions?: Record<string, any>;
-    troubleshooter?: Record<string, any>;
+    actions: Record<string, any>;
+    troubleshooter: Record<string, any>;
 
     // Members attached by files not yet individually enumerated above remain
     // reachable; new exports should get a real signature here.
