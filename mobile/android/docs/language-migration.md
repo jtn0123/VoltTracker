@@ -12,7 +12,7 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 39 | 0 | K6 staged core-adjacent helpers | K0–K3 + K5 done; medium-risk tested helpers started |
+> | Kotlin files converted | 41 | 0 | K6 staged core-adjacent helpers | K0–K3 + K5 done; medium-risk tested helpers started |
 > | Kotlin waves complete | K0–K3, K5 | K6 medium-risk helpers | K4 staged behind tests | large stateful core converts only with focused coverage |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
@@ -239,8 +239,8 @@ coverage, and each commit should still pass focused tests plus `verifyActiveApp`
 | [x] | `CompetingAppDetector.kt` | 124 | package allowlist detector; Robolectric tests cover filtering/order and Java override seam |
 | [x] | `DashboardPublisher.kt` | 86 | WebView publish allowlist/lifecycle gate; Robolectric tests cover quoting, readiness, teardown |
 | [x] | `VoltageProbe.kt` | 120 | PID-42 voltage parser/probe; JVM tests cover decode bounds and malformed frames |
-| [ ] | `ClearDtcRunner.java` | 147 | command runner with focused tests |
-| [ ] | `DiagnosticScanRunner.java` | 157 | scan runner with focused tests |
+| [x] | `ClearDtcRunner.kt` | 147 | Mode 04 clear-codes command runner; focused tests cover positive, negative, and unusable replies |
+| [x] | `DiagnosticScanRunner.kt` | 157 | diagnostic probe sweep; new focused test captures command sequence, status progression, location append, and raw transcript |
 | [ ] | `PidPollingState.java` | 306 | polling state helper with focused tests |
 | [ ] | `SessionSummaryStore.java` | 210 | JSONL session-summary store with focused tests |
 | [ ] | `ElmConnection.java` | 297 | IO wrapper with in-memory stream tests |
