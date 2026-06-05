@@ -229,7 +229,12 @@ same way — not auto-split chunks.
       `scrubber.js` tightened the `ScrubPoint` typedef (frac/distMi/grade/etc. are always built),
       optional `scrubChip` opts, `filter(Boolean)` cast, `Number(s.eff)`; `actions.js`
       `clearInterval(... ?? undefined)`, `dataset.x ?? ""`, optional `handleAction` 2nd arg.
-- [x] No exclusions / no `@ts-nocheck` — every file is fully strict-clean.
+- [x] No exclusions / no `@ts-nocheck`, and **no `VD`-as-`any` shortcuts** — all 5 IIFE
+      bootstraps keep `VD` typed as `VoltDashboard` (only the empty `({})` seed is cast). This is
+      *stronger* than before T1: `core.js`/`connection-status.js`/`dtc-*.js` were previously
+      `/** @type {any} */`, which hid bugs. Typing them surfaced 3 real ones — `setDevices`/
+      `setHistory` used `el()` results without null/element-type narrowing, and the `VoltDtcInfo`
+      interface required a `dtc` field that `dtcInfo` never returns (it returns `code`). All fixed.
 - [x] Verified: `typecheck` 0 errors, ESLint clean, Vitest 121/121, `spotlessCheck` clean.
 - [x] `CONTRIBUTING.md` + tsconfig header updated. CI already gates `typecheck` — no workflow change.
 

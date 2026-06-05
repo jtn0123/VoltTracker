@@ -11,7 +11,7 @@
 
 (function () {
   "use strict";
-  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || /** @type {VoltDashboard} */ ({}));
+  const VD = (window.VoltDashboard = window.VoltDashboard || /** @type {VoltDashboard} */ ({}));
 
   // Generic SAE J2012 powertrain codes (P0xxx) - the descriptions match the
   // SAE-defined wording. Many entries follow a family pattern (e.g. P0301-P0312

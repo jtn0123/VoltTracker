@@ -27,7 +27,7 @@
 
 (function () {
   "use strict";
-  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || /** @type {VoltDashboard} */ ({}));
+  const VD = (window.VoltDashboard = window.VoltDashboard || /** @type {VoltDashboard} */ ({}));
 
   VD.DTC_CAUSES = {
 

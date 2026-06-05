@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const VD = /** @type {any} */ (window.VoltDashboard = window.VoltDashboard || /** @type {VoltDashboard} */ ({}));
+  const VD = (window.VoltDashboard = window.VoltDashboard || /** @type {VoltDashboard} */ ({}));
   VD.bridge = window.VoltTrackerAndroid || null;
   VD.el = (/** @type {any} */ id) => document.getElementById(id);
 
@@ -479,8 +479,9 @@
 
   function setDevices(/** @type {any} */ payload) {
     const devices = parsePayload(payload, []);
-    const select = el("deviceSelect");
+    const select = /** @type {HTMLSelectElement | null} */ (el("deviceSelect"));
     const preferred = VD.getLastDevice();
+    if (!select) return;
     select.innerHTML = "";
     if (!devices.length) {
       const opt = document.createElement("option");
@@ -514,6 +515,7 @@
     state.deviceHistory = Array.isArray(parsed) ? parsed : [];
     const card = el("historyCard");
     const list = el("historyList");
+    if (!card || !list) return;
     list.replaceChildren();
     card.hidden = state.deviceHistory.length === 0;
     if (!state.deviceHistory.length) return;

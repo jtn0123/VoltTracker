@@ -38,9 +38,14 @@ interface VoltRoute {
   [key: string]: any;
 }
 
-/** Result of a DTC lookup (dtc-lookup.js `dtcInfo`). */
+/** Result of a DTC lookup (dtc-lookup.js `dtcInfo`) — shape mirrors that function exactly. */
 interface VoltDtcInfo {
-  dtc: string;
+  code: string;
+  description: string | null;
+  known: boolean;
+  category: string | null;
+  causes: any;
+  severity: any;
   [key: string]: any;
 }
 
