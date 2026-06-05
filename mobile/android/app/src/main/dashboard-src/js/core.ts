@@ -1,15 +1,30 @@
-// @ts-check
 // Initializes the VoltDashboard namespace shared by every dashboard JS file. Each
-// of the 5 files is wrapped in its own IIFE; cross-file calls go through
-// `window.VoltDashboard` (aliased locally as `VD`). `window.VoltTrackerAndroid`
-// (the Android->WebView bridge) and `window.VoltTrackerNative` (the WebView<-Android
-// callback surface) are preserved exactly as-is — those names are part of the ABI.
-(function () {
-  "use strict";
+// source file attaches cross-file calls to `window.VoltDashboard` (aliased
+// locally as `VD`). `window.VoltTrackerAndroid` (the Android->WebView bridge)
+// and `window.VoltTrackerNative` (the WebView<-Android callback surface) are
+// preserved exactly as-is — those names are part of the ABI.
 
-  const VD = (window.VoltDashboard = window.VoltDashboard || /** @type {VoltDashboard} */ ({}));
+  type DashboardData = {
+    trips: any[];
+    sessions: any[];
+    hourly: any[];
+    insights: any[];
+    demoLoaded: boolean;
+  };
+
+  type DemoDataCallback = (error: Error | null, data: DashboardData) => void;
+
+  type HistoryDevice = Record<string, any> & {
+    address?: string;
+    name?: string;
+    candidate?: boolean;
+    lastSeen?: unknown;
+    connectCount?: number;
+  };
+
+  const VD = (window.VoltDashboard = window.VoltDashboard || ({} as VoltDashboard));
   VD.bridge = window.VoltTrackerAndroid || null;
-  VD.el = (/** @type {any} */ id) => document.getElementById(id);
+  VD.el = (id: string) => document.getElementById(id);
 
   // bindListenerGuarded attaches a listener but warns + skips if the element ID is
   // missing instead of throwing. The dashboard is assembled from partials at build time, so
@@ -17,7 +32,12 @@
   // leaving every binding AFTER the missing one unwired with no surface signal. The warn is
   // piped through logClientError (window.error handler picks it up) so the regression is
   // visible in dev/test rather than silently swallowed.
-  VD.bindListenerGuarded = function bindListenerGuarded(/** @type {any} */ id, /** @type {any} */ event, /** @type {any} */ handler, /** @type {any} */ opts) {
+  VD.bindListenerGuarded = function bindListenerGuarded(
+    id: string,
+    event: string,
+    handler: EventListenerOrEventListenerObject,
+    opts?: boolean | AddEventListenerOptions
+  ) {
     const node = document.getElementById(id);
     if (!node) {
       const message =
@@ -49,8 +69,8 @@
 
   // Typed querySelectorAll over elements (every dashboard selector targets HTMLElements), so
   // callers get .dataset/.hidden without a per-site cast.
-  const queryAll = (/** @type {any} */ selector) =>
-    /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(selector));
+  const queryAll = (selector: string) =>
+    document.querySelectorAll(selector) as NodeListOf<HTMLElement>;
 
   function readRemoteTilesPreference() {
     try {
@@ -60,7 +80,7 @@
     }
   }
 
-  function escapeHtml(/** @type {any} */ value) {
+  function escapeHtml(value: unknown) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -72,9 +92,9 @@
   // Per-render AbortController so the listeners attached inside setHistory()
   // don't accumulate across re-renders. Each render aborts the previous batch
   // before binding the new one.
-  let /** @type {any} */ historyController = null;
+  let historyController: AbortController | null = null;
 
-  function reportClientError(/** @type {any} */ label, /** @type {any} */ detail) {
+  function reportClientError(label: unknown, detail?: unknown) {
     const message = String(detail || label || "Unknown error");
     try {
       const detailNode = el("errorBannerDetail");
@@ -123,20 +143,19 @@
     }
   })();
 
-  /** @type {{ trips: any[], sessions: any[], hourly: any[], insights: any[], demoLoaded: boolean }} */
-  const data = { trips: [], sessions: [], hourly: [], insights: [], demoLoaded: false };
+  const data: DashboardData = { trips: [], sessions: [], hourly: [], insights: [], demoLoaded: false };
   VD.data = data;
 
   let demoDataLoading = false;
-  const /** @type {any[]} */ demoDataCallbacks = [];
+  const demoDataCallbacks: DemoDataCallback[] = [];
 
-  function cloneArray(/** @type {any} */ value) {
+  function cloneArray(value: unknown) {
     return Array.isArray(value) ? value.map((item) => (
       item && typeof item === "object" ? { ...item } : item
     )) : [];
   }
 
-  function applyDemoData(/** @type {any} */ source) {
+  function applyDemoData(source: any) {
     const next = typeof source === "function" ? source() : source;
     data.trips = cloneArray(next && next.trips);
     data.sessions = cloneArray(next && next.sessions);
@@ -146,14 +165,14 @@
     return data;
   }
 
-  function flushDemoDataCallbacks(/** @type {any} */ error) {
+  function flushDemoDataCallbacks(error: Error | null) {
     const callbacks = demoDataCallbacks.splice(0);
     callbacks.forEach((callback) => {
       try { callback(error, data); } catch (err) { reportClientError("demoData.callback", err instanceof Error ? err.message : undefined); }
     });
   }
 
-  function ensureDemoData(/** @type {any} */ callback) {
+  function ensureDemoData(callback?: DemoDataCallback) {
     if (data.demoLoaded) {
       if (callback) callback(null, data);
       return true;
@@ -183,11 +202,11 @@
     return false;
   }
 
-  function dashboardScriptAlreadyLoaded(/** @type {any} */ src) {
+  function dashboardScriptAlreadyLoaded(src: string) {
     return Boolean(document.querySelector(`script[src="${src}"][data-dashboard-lazy="true"]`));
   }
 
-  function loadDashboardScript(/** @type {any} */ src) {
+  function loadDashboardScript(src: string) {
     if (window.__VoltDashboardLoadScript) {
       return Promise.resolve(window.__VoltDashboardLoadScript(src));
     }
@@ -205,7 +224,7 @@
     });
   }
 
-  let /** @type {any} */ dtcDataPromise = null;
+  let dtcDataPromise: Promise<VoltDashboard> | null = null;
 
   function dtcDataLoaded() {
     return typeof VD.dtcInfo === "function" && Array.isArray(VD.dtcSampleCodes);
@@ -231,7 +250,7 @@
     return dtcDataPromise;
   }
 
-  function dtcSearchUrl(/** @type {any} */ code) {
+  function dtcSearchUrl(code: unknown) {
     const key = String(code || "").trim().toUpperCase();
     const q = encodeURIComponent((key || "OBD-II") + " Chevy Volt DTC");
     return "https://www.google.com/search?q=" + q;
@@ -240,8 +259,7 @@
   // The central runtime/UI state bag. Fields are assigned dynamically across
   // every dashboard file (telemetry samples, render selections, map layers),
   // so it is typed as an open record rather than a closed literal.
-  /** @type {Record<string, any>} */
-  const state = {
+  const state: Record<string, any> = {
     view: "drive",
     mode: "ev",
     selectedRealTripId: null,
@@ -253,7 +271,6 @@
     insights: {},
     // Demo-only staged charge sessions (actions.js stages rows here so they
     // don't touch the real session list); null until demo mode adds the first.
-    /** @type {any[] | null} */
     demoSessions: null,
     appState: {},
     demoActive: false,
@@ -300,8 +317,7 @@
   };
   VD.state = state;
 
-  /** @type {Record<string, [string, string]>} */
-  const realViewMeta = {
+  const realViewMeta: Record<string, [string, string]> = {
     drive: ["Volt Tracker Android", "Drive"],
     trips: ["Logged drives", "Trips"],
     map: ["GPS route", "Map"],
@@ -311,8 +327,7 @@
     signals: ["Enhanced discovery", "Detailed Signals"]
   };
 
-  /** @type {Record<string, string>} */
-  const viewIconPaths = {
+  const viewIconPaths: Record<string, string> = {
     drive: "M13 2 5 13h6l-1 9 9-13h-6z",
     trips: "M4 5h3v3H4V5zm5 0h11v3H9V5zM4 10.5h3v3H4v-3zm5 0h11v3H9v-3zM4 16h3v3H4v-3zm5 0h11v3H9v-3z",
     map: "M15 4 9 2 3 4v18l6-2 6 2 6-2V2l-6 2zm-1 15-4-1.35V5l4 1.35V19z",
@@ -322,7 +337,7 @@
     signals: "M4 6h4m4 0h8M4 12h10m4 0h2M4 18h6m4 0h6M8 4v4m6 8v4m4-10v4"
   };
 
-  function parsePayload(/** @type {any} */ payload, /** @type {any} */ fallback) {
+  function parsePayload(payload: unknown, fallback: any = null) {
     if (!payload) return fallback;
     try { return typeof payload === "string" ? JSON.parse(payload) : payload; }
     catch (_err) { return fallback; }
@@ -333,8 +348,8 @@
   // So a miss now warns ONCE per id (deduped — these run ~1Hz) and pipes through logClientError, the
   // same surfacing the bindListenerGuarded path uses. Both helpers return whether the element was
   // found, so a caller can react to a false if it ever needs to. Mirrors VD.bindListenerGuarded.
-  const warnedMissingTargets = new Set();
-  function warnMissingTarget(/** @type {any} */ fn, /** @type {any} */ id) {
+  const warnedMissingTargets = new Set<string>();
+  function warnMissingTarget(fn: string, id: string) {
     if (warnedMissingTargets.has(id)) return;
     warnedMissingTargets.add(id);
     const message = fn + " skipped: missing #" + id;
@@ -353,17 +368,17 @@
     } catch (ignored) {}
   }
 
-  function setText(/** @type {any} */ id, /** @type {any} */ value) {
+  function setText(id: string, value: unknown) {
     const node = el(id);
     if (!node) {
       warnMissingTarget("setText", id);
       return false;
     }
-    node.textContent = value == null || value === "" ? "--" : value;
+    node.textContent = String(value == null || value === "" ? "--" : value);
     return true;
   }
 
-  function setMeter(/** @type {any} */ id, /** @type {any} */ value) {
+  function setMeter(id: string, value: unknown) {
     const node = el(id);
     if (!node) {
       warnMissingTarget("setMeter", id);
@@ -387,7 +402,7 @@
     return true;
   }
 
-  function setView(/** @type {any} */ view) {
+  function setView(view: string) {
     state.view = view;
     document.body.dataset.activeView = view;
     if (view !== "map" && state.mapFull) {
@@ -421,7 +436,7 @@
     if (icon) icon.setAttribute("d", viewIconPaths[state.view] || viewIconPaths.drive);
   }
 
-  function setDemoActive(/** @type {any} */ active, /** @type {any} */ detail) {
+  function setDemoActive(active: unknown, detail?: string) {
     const next = Boolean(active);
     const changed = state.demoActive !== next;
     state.demoActive = next;
@@ -477,9 +492,9 @@
     state.sessionLastLng = null;
   }
 
-  function setDevices(/** @type {any} */ payload) {
+  function setDevices(payload: unknown) {
     const devices = parsePayload(payload, []);
-    const select = /** @type {HTMLSelectElement | null} */ (el("deviceSelect"));
+    const select = el("deviceSelect") as HTMLSelectElement | null;
     const preferred = VD.getLastDevice();
     if (!select) return;
     select.innerHTML = "";
@@ -490,27 +505,29 @@
       select.append(opt);
       return;
     }
-    devices.forEach((/** @type {any} */ device) => {
+    devices.forEach((device: HistoryDevice) => {
       const option = document.createElement("option");
-      option.value = device.address;
+      option.value = String(device.address || "");
       option.dataset.name = device.name || "OBD adapter";
       option.textContent = `${device.name || "OBD adapter"} · ${device.address}`;
       select.append(option);
     });
     if (preferred.address) {
-      const option = Array.from(select.options).find((item) => item.value === preferred.address);
-      if (option) select.value = preferred.address;
+      const preferredAddress = String(preferred.address);
+      const option = Array.from(select.options).find((item) => item.value === preferredAddress);
+      if (option) select.value = preferredAddress;
     } else {
-      const likely = devices.find((/** @type {any} */ device) => device.obdCandidate);
-      if (likely) select.value = likely.address;
+      const likely = devices.find((device: HistoryDevice) => device.obdCandidate);
+      if (likely) select.value = String(likely.address || "");
     }
   }
 
-  function setHistory(/** @type {any} */ payload) {
+  function setHistory(payload: unknown) {
     // Abort any listeners attached by the previous render so they don't
     // leak when the history list is rebuilt.
     historyController?.abort();
-    historyController = new AbortController();
+    const controller = new AbortController();
+    historyController = controller;
     const parsed = parsePayload(payload, []);
     state.deviceHistory = Array.isArray(parsed) ? parsed : [];
     const card = el("historyCard");
@@ -519,19 +536,19 @@
     list.replaceChildren();
     card.hidden = state.deviceHistory.length === 0;
     if (!state.deviceHistory.length) return;
-    const savedCount = state.deviceHistory.filter((/** @type {any} */ device) => !device.candidate).length;
+    const savedCount = state.deviceHistory.filter((device: HistoryDevice) => !device.candidate).length;
     setText("historyHint", savedCount ? "tap to select" : "paired candidate");
-    list.replaceChildren(...state.deviceHistory.map((/** @type {any} */ device, /** @type {number} */ index) => buildHistoryRow(device, index)));
+    list.replaceChildren(...state.deviceHistory.map((device: HistoryDevice, index: number) => buildHistoryRow(device, index)));
     queryAll("[data-history-index]").forEach((button) => {
       button.addEventListener("click", () => {
         const device = state.deviceHistory[Number(button.dataset.historyIndex)];
         VD.selectDevice(device.address, device.name || "OBD adapter");
         VD.setStatus({ state: "ready", detail: `Selected ${device.name || device.address}.` });
-      }, { signal: historyController.signal });
+      }, { signal: controller.signal });
     });
   }
 
-  function buildHistoryRow(/** @type {any} */ device, /** @type {any} */ index) {
+  function buildHistoryRow(device: HistoryDevice, index: number) {
     const meta = device.candidate ? "paired candidate" : VD.relativeTime(device.lastSeen);
     const count = device.candidate ? "new" : (device.connectCount ? `${device.connectCount}x` : "");
     const button = document.createElement("button");
@@ -568,4 +585,5 @@
     setHistory,
     realViewMeta
   });
-})();
+
+export {};

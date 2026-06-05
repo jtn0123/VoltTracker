@@ -9,7 +9,7 @@ const DASHBOARD_JS = resolve(HERE, '../app/src/main/dashboard-src/js');
 
 const ALLOWED_DOM_SINKS = [
   {
-    file: 'core.js',
+    file: 'core.ts',
     source: 'select.innerHTML = "";',
   },
   {
@@ -31,7 +31,7 @@ function findDomSinks(file) {
 describe('dashboard DOM sink guardrail', () => {
   it('keeps HTML-writing sinks limited to audited chart/clear paths', () => {
     const files = readdirSync(DASHBOARD_JS)
-      .filter((name) => name.endsWith('.js'))
+      .filter((name) => name.endsWith('.js') || name.endsWith('.ts'))
       .sort();
 
     const sinks = files.flatMap(findDomSinks).sort((a, b) => {

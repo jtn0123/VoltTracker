@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,6 +10,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_ASSETS = resolve(HERE, '../app/src/main/assets/dashboard');
 const DASHBOARD_SRC = resolve(HERE, '../app/src/main/dashboard-src');
 
+function sourceFor(name) {
+  const ts = resolve(DASHBOARD_SRC, `js/${name}.ts`);
+  return existsSync(ts) ? ts : resolve(DASHBOARD_SRC, `js/${name}.js`);
+}
+
 describe('dashboard demo data', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -20,7 +25,7 @@ describe('dashboard demo data', () => {
   });
 
   it('keeps demo fixture rows out of core.js and the eager template', () => {
-    const core = readFileSync(resolve(DASHBOARD_SRC, 'js/core.js'), 'utf8');
+    const core = readFileSync(sourceFor('core'), 'utf8');
     const template = readFileSync(resolve(DASHBOARD_SRC, 'index.template.html'), 'utf8');
 
     expect(core).not.toContain('Home -> Office');
