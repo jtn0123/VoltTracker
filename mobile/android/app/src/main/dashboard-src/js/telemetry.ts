@@ -1,11 +1,11 @@
-// @ts-check
-(function () {
-  "use strict";
-
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
   const el = VD.el;
+
+  type PayloadRecord = Record<string, any>;
+  type LiveCellGroup = HTMLElement | Element | null;
+  type ValidationTone = "ok" | "warn" | "bad";
 
   // Live-tile element ids that should pulse with a `.stale` class when the
   // adapter stops sending fresh samples (>3s since lastSampleAt). Derived at
@@ -21,17 +21,17 @@
   // How long (ms) since the last accepted sample before we mark tiles stale.
   const STALE_THRESHOLD_MS = 3000;
 
-  function average(/** @type {any} */ values) {
-    return values.length ? values.reduce((/** @type {any} */ sum, /** @type {any} */ value) => sum + value, 0) / values.length : 0;
+  function average(values: number[]) {
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
   }
 
-  function formatDistance(/** @type {any} */ meters) {
+  function formatDistance(meters: unknown) {
     const miles = Number(meters || 0) / 1609.344;
     if (!Number.isFinite(miles) || miles <= 0) return "--";
     return miles < 10 ? `${miles.toFixed(1)} mi` : `${Math.round(miles)} mi`;
   }
 
-  function escapeHtml(/** @type {any} */ value) {
+  function escapeHtml(value: unknown) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -40,7 +40,7 @@
       .replace(/'/g, "&#39;");
   }
 
-  function setStatus(/** @type {any} */ payload) {
+  function setStatus(payload: unknown) {
     const wasActive = isActiveStatus();
     const status = VD.parsePayload(payload, {});
     state.status = status;
@@ -56,7 +56,7 @@
     updateValidationUi();
   }
 
-  function setAppState(/** @type {any} */ payload) {
+  function setAppState(payload: unknown) {
     state.appState = VD.parsePayload(payload, {});
     const nextTelemetry = state.appState.latestTelemetry || {};
     if (shouldAcceptTelemetry(nextTelemetry)) {
@@ -76,7 +76,7 @@
     updateValidationUi();
   }
 
-  function shouldAcceptTelemetry(/** @type {any} */ sample) {
+  function shouldAcceptTelemetry(sample: PayloadRecord) {
     if (!sample || !Object.keys(sample).length) return false;
     const source = String(sample.source || "").toLowerCase();
     if (source.includes("demo")) return state.demoActive || isActiveStatus();
@@ -177,7 +177,7 @@
     }
   }
 
-  function dbRowCount(/** @type {any} */ storage) {
+  function dbRowCount(storage: PayloadRecord) {
     const keys = [
       "sampleCount",
       "eventCount",
@@ -201,7 +201,7 @@
     return state.lastDevice || {};
   }
 
-  function relativeTime(/** @type {any} */ value) {
+  function relativeTime(value: unknown) {
     const ts = Number(value);
     if (!Number.isFinite(ts) || ts <= 0) return "saved";
     const seconds = Math.max(1, Math.round((Date.now() - ts) / 1000));
@@ -213,13 +213,13 @@
     return `${Math.round(hours / 24)}d ago`;
   }
 
-  function formatWhen(/** @type {any} */ value) {
+  function formatWhen(value: unknown) {
     const ts = Number(value);
     if (!Number.isFinite(ts) || ts <= 0) return "not yet";
     return relativeTime(ts);
   }
 
-  function formatBytes(/** @type {any} */ value) {
+  function formatBytes(value: unknown) {
     const bytes = Number(value);
     if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
     if (bytes < 1024) return `${Math.round(bytes)} B`;
@@ -227,13 +227,13 @@
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  function formatShortDuration(/** @type {number} */ ms) {
+  function formatShortDuration(ms: number) {
     const value = Math.max(0, Number(ms) || 0);
     if (value < 1000) return `${Math.round(value)}ms`;
     return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}s`;
   }
 
-  function setOptionalLiveText(/** @type {any} */ id, /** @type {any} */ value) {
+  function setOptionalLiveText(id: string, value: unknown) {
     VD.setText(id, value);
     const node = el(id);
     if (!node) return;
@@ -244,29 +244,33 @@
     syncOptionalLiveGroup(cell.closest("[data-optional-live-group]"));
   }
 
-  function syncOptionalLiveGroup(/** @type {any} */ group) {
+  function syncOptionalLiveGroup(group: LiveCellGroup) {
     if (!group) return;
     const cells = Array.from(group.querySelectorAll("[data-live-cell]"));
     group.classList.toggle("is-empty", cells.length > 0 && cells.every((cell) => cell.classList.contains("is-empty")));
   }
 
-  function selectDevice(/** @type {any} */ address, /** @type {any} */ name) {
+  function selectDevice(address: unknown, name?: unknown) {
     if (!address) return;
-    const select = /** @type {HTMLSelectElement} */ (el("deviceSelect"));
-    let option = Array.from(select.options).find((item) => item.value === address);
+    const select = el("deviceSelect") as HTMLSelectElement | null;
+    if (!select) return;
+    const addressText = String(address);
+    const nameText = String(name || "OBD adapter");
+    let option = Array.from(select.options).find((item) => item.value === addressText);
     if (!option) {
       option = document.createElement("option");
-      option.value = address;
-      option.dataset.name = name || "OBD adapter";
-      option.textContent = `${name || "OBD adapter"} · remembered`;
+      option.value = addressText;
+      option.dataset.name = nameText;
+      option.textContent = `${nameText} · remembered`;
       select.append(option);
     }
-    select.value = address;
+    select.value = addressText;
     renderOperationalState();
   }
 
   function getSelectedDevice() {
-    const option = /** @type {HTMLSelectElement} */ (el("deviceSelect")).selectedOptions[0];
+    const select = el("deviceSelect") as HTMLSelectElement | null;
+    const option = select?.selectedOptions[0];
     if (!option || !option.value) return null;
     return {
       address: option.value,
@@ -277,7 +281,7 @@
   // Stash the latest sample; defer the heavy renders (updateLiveUi,
   // drawTrace, renderOperationalState, updateValidationUi) to the next animation
   // frame so a high-rate OBD source can't cause render thrash.
-  function updateTelemetry(/** @type {any} */ payload) {
+  function updateTelemetry(payload: unknown) {
     const sample = VD.parsePayload(payload, {});
     const source = String(sample.source || "").toLowerCase();
     const isDemoSample = source.includes("demo");
@@ -425,7 +429,7 @@
   //   live    → samples flowing and fresh
   //   stale   → samples seen but none for STALE_THRESHOLD_MS
   // `isStale` is passed in from applyStaleIndicator() so both share one clock read.
-  function updateRateChip(/** @type {any} */ isStale) {
+  function updateRateChip(isStale: boolean) {
     const chip = el("liveRateChip");
     if (!chip) return;
     const samples = hasLiveSamples();
@@ -607,7 +611,13 @@
     VD.setText("validationSummary", okCount ? `${okCount}/5 ok` : "waiting");
   }
 
-  function setValidationRow(/** @type {any} */ id, /** @type {any} */ tone, /** @type {any} */ label, /** @type {any} */ detail, /** @type {any} */ value) {
+  function setValidationRow(
+    id: string,
+    tone: ValidationTone,
+    label: string,
+    detail: string,
+    value: string
+  ) {
     const row = el(id);
     if (!row) return;
     row.dataset.tone = tone;
@@ -619,20 +629,20 @@
     if (tag) tag.textContent = value;
   }
 
-  function formatAge(/** @type {number} */ ms) {
+  function formatAge(ms: number) {
     const clean = Math.max(0, Number(ms) || 0);
     if (clean < 1000) return "now";
     if (clean < 60000) return `${Math.round(clean / 1000)}s`;
     return `${Math.round(clean / 60000)}m`;
   }
 
-  function summarizePidLine(/** @type {any} */ value) {
+  function summarizePidLine(value: unknown) {
     const clean = String(value || "").replace(/SEARCHING\.+/gi, "").trim();
     const match = clean.match(/4100[0-9A-F]+/i);
     return match ? "01-00 ok" : (clean ? "adapter ok" : "unknown");
   }
 
-  function formatDuration(/** @type {number} */ ms) {
+  function formatDuration(ms: number) {
     const seconds = Math.max(0, Math.round(Number(ms) / 1000));
     if (seconds < 60) return `${seconds}s`;
     const minutes = Math.floor(seconds / 60);
@@ -644,7 +654,7 @@
   }
 
   function drawTrace() {
-    const canvas = /** @type {HTMLCanvasElement | null} */ (el("speedCanvas"));
+    const canvas = el("speedCanvas") as HTMLCanvasElement | null;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -669,7 +679,7 @@
     if (samples.length < 2) return;
     const max = Math.max(120, ...samples);
     ctx.beginPath();
-    samples.forEach((/** @type {any} */ value, /** @type {any} */ index) => {
+    samples.forEach((value: number, index: number) => {
       const x = (index / (samples.length - 1)) * w;
       const y = h - (value / max) * (h - 18) - 8;
       if (index === 0) ctx.moveTo(x, y);
@@ -721,4 +731,5 @@
     formatDuration,
     drawTrace
   });
-})();
+
+export {};

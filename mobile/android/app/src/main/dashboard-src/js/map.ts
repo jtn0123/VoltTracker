@@ -1,30 +1,61 @@
-// @ts-check
-(function () {
-  "use strict";
-
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
   const el = VD.el;
 
-  let /** @type {any} */ mapInstance = null;
-  let /** @type {any} */ remoteTileLayer = null;
-  /** @type {Record<string, any>} */
-  const mapLayerGroups = { routes: null, heat: null, stops: null, eff: null };
-  let /** @type {any} */ mapFitKey = null;
+  type MapRoutePoint = Record<string, any> & {
+    lat: number;
+    lng: number;
+    atMs: number;
+  };
+
+  type MapRoute = Record<string, any> & {
+    points?: MapRoutePoint[];
+    session?: Record<string, any>;
+    distanceMeters?: number;
+  };
+
+  type MapStop = {
+    lat: number;
+    lng: number;
+    durationMs: number;
+  };
+
+  type DemoRouteOpts = {
+    sessionId: number;
+    startedAtMs: number;
+    from: number;
+    to: number;
+    startSoc: number;
+    socDrop: number;
+    accW?: number;
+    elevShift?: number;
+    adapterName?: string;
+  };
+
+  type DemoRoute = MapRoute & {
+    points: MapRoutePoint[];
+    session: Record<string, any>;
+    distanceMeters: number;
+  };
+
+  let mapInstance: any = null;
+  let remoteTileLayer: any = null;
+  const mapLayerGroups: Record<string, any> = { routes: null, heat: null, stops: null, eff: null };
+  let mapFitKey: string | null = null;
   // Live "you are here" marker + breadcrumb, driven by the demo (or real) GPS
   // stream. Separate from the route layer groups so a route re-render leaves it.
-  let /** @type {any} */ livePositionMarker = null;
-  let /** @type {any} */ liveBreadcrumb = null;
-  let /** @type {any[]} */ liveBreadcrumbPts = [];
+  let livePositionMarker: any = null;
+  let liveBreadcrumb: any = null;
+  let liveBreadcrumbPts: Array<[number, number]> = [];
 
   /** Move/draw the live position marker + breadcrumb. No-op until the map is mounted. */
-  function updateLivePosition(/** @type {any} */ lat, /** @type {any} */ lng) {
+  function updateLivePosition(lat: unknown, lng: unknown) {
     if (!mapInstance || typeof L === "undefined") return;
     const la = Number(lat);
     const ln = Number(lng);
     if (!Number.isFinite(la) || !Number.isFinite(ln)) return;
-    const ll = [la, ln];
+    const ll: [number, number] = [la, ln];
     liveBreadcrumbPts.push(ll);
     if (liveBreadcrumbPts.length > 240) liveBreadcrumbPts.shift();
     if (!liveBreadcrumb) {
@@ -55,14 +86,15 @@
   // Per-segment efficiency bucket color for the V3 "Eff" layer. Grey for
   // segments without power data yet, so the user can see at a glance which
   // parts of the drive lack derived efficiency.
-  function mapEffColor(/** @type {any} */ eff) {
-    if (!Number.isFinite(eff)) return "#6a6a72";
-    if (eff >= 4) return "#b8e63b";
-    if (eff >= 2.7) return "#ffb84a";
+  function mapEffColor(eff: unknown) {
+    const value = Number(eff);
+    if (!Number.isFinite(value)) return "#6a6a72";
+    if (value >= 4) return "#b8e63b";
+    if (value >= 2.7) return "#ffb84a";
     return "#ff6b5f";
   }
 
-  function createRemoteTileLayer(/** @type {any} */ map) {
+  function createRemoteTileLayer(map: any) {
     const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       subdomains: "abcd",
       maxZoom: 19,
@@ -73,7 +105,7 @@
     // basemap is down.
     let tileErrorCount = 0;
     let fallbackActivated = false;
-    tiles.on("tileerror", (/** @type {any} */ event) => {
+    tiles.on("tileerror", (event: any) => {
       tileErrorCount += 1;
       const src = (event && event.tile && event.tile.src) || "unknown";
       if (tileErrorCount <= 2) {
@@ -129,7 +161,7 @@
     syncRemoteTiles();
     if (typeof VD.scrubberAttachMap === "function") VD.scrubberAttachMap(mapInstance);
     // Tap anywhere on the map → snap the scrubber to the closest route point.
-    mapInstance.on("click", (/** @type {any} */ e) => {
+    mapInstance.on("click", (e: any) => {
       if (e && e.latlng && typeof VD.scrubAtLatLng === "function") {
         VD.scrubAtLatLng(e.latlng.lat, e.latlng.lng);
       }
@@ -141,7 +173,7 @@
     const storage = state.storage || {};
     const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
     if (routes.length) {
-      const selectedExists = routes.some((/** @type {any} */ route) =>
+      const selectedExists = routes.some((route: MapRoute) =>
         String((route.session || {}).id || "") === String(state.selectedMapSessionId || "")
       );
       if (!selectedExists) state.selectedMapSessionId = (routes[0].session || {}).id || null;
@@ -156,7 +188,7 @@
     if (frame) frame.dataset.layer = layer;
     VD.setText("mapStopsCount", stops.length ? String(Math.min(20, stops.length)) : "0");
     document.querySelectorAll("[data-map-layer]").forEach((node) => {
-      const button = /** @type {HTMLElement} */ (node);
+      const button = node as HTMLElement;
       const active = button.dataset.mapLayer === layer;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-selected", active ? "true" : "false");
@@ -216,13 +248,13 @@
     // Hide the Recorded Sessions card when the chip strip already covers
     // every drive. It re-appears with its empty-state message when there are
     // no logged drives yet (so the user sees the "no route" prompt).
-    const sessionsCard = /** @type {HTMLElement | null} */ (document.querySelector("#view-map .map-layout"));
+    const sessionsCard = document.querySelector("#view-map .map-layout") as HTMLElement | null;
     if (sessionsCard) sessionsCard.hidden = routes.length > 0;
   }
 
   // Chip date formatter: "Today 2:51 AM" / "Yesterday 6:54 PM" / "Sat 9:15 AM" /
   // "Oct 15". More skim-able than "6h ago / 30h ago / 4d ago".
-  function fmtChipDate(/** @type {number} */ ms) {
+  function fmtChipDate(ms: number) {
     if (!Number.isFinite(ms)) return "session";
     const now = new Date();
     const d = new Date(ms);
@@ -248,7 +280,7 @@
   // start time, distance, and a color-coded average efficiency dot — same
   // pattern as the demo's drive picker. Click delegation flows through the
   // existing [data-map-session] handler in actions.js.
-  function renderMapDriveChips(/** @type {any} */ routes) {
+  function renderMapDriveChips(routes: MapRoute[]) {
     const wrap = el("mapDriveChips");
     if (!wrap) return;
     if (!routes.length) {
@@ -258,7 +290,7 @@
     }
     wrap.hidden = false;
     const selId = String(state.selectedMapSessionId || "");
-    const chips = routes.map((/** @type {any} */ route) => {
+    const chips = routes.map((route) => {
       if (typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
       const s = sessionForRoute(route);
       const id = String(s.id || "");
@@ -275,9 +307,9 @@
       const distMi = (Number(route.distanceMeters || 0) / 1609.34).toFixed(1);
       distance.textContent = distMi + " mi";
       meta.append(distance);
-      const effPts = (route.points || []).filter((/** @type {any} */ p) => Number.isFinite(Number(p.eff)));
+      const effPts = (route.points || []).filter((p) => Number.isFinite(Number(p.eff)));
       const avgEff = effPts.length
-        ? effPts.reduce((/** @type {any} */ acc, /** @type {any} */ p) => acc + Number(p.eff), 0) / effPts.length
+        ? effPts.reduce((acc, p) => acc + Number(p.eff), 0) / effPts.length
         : 0;
       if (avgEff > 0) {
         meta.append(document.createTextNode(" · "));
@@ -298,7 +330,7 @@
   }
 
   // Draws the selected route on Leaflet as routes / heat / stops layer groups.
-  function drawMapRoute(/** @type {any} */ points, /** @type {any} */ hasRoute, /** @type {any} */ layer, /** @type {any} */ routeSession) {
+  function drawMapRoute(points: MapRoutePoint[], hasRoute: boolean, layer: string, routeSession: Record<string, any>) {
     const container = el("mapLeaflet");
     if (!container || !container.offsetWidth || !container.offsetHeight) return;
     const map = ensureMap();
@@ -313,7 +345,7 @@
     if (!hasRoute) return;
     const drawable = points.filter(isValidRoutePoint);
     if (drawable.length < 2) return;
-    const latlngs = drawable.map((/** @type {any} */ p) => [Number(p.lat), Number(p.lng)]);
+    const latlngs = drawable.map((p) => [Number(p.lat), Number(p.lng)] as [number, number]);
 
     mapLayerGroups.routes = L.layerGroup([
       L.polyline(latlngs, { color: "#ff7a45", weight: 9, opacity: 0.16 }),
@@ -322,8 +354,7 @@
       L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: "#fff", weight: 2, fillColor: "#ff7141", fillOpacity: 1 })
     ]);
 
-    /** @type {Record<string, any[]>} */
-    const bands = { "#ff6b4a": [], "#ffd23f": [], "#7ee06a": [] };
+    const bands: Record<string, any[]> = { "#ff6b4a": [], "#ffd23f": [], "#7ee06a": [] };
     for (let i = 1; i < drawable.length; i += 1) {
       const speed = segmentSpeedMps(drawable[i - 1], drawable[i]);
       const color = speed < 8 ? "#ff6b4a" : (speed < 18 ? "#ffd23f" : "#7ee06a");
@@ -350,8 +381,7 @@
     // V3 efficiency layer — per-segment polylines bucketed by mi/kWh.
     // Segments with no power data (eff null) render grey so the user
     // can tell which portions of the drive lack derived efficiency.
-    /** @type {Record<string, any[]>} */
-    const effBands = {};
+    const effBands: Record<string, any[]> = {};
     for (let i = 1; i < drawable.length; i += 1) {
       const color = mapEffColor(Number(drawable[i].eff));
       (effBands[color] = effBands[color] || []).push([latlngs[i - 1], latlngs[i]]);
@@ -377,13 +407,14 @@
     }
   }
 
-  function isValidRoutePoint(/** @type {any} */ point) {
-    const lat = Number(point && point.lat);
-    const lng = Number(point && point.lng);
+  function isValidRoutePoint(point: unknown): point is MapRoutePoint {
+    const candidate = point as MapRoutePoint | null;
+    const lat = Number(candidate && candidate.lat);
+    const lng = Number(candidate && candidate.lng);
     return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
   }
 
-  function routeFitKey(/** @type {any} */ routeSession, /** @type {any[]} */ points) {
+  function routeFitKey(routeSession: Record<string, any>, points: MapRoutePoint[]) {
     const first = points[0] || {};
     const last = points[points.length - 1] || {};
     return [
@@ -396,7 +427,7 @@
     ].join(":");
   }
 
-  function renderMapSessionList(/** @type {any} */ routes) {
+  function renderMapSessionList(routes: MapRoute[]) {
     const list = el("mapSessionList");
     if (!list) return;
     if (!routes.length) {
@@ -409,7 +440,7 @@
     list.replaceChildren(...routes.map(buildMapSessionRow));
   }
 
-  function buildMapSessionRow(/** @type {any} */ r) {
+  function buildMapSessionRow(r: MapRoute) {
     const s = sessionForRoute(r);
     const active = String(s.id || "") === String(state.selectedMapSessionId || "");
     const button = document.createElement("button");
@@ -428,10 +459,10 @@
     return button;
   }
 
-  function selectedMapRoute(/** @type {any} */ storage) {
+  function selectedMapRoute(storage: Record<string, any>): MapRoute {
     const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
     if (routes.length) {
-      const selected = routes.find((/** @type {any} */ route) => String((route.session || {}).id || "") === String(state.selectedMapSessionId || ""));
+      const selected = routes.find((route: MapRoute) => String((route.session || {}).id || "") === String(state.selectedMapSessionId || ""));
       if (selected) return selected;
       state.selectedMapSessionId = (routes[0].session || {}).id || null;
       return routes[0];
@@ -439,11 +470,11 @@
     return storage.latestRoute || {};
   }
 
-  function sessionForRoute(/** @type {any} */ route) {
+  function sessionForRoute(route: MapRoute) {
     return route && route.session ? route.session : {};
   }
 
-  function haversineMetersJs(/** @type {number} */ lat1, /** @type {number} */ lng1, /** @type {number} */ lat2, /** @type {number} */ lng2) {
+  function haversineMetersJs(lat1: number, lng1: number, lat2: number, lng2: number) {
     const r = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLng = (lng2 - lng1) * Math.PI / 180;
@@ -453,7 +484,7 @@
     return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  function routeDistanceMeters(/** @type {any} */ points) {
+  function routeDistanceMeters(points: MapRoutePoint[]) {
     let total = 0;
     for (let i = 1; i < points.length; i += 1) {
       total += haversineMetersJs(points[i - 1].lat, points[i - 1].lng, points[i].lat, points[i].lng);
@@ -461,15 +492,15 @@
     return total;
   }
 
-  function segmentSpeedMps(/** @type {any} */ a, /** @type {any} */ b) {
+  function segmentSpeedMps(a: MapRoutePoint, b: MapRoutePoint) {
     const seconds = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
     return haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / seconds;
   }
 
   // A stop is a sustained run (>= 45 s) of near-zero movement between GPS points.
-  function detectStops(/** @type {any} */ points) {
-    const /** @type {any[]} */ stops = [];
-    let runStart = null;
+  function detectStops(points: MapRoutePoint[]): MapStop[] {
+    const stops: MapStop[] = [];
+    let runStart: number | null = null;
     for (let i = 1; i < points.length; i += 1) {
       const slow = segmentSpeedMps(points[i - 1], points[i]) < 1.5;
       if (slow) {
@@ -483,7 +514,7 @@
     return stops;
   }
 
-  function addStop(/** @type {any} */ stops, /** @type {any} */ points, /** @type {any} */ startIdx, /** @type {any} */ endIdx) {
+  function addStop(stops: MapStop[], points: MapRoutePoint[], startIdx: number, endIdx: number) {
     const durationMs = Number(points[endIdx].atMs) - Number(points[startIdx].atMs);
     if (durationMs < 45000) return;
     const mid = points[Math.floor((startIdx + endIdx) / 2)];
@@ -494,17 +525,16 @@
   // lat, lng] triples. Used only as preview content when no Android bridge is present, so
   // the dashboard can be reviewed loaded; it never runs inside the real app.
   const _SAMPLE_ROUTE_START_MS = 1779281066443;
-  const SAMPLE_ROUTE = [[0,32.80131,-116.9513],[29,32.80324,-116.95098],[58,32.80344,-116.95173],[86,32.80321,-116.95898],[112,32.80314,-116.96924],[139,32.79793,-116.97686],[167,32.78853,-116.97791],[194,32.78066,-116.9825],[220,32.77918,-116.99186],[247,32.77833,-117.00258],[273,32.77462,-117.01211],[299,32.77102,-117.02164],[326,32.77389,-117.03147],[352,32.77268,-117.04105],[378,32.77609,-117.0498],[405,32.77837,-117.05984],[431,32.77939,-117.06921],[457,32.7801,-117.07931],[483,32.78089,-117.0893],[511,32.77943,-117.09954],[537,32.77872,-117.10943],[563,32.77788,-117.1194],[590,32.77325,-117.12789],[616,32.77062,-117.13732],[642,32.76709,-117.14734],[669,32.7644,-117.15821],[695,32.76095,-117.16827],[721,32.75943,-117.17893],[748,32.76013,-117.18982],[774,32.76021,-117.19997],[800,32.75575,-117.20492],[826,32.75121,-117.20511],[852,32.74743,-117.2089],[878,32.74532,-117.21175],[905,32.74297,-117.21367],[934,32.73984,-117.21632],[961,32.73651,-117.21916],[989,32.73247,-117.22261],[1017,32.72903,-117.22553],[1045,32.7292,-117.22551],[1074,32.72893,-117.22561],[1103,32.72679,-117.22744],[1130,32.72613,-117.228],[1158,32.72348,-117.23026],[1188,32.72314,-117.23053],[1217,32.72154,-117.23188],[1245,32.7204,-117.23277],[1273,32.71904,-117.23456],[1301,32.71875,-117.23497],[1329,32.71858,-117.2352],[1358,32.71839,-117.23547],[1386,32.71828,-117.23569],[1415,32.71818,-117.2357],[1444,32.71791,-117.23587],[1473,32.71751,-117.23595],[1501,32.71704,-117.23612],[1530,32.71623,-117.23621],[1557,32.71601,-117.23646],[1585,32.71559,-117.23663],[1613,32.71527,-117.23675],[1640,32.71482,-117.23691],[1667,32.71444,-117.23707],[1693,32.71383,-117.23737],[1721,32.71325,-117.23766],[1747,32.71302,-117.23772],[1773,32.71254,-117.23785],[1801,32.71167,-117.2381],[1829,32.71131,-117.23819],[1857,32.71064,-117.23836],[1885,32.71034,-117.23846],[1913,32.70995,-117.23854],[1941,32.70949,-117.23866],[1971,32.70894,-117.2388],[1999,32.70801,-117.23906],[2027,32.70724,-117.23926],[2056,32.70754,-117.23883],[2085,32.70661,-117.23928],[2112,32.70621,-117.23918],[2140,32.70603,-117.2382],[2168,32.70531,-117.23915],[2194,32.705,-117.23913],[2221,32.70452,-117.23904],[2249,32.70137,-117.23966],[2276,32.69781,-117.24032],[2303,32.69418,-117.24076],[2331,32.69063,-117.23976],[2360,32.68805,-117.23964],[2389,32.68648,-117.23939],[2417,32.6851,-117.23849],[2445,32.68422,-117.23824],[2474,32.68409,-117.23972],[2503,32.68402,-117.23975],[2529,32.68412,-117.2397]];
+  const SAMPLE_ROUTE: Array<[number, number, number]> = [[0,32.80131,-116.9513],[29,32.80324,-116.95098],[58,32.80344,-116.95173],[86,32.80321,-116.95898],[112,32.80314,-116.96924],[139,32.79793,-116.97686],[167,32.78853,-116.97791],[194,32.78066,-116.9825],[220,32.77918,-116.99186],[247,32.77833,-117.00258],[273,32.77462,-117.01211],[299,32.77102,-117.02164],[326,32.77389,-117.03147],[352,32.77268,-117.04105],[378,32.77609,-117.0498],[405,32.77837,-117.05984],[431,32.77939,-117.06921],[457,32.7801,-117.07931],[483,32.78089,-117.0893],[511,32.77943,-117.09954],[537,32.77872,-117.10943],[563,32.77788,-117.1194],[590,32.77325,-117.12789],[616,32.77062,-117.13732],[642,32.76709,-117.14734],[669,32.7644,-117.15821],[695,32.76095,-117.16827],[721,32.75943,-117.17893],[748,32.76013,-117.18982],[774,32.76021,-117.19997],[800,32.75575,-117.20492],[826,32.75121,-117.20511],[852,32.74743,-117.2089],[878,32.74532,-117.21175],[905,32.74297,-117.21367],[934,32.73984,-117.21632],[961,32.73651,-117.21916],[989,32.73247,-117.22261],[1017,32.72903,-117.22553],[1045,32.7292,-117.22551],[1074,32.72893,-117.22561],[1103,32.72679,-117.22744],[1130,32.72613,-117.228],[1158,32.72348,-117.23026],[1188,32.72314,-117.23053],[1217,32.72154,-117.23188],[1245,32.7204,-117.23277],[1273,32.71904,-117.23456],[1301,32.71875,-117.23497],[1329,32.71858,-117.2352],[1358,32.71839,-117.23547],[1386,32.71828,-117.23569],[1415,32.71818,-117.2357],[1444,32.71791,-117.23587],[1473,32.71751,-117.23595],[1501,32.71704,-117.23612],[1530,32.71623,-117.23621],[1557,32.71601,-117.23646],[1585,32.71559,-117.23663],[1613,32.71527,-117.23675],[1640,32.71482,-117.23691],[1667,32.71444,-117.23707],[1693,32.71383,-117.23737],[1721,32.71325,-117.23766],[1747,32.71302,-117.23772],[1773,32.71254,-117.23785],[1801,32.71167,-117.2381],[1829,32.71131,-117.23819],[1857,32.71064,-117.23836],[1885,32.71034,-117.23846],[1913,32.70995,-117.23854],[1941,32.70949,-117.23866],[1971,32.70894,-117.2388],[1999,32.70801,-117.23906],[2027,32.70724,-117.23926],[2056,32.70754,-117.23883],[2085,32.70661,-117.23928],[2112,32.70621,-117.23918],[2140,32.70603,-117.2382],[2168,32.70531,-117.23915],[2194,32.705,-117.23913],[2221,32.70452,-117.23904],[2249,32.70137,-117.23966],[2276,32.69781,-117.24032],[2303,32.69418,-117.24076],[2331,32.69063,-117.23976],[2360,32.68805,-117.23964],[2389,32.68648,-117.23939],[2417,32.6851,-117.23849],[2445,32.68422,-117.23824],[2474,32.68409,-117.23972],[2503,32.68402,-117.23975],[2529,32.68412,-117.2397]];
 
   // Build one synthetic route from a slice of SAMPLE_ROUTE. Each route gets its
   // own session id, start time, altitude profile, socTrack, and powerTrack so
   // the chip strip, Eff layer, scrubber, and Insights scatter all populate
   // with varied content rather than a single drive.
-  function buildSampleRoute(/** @type {any} */ opts) {
+  function buildSampleRoute(opts: DemoRouteOpts): DemoRoute {
     const slice = SAMPLE_ROUTE.slice(opts.from, opts.to);
     const baseT = slice[0][0];
-    /** @type {Array<{ atMs: number, lat: number, lng: number, altM?: number }>} */
-    const points = slice.map(([t, lat, lng]) => ({
+    const points: MapRoutePoint[] = slice.map(([t, lat, lng]) => ({
       atMs: opts.startedAtMs + (t - baseT) * 1000, lat, lng
     }));
     const startMs = points[0].atMs;
@@ -528,7 +558,7 @@
         (opts.elevShift || 0);
     }
 
-    const socTrack = [];
+    const socTrack: Array<{ atMs: number; soc: number }> = [];
     const socEnd = Math.max(15, opts.startSoc - opts.socDrop);
     for (let i = 0; i <= 24; i += 1) {
       const f = i / 24;
@@ -538,7 +568,7 @@
       });
     }
 
-    const powerTrack = [];
+    const powerTrack: Array<{ atMs: number; powerKw: number }> = [];
     const mass = 1720, g = 9.81, Crr = 0.011, kAero = 0.5 * 1.2 * 0.28 * 2.2;
     let prevV = 0;
     for (let i = 0; i < points.length; i += 1) {
@@ -750,14 +780,7 @@
     VD.renderInsightStats();
   }
 
-  /**
-   * Named demo scenarios for systematic dogfooding. "typical" is the rich
-   * happy-path dataset (loadSampleData); the rest mutate that base (or clear it)
-   * to exercise empty states, dense data, fault/error states, and layout
-   * extremes. Browser-only — never runs with a native bridge.
-   * @param {string} name
-   */
-  function loadDemoScenario(name) {
+  function loadDemoScenario(name: string) {
     const scenario = String(name || "typical");
     if (scenario === "empty") {
       VD.setDemoActive(false);
@@ -844,4 +867,5 @@
     loadSampleData,
     loadDemoScenario
   });
-})();
+
+export {};

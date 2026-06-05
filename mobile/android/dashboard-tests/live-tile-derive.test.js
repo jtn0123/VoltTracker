@@ -3,17 +3,21 @@
 // A new live tile in a partial without the attribute will fail here (and the
 // stale indicator wouldn't bind to it in prod either).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const TELEMETRY_JS = resolve(
-  HERE,
-  '../app/src/main/dashboard-src/js/telemetry.js',
-);
+function sourceFor(name) {
+  const ts = resolve(HERE, `../app/src/main/dashboard-src/js/${name}.ts`);
+  return existsSync(ts)
+    ? ts
+    : resolve(HERE, `../app/src/main/dashboard-src/js/${name}.js`);
+}
+
+const TELEMETRY_SOURCE = sourceFor('telemetry');
 
 describe('LIVE_TILE_IDS is DOM-derived', () => {
   beforeEach(async () => {
@@ -29,7 +33,7 @@ describe('LIVE_TILE_IDS is DOM-derived', () => {
     // version of this check only matched if the array contained "speedValue", so a
     // refactor that swapped to a different ID set would slip through. Match ANY
     // literal-array assignment to LIVE_TILE_IDS.
-    const source = readFileSync(TELEMETRY_JS, 'utf8');
+    const source = readFileSync(TELEMETRY_SOURCE, 'utf8');
     const hardcoded = /\b(?:const|let|var)\s+LIVE_TILE_IDS\s*=\s*\[/.test(source);
     expect(
       hardcoded,

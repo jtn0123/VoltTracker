@@ -36,10 +36,10 @@ const DASHBOARD_MODULE_LOADERS = {
   'drive.js': () => import('../../app/src/main/dashboard-src/js/drive.ts'),
   'dtc-causes.js': () => import('../../app/src/main/dashboard-src/js/dtc-causes.ts'),
   'dtc-lookup.js': () => import('../../app/src/main/dashboard-src/js/dtc-lookup.ts'),
-  'map.js': () => import('../../app/src/main/dashboard-src/js/map.js'),
+  'map.js': () => import('../../app/src/main/dashboard-src/js/map.ts'),
   'panels.js': () => import('../../app/src/main/dashboard-src/js/panels.js'),
   'scrubber.js': () => import('../../app/src/main/dashboard-src/js/scrubber.ts'),
-  'telemetry.js': () => import('../../app/src/main/dashboard-src/js/telemetry.js'),
+  'telemetry.js': () => import('../../app/src/main/dashboard-src/js/telemetry.ts'),
   'troubleshooter.js': () => import('../../app/src/main/dashboard-src/js/troubleshooter.ts'),
 };
 

@@ -65,9 +65,9 @@ diverge.
 
 | Status | Files |
 |---|---|
-| Converted | `demo-data.ts`, `connection-tools.ts`, `connection-status.ts`, `dtc-causes.ts`, `dtc-lookup.ts`, `drive.ts`, `troubleshooter.ts`, `scrubber.ts` |
+| Converted | `demo-data.ts`, `connection-tools.ts`, `connection-status.ts`, `dtc-causes.ts`, `dtc-lookup.ts`, `drive.ts`, `troubleshooter.ts`, `scrubber.ts`, `telemetry.ts`, `map.ts` |
 | Next low/medium risk | none remaining in the current queue |
-| Next higher risk | `telemetry.js`, `map.js` |
+| Next higher risk | none remaining in the current queue |
 | Leave until late | `core.js`, `actions.js`, `panels.js` |
 
 ### Kotlin-owned files
@@ -315,6 +315,10 @@ the global-namespace shim; types replace the `dashboard-globals.d.ts` ambient de
             force-stop package parsing, and observer wrappers now use TS types
       - [x] `scrubber.js` -> `scrubber.ts`: route-derived scrub samples, chart tracks,
             cursor state, and the Leaflet marker handle now use TS types
+      - [x] `telemetry.js` -> `telemetry.ts`: native payload ingestion, live-tile stale
+            state, validation rows, and canvas trace helpers now use TS types
+      - [x] `map.js` -> `map.ts`: Leaflet map lifecycle, route drawing, session chips,
+            stop detection, demo route generation, and scenario loading now use TS types
 - [ ] (Optional) source maps for on-device debugging, with a `*.map` packaging exclude
 - [ ] (Optional, T3) debug-only WebView → vite dev server hook for on-device live reload
 
@@ -352,3 +356,5 @@ the global-namespace shim; types replace the `dashboard-globals.d.ts` ambient de
 | 2026-06-05 | T2b lazy-data slice: `dtc-causes` and `dtc-lookup` moved to `.ts` modules. The big curated tables stayed structurally unchanged; the wrapper now uses TS signatures and still emits the same lazy classic script filenames for the WebView. |
 | 2026-06-05 | T2b Drive slice: `drive` moved to a `.ts` module. The public `VoltDashboard` render helpers stay attached for `telemetry.js`, while the chip model, chart points, DOM widths, canvas node, and resize debounce state now use TS annotations. |
 | 2026-06-05 | T2b support-UI slice: `troubleshooter` and `scrubber` moved to `.ts` modules. The WebView still receives `js/troubleshooter.js` and `js/scrubber.js`; local TS types now cover failure copy, stale telemetry rows, route scrub samples, chart tracks, and scrubber cursor/marker state. |
+| 2026-06-05 | T2b telemetry slice: `telemetry` moved to a `.ts` module while preserving the native callback/public `VoltDashboard` surface. Payloads remain open records at the bridge boundary; concrete helpers now type live-tile IDs, validation tones, formatting inputs, and the speed trace canvas path. |
+| 2026-06-05 | T2b map slice: `map` moved to a `.ts` module. Leaflet remains a runtime global for the WebView; local types now cover route points, stop rows, demo route options, live breadcrumb coordinates, and route/session helper signatures. |
