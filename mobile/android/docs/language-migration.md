@@ -12,8 +12,8 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 17 | 0 | ~14 candidates | K0 canary + K1 (constants/enums) + K2 (11 DTOs) |
-> | Kotlin waves complete | K0–K2 | — | K3–K4 | K3 (opportunistic) or T1 (strictNullChecks) next |
+> | Kotlin files converted | 20 | 2 left (tested) | ~7 candidates | K0–K2 + K3 partial (3 of 6) |
+> | Kotlin waves complete | K0–K2, K3 partial | — | K3 tail, K4 | BackupMigrator + ChargeSessionMaterializer next; BackupController stays Java (no test) |
 > | Dashboard JS type-safety | checkJs + strictNullChecks ✅ | — | full TS (T2) | whole dir, null-safe, zero build |
 > | Dashboard build step | none | — | esbuild/vite (proposed) | zero-build today |
 
@@ -147,16 +147,20 @@ held at **90.5%** (floor 89%), project **76.7%** (floor 71%).
 | [x] | `EnhancedPidProfile.kt` | 16 | `clean` (trim + null→`""`) via file-private helper |
 
 ### Wave K3 — Class-with-nested-enum + mid-size logic (opportunistic)
-Convert when you're already reworking these; more surface than K1/K2.
+More surface than K1/K2 — only converting the ones with a **test safety net**, faithfully
+(identity-equality, `@JvmField` for field access, `@JvmStatic`/`const val` for statics,
+`require(...)` for the validating constructors). `BackupController` has **no test**, so it
+stays Java until it gets coverage — converting untested backup/restore orchestration blind
+is exactly the risk the "opportunistic" rule guards against.
 
 | # | File | Lines | Notes |
 |---|---|---:|---|
-| [ ] | `SessionStateMachine.java` | 90 | enum + transition logic; `when` exhaustiveness wins |
-| [ ] | `location/LocationFilter.java` | 152 | enum + filtering logic |
-| [ ] | `data/BackupMigrator.java` | 134 | enum + migration steps; `data` floor |
-| [ ] | `PidSchedule.java` | 223 | enum + scheduling; check threading |
-| [ ] | `materialize/ChargeSessionMaterializer.java` | 278 | enum + heuristics; `materialize` is well-tested |
-| [ ] | `BackupController.java` | 444 | large; only if substantially reworked |
+| [x] | `SessionStateMachine.kt` | 90 | `@Synchronized` methods; `@JvmStatic phaseForDashboardState`; `switch`→exhaustive `when` |
+| [x] | `location/LocationFilter.kt` | 152 | `Decision` enum; secondary no-arg ctor; `const val` defaults; `@JvmStatic` helpers |
+| [x] | `PidSchedule.kt` | 223 | `object`; `Header`/`PidSpec` nested; `@JvmField` lists/fields; `require` validation |
+| [ ] | `data/BackupMigrator.kt` | 134 | tested; Android SQLite + file I/O (`.use {}`) — data-touching, convert carefully |
+| [ ] | `materialize/ChargeSessionMaterializer.kt` | 278 | tested; charge heuristics — data-touching, convert carefully |
+| [-] | `BackupController.java` | 444 | **no test** → stays Java; convert only when it gets coverage / is reworked |
 
 ### Wave K4 — Large stateful core (defer; convert only mid-rework) `[-]`
 High interop surface (threads, listeners, the WebView bridge). Language-only churn here
@@ -289,3 +293,5 @@ top *only* for the dev server / HMR against the browser preview. Sub-steps:
 | 2026-06-04 | Wave K1 landed: `VehicleActivityThresholds` + 4 enums (`FailureClass`, `classify/VehicleState`, `classify/Confidence`, `materialize/Confidence`) converted to Kotlin. Zero call-site changes; all gates green. Next: K2 (DTOs) or T1. |
 | 2026-06-04 | Wave K2 landed: all 11 DTO/value classes converted. Chose **plain `class` + `@JvmField`** over `data class` (ctor normalization + identity-equality preservation + `data` coverage floor). Zero call-site changes; `data` 90.5%/project 76.7%. Java main files now 82, Kotlin 17. Next: K3 (opportunistic) or T1. |
 | 2026-06-04 | Wave T1 landed: `strictNullChecks` ON, dashboard fully null-safe. Root-cause fix (required vs optional `VoltDashboard` members) cleared 656 of 709 noise errors; fixed the 53 real ones with no exclusions. typecheck/ESLint/Vitest(121)/spotless all green. Remaining: K3 and T2 (full TS+bundler). |
+| 2026-06-04 | Post-review: kept all `VD` bootstraps typed (dropped `any`), which surfaced + fixed 3 latent bugs (setDevices/setHistory null-guards, `VoltDtcInfo` had a phantom `dtc` field). |
+| 2026-06-04 | Wave K3 (partial): converted SessionStateMachine, LocationFilter, PidSchedule to Kotlin (the tested, non-data-integrity logic). All gates green. BackupMigrator + ChargeSessionMaterializer remain (tested, data-touching); BackupController stays Java (no test). |
