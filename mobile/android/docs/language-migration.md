@@ -12,8 +12,8 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 22 | 0 | 1 (BackupController) | K0–K3 done (5 of 6 K3; BackupController stays Java) |
-> | Kotlin waves complete | K0–K3 | — | K4 (deferred) | K3 done except untested BackupController |
+> | Kotlin files converted | 23 | 0 | tested helper candidates | K0–K3 done; K5 started; BackupController stays Java |
+> | Kotlin waves complete | K0–K3 | K5 small helpers | K4 (deferred) | large stateful core remains Java-for-now |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
 
@@ -75,7 +75,7 @@ New Android app code should be Kotlin. Existing Java should convert only when th
 clear test safety net or is already being substantially reworked. Good future Kotlin
 candidates are small, tested helpers/payload utilities such as `ConnectionFailureClassifier`,
 `BluetoothStateReporter`, `DeviceCatalog`, `DiagnosticsShareIntent`, `PermissionGate`,
-`RollingAppLog`, `WebViewBootstrap`, `SpeedPlausibilityFilter`, `StorageSummaryJson`,
+`RollingAppLog`, `WebViewBootstrap`, `StorageSummaryJson`,
 `AppStateJson`, `DiagnosticCodeReport`, and narrowly-scoped `ObdStore*` helpers when their
 database tests cover the behavior.
 
@@ -201,6 +201,22 @@ High interop surface (threads, listeners, the WebView bridge). Language-only chu
 is not worth the risk.
 - [-] `ObdPollingEngine.java`, `ObdService.java`, `SessionRecorder.java`,
   `ObdProtocol.java`, `MainActivity.java`, `VoltBridge.java`
+
+### Wave K5 — Small tested helpers `[~]`
+After the original K0-K3 waves, continue only with files that are small and already covered by
+focused JVM/Robolectric tests. This wave is opportunistic; each item should stand alone and pass
+`verifyActiveApp` before moving to the next helper.
+
+| # | File | Lines | Notes |
+|---|---|---:|---|
+| [x] | `SpeedPlausibilityFilter.kt` | 45 | stateful speed-glitch filter; existing Java test covers every branch |
+| [ ] | `ConnectionFailureClassifier.java` | — | candidate if classifier tests cover wire buckets |
+| [ ] | `BluetoothStateReporter.java` | — | candidate with existing Robolectric tests |
+| [ ] | `DeviceCatalog.java` | — | candidate, but larger parsing surface |
+| [ ] | `DiagnosticsShareIntent.java` | — | candidate, but Android intent/file URI surface |
+| [ ] | `PermissionGate.java` | — | candidate, but Activity/runtime-permission surface |
+| [ ] | `RollingAppLog.java` | — | candidate if log retention tests cover edge cases |
+| [ ] | `WebViewBootstrap.java` | — | candidate with startup contract tests |
 
 ---
 
