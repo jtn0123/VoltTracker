@@ -12,7 +12,7 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 93 | 6 Java files | K4 final core | K0–K3 + K5–K10 done; K11 in progress |
+> | Kotlin files converted | 95 | 4 Java files | K4 final core | K0–K3 + K5–K10 done; K11 in progress |
 > | Kotlin waves complete | K0–K3, K5–K10 | K11 final core | K4 staged behind tests | large stateful core converts only with focused coverage |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
@@ -81,10 +81,9 @@ database tests cover the behavior.
 
 ### Java-for-now files
 These files are intentionally not Kotlin targets for a language-only pass:
-`MainActivity.java`, `VoltBridge.java`, `ObdService.java`, `ObdPollingEngine.java`,
-`SessionRecorder.java`, and `TroubleshooterBridge.java`. Convert them only during a
-real refactor with focused tests, because they own UI lifecycle, WebView bridge ABI,
-threads, Bluetooth/service control, or session persistence.
+`MainActivity.java`, `ObdService.java`, `ObdPollingEngine.java`, and
+`SessionRecorder.java`. Convert them only during a real refactor with focused tests,
+because they own UI lifecycle, threads, Bluetooth/service control, or session persistence.
 
 ---
 
@@ -200,7 +199,7 @@ High interop surface (threads, listeners, the WebView bridge). Convert these whe
 target has a focused test harness or when a refactor creates one; Git is the rollback
 tool, but focused tests are the reliability tool.
 - [-] `ObdPollingEngine.java`, `ObdService.java`, `SessionRecorder.java`,
-  `MainActivity.java`, `VoltBridge.java`, `TroubleshooterBridge.java`
+  `MainActivity.java`
 
 ### Wave K5 — Small tested helpers `[~]`
 After the original K0-K3 waves, continue only with files that are small and already covered by
@@ -322,18 +321,19 @@ contracts without changing the SQLite or WebView wire formats.
 | [x] | `LiveSampleReader.kt` | live telemetry sample builder; Java-facing `SampleContext` interop preserved |
 
 Remaining Java after K10: **13 files**. Wave K11 has now converted the four remaining
-data helpers, `ObdProtocol`, and the backup file/controller pair; **6 Java files remain**.
+data helpers, `ObdProtocol`, the backup file/controller pair, and the WebView bridge pair;
+**4 Java files remain**.
 
 | Bucket | Files | Next action |
 |---|---|---|
-| Converted in K11 | `data/DatabaseMerger.kt`, `data/ObdStoreReports.kt`, `data/ObdStoreWriter.kt`, `data/VoltTrackerSchema.kt`, `ObdProtocol.kt`, `DataBackup.kt`, `BackupController.kt` | Data/protocol tests and focused backup tests pass. |
-| Runtime/lifecycle late-stage | `MainActivity.java`, `ObdService.java`, `ObdPollingEngine.java`, `SessionRecorder.java`, `VoltBridge.java`, `TroubleshooterBridge.java` | Convert only with focused checkpoints; these own lifecycle, threads, bridge ABI, service control, or session persistence. |
+| Converted in K11 | `data/DatabaseMerger.kt`, `data/ObdStoreReports.kt`, `data/ObdStoreWriter.kt`, `data/VoltTrackerSchema.kt`, `ObdProtocol.kt`, `DataBackup.kt`, `BackupController.kt`, `TroubleshooterBridge.kt`, `VoltBridge.kt` | Data/protocol tests, focused backup tests, and bridge ABI tests pass. |
+| Runtime/lifecycle late-stage | `MainActivity.java`, `ObdService.java`, `ObdPollingEngine.java`, `SessionRecorder.java` | Convert only with focused checkpoints; these own lifecycle, threads, Bluetooth/service control, or session persistence. |
 
 ### Wave K11 — Final Java tail `[~]`
 The last pass is intentionally split into checkpoints because these files have the highest
 runtime blast radius. The first checkpoints converted the remaining data helpers, protocol
-parser, and backup file/controller pair; the remaining six are service/activity/bridge/session
-core classes.
+parser, backup file/controller pair, and WebView bridge pair; the remaining four are
+service/activity/session core classes.
 
 | # | File | Notes |
 |---|---|---|
@@ -344,8 +344,8 @@ core classes.
 | [x] | `ObdProtocol.kt` | OBD parser/decoder helper; nested Java field access preserved |
 | [x] | `DataBackup.kt` | backup file IO, crypto, restore validation |
 | [x] | `BackupController.kt` | restore/merge UI orchestration |
-| [ ] | `TroubleshooterBridge.java` | WebView troubleshooting bridge |
-| [ ] | `VoltBridge.java` | primary WebView bridge ABI |
+| [x] | `TroubleshooterBridge.kt` | WebView troubleshooting bridge |
+| [x] | `VoltBridge.kt` | primary WebView bridge ABI |
 | [ ] | `SessionRecorder.java` | session persistence coordinator |
 | [ ] | `ObdPollingEngine.java` | Bluetooth/ELM polling engine |
 | [ ] | `ObdService.java` | foreground service lifecycle/threading |
@@ -519,3 +519,4 @@ namespace shim with explicit imports after the runtime surface is fully modeled.
 | 2026-06-05 | Wave K10 landed: converted 10 more Android helpers (`SdpProbe`, `SessionHealthTracker`, `ObdPersistenceWorker`, `LiveSampleReader`, `ObdLocalStore`, `ObdStoreSupport`, `ObdStoreTrips`, `ObdStoreRouteProjection`, `ObdStoreSessionReview`, `VoltTrackerDb`). Java main files now 13, Kotlin 86. Remaining reasonable data targets are `DatabaseMerger`, `ObdStoreReports`, `ObdStoreWriter`, and `VoltTrackerSchema`; service/activity/bridge/restore flows stay late-stage. |
 | 2026-06-05 | Wave K11 checkpoint: converted `VoltTrackerSchema`, `ObdStoreWriter`, `ObdStoreReports`, `DatabaseMerger`, and `ObdProtocol`. Java main files reached 8, Kotlin 91. Verified focused data package tests plus protocol/polling parser tests. Backup/lifecycle/bridge/session files remained for the next checkpoint. |
 | 2026-06-05 | Wave K11 backup checkpoint: converted `DataBackup` and `BackupController` to Kotlin after the backup round-trip/controller tests were available. Java main files now 6, Kotlin 93. Verified compile plus `DataBackupTest`, `BackupRoundTripTest`, and `BackupController*` tests. |
+| 2026-06-05 | Wave K11 bridge checkpoint: converted `TroubleshooterBridge` and `VoltBridge` to Kotlin while preserving the `@JavascriptInterface` ABI. Java main files now 4, Kotlin 95. Verified compile plus `VoltBridgeTest`, `TroubleshooterBridgeTest`, `WebViewBootstrapTest`, and `ArchitectureBoundaryTest`. |
