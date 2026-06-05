@@ -24,25 +24,33 @@ class ObdPersistenceWorker(
     private val droppedTelemetryTasks = AtomicLong()
     private val failedTelemetryTasks = AtomicLong()
 
-    private val telemetryExecutor: ExecutorService =
-        ThreadPoolExecutor(
-            1,
-            1,
-            0L,
-            TimeUnit.MILLISECONDS,
-            LinkedBlockingQueue(TELEMETRY_QUEUE_CAPACITY),
-            DiscardOldestUnlessShutdownPolicy(droppedTelemetryTasks),
-        )
+    private val telemetryExecutor: ExecutorService? =
+        if (localStore == null) {
+            null
+        } else {
+            ThreadPoolExecutor(
+                1,
+                1,
+                0L,
+                TimeUnit.MILLISECONDS,
+                LinkedBlockingQueue(TELEMETRY_QUEUE_CAPACITY),
+                DiscardOldestUnlessShutdownPolicy(droppedTelemetryTasks),
+            )
+        }
 
-    private val lifecycleExecutor: ExecutorService =
-        ThreadPoolExecutor(
-            1,
-            1,
-            0L,
-            TimeUnit.MILLISECONDS,
-            LinkedBlockingQueue(LIFECYCLE_QUEUE_CAPACITY),
-            ThreadPoolExecutor.AbortPolicy(),
-        )
+    private val lifecycleExecutor: ExecutorService? =
+        if (localStore == null) {
+            null
+        } else {
+            ThreadPoolExecutor(
+                1,
+                1,
+                0L,
+                TimeUnit.MILLISECONDS,
+                LinkedBlockingQueue(LIFECYCLE_QUEUE_CAPACITY),
+                ThreadPoolExecutor.AbortPolicy(),
+            )
+        }
 
     private class DiscardOldestUnlessShutdownPolicy(
         private val droppedCount: AtomicLong,
@@ -67,8 +75,9 @@ class ObdPersistenceWorker(
     fun drainFailedTelemetryCount(): Long = failedTelemetryTasks.getAndSet(0L)
 
     fun submitTelemetry(task: Runnable) {
+        val executor = telemetryExecutor ?: return
         try {
-            telemetryExecutor.execute {
+            executor.execute {
                 try {
                     task.run()
                 } catch (ex: RuntimeException) {
@@ -87,8 +96,9 @@ class ObdPersistenceWorker(
         sessionId: Long,
         op: String,
     ) {
+        val executor = lifecycleExecutor ?: return
         try {
-            lifecycleExecutor.execute {
+            executor.execute {
                 try {
                     task.run()
                 } catch (ex: RuntimeException) {
@@ -108,12 +118,13 @@ class ObdPersistenceWorker(
     }
 
     fun awaitTelemetryDrain() {
+        val executor = telemetryExecutor ?: return
         try {
-            val marker: Future<*> = telemetryExecutor.submit { }
+            val marker: Future<*> = executor.submit { }
             marker.get(30, TimeUnit.SECONDS)
         } catch (ex: RejectedExecutionException) {
             try {
-                telemetryExecutor.awaitTermination(30, TimeUnit.SECONDS)
+                executor.awaitTermination(30, TimeUnit.SECONDS)
             } catch (interrupted: InterruptedException) {
                 Thread.currentThread().interrupt()
             }
@@ -149,15 +160,17 @@ class ObdPersistenceWorker(
     }
 
     fun shutdown() {
-        telemetryExecutor.shutdown()
-        lifecycleExecutor.shutdown()
+        val telemetry = telemetryExecutor ?: return
+        val lifecycle = lifecycleExecutor ?: return
+        telemetry.shutdown()
+        lifecycle.shutdown()
         try {
-            telemetryExecutor.awaitTermination(SHUTDOWN_DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            telemetry.awaitTermination(SHUTDOWN_DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         } catch (ex: InterruptedException) {
             Thread.currentThread().interrupt()
         }
         try {
-            lifecycleExecutor.awaitTermination(SHUTDOWN_DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            lifecycle.awaitTermination(SHUTDOWN_DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         } catch (ex: InterruptedException) {
             Thread.currentThread().interrupt()
         }

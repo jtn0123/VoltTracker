@@ -89,10 +89,10 @@ public class ArchitectureBoundaryTest {
         List<String> violations =
                 scanFilesForForbiddenReferences(
                         Arrays.asList(
-                                "ObdPollingEngine.java",
-                                "ElmConnection.java",
-                                "DiagnosticScanRunner.java",
-                                "ClearDtcRunner.java"),
+                                "ObdPollingEngine.kt",
+                                "ElmConnection.kt",
+                                "DiagnosticScanRunner.kt",
+                                "ClearDtcRunner.kt"),
                         FORBIDDEN_ENGINE_UI_REFERENCES);
 
         assertTrue(
@@ -104,8 +104,7 @@ public class ArchitectureBoundaryTest {
     public void serviceLayerDoesNotCallWebViewApis() throws IOException {
         List<String> violations =
                 scanFilesForForbiddenReferences(
-                        Arrays.asList(
-                                "ObdService.java", "ObdNotifications.java", "PermissionGate.java"),
+                        Arrays.asList("ObdService.kt", "ObdNotifications.kt", "PermissionGate.kt"),
                         FORBIDDEN_SERVICE_WEBVIEW_REFERENCES);
 
         assertTrue(
@@ -117,8 +116,7 @@ public class ArchitectureBoundaryTest {
     public void dashboardBridgeDoesNotOpenWritableDatabaseDirectly() throws IOException {
         List<String> violations =
                 scanFilesForForbiddenReferences(
-                        Arrays.asList(
-                                "MainActivity.java", "VoltBridge.java", "WebViewBootstrap.java"),
+                        Arrays.asList("MainActivity.kt", "VoltBridge.kt", "WebViewBootstrap.kt"),
                         Arrays.asList("getWritableDatabase("));
 
         assertTrue(
@@ -142,12 +140,13 @@ public class ArchitectureBoundaryTest {
         return violations;
     }
 
-    private static Path sourcePath(String javaFileName) {
+    private static Path sourcePath(String sourceFileName) {
         List<String> candidates = new ArrayList<>();
-        candidates.add(javaFileName);
-        if (javaFileName.endsWith(".java")) {
+        candidates.add(sourceFileName);
+        if (sourceFileName.endsWith(".java")) {
             candidates.add(
-                    javaFileName.substring(0, javaFileName.length() - ".java".length()) + ".kt");
+                    sourceFileName.substring(0, sourceFileName.length() - ".java".length())
+                            + ".kt");
         }
 
         for (Path sourceRoot : sourceRoots()) {
@@ -159,7 +158,7 @@ public class ArchitectureBoundaryTest {
                 }
             }
         }
-        throw new AssertionError("Could not locate Android source file " + javaFileName);
+        throw new AssertionError("Could not locate Android source file " + sourceFileName);
     }
 
     private static List<Path> sourceRoots() {

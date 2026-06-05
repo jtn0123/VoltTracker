@@ -7,17 +7,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { loadDashboard } from './setup/load-dashboard.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DASHBOARD_JS = resolve(HERE, '../app/src/main/dashboard-src/js');
+const DASHBOARD_TS = resolve(HERE, '../app/src/main/dashboard-src/js');
 const CODE_RE = /^[PBCU][0-9A-F]{4}$/;
 const VALID_SEVERITIES = new Set(['info', 'warning', 'critical']);
 
 function sourceFor(file) {
   const base = file.replace(/\.(js|ts)$/u, '');
-  for (const ext of ['.ts', '.js']) {
-    const candidate = resolve(DASHBOARD_JS, `${base}${ext}`);
-    if (existsSync(candidate)) return readFileSync(candidate, 'utf8');
-  }
-  throw new Error(`Missing dashboard DTC source for ${file}`);
+  const candidate = resolve(DASHBOARD_TS, `${base}.ts`);
+  if (existsSync(candidate)) return readFileSync(candidate, 'utf8');
+  throw new Error(`Missing dashboard DTC TypeScript source for ${file}`);
 }
 
 function extractTopLevelDtcKeys(source) {

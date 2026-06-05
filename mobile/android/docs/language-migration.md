@@ -2,8 +2,8 @@
 
 Living plan for two parallel, independent modernizations:
 
-- **Part A — Kotlin** for the Android app (currently Java).
-- **Part B — TypeScript / build** for the dashboard WebView JS.
+- **Part A — Kotlin** for the Android app.
+- **Part B — TypeScript / build** for the dashboard WebView source.
 
 This file is the single source of truth for *what's planned, what's done, and what's
 next*. Update it in the same PR as the work (see [How to update](#how-to-update)).
@@ -14,25 +14,24 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 > |---|---:|---:|---:|---|
 > | Kotlin files converted | 99 | 0 Java production files | — | Android production source is Kotlin-complete |
 > | Kotlin waves complete | K0–K11 | — | optional Kotlin test migration | Java tests remain legacy coverage by policy |
-> | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
+> | Dashboard TS type-safety | full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
 
 **Status legend:** `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` won't do / deferred indefinitely.
 
 ---
 
-## Current state (baseline)
+## Current state
 
 - **Android:** 99 Kotlin production files + 0 Java production files. AGP 9.2.1
   built-in Kotlin is enabled; Spotless/ktlint formats `.kt`; JaCoCo measures Kotlin
   (`built_in_kotlinc` output). Policy is documented in `CONTRIBUTING.md` and the repo
   `CLAUDE.md`: **new native source is Kotlin; existing Java tests remain unless they
   are being materially reworked.**
-- **Dashboard:** 13 first-party JS files (~14k LOC), classic IIFE pattern sharing
-  `window.VoltDashboard`, loaded by ordered `<script>` tags. Type-checked by
-  `tsc --checkJs` (`checkJs:true`, `noImplicitAny:true`, `strictNullChecks:false`),
-  linted by ESLint, tested by Vitest (jsdom) + Playwright (e2e + visual). **No build
-  step** — files ship as-is into the APK.
+- **Dashboard:** 13 first-party TypeScript source files in `dashboard-src/js/`, compiled
+  by esbuild into classic, WebView-safe `.js` assets (`app.js` plus lazy data chunks).
+  Type-checked by `tsc` with full `strict`, linted by ESLint, tested by Vitest (jsdom)
+  and Playwright e2e. The emitted `assets/dashboard/js/` files are build artifacts.
 
 ---
 
@@ -44,14 +43,15 @@ communicate only across the WebView bridge (a string/JSON ABI, not a code bounda
 
 | Layer | Runs | Source: today → end state | Tests: today → end state |
 |---|---|---|---|
-| **Native app** | on device (APK) | Java → **Kotlin** (new) + Java (legacy) | `app/src/test/java/` Java → **new tests in Kotlin**, existing stay Java |
-| **Dashboard** | inside the WebView | JS → **TS** (Wave T2) *or* JS + checkJs/strict | `dashboard-tests/` `.js` → **`.ts` iff source goes TS (T2)** |
+| **Native app** | on device (APK) | **Kotlin** | New tests in Kotlin; existing Java tests stay Java unless materially reworked |
+| **Dashboard** | inside the WebView | **TypeScript source** → classic `.js` assets | Existing JS tests stay JS unless materially reworked; new source-level tests may be TS |
 
 **Test-language rule:** tests are authored in whatever language their layer uses.
 - Native: **write new tests in Kotlin** (the build already compiles `src/test/**/*.kt`;
   Spotless/ktlint already targets it). Don't rewrite passing Java tests.
-- Dashboard: tests stay `.js` at State 0/1; they become `.ts` only if/when the source
-  migrates to TS in Wave T2 (Vitest + Playwright run TS natively once esbuild is in play).
+- Dashboard: existing Vitest/Playwright tests may stay `.js`; they exercise the TypeScript
+  source and built WebView output. New or substantially reworked source-level tests can be
+  `.ts` when the added type coverage is useful.
 
 ## Conversion ownership map
 
@@ -349,12 +349,13 @@ service/activity/polling-engine core classes.
 
 # Part B — TypeScript / dashboard build
 
-## The three states (differences & benefits)
+## The three states (completed path)
 
-The dashboard can sit at one of three levels of type-safety/tooling. We're at **State 0**
-today. Here's what each adds and costs.
+The dashboard moved through three levels of type-safety/tooling and is now at
+**State 2 — full TS + bundler**. This table is kept as the decision record for why the
+work was sequenced the way it was.
 
-| | **State 0 — checkJs (today)** | **State 1 — strictNullChecks** | **State 2 — full TS + bundler** |
+| | **State 0 — checkJs** | **State 1 — strictNullChecks** | **State 2 — full TS + bundler (current)** |
 |---|---|---|---|
 | Source files | `.js` + JSDoc | `.js` + JSDoc | `.ts` |
 | Build step | **none** | **none** | **yes** (esbuild/vite) |
@@ -516,3 +517,4 @@ namespace shim with explicit imports after the runtime surface is fully modeled.
 | 2026-06-05 | Wave K11 bridge checkpoint: converted `TroubleshooterBridge` and `VoltBridge` to Kotlin while preserving the `@JavascriptInterface` ABI. Java main files now 4, Kotlin 95. Verified compile plus `VoltBridgeTest`, `TroubleshooterBridgeTest`, `WebViewBootstrapTest`, and `ArchitectureBoundaryTest`. |
 | 2026-06-05 | Wave K11 recorder checkpoint: converted `SessionRecorder` to Kotlin while preserving Java constructor/static constant call shapes. Java main files now 3, Kotlin 96. Verified compile plus `SessionRecorderTest`, `SessionRecorderLifecycleFailureTest`, and `MaterializerIntegrationDbTest`. |
 | 2026-06-05 | Wave K11 final core checkpoint: converted `ObdPollingEngine`, `ObdService`, and `MainActivity` to Kotlin. Android production source is now 99 Kotlin / 0 Java. Preserved Java test override seams and WebView/service constants. Verified focused engine/service/activity/bridge/backup tests; full `verifyActiveApp` is the final gate for the commit. |
+| 2026-06-05 | Post-migration deep pass: confirmed 99 Kotlin / 0 Java production Android source and 13 TS / 0 JS dashboard source files. Tightened dashboard tooling so source discovery is TS-only, removed stale JS-check compiler assumptions, updated active docs/comments, and hardened late Kotlin conversions around optional background executors. Verified `dashboard-tests` build/typecheck/coverage, focused Android migration-risk tests, and full `verifyActiveApp`. |

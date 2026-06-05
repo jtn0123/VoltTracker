@@ -89,7 +89,7 @@ class BackupController(
             if (encrypted) "Preparing encrypted data backup..." else "Preparing data backup...",
             false,
         )
-        executor!!.execute {
+        runBackground("Could not start the backup worker.") {
             val backup =
                 if (encrypted) {
                     dataBackup.buildEncryptedBackupFile(activity.localStore, passphrase)
@@ -176,7 +176,7 @@ class BackupController(
         passphrase: String?,
     ) {
         activity.publishStatus("ready", "Reading backup...", false)
-        executor!!.execute {
+        runBackground("Could not start the restore worker.") {
             val staged = dataBackup.stageRestoreFile(uri, passphrase)
             activity.runOnUiThread {
                 if (staged == null) {
@@ -215,7 +215,7 @@ class BackupController(
 
     private fun performReplace(staged: File) {
         activity.publishStatus("ready", "Restoring backup...", false)
-        executor!!.execute {
+        runBackground("Could not start the restore worker.") {
             val result = applyReplace(staged)
             activity.runOnUiThread {
                 if (result == RestoreResult.OK) {
@@ -231,7 +231,7 @@ class BackupController(
 
     private fun performMerge(staged: File) {
         activity.publishStatus("ready", "Merging backup...", false)
-        executor!!.execute {
+        runBackground("Could not start the restore worker.") {
             val outcome = applyMerge(staged)
             activity.runOnUiThread {
                 if (outcome.result == RestoreResult.OK) {
@@ -261,6 +261,18 @@ class BackupController(
                 "Restore failed - could not replace the on-device database."
             }
         activity.publishStatus("blocked", message, true)
+    }
+
+    private fun runBackground(
+        unavailableMessage: String,
+        task: Runnable,
+    ) {
+        val worker = executor
+        if (worker == null) {
+            activity.publishStatus("blocked", unavailableMessage, true)
+            return
+        }
+        worker.execute(task)
     }
 
     private class MergeOutcome(

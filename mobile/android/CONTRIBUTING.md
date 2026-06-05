@@ -40,7 +40,7 @@ Under `app/src/main/assets/dashboard/`, both `index.html` **and** `js/` are
 - Behavior (TypeScript): `app/src/main/dashboard-src/js/*.ts`
 - Styles: `app/src/main/assets/dashboard/css/*.css` (CSS loads directly — no build)
 
-**The dashboard JS is bundled.** `dashboard-tests/build.mjs` (esbuild) compiles the
+**The dashboard TypeScript is bundled.** `dashboard-tests/build.mjs` (esbuild) compiles the
 source in `dashboard-src/js/` into `app/src/main/assets/dashboard/js/` — a single
 classic-IIFE `app.js` (the eager scripts, in dependency order) plus the lazy
 `dtc-lookup`/`dtc-causes`/`demo-data` chunks. That output dir is **gitignored** (a
@@ -106,7 +106,7 @@ and existing Java tests remain as legacy coverage unless they are being material
 - Bytecode target is Java 17, set once via `compileOptions` in `app/build.gradle`; AGP's
   built-in Kotlin inherits the same `jvmTarget` from it automatically.
 - **Formatting:** Spotless runs ktlint on `.kt` (`./gradlew :app:spotlessApply` to fix,
-  `:app:spotlessCheck` is the CI gate) — the same lane that formats Java and the dashboard JS.
+  `:app:spotlessCheck` is the CI gate) — the same lane that formats Java tests and the dashboard HTML.
 - **Coverage:** JaCoCo measures Kotlin classes too (`app/jacoco.gradle` scans both the javac and
   kotlin-classes outputs), so new Kotlin is held to the same ratcheting floors as Java — write
   tests for it.

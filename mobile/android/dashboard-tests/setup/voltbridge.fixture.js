@@ -5,7 +5,7 @@
 //
 // Return values default to JSON strings (the real bridge returns Strings),
 // or `undefined` for void methods. Test code can override any method with
-// `vi.fn()` to assert how the dashboard JS calls in.
+// `vi.fn()` to assert how the dashboard calls into Android.
 export function createVoltBridgeFixture(overrides = {}) {
   const stub = (returnValue) => () => returnValue;
   const voidStub = () => undefined;

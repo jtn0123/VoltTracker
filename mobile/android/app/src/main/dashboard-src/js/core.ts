@@ -1,4 +1,4 @@
-// Initializes the VoltDashboard namespace shared by every dashboard JS file. Each
+// Initializes the VoltDashboard namespace shared by every dashboard source file. Each
 // source file attaches cross-file calls to `window.VoltDashboard` (aliased
 // locally as `VD`). `window.VoltTrackerAndroid` (the Android->WebView bridge)
 // and `window.VoltTrackerNative` (the WebView<-Android callback surface) are

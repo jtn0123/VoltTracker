@@ -1,4 +1,4 @@
-// Production bundler for the dashboard WebView JS (T2).
+// Production bundler for the dashboard WebView TypeScript source.
 //
 // The editable source lives in app/src/main/dashboard-src/js/ (alongside the HTML
 // partials). This builds it into app/src/main/assets/dashboard/js/ — the shipped
@@ -13,7 +13,7 @@
 // - The eager scripts (loaded up front, in dependency order by index.html) bundle
 //   into a single app.js.
 // - The lazy chunks (dtc-lookup / dtc-causes / demo-data, injected on demand by
-//   core.js) keep their own filenames so the existing loadDashboardScript() paths
+//   core.ts) keep their emitted filenames so the existing loadDashboardScript() paths
 //   resolve unchanged.
 import { build } from "esbuild";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
@@ -50,11 +50,9 @@ const EAGER = [
 const LAZY = ["dtc-lookup", "dtc-causes", "demo-data"];
 
 function sourceFor(name) {
-  for (const ext of [".ts", ".js"]) {
-    const file = `${SRC}/${name}${ext}`;
-    if (existsSync(file)) return file;
-  }
-  throw new Error(`Missing dashboard source for ${name}`);
+  const file = `${SRC}/${name}.ts`;
+  if (existsSync(file)) return file;
+  throw new Error(`Missing dashboard TypeScript source for ${name}`);
 }
 
 const shared = {
