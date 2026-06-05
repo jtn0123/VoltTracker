@@ -12,8 +12,8 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 20 | 2 left (tested) | ~7 candidates | K0–K2 + K3 partial (3 of 6) |
-> | Kotlin waves complete | K0–K2, K3 partial | — | K3 tail, K4 | BackupMigrator + ChargeSessionMaterializer next; BackupController stays Java (no test) |
+> | Kotlin files converted | 22 | 0 | 1 (BackupController) | K0–K3 done (5 of 6 K3; BackupController stays Java) |
+> | Kotlin waves complete | K0–K3 | — | K4 (deferred) | K3 done except untested BackupController |
 > | Dashboard JS type-safety | checkJs + strictNullChecks ✅ | — | full TS (T2) | whole dir, null-safe, zero build |
 > | Dashboard build step | none | — | esbuild/vite (proposed) | zero-build today |
 
@@ -146,8 +146,8 @@ held at **90.5%** (floor 89%), project **76.7%** (floor 71%).
 | [x] | `data/AdapterHistoryRecord.kt` | 14 | `nonNull` normalization |
 | [x] | `EnhancedPidProfile.kt` | 16 | `clean` (trim + null→`""`) via file-private helper |
 
-### Wave K3 — Class-with-nested-enum + mid-size logic (opportunistic)
-More surface than K1/K2 — only converting the ones with a **test safety net**, faithfully
+### Wave K3 — Class-with-nested-enum + mid-size logic ✅ done (except BackupController)
+More surface than K1/K2 — converted the 5 with a **test safety net**, faithfully
 (identity-equality, `@JvmField` for field access, `@JvmStatic`/`const val` for statics,
 `require(...)` for the validating constructors). `BackupController` has **no test**, so it
 stays Java until it gets coverage — converting untested backup/restore orchestration blind
@@ -158,8 +158,8 @@ is exactly the risk the "opportunistic" rule guards against.
 | [x] | `SessionStateMachine.kt` | 90 | `@Synchronized` methods; `@JvmStatic phaseForDashboardState`; `switch`→exhaustive `when` |
 | [x] | `location/LocationFilter.kt` | 152 | `Decision` enum; secondary no-arg ctor; `const val` defaults; `@JvmStatic` helpers |
 | [x] | `PidSchedule.kt` | 223 | `object`; `Header`/`PidSpec` nested; `@JvmField` lists/fields; `require` validation |
-| [ ] | `data/BackupMigrator.kt` | 134 | tested; Android SQLite + file I/O (`.use {}`) — data-touching, convert carefully |
-| [ ] | `materialize/ChargeSessionMaterializer.kt` | 278 | tested; charge heuristics — data-touching, convert carefully |
+| [x] | `data/BackupMigrator.kt` | 134 | `object`; `@JvmStatic`; try-with-resources → `.use {}`; multi-catch split into IOException/RuntimeException |
+| [x] | `materialize/ChargeSessionMaterializer.kt` | 278 | `object`; nullable doubles captured into locals for smart-casts; arithmetic preserved exactly; `in`→`input` (Kotlin keyword) |
 | [-] | `BackupController.java` | 444 | **no test** → stays Java; convert only when it gets coverage / is reworked |
 
 ### Wave K4 — Large stateful core (defer; convert only mid-rework) `[-]`
@@ -295,3 +295,4 @@ top *only* for the dev server / HMR against the browser preview. Sub-steps:
 | 2026-06-04 | Wave T1 landed: `strictNullChecks` ON, dashboard fully null-safe. Root-cause fix (required vs optional `VoltDashboard` members) cleared 656 of 709 noise errors; fixed the 53 real ones with no exclusions. typecheck/ESLint/Vitest(121)/spotless all green. Remaining: K3 and T2 (full TS+bundler). |
 | 2026-06-04 | Post-review: kept all `VD` bootstraps typed (dropped `any`), which surfaced + fixed 3 latent bugs (setDevices/setHistory null-guards, `VoltDtcInfo` had a phantom `dtc` field). |
 | 2026-06-04 | Wave K3 (partial): converted SessionStateMachine, LocationFilter, PidSchedule to Kotlin (the tested, non-data-integrity logic). All gates green. BackupMigrator + ChargeSessionMaterializer remain (tested, data-touching); BackupController stays Java (no test). |
+| 2026-06-04 | Wave K3 complete (5 of 6): added BackupMigrator (SQLite/file I/O via `.use {}`) and ChargeSessionMaterializer (charge heuristics, arithmetic preserved). All gates green incl. data-layer + materializer integration tests. BackupController stays Java until it has a test. 77 Java + 22 Kotlin main files. |
