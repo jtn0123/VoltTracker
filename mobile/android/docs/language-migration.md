@@ -12,8 +12,8 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 44 | 0 | K6 staged core-adjacent helpers | K0–K3 + K5 done; medium-risk tested helpers started |
-> | Kotlin waves complete | K0–K3, K5 | K6 medium-risk helpers | K4 staged behind tests | large stateful core converts only with focused coverage |
+> | Kotlin files converted | 46 | 0 | K4 staged core | K0–K3 + K5–K6 done; lifecycle/service core remains |
+> | Kotlin waves complete | K0–K3, K5–K6 | — | K4 staged behind tests | large stateful core converts only with focused coverage |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
 
@@ -230,7 +230,7 @@ Remaining K5 evaluation:
 - K4 lifecycle/service/bridge classes and backup restore orchestration are no longer
   "never convert"; they are staged behind pre-conversion tests.
 
-### Wave K6 — Tested medium-risk helpers `[~]`
+### Wave K6 — Tested medium-risk helpers ✅ done
 Broaden conversion beyond tiny helpers. Each item has direct tests or strong integration
 coverage, and each commit should still pass focused tests plus `verifyActiveApp`.
 
@@ -244,8 +244,8 @@ coverage, and each commit should still pass focused tests plus `verifyActiveApp`
 | [x] | `PidPollingState.kt` | 306 | live PID schedule/carry-forward state; focused tests cover stale caps and Mode-01 batching |
 | [x] | `SessionSummaryStore.kt` | 210 | JSONL session-summary store; focused tests cover round-trip, singleton, ordering, and retention |
 | [x] | `ElmConnection.kt` | 297 | RFCOMM stream wrapper; in-memory tests cover transact prompt/timeout behavior and engine fake override seams |
-| [ ] | `TripMaterializer.java` | 479 | trip materializer with focused tests |
-| [ ] | `DriveWindowDetector.java` | 436 | drive-window splitter with DB/integration coverage |
+| [x] | `TripMaterializer.kt` | 479 | trip materializer with focused tests |
+| [x] | `DriveWindowDetector.kt` | 436 | drive-window splitter with DB/integration coverage |
 
 ---
 
