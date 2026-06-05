@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DASHBOARD_JS = resolve(HERE, '../app/src/main/assets/dashboard/js');
+const DASHBOARD_JS = resolve(HERE, '../app/src/main/dashboard-src/js');
 
 const ALLOWED_DOM_SINKS = [
   {

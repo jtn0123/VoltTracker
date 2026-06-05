@@ -26,9 +26,12 @@ spotless {
         endWithNewline()
     }
     format "dashboard", {
-        target "src/main/assets/dashboard/**/*.{js,css,html}",
-               "src/main/dashboard-src/**/*.html"
-        targetExclude "src/main/assets/dashboard/lib/**", "src/main/assets/dashboard/index.html"
+        // Only the HTML partials/template. (Spotless globs don't expand `{a,b}` braces, so the
+        // historical `assets/dashboard/**/*.{js,css,html}` target only ever matched nothing — the
+        // dashboard JS/CSS were never Spotless-formatted, just ESLint-linted + authored. The JS now
+        // lives in dashboard-src/js and assets/dashboard/js is the built, minified bundle — neither
+        // should be prettier-reformatted here.)
+        target "src/main/dashboard-src/**/*.html"
         prettier("3.8.3")
         trimTrailingWhitespace()
         endWithNewline()
@@ -194,4 +197,7 @@ tasks.named("generateDashboardHtml") {
 
 tasks.named("preBuild") {
     dependsOn("generateDashboardHtml")
+    // The shipped dashboard JS (assets/dashboard/js) is gitignored, built from
+    // dashboard-src/js by esbuild — build it before the assets get packaged.
+    dependsOn(rootProject.tasks.named("buildDashboardJs"))
 }

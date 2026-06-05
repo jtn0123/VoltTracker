@@ -28,19 +28,19 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_INDEX_HTML = resolve(HERE, '../../app/src/main/assets/dashboard/index.html');
 
 const DASHBOARD_MODULE_LOADERS = {
-  'actions.js': () => import('../../app/src/main/assets/dashboard/js/actions.js'),
-  'connection-status.js': () => import('../../app/src/main/assets/dashboard/js/connection-status.js'),
-  'connection-tools.js': () => import('../../app/src/main/assets/dashboard/js/connection-tools.js'),
-  'core.js': () => import('../../app/src/main/assets/dashboard/js/core.js'),
-  'demo-data.js': () => import('../../app/src/main/assets/dashboard/js/demo-data.js'),
-  'drive.js': () => import('../../app/src/main/assets/dashboard/js/drive.js'),
-  'dtc-causes.js': () => import('../../app/src/main/assets/dashboard/js/dtc-causes.js'),
-  'dtc-lookup.js': () => import('../../app/src/main/assets/dashboard/js/dtc-lookup.js'),
-  'map.js': () => import('../../app/src/main/assets/dashboard/js/map.js'),
-  'panels.js': () => import('../../app/src/main/assets/dashboard/js/panels.js'),
-  'scrubber.js': () => import('../../app/src/main/assets/dashboard/js/scrubber.js'),
-  'telemetry.js': () => import('../../app/src/main/assets/dashboard/js/telemetry.js'),
-  'troubleshooter.js': () => import('../../app/src/main/assets/dashboard/js/troubleshooter.js'),
+  'actions.js': () => import('../../app/src/main/dashboard-src/js/actions.js'),
+  'connection-status.js': () => import('../../app/src/main/dashboard-src/js/connection-status.js'),
+  'connection-tools.js': () => import('../../app/src/main/dashboard-src/js/connection-tools.js'),
+  'core.js': () => import('../../app/src/main/dashboard-src/js/core.js'),
+  'demo-data.js': () => import('../../app/src/main/dashboard-src/js/demo-data.js'),
+  'drive.js': () => import('../../app/src/main/dashboard-src/js/drive.js'),
+  'dtc-causes.js': () => import('../../app/src/main/dashboard-src/js/dtc-causes.js'),
+  'dtc-lookup.js': () => import('../../app/src/main/dashboard-src/js/dtc-lookup.js'),
+  'map.js': () => import('../../app/src/main/dashboard-src/js/map.js'),
+  'panels.js': () => import('../../app/src/main/dashboard-src/js/panels.js'),
+  'scrubber.js': () => import('../../app/src/main/dashboard-src/js/scrubber.js'),
+  'telemetry.js': () => import('../../app/src/main/dashboard-src/js/telemetry.js'),
+  'troubleshooter.js': () => import('../../app/src/main/dashboard-src/js/troubleshooter.js'),
 };
 
 // Loaded in the exact order that index.template.html lists the production scripts.

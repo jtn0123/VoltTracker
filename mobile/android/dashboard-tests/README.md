@@ -2,7 +2,7 @@
 
 Vitest + jsdom smoke suite for the production dashboard JS bundle that ships
 inside the Android WebView. The tests load the real files from
-`../app/src/main/assets/dashboard/js/` (no copy, no transpile) into a jsdom
+`../app/src/main/dashboard-src/js/` (no copy, no transpile) into a jsdom
 window and then poke at the surface that the Android side touches:
 
 - `window.VoltTrackerNative.*` — the WebView callback ABI the JVM side invokes

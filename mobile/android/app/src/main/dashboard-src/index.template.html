@@ -130,23 +130,15 @@
     </nav>
 
     <!--
-      Classic (non-module) scripts loaded in dependency order. The dashboard is
-      served from file:///android_asset/ in the WebView, and `<script type="module">`
-      is fetched with CORS semantics that file:// cannot satisfy — so a module
-      bootstrap silently never executes on-device (all JS dead, while classic
-      scripts like Leaflet still run). Each file is a self-contained IIFE that
-      shares state via window.VoltDashboard, so plain ordered scripts work. Keep
-      this order in sync with dashboard-tests/script-order.test.js.
+      Single classic (non-module) bundle, built by dashboard-tests/build.mjs from the
+      editable source in dashboard-src/js/. It must stay a classic IIFE (NOT a module):
+      the dashboard is served from file:///android_asset/ in the WebView, where
+      `<script type="module">` is fetched with CORS semantics file:// cannot satisfy —
+      so a module bootstrap silently never executes on-device. The bundle concatenates
+      the eager source files in dependency order (the order lives in build.mjs / is
+      guarded by dashboard-tests/script-order.test.js); the lazy dtc-*/demo-data chunks
+      are built alongside and injected on demand by core.js.
     -->
-    <script src="js/core.js"></script>
-    <script src="js/panels.js"></script>
-    <script src="js/map.js"></script>
-    <script src="js/scrubber.js"></script>
-    <script src="js/drive.js"></script>
-    <script src="js/telemetry.js"></script>
-    <script src="js/actions.js"></script>
-    <script src="js/troubleshooter.js"></script>
-    <script src="js/connection-status.js"></script>
-    <script src="js/connection-tools.js"></script>
+    <script src="js/app.js"></script>
   </body>
 </html>

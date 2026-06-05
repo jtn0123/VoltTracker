@@ -33,12 +33,27 @@ Windows users: substitute `.\gradlew.bat` for `./gradlew` and use PowerShell.
 
 ## Editing the dashboard
 
-The dashboard `index.html` under `app/src/main/assets/dashboard/` is **generated**.
-Edit the sources, not the generated file:
+Under `app/src/main/assets/dashboard/`, both `index.html` **and** `js/` are
+**generated** — edit the sources, not the generated files:
 
 - Markup: `app/src/main/dashboard-src/partials/*.html`
-- Styles: `app/src/main/assets/dashboard/css/*.css`
-- Behavior: `app/src/main/assets/dashboard/js/*.js`
+- Behavior (JS): `app/src/main/dashboard-src/js/*.js`
+- Styles: `app/src/main/assets/dashboard/css/*.css` (CSS loads directly — no build)
+
+**The dashboard JS is bundled.** `dashboard-tests/build.mjs` (esbuild) compiles the
+source in `dashboard-src/js/` into `app/src/main/assets/dashboard/js/` — a single
+classic-IIFE `app.js` (the eager scripts, in dependency order) plus the lazy
+`dtc-lookup`/`dtc-causes`/`demo-data` chunks. That output dir is **gitignored** (a
+build artifact). It stays a classic IIFE, never an ES module: the WebView serves the
+dashboard from `file://`, where `<script type=module>` silently never runs.
+
+After editing a JS source file, rebuild the bundle:
+
+```sh
+npm --prefix dashboard-tests run build
+# or just build the app — Gradle's buildDashboardJs runs in preBuild:
+./gradlew :app:assembleDebug
+```
 
 After editing a partial or the template, regenerate the assembled HTML:
 
@@ -46,13 +61,10 @@ After editing a partial or the template, regenerate the assembled HTML:
 ./gradlew generateDashboardHtml
 ```
 
-CSS and JS edits load directly — no regeneration needed.
-
-CI also runs `verifyGeneratedDashboardClean`, which compares
-`app/src/main/assets/dashboard/index.html` with the partial/template output and
-fails if the generated file is stale. If that check fails, rerun
-`./gradlew generateDashboardHtml` and include the generated file in the same
-change as the partial/template edit.
+Tests read the **source** (`dashboard-src/js/`): Vitest/ESLint/`tsc` all point there,
+so you don't need to rebuild to run them. Playwright e2e serves the real `index.html`
+(→ the built `app.js`), so it builds the bundle first. CI runs `verifyGeneratedDashboardClean`
+(index.html freshness) and `verifyDashboardBundleSize` (against the built bundle).
 
 ## Pre-commit hooks
 

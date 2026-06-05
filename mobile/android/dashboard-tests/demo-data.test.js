@@ -20,7 +20,7 @@ describe('dashboard demo data', () => {
   });
 
   it('keeps demo fixture rows out of core.js and the eager template', () => {
-    const core = readFileSync(resolve(DASHBOARD_ASSETS, 'js/core.js'), 'utf8');
+    const core = readFileSync(resolve(DASHBOARD_SRC, 'js/core.js'), 'utf8');
     const template = readFileSync(resolve(DASHBOARD_SRC, 'index.template.html'), 'utf8');
 
     expect(core).not.toContain('Home -> Office');

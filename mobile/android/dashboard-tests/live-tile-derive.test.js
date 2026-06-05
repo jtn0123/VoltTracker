@@ -12,7 +12,7 @@ import { loadDashboard } from './setup/load-dashboard.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TELEMETRY_JS = resolve(
   HERE,
-  '../app/src/main/assets/dashboard/js/telemetry.js',
+  '../app/src/main/dashboard-src/js/telemetry.js',
 );
 
 describe('LIVE_TILE_IDS is DOM-derived', () => {

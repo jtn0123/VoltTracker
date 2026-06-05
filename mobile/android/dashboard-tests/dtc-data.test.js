@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { loadDashboard } from './setup/load-dashboard.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DASHBOARD_JS = resolve(HERE, '../app/src/main/assets/dashboard/js');
+const DASHBOARD_JS = resolve(HERE, '../app/src/main/dashboard-src/js');
 const CODE_RE = /^[PBCU][0-9A-F]{4}$/;
 const VALID_SEVERITIES = new Set(['info', 'warning', 'critical']);
 

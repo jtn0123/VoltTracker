@@ -15,7 +15,7 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 > | Kotlin files converted | 22 | 0 | 1 (BackupController) | K0–K3 done (5 of 6 K3; BackupController stays Java) |
 > | Kotlin waves complete | K0–K3 | — | K4 (deferred) | K3 done except untested BackupController |
 > | Dashboard JS type-safety | checkJs + full `strict` ✅ | — | full TS (T2) | max checking, zero build |
-> | Dashboard build step | none | — | esbuild/vite (proposed) | zero-build today |
+> | Dashboard build step | esbuild bundle ✅ (T2a) | — | `.ts` modules (T2b) | source in `dashboard-src/js`, built `app.js` shipped |
 
 **Status legend:** `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` won't do / deferred indefinitely.
 
@@ -242,34 +242,35 @@ same way — not auto-split chunks.
 - [x] Verified: `typecheck` 0 errors, ESLint clean, Vitest 121/121, `spotlessCheck` clean.
 - [x] `CONTRIBUTING.md` + tsconfig header updated. CI already gates `typecheck` — no workflow change.
 
-### Wave T2 — Full `.ts` + bundler (proposed; pending go-ahead `[ ]`)
-Tooling decision: **esbuild** for the production bundle (fast, trivial config, emits
-classic IIFE, supports multiple entry points for the lazy chunks); **vite** layered on
-top *only* for the dev server / HMR against the browser preview. Sub-steps:
+### Wave T2a — esbuild build pipeline (bundle the existing IIFE source) ✅ done
+The build pipeline landed *without* rewriting the source to ES modules (that's T2b) — the
+existing IIFE files bundle as-is, which is lower-risk and immediately useful.
 
-- [ ] Add `esbuild` to `dashboard-tests` (or a new `dashboard-build/`) toolchain; pin version
-- [ ] Configure entry points: one **core** bundle (the 10 ordered scripts) + one per lazy
-      chunk (`dtc`, `demo-data`); output classic IIFE with `globalName`/global preservation
-      for the `window.VoltDashboard` / `window.VoltTrackerAndroid` / `VoltTrackerNative` ABI
-- [ ] Convert `js/*.js` → `src/*.ts` with real `import`/`export`; delete the
-      `window.VoltDashboard` namespace shim and `script-order.test.js` ordering once modules
-      express the deps
-- [ ] Emit source maps; verify they resolve in Playwright + on-device WebView
-- [ ] Rewire `generateDashboardHtml` + `index.html` to reference built outputs, and make
-      the build a `preBuild` dependency
-- [ ] Update the budget gates: `verifyDashboardBundleSize` (root `build.gradle`) and the
-      CI bundle-size step measure **built outputs**, not hand-written sources; re-baseline
-      the 400 KB / 380 KB budgets against minified output
-- [ ] Rework the Vitest harness: `setup/load-dashboard.js`, the `readFileSync('js/..')`
-      content tests (`demo-data.test.js`, `csp.test.js`), and `script-order.test.js`
-- [ ] Update `docs/dashboard-script-contract.md`, `docs/bundle-budget.md`, and
-      `CONTRIBUTING.md`
-- [ ] Confirm CSP (`script-src 'self'`) still satisfied by the bundled output
+- [x] `esbuild` added to `dashboard-tests`; `build.mjs` bundles via side-effect imports
+- [x] Source moved `assets/dashboard/js/` → **`dashboard-src/js/`** (editable source); the
+      eager scripts bundle (in dependency order) into a single classic-IIFE `app.js`, the lazy
+      `dtc-lookup`/`dtc-causes`/`demo-data` chunks build alongside with their original filenames
+- [x] Output `assets/dashboard/js/` is **gitignored** (build artifact); minified, no `type=module`
+- [x] Gradle `buildDashboardJs` task wired into `preBuild` (+ `dashboardE2e`/`verifyDashboardBundleSize`)
+- [x] `index.template.html` loads the single `js/app.js`; `generateDashboardHtml` regenerated
+- [x] Budget gates measure the **built** bundle — minification gave big headroom (core 240 KB /
+      400 KB, DTC 273 KB / 380 KB). Spotless `dashboard` format corrected to HTML-only (its old
+      `{js,css,html}` brace-glob never matched — Spotless globs don't expand braces)
+- [x] Vitest/ESLint/`tsc` repointed to `dashboard-src/js`; `script-order.test.js` rewritten for the
+      single bundle (asserts classic non-module + `build.mjs` eager order)
+- [x] CI: Node added to the APK-building jobs (`unit-tests`, `emulator-smoke`); `npm run build`
+      step added to `dashboard-tests`/`dashboard-e2e`/`dashboard-visual`
+- [x] Verified locally: `npm run build`, Vitest 122/122, **Playwright e2e 30/30 against the bundle**,
+      `assembleDebug` (preBuild builds + packages the bundle), budget, spotless, typecheck, lint
 
-### Wave T3 — On-device live reload (optional, after T2) `[ ]`
-- [ ] Debug-build-only hook: point the WebView at the vite dev server
-      (`http://10.0.2.2:5173` for the emulator) behind a build flag, so on-device edits
-      hot-reload instead of needing a reinstall. Release builds always load file:// assets.
+### Wave T2b — Convert source to `.ts` ES modules (future)
+Now that a bundler is in place, files can migrate from IIFE + `window.VoltDashboard` to real
+`.ts` with `import`/`export`, one at a time (esbuild bundles mixed IIFE/module). End state: drop
+the global-namespace shim; types replace the `dashboard-globals.d.ts` ambient declarations.
+- [ ] Migrate files incrementally to `.ts` modules; keep the public API attached to
+      `window.VoltDashboard` for the native bridge ABI until all consumers are modules
+- [ ] (Optional) source maps for on-device debugging, with a `*.map` packaging exclude
+- [ ] (Optional, T3) debug-only WebView → vite dev server hook for on-device live reload
 
 ---
 
@@ -298,4 +299,5 @@ top *only* for the dev server / HMR against the browser preview. Sub-steps:
 | 2026-06-04 | Wave K3 complete (5 of 6): added BackupMigrator (SQLite/file I/O via `.use {}`) and ChargeSessionMaterializer (charge heuristics, arithmetic preserved). All gates green incl. data-layer + materializer integration tests. BackupController stays Java until it has a test. 77 Java + 22 Kotlin main files. |
 | 2026-06-04 | Dashboard typecheck taken to full `strict` (subsumes the earlier strictNullChecks). Only 2 new errors — `useUnknownInCatchVariables` catch-var `.message` accesses — fixed with `instanceof Error` narrowing. typecheck/ESLint/Vitest(121)/spotless green. This is the max the JSDoc+checkJs setup gives; the remaining TS step is the .ts+bundler migration (T2). |
 | 2026-06-04 | Added `noImplicitReturns` + `noFallthroughCasesInSwitch` (both 0 errors — free guards against missing returns / switch fallthrough). `noUncheckedIndexedAccess` measured at 56 errors (map.js/scrubber.js/core.js) — deferred as low-ROI defensive churn; revisit if those files are reworked. |
+| 2026-06-04 | Wave T2a landed: esbuild build pipeline. JS source moved to `dashboard-src/js`; eager files bundle into a single classic-IIFE `app.js` + lazy chunks; output gitignored, built by Gradle `buildDashboardJs` in preBuild. Kept IIFE source (no `.ts` rewrite yet — that's T2b) for low risk. Minification → core 240 KB / DTC 273 KB (big budget headroom). Verified: build, Vitest 122, **Playwright 30 against the bundle**, assembleDebug, budget, spotless, typecheck, lint. CI: Node added to APK jobs + build steps to dashboard jobs. |
 | 2026-06-04 | Audited all 56 `noUncheckedIndexedAccess` sites as a bug hunt: every one is provably-safe — `core.js` relies on the guaranteed `realViewMeta.drive` fallback, `map.js` 505-560 is `buildSampleRoute` over hardcoded `SAMPLE_ROUTE` slices with bounded loop indices, `scrubber.js` `scrubSampleAt` is only called after a `scrubData.length` check. No real bugs found → flag stays off (would be 56 assertion-churn sites + permanent friction for zero caught bugs). Whole branch validated locally: Android unit/lint/coverage, dashboard typecheck/ESLint/Vitest(121), and **Playwright e2e (30 passed)**. |

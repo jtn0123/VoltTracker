@@ -39,6 +39,20 @@ tasks.register("dashboardNpmCi", Exec) {
     outputs.dir(file("${dashboardTestsDir}/node_modules"))
 }
 
+// Compiles the editable dashboard JS (app/src/main/dashboard-src/js) into the shipped,
+// gitignored bundle (app/src/main/assets/dashboard/js) via esbuild. Wired into preBuild
+// so `:app:assembleDebug` always packages a fresh bundle; up-to-date when the source is
+// unchanged. Requires Node (the dashboard toolchain), so CI Android jobs set up Node.
+tasks.register("buildDashboardJs", Exec) {
+    description = "Bundles dashboard-src/js into assets/dashboard/js with esbuild."
+    dependsOn("dashboardNpmCi")
+    workingDir = dashboardTestsDir
+    commandLine "npm", "run", "build"
+    inputs.dir(file("app/src/main/dashboard-src/js"))
+    inputs.file(file("${dashboardTestsDir}/build.mjs"))
+    outputs.dir(file("app/src/main/assets/dashboard/js"))
+}
+
 tasks.register("dashboardTest", Exec) {
     description = "Runs dashboard Vitest coverage for the shipped WebView assets."
     dependsOn("dashboardNpmCi")
@@ -71,7 +85,7 @@ tasks.register("dashboardE2eNpmCi", Exec) {
 
 tasks.register("dashboardE2e", Exec) {
     description = "Runs Playwright functional tests against the shipped dashboard."
-    dependsOn("dashboardE2eNpmCi")
+    dependsOn("dashboardE2eNpmCi", "buildDashboardJs")
     workingDir = dashboardE2eDir
     commandLine "npm", "test"
 }
@@ -104,6 +118,8 @@ tasks.register("verifyGeneratedDashboardClean") {
 
 tasks.register("verifyDashboardBundleSize") {
     description = "Fails when the core dashboard bundle or the DTC data exceeds its size budget."
+    // Measures the BUILT bundle (app.js + lazy chunks), so it must build first.
+    dependsOn("buildDashboardJs")
     // Core = boot/interactive JS + CSS, minus the lazy DTC reference tables.
     def coreAssets = files(fileTree(dashboardAssetDir) {
         include "js/**/*.js", "css/**/*.css"

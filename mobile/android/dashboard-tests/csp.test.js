@@ -16,6 +16,8 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD = resolve(HERE, '../app/src/main/assets/dashboard');
+// JS source moved to dashboard-src/js/ (assets/dashboard/js/ is the built bundle).
+const DASHBOARD_SRC = resolve(HERE, '../app/src/main/dashboard-src');
 
 // The exact resource hosts the dashboard is allowed to reach. Keep in sync with the
 // CSP meta in dashboard-src/index.template.html. Adding a host here is a deliberate,
@@ -92,7 +94,7 @@ describe('dashboard content-security-policy', () => {
     // map.js builds the basemap + OSM-fallback tile URLs. Those are the actual
     // img/connect resources CSP governs; a host here that isn't in the allowlist
     // would be silently blocked on-device (blank map).
-    const mapJs = readDashboard('js/map.js');
+    const mapJs = readFileSync(resolve(DASHBOARD_SRC, 'js/map.js'), 'utf8');
     const tileUrls = [...mapJs.matchAll(/https:\/\/\{s\}\.[a-z0-9.]+/g)].map((m) => m[0]);
     expect(tileUrls.length).toBeGreaterThan(0);
 

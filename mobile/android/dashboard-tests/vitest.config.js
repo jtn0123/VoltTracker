@@ -20,7 +20,7 @@ export default {
       provider: 'istanbul',
       all: true,
       allowExternal: true,
-      include: ['**/app/src/main/assets/dashboard/js/**/*.js'],
+      include: ['**/app/src/main/dashboard-src/js/**/*.js'],
       exclude: ['**/app/src/main/assets/dashboard/lib/**/*'],
       reporter: ['text-summary', 'html'],
       // Ratcheted 2026-05-29 to ~3pts below measured (lines 65.4 / stmts 62.2 /
