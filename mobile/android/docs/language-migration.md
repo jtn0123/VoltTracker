@@ -12,7 +12,7 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 27 | 0 | tested helper candidates | K0–K3 done; K5 started; BackupController stays Java |
+> | Kotlin files converted | 28 | 0 | tested helper candidates | K0–K3 done; K5 started; BackupController stays Java |
 > | Kotlin waves complete | K0–K3 | K5 small helpers | K4 (deferred) | large stateful core remains Java-for-now |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
@@ -214,17 +214,17 @@ focused JVM/Robolectric tests. This wave is opportunistic; each item should stan
 | [x] | `AppStateJson.kt` | 37 | pure app-state payload wrapper; existing app-state tests cover dashboard shape |
 | [x] | `StatusPayload.kt` | 76 | live-status payload builder; existing tests cover optional fields and extras override |
 | [x] | `data/DiagnosticCodeReport.kt` | 104 | DTC report read-model; existing tests cover trimming and dashboard JSON names |
+| [x] | `RollingAppLog.kt` | 178 | append-only diagnostics log; existing tests cover null flattening and 7-day rotation |
 | [ ] | `BluetoothStateReporter.java` | — | candidate with existing Robolectric tests |
 | [ ] | `DeviceCatalog.java` | — | candidate, but larger parsing surface |
 | [ ] | `DiagnosticsShareIntent.java` | — | candidate, but Android intent/file URI surface |
 | [ ] | `PermissionGate.java` | — | candidate, but Activity/runtime-permission surface |
-| [ ] | `RollingAppLog.java` | — | candidate if log retention tests cover edge cases |
 | [ ] | `WebViewBootstrap.java` | — | candidate with startup contract tests |
 
 Remaining K5 evaluation:
-- Convert next: `WebViewBootstrap.java`, `RollingAppLog.java`, and possibly `SystemSnapshot.java`
+- Convert next: `WebViewBootstrap.java` and possibly `SystemSnapshot.java`
   are small and directly tested, but each should stay in its own commit because they touch WebView
-  settings, file retention, or Android system services.
+  settings or Android system services.
 - Convert carefully: `PermissionGate.java`, `DiagnosticsShareIntent.java`,
   `BluetoothStateReporter.java`, `DeviceCatalog.java`, `TelemetryPayload.java`, and
   `StorageSummaryJson.java` are still Kotlin-owned in principle, but have broader Android, intent,
