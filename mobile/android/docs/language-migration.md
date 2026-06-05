@@ -12,7 +12,7 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 30 | 0 | tested helper candidates | K0–K3 done; K5 started; BackupController stays Java |
+> | Kotlin files converted | 31 | 0 | tested helper candidates | K0–K3 done; K5 started; BackupController stays Java |
 > | Kotlin waves complete | K0–K3 | K5 small helpers | K4 (deferred) | large stateful core remains Java-for-now |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
@@ -217,18 +217,15 @@ focused JVM/Robolectric tests. This wave is opportunistic; each item should stan
 | [x] | `RollingAppLog.kt` | 178 | append-only diagnostics log; existing tests cover null flattening and 7-day rotation |
 | [x] | `SystemSnapshot.kt` | 134 | session-start diagnostic payload; existing Robolectric tests cover keys and last-successful lookup |
 | [x] | `WebViewBootstrap.kt` | 120 | WebView startup wiring; existing tests cover hardening, bridge attach, and origin blocking |
+| [x] | `PermissionGate.kt` | 105 | runtime-permission helper; existing tests cover connect-only and optional feature permission paths |
 | [ ] | `BluetoothStateReporter.java` | — | candidate with existing Robolectric tests |
 | [ ] | `DeviceCatalog.java` | — | candidate, but larger parsing surface |
 | [ ] | `DiagnosticsShareIntent.java` | — | candidate, but Android intent/file URI surface |
-| [ ] | `PermissionGate.java` | — | candidate, but Activity/runtime-permission surface |
 
 Remaining K5 evaluation:
-- Convert next: `PermissionGate.java` is the smallest remaining Android-boundary helper, but should
-  stay in its own commit because it touches runtime permission decisions.
-- Convert carefully: `PermissionGate.java`, `DiagnosticsShareIntent.java`,
-  `BluetoothStateReporter.java`, `DeviceCatalog.java`, `TelemetryPayload.java`, and
-  `StorageSummaryJson.java` are still Kotlin-owned in principle, but have broader Android, intent,
-  parsing, or dashboard-ABI surfaces.
+- Convert carefully: `DiagnosticsShareIntent.java`, `BluetoothStateReporter.java`,
+  `DeviceCatalog.java`, `TelemetryPayload.java`, and `StorageSummaryJson.java` are still
+  Kotlin-owned in principle, but have broader Android, intent, parsing, or dashboard-ABI surfaces.
 - Leave Java-for-now: K4 lifecycle/service/bridge classes and backup restore orchestration remain
   out of scope for language-only churn.
 
