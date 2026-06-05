@@ -1,6 +1,5 @@
-// @ts-check
 /*
- * drive.js — Drive-tab live polish.
+ * drive.ts — Drive-tab live polish.
  *
  * Mirrors the Map-tab visual vocabulary (chip strip, scrub-chart, scrub-readout)
  * on the Drive screen so the live OBD experience feels like the same product:
@@ -16,16 +15,26 @@
  * The render entry point is renderDriveLive(), called once per scheduled render
  * frame from telemetry.js. Charts re-render on resize.
  */
-(function () {
-  "use strict";
+const VD = window.VoltDashboard;
+const state = VD.state;
+const el = VD.el;
 
-  const VD = window.VoltDashboard;
-  const state = VD.state;
-  const el = VD.el;
+type DriveChip = {
+  tone: string;
+  label: string;
+  meta: Array<string | number>;
+  isLink?: boolean;
+  liveStable?: boolean;
+};
+
+type ChartPoint = {
+  x: number;
+  y: number;
+};
 
   // ----- shared SVG helpers -------------------------------------------------
 
-  function paintEmpty(/** @type {any} */ target, /** @type {any} */ label) {
+  function paintEmpty(target: HTMLElement | null, label: string) {
     if (!target) return;
     const empty = document.createElement("div");
     empty.className = "live-chart-empty";
@@ -34,20 +43,20 @@
     target.replaceChildren(empty);
   }
 
-  function domNode(/** @type {any} */ tag, /** @type {any} */ className) {
+  function domNode(tag: string, className: string) {
     const node = document.createElement(tag);
     if (className) node.className = className;
     return node;
   }
 
-  function targetWidth(/** @type {any} */ node) {
+  function targetWidth(node: HTMLElement | null) {
     if (!node) return 0;
     return Math.max(0, node.clientWidth || node.getBoundingClientRect().width);
   }
 
   // ----- session chip strip -------------------------------------------------
 
-  function fmtDuration(/** @type {number} */ ms) {
+  function fmtDuration(ms: number) {
     const s = Math.max(0, Math.round(Number(ms) / 1000));
     if (s < 60) return s + "s";
     const m = Math.floor(s / 60);
@@ -72,7 +81,7 @@
     if (state.demoActive) {
       // Show live demo metrics so the chip feels alive — same shape as a real
       // recording chip but with a "demo" tone and a Demo label.
-      const meta = [];
+      const meta: string[] = [];
       const demoSamples = samples || Number(t.sampleCount || 0);
       if (demoSamples) meta.push(demoSamples.toLocaleString() + " samples");
       const demoRuntime = runtimeMs || Number(t.sessionMs || 0);
@@ -88,7 +97,7 @@
       ) ||
       adapter.connected
     ) {
-      const meta = [];
+      const meta: string[] = [];
       if (samples) meta.push(samples.toLocaleString() + " samples");
       if (runtimeMs) meta.push(fmtDuration(runtimeMs));
       if (distance) meta.push((distance / 1609.34).toFixed(1) + " mi");
@@ -116,11 +125,11 @@
   // Build via DOM APIs (textContent) instead of innerHTML string-concat so the
   // user-controlled Bluetooth `adapter.name` (which lands in `c.meta` via
   // deriveLiveChip()) can never be reinterpreted as markup.
-  function buildDriveNowChip(/** @type {any} */ c) {
+  function buildDriveNowChip(c: DriveChip) {
     const root = document.createElement(c.isLink ? "button" : "div");
     root.className = "map-drive-chip drive-now-chip";
     if (c.isLink) {
-      /** @type {HTMLButtonElement} */ (root).type = "button";
+      (root as HTMLButtonElement).type = "button";
       root.dataset.navJump = "map";
     } else if (c.liveStable || c.tone === "idle" || c.tone === "ok") {
       root.setAttribute("role", "status");
@@ -137,7 +146,7 @@
 
     const metaSpan = document.createElement("span");
     metaSpan.className = "dm";
-    c.meta.forEach((/** @type {any} */ m, /** @type {number} */ i) => {
+    c.meta.forEach((m, i) => {
       if (i > 0) {
         const sep = document.createElement("span");
         sep.textContent = "·";
@@ -155,7 +164,7 @@
   function renderDriveNowChips() {
     const host = el("driveNowChips");
     if (!host) return;
-    const chips = [];
+    const chips: DriveChip[] = [];
     // The Drive page is for the live drive. Idle / "ready · remembered" is already shown by the
     // top-bar pill + slim last-connected line, and past drives live on Trips/Map — so the now-chips
     // strip only surfaces the live chip while something is actually happening (Recording /
@@ -170,7 +179,7 @@
 
   function drawLiveSpeedTrace() {
     const host = el("liveTraceChart");
-    const canvas = /** @type {HTMLCanvasElement | null} */ (el("liveTraceCanvas"));
+    const canvas = el("liveTraceCanvas") as HTMLCanvasElement | null;
     if (!host || !canvas) return;
     const w = targetWidth(host);
     if (!w) return;
@@ -182,7 +191,7 @@
     canvas.height = Math.max(1, Math.round(h * dpr));
     canvas.style.height = h + "px";
     const ctx = canvas.getContext && canvas.getContext("2d");
-    const samples = state.speedHistory.map((/** @type {any} */ kph) => kph * 0.621371);
+    const samples = (state.speedHistory || []).map((kph: any) => kph * 0.621371);
     host.dataset.traceState = samples.length >= 2 ? "ready" : "empty";
     host.dataset.traceLabel = samples.length >= 2
       ? Math.round(samples[samples.length - 1]) + " mph"
@@ -214,7 +223,7 @@
     const cap = Math.max(12, samples.length);
     const stride = w / Math.max(1, cap - 1);
     const offset = w - (samples.length - 1) * stride;
-    const points = samples.map((/** @type {any} */ sample, /** @type {any} */ index) => ({
+    const points: ChartPoint[] = samples.map((sample: number, index: number) => ({
       x: offset + index * stride,
       y: padT + (1 - sample / maxMph) * (h - padT - padB)
     }));
@@ -223,7 +232,7 @@
     gradient.addColorStop(0, "rgba(255, 122, 69, 0.2)");
     gradient.addColorStop(1, "rgba(255, 122, 69, 0)");
     ctx.beginPath();
-    points.forEach((/** @type {any} */ point, /** @type {any} */ index) => {
+    points.forEach((point, index) => {
       if (index === 0) ctx.moveTo(point.x, point.y);
       else ctx.lineTo(point.x, point.y);
     });
@@ -234,7 +243,7 @@
     ctx.fill();
 
     ctx.beginPath();
-    points.forEach((/** @type {any} */ point, /** @type {any} */ index) => {
+    points.forEach((point, index) => {
       if (index === 0) ctx.moveTo(point.x, point.y);
       else ctx.lineTo(point.x, point.y);
     });
@@ -319,7 +328,7 @@
 
   // Typographic minus matches the +/- glyph advance width — same trick the Map
   // scrubber uses to keep the SOC delta chip from twitching as it crosses zero.
-  function fmtSocDelta(/** @type {number} */ v) {
+  function fmtSocDelta(v: number) {
     const abs = Math.abs(v);
     if (abs < 0.05) return "+0.0";
     return (v < 0 ? "−" : "+") + abs.toFixed(1);
@@ -347,8 +356,8 @@
     const obsLo = Math.min(...samples);
     const obsHi = Math.max(...samples);
     const observed = obsHi - obsLo;
-    let lo;
-    let hi;
+    let lo: number;
+    let hi: number;
     if (observed < MIN_RANGE) {
       const center = (obsHi + obsLo) / 2;
       lo = Math.max(0, center - MIN_RANGE / 2);
@@ -365,7 +374,7 @@
     const cap = Math.max(48, samples.length);
     const stride = w / Math.max(1, cap - 1);
     const offset = w - (samples.length - 1) * stride;
-    const points = samples.map((/** @type {any} */ sample, /** @type {any} */ index) => ({
+    const points: ChartPoint[] = samples.map((sample: number, index: number) => ({
       x: offset + index * stride,
       y: padT + (1 - (sample - lo) / (hi - lo)) * (h - padT - padB)
     }));
@@ -378,7 +387,7 @@
     baseline.style.top = baselineY.toFixed(1) + "px";
     chart.append(baseline);
 
-    points.forEach((/** @type {any} */ point, /** @type {any} */ index) => {
+    points.forEach((point, index) => {
       const dot = domNode("span", "live-soc-dot");
       dot.style.left = point.x.toFixed(1) + "px";
       dot.style.top = point.y.toFixed(1) + "px";
@@ -455,9 +464,9 @@
   }
 
   // Resize redraws — keep the rendered widths in sync with the container.
-  let /** @type {any} */ resizeTimer = null;
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   window.addEventListener("resize", () => {
-    clearTimeout(resizeTimer);
+    if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(renderDriveLive, 160);
   });
 
@@ -468,4 +477,5 @@
     drawLivePowerBars,
     drawLiveSocTrace
   });
-})();
+
+export {};

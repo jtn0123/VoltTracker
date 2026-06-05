@@ -65,8 +65,8 @@ diverge.
 
 | Status | Files |
 |---|---|
-| Converted | `demo-data.ts`, `connection-tools.ts`, `connection-status.ts`, `dtc-causes.ts`, `dtc-lookup.ts` |
-| Next low/medium risk | `drive.js`, `troubleshooter.js`, `scrubber.js` |
+| Converted | `demo-data.ts`, `connection-tools.ts`, `connection-status.ts`, `dtc-causes.ts`, `dtc-lookup.ts`, `drive.ts` |
+| Next low/medium risk | `troubleshooter.js`, `scrubber.js` |
 | Next higher risk | `telemetry.js`, `map.js` |
 | Leave until late | `core.js`, `actions.js`, `panels.js` |
 
@@ -309,6 +309,8 @@ the global-namespace shim; types replace the `dashboard-globals.d.ts` ambient de
             and status observer while preserving eager bundle order
       - [x] `dtc-causes.js` / `dtc-lookup.js` -> `.ts`: lazy DTC data/lookup modules still
             build to classic `js/dtc-causes.js` and `js/dtc-lookup.js`
+      - [x] `drive.js` -> `drive.ts`: live Drive chip/chart render helpers now use TS types
+            while still attaching the same `VoltDashboard` public functions
 - [ ] (Optional) source maps for on-device debugging, with a `*.map` packaging exclude
 - [ ] (Optional, T3) debug-only WebView → vite dev server hook for on-device live reload
 
@@ -344,3 +346,4 @@ the global-namespace shim; types replace the `dashboard-globals.d.ts` ambient de
 | 2026-06-04 | T2b takeover canary: dashboard build/test tooling now accepts mixed `.js`/`.ts` source and `demo-data` moved to a real `.ts` module with typed fixture rows. The public lazy asset remains `js/demo-data.js`, preserving the WebView/native contract while proving esbuild, Vitest, `tsc`, and ESLint all understand the next migration shape. |
 | 2026-06-05 | T2b small eager-module slice: `connection-tools` and `connection-status` moved to `.ts` modules. They keep the same bundle order and public behavior, but bridge calls, recent-session parsing, low-voltage status rendering, and the `setStatus` observer now use explicit TS annotations instead of JSDoc comments. |
 | 2026-06-05 | T2b lazy-data slice: `dtc-causes` and `dtc-lookup` moved to `.ts` modules. The big curated tables stayed structurally unchanged; the wrapper now uses TS signatures and still emits the same lazy classic script filenames for the WebView. |
+| 2026-06-05 | T2b Drive slice: `drive` moved to a `.ts` module. The public `VoltDashboard` render helpers stay attached for `telemetry.js`, while the chip model, chart points, DOM widths, canvas node, and resize debounce state now use TS annotations. |
