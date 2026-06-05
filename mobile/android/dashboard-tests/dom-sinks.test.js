@@ -13,7 +13,7 @@ const ALLOWED_DOM_SINKS = [
     source: 'select.innerHTML = "";',
   },
   {
-    file: 'panels.js',
+    file: 'panels.ts',
     source: 'chart.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${inner}</svg>`;',
   },
 ];

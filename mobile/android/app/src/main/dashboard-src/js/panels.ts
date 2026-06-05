@@ -1,4 +1,3 @@
-// @ts-check
 (function () {
   "use strict";
 
@@ -7,7 +6,8 @@
   const bridge = VD.bridge;
   const el = VD.el;
   let enhancedSignalFilter = "all";
-  const signalStageMeta = {
+  type SignalStageMeta = { label: string; hint: string };
+  const signalStageMeta: Record<string, SignalStageMeta> = {
     passive: {
       label: "Passive",
       hint: "Only logs adapter state and passive targets; no active enhanced PID requests."
@@ -26,11 +26,11 @@
     }
   };
 
-  function isNativeError(/** @type {any} */ payload) {
+  function isNativeError(payload: any) {
     return payload && typeof payload === "object" && payload.ok === false && payload.error;
   }
 
-  function reportNativeReadError(/** @type {any} */ payload, /** @type {any} */ fallbackDetail) {
+  function reportNativeReadError(payload: any, fallbackDetail: any) {
     const detail = payload.message || fallbackDetail || "Could not read local storage.";
     VD.setStatus({ state: "blocked", detail });
     if (bridge && typeof bridge.logClientError === "function") {
@@ -38,7 +38,7 @@
     }
   }
 
-  function setStorage(/** @type {any} */ payload) {
+  function setStorage(payload: any) {
     const parsed = VD.parsePayload(payload, {});
     if (isNativeError(parsed)) {
       reportNativeReadError(parsed, "Could not read local storage summary.");
@@ -130,14 +130,14 @@
   // innerHTML += template literals so storage strings can never be reinterpreted
   // as markup. Each builder returns a single root Element.
 
-  function buildStatusCopy(/** @type {any} */ text) {
+  function buildStatusCopy(text: any) {
     const p = document.createElement("p");
     p.className = "status-copy";
     p.textContent = text;
     return p;
   }
 
-  function buildRecentSessionRow(/** @type {any} */ session) {
+  function buildRecentSessionRow(session: any) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "history-row";
@@ -161,14 +161,14 @@
     const codes = Array.isArray(storage.latestDiagnosticCodes) ? storage.latestDiagnosticCodes : [];
     const list = el("dtcList");
     const summaryCounts = storage.diagnosticCodeStatusCounts || {};
-    const statusCounts = Object.keys(summaryCounts).length ? summaryCounts : codes.reduce((/** @type {any} */ counts, /** @type {any} */ code) => {
+    const statusCounts = Object.keys(summaryCounts).length ? summaryCounts : codes.reduce((counts: any, code: any) => {
       const key = String(code.status || "stored").toLowerCase();
       counts[key] = (counts[key] || 0) + 1;
       return counts;
     }, {});
     const totalCodes = Number(storage.diagnosticCodeCount ?? codes.length);
     const storedOrCurrent = Number(statusCounts.stored || 0) + Number(statusCounts.current || 0);
-    const latestSeen = codes.reduce((/** @type {any} */ latest, /** @type {any} */ code) => Math.max(latest, Number(code.lastSeenMs || 0)), 0);
+    const latestSeen = codes.reduce((latest: any, code: any) => Math.max(latest, Number(code.lastSeenMs || 0)), 0);
     const needsDtcData = codes.length > 0 && typeof VD.dtcInfo !== "function";
     VD.setText("dtcTitle", totalCodes ? `${totalCodes} code${totalCodes === 1 ? "" : "s"} saved` : "No car-code scan yet");
     VD.setText("dtcReportBadge", needsDtcData ? "loading details" : totalCodes ? "evidence saved" : "ready");
@@ -192,10 +192,10 @@
       list.replaceChildren(buildDtcEmptyState());
       return;
     }
-    list.replaceChildren(...codes.map((/** @type {number} */ c) => buildDtcItem(c, false)));
+    list.replaceChildren(...codes.map((c: number) => buildDtcItem(c, false)));
   }
 
-  function enhancedCapabilityStatus(/** @type {any} */ capability) {
+  function enhancedCapabilityStatus(capability: any) {
     const sample = capability && typeof capability.sample === "object" ? capability.sample : {};
     const lane = String(sample.pollLane || capability.pollLane || "").toLowerCase();
     if (lane === "passive") return "deferred";
@@ -210,7 +210,7 @@
   function updateEnhancedCapabilityUi() {
     const storage = state.storage || {};
     const rows = detailedSignalRows(storage);
-    const counts = rows.reduce((/** @type {any} */ tally, /** @type {any} */ row) => {
+    const counts = rows.reduce((tally: any, row: any) => {
       const status = row._status;
       tally[status] = (tally[status] || 0) + 1;
       const category = String(row.category || (row.sample || {}).category || "").toLowerCase();
@@ -237,7 +237,7 @@
       list.replaceChildren(buildStatusCopy("Run Scan or Detail Probe once to collect detailed signal evidence."));
       return;
     }
-    const visible = rows.filter((/** @type {any} */ row) => matchesEnhancedFilter(row));
+    const visible = rows.filter((row: any) => matchesEnhancedFilter(row));
     if (!visible.length) {
       list.replaceChildren(buildStatusCopy("No detailed signals match this filter yet."));
       return;
@@ -245,14 +245,14 @@
     list.replaceChildren(...visible.slice(0, 18).map(buildEnhancedCapabilityRow));
   }
 
-  function detailedSignalRows(/** @type {any} */ storage) {
+  function detailedSignalRows(storage: any) {
     const capabilities = Array.isArray(storage.enhancedCapabilities) ? storage.enhancedCapabilities : [];
     const catalog = Array.isArray(storage.detailedSignalCatalog) ? storage.detailedSignalCatalog : [];
     const evidenceByKey = new Map();
-    capabilities.forEach((/** @type {any} */ capability) => {
+    capabilities.forEach((capability: any) => {
       evidenceByKey.set(signalKey(capability), capability);
     });
-    const rows = catalog.map((/** @type {any} */ profile) => {
+    const rows = catalog.map((profile: any) => {
       const evidence = evidenceByKey.get(signalKey(profile));
       if (evidence) evidenceByKey.delete(signalKey(profile));
       const merged = { ...profile, ...(evidence || {}) };
@@ -260,17 +260,17 @@
       merged._status = evidence ? enhancedCapabilityStatus(merged) : catalogSignalStatus(profile);
       return merged;
     });
-    evidenceByKey.forEach((/** @type {any} */ evidence) => {
+    evidenceByKey.forEach((evidence: any) => {
       rows.push({ ...evidence, _hasEvidence: true, _status: enhancedCapabilityStatus(evidence) });
     });
     return rows;
   }
 
-  function signalKey(/** @type {any} */ item) {
+  function signalKey(item: any) {
     return `${String(item.header || "").toUpperCase()}|${String(item.command || item.pid || "").toUpperCase()}`;
   }
 
-  function catalogSignalStatus(/** @type {any} */ profile) {
+  function catalogSignalStatus(profile: any) {
     const lane = String(profile.pollLane || "").toLowerCase();
     if (lane === "passive") return "deferred";
     const validation = String(profile.validationStatus || "").toLowerCase();
@@ -279,7 +279,7 @@
     return "candidate";
   }
 
-  function matchesEnhancedFilter(/** @type {any} */ row) {
+  function matchesEnhancedFilter(row: any) {
     if (enhancedSignalFilter === "all") return true;
     if (enhancedSignalFilter === "tpms") {
       return String(row.category || (row.sample || {}).category || "").toLowerCase() === "tpms";
@@ -290,12 +290,12 @@
   function updateEnhancedFilterButtons() {
     const bar = el("enhancedFilterBar");
     if (!bar) return;
-    bar.querySelectorAll("[data-signal-filter]").forEach((/** @type {any} */ button) => {
+    bar.querySelectorAll("[data-signal-filter]").forEach((button: any) => {
       button.classList.toggle("is-active", button.dataset.signalFilter === enhancedSignalFilter);
     });
   }
 
-  function updateEnhancedNextList(/** @type {any[]} */ rows) {
+  function updateEnhancedNextList(rows: any[]) {
     const list = el("enhancedNextList");
     const label = el("signalNextLabel");
     if (!list) return;
@@ -316,7 +316,7 @@
     list.replaceChildren(...next.map(buildEnhancedNextItem));
   }
 
-  function buildEnhancedNextItem(/** @type {any} */ row) {
+  function buildEnhancedNextItem(row: any) {
     const item = document.createElement("article");
     item.className = "enhanced-next-item";
     const strong = document.createElement("strong");
@@ -327,25 +327,25 @@
     return item;
   }
 
-  function updateSignalStageUi(/** @type {any[]} */ rows) {
+  function updateSignalStageUi(rows: any[]) {
     const stage = String(state.signalProbeStage || "tires");
-    const meta = /** @type {Record<string, {label: string, hint: string}>} */ (signalStageMeta)[stage] || signalStageMeta.tires;
+    const meta = signalStageMeta[stage] || signalStageMeta.tires;
     VD.setText("signalStageLabel", meta.label);
     VD.setText("signalStageHint", meta.hint);
     const bar = el("signalStageBar");
     if (bar) {
-      bar.querySelectorAll("[data-signal-stage]").forEach((/** @type {any} */ button) => {
+      bar.querySelectorAll("[data-signal-stage]").forEach((button: any) => {
         button.classList.toggle("is-active", button.dataset.signalStage === stage);
       });
     }
     const count = rows.filter((row) => String(row.scanStage || (row.sample || {}).scanStage || "") === stage).length;
-    const button = /** @type {HTMLButtonElement | null} */ (el("detailProbeBtn"));
+    const button = el("detailProbeBtn") as HTMLButtonElement | null;
     if (button) {
       button.textContent = count ? `Run ${meta.label} (${count})` : `Run ${meta.label}`;
     }
   }
 
-  function buildSignalChip(/** @type {string} */ text, /** @type {string} */ kind, /** @type {string} */ value) {
+  function buildSignalChip(text: string, kind: string, value: string) {
     const chip = document.createElement("span");
     chip.className = "signal-chip";
     if (kind) chip.dataset[kind] = String(value || text).toLowerCase();
@@ -353,7 +353,7 @@
     return chip;
   }
 
-  function buildEnhancedCapabilityRow(/** @type {any} */ capability) {
+  function buildEnhancedCapabilityRow(capability: any) {
     const row = document.createElement("article");
     row.className = "enhanced-capability-item";
     row.dataset.status = capability._status || enhancedCapabilityStatus(capability);
@@ -409,7 +409,7 @@
     return row;
   }
 
-  function enhancedStatusLabel(/** @type {string} */ status) {
+  function enhancedStatusLabel(status: string) {
     if (status === "confirmed") return "working";
     if (status === "rejected") return "no hit";
     return status || "candidate";
@@ -438,7 +438,7 @@
     return wrap;
   }
 
-  function buildDtcItem(/** @type {any} */ code, /** @type {any} */ isExample) {
+  function buildDtcItem(code: any, isExample: any) {
     const article = document.createElement("article");
     article.className = "dtc-item";
     article.dataset.status = String(code.status || "stored");
@@ -604,7 +604,7 @@
     }
   }
 
-  function buildRealInsightItem(/** @type {any} */ title, /** @type {any} */ detail) {
+  function buildRealInsightItem(title: any, detail: any) {
     const article = document.createElement("article");
     article.className = "real-insight-item";
     const strong = document.createElement("strong");
@@ -615,7 +615,7 @@
     return article;
   }
 
-  function buildWarningItem(/** @type {any} */ item) {
+  function buildWarningItem(item: any) {
     const article = document.createElement("article");
     article.className = "warning-item";
     const strong = document.createElement("strong");
@@ -626,7 +626,7 @@
     return article;
   }
 
-  function buildTimelineItem(/** @type {any} */ item) {
+  function buildTimelineItem(item: any) {
     const article = document.createElement("article");
     article.className = "timeline-item";
     const wrapper = document.createElement("span");
@@ -639,7 +639,7 @@
     return article;
   }
 
-  function buildPidFrameItem(/** @type {any} */ frame) {
+  function buildPidFrameItem(frame: any) {
     const article = document.createElement("article");
     article.className = "pid-frame-item";
     const cmd = document.createElement("strong");
@@ -656,7 +656,7 @@
     return article;
   }
 
-  function buildRealInsights(/** @type {any} */ review) {
+  function buildRealInsights(review: any) {
     const warnings = Array.isArray(review.warnings) ? review.warnings : [];
     const stateCounts = review.stateCounts || {};
     const parsed = Number(review.parsedPidCount || 0);
@@ -665,7 +665,7 @@
     const maxSpeed = Number(review.maxSpeedKph || 0);
     const backgroundSamples = Number(review.backgroundSampleCount || (review.latestHealth || {}).backgroundSampleCount || 0);
     const gapCount = Number(review.sampleGapEventCount || (review.latestHealth || {}).sampleGapCount || 0);
-    const hasChargeHint = warnings.some((/** @type {any} */ item) => String(item.code || "") === "charge-speed-hint");
+    const hasChargeHint = warnings.some((item: any) => String(item.code || "") === "charge-speed-hint");
     const hasDriving = Object.keys(stateCounts).some((key) => key.includes("driving"));
     return [
       {
@@ -699,7 +699,7 @@
     ];
   }
 
-  function stateCountSummary(/** @type {any} */ counts) {
+  function stateCountSummary(counts: any) {
     return Object.keys(counts || {})
       .filter((key) => key && key !== "unknown")
       .map((key) => `${key}: ${counts[key]}`)
@@ -767,7 +767,7 @@
     renderVehicleUi();
   }
 
-  function buildMaintenanceRow(/** @type {any} */ name, /** @type {any} */ detail, /** @type {any} */ tag) {
+  function buildMaintenanceRow(name: any, detail: any, tag: any) {
     const article = document.createElement("article");
     article.className = "real-insight-item";
     const center = document.createElement("span");
@@ -787,7 +787,7 @@
   // A charge row counts as "in progress" only when it has no end time AND a
   // live signal (start SOC or power). A row missing all fields is "details
   // pending", not charging — so the active-charge badge never fires on a stub.
-  function isChargeInProgress(/** @type {any} */ session) {
+  function isChargeInProgress(session: any) {
     return Boolean(
       session && session.endedAtMs == null && session.startedAtMs &&
         (session.startSoc != null || session.powerKw != null),
@@ -797,7 +797,7 @@
   // Per-session charge history for the Charge tab. The native chargeSummary now
   // ships a `recentSessions` array (newest first); the card stays hidden until
   // at least one real session exists so the empty tab keeps its first-run guide.
-  function renderChargeSessions(/** @type {any} */ charge) {
+  function renderChargeSessions(charge: any) {
     const card = el("chargeSessionsCard");
     const list = el("chargeSessionsList");
     const sessions = Array.isArray(charge.recentSessions) ? charge.recentSessions : [];
@@ -811,26 +811,26 @@
     list.replaceChildren(...sessions.slice(0, 12).map(buildChargeSessionRow));
   }
 
-  function chargeNum(/** @type {any} */ value) {
+  function chargeNum(value: any) {
     // Native sends JSON null for missing fields; coerce those to NaN so a real
     // 0 reading and "no data" don't both render as "0".
     return value == null || value === "" ? NaN : Number(value);
   }
 
-  function chargerLabel(/** @type {any} */ type) {
+  function chargerLabel(type: any) {
     const raw = String(type == null ? "" : type).trim();
     const key = raw.toLowerCase().replace(/[\s-]+/g, "_");
     if (!key || key === "unknown" || key === "null") return "";
-    const known = /** @type {Record<string, string>} */ ({
+    const known: Record<string, string> = {
       level1: "Level 1",
       level2: "Level 2",
       dc_fast: "DC fast",
       dcfast: "DC fast"
-    });
+    };
     return known[key] || raw.charAt(0).toUpperCase() + raw.slice(1);
   }
 
-  function buildChargeSessionRow(/** @type {any} */ session) {
+  function buildChargeSessionRow(session: any) {
     const row = document.createElement("article");
     row.className = "charge-session-row";
     const inProgress = isChargeInProgress(session);
@@ -863,7 +863,7 @@
     return row;
   }
 
-  function firstNum(/** @type {any[]} */ values) {
+  function firstNum(values: any[]) {
     for (const v of values) {
       if (v == null || v === "") continue;
       const n = Number(v);
@@ -876,7 +876,7 @@
   // surface voltage / temp / health / power as a stat row beneath the SOC ring
   // so the Insights hero shows the pack, not just a charge percentage. Hidden
   // until at least one field is real.
-  function renderPackStats(/** @type {any} */ latest) {
+  function renderPackStats(latest: any) {
     const row = el("realPackStats");
     if (!row) return;
     const voltage = firstNum([latest.packVoltage]);
@@ -898,7 +898,7 @@
     row.replaceChildren(...stats.map((pair) => buildPackStat(String(pair[0]), String(pair[1]))));
   }
 
-  function buildPackStat(/** @type {string} */ label, /** @type {string} */ value) {
+  function buildPackStat(label: string, value: string) {
     const cell = document.createElement("div");
     const span = document.createElement("span");
     span.textContent = label;
@@ -944,7 +944,7 @@
     VD.setText("vehicleLoggedDistance", loggedMeters > 0 ? VD.formatDistance(loggedMeters) : "--");
   }
 
-  function toggleHidden(/** @type {any} */ id, /** @type {any} */ hidden) {
+  function toggleHidden(id: any, hidden: any) {
     const node = el(id);
     if (node) node.hidden = Boolean(hidden);
   }
@@ -989,8 +989,8 @@
       : "Your trips");
   }
 
-  function realTripsRenderKey(/** @type {any} */ trips) {
-    return trips.map((/** @type {any} */ trip) => [
+  function realTripsRenderKey(trips: any) {
+    return trips.map((trip: any) => [
       trip.id,
       trip.hasRoute ? "route" : "samples",
       trip.pointCount || 0,
@@ -1005,15 +1005,15 @@
     ].join(":")).join("|");
   }
 
-  function needsMiniMapUpgrade(/** @type {any} */ list) {
+  function needsMiniMapUpgrade(list: any) {
     if (!list) return false;
     return Array.prototype.some.call(
       list.querySelectorAll("[data-real-trip-map-role='mini']"),
-      (/** @type {any} */ slot) => !slot.querySelector(".leaflet-container")
+      (slot: any) => !slot.querySelector(".leaflet-container")
     );
   }
 
-  function renderTripRow(/** @type {any} */ trip) {
+  function renderTripRow(trip: any) {
     const distance = VD.formatDistance(Number(trip.distanceMeters || 0));
     const duration = Number(trip.durationMs) > 0 ? VD.formatDuration(Number(trip.durationMs)) : null;
     const topMph = trip.maxSpeedKph ? Math.round(Number(trip.maxSpeedKph) * 0.621371) : 0;
@@ -1054,7 +1054,7 @@
     return item;
   }
 
-  function selectRealTrip(/** @type {any} */ id) {
+  function selectRealTrip(id: any) {
     state.selectedRealTripId = String(id || "");
     updateRealTripSelection();
     renderRealTripDetail();
@@ -1062,7 +1062,7 @@
   }
 
   function updateRealTripSelection() {
-    /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-real-trip-id]")).forEach((button) => {
+    document.querySelectorAll<HTMLElement>("[data-real-trip-id]").forEach((button) => {
       button.classList.toggle("is-active", String(button.dataset.realTripId || "") === String(state.selectedRealTripId || ""));
     });
   }
@@ -1072,20 +1072,20 @@
   // route that arrives after a storage refresh is not hidden forever.
   const onDemandRoutes = new Map();
 
-  function routeForTrip(/** @type {any} */ trip) {
+  function routeForTrip(trip: any) {
     const routes =
       state.storage && Array.isArray(state.storage.recentRoutes)
         ? state.storage.recentRoutes
         : [];
     const id = tripRouteKey(trip);
     const fromRecent = routes.find(
-      (/** @type {any} */ route) => String((route.session || {}).id || "") === id
+      (route: any) => String((route.session || {}).id || "") === id
     );
     if (fromRecent) return fromRecent;
     return onDemandRoutes.get(id) || null;
   }
 
-  function tripRouteKey(/** @type {any} */ trip) {
+  function tripRouteKey(trip: any) {
     return String((trip && (trip.routeId || trip.id || trip.sessionId)) || "");
   }
 
@@ -1093,7 +1093,7 @@
   // the first time a drive outside the recent-routes window is opened. The storage summary only
   // ships the most recent few routes for payload size; this lets ANY logged drive (e.g. one folded
   // in from a merged backup) preview its route. Returns the route payload or null.
-  function ensureRouteForTrip(/** @type {any} */ trip) {
+  function ensureRouteForTrip(trip: any) {
     if (!trip || !trip.hasRoute) return null;
     const id = tripRouteKey(trip);
     const cached = routeForTrip(trip);
@@ -1113,23 +1113,23 @@
     return route;
   }
 
-  function buildTripRouteSpark(/** @type {any} */ route) {
+  function buildTripRouteSpark(route: any) {
     const points = (route && route.points || [])
-      .map((/** @type {any} */ point) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
-      .filter((/** @type {any} */ point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+      .map((point: any) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
+      .filter((point: any) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
     if (points.length < 2) return document.createTextNode("");
     const ns = "http://www.w3.org/2000/svg";
     const svgNode = document.createElementNS(ns, "svg");
     svgNode.setAttribute("class", "trip-route-spark");
     svgNode.setAttribute("viewBox", "0 0 72 38");
     svgNode.setAttribute("aria-hidden", "true");
-    const minLat = Math.min.apply(null, points.map((/** @type {any} */ point) => point.lat));
-    const maxLat = Math.max.apply(null, points.map((/** @type {any} */ point) => point.lat));
-    const minLng = Math.min.apply(null, points.map((/** @type {any} */ point) => point.lng));
-    const maxLng = Math.max.apply(null, points.map((/** @type {any} */ point) => point.lng));
+    const minLat = Math.min.apply(null, points.map((point: any) => point.lat));
+    const maxLat = Math.max.apply(null, points.map((point: any) => point.lat));
+    const minLng = Math.min.apply(null, points.map((point: any) => point.lng));
+    const maxLng = Math.max.apply(null, points.map((point: any) => point.lng));
     const spanLat = maxLat - minLat || 1;
     const spanLng = maxLng - minLng || 1;
-    const coords = points.map((/** @type {any} */ point) => {
+    const coords = points.map((point: any) => {
       const x = 6 + ((point.lng - minLng) / spanLng) * 60;
       const y = 6 + (1 - (point.lat - minLat) / spanLat) * 26;
       return x.toFixed(1) + "," + y.toFixed(1);
@@ -1158,7 +1158,7 @@
   // Context-aware empty state for the route preview. A drive that recorded OBD samples but has no
   // GPS track almost always means location was off during the drive — so say that plainly and, if
   // the permission is still off, offer to enable it so future drives map.
-  function buildRouteEmptyState(/** @type {any} */ trip) {
+  function buildRouteEmptyState(trip: any) {
     const box = document.createElement("div");
     box.className = "real-route-empty route-empty-rich";
     const sampleCount = Number((trip && trip.sampleCount) || 0);
@@ -1194,7 +1194,7 @@
     return box;
   }
 
-  function buildTripMapSlot(/** @type {any} */ route, /** @type {any} */ role, /** @type {any} */ tripId) {
+  function buildTripMapSlot(route: any, role: any, tripId: any) {
     const slot = document.createElement("span");
     slot.className = role === "detail" ? "real-route-map" : "trip-route-map";
     slot.dataset.realTripMap = String(tripId || (route && route.session && route.session.id) || "");
@@ -1203,10 +1203,10 @@
     return slot;
   }
 
-  function buildTripRoutePreview(/** @type {any} */ route) {
+  function buildTripRoutePreview(route: any) {
     const points = (route && route.points || [])
-      .map((/** @type {any} */ point) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
-      .filter((/** @type {any} */ point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+      .map((point: any) => ({ lat: Number(point.lat), lng: Number(point.lng) }))
+      .filter((point: any) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
     const box = document.createElement("div");
     box.className = "real-route-empty";
     if (points.length < 2) {
@@ -1218,13 +1218,13 @@
     svgNode.setAttribute("class", "real-route-svg");
     svgNode.setAttribute("viewBox", "0 0 320 150");
     svgNode.setAttribute("aria-hidden", "true");
-    const minLat = Math.min.apply(null, points.map((/** @type {any} */ point) => point.lat));
-    const maxLat = Math.max.apply(null, points.map((/** @type {any} */ point) => point.lat));
-    const minLng = Math.min.apply(null, points.map((/** @type {any} */ point) => point.lng));
-    const maxLng = Math.max.apply(null, points.map((/** @type {any} */ point) => point.lng));
+    const minLat = Math.min.apply(null, points.map((point: any) => point.lat));
+    const maxLat = Math.max.apply(null, points.map((point: any) => point.lat));
+    const minLng = Math.min.apply(null, points.map((point: any) => point.lng));
+    const maxLng = Math.max.apply(null, points.map((point: any) => point.lng));
     const spanLat = maxLat - minLat || 1;
     const spanLng = maxLng - minLng || 1;
-    const coords = points.map((/** @type {any} */ point) => {
+    const coords = points.map((point: any) => {
       const x = 22 + ((point.lng - minLng) / spanLng) * 276;
       const y = 18 + (1 - (point.lat - minLat) / spanLat) * 112;
       return x.toFixed(1) + "," + y.toFixed(1);
@@ -1251,7 +1251,7 @@
     return svgNode;
   }
 
-  function buildEnergyRow(/** @type {any} */ label, /** @type {any} */ value, /** @type {any} */ pct, /** @type {any} */ color) {
+  function buildEnergyRow(label: any, value: any, pct: any, color: any) {
     const row = document.createElement("div");
     const span = document.createElement("span");
     span.textContent = label;
@@ -1288,7 +1288,7 @@
     // Use the resolved route (after the on-demand fetch), not just trip.hasRoute — a drive can
     // claim a route in its rollup yet have no geometry available.
     const hasRouteGeometry = !!(route && Array.isArray(route.points) && route.points.length >= 2);
-    const mapBtn = /** @type {HTMLButtonElement | null} */ (el("realTripMapBtn"));
+    const mapBtn = el("realTripMapBtn") as HTMLButtonElement | null;
     if (mapBtn) {
       mapBtn.dataset.tripMap = String(trip.id || "");
       mapBtn.disabled = !hasRouteGeometry;
@@ -1310,10 +1310,10 @@
       }
     }
     const effPts = route && Array.isArray(route.points)
-      ? route.points.map((/** @type {any} */ point) => Number(point.eff)).filter(Number.isFinite)
+      ? route.points.map((point: any) => Number(point.eff)).filter(Number.isFinite)
       : [];
     const avgEff = effPts.length
-      ? effPts.reduce((/** @type {any} */ sum, /** @type {any} */ value) => sum + value, 0) / effPts.length
+      ? effPts.reduce((sum: any, value: any) => sum + value, 0) / effPts.length
       : 0;
     VD.setText("realTripEnergyTitle", avgEff ? `${avgEff.toFixed(1)} mi/kWh` : (avgMph ? `${avgMph} mph avg` : "Stored drive"));
     const rows = el("realTripEnergyRows");
@@ -1322,9 +1322,9 @@
       // longest/busiest trip reads as full. A metric with no value renders no bar (width 0) rather
       // than a misleading full bar next to a "--".
       const allTrips = Array.isArray(state.trips) ? state.trips : [];
-      const maxOf = (/** @type {any} */ key) =>
-        allTrips.reduce((/** @type {any} */ m, /** @type {any} */ t) => Math.max(m, Number(t[key]) || 0), 0);
-      const pctOf = (/** @type {any} */ value, /** @type {any} */ max) =>
+      const maxOf = (key: any) =>
+        allTrips.reduce((m: any, t: any) => Math.max(m, Number(t[key]) || 0), 0);
+      const pctOf = (value: any, max: any) =>
         max > 0 && Number(value) > 0 ? Math.round((Number(value) / max) * 100) : 0;
       const distMeters = Number(trip.distanceMeters || 0);
       const durMs = Number(trip.durationMs || 0);
@@ -1340,7 +1340,7 @@
     }
   }
 
-  const realTripMaps = new Map();
+  const realTripMaps = new Map<HTMLElement, any>();
   let realTripMapTimer = 0;
 
   function clearRealTripMaps() {
@@ -1350,19 +1350,19 @@
     realTripMaps.clear();
   }
 
-  function queueRenderRealTripMaps(/** @type {any} */ options) {
+  function queueRenderRealTripMaps(options: any) {
     clearTimeout(realTripMapTimer);
     const detailOnly = Boolean(options && options.detailOnly);
     realTripMapTimer = setTimeout(() => renderRealTripLeafletMaps({ detailOnly }), 80);
   }
 
-  function renderRealTripLeafletMaps(/** @type {any} */ options) {
+  function renderRealTripLeafletMaps(options: any) {
     if (typeof L === "undefined") return;
     const detailOnly = Boolean(options && options.detailOnly);
     if (!detailOnly) {
       clearRealTripMaps();
     } else {
-      const currentDetailId = (el("realTripRouteBox") || {}).dataset?.tripMap || "";
+      const currentDetailId = (el("realTripRouteBox") as HTMLElement | null)?.dataset.tripMap || "";
       realTripMaps.forEach((map, slot) => {
         if (
           slot.dataset.realTripMapRole === "detail" &&
@@ -1373,7 +1373,7 @@
         }
       });
     }
-    /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-real-trip-map]")).forEach((slot) => {
+    document.querySelectorAll<HTMLElement>("[data-real-trip-map]").forEach((slot) => {
       if (detailOnly && slot.dataset.realTripMapRole !== "detail") return;
       if (realTripMaps.has(slot)) {
         try { realTripMaps.get(slot).invalidateSize(false); } catch (_err) {}
@@ -1384,8 +1384,8 @@
       const role = slot.dataset.realTripMapRole || "mini";
       const route = routeForTrip({ id });
       const points = (route && route.points || [])
-        .map((/** @type {any} */ point) => [Number(point.lat), Number(point.lng)])
-        .filter((/** @type {any} */ pair) => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
+        .map((point: any) => [Number(point.lat), Number(point.lng)])
+        .filter((pair: any) => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
       const rect = slot.getBoundingClientRect();
       if (points.length < 2 || rect.width < 24 || rect.height < 24) return;
       slot.replaceChildren();
@@ -1475,7 +1475,7 @@
   // samples carry derived eff (which depends on the OBD loop having captured
   // battery current via the Volt 7E1 PIDs).
 
-  const haversineMetersJsLocal = (/** @type {number} */ lat1, /** @type {number} */ lng1, /** @type {number} */ lat2, /** @type {number} */ lng2) => {
+  const haversineMetersJsLocal = (lat1: number, lng1: number, lat2: number, lng2: number) => {
     const r = 6371000;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLng = ((lng2 - lng1) * Math.PI) / 180;
@@ -1487,15 +1487,15 @@
     return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
-  function enrichRouteEff(/** @type {any} */ route) {
+  function enrichRouteEff(route: any) {
     if (!route || route._effDone) return;
     const pts = route.points || [];
-    const track = (route.powerTrack || []).filter((/** @type {any} */ s) =>
+    const track = (route.powerTrack || []).filter((s: any) =>
       Number.isFinite(Number(s.powerKw))
     );
     if (pts.length < 2 || track.length < 2) return;
     route._effDone = true;
-    const powerAt = (/** @type {number} */ atMs) => {
+    const powerAt = (atMs: number) => {
       if (atMs <= track[0].atMs) return Number(track[0].powerKw);
       const last = track[track.length - 1];
       if (atMs >= last.atMs) return Number(last.powerKw);
@@ -1509,7 +1509,7 @@
       }
       return Number(last.powerKw);
     };
-    const mphArr = pts.map((/** @type {any} */ p, /** @type {number} */ i) => {
+    const mphArr = pts.map((p: any, i: number) => {
       let mps = Number(p.speedMps);
       if (!Number.isFinite(mps) || mps < 0) {
         const a = pts[Math.max(0, i - 1)];
@@ -1525,7 +1525,7 @@
     // misleading. Tagging them as null instead leaves the regen segments grey (the
     // mapEffColor `eff == null` branch in map.js), making downhill / regen runs visibly
     // distinct from drive efficiency.
-    const whmiInst = pts.map((/** @type {any} */ p, /** @type {number} */ i) => {
+    const whmiInst = pts.map((p: any, i: number) => {
       if (mphArr[i] <= 4) return NaN;
       const kW = powerAt(Number(p.atMs));
       if (!Number.isFinite(kW)) return NaN;
@@ -1561,8 +1561,8 @@
       state.storage && Array.isArray(state.storage.recentRoutes)
         ? state.storage.recentRoutes
         : [];
-    const /** @type {any[]} */ pool = [];
-    routes.forEach((/** @type {any} */ route) => {
+    const pool: any[] = [];
+    routes.forEach((route: any) => {
       enrichRouteEff(route);
       const pts = (route && route.points) || [];
       for (let i = 0; i < pts.length; i += 1) {
@@ -1611,9 +1611,9 @@
     const padR = 12;
     const padT = 14;
     const padB = 28;
-    const xOf = (/** @type {any} */ mph) => padL + (mph / 75) * (w - padL - padR);
-    const yS = (/** @type {any} */ e) => padT + (1 - e / 7) * (h - padT - padB);
-    const gColor = (/** @type {number} */ g) =>
+    const xOf = (mph: any) => padL + (mph / 75) * (w - padL - padR);
+    const yS = (e: any) => padT + (1 - e / 7) * (h - padT - padB);
+    const gColor = (g: number) =>
       g <= -0.006 ? "#5cc8ff" : g >= 0.006 ? "#ff6b5f" : "#b8e63b";
     let inner = "";
     for (let gx = 0; gx <= 75; gx += 15) {
@@ -1626,7 +1626,7 @@
         `<line x1="${padL}" y1="${yS(gy)}" x2="${w - padR}" y2="${yS(gy)}" stroke="rgba(255,255,255,0.06)"/>` +
         `<text x="${padL - 6}" y="${yS(gy) + 3}" fill="#8b8c99" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">${gy}</text>`;
     }
-    const /** @type {any[]} */ bins = [];
+    const bins: any[] = [];
     pool.forEach((p) => {
       inner += `<circle cx="${xOf(p.mph).toFixed(1)}" cy="${yS(p.eff).toFixed(1)}" r="3.2" fill="${gColor(p.grade)}" fill-opacity="0.5"/>`;
       const b = Math.floor(p.mph / 10);
@@ -1638,7 +1638,7 @@
     bins.forEach((arr, b) => {
       if (!arr || arr.length < 3) return;
       const mph = b * 10 + 5;
-      const e = arr.reduce((/** @type {number} */ s, /** @type {number} */ x) => s + x, 0) / arr.length;
+      const e = arr.reduce((s: number, x: number) => s + x, 0) / arr.length;
       trend += `${started ? "L" : "M"}${xOf(mph).toFixed(1)} ${yS(e).toFixed(1)} `;
       started = true;
       if (e > best.e) best = { e: e, mph: mph };
@@ -1671,8 +1671,8 @@
     if (statsEl) {
       const hwy = pool.filter((p) => p.mph > 55).map((p) => p.eff);
       const down = pool.filter((p) => p.grade <= -0.012).map((p) => p.eff);
-      const avg = (/** @type {any} */ a) =>
-        a.length ? (a.reduce((/** @type {number} */ s, /** @type {number} */ x) => s + x, 0) / a.length).toFixed(1) : "--";
+      const avg = (a: any) =>
+        a.length ? (a.reduce((s: number, x: number) => s + x, 0) / a.length).toFixed(1) : "--";
       statsEl.replaceChildren(
         insightStat("Samples", String(pool.length)),
         insightStat("Highway avg", avg(hwy) + " mi/kWh"),
@@ -1681,7 +1681,7 @@
     }
   }
 
-  function insightStat(/** @type {any} */ label, /** @type {any} */ value) {
+  function insightStat(label: any, value: any) {
     const item = document.createElement("div");
     const key = document.createElement("span");
     key.className = "kicker";
@@ -1693,7 +1693,7 @@
   }
 
   // Re-render the scatter on viewport resize (SVG sized in real pixels).
-  let /** @type {any} */ scatterResizeTimer = null;
+  let scatterResizeTimer: any = null;
   window.addEventListener("resize", () => {
     clearTimeout(scatterResizeTimer);
     scatterResizeTimer = setTimeout(() => {
@@ -1729,8 +1729,8 @@
     const bar = el("enhancedFilterBar");
     if (!bar) return;
     bar.addEventListener("click", (event) => {
-      const target = /** @type {any} */ (event.target);
-      const button = /** @type {HTMLElement | null} */ (target ? target.closest("[data-signal-filter]") : null);
+      const target = event.target instanceof Element ? event.target : null;
+      const button = target ? target.closest<HTMLElement>("[data-signal-filter]") : null;
       if (!button) return;
       enhancedSignalFilter = button.dataset.signalFilter || "all";
       updateEnhancedCapabilityUi();
@@ -1741,8 +1741,8 @@
     const bar = el("signalStageBar");
     if (!bar) return;
     bar.addEventListener("click", (event) => {
-      const target = /** @type {any} */ (event.target);
-      const button = /** @type {HTMLElement | null} */ (target ? target.closest("[data-signal-stage]") : null);
+      const target = event.target instanceof Element ? event.target : null;
+      const button = target ? target.closest<HTMLElement>("[data-signal-stage]") : null;
       if (!button) return;
       state.signalProbeStage = button.dataset.signalStage || "tires";
       updateEnhancedCapabilityUi();
@@ -1755,7 +1755,7 @@
   // on the status state — this binding just forwards the click to the
   // bridge.
   (function bindRetryCancel() {
-    const btn = /** @type {HTMLButtonElement | null} */ (el("errorBannerCancelRetry"));
+    const btn = el("errorBannerCancelRetry") as HTMLButtonElement | null;
     if (!btn) return;
     btn.addEventListener("click", () => {
       // Only enter the "Cancelling…" UI state when the bridge actually has a cancelRetry
@@ -1783,3 +1783,5 @@
     });
   })();
 })();
+
+export {};

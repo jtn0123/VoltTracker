@@ -57,7 +57,7 @@ interface VoltStatus {
 }
 
 declare global {
-  /** Leaflet runtime global; kept broad until map.js/panels.js move to TS. */
+  /** Leaflet runtime global; kept broad while the map/panel runtime surface is still globally shared. */
   const L: any;
 
   /**

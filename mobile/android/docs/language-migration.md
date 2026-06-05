@@ -14,8 +14,8 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 > |---|---:|---:|---:|---|
 > | Kotlin files converted | 22 | 0 | 1 (BackupController) | K0–K3 done (5 of 6 K3; BackupController stays Java) |
 > | Kotlin waves complete | K0–K3 | — | K4 (deferred) | K3 done except untested BackupController |
-> | Dashboard JS type-safety | checkJs + full `strict` ✅ | — | full TS (T2) | max checking, zero build |
-> | Dashboard build step | esbuild bundle ✅ (T2a) | T2b canary | `.ts` modules | source in `dashboard-src/js`, built `app.js` shipped |
+> | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
+> | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
 
 **Status legend:** `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` won't do / deferred indefinitely.
 
@@ -65,10 +65,10 @@ diverge.
 
 | Status | Files |
 |---|---|
-| Converted | `demo-data.ts`, `connection-tools.ts`, `connection-status.ts`, `dtc-causes.ts`, `dtc-lookup.ts`, `drive.ts`, `troubleshooter.ts`, `scrubber.ts`, `telemetry.ts`, `map.ts`, `core.ts`, `actions.ts` |
+| Converted | `demo-data.ts`, `connection-tools.ts`, `connection-status.ts`, `dtc-causes.ts`, `dtc-lookup.ts`, `drive.ts`, `troubleshooter.ts`, `scrubber.ts`, `telemetry.ts`, `map.ts`, `core.ts`, `actions.ts`, `panels.ts` |
 | Next low/medium risk | none remaining in the current queue |
 | Next higher risk | none remaining in the current queue |
-| Leave until late | `panels.js` |
+| Leave until late | none remaining in the current queue |
 
 ### Kotlin-owned files
 New Android app code should be Kotlin. Existing Java should convert only when the file has a
@@ -297,11 +297,12 @@ existing IIFE files bundle as-is, which is lower-risk and immediately useful.
 - [x] Verified locally: `npm run build`, Vitest 122/122, **Playwright e2e 30/30 against the bundle**,
       `assembleDebug` (preBuild builds + packages the bundle), budget, spotless, typecheck, lint
 
-### Wave T2b — Convert source to `.ts` ES modules `[~]`
-Now that a bundler is in place, files can migrate from IIFE + `window.VoltDashboard` to real
-`.ts` with `import`/`export`, one at a time (esbuild bundles mixed IIFE/module). End state: drop
-the global-namespace shim; types replace the `dashboard-globals.d.ts` ambient declarations.
-- [~] Migrate files incrementally to `.ts` modules; keep the public API attached to
+### Wave T2b — Convert source to `.ts` modules ✅ done
+The bundler now consumes all first-party dashboard source files as `.ts`. The shipped WebView
+assets stay classic `.js` (`app.js` plus lazy data chunks), and the public API remains attached to
+`window.VoltDashboard` for the native bridge ABI. A later cleanup can replace more of the global
+namespace shim with explicit imports after the runtime surface is fully modeled.
+- [x] Migrate files incrementally to `.ts` modules; keep the public API attached to
       `window.VoltDashboard` for the native bridge ABI until all consumers are modules
       - [x] `demo-data.js` -> `demo-data.ts` canary: real exported function, typed fixture rows,
             still shipped/lazy-loaded as `js/demo-data.js`
@@ -323,6 +324,8 @@ the global-namespace shim; types replace the `dashboard-globals.d.ts` ambient de
             state seeding, DOM setters, view switching, and device history helpers now use TS types
       - [x] `actions.js` -> `actions.ts`: bridge dispatch, busy-button guard,
             DTC actions, backup/restore commands, demo ticker, and listener binding now use TS types
+      - [x] `panels.js` -> `panels.ts`: storage/trips/insights render helpers,
+            DTC and enhanced-signal cards, charge rows, and real-trip map previews now use TS types
 - [ ] (Optional) source maps for on-device debugging, with a `*.map` packaging exclude
 - [ ] (Optional, T3) debug-only WebView → vite dev server hook for on-device live reload
 
