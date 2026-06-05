@@ -12,8 +12,8 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 56 | 0 | K4 staged core | K0–K3 + K5–K7 done; lifecycle/service core remains |
-> | Kotlin waves complete | K0–K3, K5–K7 | — | K4 staged behind tests | large stateful core converts only with focused coverage |
+> | Kotlin files converted | 66 | 0 | K4 staged core | K0–K3 + K5–K8 done; lifecycle/service core remains |
+> | Kotlin waves complete | K0–K3, K5–K8 | — | K4 staged behind tests | large stateful core converts only with focused coverage |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
 
@@ -265,6 +265,24 @@ them, while adding Kotlin nullability on constructor inputs and JSON helpers.
 | [x] | `data/TelemetrySampleRecord.kt` | telemetry read record; `toJson()` fallback preserved |
 | [x] | `data/StorageSummaryRecord.kt` | storage summary read model; defensive JSON/list/map copies preserved |
 | [x] | `data/ObdStatementCache.kt` | telemetry insert statement cache; SQL static field access preserved |
+
+### Wave K8 — Interfaces and data-store helpers ✅ done
+Converted ten more files while staying outside the lifecycle/service/bridge core. This batch
+focused on narrow interfaces, Android helper wrappers, the pure vehicle-state classifier, and
+DB helper classes that are exercised through the local-store/materializer test suite.
+
+| # | File | Notes |
+|---|---|---|
+| [x] | `BluetoothAdapters.kt` | nullable Bluetooth adapter lookup helper; static Java call surface preserved |
+| [x] | `BroadcastReceiverGroup.kt` | grouped receiver register/unregister helper |
+| [x] | `location/LocationTracker.kt` | GPS abstraction interface with listener SAM |
+| [x] | `data/ObdQueryStore.kt` | read-side store interface |
+| [x] | `data/ObdSessionStore.kt` | write/lifecycle-side store interface |
+| [x] | `classify/VehicleStateClassifier.kt` | pure classifier decision table; direct tests cover rules |
+| [x] | `data/ObdStoreVehicles.kt` | VIN redaction/hash/upsert helper; DB tests cover vehicle summary |
+| [x] | `data/ObdStoreMaintenance.kt` | clear/checkpoint/prune/merge maintenance helper |
+| [x] | `data/ObdStoreMaterialize.kt` | materializer read/write helper; materializer/local-store tests cover paths |
+| [x] | `data/ObdStoreSnapshots.kt` | write-side payload/value builders and DTC/adapter upserts |
 
 ---
 
