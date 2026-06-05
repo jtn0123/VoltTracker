@@ -6,6 +6,7 @@ context.
 
 | Report | Date | Status | Scope |
 |---|---:|---|---|
+| `language-migration.md` | 2026-06-04 | Current planning + tracker | Living plan/checklist for Kotlin adoption (Android) and TypeScript/build hardening (dashboard). Update in the same PR as the work. |
 | `release.md` | 2026-05-27 | Current release operations | Debug/latest-debug/tagged release APK behavior, signing secrets, and install notes. |
 | `dashboard-script-contract.md` | 2026-05-27 | Current dashboard contract | Production dashboard script order and the test guarding generated/template drift. |
 | `dashboard-bundle-budget.md` | 2026-05-27 | Current performance snapshot | First-party dashboard JS/CSS size budget and largest assets. |

@@ -74,11 +74,39 @@ To bypass in an emergency: `git commit --no-verify` / `git push --no-verify`
 ## Dashboard JS type-checking
 
 `npm --prefix dashboard-tests run typecheck` runs `tsc --checkJs` over the dashboard
-JS. It is **opt-in**: only files whose first line is `// @ts-check` are checked, and
-those are gated in CI. To migrate a file, add `// @ts-check`, run `typecheck`, and
-clear the errors — usually a JSDoc cast like `/** @type {HTMLInputElement} */
-(el("id"))` or `/** @type {any} */ (window.VoltDashboard ...)`. Shared globals are
-declared in `dashboard-tests/dashboard-globals.d.ts`.
+JS, and the check is gated in CI. The opt-in rollout is **complete**: `checkJs` is now
+`true`, so **every** file under `assets/dashboard/js/` is type-checked and any new `.js`
+file is covered automatically — no `// @ts-check` line required (the existing ones are
+harmless). `noImplicitAny` is on, so annotate with JSDoc rather than leaving an implicit
+`any` — usually a cast like `/** @type {HTMLInputElement} */ (el("id"))` or `/** @type
+{any} */ (window.VoltDashboard ...)`. Shared globals are declared in
+`dashboard-tests/dashboard-globals.d.ts`. `strict`/`strictNullChecks` remain off; turning
+`strictNullChecks` on is the next (separate) hardening step.
+
+## Android: Kotlin for new code
+
+The Android module is set up for **Kotlin-first new code**. Java and Kotlin interop freely
+in the same module, so:
+
+- **Write new classes in Kotlin** (`.kt`) — put them in `app/src/main/kotlin/…` (or alongside
+  Java in `app/src/main/java/…`; both source roots compile Kotlin). Tests go in
+  `app/src/test/java/…` or `app/src/test/kotlin/…`. No Kotlin plugin is applied — AGP 9.0+
+  compiles Kotlin via its built-in support.
+- **Leave existing Java as-is.** This is not a migration — don't rewrite working Java just to
+  change the language. Convert a Java file to Kotlin only when you're already substantially
+  reworking it and the change is independently justified.
+- Bytecode target is Java 17, set once via `compileOptions` in `app/build.gradle`; AGP's
+  built-in Kotlin inherits the same `jvmTarget` from it automatically.
+- **Formatting:** Spotless runs ktlint on `.kt` (`./gradlew :app:spotlessApply` to fix,
+  `:app:spotlessCheck` is the CI gate) — the same lane that formats Java and the dashboard JS.
+- **Coverage:** JaCoCo measures Kotlin classes too (`app/jacoco.gradle` scans both the javac and
+  kotlin-classes outputs), so new Kotlin is held to the same ratcheting floors as Java — write
+  tests for it.
+
+The wave-by-wave conversion plan (which Java files to convert in what order, the `@JvmField`/enum
+interop rules) and the dashboard TypeScript roadmap (strictNullChecks → full TS + bundler) live in
+[`docs/language-migration.md`](docs/language-migration.md) — a living tracker. Update it in the same
+PR as the work.
 
 ## Where things live
 

@@ -1,4 +1,7 @@
 plugins {
+    // Kotlin is the language for NEW Android code (Java stays supported for the existing
+    // sources; the two interop freely in the same module). AGP 9.0+ has built-in Kotlin
+    // support enabled by default, so no separate Kotlin plugin is applied. See CONTRIBUTING.md.
     id "com.android.application"
 }
 
@@ -9,6 +12,16 @@ spotless {
         target "src/main/java/**/*.java", "src/test/java/**/*.java"
         googleJavaFormat("1.28.0").aosp()
         removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+    kotlin {
+        // New Android code is Kotlin (.kt may live in src/main/kotlin or alongside Java in
+        // src/main/java). ktlint enforces the official Kotlin style so the spotlessCheck CI gate
+        // covers Kotlin the same way it covers Java and the dashboard JS.
+        target "src/main/java/**/*.kt", "src/main/kotlin/**/*.kt",
+               "src/test/java/**/*.kt", "src/test/kotlin/**/*.kt"
+        ktlint("1.5.0")
         trimTrailingWhitespace()
         endWithNewline()
     }
@@ -93,6 +106,15 @@ android {
                 signingConfig = signingConfigs.release
             }
         }
+    }
+
+    // Java 17 source/target. AGP's built-in Kotlin defaults its jvmTarget to targetCompatibility,
+    // so this single setting keeps the Java and Kotlin bytecode targets in lockstep (a mismatch
+    // would fail the build). minSdk 23 language features are handled by AGP desugaring. Previously
+    // unset (AGP default) — pinned now that Kotlin is part of the toolchain.
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildFeatures {

@@ -1,5 +1,6 @@
 plugins {
     // AGP and Spotless versions live in gradle/libs.versions.toml (the single source of truth).
+    // Kotlin needs no plugin here: AGP 9.0+ compiles Kotlin via its built-in support.
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.spotless) apply false
     id "com.github.ben-manes.versions" version "0.54.0"

@@ -4,18 +4,34 @@ jacoco {
     toolVersion = "0.8.14"
 }
 
+// Shared coverage inputs for the report + verification tasks below. Both the Java
+// (javac) and Kotlin (kotlin-classes) debug outputs are measured, and both the
+// src/main/java and src/main/kotlin source roots are mapped, so NEW Kotlin code is
+// held to the same ratcheting floors as the existing Java — see CONTRIBUTING.md.
+def coverageFileFilter = ["**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*"]
+def coverageClassDirs = {
+    files([
+        fileTree(dir: "${project.layout.buildDirectory.get()}/intermediates/javac/debug/compileDebugJavaWithJavac/classes", excludes: coverageFileFilter),
+        // AGP 9 built-in Kotlin emits here (not the old kotlin-android tmp/kotlin-classes path).
+        fileTree(dir: "${project.layout.buildDirectory.get()}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes", excludes: coverageFileFilter),
+    ])
+}
+def coverageSourceDirs = {
+    files(["${project.projectDir}/src/main/java", "${project.projectDir}/src/main/kotlin"])
+}
+def coverageExecData = {
+    fileTree(dir: project.layout.buildDirectory.get(), includes: ["jacoco/testDebugUnitTest.exec"])
+}
+
 tasks.register("jacocoTestReport", JacocoReport) {
     dependsOn "testDebugUnitTest"
     reports {
         xml.required = true
         html.required = true
     }
-    def fileFilter = ["**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*"]
-    def debugTree = fileTree(dir: "${project.layout.buildDirectory.get()}/intermediates/javac/debug/compileDebugJavaWithJavac/classes", excludes: fileFilter)
-    def mainSrc = "${project.projectDir}/src/main/java"
-    sourceDirectories.setFrom(files([mainSrc]))
-    classDirectories.setFrom(files([debugTree]))
-    executionData.setFrom(fileTree(dir: project.layout.buildDirectory.get(), includes: ["jacoco/testDebugUnitTest.exec"]))
+    sourceDirectories.setFrom(coverageSourceDirs())
+    classDirectories.setFrom(coverageClassDirs())
+    executionData.setFrom(coverageExecData())
 }
 
 // Coverage floors are RATCHETING regression baselines, not goals. Bump them up
@@ -30,12 +46,9 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //   floor is `actual − 2 pts` to absorb minor refactor churn.
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
     dependsOn "jacocoTestReport"
-    def fileFilter = ["**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*"]
-    def debugTree = fileTree(dir: "${project.layout.buildDirectory.get()}/intermediates/javac/debug/compileDebugJavaWithJavac/classes", excludes: fileFilter)
-    def mainSrc = "${project.projectDir}/src/main/java"
-    sourceDirectories.setFrom(files([mainSrc]))
-    classDirectories.setFrom(files([debugTree]))
-    executionData.setFrom(fileTree(dir: project.layout.buildDirectory.get(), includes: ["jacoco/testDebugUnitTest.exec"]))
+    sourceDirectories.setFrom(coverageSourceDirs())
+    classDirectories.setFrom(coverageClassDirs())
+    executionData.setFrom(coverageExecData())
     violationRules {
         rule {
             element = "PACKAGE"
