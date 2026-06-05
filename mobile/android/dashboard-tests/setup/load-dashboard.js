@@ -28,7 +28,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_INDEX_HTML = resolve(HERE, '../../app/src/main/assets/dashboard/index.html');
 
 const DASHBOARD_MODULE_LOADERS = {
-  'actions.js': () => import('../../app/src/main/dashboard-src/js/actions.js'),
+  'actions.js': () => import('../../app/src/main/dashboard-src/js/actions.ts'),
   'connection-status.js': () => import('../../app/src/main/dashboard-src/js/connection-status.ts'),
   'connection-tools.js': () => import('../../app/src/main/dashboard-src/js/connection-tools.ts'),
   'core.js': () => import('../../app/src/main/dashboard-src/js/core.ts'),

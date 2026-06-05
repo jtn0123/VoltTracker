@@ -65,10 +65,10 @@ diverge.
 
 | Status | Files |
 |---|---|
-| Converted | `demo-data.ts`, `connection-tools.ts`, `connection-status.ts`, `dtc-causes.ts`, `dtc-lookup.ts`, `drive.ts`, `troubleshooter.ts`, `scrubber.ts`, `telemetry.ts`, `map.ts`, `core.ts` |
+| Converted | `demo-data.ts`, `connection-tools.ts`, `connection-status.ts`, `dtc-causes.ts`, `dtc-lookup.ts`, `drive.ts`, `troubleshooter.ts`, `scrubber.ts`, `telemetry.ts`, `map.ts`, `core.ts`, `actions.ts` |
 | Next low/medium risk | none remaining in the current queue |
 | Next higher risk | none remaining in the current queue |
-| Leave until late | `actions.js`, `panels.js` |
+| Leave until late | `panels.js` |
 
 ### Kotlin-owned files
 New Android app code should be Kotlin. Existing Java should convert only when the file has a
@@ -321,6 +321,8 @@ the global-namespace shim; types replace the `dashboard-globals.d.ts` ambient de
             stop detection, demo route generation, and scenario loading now use TS types
       - [x] `core.js` -> `core.ts`: dashboard namespace bootstrap, lazy script loading,
             state seeding, DOM setters, view switching, and device history helpers now use TS types
+      - [x] `actions.js` -> `actions.ts`: bridge dispatch, busy-button guard,
+            DTC actions, backup/restore commands, demo ticker, and listener binding now use TS types
 - [ ] (Optional) source maps for on-device debugging, with a `*.map` packaging exclude
 - [ ] (Optional, T3) debug-only WebView → vite dev server hook for on-device live reload
 
@@ -361,3 +363,4 @@ the global-namespace shim; types replace the `dashboard-globals.d.ts` ambient de
 | 2026-06-05 | T2b telemetry slice: `telemetry` moved to a `.ts` module while preserving the native callback/public `VoltDashboard` surface. Payloads remain open records at the bridge boundary; concrete helpers now type live-tile IDs, validation tones, formatting inputs, and the speed trace canvas path. |
 | 2026-06-05 | T2b map slice: `map` moved to a `.ts` module. Leaflet remains a runtime global for the WebView; local types now cover route points, stop rows, demo route options, live breadcrumb coordinates, and route/session helper signatures. |
 | 2026-06-05 | T2b core slice: `core` moved to a `.ts` module while keeping the `VoltDashboard` namespace and lazy classic script paths intact. Types now cover the bootstrap data bag, demo-data callbacks, history devices, guarded listeners, DOM setters, and lazy DTC/demo script promises. |
+| 2026-06-05 | T2b actions slice: `actions` moved to a `.ts` module while preserving the `VoltTrackerNative` callback ABI. Types now cover bridge-command buttons, busy cooldowns, clear-DTC focus state, signal export/delete IDs, page drag-scroll state, delegated click handlers, and demo timer wiring. |
