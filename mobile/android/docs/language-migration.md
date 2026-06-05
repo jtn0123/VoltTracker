@@ -12,7 +12,7 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 32 | 0 | tested helper candidates | K0–K3 done; K5 started; BackupController stays Java |
+> | Kotlin files converted | 33 | 0 | tested helper candidates | K0–K3 done; K5 started; BackupController stays Java |
 > | Kotlin waves complete | K0–K3 | K5 small helpers | K4 (deferred) | large stateful core remains Java-for-now |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
@@ -219,12 +219,13 @@ focused JVM/Robolectric tests. This wave is opportunistic; each item should stan
 | [x] | `WebViewBootstrap.kt` | 120 | WebView startup wiring; existing tests cover hardening, bridge attach, and origin blocking |
 | [x] | `PermissionGate.kt` | 105 | runtime-permission helper; existing tests cover connect-only and optional feature permission paths |
 | [x] | `DiagnosticsShareIntent.kt` | 181 | diagnostics zip/share helper; existing tests cover zip contents, cap, stale cleanup, and intent shape |
+| [x] | `StorageSummaryJson.kt` | 157 | storage-summary dashboard JSON serializer; database and backup tests cover the emitted key contract |
 | [ ] | `BluetoothStateReporter.java` | — | candidate with existing Robolectric tests |
 | [ ] | `DeviceCatalog.java` | — | candidate, but larger parsing surface |
 
 Remaining K5 evaluation:
-- Convert carefully: `BluetoothStateReporter.java`, `DeviceCatalog.java`, `TelemetryPayload.java`,
-  and `StorageSummaryJson.java` are still Kotlin-owned in principle, but have broader Android,
+- Convert carefully: `BluetoothStateReporter.java`, `DeviceCatalog.java`, and
+  `TelemetryPayload.java` are still Kotlin-owned in principle, but have broader Android,
   parsing, or dashboard-ABI surfaces.
 - Leave Java-for-now: K4 lifecycle/service/bridge classes and backup restore orchestration remain
   out of scope for language-only churn.
