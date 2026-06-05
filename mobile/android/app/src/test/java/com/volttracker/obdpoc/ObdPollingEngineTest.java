@@ -601,13 +601,13 @@ public class ObdPollingEngineTest {
         }
 
         @Override
-        void open(BluetoothDevice device, UUID uuid, long connectTimeoutMs) {
+        public void open(BluetoothDevice device, UUID uuid, long connectTimeoutMs) {
             // No-op: TestObdPollingEngine.openBluetoothSocket overrides the whole open path so
             // this method is never reached in these tests. Kept here to satisfy the surface.
         }
 
         @Override
-        WakeNudgeResult wakeNudge(long toleranceMs) {
+        public WakeNudgeResult wakeNudge(long toleranceMs) {
             // The fake doesn't run a real RFCOMM stream, so the wake-nudge probe has nothing to
             // read. Pretend the adapter answered immediately so the engine progresses straight
             // into initializeElm327() and the connect / poll / reconnect logic under test runs.
@@ -615,7 +615,8 @@ public class ObdPollingEngineTest {
         }
 
         @Override
-        String transact(String command, long timeoutMs, ElmConnection.KeepWaiting keepWaiting)
+        public String transact(
+                String command, long timeoutMs, ElmConnection.KeepWaiting keepWaiting)
                 throws IOException {
             commandLog.add(command);
             TransactInterceptor interceptor = transactInterceptor;
@@ -636,13 +637,13 @@ public class ObdPollingEngineTest {
         }
 
         @Override
-        void sendEscape(long settleMs) {
+        public void sendEscape(long settleMs) {
             // No-op: production code only sends ESC to recover a hung ELM prompt; the fake
             // never gets hung.
         }
 
         @Override
-        void close() {
+        public void close() {
             closeCalls.incrementAndGet();
         }
     }
