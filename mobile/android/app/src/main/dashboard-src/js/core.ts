@@ -435,10 +435,12 @@
   function updateViewHeading() {
     // Demo uses the same headings as real — it only simulates numbers, it doesn't relabel the UI.
     const meta = realViewMeta[String(state.view)] || realViewMeta.drive;
+    if (!meta) return;
     setText("screenKicker", meta[0]);
     setText("screenTitle", meta[1]);
     const icon = el("screenTitleIcon");
-    if (icon) icon.setAttribute("d", viewIconPaths[String(state.view)] || viewIconPaths.drive);
+    const iconPath = viewIconPaths[String(state.view)] || viewIconPaths.drive;
+    if (icon && iconPath) icon.setAttribute("d", iconPath);
   }
 
   function setDemoActive(active: unknown, detail?: string) {

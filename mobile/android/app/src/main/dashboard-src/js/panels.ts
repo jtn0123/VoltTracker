@@ -330,6 +330,7 @@
   function updateSignalStageUi(rows: any[]) {
     const stage = String(state.signalProbeStage || "tires");
     const meta = signalStageMeta[stage] || signalStageMeta.tires;
+    if (!meta) return;
     VD.setText("signalStageLabel", meta.label);
     VD.setText("signalStageHint", meta.hint);
     const bar = el("signalStageBar");

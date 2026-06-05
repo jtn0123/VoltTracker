@@ -31,7 +31,9 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 - **Dashboard:** 13 first-party TypeScript source files in `dashboard-src/js/`, compiled
   by esbuild into classic, WebView-safe `.js` assets (`app.js` plus lazy data chunks).
   Type-checked by `tsc` with full `strict`, linted by ESLint, tested by Vitest (jsdom)
-  and Playwright e2e. The emitted `assets/dashboard/js/` files are build artifacts.
+  and Playwright e2e. A second-pass conversion bug hunt also verifies the source with
+  `--noUncheckedIndexedAccess` as a strictness probe. The emitted `assets/dashboard/js/`
+  files are build artifacts.
 
 ---
 
@@ -519,3 +521,4 @@ namespace shim with explicit imports after the runtime surface is fully modeled.
 | 2026-06-05 | Wave K11 final core checkpoint: converted `ObdPollingEngine`, `ObdService`, and `MainActivity` to Kotlin. Android production source is now 99 Kotlin / 0 Java. Preserved Java test override seams and WebView/service constants. Verified focused engine/service/activity/bridge/backup tests; full `verifyActiveApp` is the final gate for the commit. |
 | 2026-06-05 | Post-migration deep pass: confirmed 99 Kotlin / 0 Java production Android source and 13 TS / 0 JS dashboard source files. Tightened dashboard tooling so source discovery is TS-only, removed stale JS-check compiler assumptions, updated active docs/comments, and hardened late Kotlin conversions around optional background executors. Verified `dashboard-tests` build/typecheck/coverage, focused Android migration-risk tests, and full `verifyActiveApp`. |
 | 2026-06-05 | Conversion bug-hunt pass: added a Gradle guard that fails if production Java or dashboard source JS comes back, narrowed dashboard lint/Spotless globs to the migrated source layout, removed runner `Any` casts in favor of typed `ObdPollingEngine` constructor contracts, tightened a route-projection JSON null guard, and replaced several lingering dashboard `any` boundaries with `unknown`/concrete payload shapes. |
+| 2026-06-05 | Conversion bug-hunt second pass: the earlier `noUncheckedIndexedAccess` follow-up became valuable after all dashboard source moved to `.ts`. Hardened view-heading, Drive chart, Map route/demo, and scrubber indexed-access paths until both normal `typecheck` and the stricter `typecheck -- --noUncheckedIndexedAccess` probe passed. |

@@ -191,10 +191,11 @@ type ChartPoint = {
     canvas.height = Math.max(1, Math.round(h * dpr));
     canvas.style.height = h + "px";
     const ctx = canvas.getContext && canvas.getContext("2d");
-    const samples = (state.speedHistory || []).map((kph: any) => kph * 0.621371);
+    const samples = (state.speedHistory || []).map((kph: unknown) => Number(kph) * 0.621371);
     host.dataset.traceState = samples.length >= 2 ? "ready" : "empty";
+    const latestSample = samples[samples.length - 1];
     host.dataset.traceLabel = samples.length >= 2
-      ? Math.round(samples[samples.length - 1]) + " mph"
+      ? Math.round(latestSample || 0) + " mph"
       : "waiting for samples";
     if (!ctx) return;
 
@@ -227,6 +228,9 @@ type ChartPoint = {
       x: offset + index * stride,
       y: padT + (1 - sample / maxMph) * (h - padT - padB)
     }));
+    const firstPoint = points[0];
+    const latest = points[points.length - 1];
+    if (!firstPoint || !latest) return;
 
     const gradient = ctx.createLinearGradient(0, padT, 0, h - padB);
     gradient.addColorStop(0, "rgba(255, 122, 69, 0.2)");
@@ -236,8 +240,8 @@ type ChartPoint = {
       if (index === 0) ctx.moveTo(point.x, point.y);
       else ctx.lineTo(point.x, point.y);
     });
-    ctx.lineTo(points[points.length - 1].x, h - padB);
-    ctx.lineTo(points[0].x, h - padB);
+    ctx.lineTo(latest.x, h - padB);
+    ctx.lineTo(firstPoint.x, h - padB);
     ctx.closePath();
     ctx.fillStyle = gradient;
     ctx.fill();
@@ -256,7 +260,6 @@ type ChartPoint = {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    const latest = points[points.length - 1];
     ctx.beginPath();
     ctx.arc(latest.x, latest.y, 3.2, 0, Math.PI * 2);
     ctx.fillStyle = "#ffd0b8";
@@ -394,6 +397,7 @@ type ChartPoint = {
       chart.append(dot);
       if (index === points.length - 1) return;
       const next = points[index + 1];
+      if (!next) return;
       const dx = next.x - point.x;
       const dy = next.y - point.y;
       const segment = domNode("span", "live-soc-segment");

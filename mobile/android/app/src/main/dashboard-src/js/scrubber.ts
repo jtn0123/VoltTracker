@@ -103,13 +103,17 @@
   // Nearest-by-time SOC from the session's socTrack ({atMs, soc} ascending).
   function scrubSocAt(track: ScrubSocPoint[], atMs: number) {
     if (!track.length) return null;
-    if (atMs <= track[0].atMs) return track[0].soc;
+    const first = track[0];
+    if (!first) return null;
+    if (atMs <= first.atMs) return first.soc;
     const last = track[track.length - 1];
+    if (!last) return null;
     if (atMs >= last.atMs) return last.soc;
     for (let i = 1; i < track.length; i += 1) {
-      if (track[i].atMs >= atMs) {
+      const b = track[i];
+      if (b && b.atMs >= atMs) {
         const a = track[i - 1];
-        const b = track[i];
+        if (!a) continue;
         const t = (atMs - a.atMs) / ((b.atMs - a.atMs) || 1);
         return a.soc + (b.soc - a.soc) * t;
       }
@@ -122,7 +126,7 @@
     let c = 0;
     for (let k = -half; k <= half; k += 1) {
       const v = arr[i + k];
-      if (Number.isFinite(v)) {
+      if (v !== undefined && Number.isFinite(v)) {
         s += v;
         c += 1;
       }
@@ -148,13 +152,19 @@
       distMi: 0,
       elevFt: 0
     })) as ScrubPoint[];
-    d[0].distM = 0;
+    const firstPoint = d[0];
+    if (!firstPoint) return [];
+    firstPoint.distM = 0;
     for (let i = 1; i < n; i += 1) {
-      d[i].distM =
-        d[i - 1].distM +
-        haversineMetersJs(d[i - 1].lat, d[i - 1].lng, d[i].lat, d[i].lng);
+      const previousPoint = d[i - 1];
+      const point = d[i];
+      if (!previousPoint || !point) continue;
+      point.distM =
+        previousPoint.distM +
+        haversineMetersJs(previousPoint.lat, previousPoint.lng, point.lat, point.lng);
     }
-    const total = d[n - 1].distM || 1;
+    const lastPoint = d[n - 1];
+    const total = (lastPoint && lastPoint.distM) || 1;
 
     // speed — prefer the GPS-reported value, derive from geometry if missing
     const rawMph = pts.map((p, i) => {
@@ -162,6 +172,7 @@
       if (!Number.isFinite(mps) || mps < 0) {
         const a = pts[Math.max(0, i - 1)];
         const b = pts[Math.min(n - 1, i + 1)];
+        if (!a || !b) return 0;
         const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
         mps =
           haversineMetersJs(Number(a.lat), Number(a.lng), Number(b.lat), Number(b.lng)) /
@@ -177,30 +188,39 @@
     scrubHasSoc = track.length >= 2;
 
     for (let i = 0; i < n; i += 1) {
-      d[i].mph = Math.max(0, scrubWindowAvg(rawMph, i, 1) || rawMph[i]);
-      d[i].elevM = scrubHasElev ? scrubWindowAvg(rawElev, i, 3) || 0 : 0;
-      d[i].soc = scrubHasSoc ? scrubSocAt(track, d[i].atMs) : null;
+      const point = d[i];
+      const routePoint = pts[i];
+      if (!point || !routePoint) continue;
+      point.mph = Math.max(0, scrubWindowAvg(rawMph, i, 1) || rawMph[i] || 0);
+      point.elevM = scrubHasElev ? scrubWindowAvg(rawElev, i, 3) || 0 : 0;
+      point.soc = scrubHasSoc ? scrubSocAt(track, point.atMs) : null;
       // Don't coerce null -> 0; missing samples must remain null so the chart
       // can skip them and the readout can show "soon" rather than "0.0".
-      const eff = Number(pts[i].eff);
-      d[i].eff = scrubHasEff && Number.isFinite(eff) ? eff : null;
+      const eff = Number(routePoint.eff);
+      point.eff = scrubHasEff && Number.isFinite(eff) ? eff : null;
     }
     for (let i = 0; i < n; i += 1) {
+      const point = d[i];
+      if (!point) continue;
       if (i === 0 || !scrubHasElev) {
-        d[i].grade = 0;
+        point.grade = 0;
         continue;
       }
-      const horiz = Math.max(8, d[i].distM - d[i - 1].distM);
-      d[i].grade = scrubClamp(
-        (d[i].elevM - d[i - 1].elevM) / horiz,
+      const previousPoint = d[i - 1];
+      if (!previousPoint) continue;
+      const horiz = Math.max(8, point.distM - previousPoint.distM);
+      point.grade = scrubClamp(
+        (point.elevM - previousPoint.elevM) / horiz,
         -0.18,
         0.18
       );
     }
     for (let i = 0; i < n; i += 1) {
-      d[i].frac = d[i].distM / total;
-      d[i].distMi = d[i].distM / 1609.34;
-      d[i].elevFt = d[i].elevM * 3.28084;
+      const point = d[i];
+      if (!point) continue;
+      point.frac = point.distM / total;
+      point.distMi = point.distM / 1609.34;
+      point.elevFt = point.elevM * 3.28084;
     }
     return d;
   }
@@ -217,9 +237,16 @@
     const m = d.length;
     frac = scrubClamp(frac, 0, 1);
     let i = 0;
-    while (i < m - 1 && d[i + 1].frac < frac) i += 1;
+    while (i < m - 1) {
+      const next = d[i + 1];
+      if (!next || next.frac >= frac) break;
+      i += 1;
+    }
     const a = d[i];
     const b = d[Math.min(m - 1, i + 1)];
+    if (!a || !b) {
+      return { lat: 0, lng: 0, mph: 0, elevFt: 0, grade: 0, soc: null, eff: null, distMi: 0 };
+    }
     const span = (b.frac - a.frac) || 1;
     const t = scrubClamp((frac - a.frac) / span, 0, 1);
     const near = t < 0.5 ? a : b;
@@ -248,7 +275,9 @@
     let started = false;
     const parts: string[] = [];
     for (let i = 0; i < scrubData.length; i += 1) {
-      const v = Number(scrubData[i][key]);
+      const point = scrubData[i];
+      if (!point) continue;
+      const v = Number(point[key]);
       if (!Number.isFinite(v)) {
         started = false;
         continue;
@@ -257,7 +286,7 @@
       started = true;
       parts.push(
         cmd +
-          (scrubData[i].frac * w).toFixed(1) +
+          (point.frac * w).toFixed(1) +
           " " +
           scrubYOf(v, lo, hi, h, padT, padB).toFixed(1)
       );
@@ -590,8 +619,10 @@
 
     if (scrubMap) {
       if (!scrubMarker) {
+        const firstPoint = scrubData[0];
+        if (!firstPoint) return;
         scrubMarker = L.circleMarker(
-          [scrubData[0].lat, scrubData[0].lng],
+          [firstPoint.lat, firstPoint.lng],
           {
             radius: 8,
             color: "#fff",
@@ -674,7 +705,8 @@
       if (scrubAnim) { stopScrubPlay(); return; }
       playBtn.textContent = STOP_LABEL;
       setScrubAnimMode(true);
-      const totalMi = scrubData[scrubData.length - 1].distMi || 22;
+      const lastPoint = scrubData[scrubData.length - 1];
+      const totalMi = (lastPoint && lastPoint.distMi) || 22;
       // ~1 second per mile, with a sane 8-22s floor/ceiling so very short or
       // very long drives still play in a watchable window.
       const dur = Math.min(22000, Math.max(8000, totalMi * 1000));
@@ -708,12 +740,15 @@
     let bestIdx = 0;
     let bestDist = Infinity;
     for (let i = 0; i < scrubData.length; i += 1) {
-      const dLat = scrubData[i].lat - lat;
-      const dLng = scrubData[i].lng - lng;
+      const point = scrubData[i];
+      if (!point) continue;
+      const dLat = point.lat - lat;
+      const dLng = point.lng - lng;
       const d = dLat * dLat + dLng * dLng;
       if (d < bestDist) { bestDist = d; bestIdx = i; }
     }
-    setScrubCursor(scrubData[bestIdx].frac);
+    const bestPoint = scrubData[bestIdx];
+    if (bestPoint) setScrubCursor(bestPoint.frac);
   }
 
   Object.assign(VD, {

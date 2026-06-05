@@ -21,6 +21,9 @@
     durationMs: number;
   };
 
+  type LatLngTuple = [number, number];
+  type LatLngSegment = [LatLngTuple, LatLngTuple];
+
   type DemoRouteOpts = {
     sessionId: number;
     startedAtMs: number;
@@ -345,25 +348,34 @@
     if (!hasRoute) return;
     const drawable = points.filter(isValidRoutePoint);
     if (drawable.length < 2) return;
-    const latlngs = drawable.map((p) => [Number(p.lat), Number(p.lng)] as [number, number]);
+    const latlngs = drawable.map((p) => [Number(p.lat), Number(p.lng)] as LatLngTuple);
+    const firstLatLng = latlngs[0];
+    const lastLatLng = latlngs[latlngs.length - 1];
+    if (!firstLatLng || !lastLatLng) return;
 
     mapLayerGroups.routes = L.layerGroup([
       L.polyline(latlngs, { color: "#ff7a45", weight: 9, opacity: 0.16 }),
       L.polyline(latlngs, { color: "#ff7a45", weight: 3.5, opacity: 1 }),
-      L.circleMarker(latlngs[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#ff7a45", fillOpacity: 1 }),
-      L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: "#fff", weight: 2, fillColor: "#ff7141", fillOpacity: 1 })
+      L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: "#ff7a45", fillOpacity: 1 }),
+      L.circleMarker(lastLatLng, { radius: 7, color: "#fff", weight: 2, fillColor: "#ff7141", fillOpacity: 1 })
     ]);
 
-    const bands: Record<string, any[]> = { "#ff6b4a": [], "#ffd23f": [], "#7ee06a": [] };
+    const bands: Record<string, LatLngSegment[]> = { "#ff6b4a": [], "#ffd23f": [], "#7ee06a": [] };
     for (let i = 1; i < drawable.length; i += 1) {
-      const speed = segmentSpeedMps(drawable[i - 1], drawable[i]);
+      const previousPoint = drawable[i - 1];
+      const point = drawable[i];
+      const previousLatLng = latlngs[i - 1];
+      const latLng = latlngs[i];
+      if (!previousPoint || !point || !previousLatLng || !latLng) continue;
+      const speed = segmentSpeedMps(previousPoint, point);
       const color = speed < 8 ? "#ff6b4a" : (speed < 18 ? "#ffd23f" : "#7ee06a");
-      bands[color].push([latlngs[i - 1], latlngs[i]]);
+      const bucket = bands[color];
+      if (bucket) bucket.push([previousLatLng, latLng]);
     }
     mapLayerGroups.heat = L.layerGroup();
-    Object.keys(bands).forEach((color) => {
-      if (bands[color].length) {
-        L.polyline(bands[color], { color, weight: 5, opacity: 0.95 }).addTo(mapLayerGroups.heat);
+    Object.entries(bands).forEach(([color, segments]) => {
+      if (segments.length) {
+        L.polyline(segments, { color, weight: 5, opacity: 0.95 }).addTo(mapLayerGroups.heat);
       }
     });
 
@@ -381,10 +393,14 @@
     // V3 efficiency layer — per-segment polylines bucketed by mi/kWh.
     // Segments with no power data (eff null) render grey so the user
     // can tell which portions of the drive lack derived efficiency.
-    const effBands: Record<string, any[]> = {};
+    const effBands: Record<string, LatLngSegment[]> = {};
     for (let i = 1; i < drawable.length; i += 1) {
-      const color = mapEffColor(Number(drawable[i].eff));
-      (effBands[color] = effBands[color] || []).push([latlngs[i - 1], latlngs[i]]);
+      const point = drawable[i];
+      const previousLatLng = latlngs[i - 1];
+      const latLng = latlngs[i];
+      if (!point || !previousLatLng || !latLng) continue;
+      const color = mapEffColor(Number(point.eff));
+      (effBands[color] = effBands[color] || []).push([previousLatLng, latLng]);
     }
     mapLayerGroups.eff = L.layerGroup();
     // Soft white halo underneath the colored segments so the route reads
@@ -392,11 +408,11 @@
     L.polyline(latlngs, {
       color: "#ffffff", weight: 11, opacity: 0.09, interactive: false
     }).addTo(mapLayerGroups.eff);
-    Object.keys(effBands).forEach((color) => {
-      L.polyline(effBands[color], { color, weight: 5, opacity: 0.95 }).addTo(mapLayerGroups.eff);
+    Object.entries(effBands).forEach(([color, segments]) => {
+      L.polyline(segments, { color, weight: 5, opacity: 0.95 }).addTo(mapLayerGroups.eff);
     });
-    L.circleMarker(latlngs[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#b8e63b", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
-    L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: "#fff", weight: 2, fillColor: "#ff6b5f", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
+    L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: "#b8e63b", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
+    L.circleMarker(lastLatLng, { radius: 7, color: "#fff", weight: 2, fillColor: "#ff6b5f", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
 
     (mapLayerGroups[layer] || mapLayerGroups.routes).addTo(map);
 
@@ -415,8 +431,9 @@
   }
 
   function routeFitKey(routeSession: Record<string, any>, points: MapRoutePoint[]) {
-    const first = points[0] || {};
-    const last = points[points.length - 1] || {};
+    const first = points[0];
+    const last = points[points.length - 1];
+    if (!first || !last) return [(routeSession || {}).id || "", points.length, "", "", "", ""].join(":");
     return [
       (routeSession || {}).id || "",
       points.length,
@@ -487,7 +504,10 @@
   function routeDistanceMeters(points: MapRoutePoint[]) {
     let total = 0;
     for (let i = 1; i < points.length; i += 1) {
-      total += haversineMetersJs(points[i - 1].lat, points[i - 1].lng, points[i].lat, points[i].lng);
+      const previousPoint = points[i - 1];
+      const point = points[i];
+      if (!previousPoint || !point) continue;
+      total += haversineMetersJs(previousPoint.lat, previousPoint.lng, point.lat, point.lng);
     }
     return total;
   }
@@ -502,7 +522,10 @@
     const stops: MapStop[] = [];
     let runStart: number | null = null;
     for (let i = 1; i < points.length; i += 1) {
-      const slow = segmentSpeedMps(points[i - 1], points[i]) < 1.5;
+      const previousPoint = points[i - 1];
+      const point = points[i];
+      if (!previousPoint || !point) continue;
+      const slow = segmentSpeedMps(previousPoint, point) < 1.5;
       if (slow) {
         if (runStart === null) runStart = i - 1;
       } else if (runStart !== null) {
@@ -515,9 +538,13 @@
   }
 
   function addStop(stops: MapStop[], points: MapRoutePoint[], startIdx: number, endIdx: number) {
-    const durationMs = Number(points[endIdx].atMs) - Number(points[startIdx].atMs);
+    const startPoint = points[startIdx];
+    const endPoint = points[endIdx];
+    if (!startPoint || !endPoint) return;
+    const durationMs = Number(endPoint.atMs) - Number(startPoint.atMs);
     if (durationMs < 45000) return;
     const mid = points[Math.floor((startIdx + endIdx) / 2)];
+    if (!mid) return;
     stops.push({ lat: mid.lat, lng: mid.lng, durationMs });
   }
 
@@ -533,25 +560,38 @@
   // with varied content rather than a single drive.
   function buildSampleRoute(opts: DemoRouteOpts): DemoRoute {
     const slice = SAMPLE_ROUTE.slice(opts.from, opts.to);
-    const baseT = slice[0][0];
+    const firstSlicePoint = slice[0];
+    if (!firstSlicePoint) {
+      throw new Error("Sample route slice is empty");
+    }
+    const baseT = firstSlicePoint[0];
     const points: MapRoutePoint[] = slice.map(([t, lat, lng]) => ({
       atMs: opts.startedAtMs + (t - baseT) * 1000, lat, lng
     }));
-    const startMs = points[0].atMs;
-    const endMs = points[points.length - 1].atMs;
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    if (!firstPoint || !lastPoint) {
+      throw new Error("Sample route has no drawable points");
+    }
+    const startMs = firstPoint.atMs;
+    const endMs = lastPoint.atMs;
     const distanceMeters = routeDistanceMeters(points);
 
     // Elevation: descend from El Cajon (~150 m) to the coast with a mid-route
     // hill, then shift by opts.elevShift so each drive feels different.
     let cumM = 0;
     for (let i = 0; i < points.length; i += 1) {
+      const point = points[i];
+      if (!point) continue;
       if (i > 0) {
+        const previousPoint = points[i - 1];
+        if (!previousPoint) continue;
         cumM += haversineMetersJs(
-          points[i - 1].lat, points[i - 1].lng, points[i].lat, points[i].lng
+          previousPoint.lat, previousPoint.lng, point.lat, point.lng
         );
       }
       const f = cumM / (distanceMeters || 1);
-      points[i].altM =
+      point.altM =
         150 - 142 * f +
         70 * Math.exp(-Math.pow((f - 0.46) / 0.085, 2)) +
         7 * Math.sin(f * 19) +
@@ -574,10 +614,13 @@
     for (let i = 0; i < points.length; i += 1) {
       const a = points[Math.max(0, i - 1)];
       const b = points[Math.min(points.length - 1, i + 1)];
+      const point = points[i];
+      const previousPoint = points[Math.max(0, i - 1)];
+      if (!a || !b || !point || !previousPoint) continue;
       const dt = Math.max(1, (b.atMs - a.atMs) / 1000);
       const v = haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / dt;
-      const horiz = Math.max(8, haversineMetersJs(a.lat, a.lng, points[i].lat, points[i].lng) || 1);
-      const dz = Number(points[i].altM) - Number(points[Math.max(0, i - 1)].altM || points[i].altM);
+      const horiz = Math.max(8, haversineMetersJs(a.lat, a.lng, point.lat, point.lng) || 1);
+      const dz = Number(point.altM) - Number(previousPoint.altM || point.altM);
       const grade = Math.max(-0.13, Math.min(0.13, dz / horiz));
       const accel = i > 0 ? (v - prevV) / dt : 0;
       prevV = v;
@@ -586,7 +629,7 @@
       watts = watts > 0 ? watts / 0.86 : watts * 0.55;
       watts += opts.accW || 320;
       const kW = Math.max(-28, Math.min(72, watts / 1000));
-      powerTrack.push({ atMs: points[i].atMs, powerKw: kW });
+      powerTrack.push({ atMs: point.atMs, powerKw: kW });
     }
 
     const session = {
