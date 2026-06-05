@@ -160,7 +160,7 @@ is exactly the risk the "opportunistic" rule guards against.
 | [x] | `PidSchedule.kt` | 223 | `object`; `Header`/`PidSpec` nested; `@JvmField` lists/fields; `require` validation |
 | [x] | `data/BackupMigrator.kt` | 134 | `object`; `@JvmStatic`; try-with-resources → `.use {}`; multi-catch split into IOException/RuntimeException |
 | [x] | `materialize/ChargeSessionMaterializer.kt` | 278 | `object`; nullable doubles captured into locals for smart-casts; arithmetic preserved exactly; `in`→`input` (Kotlin keyword) |
-| [-] | `BackupController.java` | 444 | **no test** → stays Java; convert only when it gets coverage / is reworked |
+| [-] | `BackupController.java` | 444 | **stays Java.** No test, and not cheaply testable: it's tightly coupled to a concrete `MainActivity` (AlertDialog/Intent/FileProvider/runOnUiThread + `activity.localStore`/`isLoggingActive`/`stopObdService`). Meaningful coverage needs an interface-extraction refactor first — a deliberate change, risky for destructive restore code. Convert when that refactor happens, not before. |
 
 ### Wave K4 — Large stateful core (defer; convert only mid-rework) `[-]`
 High interop surface (threads, listeners, the WebView bridge). Language-only churn here
