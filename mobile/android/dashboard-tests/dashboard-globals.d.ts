@@ -57,6 +57,9 @@ interface VoltStatus {
 }
 
 declare global {
+  /** Leaflet runtime global; kept broad until map.js/panels.js move to TS. */
+  const L: any;
+
   /**
    * Shared dashboard namespace every IIFE extends. Members are attached across
    * core.js (most helpers), telemetry.js, panels.js, map.js, scrubber.js,

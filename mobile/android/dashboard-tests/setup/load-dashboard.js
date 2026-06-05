@@ -38,9 +38,9 @@ const DASHBOARD_MODULE_LOADERS = {
   'dtc-lookup.js': () => import('../../app/src/main/dashboard-src/js/dtc-lookup.ts'),
   'map.js': () => import('../../app/src/main/dashboard-src/js/map.js'),
   'panels.js': () => import('../../app/src/main/dashboard-src/js/panels.js'),
-  'scrubber.js': () => import('../../app/src/main/dashboard-src/js/scrubber.js'),
+  'scrubber.js': () => import('../../app/src/main/dashboard-src/js/scrubber.ts'),
   'telemetry.js': () => import('../../app/src/main/dashboard-src/js/telemetry.js'),
-  'troubleshooter.js': () => import('../../app/src/main/dashboard-src/js/troubleshooter.js'),
+  'troubleshooter.js': () => import('../../app/src/main/dashboard-src/js/troubleshooter.ts'),
 };
 
 // Loaded in the exact order that index.template.html lists the production scripts.

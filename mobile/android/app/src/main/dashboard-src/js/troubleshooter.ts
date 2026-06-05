@@ -1,6 +1,5 @@
-// @ts-check
 /*
- * troubleshooter.js — connection troubleshooter modal behavior and the
+ * troubleshooter.ts — connection troubleshooter modal behavior and the
  * stuck-bond auto-suggest hook.
  *
  * The modal opens automatically when:
@@ -20,14 +19,31 @@
  * CSS namespace: every selector this file mutates is prefixed `.troubleshooter`
  * (see css/troubleshooter.css) so connection-tool styling cannot collide.
  */
-(function () {
-  "use strict";
-
   const VD = window.VoltDashboard;
-  if (!VD) return;
   const state = VD.state;
   const bridge = VD.bridge;
   const el = VD.el;
+
+  type FailureCopy = {
+    title: string;
+    hint: string;
+  };
+
+  type StaleField = {
+    key: string;
+    label: string;
+  };
+
+  type StaleEntry = {
+    label: string;
+    staleMs: number;
+  };
+
+  type RecentSession = {
+    status?: unknown;
+  };
+
+  type PayloadHandler = (payload: unknown) => unknown;
 
   // Trigger thresholds: keep low so users see help fast in real-world
   // flaky-adapter scenarios.
@@ -38,7 +54,7 @@
   // user-facing label for each. Threshold is the same 4s used elsewhere for
   // "the adapter has stopped answering this PID."
   const STALE_THRESHOLD_MS = 4000;
-  const STALE_FIELDS = [
+  const STALE_FIELDS: StaleField[] = [
     { key: "voltageStaleMs", label: "Adapter voltage (ATRV)" },
     { key: "socStaleMs", label: "HV battery SOC" },
     { key: "coolantCStaleMs", label: "Coolant temperature" },
@@ -48,8 +64,7 @@
   // Map FailureClass.name() to user-facing copy. Keys MUST match the
   // string values produced by FailureClass.java; unknown / missing falls
   // through to the generic message.
-  /** @type {Record<string, { title: string, hint: string }>} */
-  const FAILURE_CLASS_COPY = {
+  const FAILURE_CLASS_COPY: Record<string, FailureCopy> = {
     INSTANT_DROP: {
       title: "Adapter answers but isn't talking",
       hint: "Unplug it for 10 seconds, then try again."
@@ -96,14 +111,14 @@
   const listenerController = new AbortController();
   const LISTEN_OPTS = { signal: listenerController.signal };
 
-  function modal() { return el("troubleshooterModal"); }
+  function modal(): HTMLElement | null { return el("troubleshooterModal"); }
 
   function isOpen() {
     const node = modal();
     return Boolean(node && !node.hidden);
   }
 
-  function open(/** @type {any} */ reason) {
+  function open(reason: unknown) {
     const node = modal();
     if (!node) return;
     // Remember the focused element so it can be restored when the modal closes.
@@ -218,7 +233,7 @@
 
   // Render Force-stop buttons for every competing package. `csv` may be null or ""; in that case
   // the whole step stays hidden.
-  function renderCompeting(/** @type {any} */ csv) {
+  function renderCompeting(csv: unknown) {
     const stepNode = el("troubleshooterStepCompeting");
     const listNode = el("troubleshooterCompetingList");
     if (!stepNode || !listNode) return;
@@ -232,11 +247,11 @@
     listNode.replaceChildren(...packages.map(buildCompetingRow));
   }
 
-  function parsePackageCsv(/** @type {any} */ csv) {
+  function parsePackageCsv(csv: unknown): string[] {
     if (!csv) return [];
     const raw = String(csv).split(",");
-    const seen = new Set();
-    const /** @type {any[]} */ out = [];
+    const seen = new Set<string>();
+    const out: string[] = [];
     raw.forEach((entry) => {
       const trimmed = String(entry || "").trim();
       if (!trimmed) return;
@@ -247,7 +262,7 @@
     return out;
   }
 
-  function buildCompetingRow(/** @type {any} */ pkg) {
+  function buildCompetingRow(pkg: string) {
     const row = document.createElement("div");
     row.className = "troubleshooter-competing-row";
     const label = document.createElement("span");
@@ -281,7 +296,7 @@
   // payload. Shows one <li> per slow-tier PID whose *StaleMs field exceeds
   // STALE_THRESHOLD_MS. Hidden entirely when no field is stale or when the
   // adapter hasn't started reporting staleness yet.
-  function renderStaleTelemetry(/** @type {any} */ payload) {
+  function renderStaleTelemetry(payload: unknown) {
     const stepNode = el("troubleshooterStepStale");
     const listNode = el("troubleshooterStaleList");
     if (!stepNode || !listNode) return;
@@ -295,11 +310,11 @@
     listNode.replaceChildren(...stale.map(buildStaleRow));
   }
 
-  function pickStaleFields(/** @type {any} */ payload) {
+  function pickStaleFields(payload: unknown): StaleEntry[] {
     if (!payload || typeof payload !== "object") return [];
-    const /** @type {any[]} */ out = [];
+    const out: StaleEntry[] = [];
     STALE_FIELDS.forEach((field) => {
-      const value = Number(payload[field.key]);
+      const value = Number((payload as Record<string, unknown>)[field.key]);
       if (Number.isFinite(value) && value > STALE_THRESHOLD_MS) {
         out.push({ label: field.label, staleMs: value });
       }
@@ -307,7 +322,7 @@
     return out;
   }
 
-  function buildStaleRow(/** @type {any} */ entry) {
+  function buildStaleRow(entry: StaleEntry) {
     const row = document.createElement("li");
     row.className = "troubleshooter-stale-row";
     const label = document.createElement("span");
@@ -321,7 +336,7 @@
     return row;
   }
 
-  function noteTelemetry(/** @type {any} */ payload) {
+  function noteTelemetry(payload: unknown) {
     if (!payload || typeof payload !== "object") return;
     state.troubleshooter.lastTelemetry = payload;
     if (isOpen()) {
@@ -332,14 +347,14 @@
   // Switch the primary action when the last 3 sessions all failed.
   function refreshStuckBondSuggestion() {
     state.troubleshooter.forgetMode = false;
-    let recent = [];
+    let recent: RecentSession[] = [];
     if (bridge && typeof bridge.getRecentSessions === "function") {
       try {
         const raw = bridge.getRecentSessions(3);
         // Defensive: if panels.js failed to load or was renamed, VD.parsePayload may not exist.
         // Fall back to JSON.parse + Array check so the stuck-bond path is not silently disabled.
         if (typeof VD.parsePayload === "function") {
-          recent = VD.parsePayload(raw, []);
+          recent = VD.parsePayload(raw, []) as RecentSession[];
         } else {
           const parsed = JSON.parse(raw || "[]");
           recent = Array.isArray(parsed) ? parsed : [];
@@ -368,7 +383,7 @@
   // the actions row (cancel + help) so the banner is actionable instead of
   // a plain "Dashboard error" string. Called from noteStatus on every status
   // payload.
-  function renderErrorBannerCopy(/** @type {any} */ status) {
+  function renderErrorBannerCopy(status: Record<string, any> | null | undefined) {
     const titleNode = el("errorBannerTitle");
     const hintNode = el("errorBannerHint");
     const actionsNode = el("errorBannerActions");
@@ -419,7 +434,7 @@
   }
 
   // Counts a status payload toward the auto-open trigger.
-  function noteStatus(/** @type {any} */ status) {
+  function noteStatus(status: Record<string, any> | null | undefined) {
     if (!status) return;
     const stateName = String(status.state || "").toLowerCase();
     const detail = String(status.detail || "").toLowerCase();
@@ -487,9 +502,9 @@
   // VoltTrackerNative.setStatus or the JS side calls VD.setStatus directly
   // — flows through our observer.
   function installStatusObserver() {
-    const wrap = (/** @type {any} */ prior) =>
-      function (/** @type {any} */ payload) {
-        let result;
+    const wrap = (prior: unknown): PayloadHandler =>
+      function (payload: unknown) {
+        let result: unknown;
         if (typeof prior === "function") {
           result = prior(payload);
         }
@@ -512,9 +527,9 @@
   // them out and refresh the step. Observer must never break the underlying
   // updateTelemetry call.
   function installTelemetryObserver() {
-    const wrap = (/** @type {any} */ prior) =>
-      function (/** @type {any} */ payload) {
-        let result;
+    const wrap = (prior: unknown): PayloadHandler =>
+      function (payload: unknown) {
+        let result: unknown;
         if (typeof prior === "function") {
           result = prior(payload);
         }
@@ -560,4 +575,5 @@
     STALE_FIELDS,
     STALE_THRESHOLD_MS
   };
-})();
+
+export {};
