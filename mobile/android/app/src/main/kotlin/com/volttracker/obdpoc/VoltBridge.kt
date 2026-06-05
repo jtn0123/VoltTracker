@@ -2,9 +2,9 @@ package com.volttracker.obdpoc
 
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
-import android.net.Uri
 import android.util.Log
 import android.webkit.JavascriptInterface
+import androidx.core.net.toUri
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
@@ -231,7 +231,7 @@ class VoltBridge(
         activity.runOnUiThread {
             try {
                 val query = URLEncoder.encode(code + " Chevy Volt DTC", StandardCharsets.UTF_8.name())
-                val uri = Uri.parse("https://www.google.com/search?q=$query")
+                val uri = "https://www.google.com/search?q=$query".toUri()
                 val intent = Intent(Intent.ACTION_VIEW, uri)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 activity.startActivity(intent)

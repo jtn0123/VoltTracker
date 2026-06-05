@@ -45,6 +45,12 @@ function methodBody(src, signatureFragment) {
     throw new Error(`contract: could not locate method "${fragments.join(' or ')}" — did the native emitter move/rename?`);
   }
   const open = src.indexOf('{', start);
+  const expr = src.indexOf('=', start);
+  if (expr !== -1 && (open === -1 || expr < open)) {
+    const rest = src.slice(expr + 1);
+    const next = rest.search(/\n\s*(?:@\w|(?:private|public|internal|override)?\s*fun\s)/);
+    return next === -1 ? rest : rest.slice(0, next);
+  }
   if (open === -1) throw new Error(`contract: no body brace after "${fragment}"`);
   let depth = 0;
   for (let i = open; i < src.length; i += 1) {
@@ -88,17 +94,17 @@ const NATIVE_RECENT_SESSION = putKeys(
   methodBody(storageSource, ['JSONArray recentSessionsJson(StorageSummaryRecord record)', 'fun recentSessionsJson(record: StorageSummaryRecord)']),
 );
 const NATIVE_CHARGE_SUMMARY = putKeys(
-  methodBody(reportsSource, 'JSONObject chargeSummaryJson(SQLiteDatabase db)'),
+  methodBody(reportsSource, ['JSONObject chargeSummaryJson(SQLiteDatabase db)', 'fun chargeSummaryJson(db: SQLiteDatabase)']),
 );
 const NATIVE_CHARGE_ROW = putKeys(
-  methodBody(reportsSource, 'JSONObject chargeSessionRowJson(Cursor cursor)'),
+  methodBody(reportsSource, ['JSONObject chargeSessionRowJson(Cursor cursor)', 'fun chargeSessionRowJson(cursor: Cursor)']),
 );
 const NATIVE_DTC = putKeys(methodBody(dtcSource, ['JSONObject toJson()', 'fun toJson(): JSONObject']));
 // appState.vehicle = vehicleJson()'s own keys plus the latestVehicle row it
 // merges in key-by-key (storage.optJSONObject("latestVehicle")).
 const NATIVE_VEHICLE = union(
   putKeys(methodBody(appStateSource, ['JSONObject vehicleJson()', 'fun vehicleJson(): JSONObject'])),
-  putKeys(methodBody(reportsSource, 'JSONObject latestVehicleJson(SQLiteDatabase db)')),
+  putKeys(methodBody(reportsSource, ['JSONObject latestVehicleJson(SQLiteDatabase db)', 'fun latestVehicleJson(db: SQLiteDatabase)'])),
 );
 
 function loadVD() {
