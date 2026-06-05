@@ -1,5 +1,5 @@
 {
-  "//": "Type-checking for the dashboard JS. checkJs is TRUE: the whole dashboard/js directory is type-checked and any NEW .js file is covered automatically (the per-file `// @ts-check` comments are harmless no-ops). noImplicitAny AND strictNullChecks are both ON: every param/var needs a determinable type, and every possibly-null/undefined access must be guarded or narrowed — annotate with JSDoc (`/** @type {...} */ (expr)` casts, `?? fallback`, `x?.y`). Only full `strict` (adds strictFunctionTypes, etc.) remains off. tsc emits nothing; this is a checker only. Run via `npm run typecheck`.",
+  "//": "Type-checking for the dashboard JS. checkJs is TRUE: the whole dashboard/js directory is type-checked and any NEW .js file is covered automatically (the per-file `// @ts-check` comments are harmless no-ops). Full `strict` is ON — that subsumes noImplicitAny + strictNullChecks plus strictFunctionTypes, useUnknownInCatchVariables (catch vars are `unknown`: narrow with `err instanceof Error ? err.message : ...`), noImplicitThis, etc. Every param/var needs a determinable type and every possibly-null/undefined access must be guarded or narrowed — annotate with JSDoc (`/** @type {...} */ (expr)` casts, `?? fallback`, `x?.y`). tsc emits nothing; this is a checker only. Run via `npm run typecheck`.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -8,9 +8,7 @@
     "allowJs": true,
     "checkJs": true,
     "noEmit": true,
-    "strict": false,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
+    "strict": true,
     "skipLibCheck": true,
     "types": []
   },

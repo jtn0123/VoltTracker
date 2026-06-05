@@ -149,7 +149,7 @@
   function flushDemoDataCallbacks(/** @type {any} */ error) {
     const callbacks = demoDataCallbacks.splice(0);
     callbacks.forEach((callback) => {
-      try { callback(error, data); } catch (err) { reportClientError("demoData.callback", err && err.message); }
+      try { callback(error, data); } catch (err) { reportClientError("demoData.callback", err instanceof Error ? err.message : undefined); }
     });
   }
 

@@ -14,7 +14,7 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 > |---|---:|---:|---:|---|
 > | Kotlin files converted | 22 | 0 | 1 (BackupController) | K0–K3 done (5 of 6 K3; BackupController stays Java) |
 > | Kotlin waves complete | K0–K3 | — | K4 (deferred) | K3 done except untested BackupController |
-> | Dashboard JS type-safety | checkJs + strictNullChecks ✅ | — | full TS (T2) | whole dir, null-safe, zero build |
+> | Dashboard JS type-safety | checkJs + full `strict` ✅ | — | full TS (T2) | max checking, zero build |
 > | Dashboard build step | none | — | esbuild/vite (proposed) | zero-build today |
 
 **Status legend:** `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` won't do / deferred indefinitely.
@@ -296,3 +296,4 @@ top *only* for the dev server / HMR against the browser preview. Sub-steps:
 | 2026-06-04 | Post-review: kept all `VD` bootstraps typed (dropped `any`), which surfaced + fixed 3 latent bugs (setDevices/setHistory null-guards, `VoltDtcInfo` had a phantom `dtc` field). |
 | 2026-06-04 | Wave K3 (partial): converted SessionStateMachine, LocationFilter, PidSchedule to Kotlin (the tested, non-data-integrity logic). All gates green. BackupMigrator + ChargeSessionMaterializer remain (tested, data-touching); BackupController stays Java (no test). |
 | 2026-06-04 | Wave K3 complete (5 of 6): added BackupMigrator (SQLite/file I/O via `.use {}`) and ChargeSessionMaterializer (charge heuristics, arithmetic preserved). All gates green incl. data-layer + materializer integration tests. BackupController stays Java until it has a test. 77 Java + 22 Kotlin main files. |
+| 2026-06-04 | Dashboard typecheck taken to full `strict` (subsumes the earlier strictNullChecks). Only 2 new errors — `useUnknownInCatchVariables` catch-var `.message` accesses — fixed with `instanceof Error` narrowing. typecheck/ESLint/Vitest(121)/spotless green. This is the max the JSDoc+checkJs setup gives; the remaining TS step is the .ts+bundler migration (T2). |

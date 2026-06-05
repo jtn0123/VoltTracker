@@ -76,13 +76,14 @@ To bypass in an emergency: `git commit --no-verify` / `git push --no-verify`
 `npm --prefix dashboard-tests run typecheck` runs `tsc --checkJs` over the dashboard
 JS, and the check is gated in CI. `checkJs` is `true`, so **every** file under
 `assets/dashboard/js/` is type-checked and any new `.js` file is covered automatically — no
-`// @ts-check` line required. Both `noImplicitAny` **and `strictNullChecks` are on**, so:
-annotate every param/var (JSDoc), and handle every possibly-null/undefined value — guard
-it, narrow it (`x?.y`, `value ?? fallback`), or cast it (`/** @type {HTMLInputElement} */
-(el("id"))`). Shared globals are declared in `dashboard-tests/dashboard-globals.d.ts`; the
-`VoltDashboard` members an eager script always attaches are typed **required**, so a new
-cross-file helper should be added there with a real signature (not left optional). Only full
-`strict` remains off.
+`// @ts-check` line required. **Full `strict` is on** (noImplicitAny + strictNullChecks +
+strictFunctionTypes + useUnknownInCatchVariables + …), so: annotate every param/var (JSDoc);
+handle every possibly-null/undefined value — guard it, narrow it (`x?.y`, `value ?? fallback`),
+or cast it (`/** @type {HTMLInputElement} */ (el("id"))`); and in `catch` blocks the variable
+is `unknown`, so narrow before use (`err instanceof Error ? err.message : String(err)`). Shared
+globals are declared in `dashboard-tests/dashboard-globals.d.ts`; the `VoltDashboard` members an
+eager script always attaches are typed **required**, so a new cross-file helper should be added
+there with a real signature (not left optional).
 
 ## Android: Kotlin for new code
 

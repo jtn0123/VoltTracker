@@ -1771,7 +1771,7 @@
       } catch (err) {
         // Surface, but never throw from a click handler.
         if (typeof bridge.logClientError === "function") {
-          bridge.logClientError("cancelRetry", String(err && err.message || err));
+          bridge.logClientError("cancelRetry", err instanceof Error ? err.message : String(err));
         }
       }
       // Re-enable after a short window in case the engine keeps retrying
