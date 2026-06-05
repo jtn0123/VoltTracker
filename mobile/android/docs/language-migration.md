@@ -12,8 +12,8 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 66 | 0 | K4 staged core | K0–K3 + K5–K8 done; lifecycle/service core remains |
-> | Kotlin waves complete | K0–K3, K5–K8 | — | K4 staged behind tests | large stateful core converts only with focused coverage |
+> | Kotlin files converted | 76 | 0 | K4 staged core | K0–K3 + K5–K9 done; lifecycle/service core remains |
+> | Kotlin waves complete | K0–K3, K5–K9 | — | K4 staged behind tests | large stateful core converts only with focused coverage |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
 
@@ -283,6 +283,25 @@ DB helper classes that are exercised through the local-store/materializer test s
 | [x] | `data/ObdStoreMaintenance.kt` | clear/checkpoint/prune/merge maintenance helper |
 | [x] | `data/ObdStoreMaterialize.kt` | materializer read/write helper; materializer/local-store tests cover paths |
 | [x] | `data/ObdStoreSnapshots.kt` | write-side payload/value builders and DTC/adapter upserts |
+
+### Wave K9 — Runtime helper and probe utilities ✅ done
+Converted another ten files that sit near the service/runtime surface but have focused tests
+or narrow behavior: logging, notification construction, static probe catalogs, file-backed
+session logs, location tracking, ELM decode helpers, the enhanced PID catalog, demo polling,
+and the detail-probe runner.
+
+| # | File | Notes |
+|---|---|---|
+| [x] | `LogcatMirror.kt` | explicit logcat-to-rolling-log facade |
+| [x] | `OBDLog.kt` | structured static logging helper; mirror hook preserved |
+| [x] | `ObdProbes.kt` | ELM UUID/probe constants; Java field access preserved |
+| [x] | `ObdNotifications.kt` | foreground-service notification/channel helper |
+| [x] | `ObdSessionLog.kt` | synchronized JSONL session log writer |
+| [x] | `location/LocationManagerTracker.kt` | platform GPS/network tracker implementation |
+| [x] | `ObdElmDecode.kt` | static decode/backoff/status helpers |
+| [x] | `EnhancedPidProfiles.kt` | enhanced PID catalog and JSON export |
+| [x] | `DemoPollingLoop.kt` | synthetic demo telemetry loop |
+| [x] | `TpmsDiscoveryRunner.kt` | staged detail-probe runner |
 
 ---
 
