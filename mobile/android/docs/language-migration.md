@@ -12,8 +12,8 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 36 | 0 | K4 deferred | K0–K3 + K5 done; BackupController stays Java |
-> | Kotlin waves complete | K0–K3, K5 | — | K4 (deferred) | large stateful core remains Java-for-now |
+> | Kotlin files converted | 39 | 0 | K6 staged core-adjacent helpers | K0–K3 + K5 done; medium-risk tested helpers started |
+> | Kotlin waves complete | K0–K3, K5 | K6 medium-risk helpers | K4 staged behind tests | large stateful core converts only with focused coverage |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
 
@@ -194,13 +194,14 @@ is exactly the risk the "opportunistic" rule guards against.
 | [x] | `PidSchedule.kt` | 223 | `object`; `Header`/`PidSpec` nested; `@JvmField` lists/fields; `require` validation |
 | [x] | `data/BackupMigrator.kt` | 134 | `object`; `@JvmStatic`; try-with-resources → `.use {}`; multi-catch split into IOException/RuntimeException |
 | [x] | `materialize/ChargeSessionMaterializer.kt` | 278 | `object`; nullable doubles captured into locals for smart-casts; arithmetic preserved exactly; `in`→`input` (Kotlin keyword) |
-| [-] | `BackupController.java` | 444 | **stays Java.** No test, and not cheaply testable: it's tightly coupled to a concrete `MainActivity` (AlertDialog/Intent/FileProvider/runOnUiThread + `activity.localStore`/`isLoggingActive`/`stopObdService`). Meaningful coverage needs an interface-extraction refactor first — a deliberate change, risky for destructive restore code. Convert when that refactor happens, not before. |
+| [-] | `BackupController.java` | 444 | **stays Java for now.** It now has dialog/lifecycle tests, but destructive restore orchestration is still tightly coupled to concrete `MainActivity` seams (`AlertDialog`/`Intent`/`FileProvider`/`runOnUiThread` plus `activity.localStore`/`isLoggingActive`/`stopObdService`). Convert after a focused restore-path test or interface extraction. |
 
-### Wave K4 — Large stateful core (defer; convert only mid-rework) `[-]`
-High interop surface (threads, listeners, the WebView bridge). Language-only churn here
-is not worth the risk.
+### Wave K4 — Large stateful core (stage behind focused tests) `[~]`
+High interop surface (threads, listeners, the WebView bridge). Convert these when the
+target has a focused test harness or when a refactor creates one; Git is the rollback
+tool, but focused tests are the reliability tool.
 - [-] `ObdPollingEngine.java`, `ObdService.java`, `SessionRecorder.java`,
-  `ObdProtocol.java`, `MainActivity.java`, `VoltBridge.java`
+  `ObdProtocol.java`, `MainActivity.java`, `VoltBridge.java`, `BackupController.java`
 
 ### Wave K5 — Small tested helpers `[~]`
 After the original K0-K3 waves, continue only with files that are small and already covered by
@@ -226,8 +227,25 @@ focused JVM/Robolectric tests. This wave is opportunistic; each item should stan
 
 Remaining K5 evaluation:
 - No remaining K5 candidates. The tested helper queue is complete.
-- Leave Java-for-now: K4 lifecycle/service/bridge classes and backup restore orchestration remain
-  out of scope for language-only churn.
+- K4 lifecycle/service/bridge classes and backup restore orchestration are no longer
+  "never convert"; they are staged behind pre-conversion tests.
+
+### Wave K6 — Tested medium-risk helpers `[~]`
+Broaden conversion beyond tiny helpers. Each item has direct tests or strong integration
+coverage, and each commit should still pass focused tests plus `verifyActiveApp`.
+
+| # | File | Lines | Notes |
+|---|---|---:|---|
+| [x] | `CompetingAppDetector.kt` | 124 | package allowlist detector; Robolectric tests cover filtering/order and Java override seam |
+| [x] | `DashboardPublisher.kt` | 86 | WebView publish allowlist/lifecycle gate; Robolectric tests cover quoting, readiness, teardown |
+| [x] | `VoltageProbe.kt` | 120 | PID-42 voltage parser/probe; JVM tests cover decode bounds and malformed frames |
+| [ ] | `ClearDtcRunner.java` | 147 | command runner with focused tests |
+| [ ] | `DiagnosticScanRunner.java` | 157 | scan runner with focused tests |
+| [ ] | `PidPollingState.java` | 306 | polling state helper with focused tests |
+| [ ] | `SessionSummaryStore.java` | 210 | JSONL session-summary store with focused tests |
+| [ ] | `ElmConnection.java` | 297 | IO wrapper with in-memory stream tests |
+| [ ] | `TripMaterializer.java` | 479 | trip materializer with focused tests |
+| [ ] | `DriveWindowDetector.java` | 436 | drive-window splitter with DB/integration coverage |
 
 ---
 

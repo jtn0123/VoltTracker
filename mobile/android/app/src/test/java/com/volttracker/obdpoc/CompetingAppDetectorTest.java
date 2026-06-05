@@ -42,7 +42,7 @@ public class CompetingAppDetectorTest {
             String ownPackage, List<ApplicationInfo> installed) {
         return new CompetingAppDetector(null, null, null, ownPackage) {
             @Override
-            boolean isPackageInstalled(String packageName) {
+            public boolean isPackageInstalled(String packageName) {
                 for (ApplicationInfo info : installed) {
                     if (info != null && packageName.equals(info.packageName)) {
                         return true;
