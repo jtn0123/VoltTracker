@@ -12,8 +12,8 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 46 | 0 | K4 staged core | K0–K3 + K5–K6 done; lifecycle/service core remains |
-> | Kotlin waves complete | K0–K3, K5–K6 | — | K4 staged behind tests | large stateful core converts only with focused coverage |
+> | Kotlin files converted | 56 | 0 | K4 staged core | K0–K3 + K5–K7 done; lifecycle/service core remains |
+> | Kotlin waves complete | K0–K3, K5–K7 | — | K4 staged behind tests | large stateful core converts only with focused coverage |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
 
@@ -246,6 +246,25 @@ coverage, and each commit should still pass focused tests plus `verifyActiveApp`
 | [x] | `ElmConnection.kt` | 297 | RFCOMM stream wrapper; in-memory tests cover transact prompt/timeout behavior and engine fake override seams |
 | [x] | `TripMaterializer.kt` | 479 | trip materializer with focused tests |
 | [x] | `DriveWindowDetector.kt` | 436 | drive-window splitter with DB/integration coverage |
+
+### Wave K7 — Record/interface utility batch ✅ done
+Converted a deliberately boring batch of ten Java files: package helpers, DTO-style records,
+the materializer read interface, and the telemetry statement cache. These preserve Java field
+access/static call shapes with `@JvmField`/`@JvmStatic`/companion fields where callers rely on
+them, while adding Kotlin nullability on constructor inputs and JSON helpers.
+
+| # | File | Notes |
+|---|---|---|
+| [x] | `AppStatePayload.kt` | app-state snapshot builder; dashboard payload tests cover emitted shape |
+| [x] | `MainActivityUtils.kt` | package helper object; static Java call surface preserved |
+| [x] | `SessionSummary.kt` | JSONL summary record; constants/fromJson preserved |
+| [x] | `classify/ClassifierInput.kt` | classifier input validation; direct bounds tests cover failures |
+| [x] | `materialize/Trip.kt` | trip DTO; constants and Java field access preserved |
+| [x] | `materialize/ChargeSession.kt` | charge DTO; back-compat defaults preserved |
+| [x] | `materialize/MaterializerData.kt` | read interface for materializers |
+| [x] | `data/TelemetrySampleRecord.kt` | telemetry read record; `toJson()` fallback preserved |
+| [x] | `data/StorageSummaryRecord.kt` | storage summary read model; defensive JSON/list/map copies preserved |
+| [x] | `data/ObdStatementCache.kt` | telemetry insert statement cache; SQL static field access preserved |
 
 ---
 

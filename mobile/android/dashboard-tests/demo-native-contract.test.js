@@ -97,7 +97,7 @@ const NATIVE_DTC = putKeys(methodBody(dtcSource, ['JSONObject toJson()', 'fun to
 // appState.vehicle = vehicleJson()'s own keys plus the latestVehicle row it
 // merges in key-by-key (storage.optJSONObject("latestVehicle")).
 const NATIVE_VEHICLE = union(
-  putKeys(methodBody(appStateSource, 'JSONObject vehicleJson()')),
+  putKeys(methodBody(appStateSource, ['JSONObject vehicleJson()', 'fun vehicleJson(): JSONObject'])),
   putKeys(methodBody(reportsSource, 'JSONObject latestVehicleJson(SQLiteDatabase db)')),
 );
 
