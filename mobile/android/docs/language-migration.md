@@ -12,7 +12,7 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 >
 > | Track | Done | In progress | Planned | Notes |
 > |---|---:|---:|---:|---|
-> | Kotlin files converted | 23 | 0 | tested helper candidates | K0–K3 done; K5 started; BackupController stays Java |
+> | Kotlin files converted | 24 | 0 | tested helper candidates | K0–K3 done; K5 started; BackupController stays Java |
 > | Kotlin waves complete | K0–K3 | K5 small helpers | K4 (deferred) | large stateful core remains Java-for-now |
 > | Dashboard JS type-safety | checkJs + full `strict` + all source `.ts` ✅ | — | optional source maps/dev server | max checking, bundled WebView output |
 > | Dashboard build step | esbuild bundle + all `.ts` entries ✅ | — | optional source maps/dev server | source in `dashboard-src/js`, built `app.js` shipped |
@@ -73,7 +73,7 @@ diverge.
 ### Kotlin-owned files
 New Android app code should be Kotlin. Existing Java should convert only when the file has a
 clear test safety net or is already being substantially reworked. Good future Kotlin
-candidates are small, tested helpers/payload utilities such as `ConnectionFailureClassifier`,
+candidates are small, tested helpers/payload utilities such as
 `BluetoothStateReporter`, `DeviceCatalog`, `DiagnosticsShareIntent`, `PermissionGate`,
 `RollingAppLog`, `WebViewBootstrap`, `StorageSummaryJson`,
 `AppStateJson`, `DiagnosticCodeReport`, and narrowly-scoped `ObdStore*` helpers when their
@@ -210,7 +210,7 @@ focused JVM/Robolectric tests. This wave is opportunistic; each item should stan
 | # | File | Lines | Notes |
 |---|---|---:|---|
 | [x] | `SpeedPlausibilityFilter.kt` | 45 | stateful speed-glitch filter; existing Java test covers every branch |
-| [ ] | `ConnectionFailureClassifier.java` | — | candidate if classifier tests cover wire buckets |
+| [x] | `ConnectionFailureClassifier.kt` | 147 | pure connect-failure classifier; existing Java test covers wire buckets |
 | [ ] | `BluetoothStateReporter.java` | — | candidate with existing Robolectric tests |
 | [ ] | `DeviceCatalog.java` | — | candidate, but larger parsing surface |
 | [ ] | `DiagnosticsShareIntent.java` | — | candidate, but Android intent/file URI surface |
