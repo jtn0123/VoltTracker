@@ -17,6 +17,12 @@ tasks.named("dependencyUpdates").configure {
 def dashboardTestsDir = file("dashboard-tests")
 def dashboardE2eDir = file("dashboard-e2e")
 def dashboardAssetDir = file("app/src/main/assets/dashboard")
+def productionJavaStragglers = fileTree("app/src/main/java") {
+    include "**/*.java"
+}
+def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
+    include "**/*.js"
+}
 // Split budget (C2): the *core* bundle (boot + interactive JS/CSS) is what affects
 // startup and responsiveness, so it gets a tight budget. The DTC lookup tables
 // (dtc-lookup.js + dtc-causes.js) are lazy-loaded reference data — only fetched when
@@ -39,12 +45,12 @@ tasks.register("dashboardNpmCi", Exec) {
     outputs.dir(file("${dashboardTestsDir}/node_modules"))
 }
 
-// Compiles the editable dashboard JS (app/src/main/dashboard-src/js) into the shipped,
+// Compiles the editable dashboard TypeScript source (app/src/main/dashboard-src/js) into the shipped,
 // gitignored bundle (app/src/main/assets/dashboard/js) via esbuild. Wired into preBuild
 // so `:app:assembleDebug` always packages a fresh bundle; up-to-date when the source is
 // unchanged. Requires Node (the dashboard toolchain), so CI Android jobs set up Node.
 tasks.register("buildDashboardJs", Exec) {
-    description = "Bundles dashboard-src/js into assets/dashboard/js with esbuild."
+    description = "Bundles dashboard TypeScript source into assets/dashboard/js with esbuild."
     dependsOn("dashboardNpmCi")
     workingDir = dashboardTestsDir
     commandLine "npm", "run", "build"
@@ -61,14 +67,14 @@ tasks.register("dashboardTest", Exec) {
 }
 
 tasks.register("dashboardLint", Exec) {
-    description = "Runs dashboard JavaScript lint."
+    description = "Runs dashboard TypeScript lint."
     dependsOn("dashboardNpmCi")
     workingDir = dashboardTestsDir
     commandLine "npm", "run", "lint"
 }
 
 tasks.register("dashboardTypecheck", Exec) {
-    description = "Type-checks the dashboard JS files opted in via `// @ts-check` (tsc --checkJs)."
+    description = "Type-checks the dashboard TypeScript source."
     dependsOn("dashboardNpmCi")
     workingDir = dashboardTestsDir
     commandLine "npm", "run", "typecheck"
@@ -147,6 +153,28 @@ tasks.register("verifyDashboardBundleSize") {
     }
 }
 
+tasks.register("verifyNoMigrationSourceStragglers") {
+    description = "Fails if production Java or dashboard source JavaScript returns after the migration."
+    inputs.files(productionJavaStragglers)
+    inputs.files(dashboardSourceJsStragglers)
+    doLast {
+        def productionJava = productionJavaStragglers.files.sort()
+        def dashboardSourceJs = dashboardSourceJsStragglers.files.sort()
+        if (!productionJava.empty || !dashboardSourceJs.empty) {
+            def details = []
+            if (!productionJava.empty) {
+                details << "Production Android source must stay Kotlin-only; found: " +
+                        productionJava.collect { it.path }.join(", ")
+            }
+            if (!dashboardSourceJs.empty) {
+                details << "Dashboard behavior source must stay TypeScript-only; found: " +
+                        dashboardSourceJs.collect { it.path }.join(", ")
+            }
+            throw new GradleException(details.join("\n"))
+        }
+    }
+}
+
 tasks.register("verifyActiveApp") {
     description = "Runs the full local validation suite for the active Android app."
     dependsOn(
@@ -160,6 +188,7 @@ tasks.register("verifyActiveApp") {
             "dashboardTest",
             "dashboardE2e",
             "verifyDashboardBundleSize",
+            "verifyNoMigrationSourceStragglers",
             "verifyGeneratedDashboardClean")
 }
 
@@ -171,6 +200,7 @@ subprojects {
                     rootProject.tasks.named("dashboardLint"),
                     rootProject.tasks.named("dashboardTypecheck"),
                     rootProject.tasks.named("verifyDashboardBundleSize"),
+                    rootProject.tasks.named("verifyNoMigrationSourceStragglers"),
                     rootProject.tasks.named("verifyGeneratedDashboardClean"))
         }
     }

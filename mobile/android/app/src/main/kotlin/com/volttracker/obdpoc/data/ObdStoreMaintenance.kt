@@ -9,10 +9,8 @@ import java.io.File
 /** Database maintenance: full-store reset, WAL checkpoint, and on-disk path lookup. */
 class ObdStoreMaintenance(
     private val context: Context,
-    helper: Any,
+    private val helper: VoltTrackerDb,
 ) {
-    private val helper = helper as VoltTrackerDb
-
     fun clearAllData() {
         val db = helper.writableDatabase
         db.transaction {

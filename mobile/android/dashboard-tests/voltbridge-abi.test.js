@@ -7,8 +7,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { loadDashboard } from './setup/load-dashboard.js';
 import { createVoltBridgeFixture } from './setup/voltbridge.fixture.js';
 
-// Frozen list of method names actions.js MUST expose on window.VoltTrackerNative.
-// Keep in sync with the literal object at the bottom of actions.js.
+// Frozen list of method names actions.ts MUST expose on window.VoltTrackerNative.
+// Keep in sync with the literal object at the bottom of actions.ts.
 const NATIVE_METHODS = ['setDevices', 'setHistory', 'setStatus', 'setStorage', 'setAppState', 'updateTelemetry'];
 
 describe('window.VoltTrackerNative ABI', () => {

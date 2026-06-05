@@ -1,7 +1,7 @@
 // Ambient declarations for the globals the dashboard IIFEs share (I3).
 //
-// The dashboard is not a module graph: each js/*.js file is an IIFE that hangs its
-// API off `window.VoltDashboard` (aliased `VD`) and talks to the native side via
+// The dashboard source is bundled into classic IIFEs that hang their
+// API off `window.VoltDashboard` (aliased `VD`) and talk to the native side via
 // `window.VoltTrackerAndroid`. These shapes are concrete interfaces (not `any`) so
 // that `noImplicitAny` and `strictNullChecks` can both stay ON: every cross-file
 // `VD.<name>` and bridge call is type-checked against a real signature.
@@ -11,7 +11,7 @@
 // connection-* files, loaded in order by index.html) have all attached their members
 // by the time any user-triggered call runs, so their API is declared REQUIRED. Only
 // genuinely-absent-at-call-time members stay optional: `bridge` is null outside the
-// WebView, and the dtc-lookup.js / dtc-causes.js members exist only after the lazy
+// WebView, and the dtc-lookup.ts / dtc-causes.ts members exist only after the lazy
 // `ensureDtcData()` load resolves (call sites guard with `dtcDataLoaded()`).
 
 export {};
@@ -38,7 +38,7 @@ interface VoltRoute {
   [key: string]: any;
 }
 
-/** Result of a DTC lookup (dtc-lookup.js `dtcInfo`) — shape mirrors that function exactly. */
+/** Result of a DTC lookup (dtc-lookup.ts `dtcInfo`) — shape mirrors that function exactly. */
 interface VoltDtcInfo {
   code: string;
   description: string | null;
@@ -62,12 +62,12 @@ declare global {
 
   /**
    * Shared dashboard namespace every IIFE extends. Members are attached across
-   * core.js (most helpers), telemetry.js, panels.js, map.js, scrubber.js,
-   * drive.js, dtc-lookup.js and dtc-causes.js. Eager-script members are required;
+   * core.ts (most helpers), telemetry.ts, panels.ts, map.ts, scrubber.ts,
+   * drive.ts, dtc-lookup.ts and dtc-causes.ts. Eager-script members are required;
    * the lazy dtc-* members are optional (see file header).
    */
   interface VoltDashboard {
-    // ----- core.js -----------------------------------------------------------
+    // ----- core.ts -----------------------------------------------------------
     /** Dashboard -> native bridge handle (null when running outside the WebView). */
     bridge: VoltBridge | null;
     /** `document.getElementById` wrapper. */
@@ -116,7 +116,7 @@ declare global {
     relativeTime(value: unknown): string;
     realViewMeta: Record<string, [string, string]>;
 
-    // ----- telemetry.js ------------------------------------------------------
+    // ----- telemetry.ts ------------------------------------------------------
     setStatus(payload: VoltStatus): void;
     setAppState(payload: unknown): void;
     updateTelemetry(payload: VoltPayload): void;
@@ -131,7 +131,7 @@ declare global {
     formatBytes(value: unknown): string;
     dbRowCount(storage: unknown): number;
 
-    // ----- panels.js ---------------------------------------------------------
+    // ----- panels.ts ---------------------------------------------------------
     setStorage(payload: unknown): void;
     loadTrips(): void;
     loadInsights(): void;
@@ -141,30 +141,30 @@ declare global {
     updateDiagnosticCodeUi(): void;
     enrichRouteEff(route: VoltRoute): void;
 
-    // ----- map.js ------------------------------------------------------------
+    // ----- map.ts ------------------------------------------------------------
     renderMap(): void;
     loadSampleData(): void;
     haversineMetersJs(lat1: number, lng1: number, lat2: number, lng2: number): number;
     /** Resolve the route for the currently-selected map session from a storage payload. */
     selectedMapRoute(storage: any): VoltRoute;
 
-    // ----- scrubber.js -------------------------------------------------------
+    // ----- scrubber.ts -------------------------------------------------------
     renderScrubber(route: VoltRoute): void;
     hideScrubber(): void;
     scrubberAttachMap(map: any): void;
     scrubAtLatLng(lat: number, lng: number): void;
 
-    // ----- drive.js ----------------------------------------------------------
+    // ----- drive.ts ----------------------------------------------------------
     renderDriveLive(): void;
 
-    // ----- dtc-lookup.js / dtc-causes.js (lazy: present only after ensureDtcData) ----
+    // ----- dtc-lookup.ts / dtc-causes.ts (lazy: present only after ensureDtcData) ----
     dtcInfo?(code: string): VoltDtcInfo | null;
     dtcSampleCodes?: any[];
     dtcLookupCodes?: ReadonlyArray<string>;
     dtcLookupSize?: number;
     DTC_CAUSES?: Record<string, any>;
 
-    // ----- actions.js / troubleshooter.js ------------------------------------
+    // ----- actions.ts / troubleshooter.ts ------------------------------------
     actions: Record<string, any>;
     troubleshooter: Record<string, any>;
 
@@ -239,7 +239,7 @@ declare global {
     __VoltDashboardLoadScript?: (src: string) => unknown;
     /** Demo telemetry fixture factory (demo-data.ts source, shipped as demo-data.js). */
     VoltDashboardDemoData?: (() => any) | any;
-    /** Interval handle for the demo-preview ticker (actions.js). */
+    /** Interval handle for the demo-preview ticker (actions.ts). */
     __voltDemoTimer?: ReturnType<typeof setInterval> | null;
   }
 

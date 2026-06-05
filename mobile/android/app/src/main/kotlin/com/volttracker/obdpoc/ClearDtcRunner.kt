@@ -19,10 +19,8 @@ import java.util.Locale
  */
 class ClearDtcRunner(
     private val service: ObdService,
-    engine: Any?,
+    private val engine: ObdPollingEngine,
 ) {
-    private val engine = engine as ObdPollingEngine
-
     @Throws(IOException::class)
     fun run() {
         service.broadcastStatus("clearing-codes", "Sending OBD-II Mode 04 (clear DTCs)...", false)

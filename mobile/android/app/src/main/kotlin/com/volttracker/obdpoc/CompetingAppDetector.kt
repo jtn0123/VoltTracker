@@ -16,12 +16,10 @@ import java.util.LinkedHashSet
  */
 open class CompetingAppDetector(
     private val packageManager: PackageManager?,
-    service: Any?,
-    recorder: Any?,
+    private val service: ObdService?,
+    private val recorder: SessionRecorder?,
     ownPackageName: String?,
 ) {
-    private val service = service as? ObdService
-    private val recorder = recorder as? SessionRecorder
     private val ownPackageName = ownPackageName ?: ""
 
     /**

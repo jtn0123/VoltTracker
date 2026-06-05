@@ -18,8 +18,7 @@ spotless {
         // Android production code lives in src/main/kotlin. ktlint enforces the official Kotlin
         // style so the spotlessCheck CI gate covers Kotlin the same way it covers Java tests and
         // the dashboard TypeScript.
-        target "src/main/java/**/*.kt", "src/main/kotlin/**/*.kt",
-               "src/test/java/**/*.kt", "src/test/kotlin/**/*.kt"
+        target "src/main/kotlin/**/*.kt", "src/test/java/**/*.kt"
         ktlint("1.5.0")
         trimTrailingWhitespace()
         endWithNewline()
@@ -28,8 +27,8 @@ spotless {
         // Only the HTML partials/template. (Spotless globs don't expand `{a,b}` braces, so the
         // historical `assets/dashboard/**/*.{js,css,html}` target only ever matched nothing — the
         // dashboard source/CSS were never Spotless-formatted, just ESLint-linted + authored. The
-        // TypeScript now lives in dashboard-src/js and assets/dashboard/js is the built, minified bundle — neither
-        // should be prettier-reformatted here.)
+        // TypeScript lives in dashboard-src/js and assets/dashboard/js is the built, minified
+        // bundle — neither should be prettier-reformatted here.)
         target "src/main/dashboard-src/**/*.html"
         prettier("3.8.3")
         trimTrailingWhitespace()

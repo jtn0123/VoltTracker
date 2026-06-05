@@ -1,4 +1,4 @@
-// drive.js — Drive-tab live polish (chip strip + SVG charts).
+// drive.ts — Drive-tab live polish (chip strip + SVG charts).
 // Tests the public surface (renderDriveLive / renderDriveNowChips and the
 // individual draw* functions) using the minimal DOM fixture and the shared
 // loadDashboard helper.
@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
-// Chart hosts + micro-card headers drive.js touches. Layered on top of
+// Chart hosts + micro-card headers drive.ts touches. Layered on top of
 // REQUIRED_DOM via the loader's extraDom option.
 const DRIVE_EXTRA_DOM = `
   <div id="driveNowChips"></div>
@@ -17,7 +17,7 @@ const DRIVE_EXTRA_DOM = `
   <span id="socMicroTag" data-tone="idle" data-kind="soc">%</span>
 `;
 
-describe('drive.js', () => {
+describe('drive.ts', () => {
   beforeEach(async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;
@@ -139,7 +139,7 @@ describe('drive.js', () => {
   it('resize handler debounces multiple resize events into one pending timer', () => {
     vi.useFakeTimers();
     try {
-      // 5 rapid resize events. drive.js's handler calls clearTimeout(resizeTimer)
+      // 5 rapid resize events. drive.ts's handler calls clearTimeout(resizeTimer)
       // before scheduling a fresh setTimeout, so the COUNT of pending resize-driven
       // timers should saturate at 1 (per registered handler) regardless of how many
       // events fired — not grow to 5. After advancing past the debounce window,
@@ -147,7 +147,7 @@ describe('drive.js', () => {
       // long-running interval baseline is.
       //
       // We can't assert an exact pending-timer count after the burst because
-      // multiple modules (drive.js, panels.js, etc.) each install their own resize
+      // multiple modules (drive.ts, panels.ts, etc.) each install their own resize
       // debouncer and we don't know how many are loaded in this fixture. What we
       // CAN assert is: after the burst + the debounce window expires, the timer
       // count returns to whatever it was before the burst started. A leaky

@@ -12,16 +12,17 @@ const VD = (window.VoltDashboard = window.VoltDashboard || ({} as VoltDashboard)
 const bridge = window.VoltTrackerAndroid || null;
 const el = (id: string) => document.getElementById(id);
 
-function safeCall(method: keyof VoltBridge, ...args: any[]) {
+function safeCall(method: keyof VoltBridge, ...args: unknown[]): unknown {
   const fn = bridge ? bridge[method] : null;
-  if (typeof fn !== "function") return;
+  if (typeof fn !== "function") return undefined;
   try {
     // Spread-applying a union of method signatures isn't expressible without a
     // cast; the typeof-function guard above is the real runtime safety check.
-    return (fn as (...a: any[]) => any)(...args);
+    return (fn as (...a: unknown[]) => unknown)(...args);
   } catch (ignored) {
     // Bridge calls are fire-and-forget; failures surface via the status
     // pipeline rather than throwing into the dashboard.
+    return undefined;
   }
 }
 

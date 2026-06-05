@@ -8,10 +8,8 @@ import org.json.JSONObject
  */
 class DemoPollingLoop(
     private val service: ObdService,
-    engine: Any,
+    private val engine: ObdPollingEngine,
 ) {
-    private val engine = engine as ObdPollingEngine
-
     fun run() {
         service.broadcastStatus("connected", "Demo telemetry is running without an OBD adapter.", false)
         val start = System.currentTimeMillis()

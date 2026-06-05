@@ -5,16 +5,16 @@
 // preserved exactly as-is — those names are part of the ABI.
 
   type DashboardData = {
-    trips: any[];
-    sessions: any[];
-    hourly: any[];
-    insights: any[];
+    trips: unknown[];
+    sessions: unknown[];
+    hourly: unknown[];
+    insights: unknown[];
     demoLoaded: boolean;
   };
 
   type DemoDataCallback = (error: Error | null, data: DashboardData) => void;
 
-  type HistoryDevice = Record<string, any> & {
+  type HistoryDevice = Record<string, unknown> & {
     address?: string;
     name?: string;
     candidate?: boolean;
@@ -155,12 +155,17 @@
     )) : [];
   }
 
-  function applyDemoData(source: any) {
+  function asRecord(value: unknown): Record<string, unknown> {
+    return value != null && typeof value === "object" ? value as Record<string, unknown> : {};
+  }
+
+  function applyDemoData(source: unknown) {
     const next = typeof source === "function" ? source() : source;
-    data.trips = cloneArray(next && next.trips);
-    data.sessions = cloneArray(next && next.sessions);
-    data.hourly = cloneArray(next && next.hourly);
-    data.insights = cloneArray(next && next.insights);
+    const record = asRecord(next);
+    data.trips = cloneArray(record.trips);
+    data.sessions = cloneArray(record.sessions);
+    data.hourly = cloneArray(record.hourly);
+    data.insights = cloneArray(record.insights);
     data.demoLoaded = true;
     return data;
   }
@@ -429,11 +434,11 @@
 
   function updateViewHeading() {
     // Demo uses the same headings as real — it only simulates numbers, it doesn't relabel the UI.
-    const meta = realViewMeta[state.view] || realViewMeta.drive;
+    const meta = realViewMeta[String(state.view)] || realViewMeta.drive;
     setText("screenKicker", meta[0]);
     setText("screenTitle", meta[1]);
     const icon = el("screenTitleIcon");
-    if (icon) icon.setAttribute("d", viewIconPaths[state.view] || viewIconPaths.drive);
+    if (icon) icon.setAttribute("d", viewIconPaths[String(state.view)] || viewIconPaths.drive);
   }
 
   function setDemoActive(active: unknown, detail?: string) {

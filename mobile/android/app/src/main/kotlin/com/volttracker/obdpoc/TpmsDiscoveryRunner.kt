@@ -11,10 +11,8 @@ import java.util.LinkedHashMap
  */
 class TpmsDiscoveryRunner(
     private val service: ObdService,
-    engine: Any,
+    private val engine: ObdPollingEngine,
 ) {
-    private val engine = engine as ObdPollingEngine
-
     @Throws(IOException::class)
     fun run(
         adapterAddress: String,

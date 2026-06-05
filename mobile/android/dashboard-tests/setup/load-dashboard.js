@@ -100,7 +100,7 @@ const REQUIRED_DOM = `
   <div id="dbState"></div>
 
   <!-- Live telemetry tiles. Source of truth is the data-live-tile attribute
-       on the partial element; telemetry.js derives its LIVE_TILE_IDS from it.
+       on the partial element; telemetry.ts derives its LIVE_TILE_IDS from it.
        Mirror the production attribute here so the stale-indicator test
        exercises the same code path it does in the WebView. -->
   <div id="speedValue" data-live-tile="true"></div>
@@ -276,7 +276,7 @@ const REQUIRED_DOM = `
 `;
 
 // jsdom ships with no Canvas implementation, so HTMLCanvasElement.getContext
-// returns null and telemetry.js#drawTrace blows up at `ctx.scale(...)`. Patch
+// returns null and telemetry.ts#drawTrace blows up at `ctx.scale(...)`. Patch
 // a no-op 2D context onto the prototype just for the test runtime — the tile
 // drawing path is irrelevant to what we're checking here. Idempotent so
 // multiple loadDashboard() calls per file are safe.

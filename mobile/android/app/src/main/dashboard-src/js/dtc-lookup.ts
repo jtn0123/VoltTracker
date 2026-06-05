@@ -3706,7 +3706,7 @@
     U300E: "Ignition input on",
   };
 
-  function normalize(code: any) {
+  function normalize(code: unknown) {
     return String(code || "")
       .toUpperCase()
       .trim();
@@ -3714,7 +3714,7 @@
 
   // Falls back to a category description based on the SAE prefix, so an
   // unrecognised code still gets a useful hint (e.g. P03xx => Ignition/Misfire).
-  function categoryHint(code: any) {
+  function categoryHint(code: unknown) {
     const key = normalize(code);
     if (!key || key.length < 4) return null;
     const head = key.charAt(0);
@@ -3743,7 +3743,7 @@
     return null;
   }
 
-  function dtcInfo(code: any) {
+  function dtcInfo(code: unknown) {
     const key = normalize(code);
     const empty = { code: "", description: null, known: false, category: null, causes: null, severity: null };
     if (!key) return empty;
@@ -3758,7 +3758,7 @@
     return { code: key, description: null, known: false, category: categoryTag || categoryHint(key), causes, severity };
   }
 
-  function dtcSearchUrl(code: any) {
+  function dtcSearchUrl(code: unknown) {
     const key = normalize(code);
     const q = encodeURIComponent((key || "OBD-II") + " Chevy Volt DTC");
     return "https://www.google.com/search?q=" + q;

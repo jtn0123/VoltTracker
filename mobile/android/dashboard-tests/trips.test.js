@@ -1,10 +1,10 @@
-// trips.js/panels.js — real trip row rendering.
+// panels.ts — real trip row rendering.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 import { createVoltBridgeFixture } from './setup/voltbridge.fixture.js';
 
-describe('panels.js — trip route rows', () => {
+describe('panels.ts — trip route rows', () => {
   beforeEach(async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;

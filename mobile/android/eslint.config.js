@@ -1,5 +1,5 @@
 // ESLint flat config (I1) — placed at mobile/android/ so it's the root for the dashboard
-// JS/TS files at app/src/main/dashboard-src/js/**. ESLint will not match files outside
+// TypeScript source at app/src/main/dashboard-src/js/**. ESLint will not match files outside
 // the directory containing the config, so the config lives one level above both `app/` and
 // `dashboard-tests/`.
 //
@@ -21,7 +21,7 @@ export default [
   {
     // Lint only the production dashboard source. The vendored Leaflet bundle under lib/ is
     // intentionally excluded — it's third-party code we don't own.
-    files: ['app/src/main/dashboard-src/js/**/*.{js,ts}'],
+    files: ['app/src/main/dashboard-src/js/**/*.ts'],
     ignores: ['app/src/main/assets/dashboard/lib/**/*'],
     plugins: {
       '@typescript-eslint': tseslint.plugin,

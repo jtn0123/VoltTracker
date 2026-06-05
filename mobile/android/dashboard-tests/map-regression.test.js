@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
-describe('map.js — route selection regressions', () => {
+describe('map.ts — route selection regressions', () => {
   beforeEach(async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;

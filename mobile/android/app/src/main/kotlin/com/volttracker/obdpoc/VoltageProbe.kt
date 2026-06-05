@@ -11,10 +11,8 @@ import java.util.Locale
  * bring the link up. Runs exactly once per successful init.
  */
 class VoltageProbe(
-    service: Any?,
+    private val service: ObdService?,
 ) {
-    private val service = service as? ObdService
-
     /** Functional handle to the engine's IO without exposing the full engine surface. */
     fun interface Sender {
         @Throws(IOException::class)

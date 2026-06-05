@@ -7,7 +7,7 @@
 // exactly the regressions this file guards:
 //
 //   - a CSS change that collapses the chart container to 0px width silently kills every chart
-//     (drive.js bails on `if (!w) return;`), and jsdom would never notice.
+//     (drive.ts bails on `if (!w) return;`), and jsdom would never notice.
 //   - a broken canvas draw path renders a blank trace even though dataset.traceState says "ready".
 //
 // We drive the same public render entry points the live telemetry loop uses (renderDriveLive and

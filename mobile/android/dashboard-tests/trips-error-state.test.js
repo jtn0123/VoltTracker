@@ -1,4 +1,4 @@
-// Regression pin for C3: panels.js#loadTrips / #loadInsights must surface a
+// Regression pin for C3: panels.ts#loadTrips / #loadInsights must surface a
 // native read failure through VD.setStatus({state:"blocked"}) (+ logClientError)
 // rather than silently rendering the empty state as if the read had succeeded.
 //
@@ -34,7 +34,7 @@ const insightsError = JSON.stringify({
   message: 'Could not read vehicle insights.',
 });
 
-describe('panels.js trips/insights error surfacing (C3)', () => {
+describe('panels.ts trips/insights error surfacing (C3)', () => {
   it('routes a native getTrips error through setStatus(blocked) + logClientError', async () => {
     const bridge = createVoltBridgeFixture({
       logClientError: vi.fn(),

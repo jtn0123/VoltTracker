@@ -16,10 +16,8 @@ import java.io.IOException
  */
 class DiagnosticScanRunner(
     private val service: ObdService,
-    engine: Any?,
+    private val engine: ObdPollingEngine,
 ) {
-    private val engine = engine as ObdPollingEngine
-
     @Throws(IOException::class)
     fun run() {
         service.broadcastStatus(

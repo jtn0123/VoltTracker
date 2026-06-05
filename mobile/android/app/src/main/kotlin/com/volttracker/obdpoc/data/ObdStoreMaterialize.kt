@@ -14,10 +14,8 @@ import java.util.Collections
 
 /** Read and write paths used exclusively by the session materializers. */
 class ObdStoreMaterialize(
-    helper: Any,
+    private val helper: VoltTrackerDb,
 ) {
-    private val helper = helper as VoltTrackerDb
-
     fun readLocationSamples(sessionId: Long): List<LocationSample> {
         val rows = ArrayList<LocationSample>()
         val db = helper.readableDatabase

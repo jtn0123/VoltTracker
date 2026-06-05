@@ -10,7 +10,7 @@
 // Determinism:
 //  - The clock is frozen (openDashboard fixedTime) so "2h ago" labels and the
 //    demo's now-relative timestamps don't drift the baseline.
-//  - The demo data itself is deterministic (no Math.random; see map.js).
+//  - The demo data itself is deterministic (no Math.random; see map.ts).
 //  - Canvas traces (drive charts) and the Leaflet map (network tiles, live
 //    marker) are non-deterministic, so they're masked — the baseline still
 //    locks the surrounding card/text/SVG layout around them.

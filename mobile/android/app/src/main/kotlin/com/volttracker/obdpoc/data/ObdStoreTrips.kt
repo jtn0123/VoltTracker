@@ -11,10 +11,8 @@ import java.util.Collections
  * Trip, route and per-session review projections.
  */
 class ObdStoreTrips(
-    helper: Any,
+    private val helper: VoltTrackerDb,
 ) {
-    private val helper = helper as VoltTrackerDb
-
     fun tripsJson(limit: Int): JSONArray {
         val payload = JSONArray()
         val db = helper.readableDatabase

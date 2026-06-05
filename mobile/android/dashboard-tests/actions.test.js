@@ -1,6 +1,6 @@
-// Behavioral coverage for actions.js.
+// Behavioral coverage for actions.ts.
 //
-// actions.js wires every "click" path in the dashboard to a bridge call.
+// actions.ts wires every "click" path in the dashboard to a bridge call.
 // These tests poke the exported functions (VD.actions.*) directly so we
 // can drive the bridge fixture without having to simulate DOM clicks.
 //
@@ -30,7 +30,7 @@ async function freshLoad(bridge) {
   return loadDashboard({ bridge });
 }
 
-describe('actions.js — bridge dispatch', () => {
+describe('actions.ts — bridge dispatch', () => {
   let bridge;
   let VD;
   let button;
@@ -195,8 +195,8 @@ describe('actions.js — bridge dispatch', () => {
   });
 });
 
-describe('actions.js — withBusy guard (double-tap suppression)', () => {
-  // The guard lives inside actions.js as a closure (`withBusy`). It's
+describe('actions.ts — withBusy guard (double-tap suppression)', () => {
+  // The guard lives inside actions.ts as a closure (`withBusy`). It's
   // not directly exported, but every guard-protected entry point uses it,
   // so we drive it through connectSelected with a fake button passed via
   // the underlying handleAction path.
@@ -264,7 +264,7 @@ describe('actions.js — withBusy guard (double-tap suppression)', () => {
   });
 });
 
-describe('actions.js — desktop drag scrolling', () => {
+describe('actions.ts — desktop drag scrolling', () => {
   // Capture the original descriptors so the dimension overrides below don't
   // leak into later suites (vi.restoreAllMocks() does not undo defineProperty).
   let originalInnerHeight;
@@ -331,7 +331,7 @@ describe('actions.js — desktop drag scrolling', () => {
   });
 });
 
-describe('actions.js — map tile controls', () => {
+describe('actions.ts — map tile controls', () => {
   beforeEach(async () => {
     vi.useRealTimers();
     document.body.innerHTML = '';
@@ -359,7 +359,7 @@ describe('actions.js — map tile controls', () => {
   });
 });
 
-describe('actions.js — browser preview controls', () => {
+describe('actions.ts — browser preview controls', () => {
   beforeEach(async () => {
     vi.useRealTimers();
     document.body.innerHTML = '';

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
-// Keys core.js seeds into VD.state at IIFE time. If a refactor renames one,
+// Keys core.ts seeds into VD.state at IIFE time. If a refactor renames one,
 // this test fires before behavioral bugs do.
 const REQUIRED_STATE_KEYS = [
   'view',
@@ -29,7 +29,7 @@ const REQUIRED_STATE_KEYS = [
   'telemetry',
 ];
 
-// Telemetry sub-shape from core.js. Same justification — the Android side
+// Telemetry sub-shape from core.ts. Same justification — the Android side
 // rebuilds telemetry objects in JSON, and the JS side fans them out into
 // these slots.
 const REQUIRED_TELEMETRY_KEYS = [

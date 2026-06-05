@@ -12,10 +12,8 @@ import java.util.Locale
  * never the raw VIN.
  */
 class ObdStoreVehicles(
-    helper: Any,
+    private val helper: VoltTrackerDb,
 ) {
-    private val helper = helper as VoltTrackerDb
-
     fun upsertVehicleFromVin(vin: String?): Long {
         if (vin == null || vin.length != 17) {
             return 0L

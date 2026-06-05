@@ -16,7 +16,7 @@ describe('stale-tile indicator', () => {
   beforeEach(async () => {
     // Fake timers must be installed before loadDashboard so the
     // setInterval(applyStaleIndicator, 1000) registered at the bottom of
-    // telemetry.js binds to the fake clock.
+    // telemetry.ts binds to the fake clock.
     vi.useFakeTimers();
     document.body.innerHTML = '';
     delete window.VoltDashboard;

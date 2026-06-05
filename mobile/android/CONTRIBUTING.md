@@ -100,9 +100,9 @@ with a real signature (not left optional).
 The Android module is **Kotlin-first**. Production Android source is now Kotlin-complete,
 and existing Java tests remain as legacy coverage unless they are being materially reworked.
 
-- **Write new classes in Kotlin** (`.kt`) — put them in `app/src/main/kotlin/…`. Tests go in
-  `app/src/test/java/…` or `app/src/test/kotlin/…`. No Kotlin plugin is applied — AGP 9.0+
-  compiles Kotlin via its built-in support.
+- **Write new classes in Kotlin** (`.kt`) — put them in `app/src/main/kotlin/…`. Tests stay in
+  `app/src/test/java/…` per the repo test-location rule, even if a future test file is Kotlin.
+  No Kotlin plugin is applied — AGP 9.0+ compiles Kotlin via its built-in support.
 - Bytecode target is Java 17, set once via `compileOptions` in `app/build.gradle`; AGP's
   built-in Kotlin inherits the same `jvmTarget` from it automatically.
 - **Formatting:** Spotless runs ktlint on `.kt` (`./gradlew :app:spotlessApply` to fix,

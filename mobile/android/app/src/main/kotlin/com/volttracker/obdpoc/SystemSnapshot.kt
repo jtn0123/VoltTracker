@@ -28,10 +28,9 @@ object SystemSnapshot {
     @JvmStatic
     fun collect(
         ctx: Context?,
-        summaryStore: Any?,
+        summaryStore: SessionSummaryStore?,
     ): JSONObject {
         val output = JSONObject()
-        val store = summaryStore as? SessionSummaryStore
         try {
             // -- Android version --
             output.put("androidSdk", Build.VERSION.SDK_INT)
@@ -58,9 +57,9 @@ object SystemSnapshot {
             output.put("processUptimeMs", SystemClock.elapsedRealtime())
 
             // -- Last successful session timestamp --
-            if (store != null) {
+            if (summaryStore != null) {
                 var lastOkMs = 0L
-                for (summary in store.getRecent(20)) {
+                for (summary in summaryStore.getRecent(20)) {
                     if (SessionSummary.OUTCOME_SUCCESS == summary.outcome && summary.endMs > lastOkMs) {
                         lastOkMs = summary.endMs
                     }

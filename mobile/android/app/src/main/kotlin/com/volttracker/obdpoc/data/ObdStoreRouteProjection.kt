@@ -65,7 +65,8 @@ object ObdStoreRouteProjection {
             }
             for (window in DriveWindowDetector.windowsForSession(db, session)) {
                 val route = routeForSession(db, session, pointLimit, window.startedAtMs, window.endedAtMs, window.routeKey())
-                if (route.optJSONArray("points")!!.length() < 2) {
+                val points = route.optJSONArray("points")
+                if (points == null || points.length() < 2) {
                     continue
                 }
                 payload.put(route)

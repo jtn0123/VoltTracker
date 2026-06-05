@@ -11,16 +11,26 @@ type RecentSession = {
   outcome?: string;
 };
 
+type LowVoltageStatus = {
+  lastVoltage?: number;
+};
+
+type StatusHandler = (payload: unknown) => unknown;
+
 const VD = (window.VoltDashboard = window.VoltDashboard || ({} as VoltDashboard));
 const bridge = window.VoltTrackerAndroid || null;
 const el = (id: string) => document.getElementById(id);
+
+function isRecentSession(value: unknown): value is RecentSession {
+  return value != null && typeof value === "object";
+}
 
 function parseSessions(n: number): RecentSession[] {
   if (!bridge || typeof bridge.getRecentSessions !== "function") return [];
   try {
     const raw = bridge.getRecentSessions(n);
-    const arr = JSON.parse(raw || "[]");
-    return Array.isArray(arr) ? arr : [];
+    const arr: unknown = JSON.parse(raw || "[]");
+    return Array.isArray(arr) ? arr.filter(isRecentSession) : [];
   } catch (ignored) {
     return [];
   }
@@ -65,7 +75,7 @@ function renderLastConnected() {
 }
 
 // Low-voltage hint keyed off the lastVoltage field on status payloads.
-function renderLowVoltageHint(status: any) {
+function renderLowVoltageHint(status: LowVoltageStatus | null | undefined) {
   const hint = el("lowVoltageHint");
   if (!hint || !status) return;
   const v = typeof status.lastVoltage === "number" ? status.lastVoltage : null;
@@ -96,14 +106,14 @@ function renderLowVoltageHint(status: any) {
 
 // Re-render on every status broadcast - session summaries can change when
 // a session ends, and lastVoltage updates inline.
-function noteStatus(payload: any) {
+function noteStatus(payload: LowVoltageStatus | null | undefined) {
   renderLastConnected();
   renderLowVoltageHint(payload || {});
 }
 
 function installStatusObserver() {
-  const wrap = (prior: ((payload: any) => any) | undefined) =>
-    function (payload: any) {
+  const wrap = (prior: StatusHandler | undefined) =>
+    function (payload: unknown) {
       let result;
       if (typeof prior === "function") {
         result = prior(payload);
@@ -115,10 +125,10 @@ function installStatusObserver() {
         // Observer must never break the underlying setStatus call.
       }
       return result;
-    };
-  VD.setStatus = wrap(VD.setStatus);
+  };
+  VD.setStatus = wrap(VD.setStatus as StatusHandler | undefined);
   if (window.VoltTrackerNative) {
-    window.VoltTrackerNative.setStatus = wrap(window.VoltTrackerNative.setStatus);
+    window.VoltTrackerNative.setStatus = wrap(window.VoltTrackerNative.setStatus as StatusHandler | undefined);
   }
 }
 

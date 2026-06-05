@@ -111,7 +111,7 @@ should reuse the stored configuration.
 #### Running pieces individually
 
 ```sh
-./gradlew :app:testDebugUnitTest                 # Java/Robolectric unit tests only
+./gradlew :app:testDebugUnitTest                 # JVM/Robolectric unit tests
 ./gradlew :app:jacocoTestReport                  # coverage report (build/reports/jacoco/)
 npm --prefix dashboard-tests run test:coverage   # dashboard Vitest + Istanbul coverage
 ```

@@ -39,10 +39,9 @@ import org.json.JSONObject
  */
 class BluetoothStateReporter(
     private val service: ObdService?,
-    sdpProbe: Any?,
+    private val sdpProbe: SdpProbe?,
 ) {
     private val receivers = BroadcastReceiverGroup()
-    private val sdpProbe = sdpProbe as? SdpProbe
 
     /** Address of the device the engine is currently attempting / using. Set in pre-flight. */
     @Volatile private var activeAddress: String? = null

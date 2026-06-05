@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 //
 // Scope note: CSP governs *resource loads* (scripts, images, fetch/XHR). It does NOT
 // govern user-initiated navigation, so the DTC "search Google" link strings in
-// core.js / dtc-lookup.js are intentionally out of scope here.
+// core.ts / dtc-lookup.ts are intentionally out of scope here.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD = resolve(HERE, '../app/src/main/assets/dashboard');
@@ -96,7 +96,7 @@ describe('dashboard content-security-policy', () => {
   });
 
   it('keeps every Leaflet tile URL within the CSP allowlist', () => {
-    // map.js builds the basemap + OSM-fallback tile URLs. Those are the actual
+    // map.ts builds the basemap + OSM-fallback tile URLs. Those are the actual
     // img/connect resources CSP governs; a host here that isn't in the allowlist
     // would be silently blocked on-device (blank map).
     const mapJs = readFileSync(sourceFor('map'), 'utf8');

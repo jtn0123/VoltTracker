@@ -24,7 +24,7 @@ describe('dashboard demo data', () => {
     delete window.VoltTrackerAndroid;
   });
 
-  it('keeps demo fixture rows out of core.js and the eager template', () => {
+  it('keeps demo fixture rows out of core.ts and the eager template', () => {
     const core = readFileSync(sourceFor('core'), 'utf8');
     const template = readFileSync(resolve(DASHBOARD_SRC, 'index.template.html'), 'utf8');
 
