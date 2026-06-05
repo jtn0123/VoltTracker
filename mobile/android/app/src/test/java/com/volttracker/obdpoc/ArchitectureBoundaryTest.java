@@ -47,34 +47,39 @@ public class ArchitectureBoundaryTest {
 
     @Test
     public void dataLayerDoesNotImportUiServiceOrEngineClasses() throws IOException {
-        Path dataDir =
-                sourceRoot()
-                        .resolve("com")
-                        .resolve("volttracker")
-                        .resolve("obdpoc")
-                        .resolve("data");
         List<String> violations = new ArrayList<>();
-        try (java.util.stream.Stream<Path> paths = Files.walk(dataDir)) {
-            paths.filter(path -> path.toString().endsWith(".java"))
-                    .forEach(
-                            path -> {
-                                try {
-                                    String source =
-                                            new String(
-                                                    Files.readAllBytes(path),
-                                                    StandardCharsets.UTF_8);
-                                    for (String forbidden : FORBIDDEN_DATA_LAYER_IMPORTS) {
-                                        if (source.contains(forbidden)) {
-                                            violations.add(
-                                                    sourceRoot().relativize(path)
-                                                            + " imports upward via "
-                                                            + forbidden);
+        for (Path sourceRoot : sourceRoots()) {
+            Path dataDir =
+                    sourceRoot
+                            .resolve("com")
+                            .resolve("volttracker")
+                            .resolve("obdpoc")
+                            .resolve("data");
+            if (!Files.isDirectory(dataDir)) {
+                continue;
+            }
+            try (java.util.stream.Stream<Path> paths = Files.walk(dataDir)) {
+                paths.filter(ArchitectureBoundaryTest::isSourceFile)
+                        .forEach(
+                                path -> {
+                                    try {
+                                        String source =
+                                                new String(
+                                                        Files.readAllBytes(path),
+                                                        StandardCharsets.UTF_8);
+                                        for (String forbidden : FORBIDDEN_DATA_LAYER_IMPORTS) {
+                                            if (source.contains(forbidden)) {
+                                                violations.add(
+                                                        displayPath(path)
+                                                                + " imports upward via "
+                                                                + forbidden);
+                                            }
                                         }
+                                    } catch (IOException ex) {
+                                        throw new AssertionError("Could not read " + path, ex);
                                     }
-                                } catch (IOException ex) {
-                                    throw new AssertionError("Could not read " + path, ex);
-                                }
-                            });
+                                });
+            }
         }
         assertTrue("Layering violations:\n" + String.join("\n", violations), violations.isEmpty());
     }
@@ -123,31 +128,70 @@ public class ArchitectureBoundaryTest {
 
     private static List<String> scanFilesForForbiddenReferences(
             List<String> fileNames, List<String> forbiddenReferences) throws IOException {
-        Path packageRoot = sourceRoot().resolve("com").resolve("volttracker").resolve("obdpoc");
         List<String> violations = new ArrayList<>();
 
         for (String fileName : fileNames) {
-            Path path = packageRoot.resolve(fileName);
+            Path path = sourcePath(fileName);
             String source = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
             for (String forbidden : forbiddenReferences) {
                 if (source.contains(forbidden)) {
-                    violations.add(sourceRoot().relativize(path) + " references " + forbidden);
+                    violations.add(displayPath(path) + " references " + forbidden);
                 }
             }
         }
         return violations;
     }
 
-    private static Path sourceRoot() {
-        Path fromAppProject = Paths.get("src/main/java");
-        if (Files.isDirectory(fromAppProject)) {
-            return fromAppProject;
+    private static Path sourcePath(String javaFileName) {
+        List<String> candidates = new ArrayList<>();
+        candidates.add(javaFileName);
+        if (javaFileName.endsWith(".java")) {
+            candidates.add(
+                    javaFileName.substring(0, javaFileName.length() - ".java".length()) + ".kt");
         }
-        Path fromAndroidRoot = Paths.get("app/src/main/java");
-        if (Files.isDirectory(fromAndroidRoot)) {
-            return fromAndroidRoot;
+
+        for (Path sourceRoot : sourceRoots()) {
+            Path packageRoot = sourceRoot.resolve("com").resolve("volttracker").resolve("obdpoc");
+            for (String candidate : candidates) {
+                Path path = packageRoot.resolve(candidate);
+                if (Files.isRegularFile(path)) {
+                    return path;
+                }
+            }
         }
-        throw new AssertionError(
-                "Could not locate Android source root from " + Paths.get("").toAbsolutePath());
+        throw new AssertionError("Could not locate Android source file " + javaFileName);
+    }
+
+    private static List<Path> sourceRoots() {
+        List<Path> roots = new ArrayList<>();
+        for (Path root :
+                Arrays.asList(
+                        Paths.get("src/main/java"),
+                        Paths.get("src/main/kotlin"),
+                        Paths.get("app/src/main/java"),
+                        Paths.get("app/src/main/kotlin"))) {
+            if (Files.isDirectory(root)) {
+                roots.add(root);
+            }
+        }
+        if (roots.isEmpty()) {
+            throw new AssertionError(
+                    "Could not locate Android source root from " + Paths.get("").toAbsolutePath());
+        }
+        return roots;
+    }
+
+    private static boolean isSourceFile(Path path) {
+        String name = path.toString();
+        return name.endsWith(".java") || name.endsWith(".kt");
+    }
+
+    private static String displayPath(Path path) {
+        for (Path sourceRoot : sourceRoots()) {
+            if (path.startsWith(sourceRoot)) {
+                return sourceRoot.relativize(path).toString();
+            }
+        }
+        return path.toString();
     }
 }
