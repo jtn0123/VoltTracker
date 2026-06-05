@@ -22,6 +22,24 @@
     connectCount?: number;
   };
 
+  function installLegacyWebViewPolyfills() {
+    const elementProto = typeof Element !== "undefined" ? Element.prototype : null;
+    if (elementProto && typeof elementProto.replaceChildren !== "function") {
+      Object.defineProperty(elementProto, "replaceChildren", {
+        configurable: true,
+        writable: true,
+        value: function replaceChildren(this: Element, ...nodes: Array<Node | string>) {
+          while (this.firstChild) this.removeChild(this.firstChild);
+          nodes.forEach((node) => {
+            this.appendChild(typeof node === "string" ? document.createTextNode(node) : node);
+          });
+        }
+      });
+    }
+  }
+
+  installLegacyWebViewPolyfills();
+
   const VD = (window.VoltDashboard = window.VoltDashboard || ({} as VoltDashboard));
   VD.bridge = window.VoltTrackerAndroid || null;
   VD.el = (id: string) => document.getElementById(id);

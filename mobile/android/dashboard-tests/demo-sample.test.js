@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
@@ -13,6 +13,10 @@ describe('demo sample data', () => {
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
     await loadDashboard();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('populates charge, battery, and signals so the demo exercises every tab', () => {
@@ -35,5 +39,21 @@ describe('demo sample data', () => {
     expect(
       document.querySelectorAll('#enhancedCapabilityList .enhanced-capability-item').length,
     ).toBeGreaterThan(0);
+  });
+
+  it('keeps the browser demo live GPS in the sample route region', () => {
+    vi.useFakeTimers();
+    const livePosition = vi.fn();
+    window.VoltDashboard.updateLivePosition = livePosition;
+
+    window.VoltDashboard.actions.runBrowserDemo();
+    vi.advanceTimersByTime(1000);
+
+    expect(livePosition).toHaveBeenCalled();
+    const [lat, lng] = livePosition.mock.calls.at(-1);
+    expect(lat).toBeGreaterThan(32.6);
+    expect(lat).toBeLessThan(32.9);
+    expect(lng).toBeGreaterThan(-117.3);
+    expect(lng).toBeLessThan(-116.8);
   });
 });

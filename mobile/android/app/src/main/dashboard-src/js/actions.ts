@@ -430,8 +430,9 @@
       // Electric power swings through regen (negative) so the regen state and
       // the negative half of the power meter are exercised too.
       const powerKw = gas ? 30 + Math.sin(t / 3) * 9 : 9 + Math.sin(t / 2.2) * 22;
-      const lat = 42.3601 + Math.sin(t / 40) * 0.012;
-      const lng = -71.0589 + Math.cos(t / 40) * 0.012;
+      const routeDrift = Math.sin(t / 40);
+      const lat = 32.80131 + routeDrift * 0.004;
+      const lng = -116.9513 - Math.abs(routeDrift) * 0.012;
       VD.updateTelemetry({
         source: "demo",
         connected: true,

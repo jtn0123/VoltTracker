@@ -64,7 +64,10 @@ const shared = {
   // adding ~2x the asset weight to the APK. Can be re-enabled (with a packaging exclude
   // for *.map) if on-device minified stack traces become a pain point.
   sourcemap: false,
-  target: "es2022",
+  // Keep the shipped syntax compatible with the oldest WebView we exercise in
+  // local/runtime validation. Android 9's WebView 66 cannot parse modern syntax
+  // such as optional chaining, even though desktop Chromium and jsdom can.
+  target: "chrome66",
   legalComments: "none",
   logLevel: "info",
 };

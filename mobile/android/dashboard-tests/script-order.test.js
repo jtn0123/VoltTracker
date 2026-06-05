@@ -1,9 +1,10 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 const DASHBOARD_HTML = resolve('../app/src/main/assets/dashboard/index.html');
+const DASHBOARD_JS = resolve('../app/src/main/assets/dashboard/js');
 const TEMPLATE_HTML = resolve('../app/src/main/dashboard-src/index.template.html');
 const BUILD_MJS = resolve('build.mjs');
 
@@ -57,5 +58,16 @@ describe('dashboard production script bundle', () => {
     expect(match).not.toBeNull();
     const order = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     expect(order).toEqual(EXPECTED_EAGER_ORDER);
+  });
+
+  it('ships syntax that Android 9 WebView can parse', () => {
+    const build = readFileSync(BUILD_MJS, 'utf8');
+    expect(build).toContain('target: "chrome66"');
+
+    for (const file of readdirSync(DASHBOARD_JS).filter((name) => name.endsWith('.js'))) {
+      const js = readFileSync(resolve(DASHBOARD_JS, file), 'utf8');
+      expect(js, `${file} must not ship optional chaining`).not.toMatch(/\?\./);
+      expect(js, `${file} must not ship nullish coalescing`).not.toMatch(/\?\?/);
+    }
   });
 });
