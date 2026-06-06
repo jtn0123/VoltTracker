@@ -71,12 +71,21 @@ type ChartPoint = {
     const status = state.status || {};
     const adapter = app.adapter || {};
     const t = state.telemetry || {};
-    const stateName = String(
-      session.state || status.state || ""
-    ).toLowerCase();
+    const statusName = String(status.state || "").toLowerCase();
+    const sessionName = String(session.state || "").toLowerCase();
+    const stateName = statusName || sessionName;
     const samples = Number(session.sampleCount || t.sampleCount || 0);
     const runtimeMs = Number(t.sessionMs || session.runtimeMs || 0);
     const distance = Number(state.sessionDistanceM || 0);
+    const hasLiveEvidence = Boolean(
+      samples ||
+      runtimeMs ||
+      distance ||
+      Number(state.lastSampleAt || 0) > 0 ||
+      (state.speedHistory || []).length ||
+      (state.powerHistory || []).length ||
+      (state.socHistory || []).length
+    );
 
     if (state.demoActive) {
       // Show live demo metrics so the chip feels alive — same shape as a real
@@ -91,21 +100,18 @@ type ChartPoint = {
       if (!meta.length) meta.push("preview data");
       return { tone: "demo", label: "Demo preview", meta: meta };
     }
-    if (
-      ["connected", "scanning", "scan-complete", "initializing"].includes(
-        stateName
-      ) ||
-      adapter.connected
-    ) {
+    if (stateName === "connecting" || stateName === "initializing") {
+      return { tone: "live", label: "Connecting…", meta: ["adapter handshake"] };
+    }
+    if (["connected", "scanning", "scan-complete"].includes(stateName)) {
+      if (!hasLiveEvidence) {
+        return { tone: "live", label: "Waiting for data", meta: ["adapter connected"] };
+      }
       const meta: string[] = [];
       if (samples) meta.push(samples.toLocaleString() + " samples");
       if (runtimeMs) meta.push(fmtDuration(runtimeMs));
       if (distance) meta.push((distance / 1609.34).toFixed(1) + " mi");
-      if (!meta.length) meta.push("awaiting first sample");
       return { tone: "live", label: "Recording", meta: meta };
-    }
-    if (stateName === "connecting") {
-      return { tone: "live", label: "Connecting…", meta: ["adapter handshake"] };
     }
     if (adapter.remembered || (state.lastDevice || {}).address) {
       const name = adapter.name || (state.lastDevice || {}).name || "adapter";

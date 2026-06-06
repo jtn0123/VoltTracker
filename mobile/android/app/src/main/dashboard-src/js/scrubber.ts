@@ -372,7 +372,7 @@
   }
 
   // V2 instrument stack — one thin track per signal, shared cursor.
-  function drawScrubTrack(w: number, key: keyof ScrubPoint, color: string, fill: string, label: string, terrain: boolean) {
+  function drawScrubTrack(w: number, key: keyof ScrubPoint, color: string, fill: string, _label: string, terrain: boolean) {
     const h = 52;
     const padT = 14;
     const padB = 8;
@@ -404,11 +404,7 @@
       line +
       '" fill="none" stroke="' +
       color +
-      '" stroke-width="1.9" stroke-linejoin="round"/>' +
-      '<text x="8" y="13" fill="#8b8c98" font-size="9" font-weight="700" ' +
-      'font-family="ui-monospace,monospace" letter-spacing="0.08em">' +
-      label +
-      "</text>";
+      '" stroke-width="1.9" stroke-linejoin="round"/>';
     return scrubSvg(w, h, inner);
   }
 
@@ -450,9 +446,9 @@
     const node = el("scrubReadout");
     if (!node) return;
     node.replaceChildren(
-      scrubChip("Dist mi", s.distMi.toFixed(1)),
-      scrubChip("Speed mph", Math.round(s.mph), { color: SCRUB_SPEED }),
-      scrubChip("Elev ft", scrubHasElev ? Math.round(s.elevFt) : "--", {
+      scrubChip("Distance", s.distMi.toFixed(1) + " mi"),
+      scrubChip("Speed", Math.round(s.mph) + " mph", { color: SCRUB_SPEED }),
+      scrubChip("Elevation", scrubHasElev ? Math.round(s.elevFt) + " ft" : "--", {
         color: scrubHasElev ? SCRUB_ELEV : null
       }),
       scrubChip("Grade", scrubHasElev ? scrubGrade(s.grade) : "--"),
@@ -463,7 +459,7 @@
       ),
       scrubChip(
         "mi/kWh",
-        effText,
+        scrubHasEff && effValue !== null && Number.isFinite(effValue) ? effText + " mi/kWh" : effText,
         { dim: !scrubHasEff, color: scrubHasEff ? SCRUB_EFF : null }
       )
     );
@@ -526,6 +522,10 @@
       tracks.forEach((t) => {
         const track = document.createElement("div");
         track.className = "scrub-track";
+        const label = document.createElement("span");
+        label.className = "scrub-track-label";
+        label.textContent = t[3];
+        track.appendChild(label);
         const svgNode = parseSvg(drawScrubTrack(w, t[0], t[1], t[2], t[3], t[4]));
         if (svgNode) track.appendChild(svgNode);
         const cursor = document.createElement("div");

@@ -52,29 +52,14 @@
     }
     const newRoutes =
       parsed && Array.isArray(parsed.recentRoutes) ? parsed.recentRoutes : [];
-    const allowSampleFallback = !bridge;
-    // First-launch fallback: until the user has logged a real OBD drive,
-    // populate the Map tab with the synthetic sample drive so the scrubber,
-    // efficiency-colored route, drive picker, and Insights scatter all show
-    // a populated UI instead of an empty state.
-    //
-    // The bridge re-pushes storage on every refresh, so we also protect the
-    // loaded sample against subsequent empty pushes — otherwise the next
-    // publishStorageSummary call wipes the sample back to empty. Real data
-    // (newRoutes.length > 0) always wins and clears the flag.
-    if (newRoutes.length > 0 || !allowSampleFallback) {
-      state._mapSampleLoaded = false;
-    } else if (state._mapSampleLoaded) {
-      // We're already showing the sample, incoming payload has no real
-      // routes — preserve the sample.
+    if (state.demoActive && state.demoPreviewStorage) {
+      state.realStorage = parsed;
       return;
+    }
+    if (newRoutes.length > 0) {
+      state._mapSampleLoaded = false;
     }
     state.storage = parsed;
-    if (allowSampleFallback && !state._mapSampleLoaded && newRoutes.length === 0 && typeof VD.loadSampleData === "function") {
-      state._mapSampleLoaded = true;
-      VD.loadSampleData();
-      return;
-    }
     updateStorageUi();
     updateReviewUi();
     renderRealV2Ui();
@@ -721,7 +706,19 @@
       : (battery.latestTelemetry || overview.latestTelemetry || {});
     toggleHidden("appEmptyState", hasRows);
     toggleHidden("chargeEmptyState", hasCharge);
-    toggleHidden("insightsEmptyState", hasRows);
+    // Gate the Insights first-run guide on actual insight content, not raw dbRowCount. dbRowCount
+    // sums unrelated tables (PID observations, location samples, diagnostic codes...), so a single
+    // connect/scan that writes any row but completes no trip used to hide the guide while every
+    // Insights stat still read "--" — a screen that looked broken. Mirror the chargeEmptyState
+    // pattern and key on the data the Insights screen actually renders: a logged trip/distance or
+    // a battery reading.
+    const insightsSummary = state.insights || {};
+    const insightSoc = Number(latest.soc);
+    const hasInsights =
+      Number(insightsSummary.tripCount || 0) > 0 ||
+      Number(insightsSummary.totalDistanceMeters || 0) > 0 ||
+      (Number.isFinite(insightSoc) && insightSoc > 0);
+    toggleHidden("insightsEmptyState", hasInsights);
     const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
     VD.setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
     VD.setText("overviewDistanceSub", route.pointCount ? `${route.pointCount} GPS samples in latest route` : "waiting for route samples");
@@ -956,6 +953,8 @@
       if (isNativeError(parsed)) {
         reportNativeReadError(parsed, "Could not read logged trips.");
         state.trips = [];
+      } else if (state.demoActive && Array.isArray(state.demoPreviewTrips)) {
+        state.realTrips = Array.isArray(parsed) ? parsed : [];
       } else {
         state.trips = Array.isArray(parsed) ? parsed : [];
       }
@@ -1401,12 +1400,10 @@
         touchZoom: false,
         zoomControl: false
       });
-      if (state.mapRemoteTilesEnabled) {
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-          subdomains: "abcd",
-          maxZoom: 19
-        }).addTo(map);
-      }
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        subdomains: "abcd",
+        maxZoom: 19
+      }).addTo(map);
       L.polyline(points, {
         color: "rgba(255, 255, 255, 0.64)",
         weight: role === "detail" ? 9 : 6,
@@ -1450,6 +1447,8 @@
       if (isNativeError(parsed)) {
         reportNativeReadError(parsed, "Could not read vehicle insights.");
         state.insights = {};
+      } else if (state.demoActive && state.demoPreviewInsights) {
+        state.realInsights = parsed;
       } else {
         state.insights = parsed;
       }

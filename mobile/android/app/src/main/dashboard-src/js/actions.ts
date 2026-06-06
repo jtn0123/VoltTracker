@@ -72,17 +72,31 @@
 
   function refreshDevices() {
     if (!bridge) {
-      VD.setStatus({ state: "demo", detail: "Android bridge is not available in this browser preview." });
+      VD.setStatus({ state: "ready", detail: "Browser preview ready. Start demo to view sample telemetry." });
       return;
     }
     VD.setDevices(bridge.listDevices());
     if (typeof bridge.getDeviceHistory === "function") VD.setHistory(bridge.getDeviceHistory());
   }
 
+  function showBlockedAdapterFeedback(detail: string) {
+    VD.setStatus({ state: "blocked", detail });
+    VD.setText("adapterSummary", "Adapter needed");
+    VD.setText("appStateSummary", detail);
+    VD.setText("statusCopy", detail);
+    const reviewWarnings = el("reviewWarnings");
+    if (reviewWarnings) {
+      const p = document.createElement("p");
+      p.className = "status-copy";
+      p.textContent = detail;
+      reviewWarnings.replaceChildren(p);
+    }
+  }
+
   function connectSelected(scan: boolean, button?: BusyButton | null) {
     const selected = VD.getSelectedDevice();
     if (!selected) {
-      VD.setStatus({ state: "blocked", detail: "Pick a paired or remembered OBD adapter first." });
+      showBlockedAdapterFeedback("Pick a paired or remembered OBD adapter first.");
       return;
     }
     if (!bridge) return;
@@ -101,7 +115,7 @@
   function detailProbeSelected(button?: BusyButton | null) {
     const selected = VD.getSelectedDevice();
     if (!selected) {
-      VD.setStatus({ state: "blocked", detail: "Pick a paired or remembered OBD adapter first." });
+      showBlockedAdapterFeedback("Pick a paired or remembered OBD adapter first.");
       return;
     }
     if (!bridge || typeof bridge.detailProbe !== "function") {
@@ -110,6 +124,15 @@
     }
     const stage = String(state.signalProbeStage || "tires");
     withBusy(button, () => bridge.detailProbe(selected.address, selected.name, stage));
+  }
+
+  function connectLastAdapter() {
+    const last = typeof VD.getLastDevice === "function" ? VD.getLastDevice() : state.lastDevice;
+    if (!last || !String(last.address || "").trim()) {
+      showBlockedAdapterFeedback("Connect once or pick a paired adapter before using Last.");
+      return;
+    }
+    if (bridge && typeof bridge.connectLast === "function") bridge.connectLast();
   }
 
   function handleAction(action: string | undefined, button: BusyButton | null = null) {
@@ -122,7 +145,7 @@
     if (action === "backupEncrypted") shareEncryptedBackup(button);
     if (action === "restore") restoreBackup(button);
     if (action === "restoreEncrypted") restoreEncryptedBackup(button);
-    if (action === "last") bridge && bridge.connectLast();
+    if (action === "last") connectLastAdapter();
     if (action === "scan") connectSelected(true, button);
     if (action === "tpmsScan") tpmsScanSelected(button);
     if (action === "detailProbe") detailProbeSelected(button);
@@ -230,10 +253,72 @@
         VD.setStatus({ state: "blocked", detail: "Demo data could not be loaded." });
         return;
       }
+      seedDemoScenario();
       VD.setDemoActive(true, "Demo preview is running.");
       if (bridge) bridge.demo();
       else runBrowserDemo();
     });
+  }
+
+  function currentDemoScenario() {
+    const picker = el("demoScenarioPicker");
+    const active = picker && picker.querySelector<HTMLElement>("[data-scenario].is-active");
+    return String(state.demoScenario || (active && active.dataset.scenario) || "typical");
+  }
+
+  function seedDemoScenario() {
+    const scenario = currentDemoScenario();
+    if (typeof VD.loadDemoScenario === "function") {
+      VD.loadDemoScenario(scenario);
+    } else if (typeof VD.loadSampleData === "function") {
+      VD.loadSampleData();
+    }
+  }
+
+  function refreshNativeDataAfterDemo() {
+    if (!bridge) {
+      state.storage = {
+        database: "volttracker_obd_poc.db",
+        databaseBytes: 4096,
+        sessionCount: 0,
+        sampleCount: 0,
+        rawTelemetryCount: 0,
+        recentRoutes: [],
+        recentSessions: [],
+        chargeSummary: { chargeSessionCount: 0, chargingHintCount: 0, recentSessions: [] },
+        batterySummary: {},
+        detailedSignalCatalog: [],
+        enhancedCapabilities: [],
+        latestDiagnosticCodes: [],
+        diagnosticCodeCount: 0,
+        overview: {}
+      };
+      state.trips = [];
+      state.insights = {};
+      state.appState = Object.assign({}, state.appState || {}, { vehicle: null, latestTelemetry: null });
+      state.demoPreviewStorage = null;
+      state.demoPreviewTrips = null;
+      state.demoPreviewInsights = null;
+      state.demoPreviewAppState = null;
+      state._mapSampleLoaded = false;
+      VD.updateStorageUi();
+      VD.renderRealV2Ui();
+      VD.renderMap();
+      VD.renderRealTrips();
+      VD.renderInsightStats();
+      return;
+    }
+    refreshStorage();
+    if (typeof VD.loadTrips === "function") VD.loadTrips();
+    if (typeof VD.loadInsights === "function") VD.loadInsights();
+    if (typeof VD.renderRealV2Ui === "function") VD.renderRealV2Ui();
+    if (typeof VD.renderMap === "function") VD.renderMap();
+    if (typeof VD.renderRealTrips === "function") VD.renderRealTrips();
+    if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
+    state.demoPreviewStorage = null;
+    state.demoPreviewTrips = null;
+    state.demoPreviewInsights = null;
+    state.demoPreviewAppState = null;
   }
 
   function stopDemo() {
@@ -242,17 +327,24 @@
     VD.clearDemoTelemetry();
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     VD.setDemoActive(false);
+    refreshNativeDataAfterDemo();
     VD.updateLiveUi();
     VD.drawTrace();
     VD.setStatus({ state: "idle", detail: "Demo stopped. Real data and captured history will appear here." });
   }
 
   function stopAll() {
+    const wasDemo = state.demoActive;
     window.clearInterval(window.__voltDemoTimer ?? undefined);
     if (bridge) bridge.disconnect();
     VD.clearDemoTelemetry();
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     VD.setDemoActive(false);
+    // If a demo was running, state.storage still holds the synthetic DB summary and the
+    // demoPreview* shadow fields are still set. setDemoActive(false) reloads trips/insights but
+    // NOT storage, so without this the Settings DB card keeps showing demo counts next to real
+    // trips until the next native push. Mirror stopDemo()'s cleanup.
+    if (wasDemo) refreshNativeDataAfterDemo();
     VD.updateLiveUi();
     VD.drawTrace();
     VD.setStatus({ state: "idle", detail: "Stopped." });
@@ -417,11 +509,52 @@
     bridge.deleteDetailedSignalLog(String(id || ""));
   }
 
+  function hexByte(value: number) {
+    const clamped = Math.max(0, Math.min(255, Math.round(value)));
+    return clamped.toString(16).toUpperCase().padStart(2, "0");
+  }
+
+  function hexWord(value: number) {
+    const clamped = Math.max(0, Math.min(65535, Math.round(value)));
+    return clamped.toString(16).toUpperCase().padStart(4, "0");
+  }
+
+  function demoRawFrames(sample: {
+    t: number;
+    speedKph: number;
+    rpm: number;
+    coolantC: number;
+    loadPct: number;
+    throttlePct: number;
+    voltage: number;
+    soc: number;
+  }) {
+    const rpmWord = hexWord(sample.rpm * 4);
+    const voltageWord = hexWord(sample.voltage * 1000);
+    return [
+      `demo sample ${sample.t}`,
+      ">010D",
+      `41 0D ${hexByte(sample.speedKph)}`,
+      ">010C",
+      `41 0C ${rpmWord.slice(0, 2)} ${rpmWord.slice(2)}`,
+      ">0105",
+      `41 05 ${hexByte(sample.coolantC + 40)}`,
+      ">0104",
+      `41 04 ${hexByte((sample.loadPct / 100) * 255)}`,
+      ">0111",
+      `41 11 ${hexByte((sample.throttlePct / 100) * 255)}`,
+      ">0142",
+      `41 42 ${voltageWord.slice(0, 2)} ${voltageWord.slice(2)}`,
+      ">22 43 34",
+      `62 43 34 ${hexByte(sample.soc)}`
+    ].join("\n");
+  }
+
   function runBrowserDemo() {
     let t = 0;
     VD.setStatus({ state: "connected", detail: "Browser-only demo is running." });
     window.clearInterval(window.__voltDemoTimer ?? undefined);
-    window.__voltDemoTimer = window.setInterval(() => {
+    const emitSample = () => {
       t += 1;
       // Alternate EV and gas every ~30s so both drivetrain states (RPM, gas
       // power, electric power) get exercised without a manual toggle.
@@ -433,6 +566,13 @@
       const routeDrift = Math.sin(t / 40);
       const lat = 32.80131 + routeDrift * 0.004;
       const lng = -116.9513 - Math.abs(routeDrift) * 0.012;
+      const speedKph = Math.round(54 + 23 * Math.sin(t / 3.4));
+      const rpm = gas ? Math.round(1260 + 420 * Math.sin(t / 2.1)) : 0;
+      const coolantC = Math.round(82 + 4 * Math.sin(t / 8));
+      const loadPct = Math.round(34 + 18 * Math.sin(t / 4.4));
+      const throttlePct = Math.round(18 + 14 * Math.sin(t / 2.7));
+      const voltage = 13.8;
+      const soc = Math.max(13.4, 77.8 - t * 0.01);
       VD.updateTelemetry({
         source: "demo",
         connected: true,
@@ -440,13 +580,13 @@
         sessionMs: t * 1000,
         supportedPids: "browser demo",
         vehicleState: powerKw < -0.5 ? "regen" : (gas ? "driving (gas)" : "driving"),
-        speedKph: Math.round(54 + 23 * Math.sin(t / 3.4)),
-        rpm: gas ? Math.round(1260 + 420 * Math.sin(t / 2.1)) : 0,
-        coolantC: Math.round(82 + 4 * Math.sin(t / 8)),
-        loadPct: Math.round(34 + 18 * Math.sin(t / 4.4)),
-        throttlePct: Math.round(18 + 14 * Math.sin(t / 2.7)),
-        voltage: 13.8,
-        soc: Math.max(13.4, 77.8 - t * 0.01),
+        speedKph,
+        rpm,
+        coolantC,
+        loadPct,
+        throttlePct,
+        voltage,
+        soc,
         batteryTemp: 72 + Math.sin(t / 8),
         powerKw: powerKw,
         // A slowly drifting coordinate so the demo also exercises the GPS lock
@@ -454,11 +594,13 @@
         latitude: lat,
         longitude: lng,
         updatedAt: Date.now(),
-        raw: "browser demo"
+        raw: demoRawFrames({ t, speedKph, rpm, coolantC, loadPct, throttlePct, voltage, soc })
       });
-      // Drop a live "you are here" breadcrumb on the map if it's mounted.
-      if (typeof VD.updateLivePosition === "function") VD.updateLivePosition(lat, lng);
-    }, 1000);
+      // updateTelemetry() forwards GPS into the selectable Current map route
+      // for both browser-demo and real adapter samples.
+    };
+    emitSample();
+    window.__voltDemoTimer = window.setInterval(emitSample, 1000);
   }
 
   // Window resize handler is debounced to 100ms — drawTrace recomputes canvas
@@ -505,7 +647,9 @@
     if (event.pointerType && event.pointerType !== "mouse") return false;
     const target = event.target as Element | null;
     if (target && target.closest(pageDragScrollBlockSelector)) return false;
-    return document.documentElement.scrollHeight > window.innerHeight + 2;
+    return typeof VD.canScrollApp === "function"
+      ? VD.canScrollApp()
+      : document.documentElement.scrollHeight > window.innerHeight + 2;
   }
 
   function bindPageDragScroll(opts: AddEventListenerOptions) {
@@ -530,7 +674,11 @@
         document.body.classList.add("is-page-dragging");
       }
       event.preventDefault();
-      window.scrollBy({ top: pageDragScroll.lastY - event.clientY, left: 0, behavior: "auto" });
+      if (typeof VD.scrollAppBy === "function") {
+        VD.scrollAppBy(pageDragScroll.lastY - event.clientY);
+      } else {
+        window.scrollBy({ top: pageDragScroll.lastY - event.clientY, left: 0, behavior: "auto" });
+      }
       pageDragScroll.lastY = event.clientY;
     }, { ...opts, passive: false });
 
@@ -548,11 +696,17 @@
 
     document.querySelectorAll("[data-nav]").forEach((node) => {
       const button = node as HTMLElement;
-      button.addEventListener("click", () => VD.setView(button.dataset.nav ?? ""), opts);
+      button.addEventListener("click", () => {
+        VD.setView(button.dataset.nav ?? "");
+        button.blur();
+      }, opts);
     });
     document.querySelectorAll("[data-nav-jump]").forEach((node) => {
       const button = node as HTMLElement;
-      button.addEventListener("click", () => VD.setView(button.dataset.navJump ?? ""), opts);
+      button.addEventListener("click", () => {
+        VD.setView(button.dataset.navJump ?? "");
+        button.blur();
+      }, opts);
     });
     document.querySelectorAll("[data-action]").forEach((node) => {
       const button = node as HTMLElement;
@@ -562,6 +716,9 @@
       const button = node as HTMLElement;
       button.addEventListener("click", () => {
         if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(button.dataset.scenario);
+        // Tapping a scenario is an explicit preview action; keep demo isolation
+        // active so native storage/app-state pushes cannot overwrite the sample.
+        if (typeof VD.setDemoActive === "function") VD.setDemoActive(true, "Demo preview is running.");
         const picker = el("demoScenarioPicker");
         if (picker) picker.querySelectorAll("[data-scenario]").forEach((b) => b.classList.toggle("is-active", b === button));
       }, opts);
@@ -590,18 +747,6 @@
     VD.bindListenerGuarded("mapDriveChips", "click", onSessionClick, opts);
     VD.bindListenerGuarded("mapFullBtn", "click", () => {
       state.mapFull = !state.mapFull;
-      VD.renderMap();
-    }, opts);
-    VD.bindListenerGuarded("mapTilesBtn", "click", () => {
-      state.mapRemoteTilesEnabled = !state.mapRemoteTilesEnabled;
-      try {
-        window.localStorage.setItem(
-          "volttracker.map.remoteTiles",
-          state.mapRemoteTilesEnabled ? "1" : "0"
-        );
-      } catch (_err) {
-        // Preference persistence is best-effort; the visible state still updates.
-      }
       VD.renderMap();
     }, opts);
     document.addEventListener("click", handleDtcSearch, opts);
@@ -756,9 +901,8 @@
   if (typeof VD.renderDriveLive === "function") VD.renderDriveLive();
   refreshDevices();
   refreshStorage();
-  if (!bridge) VD.loadSampleData();
   if (bridge && typeof bridge.dashboardReady === "function") bridge.dashboardReady();
-  requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
-  setTimeout(() => window.scrollTo({ top: 0, behavior: "auto" }), 200);
+  requestAnimationFrame(() => VD.scrollAppToTop());
+  setTimeout(() => VD.scrollAppToTop(), 200);
 
 export {};

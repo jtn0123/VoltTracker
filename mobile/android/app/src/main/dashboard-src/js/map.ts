@@ -13,6 +13,7 @@
     points?: MapRoutePoint[];
     session?: Record<string, any>;
     distanceMeters?: number;
+    isLive?: boolean;
   };
 
   type MapStop = {
@@ -46,44 +47,77 @@
   let remoteTileLayer: any = null;
   const mapLayerGroups: Record<string, any> = { routes: null, heat: null, stops: null, eff: null };
   let mapFitKey: string | null = null;
-  // Live "you are here" marker + breadcrumb, driven by the demo (or real) GPS
-  // stream. Separate from the route layer groups so a route re-render leaves it.
-  let livePositionMarker: any = null;
-  let liveBreadcrumb: any = null;
-  let liveBreadcrumbPts: Array<[number, number]> = [];
+  const LIVE_ROUTE_ID = "__live_current__";
+  const LIVE_ROUTE_MAX_POINTS = 600;
+  let liveRouteStartedAtMs: number | null = null;
+  let liveRoutePoints: MapRoutePoint[] = [];
 
-  /** Move/draw the live position marker + breadcrumb. No-op until the map is mounted. */
+  /** Store a demo/real GPS sample as the selectable Current route on the map. */
   function updateLivePosition(lat: unknown, lng: unknown) {
-    if (!mapInstance || typeof L === "undefined") return;
     const la = Number(lat);
     const ln = Number(lng);
     if (!Number.isFinite(la) || !Number.isFinite(ln)) return;
-    const ll: [number, number] = [la, ln];
-    liveBreadcrumbPts.push(ll);
-    if (liveBreadcrumbPts.length > 240) liveBreadcrumbPts.shift();
-    if (!liveBreadcrumb) {
-      liveBreadcrumb = L.polyline(liveBreadcrumbPts, { color: "#4cc4ff", weight: 4, opacity: 0.75 }).addTo(mapInstance);
+    const point = liveRoutePoint(la, ln);
+    const previousPoint = liveRoutePoints[liveRoutePoints.length - 1];
+    if (previousPoint) {
+      const meters = haversineMetersJs(previousPoint.lat, previousPoint.lng, point.lat, point.lng);
+      const ageMs = Math.abs(Number(point.atMs) - Number(previousPoint.atMs));
+      if (meters < 1 && ageMs < 2000) return;
     } else {
-      liveBreadcrumb.setLatLngs(liveBreadcrumbPts);
+      liveRouteStartedAtMs = point.atMs;
+      state.selectedMapSessionId = LIVE_ROUTE_ID;
+      mapFitKey = null;
     }
-    if (!livePositionMarker) {
-      livePositionMarker = L.circleMarker(ll, { radius: 7, color: "#fff", weight: 2, fillColor: "#4cc4ff", fillOpacity: 1 }).addTo(mapInstance);
-      // Center once on first fix; afterwards just move the dot so the user can pan freely.
-      mapInstance.setView(ll, 14);
-    } else {
-      livePositionMarker.setLatLng(ll);
+    liveRoutePoints.push(point);
+    if (liveRoutePoints.length > LIVE_ROUTE_MAX_POINTS) liveRoutePoints.shift();
+    if (state.selectedMapSessionId === LIVE_ROUTE_ID && state.view === "map") {
+      renderMap();
     }
   }
 
-  /** Remove the live marker + breadcrumb (e.g. when the demo stops). */
+  /** Remove the Current route (e.g. when demo stops or a new real session starts). */
   function clearLivePosition() {
-    if (mapInstance) {
-      if (livePositionMarker) mapInstance.removeLayer(livePositionMarker);
-      if (liveBreadcrumb) mapInstance.removeLayer(liveBreadcrumb);
+    const wasSelected = String(state.selectedMapSessionId || "") === LIVE_ROUTE_ID;
+    liveRouteStartedAtMs = null;
+    liveRoutePoints = [];
+    if (wasSelected) state.selectedMapSessionId = null;
+    mapFitKey = null;
+    if (state.view === "map") renderMap();
+  }
+
+  function liveRoutePoint(lat: number, lng: number): MapRoutePoint {
+    const sample = state.telemetry || {};
+    const updatedAt = liveSampleTimeMs(sample);
+    const point: MapRoutePoint = { lat, lng, atMs: updatedAt };
+    const speedKph = Number(sample.speedKph);
+    if (Number.isFinite(speedKph)) {
+      point.speedKph = speedKph;
+      point.speedMps = speedKph / 3.6;
     }
-    livePositionMarker = null;
-    liveBreadcrumb = null;
-    liveBreadcrumbPts = [];
+    const soc = Number(sample.soc);
+    if (Number.isFinite(soc)) point.soc = soc;
+    const powerKw = Number(sample.powerKw);
+    if (Number.isFinite(powerKw)) point.powerKw = powerKw;
+    const altM = Number(sample.altM ?? sample.altitudeM ?? sample.altitudeMeters);
+    if (Number.isFinite(altM)) point.altM = altM;
+    return point;
+  }
+
+  function liveSampleTimeMs(sample: Record<string, any>) {
+    const candidates = [
+      sample.atMs,
+      sample.updatedAtMs,
+      sample.updatedAt,
+      sample.timestampMs,
+      sample.capturedAtMs
+    ];
+    for (const candidate of candidates) {
+      const value = Number(candidate);
+      if (!Number.isFinite(value) || value <= 0) continue;
+      if (value > 1_000_000_000_000) return value;
+      if (value > 1_000_000_000) return value * 1000;
+    }
+    return Date.now();
   }
 
   // Per-segment efficiency bucket color for the V3 "Eff" layer. Grey for
@@ -141,19 +175,15 @@
 
   function syncRemoteTiles() {
     if (!mapInstance || typeof L === "undefined") return;
-    if (state.mapRemoteTilesEnabled && !remoteTileLayer) {
+    state.mapRemoteTilesEnabled = true;
+    if (!remoteTileLayer) {
       remoteTileLayer = createRemoteTileLayer(mapInstance);
       remoteTileLayer.addTo(mapInstance);
-      return;
-    }
-    if (!state.mapRemoteTilesEnabled && remoteTileLayer) {
-      mapInstance.removeLayer(remoteTileLayer);
-      remoteTileLayer = null;
     }
   }
 
-  // Creates the Leaflet map once. Remote basemap tiles are opt-in; the route and all data are drawn
-  // from on-device state and work against the blank offline canvas regardless.
+  // Creates the Leaflet map once. Remote basemap tiles are always on so route
+  // context stays consistent across Map and Trips.
   function ensureMap() {
     if (mapInstance) return mapInstance;
     if (typeof L === "undefined") return null;
@@ -174,16 +204,18 @@
 
   function renderMap() {
     const storage = state.storage || {};
-    const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
+    const routes = mapRoutes(storage);
     if (routes.length) {
       const selectedExists = routes.some((route: MapRoute) =>
         String((route.session || {}).id || "") === String(state.selectedMapSessionId || "")
       );
       if (!selectedExists) state.selectedMapSessionId = (routes[0].session || {}).id || null;
     }
-    const route = selectedMapRoute(storage);
+    const route = selectedMapRoute(storage, routes);
     const points = Array.isArray(route.points) ? route.points : [];
     const hasRoute = points.length >= 2;
+    const isLiveRoute = routeIsLive(route);
+    const hasMapContent = hasRoute || (isLiveRoute && points.some(isValidRoutePoint));
     const layer = state.mapLayer;
     const stops = hasRoute ? detectStops(points) : [];
 
@@ -200,14 +232,6 @@
     const mapCard = el("mapCard");
     if (mapCard) mapCard.classList.toggle("is-fullscreen", state.mapFull);
     document.body.classList.toggle("map-full-active", state.mapFull);
-    const tilesBtn = el("mapTilesBtn");
-    if (tilesBtn) {
-      tilesBtn.setAttribute("aria-pressed", state.mapRemoteTilesEnabled ? "true" : "false");
-      tilesBtn.setAttribute(
-        "aria-label",
-        state.mapRemoteTilesEnabled ? "Disable remote map tiles" : "Enable remote map tiles"
-      );
-    }
     const fullBtn = el("mapFullBtn");
     if (fullBtn) {
       fullBtn.setAttribute("aria-pressed", state.mapFull ? "true" : "false");
@@ -220,26 +244,30 @@
     // don't repeat "X mi" here.
     VD.setText(
       "mapTitle",
-      hasRoute
-        ? routeSession.adapterName || routeSession.mode || "Logged drive"
+      hasMapContent
+        ? routeSession.adapterName || (isLiveRoute ? "Current drive" : routeSession.mode) || "Logged drive"
         : "No route recorded yet"
     );
     VD.setText(
       "mapKicker",
-      hasRoute ? `GPS map · ${VD.formatWhen(routeSession.startedAtMs)}` : "GPS map"
+      // Use the same absolute, skim-able format as the drive-picker chips (fmtChipDate) so a
+      // single drive doesn't read "Today 2:51 AM" in its chip but "6h ago" in the kicker at once.
+      hasMapContent
+        ? `${isLiveRoute ? "Current GPS" : "GPS map"} · ${fmtChipDate(routeSession.startedAtMs)}`
+        : "GPS map"
     );
-    VD.setText("mapDistance", hasRoute ? VD.formatDistance(route.distanceMeters || 0) : "--");
+    VD.setText("mapDistance", hasMapContent ? VD.formatDistance(route.distanceMeters || 0) : "--");
     const session = route.session || {};
     const duration = Number(session.endedAtMs || Date.now()) - Number(session.startedAtMs || 0);
-    VD.setText("mapDuration", hasRoute && duration > 0 ? VD.formatDuration(duration) : "--");
+    VD.setText("mapDuration", hasMapContent && duration > 0 ? VD.formatDuration(duration) : "--");
     // Avg moving speed in mph from GPS: distance / duration, ignoring stopped
     // time at the granularity of the route. More useful than GPS accuracy.
-    const avgMph = hasRoute && duration > 0
+    const avgMph = hasMapContent && duration > 0
       ? (Number(route.distanceMeters || 0) / (duration / 1000)) * 2.2369363
       : 0;
     VD.setText("mapAvgMph", avgMph > 0 ? Math.round(avgMph) : "--");
     const empty = el("mapEmpty");
-    if (empty) empty.hidden = hasRoute;
+    if (empty) empty.hidden = hasMapContent;
 
     if (hasRoute && typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
     syncRemoteTiles();
@@ -279,6 +307,69 @@
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
 
+  function mapRoutes(storage: Record<string, any>) {
+    const history = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
+    const live = buildLiveRoute();
+    if (!live) return history;
+    return [
+      live,
+      ...history.filter((route: MapRoute) =>
+        String((route.session || {}).id || "") !== LIVE_ROUTE_ID
+      )
+    ];
+  }
+
+  function buildLiveRoute(): MapRoute | null {
+    if (!liveRoutePoints.length) return null;
+    const points = liveRoutePoints.slice();
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    if (!firstPoint || !lastPoint) return null;
+    const selectedDevice = typeof VD.getSelectedDevice === "function" ? VD.getSelectedDevice() : null;
+    const sample = state.telemetry || {};
+    const source = String(sample.source || "").toLowerCase();
+    const isDemo = state.demoActive || source.includes("demo");
+    const adapterName = isDemo
+      ? "Current demo"
+      : String(
+        sample.adapterName ||
+        (selectedDevice && selectedDevice.name) ||
+        "Current drive"
+      );
+    const startedAtMs = liveRouteStartedAtMs || firstPoint.atMs;
+    const powerTrack = points
+      .filter((point) => Number.isFinite(Number(point.powerKw)))
+      .map((point) => ({ atMs: point.atMs, powerKw: Number(point.powerKw) }));
+    const socTrack = points
+      .filter((point) => Number.isFinite(Number(point.soc)))
+      .map((point) => ({ atMs: point.atMs, soc: Number(point.soc) }));
+    return {
+      isLive: true,
+      points,
+      pointCount: points.length,
+      distanceMeters: Math.max(routeDistanceMeters(points), Number(state.sessionDistanceM) || 0),
+      powerTrack,
+      socTrack,
+      session: {
+        id: LIVE_ROUTE_ID,
+        mode: isDemo ? "demo" : "drive",
+        adapterName,
+        startedAtMs,
+        endedAtMs: Math.max(Date.now(), Number(lastPoint.atMs) || 0),
+        status: "live",
+        sampleCount: Number(sample.sampleCount) || points.length
+      }
+    };
+  }
+
+  function routeIsLive(route: MapRoute) {
+    return Boolean(route && (
+      route.isLive ||
+      String((route.session || {}).id || "") === LIVE_ROUTE_ID ||
+      String((route.session || {}).status || "").toLowerCase() === "live"
+    ));
+  }
+
   // Horizontal drive-picker chips above the map. Each chip shows the drive's
   // start time, distance, and a color-coded average efficiency dot — same
   // pattern as the demo's drive picker. Click delegation flows through the
@@ -297,9 +388,10 @@
       if (typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
       const s = sessionForRoute(route);
       const id = String(s.id || "");
+      const live = routeIsLive(route);
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "map-drive-chip" + (id === selId ? " is-active" : "");
+      button.className = "map-drive-chip" + (live ? " is-live" : "") + (id === selId ? " is-active" : "");
       button.dataset.mapSession = id;
       const date = document.createElement("span");
       date.className = "dl";
@@ -308,13 +400,19 @@
       meta.className = "dm";
       const distance = document.createElement("b");
       const distMi = (Number(route.distanceMeters || 0) / 1609.34).toFixed(1);
-      distance.textContent = distMi + " mi";
+      distance.textContent = live && Number(distMi) < 0.1 ? "current" : distMi + " mi";
       meta.append(distance);
+      if (live) {
+        meta.append(document.createTextNode(" · "));
+        const dot = document.createElement("u");
+        dot.style.background = "#4cc4ff";
+        meta.append(dot, document.createTextNode(" live"));
+      }
       const effPts = (route.points || []).filter((p) => Number.isFinite(Number(p.eff)));
       const avgEff = effPts.length
         ? effPts.reduce((acc, p) => acc + Number(p.eff), 0) / effPts.length
         : 0;
-      if (avgEff > 0) {
+      if (!live && avgEff > 0) {
         meta.append(document.createTextNode(" · "));
         const dot = document.createElement("u");
         dot.style.background = mapEffColor(avgEff);
@@ -345,19 +443,41 @@
         mapLayerGroups[key] = null;
       }
     });
-    if (!hasRoute) return;
     const drawable = points.filter(isValidRoutePoint);
-    if (drawable.length < 2) return;
+    const isLiveRoute = String((routeSession || {}).id || "") === LIVE_ROUTE_ID;
+    if (!drawable.length || (!hasRoute && !isLiveRoute)) return;
     const latlngs = drawable.map((p) => [Number(p.lat), Number(p.lng)] as LatLngTuple);
     const firstLatLng = latlngs[0];
     const lastLatLng = latlngs[latlngs.length - 1];
     if (!firstLatLng || !lastLatLng) return;
+    if (drawable.length === 1) {
+      const onlyMarker = () => L.circleMarker(firstLatLng, {
+        radius: 8,
+        color: "#fff",
+        weight: 2,
+        fillColor: isLiveRoute ? "#4cc4ff" : "#ff7a45",
+        fillOpacity: 1
+      });
+      mapLayerGroups.routes = L.layerGroup([onlyMarker()]);
+      mapLayerGroups.heat = L.layerGroup([onlyMarker()]);
+      mapLayerGroups.stops = L.layerGroup([onlyMarker()]);
+      mapLayerGroups.eff = L.layerGroup([onlyMarker()]);
+      (mapLayerGroups[layer] || mapLayerGroups.routes).addTo(map);
+      const fitKey = routeFitKey(routeSession, drawable);
+      if (fitKey !== mapFitKey) {
+        map.setView(firstLatLng, 15);
+        mapFitKey = fitKey;
+      }
+      return;
+    }
+    const routeColor = isLiveRoute ? "#4cc4ff" : "#ff7a45";
+    const routeEndColor = isLiveRoute ? "#4cc4ff" : "#ff7141";
 
     mapLayerGroups.routes = L.layerGroup([
-      L.polyline(latlngs, { color: "#ff7a45", weight: 9, opacity: 0.16 }),
-      L.polyline(latlngs, { color: "#ff7a45", weight: 3.5, opacity: 1 }),
-      L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: "#ff7a45", fillOpacity: 1 }),
-      L.circleMarker(lastLatLng, { radius: 7, color: "#fff", weight: 2, fillColor: "#ff7141", fillOpacity: 1 })
+      L.polyline(latlngs, { color: routeColor, weight: 9, opacity: 0.16 }),
+      L.polyline(latlngs, { color: routeColor, weight: 3.5, opacity: 1 }),
+      L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: routeColor, fillOpacity: 1 }),
+      L.circleMarker(lastLatLng, { radius: isLiveRoute ? 8 : 7, color: "#fff", weight: 2, fillColor: routeEndColor, fillOpacity: 1 })
     ]);
 
     const bands: Record<string, LatLngSegment[]> = { "#ff6b4a": [], "#ffd23f": [], "#7ee06a": [] };
@@ -380,7 +500,7 @@
     });
 
     mapLayerGroups.stops = L.layerGroup([
-      L.polyline(latlngs, { color: "#ff7a45", weight: 2.5, opacity: 0.4 })
+      L.polyline(latlngs, { color: routeColor, weight: 2.5, opacity: 0.4 })
     ]);
     const stops = detectStops(drawable).slice(0, 20);
     stops.forEach((stop) => {
@@ -460,24 +580,29 @@
   function buildMapSessionRow(r: MapRoute) {
     const s = sessionForRoute(r);
     const active = String(s.id || "") === String(state.selectedMapSessionId || "");
+    const live = routeIsLive(r);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "history-row" + (active ? " is-active" : "");
     button.dataset.mapSession = String(s.id || "");
     const center = document.createElement("span");
     const strong = document.createElement("strong");
-    strong.textContent = `${s.mode || "session"} · ${s.adapterName || "OBD adapter"}`;
+    strong.textContent = live
+      ? `${s.adapterName || "Current drive"} · current`
+      : `${s.mode || "session"} · ${s.adapterName || "OBD adapter"}`;
     const small = document.createElement("small");
-    small.textContent = `${VD.formatWhen(s.startedAtMs)} · ${VD.formatDistance(Number(r.distanceMeters || 0))} · ${Number(r.pointCount || 0)} pts`;
+    small.textContent = live
+      ? `${fmtChipDate(s.startedAtMs)} · ${VD.formatDistance(Number(r.distanceMeters || 0))} · ${Number(r.pointCount || 0)} pts`
+      : `${VD.formatWhen(s.startedAtMs)} · ${VD.formatDistance(Number(r.distanceMeters || 0))} · ${Number(r.pointCount || 0)} pts`;
     center.append(strong, small);
     const right = document.createElement("b");
-    right.textContent = s.status || "stored";
+    right.textContent = live ? "live" : s.status || "stored";
     button.append(center, right);
     return button;
   }
 
-  function selectedMapRoute(storage: Record<string, any>): MapRoute {
-    const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
+  function selectedMapRoute(storage: Record<string, any>, availableRoutes?: MapRoute[]): MapRoute {
+    const routes = availableRoutes || mapRoutes(storage);
     if (routes.length) {
       const selected = routes.find((route: MapRoute) => String((route.session || {}).id || "") === String(state.selectedMapSessionId || ""));
       if (selected) return selected;
@@ -649,7 +774,6 @@
   }
 
   function loadSampleData() {
-    VD.setDemoActive(false);
     // Three synthetic drives so the session picker has work to do and the
     // scatter actually pools data. Times are relative to "now" so chips read
     // "today / yesterday / Sat" rather than a hardcoded 3d-ago.
@@ -701,7 +825,8 @@
     // Demo charge history, a battery snapshot, and enhanced-signal evidence so the
     // browser preview / demo exercises every feature surface — Charge session list,
     // Insights HV-pack detail, and the Signals workspace — not just map + trips.
-    // Only ever runs without a native bridge, so it never touches real-device data.
+    // This only mutates the dashboard's in-memory preview state, so it never
+    // touches persisted real-device data.
     const sampleCharges = [
       // Newest is in-progress (no end time) so the active-charge state renders.
       { id: 4, startedAtMs: now - 38 * 60 * 1000, endedAtMs: null, chargerType: "level2", startSoc: 54, endSoc: 71, powerKw: 7.1, energyKwh: 3.0 },
@@ -808,8 +933,16 @@
     };
     state.appState = Object.assign({}, state.appState, { vehicle: sampleVehicle });
     state.demoScenario = "typical";
+    captureDemoPreview();
+    VD.setDemoActive(true, "Demo preview sample drive loaded.");
     renderDemoSurfaces();
-    VD.setStatus({ state: "ready", detail: "Preview sample drive loaded (real logged route)." });
+  }
+
+  function captureDemoPreview() {
+    state.demoPreviewStorage = state.storage;
+    state.demoPreviewTrips = state.trips;
+    state.demoPreviewInsights = state.insights;
+    state.demoPreviewAppState = state.appState;
   }
 
   // Re-renders every demo-backed surface (DB summary, Signals, DTC, vehicle, map,
@@ -826,7 +959,6 @@
   function loadDemoScenario(name: string) {
     const scenario = String(name || "typical");
     if (scenario === "empty") {
-      VD.setDemoActive(false);
       state.storage = {
         database: "volttracker_obd_poc.db",
         databaseBytes: 4096,
@@ -839,8 +971,9 @@
       state.insights = { tripCount: 0 };
       state.appState = Object.assign({}, state.appState, { vehicle: null });
       state.demoScenario = "empty";
+      captureDemoPreview();
+      VD.setDemoActive(true, "Demo scenario: empty (no logged data yet).");
       renderDemoSurfaces();
-      VD.setStatus({ state: "idle", detail: "Demo scenario: empty (no logged data yet)." });
       return;
     }
 
@@ -863,7 +996,7 @@
       s.chargeSessionCount = charges.length;
       s.sampleCount = 184213; s.rawTelemetryCount = 184213; s.pidObservationCount = 184213;
       s.eventCount = 312; s.sessionCount = 96;
-      VD.setStatus({ state: "ready", detail: "Demo scenario: power user (months of data)." });
+      VD.setStatus({ state: "demo", detail: "Demo scenario: power user (months of data)." });
     } else if (scenario === "fault") {
       s.latestDiagnosticCodes = [
         { dtc: "P0420", status: "current", statusLabel: "current", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 72 * hour, lastSeenMs: now - hour, seenCount: 9 },
@@ -874,6 +1007,7 @@
       s.diagnosticCodeCount = 4;
       s.diagnosticCodeStatusCounts = { current: 1, permanent: 1, "freeze-frame": 1, pending: 1 };
       state.demoScenario = "fault";
+      captureDemoPreview();
       renderDemoSurfaces();
       VD.setStatus({ state: "blocked", detail: "Adapter handshake failed after 3 retries — check the OBD dongle is seated." });
       return;
@@ -889,8 +1023,9 @@
       s.overview = Object.assign({}, s.overview, { maxSpeedKph: 257 });
     }
     state.demoScenario = scenario;
+    captureDemoPreview();
     renderDemoSurfaces();
-    VD.setStatus({ state: "ready", detail: `Demo scenario: ${scenario}.` });
+    VD.setStatus({ state: "demo", detail: `Demo scenario: ${scenario}.` });
   }
 
   Object.assign(VD, {

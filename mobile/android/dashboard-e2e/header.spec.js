@@ -4,11 +4,11 @@ const { openDashboard, setView } = require('./harness');
 
 test('title row clears the system status bar (top inset)', async ({ page }) => {
   await openDashboard(page);
-  // The fix raised the body top-inset floor so the title doesn't crowd the status bar.
+  // The app scroll container carries the top-inset floor so the title doesn't crowd the status bar.
   const padTop = await page.evaluate(
-    () => parseFloat(getComputedStyle(document.body).paddingTop) || 0,
+    () => parseFloat(getComputedStyle(document.querySelector('.app')).paddingTop) || 0,
   );
-  expect(padTop, 'body top inset should clear the status bar').toBeGreaterThanOrEqual(28);
+  expect(padTop, 'app top inset should clear the status bar').toBeGreaterThanOrEqual(28);
 
   // Title + state pill are present and sit at the very top of the content.
   await expect(page.locator('#screenTitle')).toBeVisible();
@@ -47,4 +47,22 @@ test('header action stays unclipped on the Charge tab too', async ({ page }) => 
     const m = await action.evaluate((el) => ({ s: el.scrollWidth, c: el.clientWidth }));
     expect(m.s, 'header action label must not overflow').toBeLessThanOrEqual(m.c + 1);
   }
+});
+
+test('Signals header keeps a visible stroked title icon', async ({ page }) => {
+  await openDashboard(page);
+  await setView(page, 'signals');
+
+  await expect(page.locator('#screenTitle')).toHaveText('Detailed Signals');
+  const icon = page.locator('#screenTitleIcon');
+  await expect(icon).toHaveAttribute('fill', 'none');
+  await expect(icon).toHaveAttribute('stroke', 'currentColor');
+  await expect(icon).toHaveAttribute('stroke-width', '2');
+
+  const box = await icon.evaluate((el) => {
+    const b = el.getBBox();
+    return { width: b.width, height: b.height };
+  });
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.height).toBeGreaterThan(0);
 });

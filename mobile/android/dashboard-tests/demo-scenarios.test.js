@@ -22,6 +22,30 @@ describe('demo scenarios', () => {
     expect(window.VoltDashboard.state.demoScenario).toBe('empty');
   });
 
+  it('keeps the Insights first-run guide visible for non-trip storage rows', () => {
+    const VD = window.VoltDashboard;
+    VD.state.storage = {
+      pidObservationCount: 5,
+      locationSampleCount: 3,
+      sessionCount: 1,
+      sampleCount: 5,
+      overview: {},
+      batterySummary: {},
+      chargeSummary: {},
+    };
+    VD.state.insights = {};
+
+    VD.renderRealV2Ui();
+
+    expect(document.getElementById('appEmptyState').hidden).toBe(true);
+    expect(document.getElementById('insightsEmptyState').hidden).toBe(false);
+
+    VD.state.insights = { tripCount: 1, totalDistanceMeters: 1200 };
+    VD.renderRealV2Ui();
+
+    expect(document.getElementById('insightsEmptyState').hidden).toBe(true);
+  });
+
   it('typical is the rich happy path', () => {
     window.VoltDashboard.loadDemoScenario('typical');
     const s = window.VoltDashboard.state.storage;

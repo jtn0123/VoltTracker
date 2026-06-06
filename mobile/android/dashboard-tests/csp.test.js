@@ -13,6 +13,11 @@ import { describe, expect, it } from 'vitest';
 // Scope note: CSP governs *resource loads* (scripts, images, fetch/XHR). It does NOT
 // govern user-initiated navigation, so the DTC "search Google" link strings in
 // core.ts / dtc-lookup.ts are intentionally out of scope here.
+//
+// WebView note: `frame-ancestors` is intentionally absent. Chromium ignores that
+// directive when it is delivered by a meta tag, and the dashboard is loaded from
+// file:///android_asset/. Main-frame navigation is enforced by WebViewBootstrap's
+// origin guard instead.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD = resolve(HERE, '../app/src/main/assets/dashboard');
@@ -67,7 +72,6 @@ describe('dashboard content-security-policy', () => {
         'script-src',
         'style-src',
         'connect-src',
-        'frame-ancestors',
         'base-uri',
         'form-action',
       ]),
@@ -75,7 +79,7 @@ describe('dashboard content-security-policy', () => {
     expect(directives['default-src']).toEqual(["'self'"]);
     // No remote scripts, ever — first-party JS only.
     expect(directives['script-src']).toEqual(["'self'"]);
-    expect(directives['frame-ancestors']).toEqual(["'none'"]);
+    expect(directives['frame-ancestors']).toBeUndefined();
     expect(directives['base-uri']).toEqual(["'none'"]);
     expect(directives['form-action']).toEqual(["'none'"]);
   });

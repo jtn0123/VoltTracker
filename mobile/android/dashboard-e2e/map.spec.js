@@ -34,6 +34,20 @@ test('renders a real Leaflet route map for a logged drive', async ({ page }) => 
   await expect(page.locator('#mapLeaflet')).toBeVisible();
 });
 
+test('remote map tiles are always on with no opt-out control', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('volttracker.map.remoteTiles', '0');
+  });
+  await openDashboard(page);
+  await page.evaluate((r) => window.VoltDashboard.setStorage({ recentRoutes: [r] }), ROUTE);
+  await setView(page, 'map');
+
+  await expect(page.locator('#mapTilesBtn')).toHaveCount(0);
+  await expect(page.locator('.map-top-right button')).toHaveCount(1);
+  await expect(page.locator('#mapLeaflet .leaflet-tile-pane')).toBeAttached();
+  expect(await page.evaluate(() => window.VoltDashboard.state.mapRemoteTilesEnabled)).toBe(true);
+});
+
 test('map layer tabs switch the active layer', async ({ page }) => {
   await openDashboard(page);
   await page.evaluate((r) => window.VoltDashboard.setStorage({ recentRoutes: [r] }), ROUTE);
@@ -43,4 +57,49 @@ test('map layer tabs switch the active layer', async ({ page }) => {
   await routesTab.click();
   await expect(routesTab).toHaveClass(/is-active/);
   await expect(page.locator('#mapFrame')).toHaveAttribute('data-layer', 'routes');
+});
+
+test('live GPS route appears as current and can switch back from history', async ({ page }) => {
+  await openDashboard(page, { fixedTime: '2026-06-06T19:52:00Z' });
+  await page.evaluate((r) => {
+    const VD = window.VoltDashboard;
+    VD.setStorage({ recentRoutes: [r] });
+    VD.updateTelemetry({
+      source: 'demo',
+      latitude: 32.7001,
+      longitude: -117.1001,
+      speedKph: 24,
+      powerKw: 4,
+      soc: 78,
+      sampleCount: 1,
+      updatedAt: Date.now(),
+    });
+    VD.updateTelemetry({
+      source: 'demo',
+      latitude: 32.7012,
+      longitude: -117.1014,
+      speedKph: 31,
+      powerKw: 5,
+      soc: 77.9,
+      sampleCount: 2,
+      updatedAt: Date.now() + 1000,
+    });
+  }, ROUTE);
+  await setView(page, 'map');
+
+  const currentChip = page.locator('#mapDriveChips [data-map-session="__live_current__"]');
+  const historyChip = page.locator('#mapDriveChips [data-map-session="1"]');
+  await expect(currentChip).toBeVisible();
+  await expect(currentChip).toContainText(/Today \d/);
+  await expect(currentChip).toContainText('live');
+  await expect(currentChip).toHaveClass(/is-active/);
+  await expect(page.locator('#mapTitle')).toContainText('Current demo');
+
+  await historyChip.click();
+  await expect(historyChip).toHaveClass(/is-active/);
+  await expect(currentChip).not.toHaveClass(/is-active/);
+
+  await currentChip.click();
+  await expect(currentChip).toHaveClass(/is-active/);
+  await expect(page.locator('#mapTitle')).toContainText('Current demo');
 });

@@ -150,7 +150,7 @@ jobs:
             dtc=$(cat js/dtc-lookup.js js/dtc-causes.js | wc -c | tr -d ' ')
             all=$(find js css -type f \( -name "*.js" -o -name "*.css" \) ! -path "*/lib/*" -exec cat {} + | wc -c | tr -d ' ')
             core=$((all - dtc))
-            echo "| **core (excl lib/, excl dtc data)** | **$core** / 360000 |"
+            echo "| **core (excl lib/, excl dtc data)** | **$core** / 400000 |"
             echo "| **dtc data (lookup + causes)** | **$dtc** / 380000 |"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -276,9 +276,10 @@ jobs:
           if-no-files-found: ignore
 
   emulator-smoke:
-    # Required WebView startup smoke for the file:// dashboard path. It installs
-    # the debug APK on an emulator and asserts the dashboard JS reaches the
-    # native "dashboard handshake received" logcat marker.
+    # Required WebView runtime smoke for the file:// dashboard path. It installs
+    # the debug APK on an emulator, asserts the dashboard JS reaches the native
+    # "dashboard handshake received" logcat marker, starts demo telemetry, and
+    # taps through the dashboard tabs while scanning logcat for runtime errors.
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -314,12 +315,14 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect
           script: bash mobile/android/scripts/emulator-smoke.sh
-      - name: Upload emulator smoke logcat
+      - name: Upload emulator smoke artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: emulator-smoke-logcat
-          path: mobile/android/build/emulator-smoke-logcat.txt
+          name: emulator-smoke-artifacts
+          path: |
+            mobile/android/build/emulator-smoke-logcat.txt
+            mobile/android/build/emulator-smoke/
           if-no-files-found: ignore
 
   ci-success:

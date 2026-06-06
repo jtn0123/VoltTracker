@@ -90,14 +90,6 @@
   const queryAll = (selector: string) =>
     document.querySelectorAll(selector) as NodeListOf<HTMLElement>;
 
-  function readRemoteTilesPreference() {
-    try {
-      return window.localStorage.getItem("volttracker.map.remoteTiles") === "1";
-    } catch (_err) {
-      return false;
-    }
-  }
-
   function escapeHtml(value: unknown) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -298,7 +290,7 @@
     appState: {},
     demoActive: false,
     mapLayer: "eff",
-    mapRemoteTilesEnabled: readRemoteTilesPreference(),
+    mapRemoteTilesEnabled: true,
     mapFull: false,
     selectedMapSessionId: null,
     status: {},
@@ -346,7 +338,7 @@
     map: ["GPS route", "Map"],
     charge: ["Real charging", "Charge"],
     insights: ["Vehicle health", "Insights"],
-    settings: ["OBD bridge", "Diagnostics"],
+    settings: ["Adapter setup", "Settings"],
     signals: ["Enhanced discovery", "Detailed Signals"]
   };
 
@@ -359,6 +351,7 @@
     settings: "M12 2a3 3 0 0 1 3 3v1h2.2l1.1 1.9-1.6 1.6c.2.5.3 1 .3 1.5s-.1 1-.3 1.5l1.6 1.6-1.1 1.9H15v1a3 3 0 0 1-6 0v-1H6.8l-1.1-1.9 1.6-1.6A4.2 4.2 0 0 1 7 11c0-.5.1-1 .3-1.5L5.7 7.9 6.8 6H9V5a3 3 0 0 1 3-3zm0 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
     signals: "M4 6h4m4 0h8M4 12h10m4 0h2M4 18h6m4 0h6M8 4v4m6 8v4m4-10v4"
   };
+  const strokedViewIcons = new Set(["signals"]);
 
   function parsePayload(payload: unknown, fallback: any = null) {
     if (!payload) return fallback;
@@ -425,6 +418,34 @@
     return true;
   }
 
+  function appScroller(): HTMLElement | null {
+    return document.querySelector(".app");
+  }
+
+  function scrollAppToTop() {
+    const scroller = appScroller();
+    if (scroller && typeof scroller.scrollTo === "function") {
+      scroller.scrollTo({ top: 0, behavior: "auto" });
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
+  function scrollAppBy(deltaY: number) {
+    const scroller = appScroller();
+    if (scroller && typeof scroller.scrollBy === "function") {
+      scroller.scrollBy({ top: deltaY, left: 0, behavior: "auto" });
+      return;
+    }
+    window.scrollBy({ top: deltaY, left: 0, behavior: "auto" });
+  }
+
+  function canScrollApp() {
+    const scroller = appScroller();
+    if (scroller) return scroller.scrollHeight > scroller.clientHeight + 2;
+    return document.documentElement.scrollHeight > window.innerHeight + 2;
+  }
+
   function setView(view: string) {
     state.view = view;
     document.body.dataset.activeView = view;
@@ -447,7 +468,29 @@
     else if (view === "insights") VD.loadInsights();
     else if (view === "map") VD.renderMap();
     updateViewHeading();
-    window.scrollTo({ top: 0, behavior: "auto" });
+    scrollAppToTop();
+  }
+
+  // Android hardware/gesture Back. The native OnBackPressedCallback calls this and only lets the
+  // OS exit/background the app when it returns false. Dismiss the most-nested surface first: an
+  // open troubleshooter modal, then a fullscreen map, then fall back to the Drive home tab.
+  function handleAndroidBack(): boolean {
+    const ts = (VD as any).troubleshooter;
+    if (ts && typeof ts.isOpen === "function" && ts.isOpen()) {
+      ts.close();
+      return true;
+    }
+    if (state.mapFull) {
+      state.mapFull = false;
+      document.body.classList.remove("map-full-active");
+      if (typeof VD.renderMap === "function") VD.renderMap();
+      return true;
+    }
+    if (state.view && state.view !== "drive") {
+      setView("drive");
+      return true;
+    }
+    return false;
   }
 
   function updateViewHeading() {
@@ -458,7 +501,22 @@
     setText("screenTitle", meta[1]);
     const icon = el("screenTitleIcon");
     const iconPath = viewIconPaths[String(state.view)] || viewIconPaths.drive;
-    if (icon && iconPath) icon.setAttribute("d", iconPath);
+    if (icon && iconPath) {
+      icon.setAttribute("d", iconPath);
+      if (strokedViewIcons.has(String(state.view))) {
+        icon.setAttribute("fill", "none");
+        icon.setAttribute("stroke", "currentColor");
+        icon.setAttribute("stroke-width", "2");
+        icon.setAttribute("stroke-linecap", "round");
+        icon.setAttribute("stroke-linejoin", "round");
+      } else {
+        icon.setAttribute("fill", "currentColor");
+        icon.removeAttribute("stroke");
+        icon.removeAttribute("stroke-width");
+        icon.removeAttribute("stroke-linecap");
+        icon.removeAttribute("stroke-linejoin");
+      }
+    }
   }
 
   function setDemoActive(active: unknown, detail?: string) {
@@ -598,7 +656,11 @@
     parsePayload,
     setText,
     setMeter,
+    scrollAppToTop,
+    scrollAppBy,
+    canScrollApp,
     setView,
+    handleAndroidBack,
     updateViewHeading,
     setDemoActive,
     clearDemoTelemetry,

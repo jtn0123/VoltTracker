@@ -100,6 +100,9 @@ declare global {
     setText(id: string, value: unknown): boolean;
     /** Set a meter element's fill width (0-100); returns whether the node existed. */
     setMeter(id: string, value: unknown): boolean;
+    scrollAppToTop(): void;
+    scrollAppBy(deltaY: number): void;
+    canScrollApp(): boolean;
     setView(view: string): void;
     updateViewHeading(): void;
     setDemoActive(active: boolean, detail?: string): void;

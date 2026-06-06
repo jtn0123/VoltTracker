@@ -42,6 +42,7 @@ describe('actions.ts — bridge dispatch', () => {
     vi.useFakeTimers();
     bridge = createVoltBridgeFixture({
       connect: vi.fn(),
+      connectLast: vi.fn(),
       scan: vi.fn(),
       tpmsScan: vi.fn(),
       detailProbe: vi.fn(),
@@ -116,6 +117,42 @@ describe('actions.ts — bridge dispatch', () => {
     expect(bridge.detailProbe).not.toHaveBeenCalled();
     expect(VD.state.status).toMatchObject({ state: 'blocked' });
     expect(VD.state.status.detail).toMatch(/adapter/i);
+    expect(document.getElementById('appStateSummary').textContent).toMatch(/adapter/i);
+    expect(document.getElementById('statusCopy').textContent).toMatch(/adapter/i);
+    expect(document.getElementById('reviewWarnings').textContent).toMatch(/adapter/i);
+  });
+
+  it('detailProbeSelected with no device mirrors the blocked reason into body copy', () => {
+    VD.setDevices([]);
+    VD.actions.detailProbeSelected(button);
+
+    expect(bridge.detailProbe).not.toHaveBeenCalled();
+    expect(VD.state.status).toMatchObject({ state: 'blocked' });
+    expect(document.getElementById('appStateSummary').textContent).toMatch(/adapter/i);
+    expect(document.getElementById('reviewWarnings').textContent).toMatch(/adapter/i);
+  });
+
+  it('Last with no remembered adapter gives visible body feedback instead of a silent bridge call', () => {
+    bridge.getLastDevice = vi.fn(() => '{}');
+
+    VD.actions.handleAction('last', button);
+
+    expect(bridge.connectLast).not.toHaveBeenCalled();
+    expect(VD.state.status).toMatchObject({ state: 'blocked' });
+    expect(VD.state.status.detail).toMatch(/connect once/i);
+    expect(document.getElementById('appStateSummary').textContent).toMatch(/connect once/i);
+    expect(document.getElementById('statusCopy').textContent).toMatch(/connect once/i);
+  });
+
+  it('Last with a remembered adapter still calls bridge.connectLast', () => {
+    bridge.getLastDevice = vi.fn(() => JSON.stringify({
+      address: 'AA:BB:CC:DD:EE:FF',
+      name: 'TestOBD',
+    }));
+
+    VD.actions.handleAction('last', button);
+
+    expect(bridge.connectLast).toHaveBeenCalledTimes(1);
   });
 
   it('deleteSignalLog() asks for confirmation before deleting one evidence row', () => {
@@ -306,13 +343,14 @@ describe('actions.ts — desktop drag scrolling', () => {
 
   it('lets desktop preview users drag page chrome to scroll vertically', () => {
     const scrollBy = vi.fn();
-    Object.defineProperty(window, 'scrollBy', { configurable: true, value: scrollBy });
+    window.VoltDashboard.canScrollApp = vi.fn(() => true);
+    window.VoltDashboard.scrollAppBy = scrollBy;
     const target = document.getElementById('view-drive');
 
     pointerEvent('pointerdown', target, { x: 240, y: 620 });
     pointerEvent('pointermove', target, { x: 240, y: 500 });
 
-    expect(scrollBy).toHaveBeenCalledWith({ top: 120, left: 0, behavior: 'auto' });
+    expect(scrollBy).toHaveBeenCalledWith(120);
     expect(document.body.classList.contains('is-page-dragging')).toBe(true);
 
     pointerEvent('pointerup', target, { x: 240, y: 500 });
@@ -321,7 +359,8 @@ describe('actions.ts — desktop drag scrolling', () => {
 
   it('does not turn button drags into page scrolls', () => {
     const scrollBy = vi.fn();
-    Object.defineProperty(window, 'scrollBy', { configurable: true, value: scrollBy });
+    window.VoltDashboard.canScrollApp = vi.fn(() => true);
+    window.VoltDashboard.scrollAppBy = scrollBy;
     const button = document.querySelector('[data-nav="drive"]');
 
     pointerEvent('pointerdown', button, { x: 40, y: 760 });
@@ -331,31 +370,23 @@ describe('actions.ts — desktop drag scrolling', () => {
   });
 });
 
-describe('actions.ts — map tile controls', () => {
+describe('actions.ts — map tile policy', () => {
   beforeEach(async () => {
     vi.useRealTimers();
     document.body.innerHTML = '';
-    window.localStorage.clear();
+    window.localStorage.setItem('volttracker.map.remoteTiles', '0');
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
     await loadDashboard();
   });
 
-  it('keeps remote basemap tiles off by default and persists an explicit opt-in', () => {
+  it('keeps remote basemap tiles always enabled and removes the opt-out control', () => {
     const VD = window.VoltDashboard;
     const button = document.getElementById('mapTilesBtn');
 
-    expect(VD.state.mapRemoteTilesEnabled).toBe(false);
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.getAttribute('aria-label')).toMatch(/enable remote map tiles/i);
-
-    button.click();
-
     expect(VD.state.mapRemoteTilesEnabled).toBe(true);
-    expect(window.localStorage.getItem('volttracker.map.remoteTiles')).toBe('1');
-    expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.getAttribute('aria-label')).toMatch(/disable remote map tiles/i);
+    expect(button).toBeNull();
   });
 });
 

@@ -1,12 +1,9 @@
 package com.volttracker.obdpoc;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNull;
 import static org.robolectric.Shadows.shadowOf;
 
-import android.Manifest;
 import android.app.Activity;
-import java.util.Arrays;
-import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -20,7 +17,7 @@ import org.robolectric.shadows.ShadowActivity;
 public class MainActivityPermissionTest {
 
     @Test
-    public void freshLaunchRequestsLocationRuntimePermissions() {
+    public void freshLaunchDoesNotRequestRuntimePermissions() {
         ActivityController<MainActivity> controller =
                 Robolectric.buildActivity(MainActivity.class).create();
         try {
@@ -28,10 +25,7 @@ public class MainActivityPermissionTest {
             ShadowActivity.PermissionsRequest request =
                     shadowOf(activity).getLastRequestedPermission();
 
-            assertTrue("fresh launch should request runtime permissions", request != null);
-            List<String> permissions = Arrays.asList(request.requestedPermissions);
-            assertTrue(permissions.contains(Manifest.permission.ACCESS_FINE_LOCATION));
-            assertTrue(permissions.contains(Manifest.permission.ACCESS_COARSE_LOCATION));
+            assertNull("fresh launch should let the dashboard explain permissions first", request);
         } finally {
             controller.destroy();
         }

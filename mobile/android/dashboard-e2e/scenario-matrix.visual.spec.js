@@ -41,7 +41,7 @@ test.describe('visual matrix — tab × demo scenario', () => {
           if (typeof VD.renderDriveLive === 'function') VD.renderDriveLive();
         });
 
-        // Target the view by its unique id: the Diag/settings tab actually has
+        // Target the view by its unique id: the Settings tab actually has
         // two sections sharing data-view="settings" (#view-settings plus the
         // static #view-connection-tools diagnostics panel), so a data-view
         // selector is ambiguous. #view-<tab> is one element per nav tab.

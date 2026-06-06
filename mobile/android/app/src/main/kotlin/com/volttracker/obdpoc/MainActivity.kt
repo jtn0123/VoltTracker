@@ -16,6 +16,7 @@ import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,6 +35,41 @@ import java.util.concurrent.atomic.AtomicLong
 open class MainActivity : ComponentActivity() {
     private var webView: WebView? = null
     private var dashboardPublisher: DashboardPublisher? = null
+
+    // System Back: give the dashboard SPA first crack at it (close a modal, exit fullscreen, or
+    // return to the Drive home tab) before the OS backgrounds/exits the app. evaluateJavascript is
+    // async, so we always consume the press, then re-dispatch the default Back only if the
+    // dashboard reports it had nothing to dismiss.
+    private val backCallback =
+        object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val wv = webView
+                if (wv == null) {
+                    exitToBackground()
+                    return
+                }
+                wv.evaluateJavascript(
+                    "(window.VoltDashboard && typeof VoltDashboard.handleAndroidBack === 'function')" +
+                        " ? !!VoltDashboard.handleAndroidBack() : false",
+                ) { result ->
+                    if (result != "true") {
+                        exitToBackground()
+                    }
+                }
+            }
+        }
+
+    // Default Back when the dashboard has nothing to dismiss. evaluateJavascript is async so the
+    // press is already consumed by the time we decide; onBackPressedDispatcher.onBackPressed()
+    // only re-runs registered callbacks (it does NOT perform the OS finish), so we background the
+    // app ourselves. moveTaskToBack keeps the live Activity/WebView and state alive (like Home);
+    // finish() is the fallback if this somehow isn't the task root.
+    private fun exitToBackground() {
+        if (!moveTaskToBack(true)) {
+            finish()
+        }
+    }
+
     private var prefs: SharedPreferences? = null
 
     @JvmField var deviceCatalog: DeviceCatalog? = null
@@ -156,7 +192,8 @@ open class MainActivity : ComponentActivity() {
                 runOnUiThread(command)
             }
         WebViewBootstrap.configure(createdWebView, VoltBridge(this))
-        requirePermissionGate().ensureGranted()
+
+        onBackPressedDispatcher.addCallback(this, backCallback)
     }
 
     open fun onDashboardReady() {
@@ -197,6 +234,18 @@ open class MainActivity : ComponentActivity() {
         troubleshooter?.shutdown()
         localStore?.close()
         localStore = null
+        // Tear the WebView down explicitly. It holds the VoltBridge JS interface, which keeps a
+        // strong reference back to this Activity; without destroy()/removeJavascriptInterface the
+        // WebView (and the whole Activity graph + native chromium resources) leaks every time the
+        // Activity is torn down, and the orphaned page's JS timers/console callbacks keep firing.
+        webView?.let { wv ->
+            (wv.parent as? ViewGroup)?.removeView(wv)
+            wv.removeJavascriptInterface("VoltTrackerAndroid")
+            wv.stopLoading()
+            wv.destroy()
+        }
+        webView = null
+        dashboardPublisher = null
         super.onDestroy()
     }
 
@@ -275,27 +324,35 @@ open class MainActivity : ComponentActivity() {
         name: String?,
         detailStage: String?,
     ) {
-        if (!requirePermissionGate().ensureConnectPermissions()) {
-            publishStatus("blocked", "Grant Bluetooth permission, then connect again.", true)
-            return
-        }
-        val adapter = BluetoothAdapters.get(this)
-        if (adapter == null) {
-            publishStatus("blocked", "This phone does not report Bluetooth support.", true)
-            return
-        }
-        if (!adapter.isEnabled) {
-            publishStatus("blocked", "Turn on Bluetooth to connect to the OBD adapter.", true)
-            try {
-                startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-            } catch (ignored: Exception) {
-                try {
-                    startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                } catch (settingsIgnored: Exception) {
-                    publishStatus("blocked", "Open Android Bluetooth settings, then try again.", true)
-                }
+        // The demo session is a synthetic telemetry loop (ObdService.startDemoSession runs with a
+        // null address and no Bluetooth socket), so it must NOT be gated behind Bluetooth
+        // permission/adapter/enabled checks. Gating it forced a fresh user who taps "Demo" to
+        // preview the app into a Bluetooth permission prompt or a "Turn on Bluetooth" block for a
+        // feature that never touches Bluetooth.
+        val isDemo = action == ObdService.ACTION_DEMO
+        if (!isDemo) {
+            if (!requirePermissionGate().ensureConnectPermissions()) {
+                publishStatus("blocked", "Grant Bluetooth permission, then connect again.", true)
+                return
             }
-            return
+            val adapter = BluetoothAdapters.get(this)
+            if (adapter == null) {
+                publishStatus("blocked", "This phone does not report Bluetooth support.", true)
+                return
+            }
+            if (!adapter.isEnabled) {
+                publishStatus("blocked", "Turn on Bluetooth to connect to the OBD adapter.", true)
+                try {
+                    startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                } catch (ignored: Exception) {
+                    try {
+                        startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                    } catch (settingsIgnored: Exception) {
+                        publishStatus("blocked", "Open Android Bluetooth settings, then try again.", true)
+                    }
+                }
+                return
+            }
         }
 
         troubleshooter?.clearPendingTestConnectionStop()

@@ -250,7 +250,6 @@ const REQUIRED_DOM = `
   <div id="mapLeaflet"></div>
   <div id="mapFrame"></div>
   <div id="mapCard"></div>
-  <button id="mapTilesBtn"></button>
   <button id="mapFullBtn"></button>
   <div id="mapEmpty"></div>
   <div id="mapDriveChips"></div>

@@ -122,11 +122,11 @@
   background: #ff6b5f;
 }
 
-/* ---- Diag-tab proactive tools panel ---- */
+/* ---- Settings-tab proactive tools panel ---- */
 
 .connection-tools {
   /* Inherits .view + .is-active toggling from base.css. Stacks the panel after
-     the existing settings panels on the Diag tab. */
+     the existing settings panels on the Settings tab. */
 }
 
 .connection-tools__panel {

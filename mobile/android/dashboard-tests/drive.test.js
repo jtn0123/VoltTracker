@@ -55,7 +55,21 @@ describe('drive.ts', () => {
     expect(host.querySelector('[data-tone="demo"]')).not.toBeNull();
   });
 
-  it('renders a "Recording" chip when adapter.connected is true', () => {
+  it('does not show "Recording" when status is idle even if adapter/session state is stale', () => {
+    const VD = window.VoltDashboard;
+    VD.state.status = { state: 'idle' };
+    VD.state.appState = {
+      adapter: { connected: true, name: 'OBDLink MX+' },
+      session: { state: 'connected', sampleCount: 0 },
+    };
+    VD.renderDriveNowChips();
+    const host = document.getElementById('driveNowChips');
+    expect(host.children.length).toBe(0);
+    expect(host.innerHTML).not.toContain('Recording');
+    expect(host.innerHTML).not.toContain('awaiting first sample');
+  });
+
+  it('renders a "Recording" chip when an active session has live evidence', () => {
     const VD = window.VoltDashboard;
     VD.state.appState = {
       adapter: { connected: true, name: 'OBDLink MX+' },
@@ -65,6 +79,21 @@ describe('drive.ts', () => {
     const host = document.getElementById('driveNowChips');
     expect(host.innerHTML).toContain('Recording');
     expect(host.innerHTML).toContain('42 samples');
+  });
+
+  it('uses waiting copy for an active session before the first sample arrives', () => {
+    const VD = window.VoltDashboard;
+    VD.state.status = { state: 'connected' };
+    VD.state.appState = {
+      adapter: { connected: true, name: 'OBDLink MX+' },
+      session: { state: 'connected', sampleCount: 0 },
+    };
+    VD.renderDriveNowChips();
+    const host = document.getElementById('driveNowChips');
+    expect(host.innerHTML).toContain('Waiting for data');
+    expect(host.innerHTML).toContain('adapter connected');
+    expect(host.innerHTML).not.toContain('Recording');
+    expect(host.innerHTML).not.toContain('awaiting first sample');
   });
 
   it('drawLiveSpeedTrace shows a placeholder when speedHistory is empty', () => {
@@ -80,6 +109,20 @@ describe('drive.ts', () => {
     expect(host.querySelector('canvas')).not.toBeNull();
     expect(host.dataset.traceState).toBe('empty');
     expect(host.dataset.traceLabel).toBe('waiting for samples');
+  });
+
+  it('keeps the optional live readout collapsed until a signal arrives', () => {
+    const VD = window.VoltDashboard;
+    const group = document.getElementById('liveReadout');
+
+    VD.updateLiveUi();
+    expect(group.classList.contains('is-empty')).toBe(true);
+
+    VD.state.telemetry = { rpm: 1234 };
+    VD.updateLiveUi();
+
+    expect(group.classList.contains('is-empty')).toBe(false);
+    expect(document.getElementById('rpmValue').textContent).toContain('1234');
   });
 
   it('renders power and SOC chart marks as HTML DOM nodes when live samples exist', () => {

@@ -1,20 +1,54 @@
 <section id="view-settings" class="view" data-view="settings">
   <article class="panel connect-card">
-    <div class="kicker">Adapter controls</div>
-    <div class="button-grid">
-      <button type="button" data-action="permissions">Permissions</button>
-      <button type="button" data-action="refresh">Refresh</button>
-      <button type="button" data-action="last">Last</button>
-      <button type="button" data-action="scan" class="scan">Scan</button>
-      <button type="button" data-action="connect" class="primary">
+    <div class="connection-head">
+      <div>
+        <div class="kicker">Connection</div>
+        <strong id="adapterSummary">No adapter selected</strong>
+        <small id="appStateSummary"
+          >Pick a paired OBD adapter to start logging.</small
+        >
+      </div>
+      <button id="connectBtn" type="button" class="primary primary-action">
         Connect
       </button>
-      <button type="button" data-action="stop" class="danger">Stop</button>
     </div>
-    <p class="status-copy">
-      Your drive data is saved on this phone; raw adapter logs stay in a private
-      folder.
+    <div class="state-grid" aria-label="Live app state">
+      <div><span>Logging</span><strong id="loggingState">idle</strong></div>
+      <div><span>GPS</span><strong id="gpsState">waiting</strong></div>
+      <div><span>DB</span><strong id="dbState">ready</strong></div>
+      <div><span>Source</span><strong id="dataSourceState">real</strong></div>
+    </div>
+    <div class="control-row" data-demo-hidden="true">
+      <select id="deviceSelect">
+        <option value="">No paired adapters found</option>
+      </select>
+      <button id="refreshBtn" type="button">Refresh</button>
+    </div>
+    <div
+      class="button-grid connection-actions"
+      data-demo-hidden="true"
+      aria-label="Connection actions"
+    >
+      <button id="permissionBtn" type="button">Permissions</button>
+      <button id="lastBtn" type="button">Last</button>
+      <button id="scanBtn" type="button" class="scan">Scan</button>
+      <button id="tpmsScanBtn" type="button" data-action="tpmsScan">
+        Detail Probe
+      </button>
+      <button id="disconnectBtn" type="button" class="danger">Stop</button>
+    </div>
+    <p id="statusCopy" class="status-copy" data-demo-hidden="true">
+      Pick a paired OBD adapter to start logging.
     </p>
+    <div id="demoBanner" class="demo-banner" hidden>
+      <span>
+        <strong>Demo preview is running</strong>
+        <small>Preview data is isolated from real OBD history.</small>
+      </span>
+      <button id="demoStopBtn" type="button" class="demo-stop">
+        Stop demo
+      </button>
+    </div>
   </article>
 
   <details class="sandbox-tools" aria-label="Demo preview sandbox controls">
@@ -182,30 +216,6 @@
   <article class="panel raw">
     <div class="kicker">Raw ELM327 frames</div>
     <pre id="rawFrames">Waiting for telemetry...</pre>
-  </article>
-
-  <article class="panel setting-row" id="vehicleCard">
-    <div class="card-head">
-      <div>
-        <span class="kicker">Vehicle</span>
-        <h3 id="vehicleName">No vehicle identified yet</h3>
-        <p id="vehicleSummary" class="status-copy">
-          Your vehicle's details fill in automatically once the VIN and odometer
-          are read.
-        </p>
-      </div>
-    </div>
-    <div class="review-grid">
-      <div><span>Model year</span><strong id="vehicleYear">--</strong></div>
-      <div><span>Odometer</span><strong id="vehicleOdometer">--</strong></div>
-      <div>
-        <span>Logged distance</span
-        ><strong id="vehicleLoggedDistance">--</strong>
-      </div>
-      <div style="grid-column: 1 / -1">
-        <span>VIN</span><strong id="vehicleVin">--</strong>
-      </div>
-    </div>
   </article>
 
   <p

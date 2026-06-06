@@ -64,6 +64,8 @@ logs/
 # Local Codex/agent scratch reports — keep on disk, out of the repo
 .codex-ui-validation/
 .Codex/
+dogfood-output/
+mobile/android/dogfood-output/
 
 # Backups
 backups/

@@ -24,9 +24,9 @@ on:
     paths:
       - 'mobile/android/app/src/main/dashboard-src/**'
       - 'mobile/android/app/src/main/assets/dashboard/**'
-      - 'mobile/android/app/src/main/java/com/volttracker/obdpoc/WebViewBootstrap.java'
-      - 'mobile/android/app/src/main/java/com/volttracker/obdpoc/MainActivity.java'
-      - 'mobile/android/app/src/main/java/com/volttracker/obdpoc/VoltBridge.java'
+      - 'mobile/android/app/src/main/kotlin/com/volttracker/obdpoc/WebViewBootstrap.kt'
+      - 'mobile/android/app/src/main/kotlin/com/volttracker/obdpoc/MainActivity.kt'
+      - 'mobile/android/app/src/main/kotlin/com/volttracker/obdpoc/VoltBridge.kt'
       - '.github/workflows/android-emulator-smoke.yml'
       - 'mobile/android/scripts/emulator-smoke.sh'
 
@@ -71,13 +71,15 @@ jobs:
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect
           # The action runs `script` line-by-line, so the multi-line poll lives in a real script
           # file (also makes it shellcheck-able and locally testable). It installs the APK, launches
-          # the app, and asserts the dashboard's JS->native handshake reaches logcat — the file://
-          # dead-JS class of bug shows up as the absence of that line, which a crash-only scan misses.
+          # the app, asserts the dashboard's JS->native handshake reaches logcat, starts demo
+          # telemetry, taps through the bottom nav, and captures screenshot/logcat artifacts.
           script: bash mobile/android/scripts/emulator-smoke.sh
-      - name: Upload emulator smoke logcat
+      - name: Upload emulator smoke artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: emulator-smoke-logcat
-          path: mobile/android/build/emulator-smoke-logcat.txt
+          name: emulator-smoke-artifacts
+          path: |
+            mobile/android/build/emulator-smoke-logcat.txt
+            mobile/android/build/emulator-smoke/
           if-no-files-found: ignore

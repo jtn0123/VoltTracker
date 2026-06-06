@@ -57,7 +57,16 @@
   }
 
   function setAppState(payload: unknown) {
-    state.appState = VD.parsePayload(payload, {});
+    const parsed = VD.parsePayload(payload, {});
+    if (state.demoActive && state.demoPreviewAppState) {
+      state.realAppState = parsed;
+      if (parsed.storage) VD.setStorage(parsed.storage);
+      renderOperationalState();
+      updateLiveUi();
+      updateValidationUi();
+      return;
+    }
+    state.appState = parsed;
     const nextTelemetry = state.appState.latestTelemetry || {};
     if (shouldAcceptTelemetry(nextTelemetry)) {
       state.telemetry = { ...state.telemetry, ...nextTelemetry };
@@ -112,6 +121,7 @@
     state.sessionLastLat = null;
     state.sessionLastLng = null;
     state.lastSampleAt = 0;
+    if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     applyStaleIndicator();
   }
 
@@ -357,6 +367,7 @@
       }
       state.sessionLastLat = lat;
       state.sessionLastLng = lon;
+      if (typeof VD.updateLivePosition === "function") VD.updateLivePosition(lat, lon);
     }
     scheduleRender();
   }

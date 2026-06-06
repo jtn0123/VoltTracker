@@ -195,6 +195,6 @@ describe('demo ↔ native shape contract', () => {
     const MUST_COVER_DTC = ['dtc', 'status', 'statusLabel', 'seenCount'];
     const dtc = (Array.isArray(s.latestDiagnosticCodes) && s.latestDiagnosticCodes[0]) || {};
     const dtcMissing = MUST_COVER_DTC.filter((k) => !(k in dtc));
-    expect(dtcMissing, 'demo DTC row dropped a field the Diag tab renders').toEqual([]);
+    expect(dtcMissing, 'demo DTC row dropped a field the Insights tab renders').toEqual([]);
   });
 });

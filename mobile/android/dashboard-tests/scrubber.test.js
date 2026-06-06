@@ -218,6 +218,16 @@ describe('scrubber.ts', () => {
     expect(battery).toBe('78%');
   });
 
+  it('renders scrubber metrics with readable labels and units in the values', () => {
+    const VD = window.VoltDashboard;
+    giveChartWidth();
+    VD.renderScrubber(withGappyRoute());
+
+    expect(readoutValue('Distance')).toMatch(/ mi$/);
+    expect(readoutValue('Speed')).toMatch(/ mph$/);
+    expect(readoutValue('Elevation')).toMatch(/ ft$/);
+  });
+
   it('renders elevation across altM gaps without collapsing the reading to a bogus value', () => {
     const VD = window.VoltDashboard;
     const route = withGappyRoute();
@@ -227,9 +237,9 @@ describe('scrubber.ts', () => {
     // a spurious 0.
     const gapPoint = route.points[1];
     VD.scrubAtLatLng(gapPoint.lat, gapPoint.lng);
-    const elev = readoutValue('Elev ft');
+    const elev = readoutValue('Elevation');
     expect(elev).not.toBe('--');
-    expect(Number(elev)).toBeGreaterThan(0);
+    expect(Number(elev.replace(/\s*ft$/, ''))).toBeGreaterThan(0);
   });
 
   afterEach(() => {
