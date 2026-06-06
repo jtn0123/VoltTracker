@@ -115,14 +115,32 @@ tap_bottom_nav() {
   local css_scale=$(((width + 359) / 360))
   local y=$((height - (NAV_BOTTOM_INSET_PX + NAV_RAIL_HALF_PX) * css_scale))
   echo "Navigating to $label via bottom-nav tap at ${x},${y}."
-  adb shell input tap "$x" "$y"
-  sleep 1
-  screenshot "nav-$index-$label"
-  if [ "$expect_change" = "1" ] && [ -n "$PREVIOUS_NAV_SCREENSHOT" ] && cmp -s "$PREVIOUS_NAV_SCREENSHOT" "$shot"; then
-    echo "Dashboard screenshot did not change after tapping bottom-nav $label."
-    echo "This usually means the tap target missed the WebView nav or the view did not switch."
-    exit 1
-  fi
+  # Retry the tap if the view doesn't change. A single adb `input tap` is
+  # occasionally dropped on an adb-flaky emulator boot (observed: the identical
+  # emulator profile passing all 7 taps in one run while missing one tap in a
+  # sibling run whose boot logged repeated adb-daemon connection errors). A lone
+  # dropped tap would falsely fail this smoke. Re-tapping the same nav button is
+  # idempotent — you stay on that view — so retries can NOT mask a real problem:
+  # a genuine geometry/selector break never changes the screen and still fails
+  # after every attempt.
+  local attempts=4
+  local attempt=1
+  while :; do
+    adb shell input tap "$x" "$y"
+    sleep 2
+    screenshot "nav-$index-$label"
+    if [ "$expect_change" != "1" ] || [ -z "$PREVIOUS_NAV_SCREENSHOT" ] \
+      || ! cmp -s "$PREVIOUS_NAV_SCREENSHOT" "$shot"; then
+      break
+    fi
+    if [ "$attempt" -ge "$attempts" ]; then
+      echo "Dashboard screenshot did not change after tapping bottom-nav $label (after $attempts attempts)."
+      echo "This usually means the tap target missed the WebView nav or the view did not switch."
+      exit 1
+    fi
+    echo "  No view change after tapping $label; retrying ($attempt/$attempts)."
+    attempt=$((attempt + 1))
+  done
   PREVIOUS_NAV_SCREENSHOT="$shot"
   check_logcat "bottom-nav $label"
 }
