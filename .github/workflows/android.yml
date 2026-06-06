@@ -180,8 +180,11 @@ jobs:
         working-directory: mobile/android/dashboard-tests
         run: npm ci && npm run build
       - name: Run dashboard Playwright tests
-        # Functional/layout project only — the visual (screenshot) project runs in the separate,
-        # advisory dashboard-visual job so missing/changed baselines never block this gate.
+        # Functional/layout project only — the visual (screenshot) project runs in the
+        # separate `dashboard-visual` job (also required via ci-success) so a baseline
+        # mismatch fails THERE, not here. An intentional UI change must refresh the
+        # committed *-linux.png baselines (download the dashboard-visual-snapshots
+        # artifact and commit it), or the dashboard-visual gate stays red.
         run: npx playwright test --project=chromium
       - name: Upload Playwright report
         if: always()

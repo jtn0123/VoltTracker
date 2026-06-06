@@ -40,8 +40,18 @@ ARTIFACT_DIR="build/emulator-smoke"
 SCREENSHOT_DIR="$ARTIFACT_DIR/screenshots"
 LOGCAT="build/emulator-smoke-logcat.txt"
 NAV_COUNT=7
-NAV_BOTTOM_INSET_PX=64
-NAV_RAIL_HALF_PX=36
+# Vertical geometry of the floating bottom-nav pill (css/screens.css). It renders with
+# `bottom: max(10px, env(safe-area-inset-bottom) + 10px)` and a ~58 px-tall rail
+# (button `min-height: 54px` + 6px padding), so the rail's vertical CENTER sits only
+# ~39 CSS px above the screen bottom (= 10 inset + 29 half-rail). The tap Y below is
+# `height - (10 + 29) * css_scale`, which lands dead-center on the pill.
+#   ⚠️ These were 64 + 36 = 100, calibrated for the OLD full-height bottom bar. After
+#   the dashboard refactor that tapped ~90 px ABOVE the pill, so every nav tap missed
+#   and the first asserted tap ("trips") failed with "screenshot did not change."
+#   Verified against the CI pixel_6 emulator (1080x2400): nav center ≈ physical y 2283,
+#   and `height - 39 * css_scale` = 2400 - 117 = 2283. Keep these in sync with the CSS.
+NAV_BOTTOM_INSET_PX=10
+NAV_RAIL_HALF_PX=29
 PREVIOUS_NAV_SCREENSHOT=""
 
 rm -rf "$ARTIFACT_DIR"
@@ -94,6 +104,13 @@ tap_bottom_nav() {
   local height="$4"
   local expect_change="${5:-1}"
   local shot="$SCREENSHOT_DIR/nav-$index-$label.png"
+  # X splits the FULL screen width into NAV_COUNT slots. The pill caps at
+  # min(760px, 100vw-24px) and centers, so on a phone profile (CI default: pixel_6,
+  # near-full-width pill) each slot center is well within its button. On a wide/tablet/
+  # landscape profile (CSS width > ~784px) the pill is narrower than the screen and the
+  # outer tabs' slot centers would fall outside it — derive X from the centered pill box
+  # (left = (width - nav_w)/2; x = left + nav_w*(2*index+1)/(NAV_COUNT*2)) before running
+  # this smoke on anything but a phone profile.
   local x=$((width * (index * 2 + 1) / (NAV_COUNT * 2)))
   local css_scale=$(((width + 359) / 360))
   local y=$((height - (NAV_BOTTOM_INSET_PX + NAV_RAIL_HALF_PX) * css_scale))
