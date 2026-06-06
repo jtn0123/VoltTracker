@@ -54,7 +54,7 @@ object ChargeSessionMaterializer {
             return result
         }
         val telemetry = data.readTelemetrySamples(input.sessionId)
-        if (telemetry == null || telemetry.isEmpty()) {
+        if (telemetry.isEmpty()) {
             // Without telemetry we have no continuous window to anchor a charge session on.
             return result
         }

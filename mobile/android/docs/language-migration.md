@@ -23,11 +23,11 @@ next*. Update it in the same PR as the work (see [How to update](#how-to-update)
 
 ## Current state
 
-- **Android:** 99 Kotlin production files + 0 Java production files. AGP 9.2.1
+- **Android:** 99 Kotlin production files + 0 Java production files. The unit-test suite
+  is now fully Kotlin too — all 65 test files converted, 0 Java tests remain. AGP 9.2.1
   built-in Kotlin is enabled; Spotless/ktlint formats `.kt`; JaCoCo measures Kotlin
   (`built_in_kotlinc` output). Policy is documented in `CONTRIBUTING.md` and the repo
-  `CLAUDE.md`: **new native source is Kotlin; existing Java tests remain unless they
-  are being materially reworked.**
+  `CLAUDE.md`: **all native source — production and tests — is Kotlin.**
 - **Dashboard:** 13 first-party TypeScript source files in `dashboard-src/js/`, compiled
   by esbuild into classic, WebView-safe `.js` assets (`app.js` plus lazy data chunks).
   Type-checked by `tsc` with full `strict`, linted by ESLint, tested by Vitest (jsdom)
@@ -45,12 +45,12 @@ communicate only across the WebView bridge (a string/JSON ABI, not a code bounda
 
 | Layer | Runs | Source: today → end state | Tests: today → end state |
 |---|---|---|---|
-| **Native app** | on device (APK) | **Kotlin** | New tests in Kotlin; existing Java tests stay Java unless materially reworked |
+| **Native app** | on device (APK) | **Kotlin** | **Kotlin** (suite fully converted; new tests in Kotlin) |
 | **Dashboard** | inside the WebView | **TypeScript source** → classic `.js` assets | Existing JS tests stay JS unless materially reworked; new source-level tests may be TS |
 
 **Test-language rule:** tests are authored in whatever language their layer uses.
-- Native: **write new tests in Kotlin** (the build already compiles `src/test/**/*.kt`;
-  Spotless/ktlint already targets it). Don't rewrite passing Java tests.
+- Native: **all tests are Kotlin** — the suite was converted (the build compiles
+  `src/test/**/*.kt` and Spotless/ktlint targets it). Write new tests in Kotlin.
 - Dashboard: existing Vitest/Playwright tests may stay `.js`; they exercise the TypeScript
   source and built WebView output. New or substantially reworked source-level tests can be
   `.ts` when the added type coverage is useful.
@@ -74,13 +74,12 @@ diverge.
 | Leave until late | none remaining in the current queue |
 
 ### Kotlin-owned files
-New Android app code should be Kotlin. Production Android source is now Kotlin-complete.
-Future Kotlin work is mostly about **new tests** or targeted rewrites of existing Java tests
-when those tests are being materially changed.
+New Android app code should be Kotlin. Production source AND the unit-test suite are now
+Kotlin-complete; future Kotlin work is just **new tests** for new code.
 
 ### Java-for-now files
-No Java production files remain. Existing Java unit/Robolectric tests are intentionally
-left in place; do not rewrite passing tests for language-only churn.
+None — no Java production files and no Java tests remain (the test suite was converted to
+Kotlin). All new native code and tests are Kotlin.
 
 ---
 
@@ -197,7 +196,7 @@ target has a focused test harness or when a refactor creates one; Git is the rol
 tool, but focused tests are the reliability tool.
 - [x] `ObdPollingEngine.kt`, `ObdService.kt`, `MainActivity.kt`
 
-### Wave K5 — Small tested helpers `[~]`
+### Wave K5 — Small tested helpers ✅ done
 After the original K0-K3 waves, continue only with files that are small and already covered by
 focused JVM/Robolectric tests. This wave is opportunistic; each item should stand alone and pass
 `verifyActiveApp` before moving to the next helper.

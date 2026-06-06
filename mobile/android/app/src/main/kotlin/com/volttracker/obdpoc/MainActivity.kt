@@ -85,6 +85,7 @@ open class MainActivity : ComponentActivity() {
     @JvmField var troubleshooter: TroubleshooterBridge? = null
 
     private var restoreFilePicker: ActivityResultLauncher<Intent>? = null
+    private var permissionRequester: ActivityResultLauncher<Array<String>>? = null
     private var lastTelemetry = JSONObject()
     private var lastStatus = JSONObject()
     private var lastStorage = JSONObject()
@@ -148,12 +149,14 @@ open class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         restoreFilePicker =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult(), this::onRestoreFilePicked)
+        permissionRequester =
+            registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onPermissionsResult() }
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val activityPrefs = checkNotNull(prefs)
         deviceCatalog = DeviceCatalog(this, activityPrefs)
         dataBackup = DataBackup(this)
         backupController = BackupController(this, requireDataBackup(), backgroundExecutor)
-        permissionGate = PermissionGate(this)
+        permissionGate = PermissionGate(this, ::launchPermissionRequest)
         localStore = ObdLocalStore(this)
         troubleshooter = TroubleshooterBridge(this)
         ObdNotifications.ensureChannel(this)
@@ -249,15 +252,17 @@ open class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray,
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != PermissionGate.REQUEST_CODE) {
-            return
-        }
+    /** Launches the runtime-permission request via the Activity Result API. Overridable in tests. */
+    open fun launchPermissionRequest(permissions: Array<String>) {
+        permissionRequester?.launch(permissions)
+    }
+
+    /**
+     * Reacts to a runtime-permission result. The decision re-reads the live grant state through
+     * [PermissionGate] (not the result map), so it stays correct regardless of how the request was
+     * delivered. Invoked by the [ActivityResultContracts.RequestMultiplePermissions] callback.
+     */
+    open fun onPermissionsResult() {
         publishDeviceList()
         val gate = requirePermissionGate()
         if (!gate.hasBluetoothConnect()) {

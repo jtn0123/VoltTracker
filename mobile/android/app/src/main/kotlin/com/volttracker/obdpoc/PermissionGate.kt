@@ -12,6 +12,7 @@ import android.os.Build
  */
 class PermissionGate(
     private val activity: Activity,
+    private val requestPermissions: (Array<String>) -> Unit,
 ) {
     /** Requests missing Bluetooth permissions. Returns true when connect can proceed now. */
     fun ensureConnectPermissions(): Boolean {
@@ -68,7 +69,7 @@ class PermissionGate(
 
     private fun requestMissing(missing: List<String>): Boolean {
         if (missing.isNotEmpty()) {
-            activity.requestPermissions(missing.toTypedArray(), REQUEST_CODE)
+            requestPermissions(missing.toTypedArray())
             return false
         }
         return true
@@ -87,8 +88,4 @@ class PermissionGate(
             granted(Manifest.permission.POST_NOTIFICATIONS)
 
     private fun granted(permission: String): Boolean = activity.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
-
-    companion object {
-        const val REQUEST_CODE = 4101
-    }
 }

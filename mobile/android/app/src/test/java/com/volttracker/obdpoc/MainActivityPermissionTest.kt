@@ -1,31 +1,36 @@
 package com.volttracker.obdpoc
 
-import android.app.Activity
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowActivity
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MainActivityPermissionTest {
     @Test
     fun freshLaunchDoesNotRequestRuntimePermissions() {
-        val controller: ActivityController<MainActivity> =
-            Robolectric.buildActivity(MainActivity::class.java).create()
+        val controller: ActivityController<RecordingActivity> =
+            Robolectric.buildActivity(RecordingActivity::class.java).create()
         try {
-            val activity: Activity = controller.get()
-            val request: ShadowActivity.PermissionsRequest? =
-                shadowOf(activity).lastRequestedPermission
-
-            assertNull("fresh launch should let the dashboard explain permissions first", request)
+            assertTrue(
+                "fresh launch should let the dashboard explain permissions first",
+                controller.get().requestedPermissions.isEmpty(),
+            )
         } finally {
             controller.destroy()
+        }
+    }
+
+    /** Records any runtime-permission request the activity launches during startup. */
+    class RecordingActivity : MainActivity() {
+        val requestedPermissions = mutableListOf<Array<String>>()
+
+        override fun launchPermissionRequest(permissions: Array<String>) {
+            requestedPermissions += permissions
         }
     }
 }

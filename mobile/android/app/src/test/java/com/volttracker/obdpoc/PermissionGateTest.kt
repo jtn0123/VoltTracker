@@ -2,7 +2,6 @@ package com.volttracker.obdpoc
 
 import android.Manifest
 import android.app.Activity
-import android.content.pm.PackageManager
 import android.os.Bundle
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -15,7 +14,6 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowActivity
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -23,24 +21,24 @@ class PermissionGateTest {
     @Test
     fun connectionPermissionsDoNotRequireLocation() {
         val activity = activityWithConnectionPermissions()
+        var requested: Array<String>? = null
 
-        assertTrue(PermissionGate(activity).ensureConnectionGranted())
-        assertNull(shadowOf(activity).lastRequestedPermission)
+        assertTrue(PermissionGate(activity) { requested = it }.ensureConnectionGranted())
+        assertNull(requested)
     }
 
     @Test
     fun fullPermissionRequestStillIncludesLocation() {
         val activity = activityWithConnectionPermissions()
+        var requested: Array<String>? = null
 
-        assertFalse(PermissionGate(activity).ensureGranted())
-        val request: ShadowActivity.PermissionsRequest =
-            shadowOf(activity).lastRequestedPermission
+        assertFalse(PermissionGate(activity) { requested = it }.ensureGranted())
         assertArrayEquals(
             arrayOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION,
             ),
-            request.requestedPermissions,
+            requested,
         )
     }
 
@@ -48,9 +46,10 @@ class PermissionGateTest {
     fun fullPermissionRequestDoesNotReAskFineWhenCoarseIsGranted() {
         val activity = activityWithConnectionPermissions()
         shadowOf(activity).grantPermissions(Manifest.permission.ACCESS_COARSE_LOCATION)
+        var requested: Array<String>? = null
 
-        assertTrue(PermissionGate(activity).ensureGranted())
-        assertNull(shadowOf(activity).lastRequestedPermission)
+        assertTrue(PermissionGate(activity) { requested = it }.ensureGranted())
+        assertNull(requested)
     }
 
     @Test
@@ -62,11 +61,7 @@ class PermissionGateTest {
                 Manifest.permission.BLUETOOTH_SCAN,
             )
 
-        activity.onRequestPermissionsResult(
-            PermissionGate.REQUEST_CODE,
-            arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
-            intArrayOf(PackageManager.PERMISSION_GRANTED),
-        )
+        activity.onPermissionsResult()
 
         assertEquals("ready", activity.lastState)
         assertTrue(activity.lastDetail!!.contains("Location is still off"))
@@ -83,11 +78,7 @@ class PermissionGateTest {
                 Manifest.permission.ACCESS_COARSE_LOCATION,
             )
 
-        activity.onRequestPermissionsResult(
-            PermissionGate.REQUEST_CODE,
-            arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
-            intArrayOf(PackageManager.PERMISSION_GRANTED),
-        )
+        activity.onPermissionsResult()
 
         assertEquals("ready", activity.lastState)
         assertTrue(activity.lastDetail!!.contains("Notifications are still off"))
@@ -109,7 +100,7 @@ class PermissionGateTest {
         var lastDetail: String? = null
 
         override fun onCreate(savedInstanceState: Bundle?) {
-            permissionGate = PermissionGate(this)
+            permissionGate = PermissionGate(this) {}
         }
 
         override fun publishDeviceList() {}
