@@ -1,0 +1,236 @@
+package com.volttracker.obdpoc
+
+import android.content.Context
+import android.content.Intent
+import android.os.Parcelable
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileWriter
+import java.io.IOException
+import java.util.zip.ZipInputStream
+
+/**
+ * Verifies the diagnostics zip contents and the [Intent] shape. The zip is what the user (and
+ * through them, an engineer) sees when they tap "share diagnostics", so a regression where we drop
+ * the rolling app log or the summary file would silently degrade every future field report.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class DiagnosticsShareIntentTest {
+    private lateinit var context: Context
+
+    @Before
+    fun setUp() {
+        context = RuntimeEnvironment.getApplication()
+        wipe(File(context.filesDir, "obd-logs"))
+        wipe(File(context.filesDir, "app-log"))
+        wipe(File(context.cacheDir, "diagnostics"))
+    }
+
+    @After
+    fun tearDown() {
+        wipe(File(context.filesDir, "obd-logs"))
+        wipe(File(context.filesDir, "app-log"))
+        wipe(File(context.cacheDir, "diagnostics"))
+    }
+
+    @Test
+    fun zipIncludesRecentSessionLogsAppLogsAndSummary() {
+        val obdLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(obdLogDir.mkdirs())
+
+        // 3 session JSONLs — all under the 5-file cap so all should make it into the zip.
+        writeFile(File(obdLogDir, "session-1000-obd.jsonl"), "{\"a\":1}\n")
+        writeFile(File(obdLogDir, "session-2000-obd.jsonl"), "{\"a\":2}\n")
+        writeFile(File(obdLogDir, "session-3000-obd.jsonl"), "{\"a\":3}\n")
+        writeFile(File(obdLogDir, "sessions-summary.jsonl"), "{\"sum\":1}\n")
+
+        val appLogDir = File(context.filesDir, "app-log")
+        assertTrue(appLogDir.mkdirs())
+        writeFile(File(appLogDir, "app.log"), "rolling-line-1\n")
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+        assertNotNull("buildZip should succeed when source dirs are present", zip)
+        assertTrue(
+            "zip file should live under cacheDir/diagnostics",
+            zip!!.absolutePath.contains("/diagnostics/"),
+        )
+
+        val entries = listZip(zip)
+        assertTrue(
+            "session log 1 should be in zip: $entries",
+            entries.contains("obd-logs/session-1000-obd.jsonl"),
+        )
+        assertTrue(
+            "session log 2 should be in zip: $entries",
+            entries.contains("obd-logs/session-2000-obd.jsonl"),
+        )
+        assertTrue(
+            "session log 3 should be in zip: $entries",
+            entries.contains("obd-logs/session-3000-obd.jsonl"),
+        )
+        assertTrue(
+            "summary should be in zip: $entries",
+            entries.contains("obd-logs/sessions-summary.jsonl"),
+        )
+        assertTrue("app log should be in zip: $entries", entries.contains("app-log/app.log"))
+    }
+
+    @Test
+    fun zipCapsSessionLogsAtFiveMostRecent() {
+        val obdLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(obdLogDir.mkdirs())
+
+        // 8 session logs — only the most recent 5 should be included.
+        for (i in 1..8) {
+            val f = File(obdLogDir, "session-" + (1000L * i) + "-obd.jsonl")
+            writeFile(f, "{\"i\":$i}\n")
+            // Stamp mtime in increasing order so 8 is newest.
+            assertTrue("setLastModified should succeed for $f", f.setLastModified(10_000L * i))
+        }
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+        assertNotNull(zip)
+
+        val entries = listZip(zip!!)
+        var sessionCount = 0
+        for (e in entries) {
+            if (e.startsWith("obd-logs/session-")) {
+                sessionCount++
+            }
+        }
+        assertEquals(
+            "only the " +
+                DiagnosticsShareIntent.MAX_SESSION_LOGS +
+                " most recent session logs should ship",
+            DiagnosticsShareIntent.MAX_SESSION_LOGS,
+            sessionCount,
+        )
+        // The five newest (4..8) are present; the three oldest (1..3) are NOT.
+        for (i in 4..8) {
+            assertTrue(
+                "session $i should be in zip",
+                entries.contains("obd-logs/session-" + (1000L * i) + "-obd.jsonl"),
+            )
+        }
+        for (i in 1..3) {
+            assertFalse(
+                "session $i should be dropped",
+                entries.contains("obd-logs/session-" + (1000L * i) + "-obd.jsonl"),
+            )
+        }
+    }
+
+    @Test
+    fun zipIncludesRolledAppLogWhenPresent() {
+        val appLogDir = File(context.filesDir, "app-log")
+        assertTrue(appLogDir.mkdirs())
+        writeFile(File(appLogDir, "app.log"), "live\n")
+        writeFile(File(appLogDir, "app.log.1"), "rolled\n")
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+        assertNotNull(zip)
+        val entries = listZip(zip!!)
+        assertTrue(entries.contains("app-log/app.log"))
+        assertTrue(
+            "rolled app log should also be included: $entries",
+            entries.contains("app-log/app.log.1"),
+        )
+    }
+
+    @Test
+    fun buildIntentReturnsShareIntentPointingAtZip() {
+        val obdLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(obdLogDir.mkdirs())
+        writeFile(File(obdLogDir, "session-1-obd.jsonl"), "{}\n")
+
+        val intent = DiagnosticsShareIntent.buildIntent(context)
+        assertNotNull(intent)
+        assertEquals(Intent.ACTION_SEND, intent!!.action)
+        assertEquals("application/zip", intent.type)
+        assertNotNull(
+            "EXTRA_STREAM URI must be attached",
+            intent.getParcelableExtra<Parcelable>(Intent.EXTRA_STREAM),
+        )
+        assertTrue(
+            "FLAG_GRANT_READ_URI_PERMISSION must be set so the share-sheet target can read",
+            (intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0,
+        )
+    }
+
+    @Test
+    fun buildIntentReturnsNullWhenContextIsNull() {
+        assertNull(DiagnosticsShareIntent.buildIntent(null))
+    }
+
+    @Test
+    fun buildZipClearsStaleZipsFromPriorRuns() {
+        val diagDir = File(context.cacheDir, "diagnostics")
+        assertTrue(diagDir.mkdirs())
+        val stale = File(diagDir, "diagnostics-old.zip")
+        writeFile(stale, "junk")
+        assertTrue(stale.exists())
+
+        val obdLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(obdLogDir.mkdirs())
+        writeFile(File(obdLogDir, "session-1-obd.jsonl"), "{}\n")
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+        assertNotNull(zip)
+        assertFalse("stale zip from prior run should have been cleared", stale.exists())
+        assertTrue("new zip should exist", zip!!.exists())
+    }
+
+    // ---- helpers ------------------------------------------------------------
+
+    companion object {
+        @Throws(IOException::class)
+        private fun listZip(zip: File): Set<String> {
+            val entries = HashSet<String>()
+            ZipInputStream(FileInputStream(zip)).use { zis ->
+                var e = zis.nextEntry
+                while (e != null) {
+                    entries.add(e.name)
+                    zis.closeEntry()
+                    e = zis.nextEntry
+                }
+            }
+            return entries
+        }
+
+        @Throws(IOException::class)
+        private fun writeFile(
+            f: File,
+            contents: String,
+        ) {
+            val parent = f.parentFile
+            parent?.mkdirs()
+            FileWriter(f, false).use { w ->
+                w.write(contents)
+            }
+        }
+
+        private fun wipe(f: File?) {
+            if (f == null || !f.exists()) return
+            if (f.isDirectory) {
+                val kids = f.listFiles()
+                if (kids != null) {
+                    for (k in kids) wipe(k)
+                }
+            }
+            f.delete()
+        }
+    }
+}
