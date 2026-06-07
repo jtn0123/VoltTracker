@@ -1,6 +1,0 @@
-name: "VoltTracker active app CodeQL config"
-
-paths:
-  - mobile/android
-  - .github/workflows
-  - .github/scripts

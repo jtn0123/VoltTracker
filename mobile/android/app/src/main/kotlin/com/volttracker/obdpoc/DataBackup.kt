@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import com.volttracker.obdpoc.data.BackupMigrator
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.VoltTrackerDb
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
@@ -36,6 +37,7 @@ class DataBackup(
     init {
         cleanupTransientRestoreFiles(context.cacheDir)
         cleanupTransientBackupFiles(File(context.cacheDir, "backups"))
+        cleanupTransientExportFiles(File(context.cacheDir, "exports"))
     }
 
     fun exportDebugBundle(
@@ -47,8 +49,10 @@ class DataBackup(
             payload.put("createdAtMs", System.currentTimeMillis())
             payload.put("appState", MainActivityUtils.parseJson(appStateJson))
             payload.put("storage", MainActivityUtils.parseJson(storageJson))
-            val root = context.getExternalFilesDir(null) ?: context.cacheDir
-            val dir = File(root, "exports")
+            // Internal cache, not external storage: the debug bundle contains app state + storage
+            // summary (device/trip metadata) in cleartext. App-scoped EXTERNAL storage is reachable
+            // via adb/backup tooling; internal cacheDir is private and gets swept on init.
+            val dir = File(context.cacheDir, "exports")
             if (!dir.exists() && !dir.mkdirs()) {
                 payload.put("ok", false)
                 payload.put("error", "Could not create export directory.")
@@ -203,7 +207,10 @@ class DataBackup(
 
     companion object {
         private const val MAX_RESTORE_BYTES = 128L * 1024L * 1024L
-        private const val CURRENT_RESTORE_SCHEMA_VERSION = 10
+
+        // Track the live schema version so a future migration bump can't silently make restore
+        // reject freshly-created backups (a v11 backup must validate as current, not "too new").
+        private const val CURRENT_RESTORE_SCHEMA_VERSION = VoltTrackerDb.DATABASE_VERSION
         private const val IO_BUFFER_BYTES = 8192
         private val ENCRYPTED_BACKUP_MAGIC =
             byteArrayOf(
@@ -216,6 +223,13 @@ class DataBackup(
                 '1'.code.toByte(),
                 '\n'.code.toByte(),
             )
+
+        // v2 = the v1 magic with the version byte ('1' at index 6) bumped to '2'. v2 backups feed
+        // the magic+salt+IV header to AES/GCM as AAD, so the auth tag authenticates the cleartext
+        // header (not just the ciphertext). v1 backups predate this; the decrypt branch below skips
+        // AAD for them so they still open. Same 8-byte length, so header parsing is unchanged.
+        private val ENCRYPTED_BACKUP_MAGIC_V2 =
+            ENCRYPTED_BACKUP_MAGIC.copyOf().also { it[6] = '2'.code.toByte() }
         private const val ENCRYPTION_SALT_BYTES = 16
         private const val ENCRYPTION_IV_BYTES = 12
         private const val ENCRYPTION_KEY_BITS = 256
@@ -297,6 +311,16 @@ class DataBackup(
             }
         }
 
+        private fun cleanupTransientExportFiles(dir: File?) {
+            val existing = dir?.listFiles() ?: return
+            for (file in existing) {
+                val name = file.name
+                if (name.startsWith("volttracker-debug-summary-") && name.endsWith(".json")) {
+                    file.delete()
+                }
+            }
+        }
+
         @JvmStatic
         fun isEncryptedBackup(file: File?): Boolean {
             if (file == null) {
@@ -308,7 +332,7 @@ class DataBackup(
                     if (input.read(header) != header.size) {
                         return false
                     }
-                    header.contentEquals(ENCRYPTED_BACKUP_MAGIC)
+                    isMagic(header)
                 }
             } catch (ex: IOException) {
                 false
@@ -408,9 +432,13 @@ class DataBackup(
             }
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, deriveKey(passphrase, salt), GCMParameterSpec(128, iv))
+            // Authenticate the cleartext header into the GCM tag (must precede any encryption).
+            cipher.updateAAD(ENCRYPTED_BACKUP_MAGIC_V2)
+            cipher.updateAAD(salt)
+            cipher.updateAAD(iv)
             FileInputStream(source).use { input ->
                 FileOutputStream(dest).use { fileOut ->
-                    fileOut.write(ENCRYPTED_BACKUP_MAGIC)
+                    fileOut.write(ENCRYPTED_BACKUP_MAGIC_V2)
                     fileOut.write(salt)
                     fileOut.write(iv)
                     CipherOutputStream(fileOut, cipher).use { out -> copyStream(input, out) }
@@ -437,6 +465,14 @@ class DataBackup(
                 }
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding")
                 cipher.init(Cipher.DECRYPT_MODE, deriveKey(passphrase, salt), GCMParameterSpec(128, iv))
+                // v2 backups authenticated the header as AAD at encrypt time; feed the SAME bytes
+                // back (a tampered header then fails the tag check). v1 backups had no AAD, so adding
+                // it would break their tag — skip it for them.
+                if (magic.contentEquals(ENCRYPTED_BACKUP_MAGIC_V2)) {
+                    cipher.updateAAD(magic)
+                    cipher.updateAAD(salt)
+                    cipher.updateAAD(iv)
+                }
                 CipherInputStream(fileIn, cipher).use { input ->
                     FileOutputStream(dest).use { out ->
                         copyStream(input, out, maxPlaintextBytes)
@@ -460,7 +496,8 @@ class DataBackup(
             }
         }
 
-        private fun isMagic(header: ByteArray): Boolean = header.contentEquals(ENCRYPTED_BACKUP_MAGIC)
+        private fun isMagic(header: ByteArray): Boolean =
+            header.contentEquals(ENCRYPTED_BACKUP_MAGIC) || header.contentEquals(ENCRYPTED_BACKUP_MAGIC_V2)
 
         @Throws(IOException::class)
         private fun copyStream(
