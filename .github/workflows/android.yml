@@ -331,8 +331,9 @@ jobs:
   ci-success:
     # Single aggregate status so branch protection only needs to require one
     # check ("ci-success") instead of enumerating every lane. Adding a new test
-    # job just means adding it to `needs:` here — no branch-protection edit.
-    #
+    # job just means adding it to `needs:` here — the verify step derives pass/fail
+    # from the `needs` map itself (no second hand-maintained list to forget), so a
+    # newly-added job can't silently pass this gate while failing.
     if: always()
     needs:
       [
@@ -346,15 +347,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required jobs passed
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          if [ "${{ needs.unit-tests.result }}" != "success" ] \
-            || [ "${{ needs.dashboard-tests.result }}" != "success" ] \
-            || [ "${{ needs.dashboard-e2e.result }}" != "success" ] \
-            || [ "${{ needs.dashboard-visual.result }}" != "success" ] \
-            || [ "${{ needs.gradle-dependency-audit.result }}" != "success" ] \
-            || [ "${{ needs.emulator-smoke.result }}" != "success" ]; then
-            echo "unit-tests=${{ needs.unit-tests.result }} dashboard-tests=${{ needs.dashboard-tests.result }} dashboard-e2e=${{ needs.dashboard-e2e.result }} dashboard-visual=${{ needs.dashboard-visual.result }} gradle-dependency-audit=${{ needs.gradle-dependency-audit.result }} emulator-smoke=${{ needs.emulator-smoke.result }}"
-            echo "::error::One or more required CI jobs did not succeed."
+          echo "$NEEDS_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value.result)"'
+          failed="$(echo "$NEEDS_JSON" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')"
+          if [ -n "$failed" ]; then
+            echo "::error::One or more required CI jobs did not succeed: $failed"
             exit 1
           fi
           echo "All required CI jobs succeeded."
