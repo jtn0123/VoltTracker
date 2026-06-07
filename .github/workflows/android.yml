@@ -268,21 +268,23 @@ jobs:
           cache: 'gradle'
       - name: Verify committed Gradle lockfile is in sync
         # app/gradle.lockfile is committed (see mobile/android/.gitignore) so the
-        # OSV scan below reads it directly — no --write-locks regeneration. This
-        # step resolves dependencies in lock-VERIFICATION mode (no --write-locks):
-        # Gradle checks every resolvable classpath against the committed lockfile and
-        # fails if a declared dependency drifted from the lock, so a stale lockfile
+        # OSV scan below reads it directly — no --write-locks regeneration. Only the
+        # shipped `releaseRuntimeClasspath` is locked (see app/build.gradle), so this
+        # step resolves dependencies in lock-VERIFICATION mode (no --write-locks) and
+        # Gradle fails if that classpath drifted from the lock — a stale lockfile
         # can't slip the scan. It only resolves dependencies (no Kotlin/Java compile).
-        # Regenerate after a dependency change with `./gradlew :app:dependencies
-        # --write-locks` and commit app/gradle.lockfile.
+        # AGP's unified-test-platform configs are deliberately unlocked so their
+        # build/test-host-only Netty (never shipped) stays out of the scan.
+        # Regenerate after a release-dependency change with `./gradlew :app:dependencies
+        # --configuration releaseRuntimeClasspath --write-locks` and commit the file.
         working-directory: mobile/android
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon :app:dependencies
       - name: OSV vulnerability scan
         id: osv
-        # Scans the committed Gradle lockfile for dependencies with known advisories
-        # in the OSV database.
+        # Scans the committed Gradle lockfile (shipped release runtime classpath) for
+        # dependencies with known advisories in the OSV database.
         uses: google/osv-scanner-action/osv-scanner-action@e69cc6c86b31f1e7e23935bbe7031b50e51082de # v2.0.2
         with:
           scan-args: |-

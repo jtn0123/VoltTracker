@@ -157,23 +157,24 @@ dependencies {
     testImplementation libs.robolectric
 }
 
-// Dependency locking — lockAllConfigurations() means every resolvable
-// configuration is locked against the committed app/gradle.lockfile (un-ignored
-// in mobile/android/.gitignore). The OSV-Scanner gradle-dependency-audit job
-// reads that committed lockfile directly, and every build verifies against it for
-// reproducible, version-pinned resolution.
+// Dependency locking — only the shipped release runtime classpath is locked against
+// the committed app/gradle.lockfile (un-ignored in mobile/android/.gitignore). That is
+// the dependency surface that actually ships in the release APK and the exact scope the
+// OSV-Scanner gradle-dependency-audit job reads directly, so the security scan is
+// reproducible and version-pinned.
 //
-// Regenerate after a dependency change with:
-//   ./gradlew :app:dependencies --write-locks
-// That walks all debug+release compile/runtime/lint/annotation-processor/unitTest/
-// androidTest classpaths and rewrites app/gradle.lockfile (configs with no external
-// deps are recorded on the `empty=` line, which lockAllConfigurations() also
-// requires). A blanket `configurations.each { it.resolve() }` task is intentionally
-// NOT used: it forces resolution of AGP's internal *Elements consumable variants and
-// the self-referential androidTest classpaths, which fail with variant-ambiguity
-// errors. The `dependencies` report resolves exactly the lockable classpaths.
-dependencyLocking {
-    lockAllConfigurations()
+// We deliberately do NOT lock all configurations: AGP's Unified Test Platform
+// orchestration configs (unified-test-platform-*) drag in transitive Netty that runs
+// only on the build/test host and is never bundled in the release APK. Locking those
+// would flood the OSV scan with advisories for code that does not ship.
+//
+// Regenerate after a release-dependency change with:
+//   ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --write-locks
+// and commit app/gradle.lockfile.
+configurations.configureEach {
+    if (name == "releaseRuntimeClasspath") {
+        resolutionStrategy.activateDependencyLocking()
+    }
 }
 
 // Assembles the shipped dashboard index.html from the per-screen partials in
