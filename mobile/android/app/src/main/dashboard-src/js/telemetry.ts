@@ -3,7 +3,7 @@
   const bridge = VD.bridge;
   const el = VD.el;
 
-  type PayloadRecord = Record<string, any>;
+  type PayloadRecord = Record<string, unknown>;
   type LiveCellGroup = HTMLElement | Element | null;
   type ValidationTone = "ok" | "warn" | "bad";
 
@@ -42,7 +42,7 @@
 
   function setStatus(payload: unknown) {
     const wasActive = isActiveStatus();
-    const status = VD.parsePayload(payload, {});
+    const status = VD.parsePayload<VoltStatus>(payload, {});
     state.status = status;
     const badge = el("stateBadge");
     const next = status.state || "idle";
@@ -57,9 +57,10 @@
   }
 
   function setAppState(payload: unknown) {
-    const parsed = VD.parsePayload(payload, {});
+    const parsed = VD.parsePayload<VoltAppState>(payload, {});
     if (state.demoActive && state.demoPreviewAppState) {
-      state.realAppState = parsed;
+      // Park the real app-state behind the demo preview (cross-module demo invariant).
+      VD.setState({ realAppState: parsed });
       if (parsed.storage) VD.setStorage(parsed.storage);
       renderOperationalState();
       updateLiveUi();
@@ -356,8 +357,8 @@
         Number.isFinite(state.sessionLastLng)
       ) {
         const step = VD.haversineMetersJs(
-          state.sessionLastLat,
-          state.sessionLastLng,
+          Number(state.sessionLastLat),
+          Number(state.sessionLastLng),
           lat,
           lon
         );
@@ -546,7 +547,7 @@
     VD.setText("diagSamples", samples ? `${samples} samples` : "0 samples");
     VD.setText("diagAdapter", t.adapter || status.adapter || "OBD adapter");
     VD.setText("diagVehicleState", vehicleState);
-    VD.setText("diagSession", t.sessionMs ? formatDuration(t.sessionMs) : "--");
+    VD.setText("diagSession", t.sessionMs ? formatDuration(Number(t.sessionMs)) : "--");
     VD.setText("diagSupported", t.supportedPids ? summarizePidLine(t.supportedPids) : "unknown");
   }
 
@@ -591,7 +592,7 @@
       hasGps ? "ok" : (gps.state === "blocked" ? "bad" : "warn"),
       "GPS trace",
       hasGps ? `${locationRows || "live"} location samples available` : (gps.state === "blocked" ? "Location permission blocked" : "Waiting for location samples"),
-      gps.state || "idle"
+      String(gps.state || "idle")
     );
     setValidationRow(
       "validateDb",

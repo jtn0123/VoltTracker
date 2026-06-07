@@ -40,7 +40,7 @@
   type ScrubRoute = {
     points?: ScrubRoutePoint[];
     socTrack?: ScrubSocPoint[];
-    [key: string]: any;
+    [key: string]: unknown;
   };
 
   type ScrubSample = {

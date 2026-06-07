@@ -939,10 +939,14 @@
   }
 
   function captureDemoPreview() {
-    state.demoPreviewStorage = state.storage;
-    state.demoPreviewTrips = state.trips;
-    state.demoPreviewInsights = state.insights;
-    state.demoPreviewAppState = state.appState;
+    // Snapshot the live payloads as the demo preview (cross-module demo invariant:
+    // the read-side panels swap to these while demo is active).
+    VD.setState({
+      demoPreviewStorage: state.storage,
+      demoPreviewTrips: state.trips,
+      demoPreviewInsights: state.insights,
+      demoPreviewAppState: state.appState
+    });
   }
 
   // Re-renders every demo-backed surface (DB summary, Signals, DTC, vehicle, map,
@@ -991,8 +995,11 @@
           startSoc: 22 + (i % 6) * 6, endSoc: 88 + (i % 3) * 3, powerKw: i % 5 === 0 ? 1.3 : 7.0 + (i % 3) * 0.2, energyKwh: 8 + (i % 7)
         });
       }
-      s.chargeSummary.recentSessions = charges;
-      s.chargeSummary.chargeSessionCount = charges.length;
+      // loadSampleData() above always seeds chargeSummary; keep a non-null
+      // local so the demo writes below typecheck against the optional slot.
+      const chargeSummary = (s.chargeSummary = s.chargeSummary || {});
+      chargeSummary.recentSessions = charges;
+      chargeSummary.chargeSessionCount = charges.length;
       s.chargeSessionCount = charges.length;
       s.sampleCount = 184213; s.rawTelemetryCount = 184213; s.pidObservationCount = 184213;
       s.eventCount = 312; s.sessionCount = 96;

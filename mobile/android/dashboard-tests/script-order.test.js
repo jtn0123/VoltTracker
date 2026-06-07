@@ -18,7 +18,9 @@ const BUILD_MJS = resolve('build.mjs');
 // calls into map/drive/telemetry/etc., so it comes after them.
 const EXPECTED_EAGER_ORDER = [
   'core',
-  'panels',
+  'storage-status',
+  'signals-panel',
+  'insights-panel',
   'map',
   'scrubber',
   'drive',

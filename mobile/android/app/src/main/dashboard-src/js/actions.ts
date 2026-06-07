@@ -156,7 +156,7 @@
     if (action === "openClearDtc") openClearDtcWarning();
     if (action === "cancelClearDtc") closeClearDtcWarning();
     if (action === "confirmClearDtc") confirmClearDtc(button);
-    if (action === "previewDtcCodes") previewDtcCodes();
+    if (action === "previewDtcCodes") void previewDtcCodes();
     if (action === "clearPreviewDtcCodes") clearPreviewDtcCodes();
   }
 
@@ -212,11 +212,11 @@
     const storage = state.storage || (state.storage = {});
     storage.latestDiagnosticCodes = samples.map((s) => ({ ...s }));
     storage.diagnosticCodeCount = samples.length;
-    storage.diagnosticCodeStatusCounts = samples.reduce((acc: Record<string, number>, s: any) => {
+    storage.diagnosticCodeStatusCounts = samples.reduce((acc: Record<string, number>, s) => {
       const k = String(s.status || "stored").toLowerCase();
       acc[k] = (acc[k] || 0) + 1;
       return acc;
-    }, {});
+    }, {} as Record<string, number>);
     if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
     VD.setStatus({ state: "ready", detail: "DTC example data loaded into the Insights view." });
     return undefined;
@@ -296,11 +296,15 @@
       state.trips = [];
       state.insights = {};
       state.appState = Object.assign({}, state.appState || {}, { vehicle: null, latestTelemetry: null });
-      state.demoPreviewStorage = null;
-      state.demoPreviewTrips = null;
-      state.demoPreviewInsights = null;
-      state.demoPreviewAppState = null;
-      state._mapSampleLoaded = false;
+      // Clear the demo-mode shadow copies (cross-module invariant: they gate
+      // whether storage/trips/insights renders read real vs preview data).
+      VD.setState({
+        demoPreviewStorage: null,
+        demoPreviewTrips: null,
+        demoPreviewInsights: null,
+        demoPreviewAppState: null,
+        _mapSampleLoaded: false
+      });
       VD.updateStorageUi();
       VD.renderRealV2Ui();
       VD.renderMap();
@@ -315,10 +319,12 @@
     if (typeof VD.renderMap === "function") VD.renderMap();
     if (typeof VD.renderRealTrips === "function") VD.renderRealTrips();
     if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
-    state.demoPreviewStorage = null;
-    state.demoPreviewTrips = null;
-    state.demoPreviewInsights = null;
-    state.demoPreviewAppState = null;
+    VD.setState({
+      demoPreviewStorage: null,
+      demoPreviewTrips: null,
+      demoPreviewInsights: null,
+      demoPreviewAppState: null
+    });
   }
 
   function stopDemo() {
@@ -439,7 +445,7 @@
       VD.setStatus({ state: "idle", detail: "Debug export is only available inside the Android app." });
       return;
     }
-    const result = VD.parsePayload(bridge.exportDebugBundle(), {});
+    const result = VD.parsePayload<VoltExportResult>(bridge.exportDebugBundle(), {});
     if (result.ok) {
       VD.setStatus({ state: "ready", detail: `Debug summary exported: ${result.path || "app files"}.` });
     } else {
@@ -473,7 +479,7 @@
       return;
     }
     const result = bridge.exportDetailedSignalLog(String(id || ""));
-    const parsed = VD.parsePayload(result, {});
+    const parsed = VD.parsePayload<VoltExportResult>(result, {});
     if (parsed.ok === false) {
       VD.setStatus({ state: "blocked", detail: parsed.message || "Signal log export failed." });
       return;
@@ -489,7 +495,7 @@
       return;
     }
     const result = bridge.exportDetailedSignalLogs();
-    const parsed = VD.parsePayload(result, {});
+    const parsed = VD.parsePayload<VoltExportResult>(result, {});
     if (parsed.ok === false) {
       VD.setStatus({ state: "blocked", detail: parsed.message || "Signal log export failed." });
       return;
@@ -726,7 +732,8 @@
     document.querySelectorAll("[data-map-layer]").forEach((node) => {
       const button = node as HTMLElement;
       button.addEventListener("click", () => {
-        state.mapLayer = button.dataset.mapLayer;
+        // The [data-map-layer] selector guarantees the attribute is present.
+        state.mapLayer = button.dataset.mapLayer as string;
         button.blur();
         VD.renderMap();
         window.setTimeout(VD.renderMap, 80);
@@ -738,7 +745,7 @@
       const target = event.target as Element | null;
       const button = target && target.closest("[data-map-session]");
       if (!button) return;
-      state.selectedMapSessionId = (button as HTMLElement).dataset.mapSession;
+      VD.setState({ selectedMapSessionId: (button as HTMLElement).dataset.mapSession as string });
       VD.renderMap();
     };
     VD.bindListenerGuarded("mapSessionList", "click", onSessionClick, opts);
@@ -779,23 +786,22 @@
       const tripButton = target && target.closest("[data-trip-map]");
       if (!tripButton) return;
       const id = (tripButton as HTMLElement).dataset.tripMap;
-      const trip = (state.trips || []).find((t: any) => String(t.id) === String(id));
+      const trip = (state.trips || []).find((t) => String(t.id) === String(id));
       if (trip && trip.hasRoute) {
         const route = typeof VD.ensureRouteForTrip === "function" ? VD.ensureRouteForTrip(trip) : null;
         if (route && route.session) {
           const routeKey = String(route.session.id || "");
-          const routes = Array.isArray((state.storage || {}).recentRoutes)
-            ? state.storage.recentRoutes
-            : [];
+          const existingRoutes = (state.storage || {}).recentRoutes;
+          const routes: VoltRoute[] = Array.isArray(existingRoutes) ? existingRoutes : [];
           state.storage = state.storage || {};
           state.storage.recentRoutes = [
             route,
-            ...routes.filter((existing: any) =>
+            ...routes.filter((existing) =>
               String((existing.session || {}).id || "") !== routeKey
             )
           ];
         }
-        state.selectedMapSessionId = id;
+        VD.setState({ selectedMapSessionId: id ?? null });
         VD.setView("map");
       } else {
         VD.setStatus({ state: "ready", detail: "This trip has no stored GPS route." });

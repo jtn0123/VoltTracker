@@ -16,6 +16,12 @@
 
 export {};
 
+// All dashboard ambient types live inside `declare global` so that not just the
+// VoltDashboard interface below but every bundled source file (telemetry.ts,
+// panels.ts and its split siblings, …) can name them without an import — the
+// dashboard ships as ordered classic IIFEs, never ES modules.
+declare global {
+
 /**
  * A telemetry/status payload as it crosses the native -> WebView boundary: the
  * bridge hands the WebView either a JSON string or an already-parsed object, and
@@ -23,19 +29,384 @@ export {};
  * message, so this is an open record keyed by string. Intentionally permissive:
  * a precise shape here would be dishonest given the union of payload kinds.
  */
-type VoltPayload = Record<string, any>;
+type VoltPayload = Record<string, unknown>;
 
-/** A single decoded route point used by the map + scrubber. */
+// ---------------------------------------------------------------------------
+// Native bridge payload shapes (C1)
+//
+// These mirror the JSON the Kotlin side emits — StorageSummaryJson.kt,
+// data/ObdStoreReports.kt, data/DiagnosticCodeReport.kt and AppStatePayload.kt
+// (see demo-native-contract.test.js, which derives the field set live from those
+// emitters). The dashboard re-parses each payload with parsePayload() and reads
+// fields very defensively (Number(x || 0), `x == null`, optional sub-objects), so
+// EVERY field is optional here: the native layer omits absent columns and sends
+// JSON `null` for missing nullable doubles. Numeric fields are `number | null`
+// where the native side boxes a nullable double; string fields that can be JSON
+// null are `string | null`. A trailing index signature is kept ONLY on the small
+// number of shapes that are spread/merged with arbitrary extra keys.
+// ---------------------------------------------------------------------------
+
+/** A native read that failed: `{ ok: false, error, message }` (panels isNativeError). */
+interface VoltNativeError {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+}
+
+/** Result of a bridge export call (debug bundle / signal-log export): a status
+ *  object the actions layer reads for `ok`/`path`/`error`/`message`. */
+interface VoltExportResult {
+  ok?: boolean;
+  path?: string;
+  error?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
+/** A row in storage.recentSessions[] (StorageSummaryJson.recentSessionsJson). */
+interface VoltRecentSession {
+  id?: string | number;
+  mode?: string;
+  adapterAddress?: string;
+  adapterName?: string;
+  startedAtMs?: number;
+  endedAtMs?: number | null;
+  status?: string;
+  supportedPids?: unknown;
+  sampleCount?: number;
+  usefulSampleCount?: number;
+  emptySampleCount?: number;
+  lastEventAtMs?: number;
+}
+
+/** A diagnostic-trouble-code row (data/DiagnosticCodeReport.toJson). */
+interface VoltDtcRow {
+  id?: string | number;
+  dtc?: string;
+  status?: string;
+  statusLabel?: string;
+  moduleKey?: string;
+  moduleName?: string;
+  header?: string;
+  firstSeenMs?: number;
+  lastSeenMs?: number;
+  seenCount?: number;
+  lastSessionId?: string | number | null;
+  rawResponse?: string;
+}
+
+/** A charge-session row (data/ObdStoreReports.chargeSessionRowJson). */
+interface VoltChargeSessionRow {
+  id?: string | number;
+  startedAtMs?: number;
+  endedAtMs?: number | null;
+  chargerType?: string | null;
+  startSoc?: number | null;
+  endSoc?: number | null;
+  powerKw?: number | null;
+  energyKwh?: number | null;
+}
+
+/** storage.chargeSummary (data/ObdStoreReports.chargeSummaryJson). */
+interface VoltChargeSummary {
+  chargeSessionCount?: number;
+  chargingHintCount?: number;
+  maxPowerKw?: number | null;
+  latest?: VoltChargeSessionRow | null;
+  recentSessions?: VoltChargeSessionRow[];
+}
+
+/** A single enhanced/detailed-signal capability or catalog profile row. The
+ *  catalog profiles and the captured evidence rows are merged with `{...}`, and
+ *  the merge adds the `_status`/`_hasEvidence`/`_effDone` markers, so this shape
+ *  stays open. */
+interface VoltEnhancedCapability {
+  id?: string | number;
+  name?: string;
+  pid?: string;
+  command?: string;
+  header?: string;
+  category?: string;
+  scanStage?: string;
+  pollLane?: string;
+  risk?: string;
+  notes?: string;
+  source?: string;
+  supported?: boolean;
+  responseCount?: number;
+  validationStatus?: string;
+  lastSeenMs?: number;
+  sample?: Record<string, unknown> | null;
+  /** Derived in panels: capability status bucket + whether real evidence exists. */
+  _status?: string;
+  _hasEvidence?: boolean;
+  [key: string]: unknown;
+}
+
+/** storage.latestReview (post-session review block). Read field-by-field with
+ *  heavy `|| 0` / `Array.isArray` guards, so every member is optional/open. */
+interface VoltSessionReview {
+  session?: VoltRecentSession & { detail?: string };
+  warnings?: Array<{ code?: string; count?: number; detail?: string }>;
+  timeline?: Array<{ detail?: string; state?: string; kind?: string; atMs?: number }>;
+  recentPidFrames?: Array<{
+    command?: string;
+    name?: string;
+    valueText?: string;
+    rawResponse?: string;
+    parsed?: boolean;
+  }>;
+  stateCounts?: Record<string, number>;
+  latestHealth?: { backgroundSampleCount?: number; sampleGapCount?: number };
+  maxSpeedKph?: number;
+  locationSampleCount?: number;
+  parsedPidCount?: number;
+  unknownPidCount?: number;
+  avgSampleIntervalMs?: number;
+  backgroundSampleCount?: number;
+  sampleGapEventCount?: number;
+  usefulTelemetryCount?: number;
+  emptyTelemetryCount?: number;
+  [key: string]: unknown;
+}
+
+/** The storage-summary payload (StorageSummaryJson.build + putLatestSession).
+ *  Surfaced via VD.setStorage and stashed on state.storage. Nested blocks
+ *  (overview/batterySummary) are read field-by-field, so they stay open records. */
+interface VoltStorageSummary {
+  error?: string;
+  message?: string;
+  database?: string;
+  databaseBytes?: number;
+  sessionCount?: number;
+  rawTelemetryCount?: number;
+  sampleCount?: number;
+  emptyTelemetryCount?: number;
+  eventCount?: number;
+  adapterCount?: number;
+  pidObservationCount?: number;
+  diagnosticCodeCount?: number;
+  diagnosticCodeStatusCounts?: Record<string, number>;
+  locationSampleCount?: number;
+  vehicleCount?: number;
+  fieldCapabilityCount?: number;
+  tripSegmentCount?: number;
+  chargeSessionCount?: number;
+  batterySnapshotCount?: number;
+  cellSnapshotCount?: number;
+  exportCount?: number;
+  lastSessionId?: string | number;
+  lastMode?: string;
+  lastStatus?: string;
+  lastStartedAtMs?: number;
+  lastEventAtMs?: number;
+  lastSampleCount?: number;
+  lastAdapter?: string;
+  recentSessions?: VoltRecentSession[];
+  adapters?: Array<Record<string, unknown>>;
+  latestDiagnosticCodes?: VoltDtcRow[];
+  latestReview?: VoltSessionReview;
+  latestRoute?: VoltRoute;
+  recentRoutes?: VoltRoute[];
+  overview?: Record<string, unknown>;
+  chargeSummary?: VoltChargeSummary;
+  batterySummary?: Record<string, unknown>;
+  latestVehicle?: Record<string, unknown>;
+  enhancedCapabilities?: VoltEnhancedCapability[];
+  detailedSignalCatalog?: VoltEnhancedCapability[];
+  [key: string]: unknown;
+}
+
+/** The logged-trip rollup rows returned by bridge.getTrips() and stashed on
+ *  state.trips. Read field-by-field with Number()/String() coercion. */
+interface VoltTrip {
+  id?: string | number;
+  routeId?: string | number;
+  sessionId?: string | number;
+  hasRoute?: boolean;
+  pointCount?: number;
+  sampleCount?: number;
+  startedAtMs?: number;
+  endedAtMs?: number;
+  durationMs?: number;
+  distanceMeters?: number;
+  avgMovingSpeedKph?: number;
+  maxSpeedKph?: number;
+  status?: string;
+  adapterName?: string;
+  [key: string]: unknown;
+}
+
+/** The vehicle-insights rollup returned by bridge.getInsights() (state.insights). */
+interface VoltInsights {
+  tripCount?: number;
+  totalDistanceMeters?: number;
+  totalDriveMs?: number;
+  maxSpeedKph?: number;
+  longestTripMeters?: number;
+  gpsTripCount?: number;
+  [key: string]: unknown;
+}
+
+/** appState payload (AppStatePayload.toJson) stashed on state.appState. Nested
+ *  blocks are read defensively, so they remain open records. */
+interface VoltAppState {
+  app?: { version?: string; schemaVersion?: number };
+  permissions?: { bluetooth?: boolean; location?: boolean; notifications?: boolean };
+  adapter?: Record<string, unknown>;
+  session?: Record<string, unknown>;
+  vehicle?: Record<string, unknown>;
+  gps?: Record<string, unknown>;
+  lifecycle?: Record<string, unknown>;
+  latestTelemetry?: Record<string, unknown>;
+  storage?: VoltStorageSummary;
+  [key: string]: unknown;
+}
+
+/** The live-telemetry slot on state. The known sample fields are concrete; the
+ *  slot is also spread with arbitrary sample keys (telemetry.ts `{...sample}`),
+ *  so it keeps an index signature. Numeric readings are `number | string | null`:
+ *  the native/demo layer can send a JSON number, a raw string, JSON null, or omit
+ *  the key, and the readers guard all of those (`x == null || x === ""`, Number()). */
+type VoltReading = number | string | null;
+interface VoltTelemetry {
+  speedKph?: VoltReading;
+  rpm?: VoltReading;
+  voltage?: VoltReading;
+  coolantC?: VoltReading;
+  loadPct?: VoltReading;
+  throttlePct?: VoltReading;
+  soc?: VoltReading;
+  batteryTemp?: VoltReading;
+  powerKw?: VoltReading;
+  updatedAt?: VoltReading;
+  source?: string;
+  raw?: string;
+  sampleCount?: number;
+  latitude?: VoltReading;
+  [key: string]: unknown;
+}
+
+/** Private runtime bag the troubleshooter IIFE keeps under state.troubleshooter.
+ *  The counters are seeded with numeric defaults and mutated as numbers, so they
+ *  are required; the rest carry their initial values. */
+interface VoltTroubleshooterState {
+  consecutiveFailedSessions: number;
+  retriesThisBurst: number;
+  autoOpened: boolean;
+  forgetMode: boolean;
+  lastSessionState: string;
+  lastTelemetry: VoltTelemetry | null;
+  priorFocus?: HTMLElement | null;
+  [key: string]: unknown;
+}
+
+/** A remembered/paired device entry (state.lastDevice / state.deviceHistory[]). */
+interface VoltDevice {
+  address?: string;
+  name?: string;
+  candidate?: boolean;
+  lastSeen?: unknown;
+  connectCount?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * The central runtime/UI state bag (core.ts seeds it; every module mutates it).
+ * Closed shape: the known fields carry real types, and the demo/real-shadow
+ * fields used while demo mode is streaming are declared explicitly rather than
+ * leaking back to `any`. The state-shape.test.js pins the seeded key set.
+ */
+interface DashboardState {
+  view: string;
+  mode: string;
+  selectedRealTripId: string | null;
+  signalProbeStage: string;
+  lastDevice: VoltDevice | null;
+  deviceHistory: VoltDevice[];
+  storage: VoltStorageSummary;
+  trips: VoltTrip[];
+  insights: VoltInsights;
+  demoSessions: VoltChargeSessionRow[] | null;
+  appState: VoltAppState;
+  demoActive: boolean;
+  demoScenario?: string;
+  mapLayer: string;
+  mapRemoteTilesEnabled: boolean;
+  mapFull: boolean;
+  selectedMapSessionId: string | null;
+  status: VoltStatus;
+  speedHistory: number[];
+  powerHistory: number[];
+  socHistory: number[];
+  sessionStartSoc: number | null;
+  sessionDistanceM: number;
+  sessionLastLat: number | null;
+  sessionLastLng: number | null;
+  lastSampleAt: number;
+  rafPending: number;
+  telemetry: VoltTelemetry;
+  // Demo-mode shadow copies: while demo streams, the real native payloads are
+  // parked on these so they can be restored when demo stops, and the demo
+  // preview payloads drive the visible UI. Reset to null when demo stops.
+  realStorage?: VoltStorageSummary | null;
+  realTrips?: VoltTrip[] | null;
+  realInsights?: VoltInsights | null;
+  realAppState?: VoltAppState | null;
+  demoPreviewStorage?: VoltStorageSummary | null;
+  demoPreviewTrips?: VoltTrip[] | null;
+  demoPreviewInsights?: VoltInsights | null;
+  demoPreviewAppState?: VoltAppState | null;
+  // Internal map-render flag: true once the recent-routes sample fallback loaded.
+  _mapSampleLoaded?: boolean;
+  /** Private state bag the troubleshooter IIFE keeps on the shared state. */
+  troubleshooter?: VoltTroubleshooterState;
+}
+
+/** A single decoded route point used by the map + scrubber. The derived `eff`
+ *  field is written by enrichRouteEff (null = regen/no-data segment). */
 interface VoltRoutePoint {
   lat: number;
   lng: number;
-  [key: string]: any;
+  atMs?: number;
+  speedMps?: number;
+  altM?: number;
+  eff?: number | null;
+  [key: string]: unknown;
+}
+
+/** A power sample on a route's powerTrack (used to derive per-point efficiency). */
+interface PowerTrackSample {
+  atMs: number;
+  powerKw: number | string;
 }
 
 /** A logged drive/route the map renders and the scrubber walks. */
 interface VoltRoute {
   points?: VoltRoutePoint[];
-  [key: string]: any;
+  powerTrack?: PowerTrackSample[];
+  session?: { id?: string | number; [key: string]: unknown };
+  pointCount?: number;
+  distanceMeters?: number;
+  /** Set true by enrichRouteEff once it has annotated points with `eff`. */
+  _effDone?: boolean;
+  [key: string]: unknown;
+}
+
+/** A minimal structural view of the Leaflet map instances the trip mini-maps
+ *  create. Leaflet itself is the untyped `L` global; this names just the methods
+ *  the trip-map lifecycle touches. */
+interface LeafletMap {
+  remove(): void;
+  invalidateSize(animate?: boolean): void;
+  fitBounds(bounds: unknown, options?: unknown): void;
+}
+
+/** One entry in the dtc-causes.ts DTC_CAUSES table. */
+interface VoltDtcCause {
+  causes: string[];
+  severity: string;
+  category: string;
 }
 
 /** Result of a DTC lookup (dtc-lookup.ts `dtcInfo`) — shape mirrors that function exactly. */
@@ -44,19 +415,28 @@ interface VoltDtcInfo {
   description: string | null;
   known: boolean;
   category: string | null;
-  causes: any;
-  severity: any;
-  [key: string]: any;
+  causes: string[] | null;
+  severity: string | null;
+  [key: string]: unknown;
 }
 
-/** Status object passed to `setStatus` / surfaced by the error controller. */
+/** Status object passed to `setStatus` / surfaced by the error controller
+ *  (StatusPayload.kt). `state` is read with a `|| "idle"` fallback, so it is
+ *  optional here; the rest are the fields the telemetry / troubleshooter /
+ *  connection-status readers touch. */
 interface VoltStatus {
-  state: string;
+  state?: string;
   detail?: string;
-  [key: string]: any;
+  adapter?: string;
+  blocked?: boolean;
+  competingApps?: unknown;
+  failureClass?: string;
+  lastAddress?: string;
+  lastName?: string;
+  lastVoltage?: number | string | null;
+  [key: string]: unknown;
 }
 
-declare global {
   /** Leaflet runtime global; kept broad while the map/panel runtime surface is still globally shared. */
   const L: any;
 
@@ -83,19 +463,32 @@ declare global {
     errorController?: AbortController;
     /** Mutable in-memory dashboard data (trips/sessions/hourly/insights). */
     data: {
-      trips: any[];
-      sessions: any[];
-      hourly: any[];
-      insights: any[];
+      trips: unknown[];
+      sessions: unknown[];
+      hourly: unknown[];
+      insights: unknown[];
       demoLoaded: boolean;
-      [key: string]: any;
+      [key: string]: unknown;
     };
     /** Mutable UI/runtime state bag. */
-    state: Record<string, any>;
+    state: DashboardState;
+    /** Patch-merge writes into the shared state bag (C3 accessor seam). Used for
+     *  the fields with cross-module invariants (demo lifecycle, map/trip
+     *  selection); behaves like Object.assign(state, patch). */
+    setState(patch: Partial<DashboardState>): DashboardState;
+    /** True while demo telemetry is streaming. */
+    isDemoActive(): boolean;
+    /** The currently-selected map session id (or null). */
+    getSelectedMapSessionId(): string | null;
     reportClientError(label: string, detail?: string): void;
     escapeHtml(value: unknown): string;
-    /** Parse a native payload (JSON string or object); returns `fallback` on failure. */
-    parsePayload(payload: unknown, fallback?: any): any;
+    /**
+     * Parse a native payload (JSON string or object); returns `fallback` on
+     * failure. Generic so a caller can name the expected shape
+     * (`VD.parsePayload<VoltStorageSummary>(raw, {})`); defaults to the open
+     * `VoltPayload` record so untyped callers still get a readable object.
+     */
+    parsePayload<T = VoltPayload>(payload: unknown, fallback?: unknown): T;
     /** Set an element's text (with "--" fallback); returns whether the node existed. */
     setText(id: string, value: unknown): boolean;
     /** Set a meter element's fill width (0-100); returns whether the node existed. */
@@ -107,15 +500,17 @@ declare global {
     updateViewHeading(): void;
     setDemoActive(active: boolean, detail?: string): void;
     clearDemoTelemetry(): void;
-    ensureDemoData(callback?: (data: any) => void): void;
+    ensureDemoData(callback?: (error: Error | null, data: VoltDashboard["data"]) => void): void;
     ensureDtcData(): Promise<VoltDashboard>;
     dtcDataLoaded(): boolean;
     dtcSearchUrl(code: string): string;
     setDevices(payload: unknown): void;
     setHistory(payload: unknown): void;
-    selectDevice(address: string, name?: string): void;
-    getLastDevice(): any;
-    getSelectedDevice(): any;
+    selectDevice(address: unknown, name?: unknown): void;
+    getLastDevice(): VoltDevice;
+    /** The adapter currently chosen in the device <select>, or null. Both fields
+     *  are always concrete strings when a device is returned. */
+    getSelectedDevice(): { address: string; name: string } | null;
     relativeTime(value: unknown): string;
     realViewMeta: Record<string, [string, string]>;
 
@@ -134,14 +529,35 @@ declare global {
     formatBytes(value: unknown): string;
     dbRowCount(storage: unknown): number;
 
-    // ----- panels.ts ---------------------------------------------------------
+    // ----- storage-status.ts (split from the old panels.ts) ------------------
     setStorage(payload: unknown): void;
+    updateStorageUi(): void;
+    updateDiagnosticCodeUi(): void;
+    updateReviewUi(): void;
+    renderRealV2Ui(): void;
+    renderVehicleUi(): void;
+    buildRealInsights(review: VoltSessionReview): Array<{ title: string; detail: string }>;
+    stateCountSummary(counts: Record<string, number>): string;
+    /** True when a parsed native payload is a failed read (`ok === false`). */
+    isNativeError(payload: unknown): boolean;
+    reportNativeReadError(payload: unknown, fallbackDetail: string): void;
+    buildStatusCopy(text: string): HTMLParagraphElement;
+    toggleHidden(id: string, hidden: unknown): void;
+
+    // ----- signals-panel.ts (split from the old panels.ts) -------------------
+    updateEnhancedCapabilityUi(): void;
+
+    // ----- insights-panel.ts (split from the old panels.ts) ------------------
     loadTrips(): void;
     loadInsights(): void;
     renderRealTrips(): void;
+    renderTripRow(trip: VoltTrip): HTMLElement;
     renderInsightStats(): void;
+    renderInsightScatter(): void;
     selectRealTrip(id: string | number): void;
-    updateDiagnosticCodeUi(): void;
+    ensureRouteForTrip(trip: VoltTrip): VoltRoute | null;
+    renderRealTripDetail(): void;
+    renderRealTripLeafletMaps(options: { detailOnly?: boolean }): void;
     enrichRouteEff(route: VoltRoute): void;
 
     // ----- map.ts ------------------------------------------------------------
@@ -149,12 +565,12 @@ declare global {
     loadSampleData(): void;
     haversineMetersJs(lat1: number, lng1: number, lat2: number, lng2: number): number;
     /** Resolve the route for the currently-selected map session from a storage payload. */
-    selectedMapRoute(storage: any): VoltRoute;
+    selectedMapRoute(storage: VoltStorageSummary): VoltRoute;
 
     // ----- scrubber.ts -------------------------------------------------------
     renderScrubber(route: VoltRoute): void;
     hideScrubber(): void;
-    scrubberAttachMap(map: any): void;
+    scrubberAttachMap(map: unknown): void;
     scrubAtLatLng(lat: number, lng: number): void;
 
     // ----- drive.ts ----------------------------------------------------------
@@ -162,18 +578,20 @@ declare global {
 
     // ----- dtc-lookup.ts / dtc-causes.ts (lazy: present only after ensureDtcData) ----
     dtcInfo?(code: string): VoltDtcInfo | null;
-    dtcSampleCodes?: any[];
+    dtcSampleCodes?: VoltDtcRow[];
     dtcLookupCodes?: ReadonlyArray<string>;
     dtcLookupSize?: number;
-    DTC_CAUSES?: Record<string, any>;
+    DTC_CAUSES?: Record<string, VoltDtcCause>;
 
     // ----- actions.ts / troubleshooter.ts ------------------------------------
-    actions: Record<string, any>;
-    troubleshooter: Record<string, any>;
+    // Write-only API bags (Object.assign targets); no source reads members back
+    // off them, so a `unknown`-valued record keeps them honest without `any`.
+    actions: Record<string, unknown>;
+    troubleshooter: Record<string, unknown>;
 
     // Members attached by files not yet individually enumerated above remain
     // reachable; new exports should get a real signature here.
-    [key: string]: any;
+    [key: string]: unknown;
   }
 
   /**

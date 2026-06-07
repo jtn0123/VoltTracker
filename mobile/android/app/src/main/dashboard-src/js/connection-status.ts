@@ -119,7 +119,9 @@ function installStatusObserver() {
         result = prior(payload);
       }
       try {
-        const parsed = VD.parsePayload ? VD.parsePayload(payload, {}) : payload;
+        const parsed = VD.parsePayload
+          ? VD.parsePayload<LowVoltageStatus>(payload, {})
+          : (payload as LowVoltageStatus | null | undefined);
         noteStatus(parsed);
       } catch (ignored) {
         // Observer must never break the underlying setStatus call.

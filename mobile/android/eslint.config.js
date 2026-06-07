@@ -12,10 +12,17 @@
 // Run via `npm --prefix mobile/android/dashboard-tests run lint`. The lefthook pre-commit
 // hook invokes the same npm script for staged dashboard source files.
 
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 const require = createRequire(new URL('./dashboard-tests/package.json', import.meta.url));
 const tseslint = require('typescript-eslint');
+
+// Absolute path to this config's directory (mobile/android). Type-aware rules
+// need a real tsconfig + root dir so typescript-eslint can build a program;
+// point at the dashboard checker config so lint sees exactly what `npm run
+// typecheck` sees (the .d.ts globals + the dashboard source).
+const ROOT_DIR = fileURLToPath(new URL('.', import.meta.url));
 
 export default [
   {
@@ -30,6 +37,12 @@ export default [
       parser: tseslint.parser,
       ecmaVersion: 2022,
       sourceType: 'module',
+      parserOptions: {
+        // Type-aware linting: build a program from the dashboard checker config so
+        // rules like no-floating-promises / no-misused-promises can see real types.
+        project: './dashboard-tests/tsconfig.json',
+        tsconfigRootDir: ROOT_DIR,
+      },
       globals: {
         // Browser globals the dashboard runs against inside the Android WebView.
         window: 'readonly',
@@ -89,6 +102,17 @@ export default [
           caughtErrorsIgnorePattern: '^(_.*|ignored)$',
         },
       ],
+      // Type-aware promise rules (C4): a forgotten await on a bridge/lazy-load
+      // promise silently swallows rejections, and passing an async function where
+      // a void handler is expected leaks unhandled rejections. Both are errors and
+      // are fully fixed in the source.
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      // no-explicit-any is a ratchet: warn (not error) so the remaining honest
+      // `any`s (e.g. the broad Leaflet `L` global, a couple of permissive native
+      // payload bridges) surface without blocking the build, and new ones show up
+      // in review.
+      '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
 ];

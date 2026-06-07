@@ -103,6 +103,9 @@
     // can re-render on open even if the telemetry stream is quiescent.
     lastTelemetry: null
   };
+  // Non-optional alias to the bag seeded just above, so every reader below can
+  // touch its fields without re-narrowing the optional state.troubleshooter slot.
+  const ts = state.troubleshooter;
 
   // Listener discipline: every addEventListener attached from this file
   // passes { signal } so a single controller.abort() tears all bindings down.
@@ -122,12 +125,12 @@
     const node = modal();
     if (!node) return;
     // Remember the focused element so it can be restored when the modal closes.
-    state.troubleshooter.priorFocus = document.activeElement;
+    ts.priorFocus = document.activeElement as HTMLElement | null;
     node.hidden = false;
     if (typeof node.focus === "function") node.focus();
     renderForRetry();
     renderCompeting((state.status || {}).competingApps);
-    renderStaleTelemetry(state.troubleshooter.lastTelemetry);
+    renderStaleTelemetry(ts.lastTelemetry);
     refreshStuckBondSuggestion();
     try {
       if (bridge && typeof bridge.logClientError === "function" && reason) {
@@ -142,13 +145,13 @@
     const node = modal();
     if (!node) return;
     node.hidden = true;
-    state.troubleshooter.autoOpened = false;
+    ts.autoOpened = false;
     // Restore focus to whatever opened the modal so keyboard users aren't stranded.
-    const prior = state.troubleshooter.priorFocus;
+    const prior = ts.priorFocus;
     if (prior && typeof prior.focus === "function" && document.contains(prior)) {
       prior.focus();
     }
-    state.troubleshooter.priorFocus = null;
+    ts.priorFocus = null;
   }
 
   // Collapsible step head. Toggles aria-expanded + body[hidden].
@@ -178,7 +181,7 @@
     const btn = el("troubleshooterPrimary");
     if (!btn) return;
     btn.addEventListener("click", () => {
-      if (state.troubleshooter.forgetMode) {
+      if (ts.forgetMode) {
         // Deep-link to the system Bluetooth settings so the user can forget the adapter and
         // re-pair. Android handles the activity.
         openBluetoothSettings();
@@ -218,7 +221,7 @@
     const title = el("troubleshooterTitle");
     const primary = el("troubleshooterPrimary");
     if (!intro || !primary) return;
-    if (state.troubleshooter.forgetMode) {
+    if (ts.forgetMode) {
       if (title) title.textContent = "Adapter pairing looks stuck";
       intro.textContent =
         "The last few sessions all failed. The fastest fix is usually to forget the adapter in Android Bluetooth settings and pair it fresh.";
@@ -338,7 +341,7 @@
 
   function noteTelemetry(payload: unknown) {
     if (!payload || typeof payload !== "object") return;
-    state.troubleshooter.lastTelemetry = payload;
+    ts.lastTelemetry = payload as VoltTelemetry;
     if (isOpen()) {
       renderStaleTelemetry(payload);
     }
@@ -346,7 +349,7 @@
 
   // Switch the primary action when the last 3 sessions all failed.
   function refreshStuckBondSuggestion() {
-    state.troubleshooter.forgetMode = false;
+    ts.forgetMode = false;
     let recent: RecentSession[] = [];
     if (bridge && typeof bridge.getRecentSessions === "function") {
       try {
@@ -375,7 +378,7 @@
       renderForRetry();
       return;
     }
-    state.troubleshooter.forgetMode = true;
+    ts.forgetMode = true;
     renderForRetry();
   }
 
@@ -383,7 +386,7 @@
   // the actions row (cancel + help) so the banner is actionable instead of
   // a plain "Dashboard error" string. Called from noteStatus on every status
   // payload.
-  function renderErrorBannerCopy(status: Record<string, any> | null | undefined) {
+  function renderErrorBannerCopy(status: VoltStatus | null | undefined) {
     const titleNode = el("errorBannerTitle");
     const hintNode = el("errorBannerHint");
     const actionsNode = el("errorBannerActions");
@@ -434,11 +437,11 @@
   }
 
   // Counts a status payload toward the auto-open trigger.
-  function noteStatus(status: Record<string, any> | null | undefined) {
+  function noteStatus(status: VoltStatus | null | undefined) {
     if (!status) return;
     const stateName = String(status.state || "").toLowerCase();
     const detail = String(status.detail || "").toLowerCase();
-    const t = state.troubleshooter;
+    const t = ts;
     renderErrorBannerCopy(status);
 
     // Retries within an active connect burst.
@@ -486,7 +489,7 @@
   // Manual entry-point so other panels (or a "Help" link in the error banner)
   // can open the modal on demand.
   function show() {
-    state.troubleshooter.autoOpened = true;
+    ts.autoOpened = true;
     open("manual");
   }
 
@@ -509,7 +512,7 @@
           result = prior(payload);
         }
         try {
-          const parsed = VD.parsePayload(payload, {});
+          const parsed = VD.parsePayload<VoltStatus>(payload, {});
           noteStatus(parsed);
         } catch (ignored) {
           // Observer must never break the underlying setStatus call.

@@ -36,9 +36,11 @@ const DASHBOARD_MODULE_LOADERS = {
   'drive.js': () => import('../../app/src/main/dashboard-src/js/drive.ts'),
   'dtc-causes.js': () => import('../../app/src/main/dashboard-src/js/dtc-causes.ts'),
   'dtc-lookup.js': () => import('../../app/src/main/dashboard-src/js/dtc-lookup.ts'),
+  'insights-panel.js': () => import('../../app/src/main/dashboard-src/js/insights-panel.ts'),
   'map.js': () => import('../../app/src/main/dashboard-src/js/map.ts'),
-  'panels.js': () => import('../../app/src/main/dashboard-src/js/panels.ts'),
   'scrubber.js': () => import('../../app/src/main/dashboard-src/js/scrubber.ts'),
+  'signals-panel.js': () => import('../../app/src/main/dashboard-src/js/signals-panel.ts'),
+  'storage-status.js': () => import('../../app/src/main/dashboard-src/js/storage-status.ts'),
   'telemetry.js': () => import('../../app/src/main/dashboard-src/js/telemetry.ts'),
   'troubleshooter.js': () => import('../../app/src/main/dashboard-src/js/troubleshooter.ts'),
 };
@@ -46,7 +48,9 @@ const DASHBOARD_MODULE_LOADERS = {
 // Loaded in the exact order that index.template.html lists the emitted production scripts.
 const DASHBOARD_EMITTED_JS_FILES = [
   'core.js',
-  'panels.js',
+  'storage-status.js',
+  'signals-panel.js',
+  'insights-panel.js',
   'map.js',
   'scrubber.js',
   'drive.js',
@@ -66,7 +70,7 @@ function dashboardDomHtml() {
 // Smallest DOM that lets every IIFE finish wiring. Covers:
 // - actions.ts bootstrap: addEventListener targets that have no null guard.
 // - core.ts setDevices/setHistory: query selectors and id lookups.
-// - panels.ts updateStorageUi: dbSessionList list root.
+// - storage-status.ts updateStorageUi: dbSessionList list root.
 // - telemetry.ts: every live tile id from LIVE_TILE_IDS so the stale check
 //   has nodes to toggle the .stale class on.
 const REQUIRED_DOM = `

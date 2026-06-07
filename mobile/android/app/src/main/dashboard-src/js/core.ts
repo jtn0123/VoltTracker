@@ -271,10 +271,11 @@
     return "https://www.google.com/search?q=" + q;
   }
 
-  // The central runtime/UI state bag. Fields are assigned dynamically across
-  // every dashboard file (telemetry samples, render selections, map layers),
-  // so it is typed as an open record rather than a closed literal.
-  const state: Record<string, any> = {
+  // The central runtime/UI state bag. Fields are assigned across every dashboard
+  // file (telemetry samples, render selections, map layers); the closed
+  // DashboardState interface (dashboard-globals.d.ts) pins its shape, and
+  // state-shape.test.js pins the seeded key set.
+  const state: DashboardState = {
     view: "drive",
     mode: "ev",
     selectedRealTripId: null,
@@ -332,6 +333,30 @@
   };
   VD.state = state;
 
+  // ----- shared-state accessor (C3) ----------------------------------------
+  // The state bag is mutated from every module. For the fields that carry a
+  // CROSS-MODULE invariant — the demo lifecycle (demoActive + the real/preview
+  // shadow copies) and the map/trip selections — writes go through setState so
+  // there is one typed, greppable seam instead of scattered `state.x = …`. It is
+  // a plain patch-merge (Object.assign), so behaviour is identical to a direct
+  // assignment; the value is letting future invariants hang off one place.
+  function setState(patch: Partial<DashboardState>) {
+    Object.assign(state, patch);
+    return state;
+  }
+  // Typed getters for the most cross-referenced invariant fields. Thin reads —
+  // they exist so other modules can ask "is demo on?" / "which session?" without
+  // reaching into the raw bag, mirroring setState on the write side.
+  function isDemoActive() {
+    return state.demoActive === true;
+  }
+  function getSelectedMapSessionId() {
+    return state.selectedMapSessionId;
+  }
+  VD.setState = setState;
+  VD.isDemoActive = isDemoActive;
+  VD.getSelectedMapSessionId = getSelectedMapSessionId;
+
   const realViewMeta: Record<string, [string, string]> = {
     drive: ["Volt Tracker Android", "Drive"],
     trips: ["Logged drives", "Trips"],
@@ -353,7 +378,7 @@
   };
   const strokedViewIcons = new Set(["signals"]);
 
-  function parsePayload(payload: unknown, fallback: any = null) {
+  function parsePayload(payload: unknown, fallback: unknown = null) {
     if (!payload) return fallback;
     try { return typeof payload === "string" ? JSON.parse(payload) : payload; }
     catch (_err) { return fallback; }
@@ -475,9 +500,11 @@
   // OS exit/background the app when it returns false. Dismiss the most-nested surface first: an
   // open troubleshooter modal, then a fullscreen map, then fall back to the Drive home tab.
   function handleAndroidBack(): boolean {
-    const ts = (VD as any).troubleshooter;
-    if (ts && typeof ts.isOpen === "function" && ts.isOpen()) {
-      ts.close();
+    const ts = VD.troubleshooter;
+    const isOpen = ts && ts.isOpen;
+    const close = ts && ts.close;
+    if (typeof isOpen === "function" && typeof close === "function" && isOpen()) {
+      close();
       return true;
     }
     if (state.mapFull) {
@@ -522,7 +549,7 @@
   function setDemoActive(active: unknown, detail?: string) {
     const next = Boolean(active);
     const changed = state.demoActive !== next;
-    state.demoActive = next;
+    setState({ demoActive: next });
     document.body.classList.toggle("demo-active", next);
     // Demo no longer swaps in a parallel mockup UI: it streams demo telemetry through the same
     // real components, so the real UI stays on screen and only the live numbers animate. (The old
@@ -550,29 +577,34 @@
   function clearDemoTelemetry() {
     const source = String(state.telemetry.source || "").toLowerCase();
     if (!source.includes("demo")) return;
-    // Drop any locally-staged demo rows so they don't reappear on the next demo toggle.
-    state.demoSessions = null;
-    state.telemetry = {
-      speedKph: null,
-      rpm: null,
-      voltage: null,
-      coolantC: null,
-      loadPct: null,
-      throttlePct: null,
-      soc: null,
-      batteryTemp: null,
-      powerKw: null,
-      updatedAt: null,
-      source: "",
-      raw: ""
-    };
-    state.speedHistory = [];
-    state.powerHistory = [];
-    state.socHistory = [];
-    state.sessionStartSoc = null;
-    state.sessionDistanceM = 0;
-    state.sessionLastLat = null;
-    state.sessionLastLng = null;
+    // Drop any locally-staged demo rows + the live telemetry/session derivations
+    // they fed, so they don't reappear on the next demo toggle. Routed through
+    // setState since several of these (demoSessions, the session-distance anchors)
+    // are read cross-module by the drive/charge renders.
+    setState({
+      demoSessions: null,
+      telemetry: {
+        speedKph: null,
+        rpm: null,
+        voltage: null,
+        coolantC: null,
+        loadPct: null,
+        throttlePct: null,
+        soc: null,
+        batteryTemp: null,
+        powerKw: null,
+        updatedAt: null,
+        source: "",
+        raw: ""
+      },
+      speedHistory: [],
+      powerHistory: [],
+      socHistory: [],
+      sessionStartSoc: null,
+      sessionDistanceM: 0,
+      sessionLastLat: null,
+      sessionLastLng: null
+    });
   }
 
   function setDevices(payload: unknown) {
