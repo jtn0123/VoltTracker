@@ -8,7 +8,7 @@ import java.io.IOException
 
 /** Owns live-poll PID scheduling, batching, carry-forward raw values, and stale timers. */
 class PidPollingState(
-    private val service: ObdService,
+    private val service: EngineHost,
     private val engine: ObdPollingEngine,
 ) {
     private var cycleNum = 0

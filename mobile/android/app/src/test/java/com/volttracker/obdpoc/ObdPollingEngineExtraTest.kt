@@ -238,7 +238,7 @@ class ObdPollingEngineExtraTest {
      * Identical in spirit to the harness in [ObdPollingEngineTest].
      */
     private class TestObdPollingEngine(
-        testService: ObdService,
+        testService: EngineHost,
     ) : ObdPollingEngine(testService) {
         val openCount = AtomicInteger()
 

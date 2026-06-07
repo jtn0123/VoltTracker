@@ -15,7 +15,7 @@ import java.io.IOException
  * service IO thread.
  */
 class DiagnosticScanRunner(
-    private val service: ObdService,
+    private val service: EngineHost,
     private val engine: ObdPollingEngine,
 ) {
     @Throws(IOException::class)

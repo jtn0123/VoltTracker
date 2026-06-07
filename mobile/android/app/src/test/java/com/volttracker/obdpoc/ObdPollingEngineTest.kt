@@ -556,7 +556,7 @@ class ObdPollingEngineTest {
      * a real `BluetoothAdapter`.
      */
     private class TestObdPollingEngine(
-        private val testService: ObdService,
+        private val testService: EngineHost,
         val scriptedConnection: FakeElmConnection,
     ) : ObdPollingEngine(testService) {
         val openCount = AtomicInteger()

@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 /** Tracks per-session sample health counters shared by live and demo telemetry. */
 class SessionHealthTracker(
-    private val service: ObdService,
+    private val service: EngineHost,
 ) {
     private var backgroundSampleCount = 0
     private var sampleGapCount = 0

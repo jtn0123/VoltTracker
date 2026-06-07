@@ -13,7 +13,7 @@ import java.io.IOException
  * and live-data polling.
  */
 open class ObdPollingEngine(
-    private val service: ObdService,
+    private val service: EngineHost,
 ) : LiveSampleReader.SampleContext {
     private var connection = ElmConnection()
     private val speedFilter = SpeedPlausibilityFilter()
@@ -389,14 +389,14 @@ open class ObdPollingEngine(
 
     @SuppressLint("MissingPermission")
     open fun isBluetoothReady(): Boolean {
-        val adapter = BluetoothAdapters.get(service)
+        val adapter = BluetoothAdapters.get(service.androidContext)
         return adapter != null && adapter.isEnabled
     }
 
     @SuppressLint("MissingPermission")
     @Throws(IOException::class)
     open fun openBluetoothSocket(address: String?) {
-        val adapter = BluetoothAdapters.get(service) ?: throw IOException("Bluetooth adapter unavailable")
+        val adapter = BluetoothAdapters.get(service.androidContext) ?: throw IOException("Bluetooth adapter unavailable")
         if (service.hasBluetoothScanPermission()) {
             adapter.cancelDiscovery()
         } else {

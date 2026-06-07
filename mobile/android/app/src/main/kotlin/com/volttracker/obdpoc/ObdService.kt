@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.Manifest
 import android.app.Notification
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
@@ -26,23 +27,27 @@ import java.util.concurrent.atomic.AtomicLong
  * Foreground service that owns an OBD logging session: Android lifecycle, session start/stop,
  * foreground notification, GPS tracking, and status broadcasts to the dashboard.
  */
-open class ObdService : Service() {
+open class ObdService :
+    Service(),
+    EngineHost {
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val competingAppExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
-    @JvmField val ioLock = Any()
+    override val ioLock = Any()
 
-    @JvmField val running = AtomicBoolean(false)
+    override val running = AtomicBoolean(false)
+
+    override val androidContext: Context
+        get() = this
 
     @JvmField val sessionStateMachine = SessionStateMachine()
     private val sessionToken = AtomicLong()
     private val runnerSessionToken = ThreadLocal<Long>()
     private var activeTask: Future<*>? = null
 
-    @JvmField var localStore: ObdLocalStore? = null
+    override var localStore: ObdLocalStore? = null
 
-    @JvmField
-    var recorder: SessionRecorder =
+    override var recorder: SessionRecorder =
         SessionRecorder(
             Any(),
             ObdSessionLog(File(System.getProperty("java.io.tmpdir"), "volttracker-service-recorder-${System.nanoTime()}")),
@@ -51,9 +56,9 @@ open class ObdService : Service() {
     private lateinit var engine: ObdPollingEngine
     private lateinit var notifications: ObdNotifications
 
-    @JvmField var locationTracker: LocationTracker? = null
+    override var locationTracker: LocationTracker? = null
 
-    @JvmField var bluetoothObservability: BluetoothStateReporter? = null
+    override var bluetoothObservability: BluetoothStateReporter? = null
 
     @JvmField var sdpProbe: SdpProbe? = null
 
@@ -61,20 +66,20 @@ open class ObdService : Service() {
 
     @JvmField var voltageProbe: VoltageProbe? = null
 
-    @JvmField var activeName = "OBD adapter"
+    override var activeName = "OBD adapter"
 
-    @JvmField var sessionStartedAtMs = 0L
+    override var sessionStartedAtMs = 0L
     private var lastSessionState = ""
     private var lastSessionDetail = ""
 
-    @Volatile @JvmField
-    var appInForeground = true
+    @Volatile
+    override var appInForeground = true
 
-    @Volatile @JvmField
-    var foregroundServiceActive = false
+    @Volatile
+    override var foregroundServiceActive = false
 
-    @Volatile @JvmField
-    var cancelRetryRequested = false
+    @Volatile
+    override var cancelRetryRequested = false
 
     @Volatile private var lastFailureClass: FailureClass? = null
 
@@ -100,7 +105,7 @@ open class ObdService : Service() {
         cancelRetryRequested = true
     }
 
-    fun markSessionInactive() {
+    override fun markSessionInactive() {
         if (!canCurrentThreadCleanupSession()) {
             return
         }
@@ -227,7 +232,7 @@ open class ObdService : Service() {
         super.onDestroy()
     }
 
-    fun maybeRunVoltageProbe(engineRef: ObdPollingEngine?) {
+    override fun maybeRunVoltageProbe(engineRef: ObdPollingEngine?) {
         if (voltageProbe == null || engineRef == null) {
             return
         }
@@ -413,11 +418,11 @@ open class ObdService : Service() {
         closeSessionLog()
     }
 
-    fun hasBluetoothConnectPermission(): Boolean =
+    override fun hasBluetoothConnectPermission(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
-    fun hasBluetoothScanPermission(): Boolean =
+    override fun hasBluetoothScanPermission(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
 
@@ -425,7 +430,7 @@ open class ObdService : Service() {
         checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-    open fun broadcastTelemetry(payload: JSONObject?) {
+    override fun broadcastTelemetry(payload: JSONObject?) {
         broadcastTelemetry(TelemetryPayload.fromJson(payload))
     }
 
@@ -439,7 +444,7 @@ open class ObdService : Service() {
         broadcast(BROADCAST_TELEMETRY, payload)
     }
 
-    open fun broadcastStatus(
+    override fun broadcastStatus(
         state: String?,
         detail: String?,
         blocked: Boolean,
@@ -544,19 +549,19 @@ open class ObdService : Service() {
         }
     }
 
-    open fun updateNotification(text: String?) {
+    override fun updateNotification(text: String?) {
         recorder.logEvent("notification", "text", text)
         notifications.post(text ?: "")
     }
 
-    fun setLastFailureClass(fc: FailureClass?) {
+    override fun setLastFailureClass(fc: FailureClass?) {
         if (fc == null) {
             return
         }
         lastFailureClass = fc
     }
 
-    fun clearLastFailureClass() {
+    override fun clearLastFailureClass() {
         lastFailureClass = null
     }
 
@@ -602,7 +607,7 @@ open class ObdService : Service() {
         }
     }
 
-    fun closeSessionLog() {
+    override fun closeSessionLog() {
         if (!canCurrentThreadCleanupSession()) {
             return
         }

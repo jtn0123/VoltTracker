@@ -10,7 +10,7 @@ import java.io.IOException
 
 /** Builds one live OBD telemetry sample from the current PID polling state. */
 class LiveSampleReader(
-    private val service: ObdService,
+    private val service: EngineHost,
     private val speedFilter: SpeedPlausibilityFilter,
     private val pidPolling: PidPollingState,
 ) {

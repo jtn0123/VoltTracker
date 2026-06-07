@@ -252,7 +252,7 @@ class PidPollingStateTest {
      * assert the exact round-trips the schedule produced without a real adapter.
      */
     private class CapturingEngine(
-        service: ObdService,
+        service: EngineHost,
     ) : ObdPollingEngine(service) {
         val commandLog: MutableList<String> = Collections.synchronizedList(ArrayList())
         val responses = HashMap<String, String>()

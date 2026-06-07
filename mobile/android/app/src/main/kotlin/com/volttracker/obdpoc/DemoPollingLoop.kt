@@ -7,7 +7,7 @@ import org.json.JSONObject
  * Emits the synthetic demo telemetry stream that runs in place of a real OBD adapter loop.
  */
 class DemoPollingLoop(
-    private val service: ObdService,
+    private val service: EngineHost,
     private val engine: ObdPollingEngine,
 ) {
     fun run() {

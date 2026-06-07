@@ -18,7 +18,7 @@ import java.util.Locale
  * continue to apply.
  */
 class ClearDtcRunner(
-    private val service: ObdService,
+    private val service: EngineHost,
     private val engine: ObdPollingEngine,
 ) {
     @Throws(IOException::class)
