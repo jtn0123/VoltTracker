@@ -157,11 +157,21 @@ dependencies {
     testImplementation libs.robolectric
 }
 
-// Dependency locking — enabled so CI can emit a Gradle lockfile that OSV-Scanner
-// can parse (the F1 gradle-dependency-audit job runs `:app:dependencies
-// --write-locks`). No lockfile is committed (app/gradle.lockfile is gitignored),
-// so locking imposes NO version enforcement on normal builds: Gradle only verifies
-// against a lockfile when one is present. The scan regenerates it fresh each run.
+// Dependency locking — lockAllConfigurations() means every resolvable
+// configuration is locked against the committed app/gradle.lockfile (un-ignored
+// in mobile/android/.gitignore). The OSV-Scanner gradle-dependency-audit job
+// reads that committed lockfile directly, and every build verifies against it for
+// reproducible, version-pinned resolution.
+//
+// Regenerate after a dependency change with:
+//   ./gradlew :app:dependencies --write-locks
+// That walks all debug+release compile/runtime/lint/annotation-processor/unitTest/
+// androidTest classpaths and rewrites app/gradle.lockfile (configs with no external
+// deps are recorded on the `empty=` line, which lockAllConfigurations() also
+// requires). A blanket `configurations.each { it.resolve() }` task is intentionally
+// NOT used: it forces resolution of AGP's internal *Elements consumable variants and
+// the self-referential androidTest classpaths, which fail with variant-ambiguity
+// errors. The `dependencies` report resolves exactly the lockable classpaths.
 dependencyLocking {
     lockAllConfigurations()
 }

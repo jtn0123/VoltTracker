@@ -18,6 +18,10 @@ updates:
     directory: "/mobile/android/dashboard-tests"
     schedule:
       interval: "weekly"
+  - package-ecosystem: "npm"
+    directory: "/mobile/android/dashboard-e2e"
+    schedule:
+      interval: "weekly"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
