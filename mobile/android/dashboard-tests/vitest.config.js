@@ -23,13 +23,14 @@ export default {
       include: ['**/app/src/main/dashboard-src/js/**/*.ts'],
       exclude: ['**/app/src/main/assets/dashboard/lib/**/*'],
       reporter: ['text-summary', 'html'],
-      // Ratcheted 2026-05-29 to ~3pts below measured (lines 65.4 / stmts 62.2 /
-      // funcs 62.6 / branches 48.7). Raise only; never lower.
+      // Ratcheted 2026-06-07 to ~3pts below measured (lines 79.5 / stmts 76.0 /
+      // funcs 78.1 / branches 65.4) after the troubleshooter + connection-tools
+      // recovery-path specs landed. Raise only; never lower.
       thresholds: {
-        lines: 62,
-        statements: 60,
-        functions: 60,
-        branches: 46,
+        lines: 76,
+        statements: 72,
+        functions: 75,
+        branches: 62,
       },
     },
   },

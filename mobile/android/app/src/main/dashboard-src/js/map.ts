@@ -3,17 +3,36 @@
   const bridge = VD.bridge;
   const el = VD.el;
 
-  type MapRoutePoint = Record<string, any> & {
-    lat: number;
-    lng: number;
+  // A decoded route point the map *builds* (live + sample routes). Extends the
+  // shared VoltRoutePoint (lat/lng/atMs?/speedMps?/altM?/eff? + an unknown index
+  // signature), pins atMs as a real number (every constructed point sets it),
+  // and names the extra derived fields map.ts writes. Route points that arrive
+  // from storage are the looser VoltRoutePoint and are narrowed via
+  // isValidRoutePoint before being drawn.
+  type MapRoutePoint = VoltRoutePoint & {
     atMs: number;
+    speedKph?: number;
+    soc?: number;
+    powerKw?: number;
   };
 
-  type MapRoute = Record<string, any> & {
-    points?: MapRoutePoint[];
-    session?: Record<string, any>;
-    distanceMeters?: number;
+  // A route the map renders. Reuses the shared VoltRoute shape (open record with
+  // points/powerTrack/session/distanceMeters + index signature); map.ts also reads
+  // an `isLive` marker off it.
+  type MapRoute = VoltRoute & {
     isLive?: boolean;
+  };
+
+  // The route's session sub-object — VoltRoute.session is open, so name the
+  // fields map.ts reads off it without falling back to `any`.
+  type MapRouteSession = {
+    id?: string | number;
+    adapterName?: string;
+    mode?: string;
+    status?: string;
+    startedAtMs?: number;
+    endedAtMs?: number;
+    [key: string]: unknown;
   };
 
   type MapStop = {
@@ -21,9 +40,6 @@
     lng: number;
     durationMs: number;
   };
-
-  type LatLngTuple = [number, number];
-  type LatLngSegment = [LatLngTuple, LatLngTuple];
 
   type DemoRouteOpts = {
     sessionId: number;
@@ -37,16 +53,37 @@
     adapterName?: string;
   };
 
+  // The synthetic demo route built by buildSampleRoute. Its session is fully
+  // populated (unlike the open MapRouteSession), so name the concrete fields
+  // loadSampleData reads back as required numbers/strings.
+  type DemoRouteSession = MapRouteSession & {
+    id: number;
+    mode: string;
+    adapterName: string;
+    startedAtMs: number;
+    endedAtMs: number;
+    status: string;
+    sampleCount: number;
+  };
+
   type DemoRoute = MapRoute & {
     points: MapRoutePoint[];
-    session: Record<string, any>;
+    session: DemoRouteSession;
     distanceMeters: number;
   };
 
-  let mapInstance: any = null;
-  let remoteTileLayer: any = null;
-  const mapLayerGroups: Record<string, any> = { routes: null, heat: null, stops: null, eff: null };
+  let mapInstance: LeafletMapInstance | null = null;
+  let remoteTileLayer: LeafletLayer | null = null;
+  const mapLayerGroups: Record<string, LeafletLayer | null> = { routes: null, heat: null, stops: null, eff: null };
   let mapFitKey: string | null = null;
+
+  // Add the layer group for the active layer (falling back to "routes") onto
+  // the map. The groups are always populated before this runs, but the typed
+  // record models them as nullable, so guard rather than assert.
+  function addActiveLayerGroup(layer: string, map: LeafletMapInstance) {
+    const group = mapLayerGroups[layer] || mapLayerGroups.routes;
+    if (group) group.addTo(map);
+  }
   const LIVE_ROUTE_ID = "__live_current__";
   const LIVE_ROUTE_MAX_POINTS = 600;
   let liveRouteStartedAtMs: number | null = null;
@@ -103,7 +140,7 @@
     return point;
   }
 
-  function liveSampleTimeMs(sample: Record<string, any>) {
+  function liveSampleTimeMs(sample: VoltTelemetry) {
     const candidates = [
       sample.atMs,
       sample.updatedAtMs,
@@ -131,7 +168,7 @@
     return "#ff6b5f";
   }
 
-  function createRemoteTileLayer(map: any) {
+  function createRemoteTileLayer(map: LeafletMapInstance): LeafletLayer {
     const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       subdomains: "abcd",
       maxZoom: 19,
@@ -142,7 +179,7 @@
     // basemap is down.
     let tileErrorCount = 0;
     let fallbackActivated = false;
-    tiles.on("tileerror", (event: any) => {
+    tiles.on("tileerror", (event: LeafletTileErrorEvent) => {
       tileErrorCount += 1;
       const src = (event && event.tile && event.tile.src) || "unknown";
       if (tileErrorCount <= 2) {
@@ -174,11 +211,12 @@
   }
 
   function syncRemoteTiles() {
-    if (!mapInstance || typeof L === "undefined") return;
+    const map = mapInstance;
+    if (!map || typeof L === "undefined") return;
     state.mapRemoteTilesEnabled = true;
     if (!remoteTileLayer) {
-      remoteTileLayer = createRemoteTileLayer(mapInstance);
-      remoteTileLayer.addTo(mapInstance);
+      remoteTileLayer = createRemoteTileLayer(map);
+      remoteTileLayer.addTo(map);
     }
   }
 
@@ -189,17 +227,18 @@
     if (typeof L === "undefined") return null;
     const container = el("mapLeaflet");
     if (!container) return null;
-    mapInstance = L.map(container, { zoomControl: false, attributionControl: true })
+    const map: LeafletMapInstance = L.map(container, { zoomControl: false, attributionControl: true })
       .setView([39.5, -98.35], 4);
+    mapInstance = map;
     syncRemoteTiles();
-    if (typeof VD.scrubberAttachMap === "function") VD.scrubberAttachMap(mapInstance);
+    if (typeof VD.scrubberAttachMap === "function") VD.scrubberAttachMap(map);
     // Tap anywhere on the map → snap the scrubber to the closest route point.
-    mapInstance.on("click", (e: any) => {
+    map.on("click", (e: { latlng?: LeafletLatLng }) => {
       if (e && e.latlng && typeof VD.scrubAtLatLng === "function") {
         VD.scrubAtLatLng(e.latlng.lat, e.latlng.lng);
       }
     });
-    return mapInstance;
+    return map;
   }
 
   function renderMap() {
@@ -209,7 +248,10 @@
       const selectedExists = routes.some((route: MapRoute) =>
         String((route.session || {}).id || "") === String(state.selectedMapSessionId || "")
       );
-      if (!selectedExists) state.selectedMapSessionId = (routes[0].session || {}).id || null;
+      if (!selectedExists) {
+        const firstId = (routes[0].session || {}).id;
+        state.selectedMapSessionId = firstId == null ? null : String(firstId);
+      }
     }
     const route = selectedMapRoute(storage, routes);
     const points = Array.isArray(route.points) ? route.points : [];
@@ -284,8 +326,10 @@
   }
 
   // Chip date formatter: "Today 2:51 AM" / "Yesterday 6:54 PM" / "Sat 9:15 AM" /
-  // "Oct 15". More skim-able than "6h ago / 30h ago / 4d ago".
-  function fmtChipDate(ms: number) {
+  // "Oct 15". More skim-able than "6h ago / 30h ago / 4d ago". Accepts the
+  // loosely-typed startedAtMs off a route session and coerces defensively.
+  function fmtChipDate(value: unknown) {
+    const ms = Number(value);
     if (!Number.isFinite(ms)) return "session";
     const now = new Date();
     const d = new Date(ms);
@@ -307,7 +351,7 @@
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
 
-  function mapRoutes(storage: Record<string, any>) {
+  function mapRoutes(storage: VoltStorageSummary): MapRoute[] {
     const history = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
     const live = buildLiveRoute();
     if (!live) return history;
@@ -431,7 +475,7 @@
   }
 
   // Draws the selected route on Leaflet as routes / heat / stops layer groups.
-  function drawMapRoute(points: MapRoutePoint[], hasRoute: boolean, layer: string, routeSession: Record<string, any>) {
+  function drawMapRoute(points: VoltRoutePoint[], hasRoute: boolean, layer: string, routeSession: MapRouteSession) {
     const container = el("mapLeaflet");
     if (!container || !container.offsetWidth || !container.offsetHeight) return;
     const map = ensureMap();
@@ -462,7 +506,7 @@
       mapLayerGroups.heat = L.layerGroup([onlyMarker()]);
       mapLayerGroups.stops = L.layerGroup([onlyMarker()]);
       mapLayerGroups.eff = L.layerGroup([onlyMarker()]);
-      (mapLayerGroups[layer] || mapLayerGroups.routes).addTo(map);
+      addActiveLayerGroup(layer, map);
       const fitKey = routeFitKey(routeSession, drawable);
       if (fitKey !== mapFitKey) {
         map.setView(firstLatLng, 15);
@@ -534,7 +578,7 @@
     L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: "#b8e63b", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
     L.circleMarker(lastLatLng, { radius: 7, color: "#fff", weight: 2, fillColor: "#ff6b5f", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
 
-    (mapLayerGroups[layer] || mapLayerGroups.routes).addTo(map);
+    addActiveLayerGroup(layer, map);
 
     const fitKey = routeFitKey(routeSession, drawable);
     if (fitKey !== mapFitKey) {
@@ -550,7 +594,7 @@
     return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
   }
 
-  function routeFitKey(routeSession: Record<string, any>, points: MapRoutePoint[]) {
+  function routeFitKey(routeSession: MapRouteSession, points: MapRoutePoint[]) {
     const first = points[0];
     const last = points[points.length - 1];
     if (!first || !last) return [(routeSession || {}).id || "", points.length, "", "", "", ""].join(":");
@@ -601,19 +645,23 @@
     return button;
   }
 
-  function selectedMapRoute(storage: Record<string, any>, availableRoutes?: MapRoute[]): MapRoute {
+  function selectedMapRoute(storage: VoltStorageSummary, availableRoutes?: MapRoute[]): MapRoute {
     const routes = availableRoutes || mapRoutes(storage);
     if (routes.length) {
       const selected = routes.find((route: MapRoute) => String((route.session || {}).id || "") === String(state.selectedMapSessionId || ""));
       if (selected) return selected;
-      state.selectedMapSessionId = (routes[0].session || {}).id || null;
+      const firstId = (routes[0].session || {}).id;
+      state.selectedMapSessionId = firstId == null ? null : String(firstId);
       return routes[0];
     }
     return storage.latestRoute || {};
   }
 
-  function sessionForRoute(route: MapRoute) {
-    return route && route.session ? route.session : {};
+  function sessionForRoute(route: MapRoute): MapRouteSession {
+    // VoltRoute.session is the open `{ id?; [k]: unknown }` payload; narrow it
+    // to the named fields map.ts reads. Field reads stay defensively coerced
+    // (String()/Number()) at each use, so the narrowing is presentational only.
+    return (route && route.session ? route.session : {}) as MapRouteSession;
   }
 
   function haversineMetersJs(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -626,7 +674,7 @@
     return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  function routeDistanceMeters(points: MapRoutePoint[]) {
+  function routeDistanceMeters(points: VoltRoutePoint[]) {
     let total = 0;
     for (let i = 1; i < points.length; i += 1) {
       const previousPoint = points[i - 1];
@@ -637,13 +685,13 @@
     return total;
   }
 
-  function segmentSpeedMps(a: MapRoutePoint, b: MapRoutePoint) {
+  function segmentSpeedMps(a: VoltRoutePoint, b: VoltRoutePoint) {
     const seconds = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
     return haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / seconds;
   }
 
   // A stop is a sustained run (>= 45 s) of near-zero movement between GPS points.
-  function detectStops(points: MapRoutePoint[]): MapStop[] {
+  function detectStops(points: VoltRoutePoint[]): MapStop[] {
     const stops: MapStop[] = [];
     let runStart: number | null = null;
     for (let i = 1; i < points.length; i += 1) {
@@ -662,7 +710,7 @@
     return stops;
   }
 
-  function addStop(stops: MapStop[], points: MapRoutePoint[], startIdx: number, endIdx: number) {
+  function addStop(stops: MapStop[], points: VoltRoutePoint[], startIdx: number, endIdx: number) {
     const startPoint = points[startIdx];
     const endPoint = points[endIdx];
     if (!startPoint || !endPoint) return;

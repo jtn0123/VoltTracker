@@ -18,10 +18,10 @@ import vitestConfig from './vitest.config.js';
 // Committed baseline. RAISE these in lockstep when you raise vitest.config.js
 // thresholds; NEVER lower them. They are the ratchet's floor of record.
 const COVERAGE_BASELINE = Object.freeze({
-  lines: 62,
-  statements: 60,
-  functions: 60,
-  branches: 46,
+  lines: 76,
+  statements: 72,
+  functions: 75,
+  branches: 62,
 });
 
 describe('coverage ratchet', () => {

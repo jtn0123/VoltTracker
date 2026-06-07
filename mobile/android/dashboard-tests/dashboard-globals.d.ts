@@ -402,6 +402,51 @@ interface LeafletMap {
   fitBounds(bounds: unknown, options?: unknown): void;
 }
 
+// ---------------------------------------------------------------------------
+// Minimal Leaflet handle types (C5)
+//
+// Leaflet ships as a side-effecting untyped global (`L`), and we don't vendor
+// its @types. These interfaces name ONLY the handful of map / layer / latlng
+// members the dashboard source actually touches (map.ts + the trip mini-maps in
+// insights-panel.ts). They are deliberately structural and minimal — not a full
+// Leaflet typing — so the `any`-typed handles in map.ts can be tightened without
+// pulling in the whole Leaflet surface.
+// ---------------------------------------------------------------------------
+
+/** `{ lat, lng }` carried by Leaflet map-click events. */
+interface LeafletLatLng {
+  lat: number;
+  lng: number;
+}
+
+/** The tile element on a Leaflet `tileerror` event (`event.tile.src`). */
+interface LeafletTileErrorEvent {
+  tile?: { src?: string };
+}
+
+/** A Leaflet layer / layer-group handle (polyline, circleMarker, layerGroup,
+ *  tileLayer) — only the members map.ts touches. Methods that mutate-and-return
+ *  the layer are chainable. The `addTo` target is broad (map OR layer-group) and
+ *  tolerates the possibly-null layer-group slots map.ts stores. */
+interface LeafletLayer {
+  addTo(target: LeafletMapInstance | LeafletLayer | null): this;
+  bindTooltip(content: string): this;
+  on(event: string, handler: (event: LeafletTileErrorEvent) => void): this;
+}
+
+/** The Leaflet map handle map.ts stores as `mapInstance`. Superset of LeafletMap
+ *  so it stays assignable wherever the trip mini-maps expect LeafletMap. */
+interface LeafletMapInstance extends LeafletMap {
+  setView(center: LatLngTuple, zoom: number): this;
+  on(event: string, handler: (event: { latlng?: LeafletLatLng }) => void): this;
+  removeLayer(layer: LeafletLayer): this;
+}
+
+/** A `[lat, lng]` pair as Leaflet accepts for points/markers. */
+type LatLngTuple = [number, number];
+/** A `[start, end]` line segment of two points (map.ts heat/eff bands). */
+type LatLngSegment = [LatLngTuple, LatLngTuple];
+
 /** One entry in the dtc-causes.ts DTC_CAUSES table. */
 interface VoltDtcCause {
   causes: string[];
@@ -437,7 +482,13 @@ interface VoltStatus {
   [key: string]: unknown;
 }
 
-  /** Leaflet runtime global; kept broad while the map/panel runtime surface is still globally shared. */
+  /** Leaflet runtime global. Kept as the untyped `L` because scrubber.ts and
+   *  insights-panel.ts chain Leaflet methods (setLatLng / bindPopup-with-opts /
+   *  number[] latlngs) that a minimal static type can't model without churn.
+   *  map.ts narrows the handles it stores (mapInstance / tile + layer groups)
+   *  to the LeafletMapInstance / LeafletLayer interfaces above at assignment.
+   *  (This .d.ts is not linted — only the dashboard source under js/ is — so the
+   *  `any` here is invisible to the no-explicit-any ratchet.) */
   const L: any;
 
   /**
@@ -663,7 +714,4 @@ interface VoltStatus {
     /** Interval handle for the demo-preview ticker (actions.ts). */
     __voltDemoTimer?: ReturnType<typeof setInterval> | null;
   }
-
-  /** Leaflet, loaded as a side-effecting global from lib/leaflet/leaflet.js. */
-  const L: any;
 }
