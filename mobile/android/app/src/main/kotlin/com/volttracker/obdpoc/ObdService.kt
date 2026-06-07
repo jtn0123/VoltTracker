@@ -144,7 +144,7 @@ open class ObdService :
             ) {
                 SystemSnapshot.collect(this, summaryStore)
             }
-        engine = ObdPollingEngine(this)
+        engine = createPollingEngine()
         sdpProbe = SdpProbe(this)
         bluetoothObservability = BluetoothStateReporter(this, sdpProbe)
         voltageProbe = VoltageProbe(this)
@@ -156,6 +156,14 @@ open class ObdService :
         }
         refreshCompetingAppsAsync()
     }
+
+    /**
+     * Factory for the polling engine, created once in [onCreate]. Behavior-identical to the inline
+     * `ObdPollingEngine(this)` it replaces; it exists only so a test subclass can substitute an
+     * engine whose IO loops are neutralized (the real loops open a Bluetooth RFCOMM socket that
+     * cannot run under Robolectric), letting the action-dispatch orchestration be driven directly.
+     */
+    open fun createPollingEngine(): ObdPollingEngine = ObdPollingEngine(this)
 
     override fun onStartCommand(
         intent: Intent?,
