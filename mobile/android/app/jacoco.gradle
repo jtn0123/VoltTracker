@@ -47,6 +47,20 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //   Java→Kotlin test conversion plus new VoltBridge (14→80%), DeviceCatalog
 //   (23→84%), BackupController (48→73%), ElmConnection (35→63%), and
 //   TroubleshooterBridge coverage. Actual: 82.7% project / 92.2% data.
+//   2026-06-07 (D4): added FOCUSED per-package LINE floors for the high-value,
+//   pure-logic packages so a regression there can't hide behind the aggregate
+//   project floor (a 38%-covered framework class averaged against an 87% one).
+//   We deliberately do NOT add a blanket element="CLASS" rule: several classes
+//   are framework-bound and legitimately near-zero (SdpProbe ~8%, LogcatMirror
+//   ~0%, raw Bluetooth socket paths, MainActivity$obdReceiver), so a CLASS floor
+//   would be unworkable. Instead we pin the two packages that are pure,
+//   testable domain logic and already very well covered:
+//     materialize  LINE 88.9% (386/434) -> floor 0.85 (~actual-4, churn room)
+//     classify     LINE 100%  (86/86)   -> floor 0.95 (~actual-5, churn room)
+//   Floors are actual-minus-a-margin regression baselines, not goals; raise them
+//   as the suites grow, never lower without discussion. (Percentages read from
+//   the local jacocoTestReport.xml; adjust by a point or two if a verified run
+//   differs.)
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
     dependsOn "jacocoTestReport"
     sourceDirectories.setFrom(coverageSourceDirs())
@@ -57,6 +71,19 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
             element = "PACKAGE"
             includes = ["com.volttracker.obdpoc.data"]
             limit { counter = "LINE"; minimum = 0.90 }
+        }
+        // Focused floors for the high-value, pure-logic packages (see history
+        // note above). These catch a regression in a strong module that the
+        // aggregate project floor would otherwise mask.
+        rule {
+            element = "PACKAGE"
+            includes = ["com.volttracker.obdpoc.materialize"]
+            limit { counter = "LINE"; minimum = 0.85 }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = ["com.volttracker.obdpoc.classify"]
+            limit { counter = "LINE"; minimum = 0.95 }
         }
         rule {
             limit { counter = "LINE"; minimum = 0.80 }
