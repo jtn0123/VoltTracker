@@ -32,7 +32,9 @@ import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
-open class MainActivity : ComponentActivity() {
+open class MainActivity :
+    ComponentActivity(),
+    DashboardHost {
     private var webView: WebView? = null
     private var dashboardPublisher: DashboardPublisher? = null
 
@@ -80,7 +82,7 @@ open class MainActivity : ComponentActivity() {
 
     @JvmField var permissionGate: PermissionGate? = null
 
-    @JvmField var localStore: ObdLocalStore? = null
+    override var localStore: ObdLocalStore? = null
 
     @JvmField var troubleshooter: TroubleshooterBridge? = null
 
@@ -96,17 +98,17 @@ open class MainActivity : ComponentActivity() {
     private val lastStorageSummaryAtMs = AtomicLong(0L)
     private val storageSummaryDirty = AtomicBoolean(true)
 
-    open fun runOnBackground(task: Runnable) {
+    override fun runOnBackground(task: Runnable) {
         submitBackground(task)
     }
 
-    fun requireDeviceCatalog(): DeviceCatalog = checkNotNull(deviceCatalog) { "DeviceCatalog is not ready" }
+    override fun requireDeviceCatalog(): DeviceCatalog = checkNotNull(deviceCatalog) { "DeviceCatalog is not ready" }
 
-    fun requireDataBackup(): DataBackup = checkNotNull(dataBackup) { "DataBackup is not ready" }
+    override fun requireDataBackup(): DataBackup = checkNotNull(dataBackup) { "DataBackup is not ready" }
 
-    fun requireBackupController(): BackupController = checkNotNull(backupController) { "BackupController is not ready" }
+    override fun requireBackupController(): BackupController = checkNotNull(backupController) { "BackupController is not ready" }
 
-    fun requirePermissionGate(): PermissionGate = checkNotNull(permissionGate) { "PermissionGate is not ready" }
+    override fun requirePermissionGate(): PermissionGate = checkNotNull(permissionGate) { "PermissionGate is not ready" }
 
     fun requireTroubleshooter(): TroubleshooterBridge = checkNotNull(troubleshooter) { "TroubleshooterBridge is not ready" }
 
@@ -199,7 +201,7 @@ open class MainActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, backCallback)
     }
 
-    open fun onDashboardReady() {
+    override fun onDashboardReady() {
         Log.i(TAG, "$DASHBOARD_READY_LOG: JS is live")
         val publisher = dashboardPublisher ?: return
         if (publisher.isPageReady()) {
@@ -280,13 +282,13 @@ open class MainActivity : ComponentActivity() {
         }
     }
 
-    open fun publishDeviceList() {
+    override fun publishDeviceList() {
         val catalog = requireDeviceCatalog()
         callDashboard("setDevices", catalog.getBondedDevicesJson())
         callDashboard("setHistory", catalog.getDeviceHistoryJson())
     }
 
-    open fun publishStatus(
+    override fun publishStatus(
         state: String?,
         detail: String?,
         blocked: Boolean,
@@ -314,7 +316,7 @@ open class MainActivity : ComponentActivity() {
     }
 
     @SuppressLint("MissingPermission")
-    open fun startObdService(
+    override fun startObdService(
         action: String?,
         address: String?,
         name: String?,
@@ -323,7 +325,7 @@ open class MainActivity : ComponentActivity() {
     }
 
     @SuppressLint("MissingPermission")
-    open fun startObdService(
+    override fun startObdService(
         action: String?,
         address: String?,
         name: String?,
@@ -380,7 +382,7 @@ open class MainActivity : ComponentActivity() {
         }
     }
 
-    open fun rememberDevice(
+    override fun rememberDevice(
         address: String?,
         name: String?,
     ) {
@@ -409,7 +411,7 @@ open class MainActivity : ComponentActivity() {
         publishStatus("ready", "Remembered ${if (cleanName.isEmpty()) cleanAddress else cleanName}.", false)
     }
 
-    open fun stopObdService() {
+    override fun stopObdService() {
         val service = Intent(this, ObdService::class.java)
         service.action = ObdService.ACTION_DISCONNECT
         try {
@@ -419,31 +421,31 @@ open class MainActivity : ComponentActivity() {
         }
     }
 
-    open fun forceStopPackageFromBridge(packageName: String?): Boolean = requireTroubleshooter().forceStopPackage(packageName)
+    override fun forceStopPackageFromBridge(packageName: String?): Boolean = requireTroubleshooter().forceStopPackage(packageName)
 
-    open fun cancelRetryFromBridge() {
+    override fun cancelRetryFromBridge() {
         requireTroubleshooter().cancelRetry()
     }
 
-    open fun openBluetoothSettingsFromBridge() {
+    override fun openBluetoothSettingsFromBridge() {
         requireTroubleshooter().openBluetoothSettings()
     }
 
-    open fun getRecentSessionsJson(n: Int): String = requireTroubleshooter().getRecentSessionsJson(n)
+    override fun getRecentSessionsJson(n: Int): String = requireTroubleshooter().getRecentSessionsJson(n)
 
-    open fun shareDiagnosticsFromBridge() {
+    override fun shareDiagnosticsFromBridge() {
         requireTroubleshooter().shareDiagnostics()
     }
 
-    open fun startTestConnectionFromBridge() {
+    override fun startTestConnectionFromBridge() {
         requireTroubleshooter().startTestConnection()
     }
 
-    open fun scheduleAdapterReadyNotifyFromBridge(mins: Int) {
+    override fun scheduleAdapterReadyNotifyFromBridge(mins: Int) {
         requireTroubleshooter().scheduleAdapterReadyNotify(mins)
     }
 
-    open fun cancelAdapterReadyNotifyFromBridge() {
+    override fun cancelAdapterReadyNotifyFromBridge() {
         requireTroubleshooter().cancelAdapterReadyNotify()
     }
 
@@ -483,7 +485,7 @@ open class MainActivity : ComponentActivity() {
         storageSummaryDirty.set(true)
     }
 
-    open fun publishStorageSummary() {
+    override fun publishStorageSummary() {
         if (!storageSummaryInFlight.compareAndSet(false, true)) {
             storageSummaryQueued.set(true)
             return
@@ -510,7 +512,7 @@ open class MainActivity : ComponentActivity() {
         }
     }
 
-    open fun getStorageSummaryJson(): String {
+    override fun getStorageSummaryJson(): String {
         val store = localStore ?: return MainActivityUtils.errorPayload("storage_unavailable", "Local storage is not ready yet.").toString()
         return try {
             StorageSummaryJson.build(store.getStorageSummaryRecord()).toString()
@@ -520,7 +522,7 @@ open class MainActivity : ComponentActivity() {
         }
     }
 
-    open fun getTripsJson(): String {
+    override fun getTripsJson(): String {
         val store = localStore ?: return MainActivityUtils.errorPayload("storage_unavailable", "Local storage is not ready yet.").toString()
         return try {
             store.getTripsJson(40).toString()
@@ -532,7 +534,7 @@ open class MainActivity : ComponentActivity() {
 
     open fun getTripRouteJson(sessionId: Long): String = getTripRouteJson(sessionId.toString())
 
-    open fun getTripRouteJson(routeKey: String?): String {
+    override fun getTripRouteJson(routeKey: String?): String {
         val store = localStore ?: return MainActivityUtils.errorPayload("storage_unavailable", "Local storage is not ready yet.").toString()
         return try {
             store.getTripRouteJson(routeKey).toString()
@@ -542,7 +544,7 @@ open class MainActivity : ComponentActivity() {
         }
     }
 
-    open fun getInsightsJson(): String {
+    override fun getInsightsJson(): String {
         val store = localStore ?: return MainActivityUtils.errorPayload("storage_unavailable", "Local storage is not ready yet.").toString()
         return try {
             store.getInsightsJson().toString()
@@ -560,14 +562,14 @@ open class MainActivity : ComponentActivity() {
         backupController?.onRestorePickerResult(result.resultCode, result.data)
     }
 
-    open fun isLoggingActive(): Boolean =
+    override fun isLoggingActive(): Boolean =
         MainActivityUtils.isConnectedState(lastStatus.optString("state", "")) || ObdService.hasActiveSession()
 
     private fun publishAppState() {
         callDashboard("setAppState", getAppStateJson())
     }
 
-    open fun getAppStateJson(): String {
+    override fun getAppStateJson(): String {
         val catalog = requireDeviceCatalog()
         val gate = requirePermissionGate()
         return AppStateJson.build(

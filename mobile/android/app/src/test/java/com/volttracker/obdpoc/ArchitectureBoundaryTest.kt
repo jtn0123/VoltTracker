@@ -91,7 +91,27 @@ class ArchitectureBoundaryTest {
         )
     }
 
+    @Test
+    fun dashboardBridgeDependsOnHostSeamNotConcreteActivity() {
+        val violations =
+            scanFilesForForbiddenReferences(
+                listOf("VoltBridge.kt"),
+                FORBIDDEN_BRIDGE_ACTIVITY_REFERENCES,
+            )
+
+        assertTrue(
+            "VoltBridge must depend on the DashboardHost seam, not the concrete MainActivity:\n" +
+                violations.joinToString("\n"),
+            violations.isEmpty(),
+        )
+    }
+
     private companion object {
+        val FORBIDDEN_BRIDGE_ACTIVITY_REFERENCES =
+            listOf(
+                "MainActivity",
+            )
+
         val FORBIDDEN_DATA_LAYER_IMPORTS =
             listOf(
                 "import com.volttracker.obdpoc.MainActivity",

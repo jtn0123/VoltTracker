@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets
  * The [JavascriptInterface] surface the dashboard WebView calls into.
  */
 class VoltBridge(
-    private val activity: MainActivity,
+    private val activity: DashboardHost,
 ) {
     private val clientErrorLock = Any()
     private var clientErrorTokens = LOG_CLIENT_ERROR_BURST.toDouble()
@@ -170,7 +170,7 @@ class VoltBridge(
             try {
                 activity.localStore?.clearAllData()
             } catch (ex: RuntimeException) {
-                Log.w(MainActivity.TAG, "clearStoredData failed", ex)
+                Log.w(TAG, "clearStoredData failed", ex)
                 activity.runOnUiThread {
                     activity.publishStatus("blocked", "Could not clear the local OBD database.", true)
                 }
@@ -237,7 +237,7 @@ class VoltBridge(
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 activity.startActivity(intent)
             } catch (ex: Exception) {
-                Log.w(MainActivity.TAG, "openExternalSearch failed", ex)
+                Log.w(TAG, "openExternalSearch failed", ex)
                 activity.publishStatus("blocked", "Could not open the browser for DTC lookup.", true)
             }
         }
@@ -312,7 +312,7 @@ class VoltBridge(
             try {
                 deleted = activity.localStore?.deleteEnhancedCapability(rowId) ?: 0
             } catch (ex: RuntimeException) {
-                Log.w(MainActivity.TAG, "deleteDetailedSignalLog failed", ex)
+                Log.w(TAG, "deleteDetailedSignalLog failed", ex)
             }
             val deletedRows = deleted
             activity.runOnUiThread {
@@ -353,7 +353,7 @@ class VoltBridge(
         }
         val suffix = if (dropped > 0) " (suppressed $dropped over-rate calls)" else ""
         Log.e(
-            MainActivity.TAG,
+            TAG,
             "dashboard client error [${safe(label, MAX_LABEL_LEN)}]: ${safe(detail, MAX_DETAIL_LEN)}$suffix",
         )
     }
@@ -442,6 +442,7 @@ class VoltBridge(
     }
 
     companion object {
+        private const val TAG = "VoltTracker"
         private const val MAX_ADDRESS_LEN = 64
         private const val MAX_NAME_LEN = 256
         private const val MAX_LABEL_LEN = 128
