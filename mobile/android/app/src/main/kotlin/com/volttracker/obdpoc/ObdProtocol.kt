@@ -183,6 +183,16 @@ object ObdProtocol {
             "015C" -> return parseOffsetMode01Byte(response, "5C", -40)?.let {
                 value("engine oil temperature", it.toDouble(), "deg C", 0)
             }
+            // ---- GM/Volt mode-22 (manufacturer-specific) PIDs --------------------------------
+            // NOT OBD-II standard: the PID list and the scale/offset constants below are
+            // reverse-engineered from community sources and are NOT validated against this car's
+            // real readings — treat the decoded values as approximate until confirmed on-car.
+            // Sources + open questions: docs/volt-pid-research-2026-05-20.md,
+            // docs/pid-validation-2026-06-03.md, docs/volt-pids-community-sheet.csv.
+            // Decode helpers (each value(name, …, unit, decimals) labels the signal + unit):
+            //   voltByteValue(resp, cmd, scale, offset)   = payload[0] * scale + offset      (1 byte)
+            //   voltWordValue(resp, cmd, divisor, signed) = word / divisor, word = 2 bytes big-endian,
+            //                                               two's-complement when signed = true
             "222429" -> return voltWordValue(response, cleanCommand, 64.0, true)?.let {
                 value("hv pack voltage", it, "V", 1)
             }

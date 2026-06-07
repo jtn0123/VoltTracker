@@ -38,13 +38,17 @@ upward as the test suite grows.
 
 ## Dashboard partial workflow
 
-The shipped `assets/dashboard/index.html` is generated. Edit:
+The shipped `assets/dashboard/index.html` AND the shipped JS are generated. Edit:
 
 - Markup: `app/src/main/dashboard-src/partials/*.html` (+ `index.template.html`)
-- Styles: `app/src/main/assets/dashboard/css/*.css` (load directly, no regen)
-- Behavior: `app/src/main/assets/dashboard/js/*.js` (load directly, no regen)
+- Behavior (TypeScript): `app/src/main/dashboard-src/js/*.ts`
+- Styles: `app/src/main/assets/dashboard/css/*.css` (CSS loads directly, no build)
 
-After editing a partial, run `./gradlew generateDashboardHtml`. CSS/JS edits need no regeneration.
+`assets/dashboard/js/` is the **built, minified, gitignored** bundle compiled from
+`dashboard-src/js/*.ts` by esbuild (`buildDashboardJs`), so it can't be hand-edited.
+After editing a TypeScript source, rebuild the bundle with
+`npm --prefix dashboard-tests run build` (or `./gradlew :app:assembleDebug`, which runs it).
+After editing a partial/template, run `./gradlew generateDashboardHtml`. Only CSS needs no build.
 CI fails if the committed generated file drifts from the partial/template output.
 
 ## Layering rule (see ADR 0002)

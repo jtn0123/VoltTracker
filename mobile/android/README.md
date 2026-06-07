@@ -59,7 +59,9 @@ Polled live every cycle:
 - `010C` engine RPM
 - `0105` coolant temp
 - `0104` engine load
-- `0111` throttle position
+- `0149` accelerator pedal position D (drive-by-wire pedal — the real pedal-input signal)
+- `0111` throttle position (ICE throttle body angle; the Volt returns a constant here, so
+  `0149` is preferred for actual pedal input)
 - `015B` hybrid battery state of charge
 
 Sent only by the diagnostic Scan (community-validated Chevy Volt mode-22 PIDs;
