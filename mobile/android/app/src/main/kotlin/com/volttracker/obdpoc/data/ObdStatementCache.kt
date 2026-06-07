@@ -13,6 +13,14 @@ class ObdStatementCache : Closeable {
     private var telemetryInsertStmt: SQLiteStatement? = null
 
     /**
+     * The [SQLiteDatabase] [telemetryInsertStmt] was compiled against. A prepared statement binds
+     * to one native handle, so if the DB is recycled (closed and reopened) a statement cached
+     * against the old handle would make [SQLiteStatement.executeInsert] throw. We key the cache on
+     * this instance and recompile when a different db is seen.
+     */
+    private var compiledAgainst: SQLiteDatabase? = null
+
+    /**
      * Binds the telemetry sample to the prepared statement and executes the INSERT. Returns the
      * inserted row id. Must be invoked inside an existing transaction owned by the caller.
      */
@@ -22,8 +30,12 @@ class ObdStatementCache : Closeable {
         capturedAtMs: Long,
         sample: JSONObject,
     ): Long {
-        if (telemetryInsertStmt == null) {
+        // Hot path: a cheap reference-identity check. Only when the caller hands us a different
+        // db instance (a recycled handle) do we close the stale statement and recompile.
+        if (telemetryInsertStmt == null || compiledAgainst !== db) {
+            telemetryInsertStmt?.close()
             telemetryInsertStmt = db.compileStatement(SQL_INSERT_TELEMETRY)
+            compiledAgainst = db
         }
         val stmt = requireNotNull(telemetryInsertStmt)
         stmt.clearBindings()
@@ -34,6 +46,7 @@ class ObdStatementCache : Closeable {
     override fun close() {
         telemetryInsertStmt?.close()
         telemetryInsertStmt = null
+        compiledAgainst = null
     }
 
     companion object {

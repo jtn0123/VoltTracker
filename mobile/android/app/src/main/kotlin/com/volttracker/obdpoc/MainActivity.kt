@@ -200,7 +200,7 @@ open class MainActivity : ComponentActivity() {
     }
 
     open fun onDashboardReady() {
-        Log.i(TAG, "dashboard handshake received: JS is live")
+        Log.i(TAG, "$DASHBOARD_READY_LOG: JS is live")
         val publisher = dashboardPublisher ?: return
         if (publisher.isPageReady()) {
             return
@@ -592,6 +592,15 @@ open class MainActivity : ComponentActivity() {
 
     companion object {
         const val TAG = "VoltTracker"
+
+        /**
+         * Prefix of the JS->native handshake log line emitted by [onDashboardReady]. This is the
+         * entire positive signal of `scripts/emulator-smoke.sh`, which greps logcat for it to prove
+         * the dashboard JS came alive. Renaming it on either side would make the smoke pass while
+         * testing nothing, so `EmulatorSmokeContractTest` asserts the script references this exact
+         * constant. Keep the emitted line's prefix unchanged so the live smoke still matches.
+         */
+        const val DASHBOARD_READY_LOG = "dashboard handshake received"
         private const val PREFS = "volt_obd_prefs"
         private const val STORAGE_SUMMARY_MIN_INTERVAL_MS = 10_000L
     }

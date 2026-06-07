@@ -14,6 +14,13 @@ class LiveSampleReader(
     private val speedFilter: SpeedPlausibilityFilter,
     private val pidPolling: PidPollingState,
 ) {
+    /**
+     * Commands whose positive-but-unparseable response we have already surfaced via a
+     * `pid_parse_failed` diagnostic. Rate-limits the event to once per command per reader instance
+     * (one session) so a persistently malformed PID does not spam the log every poll cycle.
+     */
+    private val parseFailureReported = HashSet<String>()
+
     interface SampleContext {
         fun incrementSampleCount(): Int
 
@@ -37,6 +44,7 @@ class LiveSampleReader(
             val due = pidPolling.dueForCurrentCycle()
             pidPolling.runScheduledPolls(due, rawThisCycle)
             pidPolling.advanceCycle()
+            reportParseFailures(due)
 
             val voltageRaw = pidPolling.lastRaw("ATRV")
             val voltage = ObdProtocol.parseVoltage(voltageRaw)
@@ -145,6 +153,39 @@ class LiveSampleReader(
             return JSONObject()
         }
         return sample
+    }
+
+    /**
+     * Surfaces the otherwise-silent case where a PID we polled this cycle answered with a genuine
+     * positive ECU frame that the parser still could not decode. Without this, [read] simply omits
+     * the field, which is indistinguishable from "PID not supported". A NO DATA / 7F / unsupported
+     * reply is excluded by [EnhancedPidProfiles.isPositiveResponse], so this fires only on malformed
+     * data — the bug worth knowing about. Mirrors the `speed_rejected` event sink
+     * ([ObdService.recorder]) and is rate-limited to once per command per session via
+     * [parseFailureReported] so a persistently broken PID does not log its raw response every cycle.
+     */
+    private fun reportParseFailures(due: List<PidSchedule.PidSpec>) {
+        for (spec in due) {
+            val command = spec.command
+            if (parseFailureReported.contains(command)) {
+                continue
+            }
+            val raw = pidPolling.lastRaw(command) ?: continue
+            if (!EnhancedPidProfiles.isPositiveResponse(command, raw)) {
+                continue
+            }
+            if (ObdProtocol.parseKnownValue(command, raw) != null) {
+                continue
+            }
+            parseFailureReported.add(command)
+            service.recorder.logEvent(
+                "pid_parse_failed",
+                "command",
+                command,
+                "response",
+                ObdProtocol.summarize(raw),
+            )
+        }
     }
 
     @Throws(JSONException::class)

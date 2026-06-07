@@ -20,12 +20,14 @@
 # ⚠️ TEST CONTRACT — the logcat string "dashboard handshake received" below is the
 # entire positive signal of this smoke. It is emitted by
 # MainActivity.onDashboardReady (Log.i(TAG, "dashboard handshake received: JS is
-# live")). The grep here matches the "dashboard handshake received" prefix. If that
-# log line is renamed, reworded, or removed, this smoke will go PERMANENTLY GREEN
-# while testing nothing — the dead-JS regression it exists to catch would sail
-# through. DO NOT change the string on either side without updating the other in the
-# same commit. See mobile/android/docs/data-model.md ("Test contract") for the
-# rationale.
+# live")), whose prefix is the source-of-truth constant MainActivity.DASHBOARD_READY_LOG.
+# The grep here must match that constant's value. If that log line is renamed,
+# reworded, or removed, this smoke will go PERMANENTLY GREEN while testing nothing —
+# the dead-JS regression it exists to catch would sail through. EmulatorSmokeContractTest
+# asserts this script references MainActivity.DASHBOARD_READY_LOG so a rename on either
+# side fails a fast unit test. DO NOT change the string on either side without updating
+# the other in the same commit. See mobile/android/docs/data-model.md ("Test contract")
+# for the rationale.
 set -euo pipefail
 
 # Resolve to mobile/android regardless of caller cwd (scripts/ -> mobile/android).
