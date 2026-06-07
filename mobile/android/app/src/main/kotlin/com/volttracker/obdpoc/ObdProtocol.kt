@@ -463,6 +463,21 @@ object ObdProtocol {
 
     private fun cleanHeader(header: String?): String = header?.trim()?.uppercase(Locale.US)?.replace(Regex("[^0-9A-F]"), "") ?: ""
 
+    /**
+     * Extracts the DTC payload from an ISO-TP CONSECUTIVE frame (one of the continuation lines that
+     * follow the first frame in a multi-frame mode 03/07/0A reply). The CAN addressing format is
+     * determined ONCE from the line's header prefix and the resulting PCI offset is used for both
+     * validation AND slicing — we never re-sniff the bytes a second time. That matters because a
+     * consecutive frame's data can legitimately begin with `0x7x` or `0x18` bytes; keying the slice
+     * on the header offset (not on payload content) keeps those frames from being mis-cut.
+     *
+     * Layout per addressing format (offsets in hex chars):
+     *   29-bit extended : header `18..` (8 chars) + CF PCI `2N` (2 chars) -> payload at offset 10.
+     *   11-bit standard : CAN ID `7xx`  (3 chars) + CF PCI `2N` (2 chars) -> payload at offset 5.
+     *   headers off     :                            CF PCI `2N` (2 chars) -> payload at offset 2.
+     * A consecutive frame must carry a CF PCI byte (high nibble `0x2`); anything else (flow control,
+     * a negative-response `7F`, padding, junk) fails the gate and yields no payload.
+     */
     private fun continuationPayload(hex: String?): String {
         if (hex == null || hex.length < 4) {
             return ""
@@ -478,31 +493,16 @@ object ObdProtocol {
         if (hex.length < pciOffset + 2) {
             return ""
         }
-        try {
-            val firstDataByte = hex.substring(pciOffset, pciOffset + 2).toInt(16)
-            if ((firstDataByte and 0xF0) != 0x20) {
-                return ""
-            }
-        } catch (ignored: NumberFormatException) {
-            return ""
-        }
-        if (hex.length >= 10 && hex.startsWith("18")) {
-            return hex.substring(10)
-        }
-        if (hex.length >= 5 && hex.startsWith("7")) {
-            return hex.substring(5)
-        }
-        if (hex.length >= 2) {
+        val pciByte =
             try {
-                val firstByte = hex.substring(0, 2).toInt(16)
-                if (firstByte in 0x21..0x2F) {
-                    return hex.substring(2)
-                }
+                hex.substring(pciOffset, pciOffset + 2).toInt(16)
             } catch (ignored: NumberFormatException) {
                 return ""
             }
+        if ((pciByte and 0xF0) != 0x20) {
+            return ""
         }
-        return ""
+        return hex.substring(pciOffset + 2)
     }
 
     private fun isLikelyExtendedCanFrame(hex: String): Boolean = hex.length >= 10 && hex.startsWith("18")
