@@ -14,7 +14,14 @@ class VoltTrackerDb : SQLiteOpenHelper {
         databaseName,
         null,
         DATABASE_VERSION,
-    )
+    ) {
+        // Write-ahead logging lets dashboard reads (storage summary, trips, route render)
+        // run concurrently with the single-thread telemetry writer instead of serializing
+        // on a shared lock — the dominant in-drive contention, since the app inserts ~1
+        // telemetry row/850 ms while servicing reads. Must be set before the DB opens.
+        // The store already issues wal_checkpoint(TRUNCATE) on maintenance/backup paths.
+        setWriteAheadLoggingEnabled(true)
+    }
 
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
@@ -29,6 +36,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
         VoltTrackerSchema.createRoadmapIndexes(db)
         VoltTrackerSchema.createPruneIndexes(db)
         VoltTrackerSchema.createSessionTripRollups(db)
+        VoltTrackerSchema.createTripListCache(db)
     }
 
     override fun onUpgrade(
@@ -114,6 +122,13 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 }
             }
         }
+        if (oldVersion < 11) {
+            runMigrationStep(db, oldVersion, 11, "trip-list-cache") { target ->
+                // Table starts empty; ObdStoreTrips backfills it on the next read because the
+                // bumped ROLLUP_CACHE_VERSION marks every existing rollup stale.
+                VoltTrackerSchema.createTripListCache(target)
+            }
+        }
     }
 
     fun interface MigrationStep {
@@ -122,7 +137,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
 
     companion object {
         const val DATABASE_NAME = "volttracker_obd_poc.db"
-        const val DATABASE_VERSION = 10
+        const val DATABASE_VERSION = 11
 
         const val TABLE_SESSIONS = "obd_sessions"
         const val TABLE_TELEMETRY = "telemetry_samples"
@@ -135,6 +150,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
         const val TABLE_FIELD_CAPABILITIES = "field_capabilities"
         const val TABLE_TRIP_SEGMENTS = "trip_segments"
         const val TABLE_SESSION_TRIP_ROLLUPS = "session_trip_rollups"
+        const val TABLE_TRIP_LIST_CACHE = "trip_list_cache"
         const val TABLE_CHARGE_SESSIONS = "charge_sessions"
         const val TABLE_BATTERY_SNAPSHOTS = "battery_snapshots"
         const val TABLE_CELL_SNAPSHOTS = "cell_snapshots"
@@ -154,6 +170,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 TABLE_FIELD_CAPABILITIES,
                 TABLE_TRIP_SEGMENTS,
                 TABLE_SESSION_TRIP_ROLLUPS,
+                TABLE_TRIP_LIST_CACHE,
                 TABLE_CHARGE_SESSIONS,
                 TABLE_BATTERY_SNAPSHOTS,
                 TABLE_CELL_SNAPSHOTS,

@@ -15,15 +15,27 @@ class ObdStoreTrips(
 ) {
     fun tripsJson(limit: Int): JSONArray {
         val payload = JSONArray()
-        val db = helper.readableDatabase
+        // Writable: ensureRollupsAndCollectActive backfills the rollup + trip-list caches.
+        val db = helper.writableDatabase
         try {
             val allTrips = ArrayList<JSONObject>()
-            for (session in ObdStoreSupport.getAllSessions(db)) {
-                if (ObdLocalStore.MODE_OBD != session.mode) {
-                    continue
-                }
+            // Finalized sessions are served from trip_list_cache (top-N by recency, no per-session
+            // recomputation). Active (not-yet-finalized) sessions aren't cached, so compute them
+            // live — there are only a handful in flight, so this stays bounded.
+            val active = ensureRollupsAndCollectActive(db)
+            for (session in active) {
                 allTrips.addAll(tripJsons(db, session))
             }
+            db
+                .rawQuery(
+                    "SELECT trip_json FROM ${VoltTrackerDb.TABLE_TRIP_LIST_CACHE}" +
+                        " ORDER BY ended_at_ms DESC LIMIT ?",
+                    arrayOf(limit.toString()),
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        allTrips.add(JSONObject(cursor.getString(0)))
+                    }
+                }
             Collections.sort(allTrips) { left, right ->
                 java.lang.Long.compare(right.optLong("endedAtMs", 0L), left.optLong("endedAtMs", 0L))
             }
@@ -198,6 +210,7 @@ class ObdStoreTrips(
         val counted: Boolean
         try {
             val trips = tripJsons(db, session)
+            writeTripListCache(db, session.id, trips)
             counted = trips.isNotEmpty()
             if (counted) {
                 var computedDistance = 0.0
@@ -243,6 +256,27 @@ class ObdStoreTrips(
         db.insertWithOnConflict(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    /**
+     * Replaces this session's cached per-window trip rows with the freshly computed [trips]. Stores
+     * the exact trip JSON the list renders, so getTripsJson reads it back verbatim. Called from
+     * insertRollup, so it rebuilds whenever ROLLUP_CACHE_VERSION bumps or a session finalizes.
+     */
+    private fun writeTripListCache(
+        db: SQLiteDatabase,
+        sessionId: Long,
+        trips: List<JSONObject>,
+    ) {
+        db.delete(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, "session_id = ?", arrayOf(sessionId.toString()))
+        for (trip in trips) {
+            val values = ContentValues()
+            values.put("session_id", sessionId)
+            values.put("ended_at_ms", trip.optLong("endedAtMs", 0L))
+            values.put("rollup_version", ROLLUP_CACHE_VERSION)
+            values.put("trip_json", trip.toString())
+            db.insert(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, null, values)
+        }
+    }
+
     private class TripAggregate {
         var tripCount = 0
         var totalDistance = 0.0
@@ -278,7 +312,9 @@ class ObdStoreTrips(
     }
 
     companion object {
-        private const val ROLLUP_CACHE_VERSION = 2
+        // Bump to invalidate cached rollups + the trip-list cache (forces a one-time rebuild on
+        // the next read). v3 added the per-window trip_list_cache backfill.
+        private const val ROLLUP_CACHE_VERSION = 3
 
         private fun maxIntForWindowBoxed(
             db: SQLiteDatabase,

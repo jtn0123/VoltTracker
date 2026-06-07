@@ -368,6 +368,35 @@ object ObdStoreSupport {
             if (cursor.moveToFirst()) cursor.getLong(0) else 0L
         }
 
+    /**
+     * Useful-telemetry-row counts for many sessions in ONE grouped query, replacing the per-session
+     * COUNT(*) N+1 in the recent-sessions reads. Returns sessionId → count; sessions with zero useful
+     * rows are absent (callers default to 0).
+     */
+    @JvmStatic
+    fun usefulSampleCountsBySession(
+        db: SQLiteDatabase,
+        sessionIds: List<Long>,
+    ): Map<Long, Long> {
+        if (sessionIds.isEmpty()) {
+            return emptyMap()
+        }
+        val placeholders = sessionIds.joinToString(",") { "?" }
+        val args = Array(sessionIds.size) { sessionIds[it].toString() }
+        val counts = HashMap<Long, Long>(sessionIds.size)
+        db
+            .rawQuery(
+                "SELECT session_id, COUNT(*) FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                    "WHERE session_id IN ($placeholders) AND $USEFUL_TELEMETRY_WHERE GROUP BY session_id",
+                args,
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    counts[cursor.getLong(0)] = cursor.getLong(1)
+                }
+            }
+        return counts
+    }
+
     @JvmStatic
     fun maxInt(
         db: SQLiteDatabase,

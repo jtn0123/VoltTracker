@@ -316,15 +316,11 @@ class ObdStoreReports(
         db: SQLiteDatabase,
         limit: Int,
     ): List<RecentSessionSummaryRecord> {
-        val records = ArrayList<RecentSessionSummaryRecord>()
-        for (session in getRecentSessions(limit)) {
-            val usefulSamples =
-                ObdStoreSupport.countRowsWhere(
-                    db,
-                    VoltTrackerDb.TABLE_TELEMETRY,
-                    "session_id = ? AND ${ObdStoreSupport.USEFUL_TELEMETRY_WHERE}",
-                    arrayOf(session.id.toString()),
-                )
+        val sessions = getRecentSessions(limit)
+        val usefulBySession = ObdStoreSupport.usefulSampleCountsBySession(db, sessions.map { it.id })
+        val records = ArrayList<RecentSessionSummaryRecord>(sessions.size)
+        for (session in sessions) {
+            val usefulSamples = usefulBySession[session.id] ?: 0L
             records.add(
                 RecentSessionSummaryRecord(
                     session,
@@ -387,7 +383,9 @@ class ObdStoreReports(
     fun recentSessionsJson(limit: Int): JSONArray {
         val payload = JSONArray()
         val db = helper.readableDatabase
-        for (record in getRecentSessions(limit)) {
+        val sessions = getRecentSessions(limit)
+        val usefulBySession = ObdStoreSupport.usefulSampleCountsBySession(db, sessions.map { it.id })
+        for (record in sessions) {
             val item = JSONObject()
             try {
                 item.put("id", record.id)
@@ -399,13 +397,7 @@ class ObdStoreReports(
                 item.put("status", record.status)
                 item.put("supportedPids", record.supportedPids)
                 item.put("sampleCount", record.sampleCount)
-                val usefulSamples =
-                    ObdStoreSupport.countRowsWhere(
-                        db,
-                        VoltTrackerDb.TABLE_TELEMETRY,
-                        "session_id = ? AND ${ObdStoreSupport.USEFUL_TELEMETRY_WHERE}",
-                        arrayOf(record.id.toString()),
-                    )
+                val usefulSamples = usefulBySession[record.id] ?: 0L
                 item.put("usefulSampleCount", usefulSamples)
                 item.put("emptySampleCount", maxOf(0L, record.sampleCount - usefulSamples))
                 item.put("lastEventAtMs", record.lastEventAtMs)

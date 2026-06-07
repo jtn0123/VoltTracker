@@ -124,6 +124,34 @@ object VoltTrackerSchema {
         )
     }
 
+    /**
+     * Per-drive-window cache for the Trips LIST. One row per finalized trip, storing the exact trip
+     * JSON the dashboard renders, so getTripsJson reads the top-N by ended_at_ms instead of
+     * recomputing drive-window detection + route projection for the entire session history on every
+     * open. Populated lazily by ObdStoreTrips.insertRollup (keyed off ROLLUP_CACHE_VERSION), so a
+     * version bump rebuilds it; active (not-yet-finalized) sessions are computed live and absent here.
+     */
+    fun createTripListCache(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS ${VoltTrackerDb.TABLE_TRIP_LIST_CACHE} (
+                _id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                ended_at_ms INTEGER NOT NULL,
+                rollup_version INTEGER NOT NULL,
+                trip_json TEXT NOT NULL,
+                FOREIGN KEY(session_id) REFERENCES ${VoltTrackerDb.TABLE_SESSIONS}(_id) ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_trip_list_cache_ended ON ${VoltTrackerDb.TABLE_TRIP_LIST_CACHE}(ended_at_ms DESC)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_trip_list_cache_session ON ${VoltTrackerDb.TABLE_TRIP_LIST_CACHE}(session_id)",
+        )
+    }
+
     fun createObservationTables(db: SQLiteDatabase) {
         db.execSQL(
             """
