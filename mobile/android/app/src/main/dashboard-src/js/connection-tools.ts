@@ -4,6 +4,7 @@
 //  - Test connection             -> VoltTrackerAndroid.startTestConnection()
 //  - Send diagnostics            -> VoltTrackerAndroid.shareDiagnostics()
 //                                   (also bound on the settings panel mirror)
+//  - Auto-connect last adapter   -> VoltTrackerAndroid.setAutoConnectEnabled(enabled)
 //  - Notify when ready           -> VoltTrackerAndroid.scheduleAdapterReadyNotify(mins)
 //
 // The low-voltage hint markup lives in the same partial but is owned by
@@ -35,6 +36,47 @@ function safeCall(method: keyof VoltBridge, ...args: unknown[]): unknown {
     // pipeline rather than throwing into the dashboard.
     return undefined;
   }
+}
+
+function parseBridgeJson(value: unknown): Record<string, unknown> {
+  if (typeof value !== "string" || !value.trim()) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (ignored) {
+    return {};
+  }
+}
+
+function autoConnectStatusText(state: Record<string, unknown>) {
+  const enabled = state.enabled !== false;
+  const hasAdapter = Boolean(String(state.lastAddress || "").trim());
+  const name = String(state.lastName || "").trim();
+  const label = name || (hasAdapter ? "last adapter" : "last adapter");
+  if (!enabled) {
+    return "Off. Manual Connect still works.";
+  }
+  if (!hasAdapter || state.available === false) {
+    return "On. Connect once to remember an adapter.";
+  }
+  return "On. Uses " + label + " when the app sees it, without Bluetooth discovery.";
+}
+
+function bindAutoConnect() {
+  const toggle = el("autoConnectToggle") as HTMLInputElement | null;
+  const status = el("autoConnectStatus");
+  if (!toggle) return;
+  const state = parseBridgeJson(safeCall("getAutoConnectState"));
+  toggle.checked = state.enabled !== false;
+  if (status) status.textContent = autoConnectStatusText(state);
+  toggle.addEventListener("change", () => {
+    safeCall("setAutoConnectEnabled", toggle.checked);
+    const nextState = {
+      ...state,
+      enabled: toggle.checked,
+    };
+    if (status) status.textContent = autoConnectStatusText(nextState);
+  });
 }
 
 // Test-connection button. The Android side starts ObdService for the
@@ -128,6 +170,7 @@ function bindNotifyWhenReady() {
 
 bindTestConnection();
 bindSendDiagnostics();
+bindAutoConnect();
 bindNotifyWhenReady();
 void VD;
 

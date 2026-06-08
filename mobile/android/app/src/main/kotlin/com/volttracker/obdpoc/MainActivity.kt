@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -85,6 +86,7 @@ open class MainActivity :
 
     @JvmField var troubleshooter: TroubleshooterBridge? = null
 
+    private var autoConnectController: AutoConnectController? = null
     private var restoreFilePicker: ActivityResultLauncher<Intent>? = null
     private var permissionRequester: ActivityResultLauncher<Array<String>>? = null
     private var lastTelemetry = JSONObject()
@@ -177,6 +179,28 @@ open class MainActivity :
             }
         }
 
+    private val autoConnectReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(
+                context: Context,
+                intent: Intent,
+            ) {
+                when (intent.action) {
+                    BluetoothDevice.ACTION_ACL_CONNECTED ->
+                        maybeAutoConnect(
+                            AutoConnectController.TRIGGER_BLUETOOTH_CONNECTED,
+                            bluetoothDeviceAddress(intent),
+                        )
+                    BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                        val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                        if (state == BluetoothAdapter.STATE_ON) {
+                            maybeAutoConnect(AutoConnectController.TRIGGER_BLUETOOTH_ON, null)
+                        }
+                    }
+                }
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         restoreFilePicker =
@@ -186,6 +210,7 @@ open class MainActivity :
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val activityPrefs = checkNotNull(prefs)
         deviceCatalog = DeviceCatalog(this, activityPrefs)
+        autoConnectController = AutoConnectController(activityPrefs, requireDeviceCatalog())
         dataBackup = DataBackup(this)
         backupController = BackupController(this, requireDataBackup(), backgroundExecutor)
         permissionGate = PermissionGate(this, ::launchPermissionRequest)
@@ -241,7 +266,12 @@ open class MainActivity :
         publishDeviceList()
         publishStorageSummary()
         publishAppState()
-        publishStatus("ready", "Pick a paired OBD adapter to start logging.", false)
+        if (isLoggingActive()) {
+            callDashboard("setStatus", lastStatus.toString())
+        } else {
+            publishStatus("ready", "Pick a paired OBD adapter to start logging.", false)
+        }
+        maybeAutoConnect(AutoConnectController.TRIGGER_DASHBOARD_READY, null)
     }
 
     fun isDashboardReadyForTest(): Boolean = dashboardPublisher?.isPageReady() == true
@@ -252,10 +282,20 @@ open class MainActivity :
         filter.addAction(ObdService.BROADCAST_TELEMETRY)
         filter.addAction(ObdService.BROADCAST_STATUS)
         broadcastReceivers.register(this, obdReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        val autoConnectFilter = IntentFilter()
+        autoConnectFilter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+        autoConnectFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+        broadcastReceivers.register(
+            this,
+            autoConnectReceiver,
+            autoConnectFilter,
+            ContextCompat.RECEIVER_EXPORTED,
+        )
         publishDeviceList()
         publishStorageSummary()
         publishAppState()
         reportAppVisibility(true)
+        maybeAutoConnect(AutoConnectController.TRIGGER_APP_RESUME, null)
     }
 
     override fun onPause() {
@@ -281,6 +321,7 @@ open class MainActivity :
         }
         webView = null
         dashboardPublisher = null
+        autoConnectController = null
         super.onDestroy()
     }
 
@@ -405,10 +446,20 @@ open class MainActivity :
         if (detailStage != null) {
             service.putExtra(ObdService.EXTRA_DETAIL_STAGE, detailStage)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(service)
-        } else {
-            startService(service)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(service)
+            } else {
+                startService(service)
+            }
+        } catch (ex: RuntimeException) {
+            Log.w(TAG, "startObdService blocked", ex)
+            troubleshooter?.clearPendingTestConnectionStop()
+            publishStatus(
+                "blocked",
+                "Android blocked OBD logging startup. Check permissions and try again.",
+                true,
+            )
         }
     }
 
@@ -583,6 +634,61 @@ open class MainActivity :
             lastStatus,
             lastStorage,
         )
+    }
+
+    override fun getAutoConnectStateJson(): String =
+        autoConnectController?.stateJson()
+            ?: MainActivityUtils.errorPayload("auto_connect_unavailable", "Auto-connect is not ready.").toString()
+
+    override fun setAutoConnectEnabledFromBridge(enabled: Boolean) {
+        val controller = autoConnectController
+        if (controller == null) {
+            publishStatus("blocked", "Auto-connect is not ready yet.", true)
+            return
+        }
+        controller.setEnabled(enabled)
+        if (enabled) {
+            publishStatus(
+                "ready",
+                "Auto-connect enabled. Volt Tracker will use the last adapter when the app sees it.",
+                false,
+            )
+            maybeAutoConnect(AutoConnectController.TRIGGER_USER_ENABLED, null)
+        } else {
+            publishStatus("ready", "Auto-connect disabled.", false)
+        }
+        publishAppState()
+    }
+
+    private fun maybeAutoConnect(
+        trigger: String,
+        observedAddress: String?,
+    ): Boolean {
+        val controller = autoConnectController ?: return false
+        return controller.maybeConnect(
+            trigger,
+            observedAddress,
+            isBluetoothReady(),
+            isLoggingActive(),
+            { address, name -> startObdService(ObdService.ACTION_CONNECT, address, name) },
+            { state, detail, blocked -> publishStatus(state, detail, blocked) },
+        )
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun bluetoothDeviceAddress(intent: Intent): String {
+        val device: BluetoothDevice? =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+            }
+        return try {
+            device?.address ?: ""
+        } catch (_: SecurityException) {
+            ""
+        }
     }
 
     private fun appVersionName(): String =

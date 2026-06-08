@@ -73,6 +73,14 @@ class VoltBridge(
     fun getDeviceHistory(): String = activity.requireDeviceCatalog().getDeviceHistoryJson()
 
     @JavascriptInterface
+    fun getAutoConnectState(): String = activity.getAutoConnectStateJson()
+
+    @JavascriptInterface
+    fun setAutoConnectEnabled(enabled: Boolean) {
+        activity.setAutoConnectEnabledFromBridge(enabled)
+    }
+
+    @JavascriptInterface
     fun getStorageSummary(): String = activity.getStorageSummaryJson()
 
     @JavascriptInterface

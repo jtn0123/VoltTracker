@@ -3,6 +3,7 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANDROID_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$ANDROID_ROOT/../.." && pwd)"
 
 failures=0
 
@@ -87,7 +88,16 @@ fi
 
 section "Node and Dashboard Tooling"
 if need_cmd node; then
-  print_cmd_version node --version
+  node_version="$(node --version 2>&1 | head -n 1)"
+  printf '%s\n' "$node_version"
+  expected_node_major="20"
+  if [ -f "$REPO_ROOT/.nvmrc" ]; then
+    expected_node_major="$(sed -E 's/^v?([0-9]+).*/\1/' "$REPO_ROOT/.nvmrc")"
+  fi
+  node_major="$(printf '%s\n' "$node_version" | sed -E 's/^v?([0-9]+).*/\1/')"
+  if [ "$node_major" != "$expected_node_major" ]; then
+    missing "Node ${expected_node_major}.x is required by .nvmrc and dashboard package engines"
+  fi
 fi
 if need_cmd npm; then
   print_cmd_version npm --version

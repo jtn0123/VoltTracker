@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EVIDENCE_DIR="${ROOT}/mobile/android/docs/release-candidates"
 REQUIRED="${REQUIRE_RELEASE_CANDIDATE_EVIDENCE:-0}"
+REQUIRE_READY_TO_TAG="${REQUIRE_READY_TO_TAG:-${REQUIRED}}"
 EVIDENCE_FILE="${RELEASE_CANDIDATE_EVIDENCE:-}"
 
 if [[ -z "${EVIDENCE_FILE}" ]]; then
@@ -44,6 +45,13 @@ done
 
 if grep -Eq '^- (Branch|Commit|Version / expected tag|APK under test|Highest validation level reached|Ready to tag):[[:space:]]*$' "${EVIDENCE_FILE}"; then
   missing "Release-candidate evidence has blank required fields: ${EVIDENCE_FILE}."
+fi
+
+if ! grep -Eiq '^- Ready to tag:[[:space:]]*(yes|true)$' "${EVIDENCE_FILE}"; then
+  if [[ "${REQUIRE_READY_TO_TAG}" == "1" ]]; then
+    missing "Release-candidate evidence must say Ready to tag: yes before tagging: ${EVIDENCE_FILE}."
+  fi
+  echo "Release-candidate evidence is not ready to tag yet: ${EVIDENCE_FILE}." >&2
 fi
 
 echo "Release-candidate evidence checked: ${EVIDENCE_FILE#${ROOT}/}"

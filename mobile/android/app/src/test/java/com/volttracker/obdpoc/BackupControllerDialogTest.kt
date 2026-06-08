@@ -161,6 +161,25 @@ class BackupControllerDialogTest {
         assertTrue(activity.lastDetail!!.contains("not a valid Volt Tracker backup"))
     }
 
+    @Test
+    fun encryptedBackupWithoutPassphraseExplainsWhatWentWrong() {
+        val id = activity.localStore!!.startSession("obd", "AA:BB", "Adapter")
+        activity.localStore!!.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000L, "")
+        val backup = DataBackup(activity).buildEncryptedBackupFile(activity.localStore, "secret-pass")
+        assertNotNull("buildEncryptedBackupFile should produce a backup", backup)
+        val uri = Uri.parse("content://test/" + backup!!.name)
+        shadowOf(activity.contentResolver)
+            .registerInputStream(uri, FileInputStream(backup))
+        val data = Intent()
+        data.setData(uri)
+
+        activity.backupController!!.onRestorePickerResult(Activity.RESULT_OK, data)
+
+        assertEquals("blocked", activity.lastState)
+        assertTrue(activity.lastDetail!!.contains("encrypted"))
+        assertTrue(activity.lastDetail!!.contains("passphrase"))
+    }
+
     /** Inline executor: stage/apply work runs synchronously so the test can assert outcomes. */
     private class DirectExecutorService : AbstractExecutorService() {
         @Volatile

@@ -141,14 +141,17 @@
     const storage = state.storage || {};
     const status = state.status || {};
     const selected = getSelectedDevice();
+    const statusName = String(status.state || "").toLowerCase();
     const adapterName = state.demoActive
       ? "Demo telemetry"
       : (adapter.name || (selected && selected.name) || "No adapter selected");
     const remembered = adapter.remembered || Boolean((getLastDevice() || {}).address);
+    const connecting = ["connecting", "initializing"].includes(statusName);
+    const scanning = statusName === "scanning";
     const connected =
       state.demoActive ||
       Boolean(adapter.connected) ||
-      ["connected", "connecting", "initializing", "scanning", "demo"].includes(String(status.state || "").toLowerCase());
+      ["connected", "connecting", "initializing", "scanning", "demo"].includes(statusName);
     const sessionState = session.state || status.state || "idle";
     const samples = Number(session.sampleCount || state.telemetry.sampleCount || 0);
 
@@ -174,23 +177,39 @@
     VD.setText("appVersionFooter", appInfo.version ? `Volt Tracker v${appInfo.version}` : "Volt Tracker");
 
     const primary = el("connectBtn");
+    const lastButton = el("lastBtn") as HTMLButtonElement | null;
+    if (lastButton) lastButton.hidden = connected && !state.demoActive;
     if (!primary) return;
     primary.classList.toggle("is-stop", connected);
     primary.classList.toggle("primary", !connected);
+    primary.setAttribute("aria-busy", connecting || scanning ? "true" : "false");
     if (state.demoActive) {
       primary.dataset.primaryAction = "stopDemo";
+      primary.setAttribute("aria-label", "Stop demo preview");
       primary.textContent = "Stop demo";
+    } else if (connecting) {
+      primary.dataset.primaryAction = "stop";
+      primary.setAttribute("aria-label", "Connecting to OBD adapter. Tap to stop.");
+      primary.textContent = "Connecting...";
+    } else if (scanning) {
+      primary.dataset.primaryAction = "stop";
+      primary.setAttribute("aria-label", "Scanning with OBD adapter. Tap to stop.");
+      primary.textContent = "Scanning...";
     } else if (connected) {
       primary.dataset.primaryAction = "stop";
-      primary.textContent = "Stop";
+      primary.setAttribute("aria-label", "Disconnect OBD adapter");
+      primary.textContent = "Disconnect";
     } else if (!bridge) {
       primary.dataset.primaryAction = "demo";
+      primary.setAttribute("aria-label", "Start demo preview");
       primary.textContent = "Start demo";
     } else if (remembered) {
       primary.dataset.primaryAction = "last";
+      primary.setAttribute("aria-label", "Resume last OBD adapter");
       primary.textContent = "Resume";
     } else {
       primary.dataset.primaryAction = "connect";
+      primary.setAttribute("aria-label", "Connect selected OBD adapter");
       primary.textContent = "Connect";
     }
   }

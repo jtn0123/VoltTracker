@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
@@ -49,6 +50,8 @@ class BackupControllerLifecycleTest {
             assertNotNull(started)
             assertEquals(Intent.ACTION_OPEN_DOCUMENT, started!!.action)
             assertEquals("application/octet-stream", started.type)
+            assertEquals("ready", activity.lastState)
+            assertEquals("Choose a Volt Tracker backup file.", activity.lastDetail)
             assertArrayEquals(
                 arrayOf(
                     "application/octet-stream",
@@ -57,6 +60,22 @@ class BackupControllerLifecycleTest {
                 ),
                 started.getStringArrayExtra(Intent.EXTRA_MIME_TYPES),
             )
+        } finally {
+            destroyQuietly(controller)
+        }
+    }
+
+    @Test
+    fun restorePickerCancelReportsNoFileSelected() {
+        val controller =
+            Robolectric.buildActivity(HarnessActivity::class.java).create()
+        try {
+            val activity = controller.get()
+
+            activity.backupController!!.onRestorePickerResult(Activity.RESULT_CANCELED, null)
+
+            assertEquals("ready", activity.lastState)
+            assertEquals("Restore cancelled - no file selected.", activity.lastDetail)
         } finally {
             destroyQuietly(controller)
         }

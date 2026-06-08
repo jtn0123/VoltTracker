@@ -45,10 +45,11 @@ test('settings exposes connection actions without expanding a disclosure', async
   await setView(page, 'settings');
 
   await expect(page.locator('#connectBtn')).toBeVisible();
+  await expect(page.locator('#connectBtn')).toHaveText(/connect/i);
   await expect(page.locator('#permissionBtn')).toBeVisible();
   await expect(page.locator('#scanBtn')).toBeVisible();
   await expect(page.locator('#lastBtn')).toBeVisible();
-  await expect(page.locator('#disconnectBtn')).toBeVisible();
+  await expect(page.locator('#disconnectBtn')).toHaveCount(0);
 });
 
 test('Start/Stop demo toggles demo state and calls the bridge', async ({ page }) => {
