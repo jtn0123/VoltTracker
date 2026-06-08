@@ -119,12 +119,22 @@ def validate_android_gradle_signing(build_gradle_text: str) -> None:
             raise ValueError(f"Android build.gradle missing debug signing contract {snippet!r}")
 
 
+def validate_release_preflight(preflight_text: str) -> None:
+    required_snippets = [
+        "./gradlew --no-daemon --max-workers=1 verifyActiveApp",
+    ]
+    for snippet in required_snippets:
+        if snippet not in preflight_text:
+            raise ValueError(f"release preflight missing {snippet!r}")
+
+
 def main() -> int:
     config = semantic_release_config((ROOT / "pyproject.toml").read_bytes())
     validate_semantic_release_config(config)
     validate_pr_title_lint((ROOT / ".github/workflows/pr-title-lint.yml").read_text())
     validate_release_workflow((ROOT / ".github/workflows/release.yml").read_text())
     validate_android_gradle_signing((ROOT / "mobile/android/app/build.gradle").read_text())
+    validate_release_preflight((ROOT / "scripts/release-preflight.sh").read_text())
     if not (ROOT / "VERSION").read_text().strip():
         raise ValueError("VERSION must not be empty")
     return 0
