@@ -88,6 +88,7 @@ def validate_release_workflow(workflow_text: str) -> None:
         "Assemble release and debug APKs",
         "Stage APKs (version-tagged flavor filenames)",
         "Update release install notes",
+        "Missing release signing secrets",
         "volttracker-${TAG}-release.apk",
         "volttracker-${TAG}-debug.apk",
     ]
@@ -97,6 +98,9 @@ def validate_release_workflow(workflow_text: str) -> None:
 
     if "'^v[0-9]+\\.[0-9]+\\.[0-9]+" not in workflow_text:
         raise ValueError("release workflow must resolve vX.Y.Z tags from HEAD")
+
+    if "release-unsigned.apk" in workflow_text:
+        raise ValueError("tagged release workflow must not publish unsigned release APKs")
 
 
 def validate_android_gradle_signing(build_gradle_text: str) -> None:

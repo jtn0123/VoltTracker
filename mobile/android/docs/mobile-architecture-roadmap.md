@@ -41,7 +41,7 @@ Completed:
 - Migration regression test (`VoltTrackerDbMigrationTest`) that round-trips every schema version.
 - Backup round-trip test (`BackupRoundTripTest`) covering the full export/import cycle.
 - GPS decoupling: location tracking now runs independently of the OBD adapter with auto-reconnect and outlier filtering (PR #96).
-- **Tiered/staggered PID polling** (`PidSchedule.java`): drive-critical PIDs (speed, RPM, throttle, load, pack V, pack I) poll every cycle (~1.7s); medium-rate PIDs (ATRV, SOC) every 4 cycles (~7s) on staggered phases; slow PIDs (coolant temp, HV battery temp) every 10 cycles (~17s) on staggered phases. Carry-forward of last-known raw responses means every sample still contains every key. `ATSH 7E4` header switch only fires on the rare cycle where battery temp is due. Per-cycle ELM transactions: 13 → 8 baseline (~30% reduction); cycle-time spent on slow PIDs no longer bounds speed/RPM refresh. Tracked as B6 in `.claude/grade-report.md`.
+- **Tiered/staggered PID polling** (`PidSchedule.kt`): hot PIDs (speed, RPM, accelerator pedal, pack current) poll every cycle; warm PIDs (load, ICE throttle, pack voltage) every 2 cycles; slow PIDs (SOC, adapter voltage) every 6 cycles; thermal PIDs (coolant and HV battery temperature) every 12 cycles; deeper validated context polls every 24+ cycles. Carry-forward plus stale-age fields keep every sample honest without making slow values bound speed/RPM refresh. Mode-01 batching is active for the hot broadcast PIDs.
 
 In progress:
 
@@ -51,7 +51,7 @@ In progress:
 Remaining:
 
 - Exportable diagnostic bundles with explicit privacy controls for VIN and location.
-- Mode-01 multi-PID batching so drive-critical values (speed, RPM, load, throttle) read in a single ELM transaction instead of four — theoretical floor ~2.5 Hz vs today's ~1 Hz. Tracked as B7 in `.claude/grade-report.md`.
+- A release-candidate checklist that captures the highest runtime proof reached before tagging.
 
 ## UI/UX Model
 
@@ -260,8 +260,8 @@ Next:
 1. Validate parser output against the newest field logs from the car.
 2. Save parsed battery, cell, capability, and vehicle-state facts into normalized tables.
 3. Wire Trips, Charge, Map, and Insights to database queries (materializers in place; UI binding remaining).
-4. Add export/privacy controls.
-5. Mode-01 multi-PID batching for sub-second drive-critical refresh (B7 in `.claude/grade-report.md`).
+4. Keep export/privacy controls current as diagnostics and map-tile behavior evolve.
+5. Add release-candidate proof notes that distinguish local green checks from phone, adapter, and real-car evidence.
 
 ## Near-Term Definition Of Done
 
@@ -277,4 +277,4 @@ Still open:
 
 - Real-car validation of the parser/classifier output against the newest field logs.
 - Trips, Charge, Map, and Insights screens need to read from the materialized tables end-to-end (data layer is in place; UI binding is the gap).
-- Mode-01 multi-PID batching so the drive-critical refresh rate can reach ~2.5 Hz (B7).
+- Release-candidate evidence needs current phone/adapter/real-car proof when runtime behavior changed.

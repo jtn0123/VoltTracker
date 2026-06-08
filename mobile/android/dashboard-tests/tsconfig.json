@@ -1,21 +1,21 @@
 {
-  "//": "Opt-in type-checking for the dashboard JS (I3). checkJs is false, so only files that start with `// @ts-check` are type-checked — migrate a file by adding that comment and clearing the errors. noImplicitAny is ON (I2): every function param/var must have a determinable type — annotate with JSDoc rather than leaving it implicit. strict/strictNullChecks remain OFF (a separate, larger migration). tsc emits nothing; this is a checker only. Run via `npm run typecheck`.",
+  "//": "Type-checking for the dashboard TypeScript source. Full `strict` is ON — that subsumes noImplicitAny + strictNullChecks plus strictFunctionTypes, useUnknownInCatchVariables (catch vars are `unknown`: narrow with `err instanceof Error ? err.message : ...`), noImplicitThis, etc. Every value needs a determinable type and every possibly-null/undefined access must be guarded or narrowed. tsc emits nothing; this is a checker only. Run via `npm run typecheck`.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "allowJs": true,
-    "checkJs": false,
     "noEmit": true,
-    "strict": false,
-    "noImplicitAny": true,
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "types": []
   },
   "include": [
     "dashboard-globals.d.ts",
-    "../app/src/main/assets/dashboard/js/**/*.js"
+    "../app/src/main/dashboard-src/js/**/*.ts"
   ],
   "exclude": ["../app/src/main/assets/dashboard/lib/**"]
 }

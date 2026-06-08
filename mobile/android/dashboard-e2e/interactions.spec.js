@@ -1,6 +1,6 @@
 // Real click interactions: bottom-nav, demo start/stop, backup/restore -> bridge wiring.
 //
-// NOTE: the restore Replace/Merge dialog is a NATIVE Android AlertDialog (BackupController.java),
+// NOTE: the restore Replace/Merge dialog is a NATIVE Android AlertDialog (BackupController.kt),
 // not web — Playwright can only verify that the web layer calls the bridge; the dialog itself is
 // covered by the JVM/instrumented side.
 const { test, expect } = require('@playwright/test');
@@ -16,9 +16,44 @@ test('bottom-nav switches the active view', async ({ page }) => {
   await expect(page.locator('body')).toHaveAttribute('data-active-view', 'map');
 });
 
+test('bottom-nav floats above content instead of becoming a full footer band', async ({ page }) => {
+  await openDashboard(page);
+
+  const navMetrics = await page.locator('nav.bottom-nav').evaluate((nav) => {
+    const rect = nav.getBoundingClientRect();
+    const style = getComputedStyle(nav);
+    return {
+      position: style.position,
+      height: rect.height,
+      width: rect.width,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      bottomGap: window.innerHeight - rect.bottom,
+      radius: Number.parseFloat(style.borderRadius),
+    };
+  });
+
+  expect(navMetrics.position).toBe('fixed');
+  expect(navMetrics.height).toBeLessThan(90);
+  expect(navMetrics.width).toBeLessThanOrEqual(navMetrics.viewportWidth - 20);
+  expect(navMetrics.bottomGap).toBeGreaterThanOrEqual(8);
+  expect(navMetrics.radius).toBeGreaterThanOrEqual(20);
+});
+
+test('settings exposes connection actions without expanding a disclosure', async ({ page }) => {
+  await openDashboard(page);
+  await setView(page, 'settings');
+
+  await expect(page.locator('#connectBtn')).toBeVisible();
+  await expect(page.locator('#permissionBtn')).toBeVisible();
+  await expect(page.locator('#scanBtn')).toBeVisible();
+  await expect(page.locator('#lastBtn')).toBeVisible();
+  await expect(page.locator('#disconnectBtn')).toBeVisible();
+});
+
 test('Start/Stop demo toggles demo state and calls the bridge', async ({ page }) => {
   await openDashboard(page);
-  // The demo controls live in the Diag (settings) view — make it active so they're clickable.
+  // The demo controls live in Settings — make it active so they're clickable.
   await setView(page, 'settings');
   await page.evaluate(() => {
     window.__demoCalls = 0;
@@ -37,6 +72,28 @@ test('Start/Stop demo toggles demo state and calls the bridge', async ({ page })
 
   await page.locator('[data-action="stopDemo"]').first().click();
   await expect.poll(() => page.evaluate(() => window.VoltDashboard.state.demoActive)).toBe(false);
+});
+
+test('browser preview Start/Stop demo owns the sample data boundary', async ({ page }) => {
+  await openDashboard(page, { withBridge: false });
+  await setView(page, 'settings');
+
+  await expect(page.locator('#connectBtn')).toHaveText(/Start demo/i);
+  await page.locator('#connectBtn').click();
+
+  await expect.poll(() => page.evaluate(() => window.VoltDashboard.state.demoActive)).toBe(true);
+  await expect(page.locator('#demoBanner')).toBeVisible();
+  await expect(page.locator('#rawFrames')).toContainText('>010D');
+  await expect(page.locator('#rawFrames')).toContainText('41 0D');
+  expect(await page.evaluate(() => window.VoltDashboard.state.storage.recentRoutes.length)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.VoltDashboard.state.storage.latestDiagnosticCodes.length)).toBeGreaterThan(0);
+
+  await page.locator('#connectBtn').click();
+
+  await expect.poll(() => page.evaluate(() => window.VoltDashboard.state.demoActive)).toBe(false);
+  await expect(page.locator('#demoBanner')).toBeHidden();
+  expect(await page.evaluate(() => window.VoltDashboard.state.storage.recentRoutes.length)).toBe(0);
+  expect(await page.evaluate(() => window.VoltDashboard.state.storage.latestDiagnosticCodes.length)).toBe(0);
 });
 
 test('"Restore file" calls the native restore bridge', async ({ page }) => {

@@ -1,4 +1,4 @@
-// Loads the production dashboard JS bundle into the current jsdom window.
+// Loads the production dashboard TypeScript modules into the current jsdom window.
 //
 // The dashboard files are pure side-effecting browser modules that mutate
 // `window`, so we execute them in the same order the WebView would (see
@@ -8,8 +8,8 @@
 //
 // The DOM is a hand-picked subset of `index.html` covering every id the
 // bootstrap path dereferences without a null check — see the comments in
-// actions.js / core.js / map.js. If you add a new bare `el("...").foo` to
-// the dashboard JS, add the corresponding placeholder here.
+// actions.ts / core.ts / map.ts. If you add a new bare `el("...").foo` to
+// the dashboard source, add the corresponding placeholder here.
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import {
@@ -28,25 +28,29 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_INDEX_HTML = resolve(HERE, '../../app/src/main/assets/dashboard/index.html');
 
 const DASHBOARD_MODULE_LOADERS = {
-  'actions.js': () => import('../../app/src/main/assets/dashboard/js/actions.js'),
-  'connection-status.js': () => import('../../app/src/main/assets/dashboard/js/connection-status.js'),
-  'connection-tools.js': () => import('../../app/src/main/assets/dashboard/js/connection-tools.js'),
-  'core.js': () => import('../../app/src/main/assets/dashboard/js/core.js'),
-  'demo-data.js': () => import('../../app/src/main/assets/dashboard/js/demo-data.js'),
-  'drive.js': () => import('../../app/src/main/assets/dashboard/js/drive.js'),
-  'dtc-causes.js': () => import('../../app/src/main/assets/dashboard/js/dtc-causes.js'),
-  'dtc-lookup.js': () => import('../../app/src/main/assets/dashboard/js/dtc-lookup.js'),
-  'map.js': () => import('../../app/src/main/assets/dashboard/js/map.js'),
-  'panels.js': () => import('../../app/src/main/assets/dashboard/js/panels.js'),
-  'scrubber.js': () => import('../../app/src/main/assets/dashboard/js/scrubber.js'),
-  'telemetry.js': () => import('../../app/src/main/assets/dashboard/js/telemetry.js'),
-  'troubleshooter.js': () => import('../../app/src/main/assets/dashboard/js/troubleshooter.js'),
+  'actions.js': () => import('../../app/src/main/dashboard-src/js/actions.ts'),
+  'connection-status.js': () => import('../../app/src/main/dashboard-src/js/connection-status.ts'),
+  'connection-tools.js': () => import('../../app/src/main/dashboard-src/js/connection-tools.ts'),
+  'core.js': () => import('../../app/src/main/dashboard-src/js/core.ts'),
+  'demo-data.js': () => import('../../app/src/main/dashboard-src/js/demo-data.ts'),
+  'drive.js': () => import('../../app/src/main/dashboard-src/js/drive.ts'),
+  'dtc-causes.js': () => import('../../app/src/main/dashboard-src/js/dtc-causes.ts'),
+  'dtc-lookup.js': () => import('../../app/src/main/dashboard-src/js/dtc-lookup.ts'),
+  'insights-panel.js': () => import('../../app/src/main/dashboard-src/js/insights-panel.ts'),
+  'map.js': () => import('../../app/src/main/dashboard-src/js/map.ts'),
+  'scrubber.js': () => import('../../app/src/main/dashboard-src/js/scrubber.ts'),
+  'signals-panel.js': () => import('../../app/src/main/dashboard-src/js/signals-panel.ts'),
+  'storage-status.js': () => import('../../app/src/main/dashboard-src/js/storage-status.ts'),
+  'telemetry.js': () => import('../../app/src/main/dashboard-src/js/telemetry.ts'),
+  'troubleshooter.js': () => import('../../app/src/main/dashboard-src/js/troubleshooter.ts'),
 };
 
-// Loaded in the exact order that index.template.html lists the production scripts.
-const DASHBOARD_JS_FILES = [
+// Loaded in the exact order that index.template.html lists the emitted production scripts.
+const DASHBOARD_EMITTED_JS_FILES = [
   'core.js',
-  'panels.js',
+  'storage-status.js',
+  'signals-panel.js',
+  'insights-panel.js',
   'map.js',
   'scrubber.js',
   'drive.js',
@@ -64,10 +68,10 @@ function dashboardDomHtml() {
 }
 
 // Smallest DOM that lets every IIFE finish wiring. Covers:
-// - actions.js bootstrap: addEventListener targets that have no null guard.
-// - core.js setDevices/setHistory: query selectors and id lookups.
-// - panels.js updateStorageUi: dbSessionList list root.
-// - telemetry.js: every live tile id from LIVE_TILE_IDS so the stale check
+// - actions.ts bootstrap: addEventListener targets that have no null guard.
+// - core.ts setDevices/setHistory: query selectors and id lookups.
+// - storage-status.ts updateStorageUi: dbSessionList list root.
+// - telemetry.ts: every live tile id from LIVE_TILE_IDS so the stale check
 //   has nodes to toggle the .stale class on.
 const REQUIRED_DOM = `
   <div id="errorBanner" hidden><div id="errorBannerDetail"></div><button id="errorBannerDismiss"></button></div>
@@ -100,7 +104,7 @@ const REQUIRED_DOM = `
   <div id="dbState"></div>
 
   <!-- Live telemetry tiles. Source of truth is the data-live-tile attribute
-       on the partial element; telemetry.js derives its LIVE_TILE_IDS from it.
+       on the partial element; telemetry.ts derives its LIVE_TILE_IDS from it.
        Mirror the production attribute here so the stale-indicator test
        exercises the same code path it does in the WebView. -->
   <div id="speedValue" data-live-tile="true"></div>
@@ -250,7 +254,6 @@ const REQUIRED_DOM = `
   <div id="mapLeaflet"></div>
   <div id="mapFrame"></div>
   <div id="mapCard"></div>
-  <button id="mapTilesBtn"></button>
   <button id="mapFullBtn"></button>
   <div id="mapEmpty"></div>
   <div id="mapDriveChips"></div>
@@ -276,7 +279,7 @@ const REQUIRED_DOM = `
 `;
 
 // jsdom ships with no Canvas implementation, so HTMLCanvasElement.getContext
-// returns null and telemetry.js#drawTrace blows up at `ctx.scale(...)`. Patch
+// returns null and telemetry.ts#drawTrace blows up at `ctx.scale(...)`. Patch
 // a no-op 2D context onto the prototype just for the test runtime — the tile
 // drawing path is irrelevant to what we're checking here. Idempotent so
 // multiple loadDashboard() calls per file are safe.
@@ -313,7 +316,7 @@ function installCanvasShim() {
 
 /**
  * Install the bridge fixture, mount the minimal DOM, and execute the
- * production dashboard JS files in load order. Returns the bridge so tests can
+ * production dashboard TypeScript modules in load order. Returns the bridge so tests can
  * assert what the bootstrap path called.
  *
  * Re-entrant: tests typically call this from `beforeEach`. We track every
@@ -323,7 +326,7 @@ function installCanvasShim() {
  *
  * Opts:
  *   `bridge` — custom VoltBridge fixture (defaults to createVoltBridgeFixture())
- *   `extras` — additional JS files (filename relative to dashboard/js/) to
+ *   `extras` — additional emitted JS filenames (relative to dashboard/js/) to
  *              execute AFTER the standard production bundle.
  *   `extraDom` — HTML appended to REQUIRED_DOM. Use for tests that need
  *                additional fixture nodes (chart hosts, etc.) without losing
@@ -363,7 +366,7 @@ export async function loadDashboard({ bridge, extras, extraDom, withBridge = tru
 
   try {
     vi.resetModules();
-    const allFiles = [...DASHBOARD_JS_FILES, ...(extras ?? [])];
+    const allFiles = [...DASHBOARD_EMITTED_JS_FILES, ...(extras ?? [])];
     for (const file of allFiles) {
       const loadModule = DASHBOARD_MODULE_LOADERS[file];
       if (!loadModule) {

@@ -10,7 +10,7 @@
 // Determinism:
 //  - The clock is frozen (openDashboard fixedTime) so "2h ago" labels and the
 //    demo's now-relative timestamps don't drift the baseline.
-//  - The demo data itself is deterministic (no Math.random; see map.js).
+//  - The demo data itself is deterministic (no Math.random; see map.ts).
 //  - Canvas traces (drive charts) and the Leaflet map (network tiles, live
 //    marker) are non-deterministic, so they're masked — the baseline still
 //    locks the surrounding card/text/SVG layout around them.
@@ -41,7 +41,7 @@ test.describe('visual matrix — tab × demo scenario', () => {
           if (typeof VD.renderDriveLive === 'function') VD.renderDriveLive();
         });
 
-        // Target the view by its unique id: the Diag/settings tab actually has
+        // Target the view by its unique id: the Settings tab actually has
         // two sections sharing data-view="settings" (#view-settings plus the
         // static #view-connection-tools diagnostics panel), so a data-view
         // selector is ambiguous. #view-<tab> is one element per nav tab.

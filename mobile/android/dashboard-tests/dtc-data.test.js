@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,12 +7,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { loadDashboard } from './setup/load-dashboard.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DASHBOARD_JS = resolve(HERE, '../app/src/main/assets/dashboard/js');
+const DASHBOARD_TS = resolve(HERE, '../app/src/main/dashboard-src/js');
 const CODE_RE = /^[PBCU][0-9A-F]{4}$/;
 const VALID_SEVERITIES = new Set(['info', 'warning', 'critical']);
 
 function sourceFor(file) {
-  return readFileSync(resolve(DASHBOARD_JS, file), 'utf8');
+  const base = file.replace(/\.(js|ts)$/u, '');
+  const candidate = resolve(DASHBOARD_TS, `${base}.ts`);
+  if (existsSync(candidate)) return readFileSync(candidate, 'utf8');
+  throw new Error(`Missing dashboard DTC TypeScript source for ${file}`);
 }
 
 function extractTopLevelDtcKeys(source) {
@@ -67,6 +70,24 @@ describe('DTC data integrity', () => {
     expect(duplicates(keys)).toEqual([]);
     expect(keys.every((key) => CODE_RE.test(key))).toBe(true);
     expect(VD.dtcLookupSize).toBe(keys.length);
+  });
+
+  it('builds a prefix-family index for future chunking', () => {
+    const keys = VD.dtcLookupCodes || [];
+    const families = VD.dtcLookupFamilyCounts || {};
+    const counted = Object.values(families).reduce((sum, count) => sum + count, 0);
+
+    expect(counted).toBe(keys.length);
+    expect(families.P04).toBeGreaterThan(0);
+    expect(families.U00).toBeGreaterThan(0);
+    expect(Object.keys(families).every((family) => /^[PBCU][0-9A-F]{2}$/.test(family))).toBe(true);
+  });
+
+  it('keeps the lazy DTC source tables within the documented scale budget', () => {
+    const lookupLines = sourceFor('dtc-lookup.js').split('\n').length;
+    const causeLines = sourceFor('dtc-causes.js').split('\n').length;
+
+    expect(lookupLines + causeLines).toBeLessThan(8000);
   });
 
   it('keeps cause entries unique and valid', () => {

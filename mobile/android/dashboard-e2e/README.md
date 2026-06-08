@@ -5,7 +5,7 @@ headless Chromium and asserts actual rendered layout and interaction.
 
 ## Why this exists (vs `dashboard-tests/`)
 
-`dashboard-tests/` runs the dashboard JS in **jsdom** — fast, but jsdom has no layout engine, so it
+`dashboard-tests/` runs the dashboard modules in **jsdom** — fast, but jsdom has no layout engine, so it
 **cannot see** sizing, clipping, overlap, or real computed styles. Most of the UI bugs we hit in the
 field (a chip rendered as a tall empty box, a clipped header action, a "full" bar next to a `--`
 value) are invisible to jsdom. This suite catches that whole class by using a real browser.

@@ -1,6 +1,6 @@
-// Behavioral coverage for actions.js.
+// Behavioral coverage for actions.ts.
 //
-// actions.js wires every "click" path in the dashboard to a bridge call.
+// actions.ts wires every "click" path in the dashboard to a bridge call.
 // These tests poke the exported functions (VD.actions.*) directly so we
 // can drive the bridge fixture without having to simulate DOM clicks.
 //
@@ -20,6 +20,30 @@ function seedSelectedDevice(VD, { address = 'AA:BB:CC:DD:EE:FF', name = 'TestOBD
   return { address, name };
 }
 
+function appDialog() {
+  return document.getElementById('appDialog');
+}
+
+function appDialogMessage() {
+  return document.getElementById('appDialogMessage').textContent;
+}
+
+async function clickAppDialogConfirm() {
+  document.getElementById('appDialogConfirm').click();
+  await Promise.resolve();
+}
+
+async function clickAppDialogCancel() {
+  document.getElementById('appDialogCancel').click();
+  await Promise.resolve();
+}
+
+function enterAppDialogInput(value) {
+  const input = document.getElementById('appDialogInput');
+  input.value = value;
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+}
+
 // Reset every global the dashboard IIFEs touch so loadDashboard() can
 // re-bootstrap cleanly. Mirrors the pattern in the other test files.
 async function freshLoad(bridge) {
@@ -30,7 +54,7 @@ async function freshLoad(bridge) {
   return loadDashboard({ bridge });
 }
 
-describe('actions.js — bridge dispatch', () => {
+describe('actions.ts — bridge dispatch', () => {
   let bridge;
   let VD;
   let button;
@@ -42,6 +66,7 @@ describe('actions.js — bridge dispatch', () => {
     vi.useFakeTimers();
     bridge = createVoltBridgeFixture({
       connect: vi.fn(),
+      connectLast: vi.fn(),
       scan: vi.fn(),
       tpmsScan: vi.fn(),
       detailProbe: vi.fn(),
@@ -116,11 +141,49 @@ describe('actions.js — bridge dispatch', () => {
     expect(bridge.detailProbe).not.toHaveBeenCalled();
     expect(VD.state.status).toMatchObject({ state: 'blocked' });
     expect(VD.state.status.detail).toMatch(/adapter/i);
+    expect(document.getElementById('appStateSummary').textContent).toMatch(/adapter/i);
+    expect(document.getElementById('statusCopy').textContent).toMatch(/adapter/i);
+    expect(document.getElementById('reviewWarnings').textContent).toMatch(/adapter/i);
   });
 
-  it('deleteSignalLog() asks for confirmation before deleting one evidence row', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('detailProbeSelected with no device mirrors the blocked reason into body copy', () => {
+    VD.setDevices([]);
+    VD.actions.detailProbeSelected(button);
+
+    expect(bridge.detailProbe).not.toHaveBeenCalled();
+    expect(VD.state.status).toMatchObject({ state: 'blocked' });
+    expect(document.getElementById('appStateSummary').textContent).toMatch(/adapter/i);
+    expect(document.getElementById('reviewWarnings').textContent).toMatch(/adapter/i);
+  });
+
+  it('Last with no remembered adapter gives visible body feedback instead of a silent bridge call', () => {
+    bridge.getLastDevice = vi.fn(() => '{}');
+
+    VD.actions.handleAction('last', button);
+
+    expect(bridge.connectLast).not.toHaveBeenCalled();
+    expect(VD.state.status).toMatchObject({ state: 'blocked' });
+    expect(VD.state.status.detail).toMatch(/connect once/i);
+    expect(document.getElementById('appStateSummary').textContent).toMatch(/connect once/i);
+    expect(document.getElementById('statusCopy').textContent).toMatch(/connect once/i);
+  });
+
+  it('Last with a remembered adapter still calls bridge.connectLast', () => {
+    bridge.getLastDevice = vi.fn(() => JSON.stringify({
+      address: 'AA:BB:CC:DD:EE:FF',
+      name: 'TestOBD',
+    }));
+
+    VD.actions.handleAction('last', button);
+
+    expect(bridge.connectLast).toHaveBeenCalledTimes(1);
+  });
+
+  it('deleteSignalLog() uses the app dialog before deleting one evidence row', async () => {
     VD.actions.deleteSignalLog(5);
+    expect(appDialog().hidden).toBe(false);
+    expect(appDialogMessage()).toMatch(/delete this saved detailed signal/i);
+    await clickAppDialogConfirm();
     expect(bridge.deleteDetailedSignalLog).toHaveBeenCalledWith('5');
   });
 
@@ -138,30 +201,35 @@ describe('actions.js — bridge dispatch', () => {
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"id"'));
   });
 
-  it('clearStorage() bails when the user cancels the confirm dialog', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('clearStorage() bails when the user cancels the app dialog', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
     VD.actions.clearStorage(button);
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(appDialog().hidden).toBe(false);
+    await clickAppDialogCancel();
+    expect(confirmSpy).not.toHaveBeenCalled();
     expect(bridge.clearStoredData).not.toHaveBeenCalled();
   });
 
-  it('clearStorage() invokes the bridge after a confirmed prompt', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('clearStorage() invokes the bridge after app-dialog confirmation', async () => {
     VD.actions.clearStorage(button);
+    expect(appDialogMessage()).toMatch(/clear local obd sessions/i);
+    await clickAppDialogConfirm();
     expect(bridge.clearStoredData).toHaveBeenCalledTimes(1);
   });
 
-  it('shareBackup() invokes bridge.shareBackup after a confirmed prompt', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('shareBackup() invokes bridge.shareBackup after app-dialog confirmation', async () => {
     VD.actions.shareBackup(button);
+    expect(appDialogMessage()).toMatch(/plaintext backup/i);
+    expect(appDialogMessage()).toMatch(/encrypted backup/i);
+    await clickAppDialogConfirm();
     expect(bridge.shareBackup).toHaveBeenCalledTimes(1);
-    expect(confirmSpy.mock.calls[0][0]).toMatch(/plaintext backup/i);
-    expect(confirmSpy.mock.calls[0][0]).toMatch(/encrypted backup/i);
   });
 
-  it('shareEncryptedBackup() passes the chosen passphrase to the bridge', () => {
-    vi.spyOn(window, 'prompt').mockReturnValue('secret-pass');
+  it('shareEncryptedBackup() passes the app-dialog passphrase to the bridge', async () => {
     VD.actions.shareEncryptedBackup(button);
+    expect(appDialog().hidden).toBe(false);
+    enterAppDialogInput('secret-pass');
+    await clickAppDialogConfirm();
     expect(bridge.shareEncryptedBackup).toHaveBeenCalledWith('secret-pass');
   });
 
@@ -173,30 +241,31 @@ describe('actions.js — bridge dispatch', () => {
     expect(VD.state.status.detail).toMatch(/example data loaded/i);
   });
 
-  it('shareBackup() cancel path sets a ready status and skips the bridge', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('shareBackup() cancel path sets a ready status and skips the bridge', async () => {
     VD.actions.shareBackup(button);
+    await clickAppDialogCancel();
     expect(bridge.shareBackup).not.toHaveBeenCalled();
     expect(VD.state.status).toMatchObject({ state: 'ready' });
     expect(VD.state.status.detail).toMatch(/cancel/i);
   });
 
-  it('restoreBackup() invokes bridge.restoreBackup after a confirmed prompt', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('restoreBackup() invokes bridge.restoreBackup without a pre-pick browser dialog', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
     VD.actions.restoreBackup(button);
+    expect(confirmSpy).not.toHaveBeenCalled();
     expect(bridge.restoreBackup).toHaveBeenCalledTimes(1);
   });
 
-  it('restoreEncryptedBackup() requires a passphrase and confirm before picker launch', () => {
-    vi.spyOn(window, 'prompt').mockReturnValue('secret-pass');
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('restoreEncryptedBackup() requires an app-dialog passphrase before picker launch', async () => {
     VD.actions.restoreEncryptedBackup(button);
+    enterAppDialogInput('secret-pass');
+    await clickAppDialogConfirm();
     expect(bridge.restoreEncryptedBackup).toHaveBeenCalledWith('secret-pass');
   });
 });
 
-describe('actions.js — withBusy guard (double-tap suppression)', () => {
-  // The guard lives inside actions.js as a closure (`withBusy`). It's
+describe('actions.ts — withBusy guard (double-tap suppression)', () => {
+  // The guard lives inside actions.ts as a closure (`withBusy`). It's
   // not directly exported, but every guard-protected entry point uses it,
   // so we drive it through connectSelected with a fake button passed via
   // the underlying handleAction path.
@@ -264,7 +333,7 @@ describe('actions.js — withBusy guard (double-tap suppression)', () => {
   });
 });
 
-describe('actions.js — desktop drag scrolling', () => {
+describe('actions.ts — desktop drag scrolling', () => {
   // Capture the original descriptors so the dimension overrides below don't
   // leak into later suites (vi.restoreAllMocks() does not undo defineProperty).
   let originalInnerHeight;
@@ -306,13 +375,14 @@ describe('actions.js — desktop drag scrolling', () => {
 
   it('lets desktop preview users drag page chrome to scroll vertically', () => {
     const scrollBy = vi.fn();
-    Object.defineProperty(window, 'scrollBy', { configurable: true, value: scrollBy });
+    window.VoltDashboard.canScrollApp = vi.fn(() => true);
+    window.VoltDashboard.scrollAppBy = scrollBy;
     const target = document.getElementById('view-drive');
 
     pointerEvent('pointerdown', target, { x: 240, y: 620 });
     pointerEvent('pointermove', target, { x: 240, y: 500 });
 
-    expect(scrollBy).toHaveBeenCalledWith({ top: 120, left: 0, behavior: 'auto' });
+    expect(scrollBy).toHaveBeenCalledWith(120);
     expect(document.body.classList.contains('is-page-dragging')).toBe(true);
 
     pointerEvent('pointerup', target, { x: 240, y: 500 });
@@ -321,7 +391,8 @@ describe('actions.js — desktop drag scrolling', () => {
 
   it('does not turn button drags into page scrolls', () => {
     const scrollBy = vi.fn();
-    Object.defineProperty(window, 'scrollBy', { configurable: true, value: scrollBy });
+    window.VoltDashboard.canScrollApp = vi.fn(() => true);
+    window.VoltDashboard.scrollAppBy = scrollBy;
     const button = document.querySelector('[data-nav="drive"]');
 
     pointerEvent('pointerdown', button, { x: 40, y: 760 });
@@ -331,35 +402,27 @@ describe('actions.js — desktop drag scrolling', () => {
   });
 });
 
-describe('actions.js — map tile controls', () => {
+describe('actions.ts — map tile policy', () => {
   beforeEach(async () => {
     vi.useRealTimers();
     document.body.innerHTML = '';
-    window.localStorage.clear();
+    window.localStorage.setItem('volttracker.map.remoteTiles', '0');
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
     await loadDashboard();
   });
 
-  it('keeps remote basemap tiles off by default and persists an explicit opt-in', () => {
+  it('keeps remote basemap tiles always enabled and removes the opt-out control', () => {
     const VD = window.VoltDashboard;
     const button = document.getElementById('mapTilesBtn');
 
-    expect(VD.state.mapRemoteTilesEnabled).toBe(false);
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.getAttribute('aria-label')).toMatch(/enable remote map tiles/i);
-
-    button.click();
-
     expect(VD.state.mapRemoteTilesEnabled).toBe(true);
-    expect(window.localStorage.getItem('volttracker.map.remoteTiles')).toBe('1');
-    expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.getAttribute('aria-label')).toMatch(/disable remote map tiles/i);
+    expect(button).toBeNull();
   });
 });
 
-describe('actions.js — browser preview controls', () => {
+describe('actions.ts — browser preview controls', () => {
   beforeEach(async () => {
     vi.useRealTimers();
     document.body.innerHTML = '';

@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "description": "Playwright end-to-end + visual tests that render the real dashboard index.html in headless Chromium. Catches layout/rendering/interaction regressions that the jsdom unit suite (dashboard-tests) cannot see.",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "test": "playwright test --project=chromium",
     "test:headed": "playwright test --project=chromium --headed",

@@ -30,16 +30,24 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
+          cache-dependency-path: |
+            mobile/android/dashboard-tests/package-lock.json
+            mobile/android/dashboard-e2e/package-lock.json
       - name: Gradle dependency updates
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon dependencyUpdates
-      - name: npm dependency snapshot
+          ./gradlew --no-daemon dependencyUpdates -Drevision=release
+      - name: npm dashboard dependency snapshot
         run: |
           cd dashboard-tests
           npm ci
           npm outdated --long > ../build/npm-outdated.txt || true
+          npm audit --audit-level=low
+      - name: npm e2e dependency snapshot
+        run: |
+          cd dashboard-e2e
+          npm ci
+          npm outdated --long > ../build/npm-e2e-outdated.txt || true
           npm audit --audit-level=low
       - name: Summarize dependency snapshot
         if: always()
@@ -47,9 +55,11 @@ jobs:
           {
             echo "## Dependency snapshot"
             echo ""
+            echo "- Snapshot date: \`$(date -u +%Y-%m-%d)\`"
             echo "- Gradle report: \`mobile/android/build/dependencyUpdates/report.txt\`"
-            echo "- npm outdated report: \`mobile/android/build/npm-outdated.txt\`"
-            echo "- npm audit gate: \`npm audit --audit-level=low\`"
+            echo "- Dashboard npm outdated report: \`mobile/android/build/npm-outdated.txt\`"
+            echo "- E2E npm outdated report: \`mobile/android/build/npm-e2e-outdated.txt\`"
+            echo "- npm audit gate: \`npm audit --audit-level=low\` for dashboard-tests and dashboard-e2e"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload dependency reports
         if: always()
@@ -59,4 +69,5 @@ jobs:
           path: |
             mobile/android/build/dependencyUpdates/report.txt
             mobile/android/build/npm-outdated.txt
+            mobile/android/build/npm-e2e-outdated.txt
           if-no-files-found: warn

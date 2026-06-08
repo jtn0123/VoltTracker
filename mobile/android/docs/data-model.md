@@ -2,7 +2,7 @@
 
 One-page reference for the on-device SQLite schema. Source of truth is the DDL
 in
-[`app/src/main/java/com/volttracker/obdpoc/data/VoltTrackerSchema.java`](../app/src/main/java/com/volttracker/obdpoc/data/VoltTrackerSchema.java)
+[`app/src/main/kotlin/com/volttracker/obdpoc/data/VoltTrackerSchema.kt`](../app/src/main/kotlin/com/volttracker/obdpoc/data/VoltTrackerSchema.kt)
 (the `CREATE TABLE` / `CREATE INDEX` statements) plus the migration orchestration
 in `VoltTrackerDb`. If this doc and the DDL disagree, the DDL wins — update this
 doc to match.
@@ -128,7 +128,7 @@ constrain `session_id`.
 ## Test contract: dashboard handshake log string
 
 Not a table, but a coupling that lives next to this data layer and is easy to
-break by accident: the emulator startup smoke
+break by accident: the emulator runtime smoke
 ([`scripts/emulator-smoke.sh`](../scripts/emulator-smoke.sh)) proves the
 dashboard JS came alive by grepping logcat for the **exact** line:
 
@@ -136,6 +136,7 @@ dashboard JS came alive by grepping logcat for the **exact** line:
 
 emitted by `MainActivity.onDashboardReady`. **This string is a TEST CONTRACT.**
 If you rename or reword that log, you must update the `grep` in
-`scripts/emulator-smoke.sh` (and the workflow
-`.github/workflows/android-emulator-smoke.yml`) in the same change, or the smoke
+`scripts/emulator-smoke.sh` (and the workflows
+`.github/workflows/android.yml` / `.github/workflows/android-emulator-smoke.yml`)
+in the same change, or the smoke
 goes permanently green while testing nothing.

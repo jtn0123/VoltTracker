@@ -15,14 +15,55 @@ import { describe, it, expect } from 'vitest';
 
 import vitestConfig from './vitest.config.js';
 
-// Committed baseline. RAISE these in lockstep when you raise vitest.config.js
-// thresholds; NEVER lower them. They are the ratchet's floor of record.
+// Committed baseline for the GLOBAL (aggregate) floors. RAISE these in lockstep
+// when you raise vitest.config.js thresholds; NEVER lower them. They are the
+// ratchet's floor of record.
 const COVERAGE_BASELINE = Object.freeze({
-  lines: 62,
-  statements: 60,
-  functions: 60,
-  branches: 46,
+  lines: 76,
+  statements: 72,
+  functions: 75,
+  branches: 62,
 });
+
+// Committed baseline for the FOCUSED per-glob floors that guard the critical
+// connection-recovery modules. Each entry is a glob key from
+// coverage.thresholds mapping to the minimum per-metric floor we expect to see
+// configured. Same ratchet rule: raise in lockstep, never lower. Adding a new
+// focused floor in vitest.config.js without registering it here trips the
+// "no unexpected coverage metric escaped the ratchet" guard below.
+const PER_GLOB_BASELINE = Object.freeze({
+  // Glob keys must match vitest.config.js verbatim. The `../` prefix is
+  // load-bearing: the instrumented modules live one dir up from the Vitest
+  // root, so the path Vitest matches against starts with `../` and a bare
+  // `**/…` glob would match zero files.
+  '../**/dashboard-src/js/troubleshooter.ts': Object.freeze({
+    statements: 85,
+    branches: 68,
+    functions: 89,
+    lines: 89,
+  }),
+  '../**/dashboard-src/js/connection-tools.ts': Object.freeze({
+    statements: 85,
+    branches: 56,
+    functions: 95,
+    lines: 92,
+  }),
+  '../**/dashboard-src/js/map-route-utils.ts': Object.freeze({
+    statements: 90,
+    branches: 75,
+    functions: 90,
+    lines: 90,
+  }),
+  '../**/dashboard-src/js/telemetry.ts': Object.freeze({
+    statements: 50,
+    branches: 38,
+    functions: 50,
+    lines: 55,
+  }),
+});
+
+// Vitest treats any non-metric key in coverage.thresholds as a glob target.
+const GLOBAL_METRIC_KEYS = Object.keys(COVERAGE_BASELINE);
 
 describe('coverage ratchet', () => {
   const thresholds = vitestConfig?.test?.coverage?.thresholds;
@@ -32,8 +73,8 @@ describe('coverage ratchet', () => {
     expect(typeof thresholds).toBe('object');
   });
 
-  for (const metric of Object.keys(COVERAGE_BASELINE)) {
-    it(`${metric} threshold is >= committed baseline (${COVERAGE_BASELINE[metric]})`, () => {
+  for (const metric of GLOBAL_METRIC_KEYS) {
+    it(`global ${metric} threshold is >= committed baseline (${COVERAGE_BASELINE[metric]})`, () => {
       const configured = thresholds?.[metric];
       expect(
         typeof configured,
@@ -45,11 +86,36 @@ describe('coverage ratchet', () => {
     });
   }
 
+  for (const [glob, metrics] of Object.entries(PER_GLOB_BASELINE)) {
+    describe(`focused floor: ${glob}`, () => {
+      it('is still configured as an object of per-metric floors', () => {
+        const configured = thresholds?.[glob];
+        expect(
+          configured && typeof configured === 'object',
+          `focused floor for ${glob} vanished from vitest.config.js`,
+        ).toBe(true);
+      });
+
+      for (const [metric, baseline] of Object.entries(metrics)) {
+        it(`${metric} floor is >= committed baseline (${baseline})`, () => {
+          const configured = thresholds?.[glob]?.[metric];
+          expect(
+            typeof configured,
+            `coverage.thresholds['${glob}'].${metric} is missing from vitest.config.js`,
+          ).toBe('number');
+          expect(configured).toBeGreaterThanOrEqual(baseline);
+        });
+      }
+    });
+  }
+
   it('no unexpected coverage metric escaped the ratchet', () => {
-    // If someone adds a new threshold key (e.g. a per-file floor), make them
-    // also add it to the baseline above so it can't regress unwatched.
+    // Every configured threshold key must be either a known global metric or a
+    // registered focused-glob baseline. If someone adds a new threshold key
+    // (another global metric or another per-glob floor), make them also add it
+    // to one of the baselines above so it can't regress unwatched.
     const configuredKeys = Object.keys(thresholds ?? {}).sort();
-    const baselineKeys = Object.keys(COVERAGE_BASELINE).sort();
-    expect(configuredKeys).toEqual(baselineKeys);
+    const expectedKeys = [...GLOBAL_METRIC_KEYS, ...Object.keys(PER_GLOB_BASELINE)].sort();
+    expect(configuredKeys).toEqual(expectedKeys);
   });
 });

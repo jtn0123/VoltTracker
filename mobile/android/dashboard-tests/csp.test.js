@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,10 +12,22 @@ import { describe, expect, it } from 'vitest';
 //
 // Scope note: CSP governs *resource loads* (scripts, images, fetch/XHR). It does NOT
 // govern user-initiated navigation, so the DTC "search Google" link strings in
-// core.js / dtc-lookup.js are intentionally out of scope here.
+// core.ts / dtc-lookup.ts are intentionally out of scope here.
+//
+// WebView note: `frame-ancestors` is intentionally absent. Chromium ignores that
+// directive when it is delivered by a meta tag, and the dashboard is loaded from
+// file:///android_asset/. Main-frame navigation is enforced by WebViewBootstrap's
+// origin guard instead.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD = resolve(HERE, '../app/src/main/assets/dashboard');
+// JS source moved to dashboard-src/js/ (assets/dashboard/js/ is the built bundle).
+const DASHBOARD_SRC = resolve(HERE, '../app/src/main/dashboard-src');
+
+function sourceFor(name) {
+  const ts = resolve(DASHBOARD_SRC, `js/${name}.ts`);
+  return existsSync(ts) ? ts : resolve(DASHBOARD_SRC, `js/${name}.js`);
+}
 
 // The exact resource hosts the dashboard is allowed to reach. Keep in sync with the
 // CSP meta in dashboard-src/index.template.html. Adding a host here is a deliberate,
@@ -60,7 +72,6 @@ describe('dashboard content-security-policy', () => {
         'script-src',
         'style-src',
         'connect-src',
-        'frame-ancestors',
         'base-uri',
         'form-action',
       ]),
@@ -68,7 +79,7 @@ describe('dashboard content-security-policy', () => {
     expect(directives['default-src']).toEqual(["'self'"]);
     // No remote scripts, ever — first-party JS only.
     expect(directives['script-src']).toEqual(["'self'"]);
-    expect(directives['frame-ancestors']).toEqual(["'none'"]);
+    expect(directives['frame-ancestors']).toBeUndefined();
     expect(directives['base-uri']).toEqual(["'none'"]);
     expect(directives['form-action']).toEqual(["'none'"]);
   });
@@ -89,10 +100,10 @@ describe('dashboard content-security-policy', () => {
   });
 
   it('keeps every Leaflet tile URL within the CSP allowlist', () => {
-    // map.js builds the basemap + OSM-fallback tile URLs. Those are the actual
+    // map.ts builds the basemap + OSM-fallback tile URLs. Those are the actual
     // img/connect resources CSP governs; a host here that isn't in the allowlist
     // would be silently blocked on-device (blank map).
-    const mapJs = readDashboard('js/map.js');
+    const mapJs = readFileSync(sourceFor('map'), 'utf8');
     const tileUrls = [...mapJs.matchAll(/https:\/\/\{s\}\.[a-z0-9.]+/g)].map((m) => m[0]);
     expect(tileUrls.length).toBeGreaterThan(0);
 

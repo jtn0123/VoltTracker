@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
-describe('telemetry.js — stale live data and session reset regressions', () => {
+describe('telemetry.ts — stale live data and session reset regressions', () => {
   beforeEach(async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-03T12:00:00Z'));

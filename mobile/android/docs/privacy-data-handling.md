@@ -23,6 +23,9 @@ under app-private `files/obd-logs/`.
 Encrypted backup is the primary export path. It creates a passphrase-protected
 portable backup before handing the file to the Android share sheet, which is the
 right choice for cloud storage, email, shared computers, or support handoffs.
+Use a strong, unique passphrase for encrypted backups. Volt Tracker cannot
+recover the backup if that passphrase is lost, and weak or reused passphrases
+make the encrypted file easier to attack offline.
 
 Plaintext backup remains available as an advanced compatibility option when a
 trusted tool specifically needs the raw SQLite database. Plaintext files can
@@ -32,16 +35,17 @@ trust.
 
 Diagnostics exports are meant for troubleshooting. They can include recent
 session logs, rolling app logs, and environment details useful for debugging an
-adapter or phone issue.
+adapter or phone issue. Before writing a debug summary or diagnostics share zip,
+Volt Tracker redacts Bluetooth MAC addresses, VIN-like identifiers, and precise
+coordinate fields from the included log tails.
 
 ## Network Use
 
 Normal OBD logging, local history, and dashboard rendering work from on-device
-data. The Map tab starts with remote basemap tiles off and can render stored
-routes on a blank offline canvas. If the user enables the Tiles control, the app
-can request remote basemap tiles from CARTO or OpenStreetMap so routes have
-geographic context. Route points and OBD samples are still rendered from local
-storage, but tile providers can see tile coordinates requested by the device.
+data. The Map and Trips route views use remote basemap tiles by default so
+stored routes have geographic context. Route points and OBD samples are still
+rendered from local storage, but tile providers can see tile coordinates
+requested by the device.
 
 ## Unusual Permissions
 

@@ -1,34 +1,47 @@
 # Dashboard Script Contract
 
-The production dashboard enters through one ES module bootstrap:
+The production dashboard ships its JavaScript as **one built bundle**, compiled from the
+editable source in `app/src/main/dashboard-src/js/` by `dashboard-tests/build.mjs` (esbuild).
 
-1. `js/bootstrap.js`
+`index.html` loads a single classic script:
 
-The bootstrap module imports the side-effecting dashboard files in this order:
+1. `js/app.js`
 
-1. `js/core.js`
-2. `js/panels.js`
-3. `js/map.js`
-4. `js/scrubber.js`
-5. `js/drive.js`
-6. `js/telemetry.js`
-7. `js/actions.js`
-8. `js/troubleshooter.js`
-9. `js/connection-status.js`
-10. `js/connection-tools.js`
+`app.js` is a classic IIFE — **never** an ES module. The WebView serves the dashboard from
+`file:///android_asset/`, where `<script type="module">` is fetched with CORS semantics that
+`file://` cannot satisfy, so a module bootstrap silently never runs on-device. esbuild bundles
+the eager source files (via side-effect imports, in dependency order) into `app.js`, so each
+file's IIFE runs in order and shares state through `window.VoltDashboard` exactly as before.
+The bundle target is `chrome66` so Android 9-era WebViews do not receive syntax they cannot
+parse, such as optional chaining or nullish coalescing.
 
-The large DTC dictionaries, `js/dtc-causes.js` and `js/dtc-lookup.js`, are not
-startup scripts. `core.js` exposes `VD.ensureDtcData()`, which loads those files
-only when a DTC view/action needs descriptions, causes, or example rows.
+Eager order (the `EAGER` array in `build.mjs`):
 
-`mobile/android/dashboard-tests/script-order.test.js` parses both
-`app/src/main/dashboard-src/index.template.html` and the generated
-`app/src/main/assets/dashboard/index.html` to catch entry-point drift, then
-parses `js/bootstrap.js` to catch import-order drift. When a new dashboard
-script is added, update `bootstrap.js`, run `./gradlew generateDashboardHtml`,
-then update the test's expected imports in the same change.
+1. `core` (seeds `window.VoltDashboard`)
+2. `panels`
+3. `map`
+4. `scrubber`
+5. `drive`
+6. `telemetry`
+7. `actions` (its bootstrap calls into map/drive/telemetry, so it comes after them)
+8. `troubleshooter`
+9. `connection-status`
+10. `connection-tools`
 
-The jsdom loader in `dashboard-tests/setup/load-dashboard.js` intentionally
-loads a small bootstrap subset by default and lets individual tests opt into
-additional production scripts with `extras`. This keeps focused tests quiet
-while the script-order test protects the full WebView order.
+The large DTC dictionaries (`dtc-causes`, `dtc-lookup`) and the demo fixture (`demo-data`)
+are **not** startup scripts. They build into their own `js/<name>.js` chunks, and `core.js`
+loads them on demand (`VD.ensureDtcData()` / the demo gate) by injecting a classic `<script>`
+— so the lazy-load paths are unchanged.
+
+`dashboard-tests/script-order.test.js` asserts three things: (1) `index.template.html` and the
+generated `index.html` load `js/app.js` as a single classic (non-module) script, (2)
+`build.mjs`'s `EAGER` array matches the dependency order above, and (3) the built JS does not
+ship syntax known to break the Android 9 WebView parser. When adding a new eager script, add it
+to `dashboard-src/js/`, insert it into `EAGER` in `build.mjs`, and update the test's
+`EXPECTED_EAGER_ORDER` in the same change.
+
+The output dir `app/src/main/assets/dashboard/js/` is **gitignored** — it's a build artifact.
+Gradle's `buildDashboardJs` (wired into `preBuild`) rebuilds it before packaging; CI's
+dashboard and APK-building jobs run the build too. The jsdom loader in
+`dashboard-tests/setup/load-dashboard.js` loads the **source** files from `dashboard-src/js/`
+(not the bundle), so unit tests don't need a build.

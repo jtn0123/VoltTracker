@@ -1,0 +1,43 @@
+<div
+  id="appDialog"
+  class="app-dialog"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="appDialogTitle"
+  tabindex="-1"
+  hidden
+>
+  <div class="app-dialog-backdrop" data-app-dialog-cancel></div>
+  <div class="app-dialog-card" role="document">
+    <header class="app-dialog-head">
+      <h2 id="appDialogTitle" class="app-dialog-title">Confirm action</h2>
+      <button
+        type="button"
+        id="appDialogClose"
+        class="app-dialog-close"
+        aria-label="Close dialog"
+        data-app-dialog-cancel
+      >
+        ×
+      </button>
+    </header>
+    <p id="appDialogMessage" class="app-dialog-message"></p>
+    <label id="appDialogInputWrap" class="app-dialog-input-wrap" hidden>
+      <span id="appDialogInputLabel">Passphrase</span>
+      <input
+        id="appDialogInput"
+        class="app-dialog-input"
+        type="password"
+        autocomplete="current-password"
+      />
+    </label>
+    <footer class="app-dialog-foot">
+      <button type="button" id="appDialogCancel" class="app-dialog-secondary">
+        Cancel
+      </button>
+      <button type="button" id="appDialogConfirm" class="app-dialog-primary">
+        Continue
+      </button>
+    </footer>
+  </div>
+</div>

@@ -1,4 +1,4 @@
-// connection-status.js — the "last connected" line under the title.
+// connection-status.ts — the "last connected" line under the title.
 //
 // A demo run is not a real adapter connection. The dashboard must never present it as the
 // last-connected adapter (it would double up with the live "Demo preview" chip on Drive). New
@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { loadDashboard } from './setup/load-dashboard.js';
 import { createVoltBridgeFixture } from './setup/voltbridge.fixture.js';
 
-describe('connection-status.js — last connected line', () => {
+describe('connection-status.ts — last connected line', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;

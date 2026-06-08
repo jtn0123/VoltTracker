@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# Emulator startup smoke: install the debug APK, launch MainActivity, and PROVE the
-# dashboard JS actually came alive — not just that the process didn't crash.
+# Emulator runtime smoke: install the debug APK, launch MainActivity, and PROVE the
+# dashboard JS actually came alive and keeps working through a few native WebView
+# interactions — not just that the process didn't crash.
 #
 # The positive check is the point: poll logcat for the JS->native handshake
 # ("dashboard handshake received", logged by MainActivity.onDashboardReady). If the
 # dashboard's script chain is dead (e.g. the file:// ES-module regression) the app
 # still *loads* and logs nothing alarming, so only the absence of that line reveals
-# it. A negative scan then rejects any crash or uncaught JS error.
+# it. A negative scan then rejects any crash or uncaught JS error. After the
+# handshake, the script starts demo telemetry through the native service action,
+# taps through the real bottom-nav WebView surfaces, and captures screenshots for
+# review. That gives CI proof that native -> WebView broadcasts and real Android
+# rendering survived startup.
 #
 # Run by .github/workflows/android-emulator-smoke.yml inside a booted emulator (the
 # android-emulator-runner action executes the workflow `script:` line-by-line, hence
@@ -15,27 +20,172 @@
 # ⚠️ TEST CONTRACT — the logcat string "dashboard handshake received" below is the
 # entire positive signal of this smoke. It is emitted by
 # MainActivity.onDashboardReady (Log.i(TAG, "dashboard handshake received: JS is
-# live")). The grep here matches the "dashboard handshake received" prefix. If that
-# log line is renamed, reworded, or removed, this smoke will go PERMANENTLY GREEN
-# while testing nothing — the dead-JS regression it exists to catch would sail
-# through. DO NOT change the string on either side without updating the other in the
-# same commit. See mobile/android/docs/data-model.md ("Test contract") for the
-# rationale.
+# live")), whose prefix is the source-of-truth constant MainActivity.DASHBOARD_READY_LOG.
+# The grep here must match that constant's value. If that log line is renamed,
+# reworded, or removed, this smoke will go PERMANENTLY GREEN while testing nothing —
+# the dead-JS regression it exists to catch would sail through. EmulatorSmokeContractTest
+# asserts this script references MainActivity.DASHBOARD_READY_LOG so a rename on either
+# side fails a fast unit test. DO NOT change the string on either side without updating
+# the other in the same commit. See mobile/android/docs/data-model.md ("Test contract")
+# for the rationale.
 set -euo pipefail
 
 # Resolve to mobile/android regardless of caller cwd (scripts/ -> mobile/android).
 cd "$(dirname "$0")/.."
 
+PKG="com.volttracker.obdpoc"
+MAIN_ACTIVITY="$PKG/.MainActivity"
+OBD_SERVICE="$PKG/.ObdService"
+ACTION_DEMO="$PKG.action.DEMO"
+ACTION_DISCONNECT="$PKG.action.DISCONNECT"
+ARTIFACT_DIR="build/emulator-smoke"
+SCREENSHOT_DIR="$ARTIFACT_DIR/screenshots"
 LOGCAT="build/emulator-smoke-logcat.txt"
-mkdir -p build
+NAV_COUNT=7
+# Vertical geometry of the floating bottom-nav pill (css/screens.css). It renders with
+# `bottom: max(10px, env(safe-area-inset-bottom) + 10px)` and a ~58 px-tall rail
+# (button `min-height: 54px` + 6px padding), so the rail's vertical CENTER sits only
+# ~39 CSS px above the screen bottom (= 10 inset + 29 half-rail). The tap Y below is
+# `height - (10 + 29) * css_scale`, which lands dead-center on the pill.
+#   ⚠️ These were 64 + 36 = 100, calibrated for the OLD full-height bottom bar. After
+#   the dashboard refactor that tapped ~90 px ABOVE the pill, so every nav tap missed
+#   and the first asserted tap ("trips") failed with "screenshot did not change."
+#   Verified against the CI pixel_6 emulator (1080x2400): nav center ≈ physical y 2283,
+#   and `height - 39 * css_scale` = 2400 - 117 = 2283. Keep these in sync with the CSS.
+NAV_BOTTOM_INSET_PX=10
+NAV_RAIL_HALF_PX=29
+PREVIOUS_NAV_SCREENSHOT=""
 
+rm -rf "$ARTIFACT_DIR"
+mkdir -p "$SCREENSHOT_DIR" build
+
+capture_logcat() {
+  adb logcat -d -v time >"$LOGCAT"
+}
+
+check_logcat() {
+  local label="$1"
+  capture_logcat
+  if grep -E "Process: $PKG|Unable to start activity ComponentInfo\\{$PKG|chromium.*Uncaught|dashboard console:.*(TypeError|ReferenceError|SyntaxError|Unhandled|Uncaught)" "$LOGCAT"; then
+    echo "Emulator smoke found an exception in logcat during: $label"
+    exit 1
+  fi
+}
+
+screenshot() {
+  local label="$1"
+  # Keep screenshots as advisory artifacts. A capture failure should not mask the
+  # stronger logcat/handshake assertions this smoke is built around.
+  adb exec-out screencap -p >"$SCREENSHOT_DIR/$label.png" || true
+}
+
+grant_runtime_permission() {
+  local permission="$1"
+  adb shell pm grant "$PKG" "$permission" >/dev/null 2>&1 || true
+}
+
+grant_runtime_permissions() {
+  grant_runtime_permission "android.permission.BLUETOOTH_CONNECT"
+  grant_runtime_permission "android.permission.BLUETOOTH_SCAN"
+  grant_runtime_permission "android.permission.ACCESS_FINE_LOCATION"
+  grant_runtime_permission "android.permission.ACCESS_COARSE_LOCATION"
+  grant_runtime_permission "android.permission.POST_NOTIFICATIONS"
+}
+
+screen_size() {
+  adb shell wm size \
+    | tr -d '\r' \
+    | sed -n 's/.*: \([0-9][0-9]*\)x\([0-9][0-9]*\).*/\1 \2/p' \
+    | tail -1
+}
+
+tap_bottom_nav() {
+  local index="$1"
+  local label="$2"
+  local width="$3"
+  local height="$4"
+  local expect_change="${5:-1}"
+  local shot="$SCREENSHOT_DIR/nav-$index-$label.png"
+  local css_scale=$(((width + 359) / 360))
+  # Match `.bottom-nav { width: min(760px, calc(100vw - 24px)); left: 50%;
+  # transform: translateX(-50%) }` in physical pixels. The old smoke split the
+  # whole screen into seven equal slots, which works on phone-sized emulators but
+  # misses the centered pill on wider profiles.
+  local nav_width=$((width - 24 * css_scale))
+  local nav_max=$((760 * css_scale))
+  if [ "$nav_width" -gt "$nav_max" ]; then
+    nav_width="$nav_max"
+  fi
+  local nav_left=$(((width - nav_width) / 2))
+  local x=$((nav_left + nav_width * (index * 2 + 1) / (NAV_COUNT * 2)))
+  local y=$((height - (NAV_BOTTOM_INSET_PX + NAV_RAIL_HALF_PX) * css_scale))
+  echo "Navigating to $label via bottom-nav tap at ${x},${y}."
+  # Retry the tap if the view doesn't change. A single adb `input tap` is
+  # occasionally dropped on an adb-flaky emulator boot (observed: the identical
+  # emulator profile passing all 7 taps in one run while missing one tap in a
+  # sibling run whose boot logged repeated adb-daemon connection errors). A lone
+  # dropped tap would falsely fail this smoke. Re-tapping the same nav button is
+  # idempotent — you stay on that view — so retries can NOT mask a real problem:
+  # a genuine geometry/selector break never changes the screen and still fails
+  # after every attempt.
+  local attempts=4
+  local attempt=1
+  while :; do
+    adb shell input tap "$x" "$y"
+    sleep 2
+    screenshot "nav-$index-$label"
+    if [ "$expect_change" != "1" ] || [ -z "$PREVIOUS_NAV_SCREENSHOT" ] \
+      || ! cmp -s "$PREVIOUS_NAV_SCREENSHOT" "$shot"; then
+      break
+    fi
+    if [ "$attempt" -ge "$attempts" ]; then
+      echo "Dashboard screenshot did not change after tapping bottom-nav $label (after $attempts attempts)."
+      echo "This usually means the tap target missed the WebView nav or the view did not switch."
+      exit 1
+    fi
+    echo "  No view change after tapping $label; retrying ($attempt/$attempts)."
+    attempt=$((attempt + 1))
+  done
+  PREVIOUS_NAV_SCREENSHOT="$shot"
+  check_logcat "bottom-nav $label"
+}
+
+start_service_as_app() {
+  local action="$1"
+  if adb shell run-as "$PKG" am start-foreground-service --user 0 -n "$OBD_SERVICE" -a "$action" >/dev/null 2>&1; then
+    return 0
+  fi
+  adb shell run-as "$PKG" am startservice --user 0 -n "$OBD_SERVICE" -a "$action" >/dev/null
+}
+
+stop_service_as_app() {
+  adb shell run-as "$PKG" am startservice --user 0 -n "$OBD_SERVICE" -a "$ACTION_DISCONNECT" >/dev/null 2>&1 || true
+}
+
+wait_for_demo_telemetry() {
+  for _ in $(seq 1 12); do
+    if adb shell run-as "$PKG" grep -R source files/obd-logs 2>/dev/null \
+      | grep -q '"source":"demo"'; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Demo telemetry never reached the app's private OBD log."
+  echo "This usually means the smoke did not really start the non-exported service as the app UID."
+  return 1
+}
+
+adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
 adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
+adb shell run-as "$PKG" rm -rf files/obd-logs >/dev/null 2>&1 || true
+grant_runtime_permissions
 adb logcat -c
-adb shell am start -n com.volttracker.obdpoc/.MainActivity
+adb shell am start -n "$MAIN_ACTIVITY"
 
 ready=0
 for _ in $(seq 1 20); do
-  adb logcat -d -v time >"$LOGCAT"
+  capture_logcat
   if grep -q "dashboard handshake received" "$LOGCAT"; then
     ready=1
     break
@@ -50,15 +200,36 @@ if [ "$ready" -ne 1 ]; then
 fi
 echo "Dashboard handshake received — JS is live."
 
-# Let the app settle, then re-capture: the snapshot above stopped the instant the
-# handshake appeared, so a crash or JS error a moment AFTER it would be missed by the
-# scan below unless we refresh logcat here.
-sleep 3
-adb logcat -d -v time >"$LOGCAT"
+sleep 2
+screenshot "startup-ready"
+check_logcat "startup ready"
 
-if grep -E "FATAL EXCEPTION|AndroidRuntime|Unable to start activity|chromium.*Uncaught|dashboard console:.*(TypeError|ReferenceError)" "$LOGCAT"; then
-  echo "Startup smoke found an exception in logcat."
-  exit 1
+echo "Starting demo telemetry through the native service action."
+start_service_as_app "$ACTION_DEMO"
+wait_for_demo_telemetry
+screenshot "demo-started"
+check_logcat "demo telemetry"
+stop_service_as_app
+sleep 1
+check_logcat "demo disconnect before navigation"
+
+size="$(screen_size)"
+if [ -z "$size" ]; then
+  echo "Could not read emulator screen size; using Pixel-profile fallback."
+  size="1080 2400"
 fi
+read -r width height <<<"$size"
 
-echo "Emulator startup smoke passed."
+tap_bottom_nav 0 drive "$width" "$height" 0
+tap_bottom_nav 1 trips "$width" "$height"
+tap_bottom_nav 2 map "$width" "$height"
+tap_bottom_nav 3 charge "$width" "$height"
+tap_bottom_nav 4 insights "$width" "$height"
+tap_bottom_nav 5 settings "$width" "$height"
+tap_bottom_nav 6 signals "$width" "$height"
+
+stop_service_as_app
+sleep 1
+check_logcat "disconnect cleanup"
+
+echo "Emulator runtime smoke passed. Screenshots: $SCREENSHOT_DIR"

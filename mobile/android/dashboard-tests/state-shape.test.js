@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
-// Keys core.js seeds into VD.state at IIFE time. If a refactor renames one,
+// Keys core.ts seeds into VD.state at IIFE time. If a refactor renames one,
 // this test fires before behavioral bugs do.
 const REQUIRED_STATE_KEYS = [
   'view',
@@ -16,6 +16,8 @@ const REQUIRED_STATE_KEYS = [
   'storage',
   'trips',
   'insights',
+  'tripsReadError',
+  'insightsReadError',
   'appState',
   'demoActive',
   'mapLayer',
@@ -29,7 +31,7 @@ const REQUIRED_STATE_KEYS = [
   'telemetry',
 ];
 
-// Telemetry sub-shape from core.js. Same justification — the Android side
+// Telemetry sub-shape from core.ts. Same justification — the Android side
 // rebuilds telemetry objects in JSON, and the JS side fans them out into
 // these slots.
 const REQUIRED_TELEMETRY_KEYS = [
@@ -81,7 +83,7 @@ describe('window.VoltDashboard.state shape', () => {
     // the user can still tap Routes / Heat / Stops in the layer tabs.
     expect(state.mapLayer).toBe('eff');
     expect(state.mapFull).toBe(false);
-    expect(state.mapRemoteTilesEnabled).toBe(false);
+    expect(state.mapRemoteTilesEnabled).toBe(true);
     // lastSampleAt is the stale-tile clock; it starts at 0 so the first
     // tick reports stale until a real sample arrives.
     expect(state.lastSampleAt).toBe(0);

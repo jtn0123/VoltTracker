@@ -17,7 +17,10 @@ pre-commit:
     # can't see. Skipped if dashboard-tests/node_modules is missing so first-time clones
     # bootstrap themselves before the lint run.
     lint-dashboard-js:
-      glob: "mobile/android/app/src/main/assets/dashboard/js/**/*.js"
+      # The editable source ESLint lints is the TypeScript under dashboard-src/js; the old glob
+      # pointed at the gitignored esbuild bundle (assets/dashboard/js), so no staged file ever
+      # matched and this hook never ran locally.
+      glob: "mobile/android/app/src/main/dashboard-src/js/**/*.ts"
       run: |
         if [ ! -d mobile/android/dashboard-tests/node_modules ]; then
           echo "dashboard test dependencies missing; running npm ci once"

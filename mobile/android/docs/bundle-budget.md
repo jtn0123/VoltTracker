@@ -37,6 +37,13 @@ modules are blocked by the WebView's CORS rules. That's why the DTC data ships a
 classic `<script>` files (injected on demand) rather than JSON fetched at runtime —
 and why these reference tables count toward a JS budget at all.
 
+## DTC data growth guard
+
+`dtc-data.test.js` keeps the lazy DTC source tables under 8,000 source lines and
+checks the runtime `dtcLookupFamilyCounts` prefix index. If the lookup/cause data
+outgrows that budget, move the tables to a generated/chunked representation by
+DTC family (`P04`, `U00`, etc.) before raising the byte budget.
+
 ## Bumping a budget
 
 Raise the relevant constant in `build.gradle` (`dashboardCoreBudgetBytes` /

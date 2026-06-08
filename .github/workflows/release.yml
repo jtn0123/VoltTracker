@@ -156,18 +156,24 @@ jobs:
       - name: Decode release keystore from secrets
         # Recreates the keystore + keystore.properties that
         # mobile/android/app/build.gradle's signingConfigs.release block looks
-        # for. If any secret is missing, the build still succeeds — it just
-        # falls back to producing app-release-unsigned.apk. The "Stage APKs"
-        # step below detects which file was produced and adjusts.
+        # for. Tagged releases require the stable app key; if any secret is
+        # missing, fail this job instead of publishing an APK that cannot update
+        # the normal signed app.
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -z "${KEYSTORE_BASE64}" ]; then
-            echo "ANDROID_KEYSTORE_BASE64 not set — release APK will be unsigned."
-            exit 0
+          missing=()
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              missing+=("${name}")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error title=Missing release signing secrets::${missing[*]} must be set for tagged APK releases."
+            exit 1
           fi
           # storeFile in keystore.properties is resolved relative to the
           # :app project's directory, not rootProject — so the path is just
@@ -189,10 +195,8 @@ jobs:
           echo "Keystore decoded; release build will be signed."
 
       - name: Assemble release and debug APKs
-        # When keystore.properties exists (previous step decoded it from
-        # secrets), this produces a signed app-release.apk. Without the
-        # secrets, it falls back to app-release-unsigned.apk and downstream
-        # steps adapt — see Stage APKs.
+        # The previous step fails when signing secrets are missing, so tagged
+        # release builds must produce the stable-key signed app-release.apk.
         env:
           # versionCode wants a monotonic integer — release.yml's run number
           # is separate from android.yml's, but debug and release sign
@@ -207,15 +211,11 @@ jobs:
         run: |
           mkdir -p release
           TAG="${{ needs.release.outputs.tag }}"
-          # When signing is wired AGP outputs app-release.apk; when not,
-          # app-release-unsigned.apk. Detect which one landed so the workflow
-          # keeps working through a future keystore-rotation outage.
-          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
-            RELEASE_SRC="app/build/outputs/apk/release/app-release.apk"
-            RELEASE_NAME="volttracker-${TAG}-release.apk"
-          else
-            RELEASE_SRC="app/build/outputs/apk/release/app-release-unsigned.apk"
-            RELEASE_NAME="volttracker-${TAG}-release-unsigned.apk"
+          RELEASE_SRC="app/build/outputs/apk/release/app-release.apk"
+          RELEASE_NAME="volttracker-${TAG}-release.apk"
+          if [ ! -f "${RELEASE_SRC}" ]; then
+            echo "::error title=Signed release APK missing::Expected ${RELEASE_SRC}; release signing may be broken."
+            exit 1
           fi
           DEBUG_SRC="app/build/outputs/apk/debug/app-debug.apk"
           DEBUG_NAME="volttracker-${TAG}-debug.apk"
@@ -244,8 +244,7 @@ jobs:
           ${START}
           ## Android APKs
 
-          - \`volttracker-${TAG}-release.apk\` is the normal signed release build.
-          - \`volttracker-${TAG}-release-unsigned.apk\` appears instead when release signing secrets are unavailable. It is a release build, but Android will not treat it as the same signed app as the normal release APK.
+          - \`volttracker-${TAG}-release.apk\` is the normal signed release build. Tagged releases fail rather than attaching an unsigned release APK when signing secrets are unavailable.
           - \`volttracker-${TAG}-debug.apk\` is the debuggable field build. When signing secrets are configured, it uses the same stable app key as the release APK so it can update tagged release installs while still allowing \`adb run-as\` and richer debugging. If signing secrets are unavailable, it falls back to the Android debug key and may require a backup, uninstall, install, and restore cycle.
           ${END}
           EOF

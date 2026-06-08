@@ -1,4 +1,4 @@
-// Regression pin for C3: panels.js#loadTrips / #loadInsights must surface a
+// Regression pin for C3: panels.ts#loadTrips / #loadInsights must surface a
 // native read failure through VD.setStatus({state:"blocked"}) (+ logClientError)
 // rather than silently rendering the empty state as if the read had succeeded.
 //
@@ -34,7 +34,7 @@ const insightsError = JSON.stringify({
   message: 'Could not read vehicle insights.',
 });
 
-describe('panels.js trips/insights error surfacing (C3)', () => {
+describe('panels.ts trips/insights error surfacing (C3)', () => {
   it('routes a native getTrips error through setStatus(blocked) + logClientError', async () => {
     const bridge = createVoltBridgeFixture({
       logClientError: vi.fn(),
@@ -43,6 +43,7 @@ describe('panels.js trips/insights error surfacing (C3)', () => {
     const VD = await freshLoad(bridge);
 
     const setStatus = vi.spyOn(VD, 'setStatus');
+    const callsBefore = bridge.getTrips.mock.calls.length;
     VD.loadTrips();
 
     expect(bridge.getTrips).toHaveBeenCalled();
@@ -58,6 +59,10 @@ describe('panels.js trips/insights error surfacing (C3)', () => {
     );
     // The failed read must not be mistaken for a successful empty result.
     expect(VD.state.trips).toEqual([]);
+    expect(VD.state.tripsReadError).toBe('Could not read logged trips.');
+    expect(document.getElementById('tripsEmptyState').textContent).toContain('Trips could not load.');
+    document.querySelector('[data-retry-trips]').click();
+    expect(bridge.getTrips).toHaveBeenCalledTimes(callsBefore + 2);
   });
 
   it('routes a native getInsights error through setStatus(blocked) + logClientError', async () => {
@@ -68,6 +73,7 @@ describe('panels.js trips/insights error surfacing (C3)', () => {
     const VD = await freshLoad(bridge);
 
     const setStatus = vi.spyOn(VD, 'setStatus');
+    const callsBefore = bridge.getInsights.mock.calls.length;
     VD.loadInsights();
 
     expect(bridge.getInsights).toHaveBeenCalled();
@@ -81,6 +87,10 @@ describe('panels.js trips/insights error surfacing (C3)', () => {
       'insights_read_failed',
       'Could not read vehicle insights.'
     );
+    expect(VD.state.insightsReadError).toBe('Could not read vehicle insights.');
+    expect(document.getElementById('insightsEmptyState').textContent).toContain('Insights could not load.');
+    document.querySelector('[data-retry-insights]').click();
+    expect(bridge.getInsights).toHaveBeenCalledTimes(callsBefore + 2);
   });
 
   it('does NOT raise a blocked status for a genuinely-empty successful read', async () => {

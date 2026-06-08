@@ -1,4 +1,4 @@
-// scrubber.js — Map-tab route scrubber. Tests the public surface
+// scrubber.ts — Map-tab route scrubber. Tests the public surface
 // (renderScrubber / hideScrubber / scrubAtLatLng / scrubberAttachMap) and the
 // invariants around empty / single-point routes. We don't exercise the
 // Leaflet marker path because it requires a real map; the early-return paths
@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadDashboard } from './setup/load-dashboard.js';
 
 // Minimal markup: the scrubber container plus the chart hosts the renderer
-// touches. The scrubber.js bootstrap binds to #scrubToggle and #scrubPlay if
+// touches. The scrubber.ts bootstrap binds to #scrubToggle and #scrubPlay if
 // present — include them so the bindings exercise (they're no-ops without
 // data). #scrubCursor is the cursor element setScrubCursor() positions via a
 // `left: NN%` style — including it lets the clamp tests observe the cursor.
@@ -40,7 +40,7 @@ function withSinglePointRoute() {
 }
 
 // A longer route with elevation + SOC that both carry GAPS (missing samples).
-// scrubber.js must interpolate across the gaps for SOC (nearest-by-time over
+// scrubber.ts must interpolate across the gaps for SOC (nearest-by-time over
 // route.socTrack) and tolerate missing altM for elevation (window-average that
 // skips NaN), never letting a gap collapse a reading to a bogus 0.
 function withGappyRoute() {
@@ -61,7 +61,7 @@ function withGappyRoute() {
   };
 }
 
-describe('scrubber.js', () => {
+describe('scrubber.ts', () => {
   beforeEach(async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;
@@ -191,6 +191,25 @@ describe('scrubber.js', () => {
     }
   });
 
+  it('reduced-motion users jump to the end without starting playback animation', () => {
+    const VD = window.VoltDashboard;
+    giveChartWidth();
+    VD.renderScrubber(withGappyRoute());
+    const play = document.getElementById('scrubPlay');
+    const priorMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn(() => ({ matches: true }));
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(1);
+    try {
+      play.click();
+      expect(play.textContent).toContain('Play');
+      expect(rafSpy).not.toHaveBeenCalled();
+      expect(cursorLeft()).toBe('100%');
+    } finally {
+      window.matchMedia = priorMatchMedia;
+      rafSpy.mockRestore();
+    }
+  });
+
   // ----- SOC / elevation interpolation across MISSING samples ----------------
 
   function readoutValue(label) {
@@ -218,6 +237,16 @@ describe('scrubber.js', () => {
     expect(battery).toBe('78%');
   });
 
+  it('renders scrubber metrics with readable labels and units in the values', () => {
+    const VD = window.VoltDashboard;
+    giveChartWidth();
+    VD.renderScrubber(withGappyRoute());
+
+    expect(readoutValue('Distance')).toMatch(/ mi$/);
+    expect(readoutValue('Speed')).toMatch(/ mph$/);
+    expect(readoutValue('Elevation')).toMatch(/ ft$/);
+  });
+
   it('renders elevation across altM gaps without collapsing the reading to a bogus value', () => {
     const VD = window.VoltDashboard;
     const route = withGappyRoute();
@@ -227,9 +256,9 @@ describe('scrubber.js', () => {
     // a spurious 0.
     const gapPoint = route.points[1];
     VD.scrubAtLatLng(gapPoint.lat, gapPoint.lng);
-    const elev = readoutValue('Elev ft');
+    const elev = readoutValue('Elevation');
     expect(elev).not.toBe('--');
-    expect(Number(elev)).toBeGreaterThan(0);
+    expect(Number(elev.replace(/\s*ft$/, ''))).toBeGreaterThan(0);
   });
 
   afterEach(() => {

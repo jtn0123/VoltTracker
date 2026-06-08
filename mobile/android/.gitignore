@@ -5,7 +5,13 @@ local.properties
 build/
 app/build/
 field-logs/
-# Dependency-lock files are generated on-demand by the F1 OSV scan in CI (via
-# --write-locks); never committed, so dependency locking imposes no version
-# enforcement on builds. Covers app/gradle.lockfile + settings-gradle.lockfile.
+# Built dashboard JS bundle + source maps. Editable source is in
+# app/src/main/dashboard-src/js/; dashboard-tests/build.mjs (esbuild) compiles it
+# into this dir, which Gradle's buildDashboardJs runs as part of preBuild.
+app/src/main/assets/dashboard/js/
+# Dependency-lock files. settings-gradle.lockfile stays ignored, but
+# app/gradle.lockfile is committed (un-ignored below) so the OSV scan and the
+# release build resolve the shipped releaseRuntimeClasspath against a reproducible,
+# version-pinned lock (see app/build.gradle — only that classpath is locked).
 *.lockfile
+!app/gradle.lockfile

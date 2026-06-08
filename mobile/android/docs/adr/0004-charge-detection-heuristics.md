@@ -76,7 +76,7 @@ order:
 
 ## References
 
-- `app/src/main/java/com/volttracker/obdpoc/materialize/ChargeSessionMaterializer.java`
+- `app/src/main/kotlin/com/volttracker/obdpoc/materialize/ChargeSessionMaterializer.kt`
 - `app/src/test/java/com/volttracker/obdpoc/materialize/ChargeSessionMaterializerTest.java`
 - `docs/volt-pid-research-2026-05-20.md` (PID `222414` decode + sign convention)
 - `docs/field-test-2026-05-19.md` (capture session that surfaced the

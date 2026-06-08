@@ -8,6 +8,18 @@
   <article id="mapCard" class="panel map-card">
     <div id="mapFrame" class="map-frame" data-layer="eff">
       <div id="mapLeaflet" class="map-canvas"></div>
+      <div
+        id="mapTileError"
+        class="map-tile-error"
+        role="status"
+        aria-live="polite"
+        hidden
+      >
+        <span id="mapTileErrorCopy">Map tiles are not loading.</span>
+        <button type="button" id="mapTileRetryBtn" class="link-btn">
+          Retry
+        </button>
+      </div>
 
       <div class="map-overlay-top">
         <div class="map-layer-tabs" role="tablist" aria-label="Map layer">
@@ -30,16 +42,6 @@
           </button>
         </div>
         <div class="map-top-right">
-          <button
-            id="mapTilesBtn"
-            type="button"
-            class="map-full-btn"
-            aria-pressed="false"
-            aria-label="Enable remote map tiles"
-            title="Remote basemap tiles"
-          >
-            Tiles
-          </button>
           <button
             id="mapFullBtn"
             type="button"

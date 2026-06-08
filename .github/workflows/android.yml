@@ -36,6 +36,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: 'gradle'
+      # Node is needed because preBuild runs buildDashboardJs (esbuild bundles the
+      # dashboard source in dashboard-src/js into the shipped assets/dashboard/js).
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
       - name: Run unit tests
         # CI keeps the same checks as verifyActiveApp split into separate steps
         # so failures point at the exact lane and artifact uploads still run.
@@ -91,8 +99,15 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
       - name: Install dashboard test deps
         run: npm ci
+      - name: Build dashboard bundle
+        # esbuild compiles dashboard-src/js -> assets/dashboard/js (gitignored), so the
+        # bundle-size report below measures the real shipped output. Lint/typecheck/tests
+        # read the source, not the bundle.
+        run: npm run build
       - name: Audit dashboard dependencies
         # Fail the job on a known high/critical advisory in the dashboard's
         # (dev-only) npm tree. `--audit-level=high` keeps low/moderate noise from
@@ -140,7 +155,7 @@ jobs:
             dtc=$(cat js/dtc-lookup.js js/dtc-causes.js | wc -c | tr -d ' ')
             all=$(find js css -type f \( -name "*.js" -o -name "*.css" \) ! -path "*/lib/*" -exec cat {} + | wc -c | tr -d ' ')
             core=$((all - dtc))
-            echo "| **core (excl lib/, excl dtc data)** | **$core** / 360000 |"
+            echo "| **core (excl lib/, excl dtc data)** | **$core** / 400000 |"
             echo "| **dtc data (lookup + causes)** | **$dtc** / 380000 |"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -161,13 +176,28 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/android/dashboard-e2e/package-lock.json
       - name: Install e2e deps
         run: npm ci
+      - name: Audit e2e dependencies
+        # Fail the job on a known high/critical advisory in the e2e (dev-only) npm
+        # tree, mirroring the dashboard-tests audit gate. `--audit-level=high` keeps
+        # low/moderate noise from blocking PRs while still gating on anything
+        # seriously exploitable.
+        run: npm audit --audit-level=high
       - name: Install Playwright Chromium + OS deps
         run: npx playwright install --with-deps chromium
+      - name: Build dashboard bundle
+        # Playwright serves the real index.html, which loads js/app.js (the built bundle).
+        working-directory: mobile/android/dashboard-tests
+        run: npm ci && npm run build
       - name: Run dashboard Playwright tests
-        # Functional/layout project only — the visual (screenshot) project runs in the separate,
-        # advisory dashboard-visual job so missing/changed baselines never block this gate.
+        # Functional/layout project only — the visual (screenshot) project runs in the
+        # separate `dashboard-visual` job (also required via ci-success) so a baseline
+        # mismatch fails THERE, not here. An intentional UI change must refresh the
+        # committed *-linux.png baselines (download the dashboard-visual-snapshots
+        # artifact and commit it), or the dashboard-visual gate stays red.
         run: npx playwright test --project=chromium
       - name: Upload Playwright report
         if: always()
@@ -194,10 +224,16 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/android/dashboard-e2e/package-lock.json
       - name: Install e2e deps
         run: npm ci
       - name: Install Playwright Chromium + OS deps
         run: npx playwright install --with-deps chromium
+      - name: Build dashboard bundle
+        # Playwright serves the real index.html, which loads js/app.js (the built bundle).
+        working-directory: mobile/android/dashboard-tests
+        run: npm ci && npm run build
       - name: Run visual screenshot tests
         run: npx playwright test --project=visual
       - name: Upload visual baselines + diffs
@@ -229,20 +265,26 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Generate Gradle dependency lockfile
-        # OSV-Scanner cannot parse `gradlew dependencies` text output — it needs a
-        # real lockfile. dependencyLocking is enabled in app/build.gradle, so
-        # --write-locks emits app/gradle.lockfile (gitignored, CI-ephemeral) listing
-        # the resolved release-runtime coordinates+versions for the scanner to check.
+          cache: 'gradle'
+      - name: Verify committed Gradle lockfile is in sync
+        # app/gradle.lockfile is committed (see mobile/android/.gitignore) so the
+        # OSV scan below reads it directly — no --write-locks regeneration. Only the
+        # shipped `releaseRuntimeClasspath` is locked (see app/build.gradle), so this
+        # step resolves dependencies in lock-VERIFICATION mode (no --write-locks) and
+        # Gradle fails if that classpath drifted from the lock — a stale lockfile
+        # can't slip the scan. It only resolves dependencies (no Kotlin/Java compile).
+        # AGP's unified-test-platform configs are deliberately unlocked so their
+        # build/test-host-only Netty (never shipped) stays out of the scan.
+        # Regenerate after a release-dependency change with `./gradlew :app:dependencies
+        # --configuration releaseRuntimeClasspath --write-locks` and commit the file.
         working-directory: mobile/android
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:dependencies \
-            --configuration releaseRuntimeClasspath --write-locks
+          ./gradlew --no-daemon :app:dependencies
       - name: OSV vulnerability scan
         id: osv
-        # Scans the generated Gradle lockfile for dependencies with known advisories
-        # in the OSV database.
+        # Scans the committed Gradle lockfile (shipped release runtime classpath) for
+        # dependencies with known advisories in the OSV database.
         uses: google/osv-scanner-action/osv-scanner-action@e69cc6c86b31f1e7e23935bbe7031b50e51082de # v2.0.2
         with:
           scan-args: |-
@@ -258,9 +300,10 @@ jobs:
           if-no-files-found: ignore
 
   emulator-smoke:
-    # Required WebView startup smoke for the file:// dashboard path. It installs
-    # the debug APK on an emulator and asserts the dashboard JS reaches the
-    # native "dashboard handshake received" logcat marker.
+    # Required WebView runtime smoke for the file:// dashboard path. It installs
+    # the debug APK on an emulator, asserts the dashboard JS reaches the native
+    # "dashboard handshake received" logcat marker, starts demo telemetry, and
+    # taps through the dashboard tabs while scanning logcat for runtime errors.
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -271,6 +314,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: 'gradle'
+      # Node is needed because preBuild runs buildDashboardJs (esbuild) to produce
+      # the shipped dashboard bundle.
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
       - name: Build debug APK
         working-directory: mobile/android
         run: |
@@ -291,19 +342,22 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect
           script: bash mobile/android/scripts/emulator-smoke.sh
-      - name: Upload emulator smoke logcat
+      - name: Upload emulator smoke artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: emulator-smoke-logcat
-          path: mobile/android/build/emulator-smoke-logcat.txt
+          name: emulator-smoke-artifacts
+          path: |
+            mobile/android/build/emulator-smoke-logcat.txt
+            mobile/android/build/emulator-smoke/
           if-no-files-found: ignore
 
   ci-success:
     # Single aggregate status so branch protection only needs to require one
     # check ("ci-success") instead of enumerating every lane. Adding a new test
-    # job just means adding it to `needs:` here — no branch-protection edit.
-    #
+    # job just means adding it to `needs:` here — the verify step derives pass/fail
+    # from the `needs` map itself (no second hand-maintained list to forget), so a
+    # newly-added job can't silently pass this gate while failing.
     if: always()
     needs:
       [
@@ -317,15 +371,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required jobs passed
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          if [ "${{ needs.unit-tests.result }}" != "success" ] \
-            || [ "${{ needs.dashboard-tests.result }}" != "success" ] \
-            || [ "${{ needs.dashboard-e2e.result }}" != "success" ] \
-            || [ "${{ needs.dashboard-visual.result }}" != "success" ] \
-            || [ "${{ needs.gradle-dependency-audit.result }}" != "success" ] \
-            || [ "${{ needs.emulator-smoke.result }}" != "success" ]; then
-            echo "unit-tests=${{ needs.unit-tests.result }} dashboard-tests=${{ needs.dashboard-tests.result }} dashboard-e2e=${{ needs.dashboard-e2e.result }} dashboard-visual=${{ needs.dashboard-visual.result }} gradle-dependency-audit=${{ needs.gradle-dependency-audit.result }} emulator-smoke=${{ needs.emulator-smoke.result }}"
-            echo "::error::One or more required CI jobs did not succeed."
+          echo "$NEEDS_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value.result)"'
+          failed="$(echo "$NEEDS_JSON" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')"
+          if [ -n "$failed" ]; then
+            echo "::error::One or more required CI jobs did not succeed: $failed"
             exit 1
           fi
           echo "All required CI jobs succeeded."

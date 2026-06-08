@@ -5,21 +5,21 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DASHBOARD_JS = resolve(HERE, '../app/src/main/assets/dashboard/js');
+const DASHBOARD_TS = resolve(HERE, '../app/src/main/dashboard-src/js');
 
 const ALLOWED_DOM_SINKS = [
   {
-    file: 'core.js',
+    file: 'core.ts',
     source: 'select.innerHTML = "";',
   },
   {
-    file: 'panels.js',
+    file: 'insights-panel.ts',
     source: 'chart.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${inner}</svg>`;',
   },
 ];
 
 function findDomSinks(file) {
-  const source = readFileSync(resolve(DASHBOARD_JS, file), 'utf8');
+  const source = readFileSync(resolve(DASHBOARD_TS, file), 'utf8');
   return source
     .split('\n')
     .map((line) => line.trim())
@@ -30,8 +30,8 @@ function findDomSinks(file) {
 
 describe('dashboard DOM sink guardrail', () => {
   it('keeps HTML-writing sinks limited to audited chart/clear paths', () => {
-    const files = readdirSync(DASHBOARD_JS)
-      .filter((name) => name.endsWith('.js'))
+    const files = readdirSync(DASHBOARD_TS)
+      .filter((name) => name.endsWith('.ts'))
       .sort();
 
     const sinks = files.flatMap(findDomSinks).sort((a, b) => {

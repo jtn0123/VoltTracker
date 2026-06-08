@@ -4,18 +4,33 @@ jacoco {
     toolVersion = "0.8.14"
 }
 
+// Shared coverage inputs for the report + verification tasks below. Both javac outputs
+// (for generated stubs / any Java interop) and Kotlin debug outputs are measured, and
+// source roots are mapped so Kotlin production code is held to the ratcheting floors.
+def coverageFileFilter = ["**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*"]
+def coverageClassDirs = {
+    files([
+        fileTree(dir: "${project.layout.buildDirectory.get()}/intermediates/javac/debug/compileDebugJavaWithJavac/classes", excludes: coverageFileFilter),
+        // AGP 9 built-in Kotlin emits here (not the old kotlin-android tmp/kotlin-classes path).
+        fileTree(dir: "${project.layout.buildDirectory.get()}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes", excludes: coverageFileFilter),
+    ])
+}
+def coverageSourceDirs = {
+    files(["${project.projectDir}/src/main/java", "${project.projectDir}/src/main/kotlin"])
+}
+def coverageExecData = {
+    fileTree(dir: project.layout.buildDirectory.get(), includes: ["jacoco/testDebugUnitTest.exec"])
+}
+
 tasks.register("jacocoTestReport", JacocoReport) {
     dependsOn "testDebugUnitTest"
     reports {
         xml.required = true
         html.required = true
     }
-    def fileFilter = ["**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*"]
-    def debugTree = fileTree(dir: "${project.layout.buildDirectory.get()}/intermediates/javac/debug/compileDebugJavaWithJavac/classes", excludes: fileFilter)
-    def mainSrc = "${project.projectDir}/src/main/java"
-    sourceDirectories.setFrom(files([mainSrc]))
-    classDirectories.setFrom(files([debugTree]))
-    executionData.setFrom(fileTree(dir: project.layout.buildDirectory.get(), includes: ["jacoco/testDebugUnitTest.exec"]))
+    sourceDirectories.setFrom(coverageSourceDirs())
+    classDirectories.setFrom(coverageClassDirs())
+    executionData.setFrom(coverageExecData())
 }
 
 // Coverage floors are RATCHETING regression baselines, not goals. Bump them up
@@ -28,22 +43,50 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //   second pass added engine, recorder, backup round-trip, materializer, and
 //   query-plan tests. Actual at the time: 73.7% project / 91.9% data. Each
 //   floor is `actual − 2 pts` to absorb minor refactor churn.
+//   2026-06-06 (round 3): project LINE 0.80, data/ LINE 0.90. Set after the full
+//   Java→Kotlin test conversion plus new VoltBridge (14→80%), DeviceCatalog
+//   (23→84%), BackupController (48→73%), ElmConnection (35→63%), and
+//   TroubleshooterBridge coverage. Actual: 82.7% project / 92.2% data.
+//   2026-06-07 (D4): added FOCUSED per-package LINE floors for the high-value,
+//   pure-logic packages so a regression there can't hide behind the aggregate
+//   project floor (a 38%-covered framework class averaged against an 87% one).
+//   We deliberately do NOT add a blanket element="CLASS" rule: several classes
+//   are framework-bound and legitimately near-zero (SdpProbe ~8%, LogcatMirror
+//   ~0%, raw Bluetooth socket paths, MainActivity$obdReceiver), so a CLASS floor
+//   would be unworkable. Instead we pin the two packages that are pure,
+//   testable domain logic and already very well covered:
+//     materialize  LINE 88.9% (386/434) -> floor 0.85 (~actual-4, churn room)
+//     classify     LINE 100%  (86/86)   -> floor 0.95 (~actual-5, churn room)
+//   Floors are actual-minus-a-margin regression baselines, not goals; raise them
+//   as the suites grow, never lower without discussion. (Percentages read from
+//   the local jacocoTestReport.xml; adjust by a point or two if a verified run
+//   differs.)
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
     dependsOn "jacocoTestReport"
-    def fileFilter = ["**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*"]
-    def debugTree = fileTree(dir: "${project.layout.buildDirectory.get()}/intermediates/javac/debug/compileDebugJavaWithJavac/classes", excludes: fileFilter)
-    def mainSrc = "${project.projectDir}/src/main/java"
-    sourceDirectories.setFrom(files([mainSrc]))
-    classDirectories.setFrom(files([debugTree]))
-    executionData.setFrom(fileTree(dir: project.layout.buildDirectory.get(), includes: ["jacoco/testDebugUnitTest.exec"]))
+    sourceDirectories.setFrom(coverageSourceDirs())
+    classDirectories.setFrom(coverageClassDirs())
+    executionData.setFrom(coverageExecData())
     violationRules {
         rule {
             element = "PACKAGE"
             includes = ["com.volttracker.obdpoc.data"]
-            limit { counter = "LINE"; minimum = 0.89 }
+            limit { counter = "LINE"; minimum = 0.90 }
+        }
+        // Focused floors for the high-value, pure-logic packages (see history
+        // note above). These catch a regression in a strong module that the
+        // aggregate project floor would otherwise mask.
+        rule {
+            element = "PACKAGE"
+            includes = ["com.volttracker.obdpoc.materialize"]
+            limit { counter = "LINE"; minimum = 0.85 }
         }
         rule {
-            limit { counter = "LINE"; minimum = 0.71 }
+            element = "PACKAGE"
+            includes = ["com.volttracker.obdpoc.classify"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        rule {
+            limit { counter = "LINE"; minimum = 0.80 }
         }
     }
 }

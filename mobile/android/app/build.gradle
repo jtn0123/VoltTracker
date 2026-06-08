@@ -1,4 +1,6 @@
 plugins {
+    // Kotlin is the language for Android production code. AGP 9.0+ has built-in Kotlin
+    // support enabled by default, so no separate Kotlin plugin is applied. See CONTRIBUTING.md.
     id "com.android.application"
 }
 
@@ -12,10 +14,22 @@ spotless {
         trimTrailingWhitespace()
         endWithNewline()
     }
+    kotlin {
+        // Android production code lives in src/main/kotlin. ktlint enforces the official Kotlin
+        // style so the spotlessCheck CI gate covers Kotlin the same way it covers Java tests and
+        // the dashboard TypeScript.
+        target "src/main/kotlin/**/*.kt", "src/test/java/**/*.kt"
+        ktlint("1.5.0")
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
     format "dashboard", {
-        target "src/main/assets/dashboard/**/*.{js,css,html}",
-               "src/main/dashboard-src/**/*.html"
-        targetExclude "src/main/assets/dashboard/lib/**", "src/main/assets/dashboard/index.html"
+        // Only the HTML partials/template. (Spotless globs don't expand `{a,b}` braces, so the
+        // historical `assets/dashboard/**/*.{js,css,html}` target only ever matched nothing — the
+        // dashboard source/CSS were never Spotless-formatted, just ESLint-linted + authored. The
+        // TypeScript lives in dashboard-src/js and assets/dashboard/js is the built, minified
+        // bundle — neither should be prettier-reformatted here.)
+        target "src/main/dashboard-src/**/*.html"
         prettier("3.8.3")
         trimTrailingWhitespace()
         endWithNewline()
@@ -52,7 +66,8 @@ android {
     }
 
     // Release signing activates only when mobile/android/keystore.properties exists
-    // (gitignored). Without it, release builds are produced unsigned.
+    // (gitignored). Local release builds without it are unsigned; tagged CI releases fail
+    // before assemble if the signing secrets are missing.
     signingConfigs {
         release {
             def keystoreProps = rootProject.file("keystore.properties")
@@ -95,6 +110,15 @@ android {
         }
     }
 
+    // Java 17 source/target. AGP's built-in Kotlin defaults its jvmTarget to targetCompatibility,
+    // so this single setting keeps the Java and Kotlin bytecode targets in lockstep (a mismatch
+    // would fail the build). minSdk 23 language features are handled by AGP desugaring. Previously
+    // unset (AGP default) — pinned now that Kotlin is part of the toolchain.
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
     buildFeatures {
         buildConfig = true
     }
@@ -134,13 +158,24 @@ dependencies {
     testImplementation libs.robolectric
 }
 
-// Dependency locking — enabled so CI can emit a Gradle lockfile that OSV-Scanner
-// can parse (the F1 gradle-dependency-audit job runs `:app:dependencies
-// --write-locks`). No lockfile is committed (app/gradle.lockfile is gitignored),
-// so locking imposes NO version enforcement on normal builds: Gradle only verifies
-// against a lockfile when one is present. The scan regenerates it fresh each run.
-dependencyLocking {
-    lockAllConfigurations()
+// Dependency locking — only the shipped release runtime classpath is locked against
+// the committed app/gradle.lockfile (un-ignored in mobile/android/.gitignore). That is
+// the dependency surface that actually ships in the release APK and the exact scope the
+// OSV-Scanner gradle-dependency-audit job reads directly, so the security scan is
+// reproducible and version-pinned.
+//
+// We deliberately do NOT lock all configurations: AGP's Unified Test Platform
+// orchestration configs (unified-test-platform-*) drag in transitive Netty that runs
+// only on the build/test host and is never bundled in the release APK. Locking those
+// would flood the OSV scan with advisories for code that does not ship.
+//
+// Regenerate after a release-dependency change with:
+//   ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --write-locks
+// and commit app/gradle.lockfile.
+configurations.configureEach {
+    if (name == "releaseRuntimeClasspath") {
+        resolutionStrategy.activateDependencyLocking()
+    }
 }
 
 // Assembles the shipped dashboard index.html from the per-screen partials in
@@ -172,4 +207,7 @@ tasks.named("generateDashboardHtml") {
 
 tasks.named("preBuild") {
     dependsOn("generateDashboardHtml")
+    // The shipped dashboard JS assets (assets/dashboard/js) are gitignored, built from
+    // dashboard-src/js TypeScript by esbuild — build them before the assets get packaged.
+    dependsOn(rootProject.tasks.named("buildDashboardJs"))
 }

@@ -80,6 +80,7 @@
 
   html, body {
     margin: 0;
+    height: 100%;
     min-height: 100%;
     width: 100%;
     overflow-x: hidden;
@@ -92,10 +93,11 @@
   }
 
   body {
-    /* Top floor raised to 30px: this WebView reports no safe-area-inset-top, so the old 14px
-       floor let the title row crowd the system status bar (clock/battery). env() still wins on
-       devices that do report a larger inset. */
-    padding: max(30px, env(safe-area-inset-top)) 12px calc(86px + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: hidden;
   }
 
   button, select, input {
@@ -123,9 +125,37 @@
   }
 
   .app {
+    flex: 1 1 auto;
+    min-height: 0;
     width: min(760px, 100%);
     margin: 0 auto;
-    overflow: visible;
+    overflow-x: visible;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    /* Promote the scroll container to its own compositing layer. Without this, the Android
+       System WebView leaves stale GPU tiles in the area a taller previous view occupied when
+       you switch to a shorter, non-scrollable view (e.g. Insights -> Charge): a ghost copy of
+       the prior content paints below the real content. The DOM/CSS render tree is correct
+       (CDP Page.captureScreenshot is clean) -- only the native surface keeps stale tiles, so
+       JS-side repaint nudges don't help. translateZ(0) forces the compositor to re-rasterize
+       the layer on every content-height change, clearing the ghost. Verified on the S24 API 36
+       emulator: ghost band luminance std-dev 38.5 -> 0.0. */
+    transform: translateZ(0);
+    /* Top floor raised to 30px: this WebView reports no safe-area-inset-top, so the old 14px
+       floor let the title row crowd the system status bar (clock/battery). env() still wins on
+       devices that do report a larger inset. */
+    padding: 30px 12px 112px;
+    padding: max(30px, env(safe-area-inset-top)) 12px calc(112px + env(safe-area-inset-bottom));
+  }
+
+  /* Fullscreen map (.map-card.is-fullscreen) lives inside .app and uses position: fixed;
+     inset: 0 to cover the viewport. A transformed ancestor establishes a containing block for
+     fixed descendants, so drop the layer-promotion transform while the map is fullscreen to
+     keep it viewport-relative. The ghost bug cannot occur here anyway -- the fullscreen map
+     fully repaints the surface. */
+  body.map-full-active .app {
+    transform: none;
   }
 
   .topbar {
