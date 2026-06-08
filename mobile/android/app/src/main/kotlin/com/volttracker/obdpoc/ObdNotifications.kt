@@ -20,7 +20,10 @@ class ObdNotifications(
     }
 
     fun build(text: String): Notification {
-        val open = Intent(context, MainActivity::class.java)
+        val open =
+            Intent()
+                .setClass(context, MainActivity::class.java)
+                .setPackage(context.packageName)
         val pendingIntent = PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_IMMUTABLE)
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
         return builder

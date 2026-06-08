@@ -288,8 +288,11 @@ class TroubleshooterBridge(
         try {
             val nm = activity.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             if (nm != null) {
-                val open = Intent(activity, MainActivity::class.java)
-                open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                val open =
+                    Intent()
+                        .setClass(activity, MainActivity::class.java)
+                        .setPackage(activity.packageName)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 val tap =
                     PendingIntent.getActivity(
                         activity,
