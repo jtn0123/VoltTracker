@@ -160,10 +160,10 @@ jobs:
         # missing, fail this job instead of publishing an APK that cannot update
         # the normal signed app.
         env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           missing=()
           for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
@@ -180,18 +180,18 @@ jobs:
           # "release.keystore" and the actual file lives at app/release.keystore.
           # Don't echo the base64 (it would land in the run log); use --decode
           # from a heredoc instead.
-          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > app/release.keystore
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > app/release.keystore
           cat > keystore.properties <<EOF
           storeFile=release.keystore
-          storePassword=${KEYSTORE_PASSWORD}
-          keyAlias=${KEY_ALIAS}
-          keyPassword=${KEY_PASSWORD}
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          keyPassword=${ANDROID_KEY_PASSWORD}
           EOF
           # Sanity-check the keystore decoded into a real PKCS12 file.
           # keytool exits non-zero if the password is wrong or the file is
           # corrupt — fail fast rather than producing a broken APK.
           keytool -list -keystore app/release.keystore \
-            -storepass "${KEYSTORE_PASSWORD}" >/dev/null
+            -storepass "${ANDROID_KEYSTORE_PASSWORD}" >/dev/null
           echo "Keystore decoded; release build will be signed."
 
       - name: Assemble release and debug APKs
@@ -202,10 +202,12 @@ jobs:
           # is separate from android.yml's, but debug and release sign
           # differently so Android treats them as separate apps anyway.
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
-          GITHUB_SHA: ${{ github.sha }}
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:assembleRelease :app:assembleDebug
+          # The job checks out the tag after semantic-release creates it, so
+          # use the checked-out tag commit in the in-app version suffix.
+          TAG_SHA="$(git rev-parse HEAD)"
+          GITHUB_SHA="${TAG_SHA}" ./gradlew --no-daemon :app:assembleRelease :app:assembleDebug
 
       - name: Stage APKs (version-tagged flavor filenames)
         run: |

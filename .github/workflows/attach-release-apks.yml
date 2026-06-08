@@ -1,0 +1,135 @@
+name: Attach tagged Android APKs
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to attach APKs to, for example v0.8.0.
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-apk:
+    name: Build and attach Android APKs
+    if: github.repository == 'jtn0123/VoltTracker'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/android
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Decode release keystore from secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=()
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              missing+=("${name}")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error title=Missing release signing secrets::${missing[*]} must be set for tagged APK releases."
+            exit 1
+          fi
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > app/release.keystore
+          cat > keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          keyPassword=${ANDROID_KEY_PASSWORD}
+          EOF
+          keytool -list -keystore app/release.keystore \
+            -storepass "${ANDROID_KEYSTORE_PASSWORD}" >/dev/null
+          echo "Keystore decoded; release build will be signed."
+
+      - name: Assemble release and debug APKs
+        run: |
+          chmod +x ./gradlew
+          TAG_SHA="$(git rev-parse HEAD)"
+          GITHUB_SHA="${TAG_SHA}" ./gradlew --no-daemon :app:assembleRelease :app:assembleDebug
+
+      - name: Stage APKs
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          mkdir -p release
+          RELEASE_SRC="app/build/outputs/apk/release/app-release.apk"
+          RELEASE_NAME="volttracker-${TAG}-release.apk"
+          if [ ! -f "${RELEASE_SRC}" ]; then
+            echo "::error title=Signed release APK missing::Expected ${RELEASE_SRC}; release signing may be broken."
+            exit 1
+          fi
+          DEBUG_SRC="app/build/outputs/apk/debug/app-debug.apk"
+          DEBUG_NAME="volttracker-${TAG}-debug.apk"
+          cp "${RELEASE_SRC}" "release/${RELEASE_NAME}"
+          cp "${DEBUG_SRC}" "release/${DEBUG_NAME}"
+          echo "Staged: ${RELEASE_NAME}"
+          echo "Staged: ${DEBUG_NAME}"
+
+      - name: Update release install notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release view "${TAG}" --repo "${{ github.repository }}" \
+            --json body --jq '.body // ""' > release/body.md
+          START="<!-- volttracker-android-apks:start -->"
+          END="<!-- volttracker-android-apks:end -->"
+          awk -v start="${START}" -v end="${END}" '
+            $0 == start { skip = 1; next }
+            $0 == end { skip = 0; next }
+            !skip { print }
+          ' release/body.md > release/body.clean.md
+          mv release/body.clean.md release/body.md
+          cat >> release/body.md <<EOF
+
+          ${START}
+          ## Android APKs
+
+          - \`volttracker-${TAG}-release.apk\` is the normal signed release build.
+          - \`volttracker-${TAG}-debug.apk\` is the debuggable field build signed with the same stable app key, so it can update tagged release installs while still allowing \`adb run-as\` and WebView debugging.
+          ${END}
+          EOF
+          gh release edit "${TAG}" --repo "${{ github.repository }}" \
+            --notes-file release/body.md
+
+      - name: Attach APKs to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release view "${TAG}" --repo "${{ github.repository }}" \
+            --json assets --jq '.assets[].name' \
+            | grep -E '^(app-(release(-unsigned)?|debug)\.apk|volttracker-'"${TAG}"'(-release|-debug)?\.apk|volttracker-'"${TAG}"'-field-diagnostics-debuggable.*\.apk)$' \
+            > release/legacy-assets.txt || true
+          while read -r asset; do
+            if [ -n "${asset}" ]; then
+              gh release delete-asset "${TAG}" "${asset}" \
+                --repo "${{ github.repository }}" --yes
+              echo "Removed legacy release asset ${asset}"
+            fi
+          done < release/legacy-assets.txt
+          gh release upload "${TAG}" release/*.apk \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+      - name: Remove keystore artifacts from runner
+        if: always()
+        run: |
+          rm -f app/release.keystore keystore.properties
