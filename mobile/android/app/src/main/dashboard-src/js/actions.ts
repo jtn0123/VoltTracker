@@ -103,6 +103,17 @@ import type { BusyButton } from "./actions-storage";
     }
   }
 
+  function showConnectionProgress(device: VoltDevice, scan: boolean) {
+    const label = device.name || device.address || "OBD adapter";
+    const status: VoltStatus = {
+      state: scan ? "scanning" : "connecting",
+      detail: scan ? `Starting scan with ${label}...` : `Connecting to ${label}...`
+    };
+    if (device.address) status.lastAddress = String(device.address);
+    if (device.name) status.lastName = String(device.name);
+    VD.setStatus(status);
+  }
+
   function connectSelected(scan: boolean, button?: BusyButton | null) {
     const selected = VD.getSelectedDevice();
     if (!selected) {
@@ -110,6 +121,7 @@ import type { BusyButton } from "./actions-storage";
       return;
     }
     if (!bridge) return;
+    showConnectionProgress(selected, scan);
     // Guard the bridge call so a quick double-tap doesn't issue two
     // overlapping connect/scan invocations against the adapter.
     withBusy(button, () => {
@@ -136,13 +148,16 @@ import type { BusyButton } from "./actions-storage";
     withBusy(button, () => bridge.detailProbe(selected.address, selected.name, stage));
   }
 
-  function connectLastAdapter() {
+  function connectLastAdapter(button?: BusyButton | null) {
     const last = typeof VD.getLastDevice === "function" ? VD.getLastDevice() : state.lastDevice;
     if (!last || !String(last.address || "").trim()) {
       showBlockedAdapterFeedback("Connect once or pick a paired adapter before using Last.");
       return;
     }
-    if (bridge && typeof bridge.connectLast === "function") bridge.connectLast();
+    showConnectionProgress(last, false);
+    if (bridge && typeof bridge.connectLast === "function") {
+      withBusy(button, () => bridge.connectLast());
+    }
   }
 
   function handleAction(action: string | undefined, button: BusyButton | null = null) {
@@ -155,7 +170,7 @@ import type { BusyButton } from "./actions-storage";
     if (action === "backupEncrypted") shareEncryptedBackup(button);
     if (action === "restore") restoreBackup(button);
     if (action === "restoreEncrypted") restoreEncryptedBackup(button);
-    if (action === "last") connectLastAdapter();
+    if (action === "last") connectLastAdapter(button);
     if (action === "scan") connectSelected(true, button);
     if (action === "tpmsScan") tpmsScanSelected(button);
     if (action === "detailProbe") detailProbeSelected(button);
@@ -503,7 +518,6 @@ import type { BusyButton } from "./actions-storage";
       const action = (btn && btn.dataset.primaryAction) || "connect";
       handleAction(action, event.currentTarget as BusyButton);
     }, opts);
-    VD.bindListenerGuarded("disconnectBtn", "click", () => handleAction("stop"), opts);
     VD.bindListenerGuarded("demoStopBtn", "click", stopDemo, opts);
     bindPageDragScroll(VD, opts);
     window.addEventListener("resize", debouncedResize, opts);

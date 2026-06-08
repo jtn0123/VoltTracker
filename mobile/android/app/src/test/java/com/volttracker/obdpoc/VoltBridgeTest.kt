@@ -315,6 +315,8 @@ class VoltBridgeTest {
                 "detailProbe",
                 "getLastDevice",
                 "getDeviceHistory",
+                "getAutoConnectState",
+                "setAutoConnectEnabled",
                 "getStorageSummary",
                 "exportDebugBundle",
                 "shareBackup",

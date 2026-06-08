@@ -386,7 +386,7 @@ jobs:
     # Rolling debug build of main, surfaced as a permanent download URL:
     # https://github.com/jtn0123/VoltTracker/releases/tag/latest-debug
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: unit-tests
+    needs: [unit-tests, ci-success]
     runs-on: ubuntu-latest
     permissions:
       contents: write

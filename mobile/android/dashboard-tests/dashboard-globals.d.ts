@@ -660,6 +660,7 @@ interface VoltStatus {
     listDevices(): string;
     getLastDevice(): string;
     getDeviceHistory(): string;
+    getAutoConnectState(): string;
     getStorageSummary(): string;
     exportDebugBundle(): string;
     getTrips(): string;
@@ -684,6 +685,7 @@ interface VoltStatus {
     restoreEncryptedBackup(passphrase: string): void;
     clearStoredData(): void;
     rememberDevice(address: string, name: string): void;
+    setAutoConnectEnabled(enabled: boolean): void;
     connectLast(): void;
     scanLast(): void;
     tpmsScanLast(): void;

@@ -59,6 +59,15 @@ interface PermissionCommands {
 }
 
 /**
+ * User-controlled, battery-safe automatic reconnect policy for the last adapter.
+ */
+interface AutoConnectCommands {
+    fun getAutoConnectStateJson(): String
+
+    fun setAutoConnectEnabledFromBridge(enabled: Boolean)
+}
+
+/**
  * Backup/restore commands. The bridge drives the export builder directly and forwards share/restore
  * launches to the backup controller.
  */
@@ -138,6 +147,7 @@ interface DashboardHost :
     BridgeThreading,
     DeviceCommands,
     PermissionCommands,
+    AutoConnectCommands,
     BackupCommands,
     DiagnosticsCommands,
     DashboardStatePublisher,

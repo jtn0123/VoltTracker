@@ -1165,7 +1165,11 @@
           >Pick a paired OBD adapter to start logging.</small
         >
       </div>
-      <button id="connectBtn" type="button" class="primary primary-action">
+      <button
+        id="connectBtn"
+        type="button"
+        class="primary primary-action settings-primary-action"
+      >
         Connect
       </button>
     </div>
@@ -1179,20 +1183,36 @@
       <select id="deviceSelect">
         <option value="">No paired adapters found</option>
       </select>
-      <button id="refreshBtn" type="button">Refresh</button>
+      <button id="refreshBtn" type="button" class="settings-refresh-btn">
+        Refresh
+      </button>
     </div>
     <div
       class="button-grid connection-actions"
       data-demo-hidden="true"
       aria-label="Connection actions"
     >
-      <button id="permissionBtn" type="button">Permissions</button>
-      <button id="lastBtn" type="button">Last</button>
-      <button id="scanBtn" type="button" class="scan">Scan</button>
-      <button id="tpmsScanBtn" type="button" data-action="tpmsScan">
-        Detail Probe
+      <button id="permissionBtn" type="button" class="settings-command">
+        <span>Permissions</span>
+        <small>Bluetooth + location</small>
       </button>
-      <button id="disconnectBtn" type="button" class="danger">Stop</button>
+      <button id="lastBtn" type="button" class="settings-command">
+        <span>Reconnect last</span>
+        <small>Saved adapter</small>
+      </button>
+      <button id="scanBtn" type="button" class="scan settings-command">
+        <span>Scan</span>
+        <small>Codes + live PIDs</small>
+      </button>
+      <button
+        id="tpmsScanBtn"
+        type="button"
+        data-action="tpmsScan"
+        class="settings-command"
+      >
+        <span>Detail probe</span>
+        <small>Targeted signals</small>
+      </button>
     </div>
     <p id="statusCopy" class="status-copy" data-demo-hidden="true">
       Pick a paired OBD adapter to start logging.
@@ -1357,19 +1377,45 @@
         role="group"
         aria-label="Backup and restore actions"
       >
-        <button type="button" data-action="backupEncrypted">
-          Back up encrypted
+        <button
+          type="button"
+          data-action="backupEncrypted"
+          class="settings-command db-safe-action"
+        >
+          <span>Back up encrypted</span>
+          <small>Safest export</small>
         </button>
-        <button type="button" data-action="restoreEncrypted">
-          Restore encrypted
+        <button
+          type="button"
+          data-action="restoreEncrypted"
+          class="settings-command db-safe-action"
+        >
+          <span>Restore encrypted</span>
+          <small>Needs passphrase</small>
         </button>
-        <button type="button" data-action="backup">Export plaintext</button>
-        <button type="button" data-action="restore">Restore file</button>
-        <button type="button" id="sendDiagnosticsSettingsBtn">
-          Send diagnostics
+        <button type="button" data-action="backup" class="settings-command">
+          <span>Export plaintext</span>
+          <small>Readable database</small>
         </button>
-        <button type="button" data-action="clearStorage" class="danger">
-          Clear debug data
+        <button type="button" data-action="restore" class="settings-command">
+          <span>Restore file</span>
+          <small>Merge or replace</small>
+        </button>
+        <button
+          type="button"
+          id="sendDiagnosticsSettingsBtn"
+          class="settings-command"
+        >
+          <span>Send diagnostics</span>
+          <small>Redacted logs</small>
+        </button>
+        <button
+          type="button"
+          data-action="clearStorage"
+          class="danger settings-command"
+        >
+          <span>Clear debug data</span>
+          <small>Delete local rows</small>
         </button>
       </div>
     </details>
@@ -1546,6 +1592,27 @@
         Send diagnostics
       </button>
     </div>
+
+    <fieldset
+      class="connection-tools__notify"
+      aria-labelledby="autoConnectTitle"
+    >
+      <legend id="autoConnectTitle" class="kicker">Auto-connect</legend>
+      <div class="connection-tools__notify-row">
+        <label class="connection-tools__notify-toggle">
+          <input
+            id="autoConnectToggle"
+            type="checkbox"
+            data-action="auto-connect"
+          />
+          <span>Connect when last adapter is seen</span>
+        </label>
+      </div>
+      <small id="autoConnectStatus" class="status-copy">
+        Uses the last adapter and Bluetooth connection events. It does not run
+        Bluetooth discovery.
+      </small>
+    </fieldset>
 
     <!-- Notify-when-ready toggle. Picks how long to keep probing in the
          background; the bridge clamps the minutes to [1, 30] and we mirror that

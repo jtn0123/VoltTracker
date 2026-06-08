@@ -100,6 +100,14 @@ describe('actions.ts — bridge dispatch', () => {
     expect(bridge.connect).toHaveBeenCalledTimes(1);
     expect(bridge.connect).toHaveBeenCalledWith(device.address, device.name);
     expect(bridge.scan).not.toHaveBeenCalled();
+    expect(VD.state.status).toMatchObject({
+      state: 'connecting',
+      detail: `Connecting to ${device.name}...`,
+      lastAddress: device.address,
+      lastName: device.name,
+    });
+    expect(document.getElementById('connectBtn').textContent).toBe('Connecting...');
+    expect(document.getElementById('connectBtn').dataset.primaryAction).toBe('stop');
     // Native connect/scan remembers the adapter once; JS must not pre-remember or
     // history counts inflate on a single click.
     expect(bridge.rememberDevice).not.toHaveBeenCalled();
@@ -111,6 +119,11 @@ describe('actions.ts — bridge dispatch', () => {
     expect(bridge.scan).toHaveBeenCalledTimes(1);
     expect(bridge.scan).toHaveBeenCalledWith(device.address, device.name);
     expect(bridge.connect).not.toHaveBeenCalled();
+    expect(VD.state.status).toMatchObject({
+      state: 'scanning',
+      detail: `Starting scan with ${device.name}...`,
+    });
+    expect(document.getElementById('connectBtn').textContent).toBe('Scanning...');
   });
 
   it('tpmsScanSelected() routes to staged bridge.detailProbe with the selected adapter', () => {
@@ -177,6 +190,26 @@ describe('actions.ts — bridge dispatch', () => {
     VD.actions.handleAction('last', button);
 
     expect(bridge.connectLast).toHaveBeenCalledTimes(1);
+    expect(VD.state.status).toMatchObject({
+      state: 'connecting',
+      detail: 'Connecting to TestOBD...',
+    });
+    expect(document.getElementById('connectBtn').textContent).toBe('Connecting...');
+  });
+
+  it('the primary connection button becomes the disconnect action while active', () => {
+    bridge.disconnect = vi.fn();
+
+    VD.setStatus({ state: 'connected', detail: 'Logging live OBD data.' });
+
+    const primary = document.getElementById('connectBtn');
+    expect(primary.textContent).toBe('Disconnect');
+    expect(primary.dataset.primaryAction).toBe('stop');
+    expect(document.getElementById('lastBtn').hidden).toBe(true);
+
+    primary.click();
+
+    expect(bridge.disconnect).toHaveBeenCalledTimes(1);
   });
 
   it('deleteSignalLog() uses the app dialog before deleting one evidence row', async () => {

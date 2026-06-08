@@ -9,6 +9,7 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.RejectedExecutionException
 
 /** Drives the Activity-facing backup/restore user flows. */
 class BackupController(
@@ -136,6 +137,7 @@ class BackupController(
             restoreFromUri(data.data, passphrase)
         } else {
             pendingRestorePassphrase = null
+            activity.publishStatus("ready", "Restore cancelled - no file selected.", false)
         }
     }
 
@@ -165,6 +167,7 @@ class BackupController(
                 arrayOf("application/octet-stream", "application/vnd.sqlite3", "application/x-sqlite3"),
             )
             pendingRestorePassphrase = passphrase
+            activity.publishStatus("ready", "Choose a Volt Tracker backup file.", false)
             activity.launchRestoreFilePicker(pick)
         } catch (ex: RuntimeException) {
             pendingRestorePassphrase = null
@@ -176,14 +179,24 @@ class BackupController(
         uri: Uri?,
         passphrase: String?,
     ) {
-        activity.publishStatus("ready", "Reading backup...", false)
+        activity.publishStatus(
+            "ready",
+            if (hasPassphrase(passphrase)) {
+                "Reading and decrypting selected backup..."
+            } else {
+                "Reading selected backup..."
+            },
+            false,
+        )
         runBackground("Could not start the restore worker.") {
-            val staged = dataBackup.stageRestoreFile(uri, passphrase)
+            val outcome = dataBackup.stageRestoreFileWithStatus(uri, passphrase)
             activity.runOnUiThread {
-                if (staged == null) {
-                    publishRestoreFailure(RestoreResult.INVALID_FILE)
+                val staged = outcome.file
+                if (!outcome.ok || staged == null) {
+                    publishRestoreStageFailure(outcome)
                     return@runOnUiThread
                 }
+                activity.publishStatus("ready", restoreVerifiedMessage(outcome), false)
                 promptRestoreMode(staged)
             }
         }
@@ -264,6 +277,44 @@ class BackupController(
         activity.publishStatus("blocked", message, true)
     }
 
+    private fun publishRestoreStageFailure(outcome: DataBackup.RestoreStageOutcome) {
+        val message =
+            when (outcome.status) {
+                DataBackup.RestoreStageStatus.NO_FILE -> "Restore cancelled - no file selected."
+                DataBackup.RestoreStageStatus.OPEN_FAILED ->
+                    "Restore failed - Android could not read the selected file."
+                DataBackup.RestoreStageStatus.TOO_LARGE ->
+                    "Restore failed - that backup is too large for the on-phone importer."
+                DataBackup.RestoreStageStatus.MISSING_PASSPHRASE ->
+                    "Restore failed - that backup is encrypted. Enter its passphrase first."
+                DataBackup.RestoreStageStatus.DECRYPT_FAILED ->
+                    "Restore failed - the passphrase did not unlock that backup."
+                DataBackup.RestoreStageStatus.TOO_NEW ->
+                    "Restore failed - that backup was created by a newer Volt Tracker app."
+                DataBackup.RestoreStageStatus.MIGRATION_FAILED ->
+                    "Restore failed - the backup could not be upgraded for this app."
+                DataBackup.RestoreStageStatus.NOT_A_BACKUP ->
+                    "Restore failed - that file is not a valid Volt Tracker backup."
+                DataBackup.RestoreStageStatus.OK ->
+                    "Restore failed - the selected backup could not be prepared."
+            }
+        activity.publishStatus(
+            if (outcome.status == DataBackup.RestoreStageStatus.NO_FILE) "ready" else "blocked",
+            message,
+            outcome.status != DataBackup.RestoreStageStatus.NO_FILE,
+        )
+    }
+
+    private fun restoreVerifiedMessage(outcome: DataBackup.RestoreStageOutcome): String {
+        val parts = ArrayList<String>()
+        parts.add(if (outcome.encrypted) "Encrypted backup verified." else "Backup verified.")
+        if (outcome.migrated) {
+            parts.add("It was upgraded for this app.")
+        }
+        parts.add("Choose Merge or Replace all.")
+        return parts.joinToString(" ")
+    }
+
     private fun runBackground(
         unavailableMessage: String,
         task: Runnable,
@@ -273,7 +324,13 @@ class BackupController(
             activity.publishStatus("blocked", unavailableMessage, true)
             return
         }
-        worker.execute(task)
+        try {
+            worker.execute(task)
+        } catch (ex: RejectedExecutionException) {
+            activity.publishStatus("blocked", unavailableMessage, true)
+        } catch (ex: RuntimeException) {
+            activity.publishStatus("blocked", unavailableMessage, true)
+        }
     }
 
     private class MergeOutcome(

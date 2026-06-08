@@ -69,4 +69,22 @@ describe('dashboard layout css', () => {
     expect(screensCss).not.toMatch(/\.bottom-nav\s+button\.is-active::before/);
     expect(screensCss).not.toMatch(/\.bottom-nav\s+button\.is-active\s*\{[^}]*inset\s+0\s+1px\s+0/);
   });
+
+  it('keeps Settings command buttons readable and grouped by intent', () => {
+    const screensCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens.css'), 'utf8');
+    const dashboardHtml = readFileSync(resolve(DASHBOARD_ASSETS, 'index.html'), 'utf8');
+    const commandRule = screensCss.match(/\.settings-command\s*\{[^}]+\}/)?.[0] || '';
+    const commandCopyRule = screensCss.match(/\.settings-command span,\s*\.settings-command small\s*\{[^}]+\}/)?.[0] || '';
+    const connectionActionsRule = screensCss.match(/\.connection-actions\s*\{[^}]+\}/)?.[0] || '';
+
+    expect(commandRule).toMatch(/display\s*:\s*grid/);
+    expect(commandRule).toMatch(/min-height\s*:\s*56px/);
+    expect(commandRule).toMatch(/text-align\s*:\s*left/);
+    expect(commandCopyRule).toMatch(/overflow-wrap\s*:\s*anywhere/);
+    expect(connectionActionsRule).toMatch(/repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(screensCss).toMatch(/@media\s*\(min-width:\s*640px\)\s*\{[\s\S]*\.connection-actions,\s*\.db-action-grid/);
+    expect(dashboardHtml).toContain('class="settings-command"');
+    expect(dashboardHtml).toContain('Reconnect last');
+    expect(dashboardHtml).not.toContain('id="disconnectBtn"');
+  });
 });

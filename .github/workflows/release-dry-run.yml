@@ -32,4 +32,5 @@ jobs:
       - name: Verify release-candidate evidence
         env:
           REQUIRE_RELEASE_CANDIDATE_EVIDENCE: "1"
+          REQUIRE_READY_TO_TAG: "0"
         run: scripts/check-release-candidate-evidence.sh

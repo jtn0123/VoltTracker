@@ -429,6 +429,8 @@ describe('connection-tools.ts — proactive adapter checks', () => {
     bridge = createVoltBridgeFixture({
       startTestConnection: vi.fn(),
       shareDiagnostics: vi.fn(),
+      getAutoConnectState: vi.fn(() => '{"enabled":true,"available":true,"lastName":"Volt OBD","lastAddress":"AA:BB:CC:DD:EE:FF"}'),
+      setAutoConnectEnabled: vi.fn(),
       scheduleAdapterReadyNotify: vi.fn(),
       cancelAdapterReadyNotify: vi.fn(),
     });
@@ -473,6 +475,22 @@ describe('connection-tools.ts — proactive adapter checks', () => {
       mirror.click();
       expect(bridge.shareDiagnostics).toHaveBeenCalledTimes(2);
     }
+  });
+
+  it('Auto-connect reflects native state and toggles the bridge preference', () => {
+    const toggle = document.getElementById('autoConnectToggle');
+    const status = document.getElementById('autoConnectStatus');
+
+    expect(bridge.getAutoConnectState).toHaveBeenCalledTimes(1);
+    expect(toggle.checked).toBe(true);
+    expect(status.textContent).toMatch(/Volt OBD/i);
+    expect(status.textContent).toMatch(/without Bluetooth discovery/i);
+
+    toggle.checked = false;
+    toggle.dispatchEvent(new window.Event('change'));
+
+    expect(bridge.setAutoConnectEnabled).toHaveBeenCalledWith(false);
+    expect(status.textContent).toMatch(/manual connect/i);
   });
 
   it('Notify-when-ready schedules the clamped minutes when toggled on', () => {
