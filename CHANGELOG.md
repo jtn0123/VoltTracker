@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v0.8.1 (2026-06-08)
+
+### Bug Fixes
+
+- **android**: Harden release flow and auto-connect UX
+  ([`17234dd`](https://github.com/jtn0123/VoltTracker/commit/17234dd52d1f46ed717250bf81cb54d9c7000668))
+
+- **release**: Install Playwright before preflight
+  ([`356c97d`](https://github.com/jtn0123/VoltTracker/commit/356c97db1bc019b4f4c864be5516f447c46a64a4))
+
+- **release**: Serialize release preflight verification
+  ([`aaf0a20`](https://github.com/jtn0123/VoltTracker/commit/aaf0a2017bea8c0e6d349e947d7212edce78f480))
+
+### Continuous Integration
+
+- **release**: Repair tagged APK publishing
+  ([`af1bb57`](https://github.com/jtn0123/VoltTracker/commit/af1bb57f8049160387cd26c9c091fb88fab53592))
+
+Fix release APK secret env wiring and add a manual workflow to attach APKs to existing tags.
+
+
 ## v0.8.0 (2026-06-08)
 
 ### Features
