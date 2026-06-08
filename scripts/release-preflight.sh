@@ -29,7 +29,10 @@ echo "== dashboard dependency audits =="
 echo "== active app verification =="
 (
   cd "${ROOT}/mobile/android"
-  ./gradlew --no-daemon verifyActiveApp
+  # The release lane runs every active-app check on one GitHub runner. Keep
+  # Gradle serialized here so the dashboard Vitest budget checks do not compete
+  # with Playwright and Android build work for the same CPU.
+  ./gradlew --no-daemon --max-workers=1 verifyActiveApp
 )
 
 if [[ "${RUN_EMULATOR_SMOKE:-0}" == "1" ]]; then
