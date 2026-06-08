@@ -62,6 +62,17 @@ jobs:
       - name: Validate release config
         run: python .github/scripts/check_release_config.py
 
+      - name: Install release dashboard e2e deps
+        working-directory: mobile/android/dashboard-e2e
+        run: npm ci
+
+      - name: Install release Playwright Chromium + OS deps
+        # release-preflight.sh runs verifyActiveApp, which includes the
+        # Playwright dashboard e2e checks. The normal Android CI installs the
+        # browser binary first; the release lane needs the same runtime setup.
+        working-directory: mobile/android/dashboard-e2e
+        run: npx playwright install --with-deps chromium
+
       - name: Release preflight
         env:
           REQUIRE_RELEASE_CANDIDATE_EVIDENCE: "1"
