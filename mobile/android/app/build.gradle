@@ -66,7 +66,8 @@ android {
     }
 
     // Release signing activates only when mobile/android/keystore.properties exists
-    // (gitignored). Without it, release builds are produced unsigned.
+    // (gitignored). Local release builds without it are unsigned; tagged CI releases fail
+    // before assemble if the signing secrets are missing.
     signingConfigs {
         release {
             def keystoreProps = rootProject.file("keystore.properties")

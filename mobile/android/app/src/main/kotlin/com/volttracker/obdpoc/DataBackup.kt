@@ -117,7 +117,7 @@ class DataBackup(
             try {
                 val text = readTailText(file, MAX_DEBUG_LOG_BYTES)
                 item.put("truncated", file.length() > MAX_DEBUG_LOG_BYTES)
-                item.put("text", text)
+                item.put("text", redactDebugLogText(text))
             } catch (ex: IOException) {
                 item.put("error", "${ex.javaClass.simpleName}: ${ex.message}")
             }
@@ -280,6 +280,13 @@ class DataBackup(
         private const val MAX_DEBUG_LOG_BYTES = 64 * 1024
         private const val MAX_DEBUG_SESSION_LOGS = 3
         private const val MAX_DEBUG_APP_LOGS = 2
+        private val BLUETOOTH_ADDRESS_RE = Regex("\\b[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}\\b")
+        private val VIN_RE = Regex("\\b[A-HJ-NPR-Za-hj-npr-z0-9]{17}\\b")
+        private val COORDINATE_FIELD_RE =
+            Regex(
+                "(\"(?:latitude|longitude|lat|lng)\"\\s*:\\s*)-?\\d{1,3}(?:\\.\\d+)?",
+                RegexOption.IGNORE_CASE,
+            )
 
         // Track the live schema version so a future migration bump can't silently make restore
         // reject freshly-created backups (a v11 backup must validate as current, not "too new").
@@ -343,6 +350,19 @@ class DataBackup(
                 arrayOf("cell_snapshots", "_id", "battery_snapshot_id", "cell_index"),
                 arrayOf("exports", "_id", "created_at_ms", "export_type", "status"),
             )
+
+        @JvmStatic
+        fun redactDebugLogText(text: String?): String {
+            if (text.isNullOrEmpty()) {
+                return ""
+            }
+            return text
+                .replace(BLUETOOTH_ADDRESS_RE, "[bluetooth-address-redacted]")
+                .replace(VIN_RE, "[vin-redacted]")
+                .replace(COORDINATE_FIELD_RE) { match ->
+                    match.groupValues[1] + "\"[coordinate-redacted]\""
+                }
+        }
 
         @JvmStatic
         fun clearRegenerableRollupCache(file: File?) {

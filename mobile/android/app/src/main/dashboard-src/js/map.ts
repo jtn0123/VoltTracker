@@ -1,39 +1,17 @@
+import {
+  LIVE_ROUTE_ID,
+  haversineMetersJs,
+  isValidRoutePoint,
+  liveSampleTimeMs,
+  mapEffColor,
+  routeFitKey
+} from "./map-route-utils";
+import type { MapRoute, MapRoutePoint, MapRouteSession } from "./map-route-utils";
+
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
   const el = VD.el;
-
-  // A decoded route point the map *builds* (live + sample routes). Extends the
-  // shared VoltRoutePoint (lat/lng/atMs?/speedMps?/altM?/eff? + an unknown index
-  // signature), pins atMs as a real number (every constructed point sets it),
-  // and names the extra derived fields map.ts writes. Route points that arrive
-  // from storage are the looser VoltRoutePoint and are narrowed via
-  // isValidRoutePoint before being drawn.
-  type MapRoutePoint = VoltRoutePoint & {
-    atMs: number;
-    speedKph?: number;
-    soc?: number;
-    powerKw?: number;
-  };
-
-  // A route the map renders. Reuses the shared VoltRoute shape (open record with
-  // points/powerTrack/session/distanceMeters + index signature); map.ts also reads
-  // an `isLive` marker off it.
-  type MapRoute = VoltRoute & {
-    isLive?: boolean;
-  };
-
-  // The route's session sub-object — VoltRoute.session is open, so name the
-  // fields map.ts reads off it without falling back to `any`.
-  type MapRouteSession = {
-    id?: string | number;
-    adapterName?: string;
-    mode?: string;
-    status?: string;
-    startedAtMs?: number;
-    endedAtMs?: number;
-    [key: string]: unknown;
-  };
 
   type MapStop = {
     lat: number;
@@ -101,7 +79,6 @@
     const group = mapLayerGroups[layer] || mapLayerGroups.routes;
     if (group) group.addTo(map);
   }
-  const LIVE_ROUTE_ID = "__live_current__";
   const LIVE_ROUTE_MAX_POINTS = 600;
   let liveRouteStartedAtMs: number | null = null;
   let liveRoutePoints: MapRoutePoint[] = [];
@@ -156,34 +133,6 @@
     const altM = Number(sample.altM ?? sample.altitudeM ?? sample.altitudeMeters);
     if (Number.isFinite(altM)) point.altM = altM;
     return point;
-  }
-
-  function liveSampleTimeMs(sample: VoltTelemetry) {
-    const candidates = [
-      sample.atMs,
-      sample.updatedAtMs,
-      sample.updatedAt,
-      sample.timestampMs,
-      sample.capturedAtMs
-    ];
-    for (const candidate of candidates) {
-      const value = Number(candidate);
-      if (!Number.isFinite(value) || value <= 0) continue;
-      if (value > 1_000_000_000_000) return value;
-      if (value > 1_000_000_000) return value * 1000;
-    }
-    return Date.now();
-  }
-
-  // Per-segment efficiency bucket color for the V3 "Eff" layer. Grey for
-  // segments without power data yet, so the user can see at a glance which
-  // parts of the drive lack derived efficiency.
-  function mapEffColor(eff: unknown) {
-    const value = Number(eff);
-    if (!Number.isFinite(value)) return "#6a6a72";
-    if (value >= 4) return "#b8e63b";
-    if (value >= 2.7) return "#ffb84a";
-    return "#ff6b5f";
   }
 
   function createRemoteTileLayer(map: LeafletMapInstance): LeafletLayer {
@@ -674,34 +623,6 @@
     return true;
   }
 
-  function isValidRoutePoint(point: unknown): point is MapRoutePoint {
-    const candidate = point as MapRoutePoint | null;
-    const lat = Number(candidate && candidate.lat);
-    const lng = Number(candidate && candidate.lng);
-    return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
-  }
-
-  function routeFitKey(routeSession: MapRouteSession, points: MapRoutePoint[]) {
-    const first = points[0];
-    const last = points[points.length - 1];
-    if (!first || !last) return [(routeSession || {}).id || "", points.length, "", "", "", ""].join(":");
-    if (String((routeSession || {}).id || "") === LIVE_ROUTE_ID) {
-      return [
-        LIVE_ROUTE_ID,
-        Number(first.lat).toFixed(5),
-        Number(first.lng).toFixed(5)
-      ].join(":");
-    }
-    return [
-      (routeSession || {}).id || "",
-      points.length,
-      Number(first.lat).toFixed(5),
-      Number(first.lng).toFixed(5),
-      Number(last.lat).toFixed(5),
-      Number(last.lng).toFixed(5)
-    ].join(":");
-  }
-
   function renderMapSessionList(routes: MapRoute[]) {
     const list = el("mapSessionList");
     if (!list) return;
@@ -756,16 +677,6 @@
     // to the named fields map.ts reads. Field reads stay defensively coerced
     // (String()/Number()) at each use, so the narrowing is presentational only.
     return (route && route.session ? route.session : {}) as MapRouteSession;
-  }
-
-  function haversineMetersJs(lat1: number, lng1: number, lat2: number, lng2: number) {
-    const r = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2
-      + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
-      * Math.sin(dLng / 2) ** 2;
-    return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
   function routeDistanceMeters(points: VoltRoutePoint[]) {

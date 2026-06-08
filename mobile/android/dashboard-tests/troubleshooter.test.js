@@ -512,6 +512,9 @@ describe('connection-tools.ts — proactive adapter checks', () => {
     expect(bridge.cancelAdapterReadyNotify).toHaveBeenCalledTimes(1);
     expect(document.getElementById('notifyWhenReadyStatus').textContent)
       .toMatch(/Probes the last-used adapter/i);
+    expect(toggle.closest('fieldset').getAttribute('aria-busy')).toBe('true');
+    vi.advanceTimersByTime(600);
+    expect(toggle.closest('fieldset').getAttribute('aria-busy')).toBe('false');
   });
 
   it('re-arms the schedule when the minutes selector changes while toggled on', () => {

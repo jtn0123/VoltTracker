@@ -1638,6 +1638,126 @@
     pointer-events: none;
   }
 
+  .app-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 220;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+  }
+
+  .app-dialog[hidden] {
+    display: none;
+  }
+
+  .app-dialog-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(4, 8, 12, 0.72);
+  }
+
+  .app-dialog-card {
+    position: relative;
+    width: min(100%, 420px);
+    max-height: min(86vh, 620px);
+    overflow: auto;
+    border: 1px solid rgba(185, 205, 226, 0.24);
+    border-radius: 8px;
+    background: #11191f;
+    color: #f3f7fb;
+    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.46);
+  }
+
+  .app-dialog-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 18px 8px;
+  }
+
+  .app-dialog-title {
+    margin: 0;
+    font-size: 1.05rem;
+    line-height: 1.25;
+  }
+
+  .app-dialog-close {
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(185, 205, 226, 0.28);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    color: inherit;
+    font-size: 1.35rem;
+    line-height: 1;
+  }
+
+  .app-dialog-message {
+    margin: 0;
+    padding: 6px 18px 14px;
+    color: #c8d2dc;
+    line-height: 1.45;
+    white-space: pre-line;
+  }
+
+  .app-dialog-input-wrap {
+    display: grid;
+    gap: 8px;
+    padding: 0 18px 14px;
+    color: #d9e2ea;
+    font-size: 0.88rem;
+  }
+
+  .app-dialog-input-wrap[hidden] {
+    display: none;
+  }
+
+  .app-dialog-input {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid rgba(185, 205, 226, 0.28);
+    border-radius: 8px;
+    background: rgba(3, 8, 13, 0.6);
+    color: #f3f7fb;
+    padding: 0 12px;
+    font: inherit;
+  }
+
+  .app-dialog-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 18px 18px;
+  }
+
+  .app-dialog-primary,
+  .app-dialog-secondary {
+    min-height: 40px;
+    border-radius: 8px;
+    padding: 0 14px;
+    font: inherit;
+    font-weight: 700;
+  }
+
+  .app-dialog-primary {
+    border: 1px solid rgba(117, 190, 255, 0.55);
+    background: #2f7fbc;
+    color: #fff;
+  }
+
+  .app-dialog-primary:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .app-dialog-secondary {
+    border: 1px solid rgba(185, 205, 226, 0.28);
+    background: rgba(255, 255, 255, 0.06);
+    color: #d9e2ea;
+  }
+
   @media (min-width: 640px) {
     .signal-stage-panel {
       grid-template-columns: minmax(0, 1fr) auto;

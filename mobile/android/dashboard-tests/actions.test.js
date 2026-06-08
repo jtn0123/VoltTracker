@@ -20,6 +20,30 @@ function seedSelectedDevice(VD, { address = 'AA:BB:CC:DD:EE:FF', name = 'TestOBD
   return { address, name };
 }
 
+function appDialog() {
+  return document.getElementById('appDialog');
+}
+
+function appDialogMessage() {
+  return document.getElementById('appDialogMessage').textContent;
+}
+
+async function clickAppDialogConfirm() {
+  document.getElementById('appDialogConfirm').click();
+  await Promise.resolve();
+}
+
+async function clickAppDialogCancel() {
+  document.getElementById('appDialogCancel').click();
+  await Promise.resolve();
+}
+
+function enterAppDialogInput(value) {
+  const input = document.getElementById('appDialogInput');
+  input.value = value;
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+}
+
 // Reset every global the dashboard IIFEs touch so loadDashboard() can
 // re-bootstrap cleanly. Mirrors the pattern in the other test files.
 async function freshLoad(bridge) {
@@ -155,9 +179,11 @@ describe('actions.ts — bridge dispatch', () => {
     expect(bridge.connectLast).toHaveBeenCalledTimes(1);
   });
 
-  it('deleteSignalLog() asks for confirmation before deleting one evidence row', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('deleteSignalLog() uses the app dialog before deleting one evidence row', async () => {
     VD.actions.deleteSignalLog(5);
+    expect(appDialog().hidden).toBe(false);
+    expect(appDialogMessage()).toMatch(/delete this saved detailed signal/i);
+    await clickAppDialogConfirm();
     expect(bridge.deleteDetailedSignalLog).toHaveBeenCalledWith('5');
   });
 
@@ -175,30 +201,35 @@ describe('actions.ts — bridge dispatch', () => {
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"id"'));
   });
 
-  it('clearStorage() bails when the user cancels the confirm dialog', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('clearStorage() bails when the user cancels the app dialog', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
     VD.actions.clearStorage(button);
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(appDialog().hidden).toBe(false);
+    await clickAppDialogCancel();
+    expect(confirmSpy).not.toHaveBeenCalled();
     expect(bridge.clearStoredData).not.toHaveBeenCalled();
   });
 
-  it('clearStorage() invokes the bridge after a confirmed prompt', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('clearStorage() invokes the bridge after app-dialog confirmation', async () => {
     VD.actions.clearStorage(button);
+    expect(appDialogMessage()).toMatch(/clear local obd sessions/i);
+    await clickAppDialogConfirm();
     expect(bridge.clearStoredData).toHaveBeenCalledTimes(1);
   });
 
-  it('shareBackup() invokes bridge.shareBackup after a confirmed prompt', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('shareBackup() invokes bridge.shareBackup after app-dialog confirmation', async () => {
     VD.actions.shareBackup(button);
+    expect(appDialogMessage()).toMatch(/plaintext backup/i);
+    expect(appDialogMessage()).toMatch(/encrypted backup/i);
+    await clickAppDialogConfirm();
     expect(bridge.shareBackup).toHaveBeenCalledTimes(1);
-    expect(confirmSpy.mock.calls[0][0]).toMatch(/plaintext backup/i);
-    expect(confirmSpy.mock.calls[0][0]).toMatch(/encrypted backup/i);
   });
 
-  it('shareEncryptedBackup() passes the chosen passphrase to the bridge', () => {
-    vi.spyOn(window, 'prompt').mockReturnValue('secret-pass');
+  it('shareEncryptedBackup() passes the app-dialog passphrase to the bridge', async () => {
     VD.actions.shareEncryptedBackup(button);
+    expect(appDialog().hidden).toBe(false);
+    enterAppDialogInput('secret-pass');
+    await clickAppDialogConfirm();
     expect(bridge.shareEncryptedBackup).toHaveBeenCalledWith('secret-pass');
   });
 
@@ -210,24 +241,25 @@ describe('actions.ts — bridge dispatch', () => {
     expect(VD.state.status.detail).toMatch(/example data loaded/i);
   });
 
-  it('shareBackup() cancel path sets a ready status and skips the bridge', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('shareBackup() cancel path sets a ready status and skips the bridge', async () => {
     VD.actions.shareBackup(button);
+    await clickAppDialogCancel();
     expect(bridge.shareBackup).not.toHaveBeenCalled();
     expect(VD.state.status).toMatchObject({ state: 'ready' });
     expect(VD.state.status.detail).toMatch(/cancel/i);
   });
 
-  it('restoreBackup() invokes bridge.restoreBackup after a confirmed prompt', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('restoreBackup() invokes bridge.restoreBackup without a pre-pick browser dialog', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
     VD.actions.restoreBackup(button);
+    expect(confirmSpy).not.toHaveBeenCalled();
     expect(bridge.restoreBackup).toHaveBeenCalledTimes(1);
   });
 
-  it('restoreEncryptedBackup() requires a passphrase and confirm before picker launch', () => {
-    vi.spyOn(window, 'prompt').mockReturnValue('secret-pass');
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('restoreEncryptedBackup() requires an app-dialog passphrase before picker launch', async () => {
     VD.actions.restoreEncryptedBackup(button);
+    enterAppDialogInput('secret-pass');
+    await clickAppDialogConfirm();
     expect(bridge.restoreEncryptedBackup).toHaveBeenCalledWith('secret-pass');
   });
 });

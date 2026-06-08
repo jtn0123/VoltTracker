@@ -52,27 +52,21 @@ For the data/privacy model, backup contents, and map tile network behavior, see
 
 ## Current PIDs
 
-Polled live every cycle:
+Live polling is tiered in `PidSchedule.kt`; every published sample carries
+stale-age metadata so slower values can be shown honestly without slowing the
+speed/RPM path.
 
-- `ATRV` adapter voltage
-- `010D` vehicle speed
-- `010C` engine RPM
-- `0105` coolant temp
-- `0104` engine load
-- `0149` accelerator pedal position D (drive-by-wire pedal — the real pedal-input signal)
-- `0111` throttle position (ICE throttle body angle; the Volt returns a constant here, so
-  `0149` is preferred for actual pedal input)
-- `015B` hybrid battery state of charge
+| Lane | Cadence | PIDs |
+|------|---------|------|
+| Hot | Every cycle | `010D` speed, `010C` RPM, `0149` accelerator pedal, `222414` HV pack current |
+| Warm | Every 2 cycles | `0104` engine load, `0111` ICE throttle, `222429` HV pack voltage |
+| Slow | Every 6 cycles | `015B` hybrid battery SOC, `ATRV` adapter voltage |
+| Thermal | Every 12 cycles | `0105` coolant temp, `22434F` HV battery temp |
+| Deep | 24+ cycles | control-module voltage, run time, fuel/oil/odometer context, motor currents/voltages, PRNDL, charger HV voltage/current, charging mode/level, raw SOC, charge count, last-charge energy, and other validated context |
 
-Sent only by the diagnostic Scan (community-validated Chevy Volt mode-22 PIDs;
-see `docs/volt-pid-research-2026-05-20.md`):
-
-- Header `ATSH7E1`: `222429` HV pack voltage, `222414` HV pack current
-- Header `ATSH7E4`: `22434F` battery temp, `224368`/`224369` charger AC voltage/current,
-  `22436B`/`22436C`/`224373` charger HV voltage/current/power, `22437D` last-charge energy
-
-The scan-only Volt mode-22 formulas should be rechecked against fresh field data
-before promoting more of them to the live loop.
+Diagnostic Scan and Detail Probe still exist for broader discovery, including
+candidate TPMS probes. Do not promote new community Mode-22 formulas into live
+polling until they have fresh field evidence from the target car.
 
 ## Build
 
@@ -112,7 +106,13 @@ npm --prefix dashboard-tests ci
 ```
 
 This runs Android unit tests, lint, Spotless, debug assemble, JaCoCo coverage,
-dashboard ESLint/Vitest, and a generated-dashboard drift check.
+dashboard ESLint/typecheck/Vitest, Playwright e2e, bundle budgets, generated
+dashboard drift, and migration straggler guards. See
+[`docs/validation-matrix.md`](docs/validation-matrix.md) for what this proves
+and which real-device/real-car checks still need separate evidence.
+
+Dashboard tooling is validated on Node 20 in CI. Use the root `.nvmrc` or
+`.node-version` when setting up a local shell.
 
 The aggregate task is configuration-cache ready. For faster repeated local
 loops, run `./gradlew verifyActiveApp --configuration-cache`; the second run
@@ -153,6 +153,8 @@ List outdated direct and transitive dependencies (advisory; nothing fails):
 
 Dependency snapshots and other dated audits are indexed in
 [`docs/reports-index.md`](docs/reports-index.md).
+The scheduled `Dependency snapshot` workflow refreshes the Gradle release
+dependency report plus dashboard/e2e npm outdated and audit artifacts weekly.
 
 ## Install On A Phone
 
@@ -187,10 +189,14 @@ scrcpy
 - Bluetooth permissions are requested at runtime on Android 12+.
 - A foreground service keeps the OBD session alive while polling.
 - The WebView only loads local assets from `app/src/main/assets/dashboard`.
-- The Map tab keeps remote basemap tiles off by default; the Tiles control opts
-  into CARTO/OSM basemap requests while route, OBD, and GPS history still come
-  from on-device storage.
+- The Map and Trips route views use remote CARTO basemap tiles by default, with
+  OpenStreetMap fallback when CARTO is unavailable. Route, OBD, and GPS history
+  still come from on-device storage, but tile providers can see requested tile
+  coordinates.
 - The service uses the standard ELM327 serial UUID: `00001101-0000-1000-8000-00805F9B34FB`.
+
+Fresh graded audits are written to `.claude/grade-report.md`, which is
+repo-local and gitignored. Historical tracked reports remain under `docs/`.
 
 ## Pulling Field-Test Logs
 

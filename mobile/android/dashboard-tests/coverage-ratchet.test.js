@@ -48,6 +48,18 @@ const PER_GLOB_BASELINE = Object.freeze({
     functions: 95,
     lines: 92,
   }),
+  '../**/dashboard-src/js/map-route-utils.ts': Object.freeze({
+    statements: 90,
+    branches: 75,
+    functions: 90,
+    lines: 90,
+  }),
+  '../**/dashboard-src/js/telemetry.ts': Object.freeze({
+    statements: 50,
+    branches: 38,
+    functions: 50,
+    lines: 55,
+  }),
 });
 
 // Vitest treats any non-metric key in coverage.thresholds as a glob target.

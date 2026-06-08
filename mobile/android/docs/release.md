@@ -33,9 +33,6 @@ builds generally cannot update a tagged release APK.
 Tagged releases attach clearly named APKs to the `vX.Y.Z` GitHub release:
 
 - `volttracker-vX.Y.Z-release.apk`: the normal signed user build.
-- `volttracker-vX.Y.Z-release-unsigned.apk`: the fallback when release signing
-  secrets are unavailable. It is inspectable, but Android will not treat it as
-  the same signed app as the normal release APK.
 - `volttracker-vX.Y.Z-debug.apk`: the debuggable build for developers and field
   diagnostics. When signing secrets are configured, it is signed with the same
   stable app key as the release APK so it can update the tagged release build
@@ -52,7 +49,9 @@ The signing secrets are:
 
 The workflow writes `mobile/android/keystore.properties` and
 `mobile/android/app/release.keystore` only on the runner, verifies the keystore
-with `keytool`, and removes both files in the final cleanup step.
+with `keytool`, and removes both files in the final cleanup step. Tagged release
+builds fail when these secrets are absent instead of publishing an unsigned
+release APK.
 
 ## Release Validation
 
@@ -65,3 +64,13 @@ cd mobile/android && ./gradlew --no-daemon verifyActiveApp
 
 The Python check keeps the semantic-release config, PR title lint types, release
 workflow guardrails, and `VERSION` source of truth aligned.
+
+For release-candidate branches, run the local preflight before requesting final
+review:
+
+```sh
+scripts/release-preflight.sh
+```
+
+The manual **Release dry run** workflow predicts the semantic-release bump/tag
+for the checked-out branch without publishing artifacts.

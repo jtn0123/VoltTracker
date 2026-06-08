@@ -65,6 +65,18 @@ export default {
           functions: 95,
           lines: 92,
         },
+        '../**/dashboard-src/js/map-route-utils.ts': {
+          statements: 90,
+          branches: 75,
+          functions: 90,
+          lines: 90,
+        },
+        '../**/dashboard-src/js/telemetry.ts': {
+          statements: 50,
+          branches: 38,
+          functions: 50,
+          lines: 55,
+        },
       },
     },
   },

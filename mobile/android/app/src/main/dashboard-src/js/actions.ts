@@ -1,3 +1,9 @@
+import { runBrowserDemoStream } from "./actions-demo";
+import { bindPageDragScroll } from "./actions-page-scroll";
+import { createSignalActions } from "./actions-signals";
+import { createStorageActions } from "./actions-storage";
+import type { BusyButton } from "./actions-storage";
+
 /*
  * actions.ts — wiring + lifecycle.
  *
@@ -18,18 +24,6 @@
   const state = VD.state;
   const bridge = VD.bridge;
   const el = VD.el;
-
-  type BusyButton = HTMLElement & {
-    disabled?: boolean;
-  };
-
-  type PageDragState = {
-    pointerId: number;
-    startX: number;
-    startY: number;
-    lastY: number;
-    active: boolean;
-  };
 
   // AbortController for every listener bound below. resetListeners() aborts
   // the current set and rebinds — useful for hot-reloading WebView content or
@@ -69,6 +63,22 @@
       throw err;
     }
   }
+
+  const {
+    refreshStorage,
+    clearStorage,
+    shareBackup,
+    shareEncryptedBackup,
+    restoreBackup,
+    restoreEncryptedBackup,
+    exportDebugBundle
+  } = createStorageActions({ VD, bridge, withBusy });
+
+  const {
+    exportSignalLog,
+    exportSignalLogs,
+    deleteSignalLog
+  } = createSignalActions({ VD, bridge });
 
   function refreshDevices() {
     if (!bridge) {
@@ -356,257 +366,8 @@
     VD.setStatus({ state: "idle", detail: "Stopped." });
   }
 
-  function refreshStorage() {
-    if (bridge && typeof bridge.getStorageSummary === "function") {
-      VD.setStorage(bridge.getStorageSummary());
-    }
-  }
-
-  function clearStorage(button?: BusyButton | null) {
-    if (!bridge || typeof bridge.clearStoredData !== "function") return;
-    const confirmed = window.confirm("Clear local OBD sessions, samples, and debug events from this phone?");
-    if (!confirmed) return;
-    // Guard the bridge call against accidental re-issue while the storage
-    // wipe is still propagating.
-    withBusy(button, () => {
-      bridge.clearStoredData();
-    });
-  }
-
-  function shareBackup(button?: BusyButton | null) {
-    if (!bridge || typeof bridge.shareBackup !== "function") {
-      VD.setStatus({ state: "idle", detail: "Backup is only available inside the Android app." });
-      return;
-    }
-    // Plaintext backup is an advanced compatibility escape hatch. The primary
-    // UI path is encrypted backup; make this disclosure explicit before the
-    // share sheet can receive a raw database copy.
-    const ok = window.confirm(
-      "Plaintext backup includes your GPS routes, every OBD sample, and adapter history.\n\n" +
-      "Use encrypted backup unless another tool specifically needs the raw database. Continue?"
-    );
-    if (!ok) {
-      VD.setStatus({ state: "ready", detail: "Backup cancelled." });
-      return;
-    }
-    // Guard the bridge call so a quick double-tap doesn't open two
-    // share sheets.
-    withBusy(button, () => bridge.shareBackup());
-  }
-
-  function readBackupPassphrase(message: string) {
-    const passphrase = window.prompt(message);
-    if (passphrase == null) return null;
-    const trimmed = String(passphrase).trim();
-    return trimmed.length ? trimmed : null;
-  }
-
-  function shareEncryptedBackup(button?: BusyButton | null) {
-    if (!bridge || typeof bridge.shareEncryptedBackup !== "function") {
-      VD.setStatus({ state: "idle", detail: "Encrypted backup is only available inside the Android app." });
-      return;
-    }
-    const passphrase = readBackupPassphrase("Choose a passphrase for this encrypted backup. You will need it to restore.");
-    if (!passphrase) {
-      VD.setStatus({ state: "ready", detail: "Encrypted backup cancelled." });
-      return;
-    }
-    withBusy(button, () => bridge.shareEncryptedBackup(passphrase));
-  }
-
-  function restoreBackup(button?: BusyButton | null) {
-    if (!bridge || typeof bridge.restoreBackup !== "function") {
-      VD.setStatus({ state: "idle", detail: "Restore is only available inside the Android app." });
-      return;
-    }
-    // The merge-vs-replace choice (and the destructive-replace warning) is shown
-    // natively after the file is picked and verified, so no pre-pick confirm here.
-    // Guard the bridge call so a quick double-tap doesn't launch two file pickers.
-    withBusy(button, () => bridge.restoreBackup());
-  }
-
-  function restoreEncryptedBackup(button?: BusyButton | null) {
-    if (!bridge || typeof bridge.restoreEncryptedBackup !== "function") {
-      VD.setStatus({ state: "idle", detail: "Encrypted restore is only available inside the Android app." });
-      return;
-    }
-    const passphrase = readBackupPassphrase("Enter the passphrase for this encrypted backup.");
-    if (!passphrase) {
-      VD.setStatus({ state: "ready", detail: "Encrypted restore cancelled." });
-      return;
-    }
-    // Merge-vs-replace (and the destructive-replace warning) is chosen natively
-    // once the file is picked, decrypted, and verified.
-    withBusy(button, () => bridge.restoreEncryptedBackup(passphrase));
-  }
-
-  function exportDebugBundle() {
-    if (!bridge || typeof bridge.exportDebugBundle !== "function") {
-      VD.setStatus({ state: "idle", detail: "Debug export is only available inside the Android app." });
-      return;
-    }
-    const result = VD.parsePayload<VoltExportResult>(bridge.exportDebugBundle(), {});
-    if (result.ok) {
-      VD.setStatus({ state: "ready", detail: `Debug summary exported: ${result.path || "app files"}.` });
-    } else {
-      VD.setStatus({ state: "blocked", detail: result.error || "Debug export failed." });
-    }
-  }
-
-  function writeClipboard(text: unknown) {
-    const nav = window.navigator;
-    if (nav.clipboard && typeof nav.clipboard.writeText === "function") {
-      return nav.clipboard.writeText(String(text));
-    }
-    const area = document.createElement("textarea");
-    area.value = String(text);
-    area.setAttribute("readonly", "true");
-    area.style.position = "fixed";
-    area.style.left = "-9999px";
-    document.body.append(area);
-    area.select();
-    try {
-      document.execCommand("copy");
-    } finally {
-      area.remove();
-    }
-    return Promise.resolve();
-  }
-
-  function exportSignalLog(id: unknown) {
-    if (!bridge || typeof bridge.exportDetailedSignalLog !== "function") {
-      VD.setStatus({ state: "idle", detail: "Signal log export is only available inside the Android app." });
-      return;
-    }
-    const result = bridge.exportDetailedSignalLog(String(id || ""));
-    const parsed = VD.parsePayload<VoltExportResult>(result, {});
-    if (parsed.ok === false) {
-      VD.setStatus({ state: "blocked", detail: parsed.message || "Signal log export failed." });
-      return;
-    }
-    writeClipboard(JSON.stringify(parsed, null, 2))
-      .then(() => VD.setStatus({ state: "ready", detail: "Detailed signal log copied." }))
-      .catch(() => VD.setStatus({ state: "blocked", detail: "Could not copy detailed signal log." }));
-  }
-
-  function exportSignalLogs() {
-    if (!bridge || typeof bridge.exportDetailedSignalLogs !== "function") {
-      VD.setStatus({ state: "idle", detail: "Signal log export is only available inside the Android app." });
-      return;
-    }
-    const result = bridge.exportDetailedSignalLogs();
-    const parsed = VD.parsePayload<VoltExportResult>(result, {});
-    if (parsed.ok === false) {
-      VD.setStatus({ state: "blocked", detail: parsed.message || "Signal log export failed." });
-      return;
-    }
-    writeClipboard(JSON.stringify(parsed, null, 2))
-      .then(() => VD.setStatus({ state: "ready", detail: "Detailed signal logs copied." }))
-      .catch(() => VD.setStatus({ state: "blocked", detail: "Could not copy detailed signal logs." }));
-  }
-
-  function deleteSignalLog(id: unknown) {
-    if (!bridge || typeof bridge.deleteDetailedSignalLog !== "function") {
-      VD.setStatus({ state: "idle", detail: "Signal log cleanup is only available inside the Android app." });
-      return;
-    }
-    const ok = window.confirm("Delete this saved detailed signal evidence row?");
-    if (!ok) return;
-    bridge.deleteDetailedSignalLog(String(id || ""));
-  }
-
-  function hexByte(value: number) {
-    const clamped = Math.max(0, Math.min(255, Math.round(value)));
-    return clamped.toString(16).toUpperCase().padStart(2, "0");
-  }
-
-  function hexWord(value: number) {
-    const clamped = Math.max(0, Math.min(65535, Math.round(value)));
-    return clamped.toString(16).toUpperCase().padStart(4, "0");
-  }
-
-  function demoRawFrames(sample: {
-    t: number;
-    speedKph: number;
-    rpm: number;
-    coolantC: number;
-    loadPct: number;
-    throttlePct: number;
-    voltage: number;
-    soc: number;
-  }) {
-    const rpmWord = hexWord(sample.rpm * 4);
-    const voltageWord = hexWord(sample.voltage * 1000);
-    return [
-      `demo sample ${sample.t}`,
-      ">010D",
-      `41 0D ${hexByte(sample.speedKph)}`,
-      ">010C",
-      `41 0C ${rpmWord.slice(0, 2)} ${rpmWord.slice(2)}`,
-      ">0105",
-      `41 05 ${hexByte(sample.coolantC + 40)}`,
-      ">0104",
-      `41 04 ${hexByte((sample.loadPct / 100) * 255)}`,
-      ">0111",
-      `41 11 ${hexByte((sample.throttlePct / 100) * 255)}`,
-      ">0142",
-      `41 42 ${voltageWord.slice(0, 2)} ${voltageWord.slice(2)}`,
-      ">22 43 34",
-      `62 43 34 ${hexByte(sample.soc)}`
-    ].join("\n");
-  }
-
   function runBrowserDemo() {
-    let t = 0;
-    VD.setStatus({ state: "connected", detail: "Browser-only demo is running." });
-    window.clearInterval(window.__voltDemoTimer ?? undefined);
-    const emitSample = () => {
-      t += 1;
-      // Alternate EV and gas every ~30s so both drivetrain states (RPM, gas
-      // power, electric power) get exercised without a manual toggle.
-      const gas = Math.floor(t / 30) % 2 === 1;
-      state.mode = gas ? "gas" : "ev";
-      // Electric power swings through regen (negative) so the regen state and
-      // the negative half of the power meter are exercised too.
-      const powerKw = gas ? 30 + Math.sin(t / 3) * 9 : 9 + Math.sin(t / 2.2) * 22;
-      const routeDrift = Math.sin(t / 40);
-      const lat = 32.80131 + routeDrift * 0.004;
-      const lng = -116.9513 - Math.abs(routeDrift) * 0.012;
-      const speedKph = Math.round(54 + 23 * Math.sin(t / 3.4));
-      const rpm = gas ? Math.round(1260 + 420 * Math.sin(t / 2.1)) : 0;
-      const coolantC = Math.round(82 + 4 * Math.sin(t / 8));
-      const loadPct = Math.round(34 + 18 * Math.sin(t / 4.4));
-      const throttlePct = Math.round(18 + 14 * Math.sin(t / 2.7));
-      const voltage = 13.8;
-      const soc = Math.max(13.4, 77.8 - t * 0.01);
-      VD.updateTelemetry({
-        source: "demo",
-        connected: true,
-        sampleCount: t,
-        sessionMs: t * 1000,
-        supportedPids: "browser demo",
-        vehicleState: powerKw < -0.5 ? "regen" : (gas ? "driving (gas)" : "driving"),
-        speedKph,
-        rpm,
-        coolantC,
-        loadPct,
-        throttlePct,
-        voltage,
-        soc,
-        batteryTemp: 72 + Math.sin(t / 8),
-        powerKw: powerKw,
-        // A slowly drifting coordinate so the demo also exercises the GPS lock
-        // indicator and the live map position instead of sitting on "waiting".
-        latitude: lat,
-        longitude: lng,
-        updatedAt: Date.now(),
-        raw: demoRawFrames({ t, speedKph, rpm, coolantC, loadPct, throttlePct, voltage, soc })
-      });
-      // updateTelemetry() forwards GPS into the selectable Current map route
-      // for both browser-demo and real adapter samples.
-    };
-    emitSample();
-    window.__voltDemoTimer = window.setInterval(emitSample, 1000);
+    runBrowserDemoStream(VD, state);
   }
 
   // Window resize handler is debounced to 100ms — drawTrace recomputes canvas
@@ -619,82 +380,6 @@
       resizeTimer = 0;
       VD.drawTrace();
     }, 100);
-  }
-
-  const pageDragScrollBlockSelector = [
-    "a",
-    "button",
-    "input",
-    "select",
-    "textarea",
-    "summary",
-    "[role='button']",
-    "[data-nav]",
-    "[data-action]",
-    "[data-signal-stage]",
-    "[data-signal-export]",
-    "[data-signal-delete]",
-    "[data-map-layer]",
-    "[data-real-trip-id]",
-    "[data-trip-map]",
-    ".bottom-nav",
-    ".map-card",
-    ".map-frame",
-    ".map-drive-chips",
-    ".scrub-chart",
-    ".scrub-track",
-    ".route-box"
-  ].join(",");
-
-  let pageDragScroll: PageDragState | null = null;
-
-  function canStartPageDragScroll(event: PointerEvent) {
-    if (event.button !== 0) return false;
-    if (event.pointerType && event.pointerType !== "mouse") return false;
-    const target = event.target as Element | null;
-    if (target && target.closest(pageDragScrollBlockSelector)) return false;
-    return typeof VD.canScrollApp === "function"
-      ? VD.canScrollApp()
-      : document.documentElement.scrollHeight > window.innerHeight + 2;
-  }
-
-  function bindPageDragScroll(opts: AddEventListenerOptions) {
-    document.addEventListener("pointerdown", (event) => {
-      if (!canStartPageDragScroll(event)) return;
-      pageDragScroll = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        lastY: event.clientY,
-        active: false
-      };
-    }, opts);
-
-    document.addEventListener("pointermove", (event) => {
-      if (!pageDragScroll || event.pointerId !== pageDragScroll.pointerId) return;
-      const totalX = Math.abs(event.clientX - pageDragScroll.startX);
-      const totalY = Math.abs(event.clientY - pageDragScroll.startY);
-      if (!pageDragScroll.active) {
-        if (totalY < 8 || totalY <= totalX) return;
-        pageDragScroll.active = true;
-        document.body.classList.add("is-page-dragging");
-      }
-      event.preventDefault();
-      if (typeof VD.scrollAppBy === "function") {
-        VD.scrollAppBy(pageDragScroll.lastY - event.clientY);
-      } else {
-        window.scrollBy({ top: pageDragScroll.lastY - event.clientY, left: 0, behavior: "auto" });
-      }
-      pageDragScroll.lastY = event.clientY;
-    }, { ...opts, passive: false });
-
-    const stopDragScroll = () => {
-      pageDragScroll = null;
-      document.body.classList.remove("is-page-dragging");
-    };
-    document.addEventListener("pointerup", stopDragScroll, opts);
-    document.addEventListener("pointercancel", stopDragScroll, opts);
-    window.addEventListener("blur", stopDragScroll, opts);
   }
 
   function bindListeners() {
@@ -820,7 +505,7 @@
     }, opts);
     VD.bindListenerGuarded("disconnectBtn", "click", () => handleAction("stop"), opts);
     VD.bindListenerGuarded("demoStopBtn", "click", stopDemo, opts);
-    bindPageDragScroll(opts);
+    bindPageDragScroll(VD, opts);
     window.addEventListener("resize", debouncedResize, opts);
   }
 

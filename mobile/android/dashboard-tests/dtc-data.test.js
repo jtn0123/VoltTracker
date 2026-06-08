@@ -72,6 +72,24 @@ describe('DTC data integrity', () => {
     expect(VD.dtcLookupSize).toBe(keys.length);
   });
 
+  it('builds a prefix-family index for future chunking', () => {
+    const keys = VD.dtcLookupCodes || [];
+    const families = VD.dtcLookupFamilyCounts || {};
+    const counted = Object.values(families).reduce((sum, count) => sum + count, 0);
+
+    expect(counted).toBe(keys.length);
+    expect(families.P04).toBeGreaterThan(0);
+    expect(families.U00).toBeGreaterThan(0);
+    expect(Object.keys(families).every((family) => /^[PBCU][0-9A-F]{2}$/.test(family))).toBe(true);
+  });
+
+  it('keeps the lazy DTC source tables within the documented scale budget', () => {
+    const lookupLines = sourceFor('dtc-lookup.js').split('\n').length;
+    const causeLines = sourceFor('dtc-causes.js').split('\n').length;
+
+    expect(lookupLines + causeLines).toBeLessThan(8000);
+  });
+
   it('keeps cause entries unique and valid', () => {
     const sourceKeys = extractTopLevelDtcKeys(sourceFor('dtc-causes.js'));
     expect(sourceKeys.length).toBeGreaterThan(300);

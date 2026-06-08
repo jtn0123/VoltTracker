@@ -228,6 +228,19 @@ open class ObdLocalStore(
 
     open override fun getStorageSummaryRecord(): StorageSummaryRecord = reports.storageSummaryRecord(getDatabaseFile())
 
+    open fun getStorageCountsJson(): JSONObject = reports.storageCountsJson(getDatabaseFile())
+
+    open fun getRecentRoutesJson(
+        limit: Int,
+        pointLimit: Int,
+    ): JSONArray = reports.recentRoutesProjectionJson(limit, pointLimit)
+
+    open fun getDiagnosticsSummaryJson(limit: Int): JSONObject = reports.diagnosticsSummaryJson(limit)
+
+    open fun getChargeSummaryJson(): JSONObject = reports.chargeSummaryProjectionJson()
+
+    open fun getBatterySummaryJson(): JSONObject = reports.batterySummaryProjectionJson()
+
     open override fun getRecentSessionsJson(limit: Int): JSONArray = reports.recentSessionsJson(limit)
 
     open override fun getAdapterHistoryJson(limit: Int): JSONArray = reports.adapterHistoryJson(limit)

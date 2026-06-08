@@ -116,6 +116,32 @@ class ObdStoreReportsDbTest {
     }
 
     @Test
+    fun targetedStorageProjectionsExposeCountsDiagnosticsAndDomainSummaries() {
+        val id = store.startSession("scan", "00:11", "Adapter")
+        store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L))
+        store.recordDiagnosticCode(id, diagnosticCode("P25A2", "stored", 1100L))
+
+        val counts = store.getStorageCountsJson()
+        assertEquals(1L, counts.optLong("sessionCount"))
+        assertEquals(1L, counts.optLong("sampleCount"))
+        assertEquals(id, counts.optLong("lastSessionId"))
+
+        val diagnostics = store.getDiagnosticsSummaryJson(5)
+        assertEquals(1L, diagnostics.optLong("diagnosticCodeCount"))
+        assertEquals(1L, diagnostics.getJSONObject("statusCounts").optLong("stored"))
+        assertEquals("P25A2", diagnostics.getJSONArray("latestDiagnosticCodes").getJSONObject(0).optString("dtc"))
+
+        val charge = store.getChargeSummaryJson()
+        assertTrue(charge.has("chargeSessionCount"))
+
+        val battery = store.getBatterySummaryJson()
+        assertTrue(battery.has("snapshotCount"))
+
+        val routes = store.getRecentRoutesJson(4, 120)
+        assertNotNull(routes)
+    }
+
+    @Test
     fun latestTelemetryIncludesStoredPackVoltageAndCurrent() {
         val id = store.startSession("obd", "00:11", "Adapter")
         val sample = sample(40, 50.0, 32.70, -117.10, 1000L)
@@ -284,4 +310,18 @@ class ObdStoreReportsDbTest {
         row.put("created_at_ms", startedAtMs)
         return row
     }
+
+    private fun diagnosticCode(
+        dtc: String,
+        status: String,
+        seenAtMs: Long,
+    ): JSONObject =
+        JSONObject()
+            .put("dtc", dtc)
+            .put("status", status)
+            .put("statusLabel", "Stored/current")
+            .put("moduleKey", "generic-obd")
+            .put("moduleName", "ECM / powertrain (generic OBD-II)")
+            .put("seenAtMs", seenAtMs)
+            .put("rawResponse", "43 25 A2 00 00")
 }

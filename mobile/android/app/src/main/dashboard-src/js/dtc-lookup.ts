@@ -3764,10 +3764,20 @@
     return "https://www.google.com/search?q=" + q;
   }
 
+  function buildFamilyCounts(keys: string[]) {
+    const counts: Record<string, number> = {};
+    for (const key of keys) {
+      const family = key.slice(0, 3);
+      counts[family] = (counts[family] || 0) + 1;
+    }
+    return Object.freeze(counts);
+  }
+
   VD.dtcInfo = dtcInfo;
   VD.dtcSearchUrl = dtcSearchUrl;
   VD.dtcLookupCodes = Object.freeze(Object.keys(VOLT_DTC));
-  VD.dtcLookupSize = Object.keys(VOLT_DTC).length;
+  VD.dtcLookupFamilyCounts = buildFamilyCounts(VD.dtcLookupCodes as string[]);
+  VD.dtcLookupSize = VD.dtcLookupCodes.length;
 
   // Sample rows for the empty-state preview and the demo preview button.
   // These are NOT real codes from the user's car; clearly marked as examples

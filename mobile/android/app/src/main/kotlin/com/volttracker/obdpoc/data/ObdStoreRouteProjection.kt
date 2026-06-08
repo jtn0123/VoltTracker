@@ -267,38 +267,35 @@ object ObdStoreRouteProjection {
         jsonKey: String,
         target: Int,
     ): JSONArray {
-        val rows = mutableListOf<ScalarTrackPoint>()
+        val total = ObdStoreSupport.countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, where, args)
+        if (total <= 0L) {
+            return JSONArray()
+        }
+        val stride = strideFor(total, target)
         db
             .query(VoltTrackerDb.TABLE_TELEMETRY, arrayOf("captured_at_ms", column), where, args, null, null, "captured_at_ms ASC")
             .use { cursor ->
+                val track = JSONArray()
+                var tail: JSONObject? = null
+                var idx = 0L
                 while (cursor.moveToNext()) {
-                    rows.add(
-                        ScalarTrackPoint(
-                            cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")),
-                            cursor.getDouble(cursor.getColumnIndexOrThrow(column)),
-                        ),
-                    )
+                    val item = JSONObject()
+                    item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")))
+                    item.put(jsonKey, cursor.getDouble(cursor.getColumnIndexOrThrow(column)))
+                    if (cursor.isLast) {
+                        tail = item
+                        break
+                    }
+                    val strideKeep = total <= target || idx % stride == 0L
+                    val withinCap = total <= target || track.length() < target - 1
+                    if (strideKeep && withinCap) {
+                        track.put(item)
+                    }
+                    idx++
                 }
+                tail?.let { track.put(it) }
+                return track
             }
-        if (rows.isEmpty()) {
-            return JSONArray()
-        }
-        val total = rows.size.toLong()
-        val stride = strideFor(total, target)
-        val track = JSONArray()
-        for (i in rows.indices) {
-            val row = rows[i]
-            val isTail = i == rows.lastIndex
-            val strideKeep = total <= target || i.toLong() % stride == 0L
-            val withinCap = total <= target || track.length() < target - 1
-            if (isTail || (strideKeep && withinCap)) {
-                val item = JSONObject()
-                item.put("atMs", row.atMs)
-                item.put(jsonKey, row.value)
-                track.put(item)
-            }
-        }
-        return track
     }
 
     private fun strideFor(
@@ -314,10 +311,5 @@ object ObdStoreRouteProjection {
     private class RoutePointTotals(
         val location: Long,
         val telemetry: Long,
-    )
-
-    private class ScalarTrackPoint(
-        val atMs: Long,
-        val value: Double,
     )
 }

@@ -263,37 +263,29 @@ class ObdStoreReports(
 
     fun storageSummaryRecord(databaseFile: File): StorageSummaryRecord {
         val db = helper.readableDatabase
-        val rawTelemetryCount = ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_TELEMETRY)
-        val usefulTelemetryCount =
-            ObdStoreSupport.countRowsWhere(
-                db,
-                VoltTrackerDb.TABLE_TELEMETRY,
-                ObdStoreSupport.USEFUL_TELEMETRY_WHERE,
-                null,
-            )
-        val latest = ObdStoreSupport.firstOrNull(getRecentSessions(1))
+        val counts = storageCountsProjection(db, databaseFile)
         val reviewSession = ObdStoreSessionReview.latestReviewableSession(db)
         return StorageSummaryRecord(
-            VoltTrackerDb.DATABASE_NAME,
-            databaseFile.length(),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_SESSIONS),
-            rawTelemetryCount,
-            usefulTelemetryCount,
-            maxOf(0L, rawTelemetryCount - usefulTelemetryCount),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_EVENTS),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES),
-            diagnosticCodeStatusCounts(db),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_VEHICLES),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_FIELD_CAPABILITIES),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_TRIP_SEGMENTS),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_CELL_SNAPSHOTS),
-            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_EXPORTS),
-            latest,
+            counts.database,
+            counts.databaseBytes,
+            counts.sessionCount,
+            counts.rawTelemetryCount,
+            counts.sampleCount,
+            counts.emptyTelemetryCount,
+            counts.eventCount,
+            counts.adapterCount,
+            counts.pidObservationCount,
+            counts.diagnosticCodeCount,
+            counts.diagnosticCodeStatusCounts,
+            counts.locationSampleCount,
+            counts.vehicleCount,
+            counts.fieldCapabilityCount,
+            counts.tripSegmentCount,
+            counts.chargeSessionCount,
+            counts.batterySnapshotCount,
+            counts.cellSnapshotCount,
+            counts.exportCount,
+            counts.latestSession,
             recentSessionSummaries(db, 6),
             getAdapterHistory(6),
             latestDiagnosticCodeReports(db, 12),
@@ -303,14 +295,39 @@ class ObdStoreReports(
             } else {
                 safeJson { ObdStoreRouteProjection.routeForSession(db, reviewSession, 240) }
             },
-            safeArray { ObdStoreRouteProjection.recentRoutes(db, 8, 500) },
-            safeJson { overviewJson(db) },
-            safeJson { chargeSummaryJson(db) },
-            safeJson { batterySummaryJson(db) },
+            recentRoutesProjectionJson(8, 500),
+            overviewProjectionJson(),
+            chargeSummaryProjectionJson(),
+            batterySummaryProjectionJson(),
             safeJson { latestVehicleJson(db) },
             safeArray { enhancedCapabilitiesJson(24) },
         )
     }
+
+    fun storageCountsJson(databaseFile: File): JSONObject = storageCountsProjection(helper.readableDatabase, databaseFile).toJson()
+
+    fun recentRoutesProjectionJson(
+        limit: Int,
+        pointLimit: Int,
+    ): JSONArray = safeArray { ObdStoreRouteProjection.recentRoutes(helper.readableDatabase, limit, pointLimit) }
+
+    fun diagnosticsSummaryJson(limit: Int): JSONObject {
+        val db = helper.readableDatabase
+        val latest = JSONArray()
+        for (report in latestDiagnosticCodeReports(db, limit)) {
+            latest.put(report.toJson())
+        }
+        return JSONObject()
+            .put("diagnosticCodeCount", ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES))
+            .put("statusCounts", diagnosticCodeStatusCountsJson(diagnosticCodeStatusCounts(db)))
+            .put("latestDiagnosticCodes", latest)
+    }
+
+    fun overviewProjectionJson(): JSONObject = safeJson { overviewJson(helper.readableDatabase) }
+
+    fun chargeSummaryProjectionJson(): JSONObject = safeJson { chargeSummaryJson(helper.readableDatabase) }
+
+    fun batterySummaryProjectionJson(): JSONObject = safeJson { batterySummaryJson(helper.readableDatabase) }
 
     private fun recentSessionSummaries(
         db: SQLiteDatabase,
@@ -472,6 +489,102 @@ class ObdStoreReports(
                 "confidence",
             )
 
+        private data class StorageCountsProjection(
+            val database: String,
+            val databaseBytes: Long,
+            val sessionCount: Long,
+            val rawTelemetryCount: Long,
+            val sampleCount: Long,
+            val emptyTelemetryCount: Long,
+            val eventCount: Long,
+            val adapterCount: Long,
+            val pidObservationCount: Long,
+            val diagnosticCodeCount: Long,
+            val diagnosticCodeStatusCounts: Map<String, Long>,
+            val locationSampleCount: Long,
+            val vehicleCount: Long,
+            val fieldCapabilityCount: Long,
+            val tripSegmentCount: Long,
+            val chargeSessionCount: Long,
+            val batterySnapshotCount: Long,
+            val cellSnapshotCount: Long,
+            val exportCount: Long,
+            val latestSession: ObdSessionRecord?,
+        ) {
+            fun toJson(): JSONObject =
+                JSONObject()
+                    .put("database", database)
+                    .put("databaseBytes", databaseBytes)
+                    .put("sessionCount", sessionCount)
+                    .put("rawTelemetryCount", rawTelemetryCount)
+                    .put("sampleCount", sampleCount)
+                    .put("emptyTelemetryCount", emptyTelemetryCount)
+                    .put("eventCount", eventCount)
+                    .put("adapterCount", adapterCount)
+                    .put("pidObservationCount", pidObservationCount)
+                    .put("diagnosticCodeCount", diagnosticCodeCount)
+                    .put("diagnosticCodeStatusCounts", diagnosticCodeStatusCountsJson(diagnosticCodeStatusCounts))
+                    .put("locationSampleCount", locationSampleCount)
+                    .put("vehicleCount", vehicleCount)
+                    .put("fieldCapabilityCount", fieldCapabilityCount)
+                    .put("tripSegmentCount", tripSegmentCount)
+                    .put("chargeSessionCount", chargeSessionCount)
+                    .put("batterySnapshotCount", batterySnapshotCount)
+                    .put("cellSnapshotCount", cellSnapshotCount)
+                    .put("exportCount", exportCount)
+                    .put("lastSessionId", latestSession?.id ?: JSONObject.NULL)
+        }
+
+        private fun storageCountsProjection(
+            db: SQLiteDatabase,
+            databaseFile: File,
+        ): StorageCountsProjection {
+            val rawTelemetryCount = ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_TELEMETRY)
+            val usefulTelemetryCount =
+                ObdStoreSupport.countRowsWhere(
+                    db,
+                    VoltTrackerDb.TABLE_TELEMETRY,
+                    ObdStoreSupport.USEFUL_TELEMETRY_WHERE,
+                    null,
+                )
+            val latest =
+                db
+                    .query(
+                        VoltTrackerDb.TABLE_SESSIONS,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        "started_at_ms DESC",
+                        "1",
+                    ).use { cursor ->
+                        if (cursor.moveToFirst()) ObdStoreSupport.readSession(cursor) else null
+                    }
+            return StorageCountsProjection(
+                VoltTrackerDb.DATABASE_NAME,
+                databaseFile.length(),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_SESSIONS),
+                rawTelemetryCount,
+                usefulTelemetryCount,
+                maxOf(0L, rawTelemetryCount - usefulTelemetryCount),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_EVENTS),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES),
+                diagnosticCodeStatusCounts(db),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_VEHICLES),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_FIELD_CAPABILITIES),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_TRIP_SEGMENTS),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_CELL_SNAPSHOTS),
+                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_EXPORTS),
+                latest,
+            )
+        }
+
         @Throws(JSONException::class)
         private fun capabilityJsonFromCursor(cursor: Cursor): JSONObject =
             JSONObject()
@@ -547,6 +660,14 @@ class ObdStoreReports(
                         payload[key] = cursor.getLong(cursor.getColumnIndexOrThrow("count"))
                     }
                 }
+            return payload
+        }
+
+        private fun diagnosticCodeStatusCountsJson(counts: Map<String, Long>): JSONObject {
+            val payload = JSONObject()
+            for ((key, value) in counts) {
+                payload.put(key, value)
+            }
             return payload
         }
 

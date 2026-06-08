@@ -635,6 +635,7 @@ interface VoltStatus {
     dtcInfo?(code: string): VoltDtcInfo | null;
     dtcSampleCodes?: VoltDtcRow[];
     dtcLookupCodes?: ReadonlyArray<string>;
+    dtcLookupFamilyCounts?: Readonly<Record<string, number>>;
     dtcLookupSize?: number;
     DTC_CAUSES?: Record<string, VoltDtcCause>;
 

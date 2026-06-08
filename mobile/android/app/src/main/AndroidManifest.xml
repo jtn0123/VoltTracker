@@ -13,7 +13,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Map basemap tiles only, and only after the user enables Tiles; OBD/GPS data stays local. -->
+    <!-- Remote map basemap tiles only; OBD/GPS data stays in app-private local storage. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Used by the troubleshooter's user-triggered force-stop button for known competing

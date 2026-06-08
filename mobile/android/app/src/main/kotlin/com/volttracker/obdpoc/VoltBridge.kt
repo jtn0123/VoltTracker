@@ -1,12 +1,8 @@
 package com.volttracker.obdpoc
 
 import android.bluetooth.BluetoothAdapter
-import android.content.Intent
 import android.util.Log
 import android.webkit.JavascriptInterface
-import androidx.core.net.toUri
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
 /**
  * The [JavascriptInterface] surface the dashboard WebView calls into.
@@ -14,6 +10,9 @@ import java.nio.charset.StandardCharsets
 class VoltBridge(
     private val activity: DashboardHost,
 ) {
+    private val connections = VoltBridgeConnections(activity)
+    private val dataExports = VoltBridgeDataExports(activity)
+    private val diagnostics = VoltBridgeDiagnostics(activity)
     private val clientErrorLock = Any()
     private var clientErrorTokens = LOG_CLIENT_ERROR_BURST.toDouble()
     private var clientErrorLastRefillMs = 0L
@@ -44,42 +43,20 @@ class VoltBridge(
     fun connect(
         address: String?,
         name: String?,
-    ) {
-        val cleanAddress = safe(address, MAX_ADDRESS_LEN)
-        val cleanName = safe(name, MAX_NAME_LEN)
-        activity.runOnUiThread {
-            activity.rememberDevice(cleanAddress, cleanName)
-            if (!validBluetoothAddress(cleanAddress)) {
-                activity.publishStatus("blocked", "Choose a valid Bluetooth adapter.", true)
-                return@runOnUiThread
-            }
-            activity.startObdService(ObdService.ACTION_CONNECT, cleanAddress, cleanName)
-        }
-    }
+    ) = connections.connect(address, name)
 
     @JavascriptInterface
     fun scan(
         address: String?,
         name: String?,
-    ) {
-        val cleanAddress = safe(address, MAX_ADDRESS_LEN)
-        val cleanName = safe(name, MAX_NAME_LEN)
-        activity.runOnUiThread {
-            activity.rememberDevice(cleanAddress, cleanName)
-            if (!validBluetoothAddress(cleanAddress)) {
-                activity.publishStatus("blocked", "Choose a valid Bluetooth adapter.", true)
-                return@runOnUiThread
-            }
-            activity.startObdService(ObdService.ACTION_SCAN, cleanAddress, cleanName)
-        }
-    }
+    ) = connections.scan(address, name)
 
     @JavascriptInterface
     fun tpmsScan(
         address: String?,
         name: String?,
     ) {
-        detailProbe(address, name, EnhancedPidProfiles.STAGE_TIRES)
+        connections.detailProbe(address, name, EnhancedPidProfiles.STAGE_TIRES)
     }
 
     @JavascriptInterface
@@ -87,19 +64,7 @@ class VoltBridge(
         address: String?,
         name: String?,
         stage: String?,
-    ) {
-        val cleanAddress = safe(address, MAX_ADDRESS_LEN)
-        val cleanName = safe(name, MAX_NAME_LEN)
-        val cleanStage = EnhancedPidProfiles.normalizeStage(safe(stage, MAX_STAGE_LEN))
-        activity.runOnUiThread {
-            activity.rememberDevice(cleanAddress, cleanName)
-            if (!validBluetoothAddress(cleanAddress)) {
-                activity.publishStatus("blocked", "Choose a valid Bluetooth adapter.", true)
-                return@runOnUiThread
-            }
-            activity.startObdService(ObdService.ACTION_TPMS_SCAN, cleanAddress, cleanName, cleanStage)
-        }
-    }
+    ) = connections.detailProbe(address, name, stage)
 
     @JavascriptInterface
     fun getLastDevice(): String = activity.requireDeviceCatalog().getLastDeviceJson()
@@ -111,34 +76,23 @@ class VoltBridge(
     fun getStorageSummary(): String = activity.getStorageSummaryJson()
 
     @JavascriptInterface
-    fun exportDebugBundle(): String =
-        activity.requireDataBackup().exportDebugBundle(activity.getAppStateJson(), activity.getStorageSummaryJson())
+    fun exportDebugBundle(): String = dataExports.exportDebugBundle()
 
     @JavascriptInterface
     fun shareBackup() {
-        activity.runOnUiThread(activity.requireBackupController()::launchShare)
+        dataExports.shareBackup()
     }
 
     @JavascriptInterface
-    fun shareEncryptedBackup(passphrase: String?) {
-        val cleanPassphrase = safe(passphrase, MAX_PASSPHRASE_LEN)
-        activity.runOnUiThread {
-            activity.requireBackupController().launchEncryptedShare(cleanPassphrase)
-        }
-    }
+    fun shareEncryptedBackup(passphrase: String?) = dataExports.shareEncryptedBackup(passphrase)
 
     @JavascriptInterface
     fun restoreBackup() {
-        activity.runOnUiThread(activity.requireBackupController()::launchRestorePicker)
+        dataExports.restoreBackup()
     }
 
     @JavascriptInterface
-    fun restoreEncryptedBackup(passphrase: String?) {
-        val cleanPassphrase = safe(passphrase, MAX_PASSPHRASE_LEN)
-        activity.runOnUiThread {
-            activity.requireBackupController().launchEncryptedRestorePicker(cleanPassphrase)
-        }
-    }
+    fun restoreEncryptedBackup(passphrase: String?) = dataExports.restoreEncryptedBackup(passphrase)
 
     @JavascriptInterface
     fun getTrips(): String = activity.getTripsJson()
@@ -154,192 +108,64 @@ class VoltBridge(
 
     @JavascriptInterface
     fun clearStoredData() {
-        if (activity.isLoggingActive()) {
-            activity.runOnUiThread {
-                activity.publishStatus("blocked", "Stop logging before clearing stored data.", true)
-            }
-            return
-        }
-        activity.runOnBackground {
-            if (activity.isLoggingActive()) {
-                activity.runOnUiThread {
-                    activity.publishStatus("blocked", "Stop logging before clearing stored data.", true)
-                }
-                return@runOnBackground
-            }
-            try {
-                activity.localStore?.clearAllData()
-            } catch (ex: RuntimeException) {
-                Log.w(TAG, "clearStoredData failed", ex)
-                activity.runOnUiThread {
-                    activity.publishStatus("blocked", "Could not clear the local OBD database.", true)
-                }
-                return@runOnBackground
-            }
-            activity.runOnUiThread {
-                activity.publishStorageSummary()
-                activity.publishStatus("ready", "On-phone OBD database cleared.", false)
-            }
-        }
+        dataExports.clearStoredData()
     }
 
     @JavascriptInterface
     fun rememberDevice(
         address: String?,
         name: String?,
-    ) {
-        val cleanAddress = safe(address, MAX_ADDRESS_LEN)
-        val cleanName = safe(name, MAX_NAME_LEN)
-        activity.runOnUiThread {
-            activity.rememberDevice(cleanAddress, cleanName)
-        }
-    }
+    ) = connections.rememberDevice(address, name)
 
     @JavascriptInterface
     fun connectLast() {
-        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
-        val address = safe(device.optString("address", ""), MAX_ADDRESS_LEN)
-        val name = safe(device.optString("name", ""), MAX_NAME_LEN)
-        activity.runOnUiThread {
-            if (!validBluetoothAddress(address)) {
-                activity.publishStatus("blocked", "No remembered adapter yet. Connect once to save it.", true)
-                return@runOnUiThread
-            }
-            activity.rememberDevice(address, name)
-            activity.startObdService(ObdService.ACTION_CONNECT, address, name)
-        }
+        connections.connectLast()
     }
 
     @JavascriptInterface
     fun clearVehicleDtcCodes() {
-        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
-        val address = safe(device.optString("address", ""), MAX_ADDRESS_LEN)
-        val name = safe(device.optString("name", ""), MAX_NAME_LEN)
-        activity.runOnUiThread {
-            if (!validBluetoothAddress(address)) {
-                activity.publishStatus("blocked", "No remembered adapter yet. Connect once to save it.", true)
-                return@runOnUiThread
-            }
-            activity.rememberDevice(address, name)
-            activity.startObdService(ObdService.ACTION_CLEAR_DTC, address, name)
-        }
+        diagnostics.clearVehicleDtcCodes()
     }
 
     @JavascriptInterface
     fun openExternalSearch(dtc: String?) {
-        val code = safe(dtc, MAX_DTC_LEN)
-        if (code.isEmpty()) return
-        activity.runOnUiThread {
-            try {
-                val query = URLEncoder.encode(code + " Chevy Volt DTC", StandardCharsets.UTF_8.name())
-                val uri = "https://www.google.com/search?q=$query".toUri()
-                val intent = Intent(Intent.ACTION_VIEW, uri)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                activity.startActivity(intent)
-            } catch (ex: Exception) {
-                Log.w(TAG, "openExternalSearch failed", ex)
-                activity.publishStatus("blocked", "Could not open the browser for DTC lookup.", true)
-            }
-        }
+        diagnostics.openExternalSearch(dtc)
     }
 
     @JavascriptInterface
     fun scanLast() {
-        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
-        val address = safe(device.optString("address", ""), MAX_ADDRESS_LEN)
-        val name = safe(device.optString("name", ""), MAX_NAME_LEN)
-        activity.runOnUiThread {
-            if (address.isEmpty()) {
-                activity.publishStatus("blocked", "No remembered adapter yet. Connect once to save it.", true)
-                return@runOnUiThread
-            }
-            activity.rememberDevice(address, name)
-            activity.startObdService(ObdService.ACTION_SCAN, address, name)
-        }
+        connections.scanLast()
     }
 
     @JavascriptInterface
     fun tpmsScanLast() {
-        detailProbeLast(EnhancedPidProfiles.STAGE_TIRES)
+        connections.detailProbeLast(EnhancedPidProfiles.STAGE_TIRES)
     }
 
     @JavascriptInterface
     fun detailProbeLast(stage: String?) {
-        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
-        val address = safe(device.optString("address", ""), MAX_ADDRESS_LEN)
-        val name = safe(device.optString("name", ""), MAX_NAME_LEN)
-        val cleanStage = EnhancedPidProfiles.normalizeStage(safe(stage, MAX_STAGE_LEN))
-        activity.runOnUiThread {
-            if (!validBluetoothAddress(address)) {
-                activity.publishStatus("blocked", "No remembered adapter yet. Connect once to save it.", true)
-                return@runOnUiThread
-            }
-            activity.rememberDevice(address, name)
-            activity.startObdService(ObdService.ACTION_TPMS_SCAN, address, name, cleanStage)
-        }
+        connections.detailProbeLast(stage)
     }
 
     @JavascriptInterface
-    fun exportDetailedSignalLog(id: String?): String {
-        val rowId = parsePositiveId(id)
-        val store = activity.localStore
-        if (rowId <= 0L || store == null) {
-            return "{\"ok\":false,\"error\":\"invalid_id\",\"message\":\"Choose a saved detailed signal log.\"}"
-        }
-        return store.getEnhancedCapabilityExportJson(rowId).toString()
-    }
+    fun exportDetailedSignalLog(id: String?): String = dataExports.exportDetailedSignalLog(id)
 
     @JavascriptInterface
-    fun exportDetailedSignalLogs(): String {
-        val store = activity.localStore
-        if (store == null) {
-            return "{\"ok\":false,\"error\":\"storage_unavailable\",\"message\":\"Local storage is not ready.\"}"
-        }
-        return store.getEnhancedCapabilitiesExportJson(250).toString()
-    }
+    fun exportDetailedSignalLogs(): String = dataExports.exportDetailedSignalLogs()
 
     @JavascriptInterface
     fun deleteDetailedSignalLog(id: String?) {
-        val rowId = parsePositiveId(id)
-        if (rowId <= 0L) {
-            activity.runOnUiThread {
-                activity.publishStatus("blocked", "Choose a saved detailed signal log.", true)
-            }
-            return
-        }
-        activity.runOnBackground {
-            var deleted = 0
-            try {
-                deleted = activity.localStore?.deleteEnhancedCapability(rowId) ?: 0
-            } catch (ex: RuntimeException) {
-                Log.w(TAG, "deleteDetailedSignalLog failed", ex)
-            }
-            val deletedRows = deleted
-            activity.runOnUiThread {
-                activity.publishStorageSummary()
-                activity.publishStatus(
-                    if (deletedRows > 0) "ready" else "blocked",
-                    if (deletedRows > 0) {
-                        "Detailed signal log removed."
-                    } else {
-                        "Detailed signal log was already gone."
-                    },
-                    deletedRows <= 0,
-                )
-            }
-        }
+        dataExports.deleteDetailedSignalLog(id)
     }
 
     @JavascriptInterface
     fun demo() {
-        activity.runOnUiThread {
-            activity.startObdService(ObdService.ACTION_DEMO, null, "Demo stream")
-        }
+        connections.demo()
     }
 
     @JavascriptInterface
     fun disconnect() {
-        activity.runOnUiThread(activity::stopObdService)
+        connections.disconnect()
     }
 
     @JavascriptInterface
@@ -382,78 +208,59 @@ class VoltBridge(
         }
 
     @JavascriptInterface
-    fun forceStopPackage(packageName: String?): Boolean {
-        val pkg = safe(packageName, MAX_NAME_LEN)
-        if (pkg.isEmpty()) {
-            return false
-        }
-        return activity.forceStopPackageFromBridge(pkg)
-    }
+    fun forceStopPackage(packageName: String?): Boolean = diagnostics.forceStopPackage(packageName)
 
     @JavascriptInterface
     fun cancelRetry() {
-        activity.runOnUiThread(activity::cancelRetryFromBridge)
+        connections.cancelRetry()
     }
 
     @JavascriptInterface
     fun tryReconnectNow() {
-        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
-        val address = safe(device.optString("address", ""), MAX_ADDRESS_LEN)
-        val name = safe(device.optString("name", ""), MAX_NAME_LEN)
-        activity.runOnUiThread {
-            if (address.isEmpty()) {
-                activity.publishStatus("blocked", "No remembered adapter yet. Pick one and try Connect.", true)
-                return@runOnUiThread
-            }
-            activity.rememberDevice(address, name)
-            activity.startObdService(ObdService.ACTION_CONNECT, address, name)
-        }
+        connections.tryReconnectNow()
     }
 
     @JavascriptInterface
     fun openBluetoothSettings() {
-        activity.runOnUiThread(activity::openBluetoothSettingsFromBridge)
+        connections.openBluetoothSettings()
     }
 
     @JavascriptInterface
-    fun getRecentSessions(n: Int): String = activity.getRecentSessionsJson(n)
+    fun getRecentSessions(n: Int): String = diagnostics.getRecentSessions(n)
 
     @JavascriptInterface
     fun shareDiagnostics() {
-        activity.runOnUiThread(activity::shareDiagnosticsFromBridge)
+        diagnostics.shareDiagnostics()
     }
 
     @JavascriptInterface
     fun startTestConnection() {
-        activity.runOnUiThread(activity::startTestConnectionFromBridge)
+        diagnostics.startTestConnection()
     }
 
     @JavascriptInterface
     fun scheduleAdapterReadyNotify(mins: Int) {
-        val clamped = maxOf(1, minOf(30, mins))
-        activity.runOnUiThread {
-            activity.scheduleAdapterReadyNotifyFromBridge(clamped)
-        }
+        diagnostics.scheduleAdapterReadyNotify(mins)
     }
 
     @JavascriptInterface
     fun cancelAdapterReadyNotify() {
-        activity.runOnUiThread(activity::cancelAdapterReadyNotifyFromBridge)
+        diagnostics.cancelAdapterReadyNotify()
     }
 
     companion object {
         private const val TAG = "VoltTracker"
-        private const val MAX_ADDRESS_LEN = 64
-        private const val MAX_NAME_LEN = 256
-        private const val MAX_LABEL_LEN = 128
-        private const val MAX_STAGE_LEN = 32
-        private const val MAX_DETAIL_LEN = 4096
-        private const val MAX_DTC_LEN = 16
-        private const val MAX_PASSPHRASE_LEN = 256
+        internal const val MAX_ADDRESS_LEN = 64
+        internal const val MAX_NAME_LEN = 256
+        internal const val MAX_LABEL_LEN = 128
+        internal const val MAX_STAGE_LEN = 32
+        internal const val MAX_DETAIL_LEN = 4096
+        internal const val MAX_DTC_LEN = 16
+        internal const val MAX_PASSPHRASE_LEN = 256
         private const val LOG_CLIENT_ERROR_RATE_PER_SEC = 5
         private const val LOG_CLIENT_ERROR_BURST = 10
 
-        private fun safe(
+        internal fun safe(
             value: String?,
             maxLen: Int,
         ): String {
@@ -468,10 +275,10 @@ class VoltBridge(
             return trimmed.substring(0, cut)
         }
 
-        private fun validBluetoothAddress(address: String?): Boolean =
+        internal fun validBluetoothAddress(address: String?): Boolean =
             address != null && BluetoothAdapter.checkBluetoothAddress(address.trim())
 
-        private fun parsePositiveId(value: String?): Long =
+        internal fun parsePositiveId(value: String?): Long =
             try {
                 val parsed = safe(value, MAX_LABEL_LEN).toLong()
                 if (parsed > 0L) parsed else -1L

@@ -1,7 +1,7 @@
 # High-Value Reliability Work Tracker
 
 Date started: 2026-06-05
-Source: `.Codex/grade-report.md`
+Source: `.claude/grade-report.md`
 
 This tracker is for the highest-ROI follow-up items after the Kotlin/TypeScript
 migration. The language conversion is treated as complete; the work here is

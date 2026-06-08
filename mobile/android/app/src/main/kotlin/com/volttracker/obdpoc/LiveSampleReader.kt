@@ -152,7 +152,7 @@ class LiveSampleReader(
             service.recorder.logError("sample_encoding_error", ex)
             return JSONObject()
         }
-        return sample
+        return TelemetryPayload.fromJson(sample).toJson()
     }
 
     /**

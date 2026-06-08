@@ -109,10 +109,7 @@ open class ObdPollingEngine(
             return
         }
 
-        var attempt = 0
-        var everConnected = false
-        var consecutiveInstantDrops = 0
-        var wedgedMode = false
+        val retry = ConnectionRetryCoordinator()
         try {
             while (service.running.get()) {
                 if (service.cancelRetryRequested) {
@@ -120,9 +117,9 @@ open class ObdPollingEngine(
                     service.recorder.logEvent(
                         "retry_cancelled_by_user",
                         "attempt",
-                        attempt.toString(),
+                        retry.attempt.toString(),
                         "everConnected",
-                        everConnected.toString(),
+                        retry.everConnected.toString(),
                         "phase",
                         "pre_connect",
                     )
@@ -133,9 +130,7 @@ open class ObdPollingEngine(
                 val attemptStart = System.currentTimeMillis()
                 try {
                     connectAndInitialize(address)
-                    everConnected = true
-                    consecutiveInstantDrops = 0
-                    wedgedMode = false
+                    retry.noteConnected()
                     service.clearLastFailureClass()
                     service.cancelRetryRequested = false
                     OBDLog.event("ObdPollingEngine", "connect", mapOf("name" to service.activeName))
@@ -155,7 +150,7 @@ open class ObdPollingEngine(
                         tpmsDiscoveryRunner.run(address, detailProbeStage)
                         return
                     }
-                    attempt = 0
+                    retry.resetAttemptBudget()
                     service.broadcastStatus(
                         "connected",
                         "Polling live OBD data from ${service.activeName}.",
@@ -167,7 +162,7 @@ open class ObdPollingEngine(
                 } catch (ex: IOException) {
                     val attemptDurationMs = maxOf(0L, System.currentTimeMillis() - attemptStart)
                     closeSocket()
-                    if (everConnected) {
+                    if (retry.everConnected) {
                         OBDLog.event("ObdPollingEngine", "disconnect", mapOf("reason" to ObdElmDecode.safeMessage(ex)))
                     }
                     if (!service.running.get()) {
@@ -186,17 +181,8 @@ open class ObdPollingEngine(
                             isBluetoothReady(),
                         )
                     service.setLastFailureClass(failureClass)
-                    if (failureClass == FailureClass.INSTANT_DROP &&
-                        attemptDurationMs < ConnectionFailureClassifier.INSTANT_DROP_THRESHOLD_MS
-                    ) {
-                        consecutiveInstantDrops += 1
-                    } else {
-                        consecutiveInstantDrops = 0
-                        wedgedMode = false
-                    }
-
-                    attempt += 1
-                    if (attempt > ObdProbes.MAX_RECONNECT_ATTEMPTS) {
+                    val decision = retry.recordFailure(failureClass, attemptDurationMs)
+                    if (decision.exhausted) {
                         Log.w(
                             MainActivity.TAG,
                             "OBD reconnect exhausted for ${service.activeName} after ${ObdProbes.MAX_RECONNECT_ATTEMPTS} attempts",
@@ -218,7 +204,7 @@ open class ObdPollingEngine(
                         )
                         service.broadcastStatus(
                             "error",
-                            if (everConnected) {
+                            if (decision.everConnected) {
                                 "Lost the adapter link and could not reconnect after ${ObdProbes.MAX_RECONNECT_ATTEMPTS} tries."
                             } else {
                                 "Could not reach ${service.activeName} after ${ObdProbes.MAX_RECONNECT_ATTEMPTS} tries. Make sure the car is awake and the adapter is plugged in."
@@ -229,12 +215,11 @@ open class ObdPollingEngine(
                         return
                     }
 
-                    if (consecutiveInstantDrops >= 2 && !wedgedMode) {
-                        wedgedMode = true
+                    if (decision.wedgedModeStarted) {
                         service.recorder.logEvent(
                             "wedged_suspected",
                             "consecutiveInstantDrops",
-                            consecutiveInstantDrops.toString(),
+                            decision.consecutiveInstantDrops.toString(),
                             "lastAttemptDurationMs",
                             attemptDurationMs.toString(),
                             "failureClass",
@@ -244,18 +229,17 @@ open class ObdPollingEngine(
                         )
                     }
 
-                    val backoffMs = computeBackoffMs(attempt, everConnected, wedgedMode)
-                    OBDLog.event("ObdPollingEngine", "reconnect_attempt", mapOf("attempt" to attempt))
+                    OBDLog.event("ObdPollingEngine", "reconnect_attempt", mapOf("attempt" to decision.attempt))
                     service.recorder.logEvent(
                         "reconnect",
                         "attempt",
-                        attempt.toString(),
+                        decision.attempt.toString(),
                         "backoffMs",
-                        backoffMs.toString(),
+                        decision.backoffMs.toString(),
                         "reason",
                         ObdElmDecode.safeMessage(ex),
                         "everConnected",
-                        everConnected.toString(),
+                        decision.everConnected.toString(),
                         "failureClass",
                         failureClass.wireName(),
                         "watchdogFired",
@@ -267,26 +251,26 @@ open class ObdPollingEngine(
                         "attemptDurationMs",
                         attemptDurationMs.toString(),
                         "wedgedMode",
-                        wedgedMode.toString(),
+                        decision.wedgedMode.toString(),
                     )
                     service.broadcastStatus(
                         "connecting",
-                        if (everConnected) {
-                            "Adapter link dropped - reconnecting ($attempt/${ObdProbes.MAX_RECONNECT_ATTEMPTS})..."
+                        if (decision.everConnected) {
+                            "Adapter link dropped - reconnecting (${decision.attempt}/${ObdProbes.MAX_RECONNECT_ATTEMPTS})..."
                         } else {
-                            "Couldn't reach ${service.activeName} - retrying ($attempt/${ObdProbes.MAX_RECONNECT_ATTEMPTS})..."
+                            "Couldn't reach ${service.activeName} - retrying (${decision.attempt}/${ObdProbes.MAX_RECONNECT_ATTEMPTS})..."
                         },
                         false,
                     )
-                    sleep(backoffMs)
+                    sleep(decision.backoffMs)
                     if (service.cancelRetryRequested) {
                         service.cancelRetryRequested = false
                         service.recorder.logEvent(
                             "retry_cancelled_by_user",
                             "attempt",
-                            attempt.toString(),
+                            decision.attempt.toString(),
                             "everConnected",
-                            everConnected.toString(),
+                            decision.everConnected.toString(),
                         )
                         service.broadcastStatus("idle", "Retry cancelled.", false)
                         service.stopSelf()
@@ -638,7 +622,7 @@ open class ObdPollingEngine(
     }
 
     companion object {
-        @JvmField val LONG_BACKOFFS_MS = longArrayOf(8_000L, 12_000L)
+        @JvmField val LONG_BACKOFFS_MS = ConnectionRetryCoordinator.LONG_BACKOFFS_MS
         private const val STACK_HEAD_MAX_CHARS = 1000
         private const val STACK_HEAD_FRAMES = 5
         const val RAW_TRANSCRIPT_MAX_CHARS = 4000
@@ -651,19 +635,7 @@ open class ObdPollingEngine(
             attempt: Int,
             everConnected: Boolean,
             wedgedMode: Boolean,
-        ): Long {
-            if (wedgedMode) {
-                val wedgeIndex = maxOf(0, attempt - 3)
-                if (wedgeIndex < LONG_BACKOFFS_MS.size) {
-                    return LONG_BACKOFFS_MS[wedgeIndex]
-                }
-            }
-            return if (everConnected) {
-                ObdElmDecode.reconnectBackoffMs(attempt)
-            } else {
-                ObdElmDecode.initialConnectBackoffMs(attempt)
-            }
-        }
+        ): Long = ConnectionRetryCoordinator.computeBackoffMs(attempt, everConnected, wedgedMode)
 
         @JvmStatic
         fun exceptionClassName(ex: Throwable?): String {
