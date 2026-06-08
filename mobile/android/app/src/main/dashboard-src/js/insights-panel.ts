@@ -18,12 +18,15 @@
     if (bridge && typeof bridge.getTrips === "function") {
       const parsed = VD.parsePayload<VoltTrip[]>(bridge.getTrips(), []);
       if (VD.isNativeError(parsed)) {
+        const err = parsed as VoltNativeError;
         VD.reportNativeReadError(parsed, "Could not read logged trips.");
+        state.tripsReadError = err.message || "Could not read logged trips.";
         state.trips = [];
       } else if (state.demoActive && Array.isArray(state.demoPreviewTrips)) {
         // Park real trips behind the demo preview (cross-module demo invariant).
         VD.setState({ realTrips: Array.isArray(parsed) ? parsed : [] });
       } else {
+        state.tripsReadError = null;
         state.trips = Array.isArray(parsed) ? parsed : [];
       }
     }
@@ -34,6 +37,7 @@
     // No demo guard: demo only simulates live numbers, so the Trips tab keeps rendering the user's
     // real logged drives (or the empty state) exactly as it would outside demo.
     const trips = Array.isArray(state.trips) ? state.trips : [];
+    renderTripsEmptyState();
     VD.toggleHidden("realTripsCard", trips.length === 0);
     VD.toggleHidden("tripsEmptyState", trips.length > 0);
     VD.toggleHidden("realTripDetailGrid", trips.length === 0);
@@ -55,6 +59,34 @@
     VD.setText("realTripsTitle", trips.length
       ? `${trips.length} logged ${trips.length === 1 ? "drive" : "drives"}`
       : "Your trips");
+  }
+
+  function renderTripsEmptyState() {
+    const empty = el("tripsEmptyState");
+    if (!empty) return;
+    const title = empty.querySelector("h2");
+    const copy = empty.querySelector("p");
+    const existingRetry = empty.querySelector("[data-retry-trips]");
+    if (!state.tripsReadError) {
+      if (title) title.textContent = "No real trips stored yet.";
+      if (copy) {
+        copy.textContent =
+          "Trip capture will come after the OBD bridge is stable. This view will stay empty until real sessions are materialized from stored GPS and PID samples.";
+      }
+      existingRetry?.remove();
+      return;
+    }
+    if (title) title.textContent = "Trips could not load.";
+    if (copy) copy.textContent = state.tripsReadError;
+    if (!existingRetry) {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "link-btn";
+      retry.dataset.retryTrips = "true";
+      retry.textContent = "Retry";
+      retry.addEventListener("click", () => loadTrips());
+      empty.append(retry);
+    }
   }
 
   function realTripsRenderKey(trips: VoltTrip[]) {
@@ -513,12 +545,15 @@
     if (bridge && typeof bridge.getInsights === "function") {
       const parsed = VD.parsePayload<VoltInsights>(bridge.getInsights(), {});
       if (VD.isNativeError(parsed)) {
+        const err = parsed as VoltNativeError;
         VD.reportNativeReadError(parsed, "Could not read vehicle insights.");
+        state.insightsReadError = err.message || "Could not read vehicle insights.";
         state.insights = {};
       } else if (state.demoActive && state.demoPreviewInsights) {
         // Park real insights behind the demo preview (cross-module demo invariant).
         VD.setState({ realInsights: parsed });
       } else {
+        state.insightsReadError = null;
         state.insights = parsed;
       }
     }
@@ -529,12 +564,44 @@
   function renderInsightStats() {
     const insights = state.insights || {};
     const trips = Number(insights.tripCount || 0);
+    renderInsightsEmptyState();
     VD.setText("insightTripCount", trips || "--");
     VD.setText("insightTotalDistance", trips ? VD.formatDistance(Number(insights.totalDistanceMeters || 0)) : "--");
     VD.setText("insightDriveTime", Number(insights.totalDriveMs) > 0 ? VD.formatDuration(Number(insights.totalDriveMs)) : "--");
     VD.setText("insightTopSpeed", insights.maxSpeedKph ? `${Math.round(Number(insights.maxSpeedKph) * 0.621371)} mph` : "--");
     VD.setText("insightLongest", Number(insights.longestTripMeters) > 0 ? VD.formatDistance(Number(insights.longestTripMeters)) : "--");
     VD.setText("insightGpsTrips", trips ? `${Number(insights.gpsTripCount || 0)}/${trips}` : "--");
+  }
+
+  function renderInsightsEmptyState() {
+    const empty = el("insightsEmptyState");
+    if (!empty) return;
+    const title = empty.querySelector("h2");
+    const copy = empty.querySelector("p");
+    const hints = empty.querySelector(".empty-hints") as HTMLElement | null;
+    const existingRetry = empty.querySelector("[data-retry-insights]");
+    if (!state.insightsReadError) {
+      if (title) title.textContent = "Not enough data yet.";
+      if (copy) {
+        copy.textContent =
+          "Pack health, savings, and monthly insights appear here once you've logged a few drives with the adapter connected.";
+      }
+      if (hints) hints.hidden = false;
+      existingRetry?.remove();
+      return;
+    }
+    if (title) title.textContent = "Insights could not load.";
+    if (copy) copy.textContent = state.insightsReadError;
+    if (hints) hints.hidden = true;
+    if (!existingRetry) {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "link-btn";
+      retry.dataset.retryInsights = "true";
+      retry.textContent = "Retry";
+      retry.addEventListener("click", () => loadInsights());
+      empty.append(retry);
+    }
   }
 
   // ----- Efficiency vs Speed scatter (Insights tab) -------------------------
@@ -774,6 +841,7 @@
   Object.assign(VD, {
     loadTrips,
     renderRealTrips,
+    renderTripsEmptyState,
     renderTripRow,
     selectRealTrip,
     ensureRouteForTrip,
@@ -781,6 +849,7 @@
     renderRealTripLeafletMaps,
     loadInsights,
     renderInsightStats,
+    renderInsightsEmptyState,
     renderInsightScatter,
     enrichRouteEff
   });

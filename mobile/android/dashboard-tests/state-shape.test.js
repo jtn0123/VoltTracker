@@ -16,6 +16,8 @@ const REQUIRED_STATE_KEYS = [
   'storage',
   'trips',
   'insights',
+  'tripsReadError',
+  'insightsReadError',
   'appState',
   'demoActive',
   'mapLayer',

@@ -20,9 +20,16 @@
     .filter(Boolean);
   // How long (ms) since the last accepted sample before we mark tiles stale.
   const STALE_THRESHOLD_MS = 3000;
+  let rateChipReconnectBound = false;
 
   function average(values: number[]) {
     return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  }
+
+  function pushBounded(values: number[], value: number, limit: number) {
+    values.push(value);
+    const overflow = values.length - limit;
+    if (overflow > 0) values.splice(0, overflow);
   }
 
   function formatDistance(meters: unknown) {
@@ -317,20 +324,13 @@
     state.lastSampleAt = Date.now();
     const kph = Number(sample.speedKph);
     if (Number.isFinite(kph)) {
-      state.speedHistory.push(kph);
-      // Fixed 48-sample window. shift() is O(n) on a JS
-      // array but n=48 makes the cost negligible (~µs); a circular buffer
-      // would be cleaner but requires changes to every reader. Revisit if
-      // speed of render becomes a hot path. `if` (not `while`) is correct
-      // because we push exactly one sample per call.
-      if (state.speedHistory.length > 48) state.speedHistory.shift();
+      pushBounded(state.speedHistory, kph, 48);
     }
     // Drive-tab live charts: power bars and SOC trace. Same fixed-window
     // discipline as the speed history.
     const power = Number(sample.powerKw);
     if (Number.isFinite(power)) {
-      state.powerHistory.push(power);
-      if (state.powerHistory.length > 60) state.powerHistory.shift();
+      pushBounded(state.powerHistory, power, 60);
     }
     const soc = Number(sample.soc);
     if (Number.isFinite(soc)) {
@@ -345,8 +345,7 @@
       // include the current SOC and looked like it was rising while the
       // delta said falling. Cap is 240 entries → ~4 min @ 1 Hz which is
       // plenty for a "current trend" widget.
-      state.socHistory.push(soc);
-      if (state.socHistory.length > 240) state.socHistory.shift();
+      pushBounded(state.socHistory, soc, 240);
     }
     // Running session distance, ticked off accepted GPS samples.
     const lat = Number(sample.latitude);
@@ -447,8 +446,50 @@
     const samples = hasLiveSamples();
     const label = samples && isStale ? "stale" : samples ? "live" : "waiting";
     chip.dataset.state = label;
+    chip.dataset.reconnectActive = samples && isStale && bridge ? "true" : "false";
+    if (samples && isStale) {
+      chip.tabIndex = bridge ? 0 : -1;
+      chip.setAttribute("role", bridge ? "button" : "status");
+      chip.setAttribute(
+        "aria-label",
+        bridge
+          ? "Telemetry stale. No samples have arrived for over three seconds. Press to reconnect."
+          : "Telemetry stale. No samples have arrived for over three seconds."
+      );
+      chip.title = bridge ? "Reconnect telemetry" : "Telemetry stale";
+      bindRateChipReconnect(chip);
+    } else {
+      chip.removeAttribute("tabindex");
+      chip.setAttribute("role", "status");
+      chip.setAttribute(
+        "aria-label",
+        label === "live"
+          ? "Telemetry live. Samples are updating."
+          : "Waiting for the first telemetry sample."
+      );
+      chip.title = "";
+    }
     const rateLabel = el("liveRateLabel");
     if (rateLabel) rateLabel.textContent = label;
+  }
+
+  function bindRateChipReconnect(chip: HTMLElement) {
+    if (rateChipReconnectBound) return;
+    rateChipReconnectBound = true;
+    const run = () => {
+      if (chip.dataset.reconnectActive !== "true") return;
+      if (bridge && typeof bridge.tryReconnectNow === "function") {
+        bridge.tryReconnectNow();
+      } else if (bridge && typeof bridge.connectLast === "function") {
+        bridge.connectLast();
+      }
+    };
+    chip.addEventListener("click", run);
+    chip.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      run();
+    });
   }
 
   function updateLiveUi() {

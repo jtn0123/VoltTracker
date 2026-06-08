@@ -12,6 +12,17 @@ const VD = (window.VoltDashboard = window.VoltDashboard || ({} as VoltDashboard)
 const bridge = window.VoltTrackerAndroid || null;
 const el = (id: string) => document.getElementById(id);
 
+function setButtonBusy(btn: HTMLElement, busy: boolean, label?: string | null) {
+  btn.setAttribute("aria-busy", busy ? "true" : "false");
+  btn.dataset.busy = busy ? "true" : "false";
+  if (btn instanceof HTMLButtonElement) btn.disabled = busy;
+  if (label != null) btn.textContent = label;
+}
+
+function isBusy(node: HTMLElement | null) {
+  return Boolean(node && node.dataset.busy === "true");
+}
+
 function safeCall(method: keyof VoltBridge, ...args: unknown[]): unknown {
   const fn = bridge ? bridge[method] : null;
   if (typeof fn !== "function") return undefined;
@@ -34,15 +45,14 @@ function bindTestConnection() {
   const btn = el("testConnectionBtn") as HTMLButtonElement | null;
   if (!btn) return;
   btn.addEventListener("click", () => {
-    btn.disabled = true;
+    if (isBusy(btn)) return;
     const original = btn.textContent;
-    btn.textContent = "Probing...";
+    setButtonBusy(btn, true, "Probing...");
     safeCall("startTestConnection");
     // Match the Android-side TEST_CONNECTION_DURATION_MS (25s) so the UI
     // re-enables roughly when the service stops itself.
     setTimeout(() => {
-      btn.disabled = false;
-      btn.textContent = original;
+      setButtonBusy(btn, false, original);
     }, 25_500);
   });
 }
@@ -51,9 +61,17 @@ function bindTestConnection() {
 // and a mirror in the settings panel - funnel into the same bridge call.
 function bindSendDiagnostics() {
   ["sendDiagnosticsBtn", "sendDiagnosticsSettingsBtn"].forEach((id) => {
-    const btn = el(id);
+    const btn = el(id) as HTMLButtonElement | null;
     if (!btn) return;
-    btn.addEventListener("click", () => safeCall("shareDiagnostics"));
+    btn.addEventListener("click", () => {
+      if (isBusy(btn)) return;
+      const original = btn.textContent;
+      setButtonBusy(btn, true, "Preparing...");
+      safeCall("shareDiagnostics");
+      setTimeout(() => {
+        setButtonBusy(btn, false, original);
+      }, 1500);
+    });
   });
 }
 
@@ -67,13 +85,25 @@ function bindNotifyWhenReady() {
   if (!toggle || !mins) return;
   const toggleInput = toggle;
   const minsInput = mins;
+  const group = toggleInput.closest("fieldset") as HTMLElement | null;
+  let busy = false;
+  function setNotifyBusy(next: boolean) {
+    busy = next;
+    if (group) {
+      group.setAttribute("aria-busy", next ? "true" : "false");
+      group.dataset.busy = next ? "true" : "false";
+    }
+  }
   function applyToggleState() {
+    if (busy) return;
+    setNotifyBusy(true);
     if (!toggleInput.checked) {
       safeCall("cancelAdapterReadyNotify");
       if (status) {
         status.textContent =
           "Probes the last-used adapter every 30s and posts a notification when it responds.";
       }
+      setTimeout(() => setNotifyBusy(false), 600);
       return;
     }
     const minutes = Math.max(1, Math.min(30, parseInt(minsInput.value, 10) || 10));
@@ -87,6 +117,7 @@ function bindNotifyWhenReady() {
         minutes +
         " min - you'll get a notification when the adapter responds.";
     }
+    setTimeout(() => setNotifyBusy(false), 600);
   }
   toggleInput.addEventListener("change", applyToggleState);
   minsInput.addEventListener("change", () => {

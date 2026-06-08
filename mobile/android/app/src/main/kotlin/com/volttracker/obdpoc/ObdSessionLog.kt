@@ -19,12 +19,18 @@ class ObdSessionLog(
     private var fos: FileOutputStream? = null
     private var writer: BufferedWriter? = null
     private var file: File? = null
+    private var lastFailure: String? = null
 
     /** Opens a fresh `session-<ts>-<mode>.jsonl`. Leaves the log closed on failure. */
     @Synchronized
     fun open(mode: String) {
         close()
         if (!logsDir.exists() && !logsDir.mkdirs()) {
+            noteFailure("open_mkdir_failed", null)
+            return
+        }
+        if (!logsDir.isDirectory) {
+            noteFailure("open_mkdir_failed", null)
             return
         }
         val pending = File(logsDir, "session-${System.currentTimeMillis()}-$mode.jsonl")
@@ -32,14 +38,20 @@ class ObdSessionLog(
             fos = FileOutputStream(pending, true)
             writer = BufferedWriter(OutputStreamWriter(fos, StandardCharsets.UTF_8))
             file = pending
+            lastFailure = null
             writeLatestPointer(pending)
         } catch (ex: IOException) {
+            noteFailure("open_failed", ex)
             closeQuietly()
         }
     }
 
     @Synchronized
     fun isOpen(): Boolean = writer != null
+
+    /** Most recent local log IO failure, or null once a later open/write succeeds. */
+    @Synchronized
+    fun lastWriteFailure(): String? = lastFailure
 
     /** The current log file name, or `null` when the log is closed. */
     @Synchronized
@@ -81,10 +93,14 @@ class ObdSessionLog(
                 try {
                     fos?.fd?.sync()
                 } catch (ignored: IOException) {
-                    // Already past flush; nothing more we can do here.
+                    noteFailure("sync_failed", ignored)
                 }
             }
-        } catch (ignored: IOException) {
+            if (lastFailure != null && (!durable || lastFailure?.startsWith("sync_failed") != true)) {
+                lastFailure = null
+            }
+        } catch (ex: IOException) {
+            noteFailure("write_failed", ex)
         } catch (ignored: JSONException) {
         }
     }
@@ -122,6 +138,16 @@ class ObdSessionLog(
                 pointerWriter.newLine()
             }
         } catch (ignored: IOException) {
+            noteFailure("latest_pointer_failed", ignored)
         }
+    }
+
+    private fun noteFailure(
+        stage: String,
+        ex: IOException?,
+    ) {
+        val detail = if (ex == null) stage else "$stage: ${ex.javaClass.simpleName}: ${ex.message}"
+        lastFailure = detail
+        OBDLog.warn("ObdSessionLog", detail)
     }
 }

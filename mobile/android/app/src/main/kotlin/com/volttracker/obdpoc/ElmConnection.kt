@@ -39,6 +39,11 @@ open class ElmConnection
 
         @JvmField var lastErrorPhase: String = ""
 
+        @Volatile @JvmField
+        var watchdogFired: Boolean = false
+
+        @JvmField var lastTransactTruncated: Boolean = false
+
         private var socket: BluetoothSocket? = null
 
         fun isOpen(): Boolean = input != null && output != null
@@ -58,6 +63,7 @@ open class ElmConnection
             getStreamsMs = -1L
             firstReadMs = -1L
             lastErrorPhase = ""
+            watchdogFired = false
 
             val pendingSocket = device.createRfcommSocketToServiceRecord(uuid)
             socket = pendingSocket
@@ -69,6 +75,7 @@ open class ElmConnection
                         return@Thread
                     }
                     if (!pendingSocket.isConnected) {
+                        watchdogFired = true
                         try {
                             pendingSocket.close()
                         } catch (_: IOException) {
@@ -156,6 +163,7 @@ open class ElmConnection
         ): String {
             val out = output ?: throw IOException("Adapter stream is not open")
             val inputStream = input ?: throw IOException("Adapter stream is not open")
+            lastTransactTruncated = false
             drainInput()
             out.write((command + "\r").toByteArray(StandardCharsets.US_ASCII))
             out.flush()
@@ -178,7 +186,12 @@ open class ElmConnection
                     sleep(25)
                 }
             }
-            return response.toString()
+            val text = response.toString()
+            lastTransactTruncated =
+                text.isNotEmpty() &&
+                text.indexOf('>') < 0 &&
+                clock.nowMs() >= deadline
+            return text
         }
 
         /** Sends the ELM escape byte and drains whatever the adapter echoes back. */

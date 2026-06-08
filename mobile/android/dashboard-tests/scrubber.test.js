@@ -191,6 +191,25 @@ describe('scrubber.ts', () => {
     }
   });
 
+  it('reduced-motion users jump to the end without starting playback animation', () => {
+    const VD = window.VoltDashboard;
+    giveChartWidth();
+    VD.renderScrubber(withGappyRoute());
+    const play = document.getElementById('scrubPlay');
+    const priorMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn(() => ({ matches: true }));
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(1);
+    try {
+      play.click();
+      expect(play.textContent).toContain('Play');
+      expect(rafSpy).not.toHaveBeenCalled();
+      expect(cursorLeft()).toBe('100%');
+    } finally {
+      window.matchMedia = priorMatchMedia;
+      rafSpy.mockRestore();
+    }
+  });
+
   // ----- SOC / elevation interpolation across MISSING samples ----------------
 
   function readoutValue(label) {

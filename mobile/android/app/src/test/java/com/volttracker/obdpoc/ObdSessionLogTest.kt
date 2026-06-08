@@ -86,6 +86,19 @@ class ObdSessionLogTest {
     }
 
     @Test
+    @Throws(IOException::class)
+    fun openFailureIsSurfacedForDiagnostics() {
+        val notDirectory = File(dir, "obd-logs")
+        Files.write(notDirectory.toPath(), byteArrayOf(1, 2, 3))
+        val log = ObdSessionLog(notDirectory)
+
+        log.open("obd")
+
+        assertFalse(log.isOpen())
+        assertTrue(log.lastWriteFailure()!!.contains("open_mkdir_failed"))
+    }
+
+    @Test
     fun fileNameIsNullWhenClosedAndPopulatedWhenOpen() {
         val log = ObdSessionLog(dir)
         assertEquals(null, log.fileName())

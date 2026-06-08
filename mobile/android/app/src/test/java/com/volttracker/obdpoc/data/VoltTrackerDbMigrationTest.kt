@@ -236,6 +236,92 @@ class VoltTrackerDbMigrationTest {
         context.deleteDatabase(name)
     }
 
+    @Test
+    fun upgradeFromV10_addsTripListCache() {
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_v10_v11.db"
+        context.deleteDatabase(name)
+
+        val v10Helper =
+            object : SQLiteOpenHelper(context.applicationContext, name, null, 10) {
+                override fun onCreate(db: SQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE " +
+                            VoltTrackerDb.TABLE_SESSIONS +
+                            " (_id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                            " mode TEXT NOT NULL, adapter_address TEXT," +
+                            " adapter_name TEXT, started_at_ms INTEGER NOT NULL," +
+                            " ended_at_ms INTEGER, status TEXT NOT NULL," +
+                            " supported_pids TEXT," +
+                            " sample_count INTEGER NOT NULL DEFAULT 0," +
+                            " last_event_at_ms INTEGER," +
+                            " created_at_ms INTEGER NOT NULL)",
+                    )
+                    db.execSQL(
+                        "CREATE TABLE " +
+                            VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS +
+                            " (session_id INTEGER PRIMARY KEY," +
+                            " counted INTEGER NOT NULL," +
+                            " distance_m REAL NOT NULL DEFAULT 0," +
+                            " duration_ms INTEGER NOT NULL DEFAULT 0," +
+                            " max_speed_kph INTEGER," +
+                            " has_route INTEGER NOT NULL DEFAULT 0," +
+                            " started_at_ms INTEGER NOT NULL DEFAULT 0," +
+                            " rollup_version INTEGER NOT NULL DEFAULT 0)",
+                    )
+                }
+
+                override fun onUpgrade(
+                    db: SQLiteDatabase,
+                    oldVersion: Int,
+                    newVersion: Int,
+                ) {
+                    // unused
+                }
+            }
+        val v10Db = v10Helper.writableDatabase
+        assertFalse(
+            "v10 schema must not pre-contain the trip list cache table",
+            readTableNames(v10Db).contains(VoltTrackerDb.TABLE_TRIP_LIST_CACHE),
+        )
+        v10Helper.close()
+
+        newHelper = VoltTrackerDb(context, name)
+        val newDb = newHelper!!.writableDatabase
+        assertEquals(
+            "Reopened DB should be at the current schema version after onUpgrade.",
+            VoltTrackerDb.DATABASE_VERSION,
+            newDb.version,
+        )
+        assertTrue(
+            "After v10->v11 upgrade, the trip list cache table must exist.",
+            readTableNames(newDb).contains(VoltTrackerDb.TABLE_TRIP_LIST_CACHE),
+        )
+        val indexes = readIndexNames(newDb)
+        assertTrue(
+            "After v10->v11 upgrade, trip list cache ended-at index must exist. Got: $indexes",
+            indexes.contains("idx_trip_list_cache_ended"),
+        )
+        assertTrue(
+            "After v10->v11 upgrade, trip list cache session index must exist. Got: $indexes",
+            indexes.contains("idx_trip_list_cache_session"),
+        )
+
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
+    fun databaseVersionBumpRequiresMigrationCoverageUpdate() {
+        assertEquals(
+            "DATABASE_VERSION changed. Add a focused migration test for the new version, " +
+                "then update EXPECTED_MIGRATION_COVERAGE_VERSION in this test.",
+            EXPECTED_MIGRATION_COVERAGE_VERSION,
+            VoltTrackerDb.DATABASE_VERSION,
+        )
+    }
+
     /**
      * B2 regression: when a migration step throws partway through, the whole step must roll back,
      * leaving the database at the prior version with NO partial changes applied. Without the
@@ -370,6 +456,8 @@ class VoltTrackerDbMigrationTest {
     }
 
     companion object {
+        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 11
+
         private val V7_INDEXES =
             arrayOf(
                 "idx_telemetry_captured_at",
@@ -381,6 +469,16 @@ class VoltTrackerDbMigrationTest {
         private fun readIndexNames(db: SQLiteDatabase): Set<String> {
             val names = HashSet<String>()
             db.rawQuery("SELECT name FROM sqlite_master WHERE type='index'", null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    names.add(cursor.getString(0)!!)
+                }
+            }
+            return names
+        }
+
+        private fun readTableNames(db: SQLiteDatabase): Set<String> {
+            val names = HashSet<String>()
+            db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'", null).use { cursor ->
                 while (cursor.moveToNext()) {
                     names.add(cursor.getString(0)!!)
                 }

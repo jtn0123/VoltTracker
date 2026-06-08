@@ -53,6 +53,7 @@ class BackupController(
             "• Redacted VIN and vehicle records if your car shared them\n" +
             "\n" +
             "Encrypted backups are protected by your passphrase; plaintext backups are not.\n" +
+            "Use a strong, unique passphrase. Volt Tracker cannot recover it if it is lost.\n" +
             "Only share with people you trust."
 
     private fun showShareDisclosure(onConfirmed: Runnable) {

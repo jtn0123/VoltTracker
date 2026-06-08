@@ -436,6 +436,61 @@ class ObdLocalStoreDbTest {
         assertEquals(9.0, points.getJSONObject(1).optDouble("accuracyM"), 0.01)
     }
 
+    @Test
+    fun scalarTracksDownsampleAndKeepTheNewestSample() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        for (i in 0 until ObdStoreRouteProjection.MAX_TRACK_POINTS + 40) {
+            val atMs = 1000L + i * 1000L
+            val sample = sample(35 + (i % 10), 1200, 32.70 + i * 0.0001, -117.10, atMs)
+            sample.put("soc", 80.0 - i * 0.01)
+            sample.put("powerKw", 4.0 + i * 0.02)
+            store.recordTelemetry(id, sample)
+        }
+
+        val route =
+            StorageSummaryJson
+                .build(store.getStorageSummaryRecord())
+                .getJSONArray("recentRoutes")
+                .getJSONObject(0)
+        val socTrack = route.getJSONArray("socTrack")
+        val powerTrack = route.getJSONArray("powerTrack")
+
+        assertTrue(socTrack.length() <= ObdStoreRouteProjection.MAX_TRACK_POINTS)
+        assertTrue(powerTrack.length() <= ObdStoreRouteProjection.MAX_TRACK_POINTS)
+        val expectedLastMs = 1000L + (ObdStoreRouteProjection.MAX_TRACK_POINTS + 39) * 1000L
+        assertEquals(expectedLastMs, socTrack.getJSONObject(socTrack.length() - 1).optLong("atMs"))
+        assertEquals(expectedLastMs, powerTrack.getJSONObject(powerTrack.length() - 1).optLong("atMs"))
+    }
+
+    @Test
+    fun batchedDriveWindowsMatchPerSessionDetection() {
+        val splitSession = store.startSession("obd", "00:11", "Adapter", 0L)
+        store.recordTelemetry(splitSession, sample(35, 1200, 32.7000, -117.1000, 0L))
+        store.recordTelemetry(splitSession, sample(38, 1300, 32.7100, -117.1000, 1_000L))
+        store.recordTelemetry(splitSession, sample(0, 0, 32.7101, -117.1000, 60_000L))
+        store.recordTelemetry(splitSession, sample(0, 0, 32.7102, -117.1000, 421_000L))
+        store.recordTelemetry(splitSession, sample(40, 1400, 32.7200, -117.1000, 480_000L))
+        store.recordTelemetry(splitSession, sample(42, 1450, 32.7300, -117.1000, 540_000L))
+        store.finishSession(splitSession, ObdLocalStore.STATUS_COMPLETE, 540_000L, "")
+
+        val straightSession = store.startSession("obd", "00:22", "Adapter", 1_000_000L)
+        store.recordTelemetry(straightSession, sample(30, 1100, 33.0000, -117.2000, 1_000_000L))
+        store.recordTelemetry(straightSession, sample(45, 1400, 33.0100, -117.2000, 1_020_000L))
+        store.finishSession(straightSession, ObdLocalStore.STATUS_COMPLETE, 1_020_000L, "")
+
+        val sessions = store.getRecentSessions(10).filter { it.mode == ObdLocalStore.MODE_OBD }
+        store.checkpoint()
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            val batched = DriveWindowDetector.windowsForSessions(db, sessions)
+            for (session in sessions) {
+                val oneByOne = DriveWindowDetector.windowsForSession(db, session)
+                val grouped = batched[session.id]
+                assertNotNull(grouped)
+                assertEquals(routeKeys(oneByOne), routeKeys(grouped!!))
+            }
+        }
+    }
+
     // ---- finalizeSession: session-end + adapter-summary atomicity ------------------
 
     @Test
@@ -870,6 +925,8 @@ class ObdLocalStoreDbTest {
             observation.put("rawResponse", rawResponse)
             return observation
         }
+
+        private fun routeKeys(windows: List<DriveWindowDetector.DriveWindow>): List<String> = windows.map { it.routeKey() }
 
         private fun adapterFor(
             records: List<AdapterHistoryRecord>,

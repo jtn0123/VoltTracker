@@ -686,10 +686,17 @@
   const PLAY_LABEL = "▶ Play";
   const STOP_LABEL = "■ Stop";
 
+  function prefersReducedMotion() {
+    return Boolean(
+      window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
+  }
+
   function setScrubAnimMode(on: boolean) {
     scrubCursors.forEach((c) => {
       if (!c) return;
-      c.style.transition = on ? "left 90ms linear" : "";
+      c.style.transition = on && !prefersReducedMotion() ? "left 90ms linear" : "";
     });
   }
 
@@ -703,6 +710,11 @@
     playBtn.addEventListener("click", () => {
       if (!scrubData.length) return;
       if (scrubAnim) { stopScrubPlay(); return; }
+      if (prefersReducedMotion()) {
+        setScrubCursor(1);
+        if (playBtn) playBtn.textContent = PLAY_LABEL;
+        return;
+      }
       playBtn.textContent = STOP_LABEL;
       setScrubAnimMode(true);
       const lastPoint = scrubData[scrubData.length - 1];

@@ -174,6 +174,20 @@ class DataBackupTest {
     @Test
     fun debugExportWritesJsonFile() {
         val context = RuntimeEnvironment.getApplication()
+        val sessionLogDir = File(context.filesDir, "obd-logs")
+        val appLogDir = File(context.filesDir, "app-log")
+        assertTrue(sessionLogDir.mkdirs() || sessionLogDir.isDirectory)
+        assertTrue(appLogDir.mkdirs() || appLogDir.isDirectory)
+        val sessionLog = File(sessionLogDir, "session-1000-obd.jsonl")
+        val appLogFile = File(appLogDir, "app.log")
+        writeFile(
+            sessionLog,
+            "{\"type\":\"command\",\"payload\":{\"command\":\"010C\",\"response\":\"410C1AF8\"}}\n",
+        )
+        writeFile(
+            appLogFile,
+            "2026-06-07T20:00:00.000 INFO OBD: command trace mirrored\n",
+        )
         val backup = DataBackup(context)
 
         val result =
@@ -193,7 +207,16 @@ class DataBackupTest {
             )
         assertNotNull(exported.optJSONObject("appState"))
         assertNotNull(exported.optJSONObject("storage"))
+        val diagnostics = exported.getJSONObject("diagnostics")
+        val sessionTrace = diagnostics.getJSONArray("sessionCommandTrace").getJSONObject(0)
+        assertEquals("session-1000-obd.jsonl", sessionTrace.optString("name"))
+        assertTrue(sessionTrace.optString("text").contains("\"command\":\"010C\""))
+        val appLog = diagnostics.getJSONArray("appLog").getJSONObject(0)
+        assertEquals("app.log", appLog.optString("name"))
+        assertTrue(appLog.optString("text").contains("command trace mirrored"))
         file.delete()
+        sessionLog.delete()
+        appLogFile.delete()
     }
 
     companion object {

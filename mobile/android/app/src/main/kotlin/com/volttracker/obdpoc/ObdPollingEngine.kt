@@ -177,6 +177,7 @@ open class ObdPollingEngine(
                     if (phase.isNullOrEmpty()) {
                         phase = "post_connect"
                     }
+                    val watchdogFired = connection.watchdogFired
                     val failureClass =
                         ConnectionFailureClassifier.classify(
                             phase,
@@ -208,6 +209,8 @@ open class ObdPollingEngine(
                             ObdProbes.MAX_RECONNECT_ATTEMPTS.toString(),
                             "failureClass",
                             failureClass.wireName(),
+                            "watchdogFired",
+                            watchdogFired.toString(),
                             "exceptionClass",
                             exceptionClassName(ex),
                             "stackHead",
@@ -236,6 +239,8 @@ open class ObdPollingEngine(
                             attemptDurationMs.toString(),
                             "failureClass",
                             failureClass.wireName(),
+                            "watchdogFired",
+                            watchdogFired.toString(),
                         )
                     }
 
@@ -253,6 +258,8 @@ open class ObdPollingEngine(
                         everConnected.toString(),
                         "failureClass",
                         failureClass.wireName(),
+                        "watchdogFired",
+                        watchdogFired.toString(),
                         "exceptionClass",
                         exceptionClassName(ex),
                         "stackHead",
@@ -612,7 +619,13 @@ open class ObdPollingEngine(
             val startedAt = System.currentTimeMillis()
             val safeCommand = command ?: ""
             val rawResponse = connection.transact(safeCommand, timeoutMs, service.running::get)
-            service.recorder.logCommand(safeCommand, timeoutMs, System.currentTimeMillis() - startedAt, rawResponse)
+            service.recorder.logCommand(
+                safeCommand,
+                timeoutMs,
+                System.currentTimeMillis() - startedAt,
+                rawResponse,
+                connection.lastTransactTruncated,
+            )
             rawResponse
         }
 

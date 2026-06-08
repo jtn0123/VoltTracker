@@ -59,11 +59,13 @@ object ObdStoreRouteProjection {
         pointLimit: Int,
     ): JSONArray {
         val payload = JSONArray()
-        for (session in ObdStoreSupport.getRecentSessions(db, maxOf(100, sessionLimit))) {
-            if (ObdLocalStore.MODE_OBD != session.mode) {
-                continue
-            }
-            for (window in DriveWindowDetector.windowsForSession(db, session)) {
+        val sessions =
+            ObdStoreSupport
+                .getRecentSessions(db, maxOf(100, sessionLimit))
+                .filter { ObdLocalStore.MODE_OBD == it.mode }
+        val windowsBySession = DriveWindowDetector.windowsForSessions(db, sessions)
+        for (session in sessions) {
+            for (window in windowsBySession[session.id].orEmpty()) {
                 val route = routeForSession(db, session, pointLimit, window.startedAtMs, window.endedAtMs, window.routeKey())
                 val points = route.optJSONArray("points")
                 if (points == null || points.length() < 2) {
@@ -110,9 +112,10 @@ object ObdStoreRouteProjection {
                 "session_id = ?"
             }
 
-        val locationTotal = ObdStoreSupport.countRowsWhere(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, sessionWhere, sessionArg)
         val telemetryWhere = "$sessionWhere AND latitude IS NOT NULL AND longitude IS NOT NULL"
-        val telemetryTotal = ObdStoreSupport.countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, telemetryWhere, sessionArg)
+        val totals = routePointTotals(db, sessionWhere, telemetryWhere, sessionArg)
+        val locationTotal = totals.location
+        val telemetryTotal = totals.telemetry
         if (locationTotal > 0 && locationTotal >= telemetryTotal) {
             val locationPoints =
                 downsampledRoutePoints(
@@ -142,6 +145,26 @@ object ObdStoreRouteProjection {
             target,
             false,
         )
+    }
+
+    private fun routePointTotals(
+        db: SQLiteDatabase,
+        locationWhere: String,
+        telemetryWhere: String,
+        args: Array<String>,
+    ): RoutePointTotals {
+        db
+            .rawQuery(
+                "SELECT " +
+                    "(SELECT COUNT(*) FROM ${VoltTrackerDb.TABLE_LOCATION_SAMPLES} WHERE $locationWhere), " +
+                    "(SELECT COUNT(*) FROM ${VoltTrackerDb.TABLE_TELEMETRY} WHERE $telemetryWhere)",
+                args + args,
+            ).use { cursor ->
+                if (!cursor.moveToFirst()) {
+                    return RoutePointTotals(0L, 0L)
+                }
+                return RoutePointTotals(cursor.getLong(0), cursor.getLong(1))
+            }
     }
 
     @Throws(JSONException::class)
@@ -244,34 +267,37 @@ object ObdStoreRouteProjection {
         jsonKey: String,
         target: Int,
     ): JSONArray {
-        val total = ObdStoreSupport.countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, where, args)
-        if (total == 0L) {
-            return JSONArray()
-        }
-        val stride = strideFor(total, target)
-        val track = JSONArray()
-        var tail: JSONObject? = null
+        val rows = mutableListOf<ScalarTrackPoint>()
         db
             .query(VoltTrackerDb.TABLE_TELEMETRY, arrayOf("captured_at_ms", column), where, args, null, null, "captured_at_ms ASC")
             .use { cursor ->
-                var idx = 0L
                 while (cursor.moveToNext()) {
-                    val item = JSONObject()
-                    item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")))
-                    item.put(jsonKey, cursor.getDouble(cursor.getColumnIndexOrThrow(column)))
-                    if (cursor.isLast) {
-                        tail = item
-                        break
-                    }
-                    val strideKeep = total <= target || idx % stride == 0L
-                    val withinCap = total <= target || track.length() < target - 1
-                    if (strideKeep && withinCap) {
-                        track.put(item)
-                    }
-                    idx++
+                    rows.add(
+                        ScalarTrackPoint(
+                            cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")),
+                            cursor.getDouble(cursor.getColumnIndexOrThrow(column)),
+                        ),
+                    )
                 }
             }
-        tail?.let { track.put(it) }
+        if (rows.isEmpty()) {
+            return JSONArray()
+        }
+        val total = rows.size.toLong()
+        val stride = strideFor(total, target)
+        val track = JSONArray()
+        for (i in rows.indices) {
+            val row = rows[i]
+            val isTail = i == rows.lastIndex
+            val strideKeep = total <= target || i.toLong() % stride == 0L
+            val withinCap = total <= target || track.length() < target - 1
+            if (isTail || (strideKeep && withinCap)) {
+                val item = JSONObject()
+                item.put("atMs", row.atMs)
+                item.put(jsonKey, row.value)
+                track.put(item)
+            }
+        }
         return track
     }
 
@@ -284,4 +310,14 @@ object ObdStoreRouteProjection {
         }
         return maxOf(1L, (total - 1L) / (target - 1).toLong())
     }
+
+    private class RoutePointTotals(
+        val location: Long,
+        val telemetry: Long,
+    )
+
+    private class ScalarTrackPoint(
+        val atMs: Long,
+        val value: Double,
+    )
 }

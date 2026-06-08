@@ -6,6 +6,7 @@ import android.net.Uri
 import com.volttracker.obdpoc.data.BackupMigrator
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.VoltTrackerDb
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
@@ -49,9 +50,11 @@ class DataBackup(
             payload.put("createdAtMs", System.currentTimeMillis())
             payload.put("appState", MainActivityUtils.parseJson(appStateJson))
             payload.put("storage", MainActivityUtils.parseJson(storageJson))
+            payload.put("diagnostics", buildDiagnosticsSnapshot())
             // Internal cache, not external storage: the debug bundle contains app state + storage
-            // summary (device/trip metadata) in cleartext. App-scoped EXTERNAL storage is reachable
-            // via adb/backup tooling; internal cacheDir is private and gets swept on init.
+            // summary plus bounded diagnostic log excerpts in cleartext. App-scoped EXTERNAL
+            // storage is reachable via adb/backup tooling; internal cacheDir is private and gets
+            // swept on init.
             val dir = File(context.cacheDir, "exports")
             if (!dir.exists() && !dir.mkdirs()) {
                 payload.put("ok", false)
@@ -75,6 +78,73 @@ class DataBackup(
             }
         }
         return payload.toString()
+    }
+
+    private fun buildDiagnosticsSnapshot(): JSONObject {
+        val diagnostics = JSONObject()
+        val sessionLogDir = File(context.filesDir, "obd-logs")
+        val appLogDir = File(context.filesDir, "app-log")
+        diagnostics.put("sessionCommandTrace", recentLogEntries(sessionLogDir, "session-", ".jsonl", MAX_DEBUG_SESSION_LOGS))
+        diagnostics.put("appLog", recentLogEntries(appLogDir, "app.log", "", MAX_DEBUG_APP_LOGS))
+        return diagnostics
+    }
+
+    private fun recentLogEntries(
+        dir: File,
+        prefix: String,
+        suffix: String,
+        maxFiles: Int,
+    ): JSONArray {
+        val entries = JSONArray()
+        val files =
+            dir
+                .listFiles { file ->
+                    if (!file.isFile) {
+                        false
+                    } else if (prefix == "app.log") {
+                        file.name == "app.log" || file.name == "app.log.1"
+                    } else {
+                        file.name.startsWith(prefix) && (suffix.isEmpty() || file.name.endsWith(suffix))
+                    }
+                }?.sortedByDescending { it.lastModified() }
+                ?.take(maxFiles)
+                ?: return entries
+        for (file in files) {
+            val item = JSONObject()
+            item.put("name", file.name)
+            item.put("lastModifiedMs", file.lastModified())
+            item.put("bytes", file.length())
+            try {
+                val text = readTailText(file, MAX_DEBUG_LOG_BYTES)
+                item.put("truncated", file.length() > MAX_DEBUG_LOG_BYTES)
+                item.put("text", text)
+            } catch (ex: IOException) {
+                item.put("error", "${ex.javaClass.simpleName}: ${ex.message}")
+            }
+            entries.put(item)
+        }
+        return entries
+    }
+
+    @Throws(IOException::class)
+    private fun readTailText(
+        file: File,
+        maxBytes: Int,
+    ): String {
+        val length = file.length()
+        val skipBytes = maxOf(0L, length - maxBytes.toLong())
+        FileInputStream(file).use { input ->
+            var remaining = skipBytes
+            while (remaining > 0L) {
+                val skipped = input.skip(remaining)
+                if (skipped <= 0L) {
+                    break
+                }
+                remaining -= skipped
+            }
+            val bytes = input.readBytes()
+            return String(bytes, StandardCharsets.UTF_8)
+        }
     }
 
     fun buildBackupFile(store: ObdLocalStore?): File? {
@@ -207,6 +277,9 @@ class DataBackup(
 
     companion object {
         private const val MAX_RESTORE_BYTES = 128L * 1024L * 1024L
+        private const val MAX_DEBUG_LOG_BYTES = 64 * 1024
+        private const val MAX_DEBUG_SESSION_LOGS = 3
+        private const val MAX_DEBUG_APP_LOGS = 2
 
         // Track the live schema version so a future migration bump can't silently make restore
         // reject freshly-created backups (a v11 backup must validate as current, not "too new").

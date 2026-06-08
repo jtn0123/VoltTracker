@@ -41,6 +41,22 @@
     durationMs: number;
   };
 
+  type MutablePolylineLayer = LeafletLayer & {
+    setLatLngs?: (latlngs: LatLngTuple[]) => void;
+  };
+
+  type MutableMarkerLayer = LeafletLayer & {
+    setLatLng?: (latlng: LatLngTuple) => void;
+  };
+
+  type LiveRouteLayerCache = {
+    outer: MutablePolylineLayer;
+    inner: MutablePolylineLayer;
+    start: MutableMarkerLayer;
+    end: MutableMarkerLayer;
+    group: LeafletLayer;
+  };
+
   type DemoRouteOpts = {
     sessionId: number;
     startedAtMs: number;
@@ -74,6 +90,7 @@
 
   let mapInstance: LeafletMapInstance | null = null;
   let remoteTileLayer: LeafletLayer | null = null;
+  let liveRouteLayerCache: LiveRouteLayerCache | null = null;
   const mapLayerGroups: Record<string, LeafletLayer | null> = { routes: null, heat: null, stops: null, eff: null };
   let mapFitKey: string | null = null;
 
@@ -106,7 +123,8 @@
       mapFitKey = null;
     }
     liveRoutePoints.push(point);
-    if (liveRoutePoints.length > LIVE_ROUTE_MAX_POINTS) liveRoutePoints.shift();
+    const overflow = liveRoutePoints.length - LIVE_ROUTE_MAX_POINTS;
+    if (overflow > 0) liveRoutePoints.splice(0, overflow);
     if (state.selectedMapSessionId === LIVE_ROUTE_ID && state.view === "map") {
       renderMap();
     }
@@ -182,6 +200,7 @@
     tiles.on("tileerror", (event: LeafletTileErrorEvent) => {
       tileErrorCount += 1;
       const src = (event && event.tile && event.tile.src) || "unknown";
+      setMapTileError(true, "Map tiles are not loading. Routes still work; retry when the network is back.");
       if (tileErrorCount <= 2) {
         if (bridge && typeof bridge.logClientError === "function") {
           bridge.logClientError("map.tileerror", "Basemap tile failed: " + src);
@@ -194,6 +213,9 @@
           const fallback = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
             attribution: "© OpenStreetMap",
             maxZoom: 19
+          });
+          fallback.on("tileerror", () => {
+            setMapTileError(true, "Backup map tiles are also unavailable. Routes still work without basemap tiles.");
           });
           fallback.addTo(map);
           remoteTileLayer = fallback;
@@ -208,6 +230,26 @@
       }
     });
     return tiles;
+  }
+
+  function setMapTileError(show: boolean, detail?: string) {
+    const banner = el("mapTileError");
+    if (!banner) return;
+    banner.hidden = !show;
+    if (detail) VD.setText("mapTileErrorCopy", detail);
+  }
+
+  function retryMapTiles() {
+    const map = mapInstance;
+    setMapTileError(false);
+    if (!map) return;
+    if (remoteTileLayer) {
+      try {
+        map.removeLayer(remoteTileLayer);
+      } catch (ignored) {}
+      remoteTileLayer = null;
+    }
+    syncRemoteTiles();
   }
 
   function syncRemoteTiles() {
@@ -258,7 +300,7 @@
     const hasRoute = points.length >= 2;
     const isLiveRoute = routeIsLive(route);
     const hasMapContent = hasRoute || (isLiveRoute && points.some(isValidRoutePoint));
-    const layer = state.mapLayer;
+    const layer = isLiveRoute ? "routes" : state.mapLayer;
     const stops = hasRoute ? detectStops(points) : [];
 
     const frame = el("mapFrame");
@@ -481,14 +523,18 @@
     const map = ensureMap();
     if (!map) return;
     map.invalidateSize(false);
+    const drawable = points.filter(isValidRoutePoint);
+    const isLiveRoute = String((routeSession || {}).id || "") === LIVE_ROUTE_ID;
+    if (isLiveRoute && layer === "routes" && updateLiveRouteLayer(drawable, map, routeSession)) {
+      return;
+    }
     Object.keys(mapLayerGroups).forEach((key) => {
       if (mapLayerGroups[key]) {
         map.removeLayer(mapLayerGroups[key]);
         mapLayerGroups[key] = null;
       }
     });
-    const drawable = points.filter(isValidRoutePoint);
-    const isLiveRoute = String((routeSession || {}).id || "") === LIVE_ROUTE_ID;
+    liveRouteLayerCache = null;
     if (!drawable.length || (!hasRoute && !isLiveRoute)) return;
     const latlngs = drawable.map((p) => [Number(p.lat), Number(p.lng)] as LatLngTuple);
     const firstLatLng = latlngs[0];
@@ -517,12 +563,21 @@
     const routeColor = isLiveRoute ? "#4cc4ff" : "#ff7a45";
     const routeEndColor = isLiveRoute ? "#4cc4ff" : "#ff7141";
 
-    mapLayerGroups.routes = L.layerGroup([
-      L.polyline(latlngs, { color: routeColor, weight: 9, opacity: 0.16 }),
-      L.polyline(latlngs, { color: routeColor, weight: 3.5, opacity: 1 }),
-      L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: routeColor, fillOpacity: 1 }),
-      L.circleMarker(lastLatLng, { radius: isLiveRoute ? 8 : 7, color: "#fff", weight: 2, fillColor: routeEndColor, fillOpacity: 1 })
-    ]);
+    const outerRoute = L.polyline(latlngs, { color: routeColor, weight: 9, opacity: 0.16 }) as MutablePolylineLayer;
+    const innerRoute = L.polyline(latlngs, { color: routeColor, weight: 3.5, opacity: 1 }) as MutablePolylineLayer;
+    const startMarker = L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: routeColor, fillOpacity: 1 }) as MutableMarkerLayer;
+    const endMarker = L.circleMarker(lastLatLng, { radius: isLiveRoute ? 8 : 7, color: "#fff", weight: 2, fillColor: routeEndColor, fillOpacity: 1 }) as MutableMarkerLayer;
+    const routeGroup = L.layerGroup([outerRoute, innerRoute, startMarker, endMarker]);
+    mapLayerGroups.routes = routeGroup;
+    if (isLiveRoute && layer === "routes") {
+      liveRouteLayerCache = {
+        outer: outerRoute,
+        inner: innerRoute,
+        start: startMarker,
+        end: endMarker,
+        group: routeGroup
+      };
+    }
 
     const bands: Record<string, LatLngSegment[]> = { "#ff6b4a": [], "#ffd23f": [], "#7ee06a": [] };
     for (let i = 1; i < drawable.length; i += 1) {
@@ -587,6 +642,38 @@
     }
   }
 
+  function updateLiveRouteLayer(
+    drawable: MapRoutePoint[],
+    map: LeafletMapInstance,
+    routeSession: MapRouteSession
+  ) {
+    const cache = liveRouteLayerCache;
+    if (!cache || drawable.length < 2) return false;
+    if (
+      typeof cache.outer.setLatLngs !== "function" ||
+      typeof cache.inner.setLatLngs !== "function" ||
+      typeof cache.start.setLatLng !== "function" ||
+      typeof cache.end.setLatLng !== "function"
+    ) {
+      return false;
+    }
+    const latlngs = drawable.map((p) => [Number(p.lat), Number(p.lng)] as LatLngTuple);
+    const first = latlngs[0];
+    const last = latlngs[latlngs.length - 1];
+    if (!first || !last) return false;
+    cache.outer.setLatLngs(latlngs);
+    cache.inner.setLatLngs(latlngs);
+    cache.start.setLatLng(first);
+    cache.end.setLatLng(last);
+    addActiveLayerGroup("routes", map);
+    const fitKey = routeFitKey(routeSession, drawable);
+    if (fitKey !== mapFitKey) {
+      map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
+      mapFitKey = fitKey;
+    }
+    return true;
+  }
+
   function isValidRoutePoint(point: unknown): point is MapRoutePoint {
     const candidate = point as MapRoutePoint | null;
     const lat = Number(candidate && candidate.lat);
@@ -598,6 +685,13 @@
     const first = points[0];
     const last = points[points.length - 1];
     if (!first || !last) return [(routeSession || {}).id || "", points.length, "", "", "", ""].join(":");
+    if (String((routeSession || {}).id || "") === LIVE_ROUTE_ID) {
+      return [
+        LIVE_ROUTE_ID,
+        Number(first.lat).toFixed(5),
+        Number(first.lng).toFixed(5)
+      ].join(":");
+    }
     return [
       (routeSession || {}).id || "",
       points.length,
@@ -1083,10 +1177,17 @@
     VD.setStatus({ state: "demo", detail: `Demo scenario: ${scenario}.` });
   }
 
+  const mapTileRetry = el("mapTileRetryBtn");
+  if (mapTileRetry) {
+    mapTileRetry.addEventListener("click", retryMapTiles);
+  }
+
   Object.assign(VD, {
     ensureMap,
     renderMap,
     drawMapRoute,
+    setMapTileError,
+    retryMapTiles,
     renderMapSessionList,
     selectedMapRoute,
     sessionForRoute,

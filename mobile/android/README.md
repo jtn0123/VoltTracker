@@ -118,6 +118,18 @@ The aggregate task is configuration-cache ready. For faster repeated local
 loops, run `./gradlew verifyActiveApp --configuration-cache`; the second run
 should reuse the stored configuration.
 
+### Environment doctor
+
+Run the no-network doctor when a new machine or agent shell behaves differently
+from CI:
+
+```sh
+./scripts/doctor.sh
+```
+
+It reports Java, Android SDK, adb/device, Node/npm, dashboard dependency, and
+Playwright readiness without installing anything.
+
 #### Running pieces individually
 
 ```sh

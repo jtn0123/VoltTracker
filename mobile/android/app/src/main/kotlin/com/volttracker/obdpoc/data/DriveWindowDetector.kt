@@ -27,7 +27,31 @@ object DriveWindowDetector {
         if (db == null || session == null) {
             return emptyList()
         }
-        val bounds = dataBounds(db, session.id)
+        val data = readSessionData(db, listOf(session))[session.id] ?: SessionData()
+        return windowsForSession(session, data)
+    }
+
+    @JvmStatic
+    fun windowsForSessions(
+        db: SQLiteDatabase?,
+        sessions: List<ObdSessionRecord>?,
+    ): Map<Long, List<DriveWindow>> {
+        if (db == null || sessions.isNullOrEmpty()) {
+            return emptyMap()
+        }
+        val dataBySession = readSessionData(db, sessions)
+        val windowsBySession = LinkedHashMap<Long, List<DriveWindow>>()
+        for (session in sessions) {
+            windowsBySession[session.id] = windowsForSession(session, dataBySession[session.id] ?: SessionData())
+        }
+        return windowsBySession
+    }
+
+    private fun windowsForSession(
+        session: ObdSessionRecord,
+        data: SessionData,
+    ): List<DriveWindow> {
+        val bounds = dataBounds(data)
         var fallbackStartMs = session.startedAtMs
         var fallbackEndMs =
             if (session.endedAtMs > 0) {
@@ -47,7 +71,7 @@ object DriveWindowDetector {
         if (fallbackEndMs <= fallbackStartMs) {
             return emptyList()
         }
-        val spans = splitSpans(db, session.id)
+        val spans = splitSpans(data)
         if (spans.isEmpty()) {
             return listOf(DriveWindow(session.id, 0, fallbackStartMs, fallbackEndMs))
         }
@@ -89,21 +113,15 @@ object DriveWindowDetector {
         return null
     }
 
-    private fun splitSpans(
-        db: SQLiteDatabase,
-        sessionId: Long,
-    ): List<SplitSpan> {
+    private fun splitSpans(data: SessionData): List<SplitSpan> {
         val spans = mutableListOf<SplitSpan>()
-        spans.addAll(gpsStopSpans(db, sessionId))
-        spans.addAll(inactiveTelemetrySpans(db, sessionId))
+        spans.addAll(gpsStopSpans(data))
+        spans.addAll(inactiveTelemetrySpans(data))
         return spans
     }
 
-    private fun gpsStopSpans(
-        db: SQLiteDatabase,
-        sessionId: Long,
-    ): List<SplitSpan> {
-        val samples = readRouteSamples(db, sessionId)
+    private fun gpsStopSpans(data: SessionData): List<SplitSpan> {
+        val samples = routeSamples(data)
         val spans = mutableListOf<SplitSpan>()
         if (samples.size < 2) {
             return spans
@@ -119,19 +137,18 @@ object DriveWindowDetector {
                     runStart = i - 1
                 }
             } else if (runStart >= 0) {
-                addStopSpan(db, sessionId, spans, samples, runStart, i - 1)
+                addStopSpan(data.activitySamples, spans, samples, runStart, i - 1)
                 runStart = -1
             }
         }
         if (runStart >= 0) {
-            addStopSpan(db, sessionId, spans, samples, runStart, samples.lastIndex)
+            addStopSpan(data.activitySamples, spans, samples, runStart, samples.lastIndex)
         }
         return spans
     }
 
     private fun addStopSpan(
-        db: SQLiteDatabase,
-        sessionId: Long,
+        activitySamples: List<ActivitySample>,
         spans: MutableList<SplitSpan>,
         samples: List<RouteSample>,
         startIndex: Int,
@@ -142,31 +159,17 @@ object DriveWindowDetector {
         val stoppedAtMs = samples[min(startIndex + 1, endIndex)].atMs
         if (endMs - stoppedAtMs >= MIN_STOP_SPLIT_MS &&
             pathMeters(samples, startIndex, endIndex) <= MAX_STOP_DRIFT_METERS &&
-            !hasActiveTelemetryInSpan(db, sessionId, stoppedAtMs, endMs)
+            !hasActiveTelemetryInSpan(activitySamples, stoppedAtMs, endMs)
         ) {
             spans.add(SplitSpan(startMs, endMs))
         }
     }
 
-    private fun dataBounds(
-        db: SQLiteDatabase,
-        sessionId: Long,
-    ): DataBounds? {
-        val route = boundsFor(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, "session_id = ?", sessionId)
-        val geoTelemetry =
-            boundsFor(
-                db,
-                VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL",
-                sessionId,
-            )
-        if (geoTelemetry != null) {
-            return mergeBounds(route, geoTelemetry)
+    private fun dataBounds(data: SessionData): DataBounds? {
+        if (data.geoTelemetryBounds != null) {
+            return mergeBounds(data.locationBounds, data.geoTelemetryBounds)
         }
-        return mergeBounds(
-            route,
-            boundsFor(db, VoltTrackerDb.TABLE_TELEMETRY, "session_id = ?", sessionId),
-        )
+        return mergeBounds(data.locationBounds, data.telemetryBounds)
     }
 
     private fun mergeBounds(
@@ -182,24 +185,6 @@ object DriveWindowDetector {
         return DataBounds(min(left.firstMs, right.firstMs), max(left.lastMs, right.lastMs))
     }
 
-    private fun boundsFor(
-        db: SQLiteDatabase,
-        table: String,
-        where: String,
-        sessionId: Long,
-    ): DataBounds? {
-        db
-            .rawQuery(
-                "SELECT MIN(captured_at_ms), MAX(captured_at_ms) FROM $table WHERE $where",
-                arrayOf(sessionId.toString()),
-            ).use { cursor ->
-                if (!cursor.moveToFirst() || cursor.isNull(0) || cursor.isNull(1)) {
-                    return null
-                }
-                return DataBounds(cursor.getLong(0), cursor.getLong(1))
-            }
-    }
-
     private fun pathMeters(
         samples: List<RouteSample>,
         startIndex: Int,
@@ -212,92 +197,29 @@ object DriveWindowDetector {
         return meters
     }
 
-    private fun readRouteSamples(
-        db: SQLiteDatabase,
-        sessionId: Long,
-    ): List<RouteSample> {
-        val locationSamples =
-            readRouteSamplesFromTable(
-                db,
-                VoltTrackerDb.TABLE_LOCATION_SAMPLES,
-                "session_id = ?",
-                arrayOf(sessionId.toString()),
-            )
-        val telemetrySamples =
-            readRouteSamplesFromTable(
-                db,
-                VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL",
-                arrayOf(sessionId.toString()),
-            )
-        return if (locationSamples.size >= telemetrySamples.size) {
-            locationSamples
+    private fun routeSamples(data: SessionData): List<RouteSample> =
+        if (data.locationSamples.size >= data.telemetryRouteSamples.size) {
+            data.locationSamples
         } else {
-            telemetrySamples
+            data.telemetryRouteSamples
         }
-    }
 
-    private fun readRouteSamplesFromTable(
-        db: SQLiteDatabase,
-        table: String,
-        where: String,
-        args: Array<String>,
-    ): List<RouteSample> {
-        val samples = mutableListOf<RouteSample>()
-        db
-            .query(
-                table,
-                arrayOf("captured_at_ms", "latitude", "longitude"),
-                where,
-                args,
-                null,
-                null,
-                "captured_at_ms ASC",
-            ).use { cursor ->
-                while (cursor.moveToNext()) {
-                    samples.add(
-                        RouteSample(
-                            cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")),
-                            cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")),
-                            cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")),
-                        ),
-                    )
-                }
-            }
-        return samples
-    }
-
-    private fun inactiveTelemetrySpans(
-        db: SQLiteDatabase,
-        sessionId: Long,
-    ): List<SplitSpan> {
+    private fun inactiveTelemetrySpans(data: SessionData): List<SplitSpan> {
         val spans = mutableListOf<SplitSpan>()
         var inactiveStartMs = -1L
         var inactiveEndMs = -1L
-        db
-            .query(
-                VoltTrackerDb.TABLE_TELEMETRY,
-                arrayOf("captured_at_ms", "speed_kph", "rpm", "voltage", "power_kw", "pack_current_a"),
-                "session_id = ?",
-                arrayOf(sessionId.toString()),
-                null,
-                null,
-                "captured_at_ms ASC",
-            ).use { cursor ->
-                while (cursor.moveToNext()) {
-                    val atMs = cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms"))
-                    if (isActiveVehicleSample(cursor)) {
-                        addInactiveSpan(spans, inactiveStartMs, inactiveEndMs)
-                        inactiveStartMs = -1L
-                        inactiveEndMs = -1L
-                    } else {
-                        if (inactiveStartMs < 0L) {
-                            inactiveStartMs = atMs
-                        }
-                        inactiveEndMs = atMs
-                    }
+        for (sample in data.activitySamples) {
+            if (isActiveVehicleSample(sample)) {
+                addInactiveSpan(spans, inactiveStartMs, inactiveEndMs)
+                inactiveStartMs = -1L
+                inactiveEndMs = -1L
+            } else {
+                if (inactiveStartMs < 0L) {
+                    inactiveStartMs = sample.atMs
                 }
+                inactiveEndMs = sample.atMs
             }
+        }
         addInactiveSpan(spans, inactiveStartMs, inactiveEndMs)
         return spans
     }
@@ -313,27 +235,15 @@ object DriveWindowDetector {
     }
 
     private fun hasActiveTelemetryInSpan(
-        db: SQLiteDatabase,
-        sessionId: Long,
+        activitySamples: List<ActivitySample>,
         startMs: Long,
         endMs: Long,
     ): Boolean {
-        db
-            .query(
-                VoltTrackerDb.TABLE_TELEMETRY,
-                arrayOf("speed_kph", "rpm", "voltage", "power_kw", "pack_current_a"),
-                "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ?",
-                arrayOf(sessionId.toString(), startMs.toString(), endMs.toString()),
-                null,
-                null,
-                "captured_at_ms ASC",
-            ).use { cursor ->
-                while (cursor.moveToNext()) {
-                    if (isActiveVehicleSample(cursor)) {
-                        return true
-                    }
-                }
+        for (sample in activitySamples) {
+            if (sample.atMs >= startMs && sample.atMs <= endMs && isActiveVehicleSample(sample)) {
+                return true
             }
+        }
         return false
     }
 
@@ -358,24 +268,24 @@ object DriveWindowDetector {
         return merged
     }
 
-    private fun isActiveVehicleSample(cursor: Cursor): Boolean {
-        val speedKph = nullableInt(cursor, "speed_kph")
+    private fun isActiveVehicleSample(sample: ActivitySample): Boolean {
+        val speedKph = sample.speedKph
         if (speedKph != null && speedKph > VehicleActivityThresholds.MOVING_SPEED_KPH) {
             return true
         }
-        val rpm = nullableInt(cursor, "rpm")
+        val rpm = sample.rpm
         if (rpm != null && rpm > VehicleActivityThresholds.ENGINE_READY_RPM) {
             return true
         }
-        val voltage = nullableDouble(cursor, "voltage")
+        val voltage = sample.voltage
         if (voltage != null && voltage > VehicleActivityThresholds.READY_VOLTAGE) {
             return true
         }
-        val powerKw = nullableDouble(cursor, "power_kw")
+        val powerKw = sample.powerKw
         if (powerKw != null && abs(powerKw) > VehicleActivityThresholds.ACTIVE_POWER_KW) {
             return true
         }
-        val packCurrentA = nullableDouble(cursor, "pack_current_a")
+        val packCurrentA = sample.packCurrentA
         return packCurrentA != null &&
             abs(packCurrentA) > VehicleActivityThresholds.ACTIVE_PACK_CURRENT_A
     }
@@ -395,6 +305,138 @@ object DriveWindowDetector {
         val idx = cursor.getColumnIndexOrThrow(column)
         return if (cursor.isNull(idx)) null else cursor.getDouble(idx)
     }
+
+    private fun readSessionData(
+        db: SQLiteDatabase,
+        sessions: List<ObdSessionRecord>,
+    ): Map<Long, SessionData> {
+        val ids = sessions.map { it.id }.distinct()
+        if (ids.isEmpty()) {
+            return emptyMap()
+        }
+        val dataBySession = LinkedHashMap<Long, SessionData>()
+        for (id in ids) {
+            dataBySession[id] = SessionData()
+        }
+        val geoTelemetryWhere = "AND latitude IS NOT NULL AND longitude IS NOT NULL"
+        applyBounds(
+            dataBySession,
+            readBoundsBySession(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, ids, ""),
+        ) { data, bounds -> data.locationBounds = bounds }
+        applyBounds(
+            dataBySession,
+            readBoundsBySession(db, VoltTrackerDb.TABLE_TELEMETRY, ids, geoTelemetryWhere),
+        ) { data, bounds -> data.geoTelemetryBounds = bounds }
+        applyBounds(
+            dataBySession,
+            readBoundsBySession(db, VoltTrackerDb.TABLE_TELEMETRY, ids, ""),
+        ) { data, bounds -> data.telemetryBounds = bounds }
+        readRouteSamplesBySession(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, ids, "").forEach { (sessionId, samples) ->
+            dataBySession[sessionId]?.locationSamples = samples
+        }
+        readRouteSamplesBySession(db, VoltTrackerDb.TABLE_TELEMETRY, ids, geoTelemetryWhere)
+            .forEach { (sessionId, samples) ->
+                dataBySession[sessionId]?.telemetryRouteSamples = samples
+            }
+        readActivitySamplesBySession(db, ids).forEach { (sessionId, samples) ->
+            dataBySession[sessionId]?.activitySamples = samples
+        }
+        return dataBySession
+    }
+
+    private fun applyBounds(
+        dataBySession: Map<Long, SessionData>,
+        boundsBySession: Map<Long, DataBounds>,
+        apply: (SessionData, DataBounds) -> Unit,
+    ) {
+        for ((sessionId, bounds) in boundsBySession) {
+            dataBySession[sessionId]?.let { apply(it, bounds) }
+        }
+    }
+
+    private fun readBoundsBySession(
+        db: SQLiteDatabase,
+        table: String,
+        sessionIds: List<Long>,
+        extraWhere: String,
+    ): Map<Long, DataBounds> {
+        val selection = sessionSelection(sessionIds)
+        val boundsBySession = LinkedHashMap<Long, DataBounds>()
+        db
+            .rawQuery(
+                "SELECT session_id, MIN(captured_at_ms), MAX(captured_at_ms) " +
+                    "FROM $table WHERE session_id IN (${selection.placeholders}) $extraWhere GROUP BY session_id",
+                selection.args,
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    if (!cursor.isNull(1) && !cursor.isNull(2)) {
+                        boundsBySession[cursor.getLong(0)] = DataBounds(cursor.getLong(1), cursor.getLong(2))
+                    }
+                }
+            }
+        return boundsBySession
+    }
+
+    private fun readRouteSamplesBySession(
+        db: SQLiteDatabase,
+        table: String,
+        sessionIds: List<Long>,
+        extraWhere: String,
+    ): Map<Long, List<RouteSample>> {
+        val selection = sessionSelection(sessionIds)
+        val samplesBySession = LinkedHashMap<Long, MutableList<RouteSample>>()
+        db
+            .rawQuery(
+                "SELECT session_id, captured_at_ms, latitude, longitude " +
+                    "FROM $table WHERE session_id IN (${selection.placeholders}) $extraWhere " +
+                    "ORDER BY session_id ASC, captured_at_ms ASC",
+                selection.args,
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    samplesBySession
+                        .getOrPut(cursor.getLong(0)) { mutableListOf() }
+                        .add(RouteSample(cursor.getLong(1), cursor.getDouble(2), cursor.getDouble(3)))
+                }
+            }
+        return samplesBySession
+    }
+
+    private fun readActivitySamplesBySession(
+        db: SQLiteDatabase,
+        sessionIds: List<Long>,
+    ): Map<Long, List<ActivitySample>> {
+        val selection = sessionSelection(sessionIds)
+        val samplesBySession = LinkedHashMap<Long, MutableList<ActivitySample>>()
+        db
+            .rawQuery(
+                "SELECT session_id, captured_at_ms, speed_kph, rpm, voltage, power_kw, pack_current_a " +
+                    "FROM ${VoltTrackerDb.TABLE_TELEMETRY} WHERE session_id IN (${selection.placeholders}) " +
+                    "ORDER BY session_id ASC, captured_at_ms ASC",
+                selection.args,
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    samplesBySession
+                        .getOrPut(cursor.getLong(0)) { mutableListOf() }
+                        .add(
+                            ActivitySample(
+                                cursor.getLong(1),
+                                nullableInt(cursor, "speed_kph"),
+                                nullableInt(cursor, "rpm"),
+                                nullableDouble(cursor, "voltage"),
+                                nullableDouble(cursor, "power_kw"),
+                                nullableDouble(cursor, "pack_current_a"),
+                            ),
+                        )
+                }
+            }
+        return samplesBySession
+    }
+
+    private fun sessionSelection(sessionIds: List<Long>): SessionSelection =
+        SessionSelection(
+            sessionIds.joinToString(",") { "?" },
+            sessionIds.map { it.toString() }.toTypedArray(),
+        )
 
     private fun haversineMeters(
         a: RouteSample,
@@ -440,8 +482,31 @@ object DriveWindowDetector {
         val lng: Double,
     )
 
+    private class ActivitySample(
+        val atMs: Long,
+        val speedKph: Int?,
+        val rpm: Int?,
+        val voltage: Double?,
+        val powerKw: Double?,
+        val packCurrentA: Double?,
+    )
+
     private class DataBounds(
         val firstMs: Long,
         val lastMs: Long,
+    )
+
+    private class SessionData(
+        var locationBounds: DataBounds? = null,
+        var geoTelemetryBounds: DataBounds? = null,
+        var telemetryBounds: DataBounds? = null,
+        var locationSamples: List<RouteSample> = emptyList(),
+        var telemetryRouteSamples: List<RouteSample> = emptyList(),
+        var activitySamples: List<ActivitySample> = emptyList(),
+    )
+
+    private class SessionSelection(
+        val placeholders: String,
+        val args: Array<String>,
     )
 }

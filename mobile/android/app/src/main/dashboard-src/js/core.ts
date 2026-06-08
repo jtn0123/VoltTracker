@@ -285,6 +285,8 @@
     storage: {},
     trips: [],
     insights: {},
+    tripsReadError: null,
+    insightsReadError: null,
     // Demo-only staged charge sessions (actions.js stages rows here so they
     // don't touch the real session list); null until demo mode adds the first.
     demoSessions: null,

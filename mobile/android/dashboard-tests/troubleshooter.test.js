@@ -114,6 +114,31 @@ describe('troubleshooter.ts — auto-open triggers', () => {
     expect(isModalOpen()).toBe(false);
     expect(VD.state.troubleshooter.autoOpened).toBe(false);
   });
+
+  it('closes on Escape and restores the inert background', () => {
+    const app = document.querySelector('main.app');
+    VD.troubleshooter.open();
+    expect(isModalOpen()).toBe(true);
+    expect(app.getAttribute('aria-hidden')).toBe('true');
+    expect(app.inert).toBe(true);
+
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(isModalOpen()).toBe(false);
+    expect(app.getAttribute('aria-hidden')).toBeNull();
+    expect(app.inert).toBe(false);
+  });
+
+  it('traps Tab focus inside the modal', () => {
+    VD.troubleshooter.open();
+    const first = modal().querySelector('.troubleshooter-close');
+    const last = modal().querySelector('.troubleshooter-secondary');
+    last.focus();
+
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+
+    expect(document.activeElement).toBe(first);
+  });
 });
 
 describe('troubleshooter.ts — failure-class banner copy', () => {
@@ -419,20 +444,29 @@ describe('connection-tools.ts — proactive adapter checks', () => {
     const button = document.getElementById('testConnectionBtn');
     const original = button.textContent;
     button.click();
+    button.click();
 
     expect(bridge.startTestConnection).toHaveBeenCalledTimes(1);
     expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-busy')).toBe('true');
     expect(button.textContent).toBe('Probing...');
 
     // Re-enables roughly when the Android-side probe (25 s) stops itself.
     vi.advanceTimersByTime(25_500);
     expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-busy')).toBe('false');
     expect(button.textContent).toBe(original);
   });
 
   it('Send diagnostics funnels both the primary and settings-mirror buttons to the bridge', () => {
-    document.getElementById('sendDiagnosticsBtn').click();
+    const primary = document.getElementById('sendDiagnosticsBtn');
+    primary.click();
+    primary.click();
     expect(bridge.shareDiagnostics).toHaveBeenCalledTimes(1);
+    expect(primary.disabled).toBe(true);
+    expect(primary.getAttribute('aria-busy')).toBe('true');
+    vi.advanceTimersByTime(1500);
+    expect(primary.disabled).toBe(false);
 
     const mirror = document.getElementById('sendDiagnosticsSettingsBtn');
     if (mirror) {
@@ -451,7 +485,10 @@ describe('connection-tools.ts — proactive adapter checks', () => {
     toggle.dispatchEvent(new window.Event('change'));
 
     expect(bridge.scheduleAdapterReadyNotify).toHaveBeenCalledWith(15);
+    expect(toggle.closest('fieldset').getAttribute('aria-busy')).toBe('true');
     expect(status.textContent).toMatch(/next 15 min/i);
+    vi.advanceTimersByTime(600);
+    expect(toggle.closest('fieldset').getAttribute('aria-busy')).toBe('false');
   });
 
   it('Notify-when-ready honors the longest (30 min) selectable duration', () => {
@@ -484,6 +521,7 @@ describe('connection-tools.ts — proactive adapter checks', () => {
     toggle.checked = true;
     toggle.dispatchEvent(new window.Event('change'));
     expect(bridge.scheduleAdapterReadyNotify).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(600);
 
     mins.value = '5';
     mins.dispatchEvent(new window.Event('change'));

@@ -23,8 +23,30 @@ class ElmConnectionTest {
         val response = connection.transact("010C", 1000L) { true }
 
         assertEquals("41 0C 1880\r>", response)
+        assertEquals(false, connection.lastTransactTruncated)
         // the command is written with a trailing carriage return
         assertEquals("010C\r", out.toString("US-ASCII"))
+    }
+
+    @Test
+    fun transactMarksPartialDeadlineResponseAsTruncated() {
+        val input = ReplyStream("41 0C 1880\r")
+        val out = TriggerOutputStream(input)
+        val reads = AtomicInteger()
+        val clock =
+            ElmConnection.Clock {
+                if (reads.getAndIncrement() < 2) {
+                    0L
+                } else {
+                    100L
+                }
+            }
+        val connection = ElmConnection(input, out, clock)
+
+        val response = connection.transact("010C", 50L) { true }
+
+        assertEquals("41 0C 1880\r", response)
+        assertEquals(true, connection.lastTransactTruncated)
     }
 
     @Test

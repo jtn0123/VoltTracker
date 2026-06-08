@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
+import { createVoltBridgeFixture } from './setup/voltbridge.fixture.js';
 
 function staleTileIds() {
   return Array.from(document.querySelectorAll('[data-live-tile="true"]'))
@@ -87,5 +88,29 @@ describe('stale-tile indicator', () => {
     vi.advanceTimersByTime(4000);
     expect(chip.dataset.state).toBe('stale');
     expect(label.textContent).toBe('stale');
+  });
+
+  it('explains stale telemetry and lets keyboard users reconnect', async () => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    const bridge = createVoltBridgeFixture({ tryReconnectNow: vi.fn() });
+    await loadDashboard({ bridge });
+    const chip = document.getElementById('liveRateChip');
+
+    window.VoltTrackerNative.updateTelemetry({
+      source: 'real',
+      speedKph: 42,
+      sampleCount: 1,
+      updatedAt: Date.now(),
+    });
+    vi.advanceTimersByTime(4100);
+
+    expect(chip.dataset.state).toBe('stale');
+    expect(chip.getAttribute('role')).toBe('button');
+    expect(chip.getAttribute('aria-label')).toMatch(/press to reconnect/i);
+    chip.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(bridge.tryReconnectNow).toHaveBeenCalledTimes(1);
   });
 });

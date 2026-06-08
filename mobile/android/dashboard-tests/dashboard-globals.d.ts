@@ -327,6 +327,8 @@ interface DashboardState {
   storage: VoltStorageSummary;
   trips: VoltTrip[];
   insights: VoltInsights;
+  tripsReadError: string | null;
+  insightsReadError: string | null;
   demoSessions: VoltChargeSessionRow[] | null;
   appState: VoltAppState;
   demoActive: boolean;
@@ -613,6 +615,8 @@ interface VoltStatus {
 
     // ----- map.ts ------------------------------------------------------------
     renderMap(): void;
+    setMapTileError(show: boolean, detail?: string): void;
+    retryMapTiles(): void;
     loadSampleData(): void;
     haversineMetersJs(lat1: number, lng1: number, lat2: number, lng2: number): number;
     /** Resolve the route for the currently-selected map session from a storage payload. */

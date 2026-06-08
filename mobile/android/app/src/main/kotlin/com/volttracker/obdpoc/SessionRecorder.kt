@@ -235,6 +235,7 @@ class SessionRecorder {
         timeoutMs: Long,
         durationMs: Long,
         response: String?,
+        truncatedOnDeadline: Boolean = false,
     ) {
         synchronized(lock) {
             val payload = JSONObject()
@@ -247,6 +248,10 @@ class SessionRecorder {
                 payload.put("durationMs", durationMs)
                 payload.put("response", ObdElmDecode.summarizeForStorage(command, response))
                 payload.put("gotPrompt", response != null && response.indexOf('>') >= 0)
+                payload.put("truncatedOnDeadline", truncatedOnDeadline)
+                if (truncatedOnDeadline) {
+                    payload.put("warning", "Response ended at the command deadline before the ELM prompt arrived.")
+                }
                 payload.put("empty", response == null || ObdProtocol.summarize(response).isEmpty())
                 payload.put("observedAtMs", observedAtMs)
             } catch (ignored: JSONException) {

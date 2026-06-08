@@ -131,6 +131,14 @@ class BackupControllerShareTest {
             activity.backupController!!.shareDisclosureMessage(),
             shadow.message.toString(),
         )
+        assertTrue(
+            "encrypted backup disclosure should set passphrase-strength expectations",
+            shadow.message.toString().contains("strong, unique passphrase"),
+        )
+        assertTrue(
+            "encrypted backup disclosure should explain lost passphrases cannot be recovered",
+            shadow.message.toString().contains("cannot recover it if it is lost"),
+        )
         assertEquals(
             "Share anyway",
             dialog.getButton(DialogInterface.BUTTON_POSITIVE).text.toString(),

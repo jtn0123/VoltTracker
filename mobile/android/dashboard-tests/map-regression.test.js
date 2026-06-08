@@ -95,4 +95,18 @@ describe('map.ts — route selection regressions', () => {
     VD.renderMap();
     expect(document.querySelector('[data-map-session="__live_current__"]').classList.contains('is-active')).toBe(true);
   });
+
+  it('surfaces basemap tile failures with a retry affordance', () => {
+    const VD = window.VoltDashboard;
+    const banner = document.getElementById('mapTileError');
+    const copy = document.getElementById('mapTileErrorCopy');
+
+    VD.setMapTileError(true, 'Map tiles are not loading. Routes still work.');
+
+    expect(banner.hidden).toBe(false);
+    expect(copy.textContent).toBe('Map tiles are not loading. Routes still work.');
+
+    document.getElementById('mapTileRetryBtn').click();
+    expect(banner.hidden).toBe(true);
+  });
 });

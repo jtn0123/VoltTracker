@@ -188,6 +188,36 @@
     inset: 0;
   }
 
+  .map-tile-error {
+    position: absolute;
+    z-index: 1250;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 10px 9px 12px;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 8px;
+    background: rgba(12,14,18,0.9);
+    color: var(--soft);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.24);
+    backdrop-filter: blur(10px);
+    font-size: 12px;
+  }
+
+  .map-tile-error[hidden] {
+    display: none;
+  }
+
+  .map-tile-error .link-btn {
+    flex: none;
+    min-height: 30px;
+    padding: 0 10px;
+  }
+
   .map-overlay-top {
     position: absolute;
     z-index: 1200;
