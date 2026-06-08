@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v0.8.0 (2026-06-08)
+
+### Features
+
+- **android**: Ship VoltTracker 0.8.0 release
+  ([`0c9fd7c`](https://github.com/jtn0123/VoltTracker/commit/0c9fd7c6e04418ab65c17e326b3188889beed71a))
+
+Merge release branch for VoltTracker 0.8.0.
+
+
 ## v0.7.0 (2026-06-04)
 
 ### Features
