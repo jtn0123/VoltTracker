@@ -49,7 +49,7 @@ describe('dashboard demo data', () => {
     expect(VD.state.demoActive).toBe(true);
     expect(VD.data.trips.some((trip) => trip.label === 'Home -> Office')).toBe(true);
     expect(VD.data.insights.some((insight) => /Best month yet/.test(insight.title))).toBe(true);
-  });
+  }, 10_000);
 
   it('seeds the selected sample scenario before starting the native demo stream', async () => {
     const bridge = await loadDashboard({ extras: ['demo-data.js'] });

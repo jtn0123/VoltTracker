@@ -35,9 +35,9 @@ trust.
 
 Diagnostics exports are meant for troubleshooting. They can include recent
 session logs, rolling app logs, and environment details useful for debugging an
-adapter or phone issue. Before writing the exported debug bundle, Volt Tracker
-redacts Bluetooth MAC addresses, VIN-like identifiers, and precise coordinate
-fields from the included log tails.
+adapter or phone issue. Before writing a debug summary or diagnostics share zip,
+Volt Tracker redacts Bluetooth MAC addresses, VIN-like identifiers, and precise
+coordinate fields from the included log tails.
 
 ## Network Use
 

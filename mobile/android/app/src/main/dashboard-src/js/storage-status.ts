@@ -44,7 +44,9 @@
     if (isNativeError(parsed)) {
       const err = parsed as VoltNativeError;
       reportNativeReadError(parsed, "Could not read local storage summary.");
-      state.storage = { error: err.error, message: err.message || "" };
+      const storageError: VoltStorageSummary = { message: err.message || "" };
+      if (err.error) storageError.error = err.error;
+      state.storage = storageError;
       updateStorageUi();
       updateReviewUi();
       renderRealV2Ui();

@@ -6,6 +6,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "== release config contract =="
 python "${ROOT}/.github/scripts/check_release_config.py"
 
+echo "== semantic release dry run =="
+python "${ROOT}/.github/scripts/semantic_release_dry_run.py"
+
+echo "== release candidate evidence =="
+"${ROOT}/scripts/check-release-candidate-evidence.sh"
+
 echo "== dashboard dependency audits =="
 (
   cd "${ROOT}/mobile/android/dashboard-tests"

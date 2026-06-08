@@ -482,7 +482,7 @@
       if (slot.querySelector(".leaflet-container")) return;
       const id = slot.dataset.realTripMap;
       const role = slot.dataset.realTripMapRole || "mini";
-      const route = routeForTrip({ id });
+      const route = routeForTrip(id == null ? {} : { id });
       const points = ((route && route.points) || [])
         .map((point) => [Number(point.lat), Number(point.lng)])
         .filter((pair) => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));

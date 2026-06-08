@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -29,8 +30,6 @@ import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 
 open class MainActivity :
     ComponentActivity(),
@@ -93,10 +92,16 @@ open class MainActivity :
     private var lastStorage = JSONObject()
     private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val broadcastReceivers = BroadcastReceiverGroup()
-    private val storageSummaryInFlight = AtomicBoolean(false)
-    private val storageSummaryQueued = AtomicBoolean(false)
-    private val lastStorageSummaryAtMs = AtomicLong(0L)
-    private val storageSummaryDirty = AtomicBoolean(true)
+    private val storageSummaryPublisher =
+        StorageSummaryPublisher(
+            submitBackground = { task -> submitBackground(task) },
+            runOnUi = { task -> runOnUiThread(task) },
+            readStorageJson = { getStorageSummaryJson() },
+            publishStorageJson = { storage, parsed ->
+                lastStorage = parsed
+                callDashboard("setStorage", storage)
+            },
+        )
 
     override fun runOnBackground(task: Runnable) {
         submitBackground(task)
@@ -117,6 +122,31 @@ open class MainActivity :
             backgroundExecutor.execute(task)
         } catch (ex: RejectedExecutionException) {
             Log.d(TAG, "background task dropped; executor is shut down (activity tearing down)", ex)
+        }
+    }
+
+    override fun confirmBridgeAction(
+        title: String,
+        message: String,
+        positiveLabel: String,
+        onConfirmed: Runnable,
+    ) {
+        runOnUiThread {
+            try {
+                AlertDialog
+                    .Builder(this)
+                    .setTitle(title)
+                    .setMessage(message)
+                    .setPositiveButton(positiveLabel) { _, _ -> onConfirmed.run() }
+                    .setNegativeButton("Cancel") { _, _ ->
+                        publishStatus("ready", "Action cancelled.", false)
+                    }.setOnCancelListener {
+                        publishStatus("ready", "Action cancelled.", false)
+                    }.show()
+            } catch (ex: RuntimeException) {
+                Log.w(TAG, "bridge confirmation failed", ex)
+                publishStatus("blocked", "Could not show the Android confirmation.", true)
+            }
         }
     }
 
@@ -471,45 +501,15 @@ open class MainActivity :
     }
 
     open fun publishStorageSummaryThrottled() {
-        val now = System.currentTimeMillis()
-        if (now - lastStorageSummaryAtMs.get() < STORAGE_SUMMARY_MIN_INTERVAL_MS) {
-            return
-        }
-        if (!storageSummaryDirty.get()) {
-            return
-        }
-        publishStorageSummary()
+        storageSummaryPublisher.publishThrottled()
     }
 
     open fun markStorageSummaryDirty() {
-        storageSummaryDirty.set(true)
+        storageSummaryPublisher.markDirty()
     }
 
     override fun publishStorageSummary() {
-        if (!storageSummaryInFlight.compareAndSet(false, true)) {
-            storageSummaryQueued.set(true)
-            return
-        }
-        runStorageSummaryRefresh()
-    }
-
-    private fun runStorageSummaryRefresh() {
-        submitBackground {
-            storageSummaryDirty.set(false)
-            val storage = getStorageSummaryJson()
-            if (!MainActivityUtils.parseJson(storage).optBoolean("ok", true)) {
-                storageSummaryDirty.set(true)
-            }
-            lastStorageSummaryAtMs.set(System.currentTimeMillis())
-            runOnUiThread {
-                lastStorage = MainActivityUtils.parseJson(storage)
-                callDashboard("setStorage", storage)
-            }
-            storageSummaryInFlight.set(false)
-            if (storageSummaryQueued.getAndSet(false)) {
-                publishStorageSummary()
-            }
-        }
+        storageSummaryPublisher.publish()
     }
 
     override fun getStorageSummaryJson(): String {
@@ -604,6 +604,5 @@ open class MainActivity :
          */
         const val DASHBOARD_READY_LOG = "dashboard handshake received"
         private const val PREFS = "volt_obd_prefs"
-        private const val STORAGE_SUMMARY_MIN_INTERVAL_MS = 10_000L
     }
 }

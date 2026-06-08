@@ -174,11 +174,11 @@ class TroubleshooterBridge(
 
     fun diagnosticsDisclosureMessage(): String =
         "This diagnostics bundle may include:\n" +
-            "• Recent JSONL session logs and app logs\n" +
-            "• OBD commands, adapter state, and Bluetooth adapter addresses\n" +
-            "• Raw telemetry, diagnostic trouble codes, and GPS samples\n" +
+            "• Recent redacted JSONL session logs and app logs\n" +
+            "• OBD commands, adapter state, and diagnostic events\n" +
+            "• Telemetry, diagnostic trouble codes, and redacted GPS fields\n" +
             "\n" +
-            "Only share it with someone you trust to debug your vehicle data."
+            "Bluetooth MAC addresses, VIN-like identifiers, and precise coordinate fields are redacted before sharing."
 
     fun showDiagnosticsDisclosure(share: Intent) {
         try {

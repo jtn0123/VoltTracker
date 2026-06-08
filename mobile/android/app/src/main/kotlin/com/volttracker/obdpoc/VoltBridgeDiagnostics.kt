@@ -18,8 +18,14 @@ internal class VoltBridgeDiagnostics(
                 activity.publishStatus("blocked", "No remembered adapter yet. Connect once to save it.", true)
                 return@runOnUiThread
             }
-            activity.rememberDevice(address, name)
-            activity.startObdService(ObdService.ACTION_CLEAR_DTC, address, name)
+            activity.confirmBridgeAction(
+                "Clear vehicle codes?",
+                "This sends a real clear-DTC command through the remembered adapter. Emissions readiness monitors may reset.",
+                "Clear codes",
+            ) {
+                activity.rememberDevice(address, name)
+                activity.startObdService(ObdService.ACTION_CLEAR_DTC, address, name)
+            }
         }
     }
 
@@ -45,7 +51,19 @@ internal class VoltBridgeDiagnostics(
         if (pkg.isEmpty()) {
             return false
         }
-        return activity.forceStopPackageFromBridge(pkg)
+        activity.confirmBridgeAction(
+            "Force-stop OBD app?",
+            "Ask Android to stop $pkg if it is holding the Bluetooth adapter. Only use this for a competing OBD app you recognize.",
+            "Force-stop",
+        ) {
+            val stopped = activity.forceStopPackageFromBridge(pkg)
+            activity.publishStatus(
+                if (stopped) "ready" else "blocked",
+                if (stopped) "Force-stop requested for $pkg." else "Could not force-stop $pkg.",
+                !stopped,
+            )
+        }
+        return true
     }
 
     fun getRecentSessions(n: Int): String = activity.getRecentSessionsJson(n)

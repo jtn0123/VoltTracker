@@ -34,7 +34,7 @@ trims, and truncates. The bounds are `MAX_ADDRESS_LEN=64`, `MAX_NAME_LEN=256`,
 | `restoreBackup()` | — | void | — | Launches a restore picker via `BackupController.launchRestorePicker`. |
 | `getTrips()` | — | `String` (JSON array) | — | Calls `MainActivity.getTripsJson()` (40 most-recent trips). |
 | `getInsights()` | — | `String` (JSON object) | — | Calls `MainActivity.getInsightsJson()`. |
-| `clearStoredData()` | — | void | — | Runs `ObdLocalStore.clearAllData()` on a background executor (11 DELETEs in one transaction). Reports status via `publishStatus`. |
+| `clearStoredData()` | — | void | native confirmation; refuses while logging is active | Runs `ObdLocalStore.clearAllData()` on a background executor (11 DELETEs in one transaction). Reports status via `publishStatus`. |
 | `rememberDevice(address, name)` | `String, String` | void | `safe(address, 64)`, `safe(name, 256)` | Updates `DeviceCatalog` without starting the service. |
 | `connectLast()` | — | void | bounds applied to cached values from SharedPreferences | Connects to remembered/candidate adapter; `publishStatus("blocked", …)` if none. |
 | `scanLast()` | — | void | bounds applied to cached values from SharedPreferences | Scans against remembered/candidate adapter; `publishStatus("blocked", …)` if none. |
@@ -44,7 +44,10 @@ trims, and truncates. The bounds are `MAX_ADDRESS_LEN=64`, `MAX_NAME_LEN=256`,
 | `logClientError(label, detail)` | `String, String` | void | `safe(label, 128)`, `safe(detail, 4096)` | Writes a single `Log.e` line; the dashboard uses this for window-level errors, unhandled rejections, and CSP violations. |
 
 The JS-side mirror of this list lives in
-`mobile/android/dashboard-tests/setup/voltbridge.fixture.js`. The Vitest ABI
+`mobile/android/dashboard-tests/setup/voltbridge.fixture.js`. Destructive or
+privacy-sensitive methods must also go through a native confirmation/disclosure
+path owned by `DashboardHost.confirmBridgeAction`, `BackupController`, or
+`TroubleshooterBridge`. The Vitest ABI
 smoke test cross-references this fixture against the `@JavascriptInterface`
 methods on `VoltBridge.kt`.
 

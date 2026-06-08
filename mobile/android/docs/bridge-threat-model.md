@@ -19,11 +19,11 @@ and force-stop known competing OBD apps.
 
 | Method | Risk | Required precondition / guard |
 |---|---|---|
-| `clearStoredData()` | Destructive local SQLite delete. | Refuses while logging is active; work happens on background executor; status is republished after completion. |
+| `clearStoredData()` | Destructive local SQLite delete. | Refuses while logging is active; shows a native Android confirmation; work happens on background executor; status is republished after completion. |
 | `shareBackup()` / `shareEncryptedBackup(passphrase)` | Exports full local database, including GPS/OBD history. | Refuses while logging is active; encrypted path requires passphrase; `BackupController` shows a disclosure before sharing. |
 | `restoreBackup()` / `restoreEncryptedBackup(passphrase)` | Replaces or merges local database content. | Refuses while logging is active; restore file is staged, size-capped, schema-checked, migrated, then user chooses merge/replace. |
-| `forceStopPackage(packageName)` | Requests Android kill of another package. | Only allowlisted known OBD packages; rejects own package and uninstalled packages; user-triggered only. |
-| `clearVehicleDtcCodes()` | Sends a real vehicle command through the remembered adapter. | Requires a remembered valid Bluetooth adapter address; runs through the foreground service path. |
+| `forceStopPackage(packageName)` | Requests Android kill of another package. | Shows a native Android confirmation first; only allowlisted known OBD packages are stopped; rejects own package and uninstalled packages; user-triggered only. |
+| `clearVehicleDtcCodes()` | Sends a real vehicle command through the remembered adapter. | Requires a remembered valid Bluetooth adapter address; shows a native Android confirmation; runs through the foreground service path. |
 | `openExternalSearch(dtc)` | Opens a browser to search a diagnostic code. | Truncates code input and URL-encodes the query; leaves the WebView. |
 | `logClientError(label, detail)` | Writes untrusted dashboard text into logcat. | Truncates inputs and token-bucket rate limits bursty callers. |
 
@@ -40,7 +40,10 @@ When adding or changing a bridge method:
 ## Current Residual Risk
 
 The dashboard is local-only and navigation-guarded, so remote content should not
-reach `VoltTrackerAndroid`. The practical residual risk is accidental expansion:
-a future method can become destructive or privacy-sensitive without the same
-preconditions as the existing methods. The ABI drift test and this document are
-the guardrails; bridge minimization should remain a regular review target.
+reach `VoltTrackerAndroid`. High-impact methods now also require a native
+confirmation or disclosure, so a dashboard-only bug cannot silently clear data,
+clear vehicle codes, or force-stop another app. The practical residual risk is
+accidental expansion: a future method can become destructive or privacy-sensitive
+without the same preconditions as the existing methods. The ABI drift test and
+this document are the guardrails; bridge minimization should remain a regular
+review target.

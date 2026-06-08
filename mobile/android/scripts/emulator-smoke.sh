@@ -106,15 +106,18 @@ tap_bottom_nav() {
   local height="$4"
   local expect_change="${5:-1}"
   local shot="$SCREENSHOT_DIR/nav-$index-$label.png"
-  # X splits the FULL screen width into NAV_COUNT slots. The pill caps at
-  # min(760px, 100vw-24px) and centers, so on a phone profile (CI default: pixel_6,
-  # near-full-width pill) each slot center is well within its button. On a wide/tablet/
-  # landscape profile (CSS width > ~784px) the pill is narrower than the screen and the
-  # outer tabs' slot centers would fall outside it — derive X from the centered pill box
-  # (left = (width - nav_w)/2; x = left + nav_w*(2*index+1)/(NAV_COUNT*2)) before running
-  # this smoke on anything but a phone profile.
-  local x=$((width * (index * 2 + 1) / (NAV_COUNT * 2)))
   local css_scale=$(((width + 359) / 360))
+  # Match `.bottom-nav { width: min(760px, calc(100vw - 24px)); left: 50%;
+  # transform: translateX(-50%) }` in physical pixels. The old smoke split the
+  # whole screen into seven equal slots, which works on phone-sized emulators but
+  # misses the centered pill on wider profiles.
+  local nav_width=$((width - 24 * css_scale))
+  local nav_max=$((760 * css_scale))
+  if [ "$nav_width" -gt "$nav_max" ]; then
+    nav_width="$nav_max"
+  fi
+  local nav_left=$(((width - nav_width) / 2))
+  local x=$((nav_left + nav_width * (index * 2 + 1) / (NAV_COUNT * 2)))
   local y=$((height - (NAV_BOTTOM_INSET_PX + NAV_RAIL_HALF_PX) * css_scale))
   echo "Navigating to $label via bottom-nav tap at ${x},${y}."
   # Retry the tap if the view doesn't change. A single adb `input tap` is

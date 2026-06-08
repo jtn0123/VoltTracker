@@ -37,6 +37,16 @@ internal class VoltBridgeDataExports(
             }
             return
         }
+        activity.confirmBridgeAction(
+            "Clear stored data?",
+            "This permanently deletes local OBD sessions, samples, routes, diagnostics, and storage rollups from this phone.",
+            "Clear data",
+        ) {
+            clearStoredDataConfirmed()
+        }
+    }
+
+    private fun clearStoredDataConfirmed() {
         activity.runOnBackground {
             if (activity.isLoggingActive()) {
                 activity.runOnUiThread {

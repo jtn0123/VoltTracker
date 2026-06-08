@@ -63,7 +63,7 @@ tasks.register("dashboardTest", Exec) {
     description = "Runs dashboard Vitest coverage for the shipped WebView assets."
     dependsOn("dashboardNpmCi")
     workingDir = dashboardTestsDir
-    commandLine "npm", "test", "--", "--run"
+    commandLine "npm", "run", "test:coverage"
 }
 
 tasks.register("dashboardLint", Exec) {

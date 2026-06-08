@@ -200,6 +200,7 @@ class VoltBridgeDispatchTest {
         bridge.clearVehicleDtcCodes()
         drain()
 
+        assertEquals("Clear vehicle codes?", activity.lastConfirmationTitle)
         assertEquals(ObdService.ACTION_CLEAR_DTC, activity.lastServiceAction)
         assertEquals(VALID_ADDRESS, activity.lastServiceAddress)
     }
@@ -287,6 +288,7 @@ class VoltBridgeDispatchTest {
         bridge.clearStoredData()
         drain()
 
+        assertEquals("Clear stored data?", activity.lastConfirmationTitle)
         assertEquals(1, activity.store.clearAllDataCalls)
         assertEquals("ready", activity.lastStatusState)
         assertFalse(activity.lastStatusBlocked)
@@ -410,8 +412,10 @@ class VoltBridgeDispatchTest {
         activity.forceStopReturn = true
 
         val result = bridge.forceStopPackage("  com.example.obd  ")
+        drain()
 
         assertTrue(result)
+        assertEquals("Force-stop OBD app?", activity.lastConfirmationTitle)
         assertEquals("com.example.obd", activity.lastForceStopPackage)
     }
 
@@ -530,6 +534,11 @@ class VoltBridgeDispatchTest {
         var loggingActive = false
         var storageSummaryCalls = 0
 
+        var confirmationCalls = 0
+        var lastConfirmationTitle: String? = null
+        var lastConfirmationMessage: String? = null
+        var lastConfirmationPositiveLabel: String? = null
+
         var forceStopReturn = false
         var lastForceStopPackage: String? = null
         var cancelRetryCalls = 0
@@ -616,6 +625,19 @@ class VoltBridgeDispatchTest {
         }
 
         override fun isLoggingActive(): Boolean = loggingActive
+
+        override fun confirmBridgeAction(
+            title: String,
+            message: String,
+            positiveLabel: String,
+            onConfirmed: Runnable,
+        ) {
+            confirmationCalls += 1
+            lastConfirmationTitle = title
+            lastConfirmationMessage = message
+            lastConfirmationPositiveLabel = positiveLabel
+            onConfirmed.run()
+        }
 
         override fun publishStorageSummary() {
             storageSummaryCalls += 1

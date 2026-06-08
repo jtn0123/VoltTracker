@@ -7,6 +7,11 @@ import {
   routeFitKey
 } from "./map-route-utils";
 import type { MapRoute, MapRoutePoint, MapRouteSession } from "./map-route-utils";
+import {
+  renderMapSessionListInto,
+  routeIsLive,
+  sessionForRoute
+} from "./map-session-list";
 
   const VD = window.VoltDashboard;
   const state = VD.state;
@@ -397,14 +402,6 @@ import type { MapRoute, MapRoutePoint, MapRouteSession } from "./map-route-utils
     };
   }
 
-  function routeIsLive(route: MapRoute) {
-    return Boolean(route && (
-      route.isLive ||
-      String((route.session || {}).id || "") === LIVE_ROUTE_ID ||
-      String((route.session || {}).status || "").toLowerCase() === "live"
-    ));
-  }
-
   // Horizontal drive-picker chips above the map. Each chip shows the drive's
   // start time, distance, and a color-coded average efficiency dot — same
   // pattern as the demo's drive picker. Click delegation flows through the
@@ -626,38 +623,12 @@ import type { MapRoute, MapRoutePoint, MapRouteSession } from "./map-route-utils
   function renderMapSessionList(routes: MapRoute[]) {
     const list = el("mapSessionList");
     if (!list) return;
-    if (!routes.length) {
-      const p = document.createElement("p");
-      p.className = "status-copy";
-      p.textContent = "No route-bearing SQLite sessions yet. Start a real logged drive with GPS permission and the route will render here.";
-      list.replaceChildren(p);
-      return;
-    }
-    list.replaceChildren(...routes.map(buildMapSessionRow));
-  }
-
-  function buildMapSessionRow(r: MapRoute) {
-    const s = sessionForRoute(r);
-    const active = String(s.id || "") === String(state.selectedMapSessionId || "");
-    const live = routeIsLive(r);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "history-row" + (active ? " is-active" : "");
-    button.dataset.mapSession = String(s.id || "");
-    const center = document.createElement("span");
-    const strong = document.createElement("strong");
-    strong.textContent = live
-      ? `${s.adapterName || "Current drive"} · current`
-      : `${s.mode || "session"} · ${s.adapterName || "OBD adapter"}`;
-    const small = document.createElement("small");
-    small.textContent = live
-      ? `${fmtChipDate(s.startedAtMs)} · ${VD.formatDistance(Number(r.distanceMeters || 0))} · ${Number(r.pointCount || 0)} pts`
-      : `${VD.formatWhen(s.startedAtMs)} · ${VD.formatDistance(Number(r.distanceMeters || 0))} · ${Number(r.pointCount || 0)} pts`;
-    center.append(strong, small);
-    const right = document.createElement("b");
-    right.textContent = live ? "live" : s.status || "stored";
-    button.append(center, right);
-    return button;
+    renderMapSessionListInto(list, routes, {
+      selectedSessionId: state.selectedMapSessionId,
+      formatChipDate: (value) => fmtChipDate(value),
+      formatDistance: (value) => VD.formatDistance(value),
+      formatWhen: (value) => VD.formatWhen(value),
+    });
   }
 
   function selectedMapRoute(storage: VoltStorageSummary, availableRoutes?: MapRoute[]): MapRoute {
@@ -670,13 +641,6 @@ import type { MapRoute, MapRoutePoint, MapRouteSession } from "./map-route-utils
       return routes[0];
     }
     return storage.latestRoute || {};
-  }
-
-  function sessionForRoute(route: MapRoute): MapRouteSession {
-    // VoltRoute.session is the open `{ id?; [k]: unknown }` payload; narrow it
-    // to the named fields map.ts reads. Field reads stay defensively coerced
-    // (String()/Number()) at each use, so the narrowing is presentational only.
-    return (route && route.session ? route.session : {}) as MapRouteSession;
   }
 
   function routeDistanceMeters(points: VoltRoutePoint[]) {

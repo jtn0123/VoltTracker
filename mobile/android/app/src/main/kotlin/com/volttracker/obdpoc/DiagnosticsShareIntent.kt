@@ -119,7 +119,7 @@ object DiagnosticsShareIntent {
         files
             .sortedByDescending { it.lastModified() }
             .take(MAX_SESSION_LOGS)
-            .forEach { addFile(zipStream, it, "$SESSION_LOG_DIR/${it.name}") }
+            .forEach { addFile(zipStream, it, "$SESSION_LOG_DIR/${it.name}", redactText = true) }
     }
 
     @Throws(IOException::class)
@@ -132,7 +132,7 @@ object DiagnosticsShareIntent {
         }
         appLogDir.listFiles()?.forEach { file ->
             if (file.isFile) {
-                addFile(zipStream, file, "$APP_LOG_DIR/${file.name}")
+                addFile(zipStream, file, "$APP_LOG_DIR/${file.name}", redactText = true)
             }
         }
     }
@@ -143,7 +143,7 @@ object DiagnosticsShareIntent {
         summary: File,
     ) {
         if (summary.isFile) {
-            addFile(zipStream, summary, "$SESSION_LOG_DIR/${summary.name}")
+            addFile(zipStream, summary, "$SESSION_LOG_DIR/${summary.name}", redactText = true)
         }
     }
 
@@ -152,18 +152,24 @@ object DiagnosticsShareIntent {
         zipStream: ZipOutputStream,
         source: File,
         entryName: String,
+        redactText: Boolean,
     ) {
         val entry =
             ZipEntry(entryName).apply {
                 time = source.lastModified()
             }
         zipStream.putNextEntry(entry)
-        BufferedInputStream(FileInputStream(source)).use { input ->
-            val buffer = ByteArray(8192)
-            var bytesRead = input.read(buffer)
-            while (bytesRead > 0) {
-                zipStream.write(buffer, 0, bytesRead)
-                bytesRead = input.read(buffer)
+        if (redactText) {
+            val redacted = DataBackup.redactDebugLogText(source.readText(Charsets.UTF_8))
+            zipStream.write(redacted.toByteArray(Charsets.UTF_8))
+        } else {
+            BufferedInputStream(FileInputStream(source)).use { input ->
+                val buffer = ByteArray(8192)
+                var bytesRead = input.read(buffer)
+                while (bytesRead > 0) {
+                    zipStream.write(buffer, 0, bytesRead)
+                    bytesRead = input.read(buffer)
+                }
             }
         }
         zipStream.closeEntry()

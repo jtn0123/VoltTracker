@@ -121,8 +121,8 @@ class TroubleshooterBridgeTest {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE)!!.text.toString(),
         )
         assertTrue(
-            "message should disclose raw telemetry/GPS contents",
-            bridge!!.diagnosticsDisclosureMessage().contains("Raw telemetry"),
+            "message should disclose redaction before sharing",
+            bridge!!.diagnosticsDisclosureMessage().contains("redacted"),
         )
     }
 

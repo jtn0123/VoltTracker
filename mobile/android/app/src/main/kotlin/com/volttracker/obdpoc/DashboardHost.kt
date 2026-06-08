@@ -13,6 +13,13 @@ interface BridgeThreading {
     fun runOnUiThread(action: Runnable)
 
     fun runOnBackground(task: Runnable)
+
+    fun confirmBridgeAction(
+        title: String,
+        message: String,
+        positiveLabel: String,
+        onConfirmed: Runnable,
+    )
 }
 
 /**

@@ -19,6 +19,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileWriter
 import java.io.IOException
+import java.nio.charset.StandardCharsets
 import java.util.zip.ZipInputStream
 
 /**
@@ -151,6 +152,36 @@ class DiagnosticsShareIntentTest {
     }
 
     @Test
+    fun zipRedactsSensitiveLogTextBeforeSharing() {
+        val obdLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(obdLogDir.mkdirs())
+        writeFile(
+            File(obdLogDir, "session-1-obd.jsonl"),
+            "{\"adapter\":\"AA:BB:CC:DD:EE:FF\",\"vin\":\"1G1RD6E45CU112233\"," +
+                "\"lat\":32.712345,\"lng\":-117.112233,\"command\":\"010C\"}\n",
+        )
+        val appLogDir = File(context.filesDir, "app-log")
+        assertTrue(appLogDir.mkdirs())
+        writeFile(File(appLogDir, "app.log"), "adapter=00:11:22:33:44:55\n")
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+        assertNotNull(zip)
+
+        val session = readZipText(zip!!, "obd-logs/session-1-obd.jsonl")
+        assertFalse(session.contains("AA:BB:CC:DD:EE:FF"))
+        assertFalse(session.contains("1G1RD6E45CU112233"))
+        assertFalse(session.contains("32.712345"))
+        assertTrue(session.contains("[bluetooth-address-redacted]"))
+        assertTrue(session.contains("[vin-redacted]"))
+        assertTrue(session.contains("[coordinate-redacted]"))
+        assertTrue(session.contains("\"command\":\"010C\""))
+
+        val appLog = readZipText(zip, "app-log/app.log")
+        assertFalse(appLog.contains("00:11:22:33:44:55"))
+        assertTrue(appLog.contains("[bluetooth-address-redacted]"))
+    }
+
+    @Test
     fun buildIntentReturnsShareIntentPointingAtZip() {
         val obdLogDir = File(context.filesDir, "obd-logs")
         assertTrue(obdLogDir.mkdirs())
@@ -208,6 +239,24 @@ class DiagnosticsShareIntentTest {
                 }
             }
             return entries
+        }
+
+        @Throws(IOException::class)
+        private fun readZipText(
+            zip: File,
+            entryName: String,
+        ): String {
+            ZipInputStream(FileInputStream(zip)).use { zis ->
+                var e = zis.nextEntry
+                while (e != null) {
+                    if (e.name == entryName) {
+                        return String(zis.readBytes(), StandardCharsets.UTF_8)
+                    }
+                    zis.closeEntry()
+                    e = zis.nextEntry
+                }
+            }
+            throw AssertionError("missing zip entry $entryName")
         }
 
         @Throws(IOException::class)

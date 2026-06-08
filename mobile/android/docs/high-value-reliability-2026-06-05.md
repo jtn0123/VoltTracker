@@ -29,15 +29,21 @@ runtime proof, reliability, and review-surface cleanup.
 | J5 | Landed | Dogfood the Android demo preview with Power User data | Medium | Very high | Android dogfood showed native storage refreshes overwrote demo scenario data, leaving Charge/Trips/Map/Insights empty while Drive streamed. Demo preview state is now protected while active, native real data is parked separately, and stopping demo restores real bridge data. |
 | J6 | Landed | Fix dogfood follow-up UX issues | Small | High | Fresh launch no longer auto-stacks runtime permission prompts; permissions are requested from explicit user actions. Blocked adapter actions now mirror the actionable reason into visible body copy, and Last preflights remembered-adapter state before calling the bridge. |
 | J7 | Landed | Fix S24 WebView bottom-nav paint tearing | Medium | Very high | Follow-up dogfood showed the fixed floating nav hit-tested correctly but painted as split/clipped over Drive content. The shell now uses a viewport-height body, scrollable `main.app`, and a normal footer nav so content no longer composites underneath the controls. |
+| K1 | Landed | Align local dashboard tests with CI coverage | Small | High | `dashboardTest` now runs `npm run test:coverage`, so `verifyActiveApp` exercises the same dashboard coverage gate as CI. |
+| K2 | Landed | Add automatic release dry-run and release-candidate evidence check | Small | High | Release dry-run now runs on `release` pushes/PRs and validates a candidate evidence file; preflight also predicts the semantic-release bump. |
+| K3 | Landed | Native-confirm high-risk bridge actions and redact diagnostics share zips | Medium | High | Clear-storage, clear-DTC, and force-stop bridge calls now require native confirmation; diagnostics zips redact MAC/VIN/coordinate fields before sharing. |
+| K4 | Landed | Broaden deterministic runtime budgets | Small | High | `startup-budget.test.js` now also covers primary-tab switching and high-rate telemetry render coalescing. |
+| K5 | Landed | Tighten dashboard TypeScript optional-property checks | Small | Medium | `exactOptionalPropertyTypes` is now enabled; the two optional-shape violations it surfaced were fixed instead of papered over. |
+| K6 | Landed | Split pure map session-list rendering out of `map.ts` | Small | Medium | `map-session-list.ts` owns route-row DOM creation and live-route classification so the Leaflet-heavy map module is smaller and easier to review. |
 
 ## Deferred Large Items
 
 | ID | Status | Item | Effort | ROI | Deferral reason |
 |---|---|---|---:|---:|---|
-| A1 | Deferred | Split `MainActivity`, `ObdService`, and `ObdPollingEngine` coordinators | Large | High | Worth doing next, but it needs careful staged refactors under focused tests. |
+| A1 | Partially landed | Split `MainActivity`, `ObdService`, and `ObdPollingEngine` coordinators | Large | High | `StorageSummaryPublisher` now owns storage-summary throttle/queue state; service and polling-engine splits remain future staged refactors. |
 | B1 | Deferred | Add broad real OBD failure replay fixtures | Large | High | Needs sanitized real adapter/car logs to avoid inventing unrealistic fixtures. |
-| G1/G2b | Deferred | Device/WebView performance budgets from emulator or physical-device timings | Medium | High | Local deterministic budgets are landed; calibrated Android WebView timings should be added after collecting a few stable device/emulator baselines. |
-| E1b | Deferred | Full WebView bridge minimization | Medium | High | Threat model is documented; code minimization should be a deliberate staged pass around destructive/admin methods. |
+| G1/G2b | Partially landed | Device/WebView performance budgets from emulator or physical-device timings | Medium | High | Deterministic JS budgets now cover startup, long route work, tab switching, and telemetry coalescing; calibrated device timing artifacts remain future work. |
+| E1b | Partially landed | Full WebView bridge minimization | Medium | High | Native confirmations now guard the highest-impact methods; deeper ABI minimization remains a future staged pass. |
 
 ## Completion Notes
 
