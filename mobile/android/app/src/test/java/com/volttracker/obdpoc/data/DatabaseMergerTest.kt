@@ -76,7 +76,7 @@ class DatabaseMergerTest {
     }
 
     @Test
-    fun skipsDuplicateSessionAndItsChildren() {
+    fun matchesDuplicateSessionAndImportsMissingChildren() {
         val liveSession = insertSession(live, 1000L)
         insertTelemetry(live, liveSession, 1000L)
 
@@ -93,8 +93,29 @@ class DatabaseMergerTest {
         assertEquals(1, result.sessionsAdded)
         assertEquals(1, result.sessionsSkipped)
         assertEquals(2, count(live, VoltTrackerDb.TABLE_SESSIONS))
-        // Live's 1 + only the new donor session's 1 telemetry row. The duplicate's 2 are dropped.
-        assertEquals(2, count(live, VoltTrackerDb.TABLE_TELEMETRY))
+        // Live's 1 + one missing row from the matched duplicate + the new donor session's row.
+        assertEquals(3, count(live, VoltTrackerDb.TABLE_TELEMETRY))
+        assertForeignKeysIntact(live)
+    }
+
+    @Test
+    fun duplicateSessionImportsMissingRouteRowsForMap() {
+        val liveSession = insertSession(live, 1000L)
+
+        val duplicateDonorSession = insertSession(donor, 1000L)
+        insertLocationSample(donor, duplicateDonorSession, 1000L)
+        insertLocationSample(donor, duplicateDonorSession, 2000L)
+
+        val result = DatabaseMerger.merge(live, donor)
+
+        assertTrue(result.ok)
+        assertEquals(0, result.sessionsAdded)
+        assertEquals(1, result.sessionsSkipped)
+        assertEquals(1, count(live, VoltTrackerDb.TABLE_SESSIONS))
+        assertEquals(2, count(live, VoltTrackerDb.TABLE_LOCATION_SAMPLES))
+        assertTrue(DatabaseMerger.merge(live, donor).ok)
+        assertEquals("re-merging must not duplicate route rows", 2, count(live, VoltTrackerDb.TABLE_LOCATION_SAMPLES))
+        assertEquals(2, ObdStoreRouteProjection.routePointsForSessionJson(live, liveSession, 500).length())
         assertForeignKeysIntact(live)
     }
 
@@ -176,14 +197,14 @@ class DatabaseMergerTest {
     }
 
     @Test
-    fun summaryReadsCleanlyForSkippedDuplicates() {
+    fun summaryReadsCleanlyForMatchedDuplicates() {
         insertSession(live, 1000L)
         insertSession(donor, 1000L)
         insertSession(donor, 2000L)
 
         val result = DatabaseMerger.merge(live, donor)
 
-        assertEquals("Merged backup - 1 new session (1 duplicate skipped).", result.summary())
+        assertEquals("Merged backup - 1 new session (1 duplicate session matched).", result.summary())
     }
 
     @Test
@@ -282,9 +303,9 @@ class DatabaseMergerTest {
     }
 
     @Test
-    fun cellSnapshotsOfSkippedSessionAreDropped() {
-        // Duplicate session by start time -> its battery snapshot is not imported, so its cell
-        // snapshots (NOT NULL parent) must be dropped rather than orphaned.
+    fun cellSnapshotsOfMatchedSessionAreImportedWithTheirBatteryParent() {
+        // Duplicate session by start time -> the donor parent is matched to the live session, so
+        // battery/cell snapshots should import instead of silently disappearing.
         insertSession(live, 1000L)
         val dupSession = insertSession(donor, 1000L)
         val battery = insertBatterySnapshot(donor, dupSession, null, 1001L)
@@ -293,8 +314,8 @@ class DatabaseMergerTest {
         val result = DatabaseMerger.merge(live, donor)
 
         assertTrue(result.ok)
-        assertEquals(0, count(live, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS))
-        assertEquals(0, count(live, VoltTrackerDb.TABLE_CELL_SNAPSHOTS))
+        assertEquals(1, count(live, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS))
+        assertEquals(1, count(live, VoltTrackerDb.TABLE_CELL_SNAPSHOTS))
         assertForeignKeysIntact(live)
     }
 

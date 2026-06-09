@@ -45,7 +45,7 @@ object DatabaseMerger {
                 sb
                     .append(" (")
                     .append(sessionsSkipped)
-                    .append(if (sessionsSkipped == 1) " duplicate skipped)" else " duplicates skipped)")
+                    .append(if (sessionsSkipped == 1) " duplicate session matched)" else " duplicate sessions matched)")
             }
             sb.append('.')
             return sb.toString()
@@ -184,14 +184,14 @@ object DatabaseMerger {
         sessionMap: MutableMap<Long, Long>,
         counts: IntArray,
     ): Long {
-        val existingKeys = HashSet<String>()
+        val existingByKey = HashMap<String, Long>()
         target
             .rawQuery(
-                "SELECT started_at_ms, mode, adapter_address FROM ${VoltTrackerDb.TABLE_SESSIONS}",
+                "SELECT _id, started_at_ms, mode, adapter_address FROM ${VoltTrackerDb.TABLE_SESSIONS}",
                 null,
             ).use { c ->
                 while (c.moveToNext()) {
-                    existingKeys.add(sessionKey(c.getLong(0), c.getString(1), c.getString(2)))
+                    existingByKey[sessionKey(c.getLong(1), c.getString(2), c.getString(3))] = c.getLong(0)
                 }
             }
         var inserted = 0L
@@ -204,14 +204,16 @@ object DatabaseMerger {
                     continue
                 }
                 val key = sessionKey(startedAt, cv.getAsString("mode"), cv.getAsString("adapter_address"))
-                if (existingKeys.contains(key)) {
+                val existingId = existingByKey[key]
+                if (existingId != null) {
+                    sessionMap[oldId] = existingId
                     counts[1]++
                     continue
                 }
                 cv.remove("_id")
                 val newId = target.insertOrThrow(VoltTrackerDb.TABLE_SESSIONS, null, cv)
                 sessionMap[oldId] = newId
-                existingKeys.add(key)
+                existingByKey[key] = newId
                 counts[0]++
                 inserted++
             }
@@ -248,6 +250,13 @@ object DatabaseMerger {
                     remap(cv, "start_sample_id", telemetryMap)
                     remap(cv, "end_sample_id", telemetryMap)
                 }
+                val existingId = matchingExistingRowId(target, table, cv)
+                if (existingId != null) {
+                    if (outIdMap != null && oldId != null) {
+                        outIdMap[oldId] = existingId
+                    }
+                    continue
+                }
                 val newId = target.insertOrThrow(table, null, cv)
                 if (outIdMap != null && oldId != null) {
                     outIdMap[oldId] = newId
@@ -273,6 +282,9 @@ object DatabaseMerger {
                 }
                 cv.remove("_id")
                 cv.put("battery_snapshot_id", batteryMap[parent])
+                if (matchingExistingRowId(target, VoltTrackerDb.TABLE_CELL_SNAPSHOTS, cv) != null) {
+                    continue
+                }
                 target.insertOrThrow(VoltTrackerDb.TABLE_CELL_SNAPSHOTS, null, cv)
                 inserted++
             }
@@ -423,6 +435,52 @@ object DatabaseMerger {
     ): String = "$startedAtMs|${normalizeKeyPart(mode)}|${normalizeKeyPart(adapterAddress)}"
 
     private fun normalizeKeyPart(value: String?): String = value ?: ""
+
+    private fun matchingExistingRowId(
+        db: SQLiteDatabase,
+        table: String,
+        cv: ContentValues,
+    ): Long? {
+        val columns = dedupeColumnsFor(table)
+        if (columns.isEmpty()) {
+            return null
+        }
+        val where = StringBuilder()
+        val args = ArrayList<String>()
+        for (column in columns) {
+            if (!cv.containsKey(column)) {
+                return null
+            }
+            if (where.isNotEmpty()) {
+                where.append(" AND ")
+            }
+            val value = cv[column]
+            if (value == null) {
+                where.append(column).append(" IS NULL")
+            } else {
+                where.append(column).append(" = ?")
+                args.add(value.toString())
+            }
+        }
+        db.query(table, arrayOf("_id"), where.toString(), args.toTypedArray(), null, null, null, "1").use { c ->
+            return if (c.moveToFirst()) c.getLong(0) else null
+        }
+    }
+
+    private fun dedupeColumnsFor(table: String): Array<String> =
+        when (table) {
+            VoltTrackerDb.TABLE_TELEMETRY -> arrayOf("session_id", "captured_at_ms", "json")
+            VoltTrackerDb.TABLE_EVENTS -> arrayOf("session_id", "occurred_at_ms", "kind", "payload")
+            VoltTrackerDb.TABLE_PID_OBSERVATIONS -> arrayOf("session_id", "observed_at_ms", "command", "header", "pid", "json")
+            VoltTrackerDb.TABLE_LOCATION_SAMPLES -> arrayOf("session_id", "captured_at_ms", "latitude", "longitude")
+            VoltTrackerDb.TABLE_FIELD_CAPABILITIES -> arrayOf("vehicle_id", "adapter_key", "protocol", "header", "command", "pid")
+            VoltTrackerDb.TABLE_TRIP_SEGMENTS -> arrayOf("session_id", "started_at_ms", "ended_at_ms", "classification")
+            VoltTrackerDb.TABLE_CHARGE_SESSIONS -> arrayOf("session_id", "started_at_ms", "ended_at_ms", "charger_type")
+            VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS -> arrayOf("session_id", "captured_at_ms", "json")
+            VoltTrackerDb.TABLE_CELL_SNAPSHOTS -> arrayOf("battery_snapshot_id", "cell_index")
+            VoltTrackerDb.TABLE_EXPORTS -> arrayOf("session_id", "created_at_ms", "export_type", "file_name")
+            else -> emptyArray()
+        }
 
     private fun queryOne(
         db: SQLiteDatabase,

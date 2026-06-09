@@ -227,8 +227,8 @@ class BackupController(
                 .Builder(activity)
                 .setTitle("Restore backup")
                 .setMessage(
-                    "Merge adds this backup's trips to what's already on your phone " +
-                        "(duplicate trips are skipped).\n\n" +
+                    "Merge adds this backup's data to what's already on your phone. " +
+                        "Existing sessions are matched so missing route samples can fill in.\n\n" +
                         "Replace erases everything on this phone first, then loads the backup.",
                 ).setPositiveButton("Merge") { _, _ -> performMerge(staged) }
                 .setNegativeButton("Replace all") { _, _ -> performReplace(staged) }
@@ -281,7 +281,7 @@ class BackupController(
     private fun performMerge(staged: File) {
         showRestoreProgress(
             "Merging backup",
-            "Adding the backup rows and skipping duplicate sessions. Large backups can take a minute.",
+            "Adding backup rows and matching existing sessions. Large backups can take a minute.",
         )
         logRestore("merge_start", emptyMap<String, Any?>())
         activity.publishStatus("ready", "Merging backup...", false)
