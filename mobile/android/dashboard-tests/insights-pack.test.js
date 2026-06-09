@@ -34,7 +34,8 @@ describe('insights HV-pack detail stats', () => {
     const text = row.textContent;
     expect(text).toContain('Pack');
     expect(text).toContain('364 V');
-    expect(text).toContain('23°C');
+    // Units default to imperial, so the seeded 23°C renders as °F (23·9/5+32 = 73).
+    expect(text).toContain('73°F');
     expect(text).toContain('92%');
     expect(text).toContain('-7.4 kW');
   });

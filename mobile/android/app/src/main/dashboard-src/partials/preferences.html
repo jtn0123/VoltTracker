@@ -1,0 +1,73 @@
+<!--
+  Preferences — display-layer settings (units, electricity rate). Sits first on
+  the Settings tab. Wiring + persistence live in prefs.ts.
+-->
+<section id="view-preferences" class="view" data-view="settings">
+  <article class="panel pref-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Display</span>
+        <h3>Preferences</h3>
+      </div>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Units</strong>
+        <small>Distance, speed &amp; temperature</small>
+      </div>
+      <div
+        class="signal-stage-tabs pref-seg"
+        role="group"
+        aria-label="Measurement units"
+      >
+        <button
+          type="button"
+          data-pref-units="imperial"
+          class="is-active"
+          aria-pressed="true"
+        >
+          <span>mi &middot; &deg;F</span>
+        </button>
+        <button type="button" data-pref-units="metric" aria-pressed="false">
+          <span>km &middot; &deg;C</span>
+        </button>
+      </div>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Electricity rate</strong>
+        <small>Estimates charging cost on the Charge tab</small>
+      </div>
+      <label class="pref-price">
+        <span>$</span>
+        <input
+          id="pricePerKwhInput"
+          type="number"
+          inputmode="decimal"
+          min="0"
+          step="0.01"
+          placeholder="0.00"
+          aria-label="Electricity rate in dollars per kilowatt-hour"
+        />
+        <span>/kWh</span>
+      </label>
+    </div>
+  </article>
+
+  <article class="panel pref-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Drive tiles</span>
+        <h3>Customize live readout</h3>
+      </div>
+    </div>
+    <p class="status-copy">
+      Show, hide, and reorder the live signal tiles on the Drive tab.
+    </p>
+    <div
+      id="driveTilesEditor"
+      class="tiles-editor"
+      aria-label="Drive tile layout"
+    ></div>
+  </article>
+</section>

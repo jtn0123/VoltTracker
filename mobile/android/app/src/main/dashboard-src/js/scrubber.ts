@@ -312,8 +312,12 @@
   }
 
   function scrubSvg(w: number, h: number, inner: string) {
+    // The xmlns is REQUIRED: parseSvg() parses this with DOMParser as
+    // "image/svg+xml", and without a default namespace declaration every node
+    // lands in the null namespace and renders nothing (the fill/stroke/d
+    // attributes become inert). With it, the nodes are real SVG elements.
     return (
-      '<svg width="' +
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' +
       w +
       '" height="' +
       h +
@@ -445,10 +449,24 @@
         : "soon";
     const node = el("scrubReadout");
     if (!node) return;
+    const metricUnits = VD.units.system() === "metric";
+    const dist = VD.units.distanceMiles(s.distMi);
+    const speedVal = Math.round(metricUnits ? s.mph / 0.621371 : s.mph);
+    const elevText = scrubHasElev
+      ? metricUnits
+        ? `${Math.round(s.elevFt * 0.3048)} m`
+        : `${Math.round(s.elevFt)} ft`
+      : "--";
+    const effDisplay =
+      scrubHasEff && effValue !== null && Number.isFinite(effValue)
+        ? metricUnits
+          ? (effValue / 0.621371).toFixed(1)
+          : effValue.toFixed(1)
+        : effText;
     node.replaceChildren(
-      scrubChip("Distance", s.distMi.toFixed(1) + " mi"),
-      scrubChip("Speed", Math.round(s.mph) + " mph", { color: SCRUB_SPEED }),
-      scrubChip("Elevation", scrubHasElev ? Math.round(s.elevFt) + " ft" : "--", {
+      scrubChip("Distance", `${dist.value} ${dist.unit}`),
+      scrubChip("Speed", `${speedVal} ${VD.units.speedUnit()}`, { color: SCRUB_SPEED }),
+      scrubChip("Elevation", elevText, {
         color: scrubHasElev ? SCRUB_ELEV : null
       }),
       scrubChip("Grade", scrubHasElev ? scrubGrade(s.grade) : "--"),
@@ -457,9 +475,11 @@
         socText,
         { color: scrubHasSoc ? SCRUB_SOC : null }
       ),
+      // The label already carries the unit, so the value is just the number —
+      // repeating the unit here overflowed the compact readout cell.
       scrubChip(
-        "mi/kWh",
-        scrubHasEff && effValue !== null && Number.isFinite(effValue) ? effText + " mi/kWh" : effText,
+        VD.units.efficiencyUnit(),
+        effDisplay,
         { dim: !scrubHasEff, color: scrubHasEff ? SCRUB_EFF : null }
       )
     );
@@ -488,15 +508,18 @@
     const stack = el("scrubStack");
     if (stack && scrubExpanded) {
       const w = chart.clientWidth;
+      // Track values stay in source units (the trace autoscales, so only the
+      // header label needs to reflect the user's unit preference).
+      const metric = VD.units.system() === "metric";
       const tracks: ScrubTrack[] = [
-        ["mph", SCRUB_SPEED, "rgba(255,122,69,0.16)", "SPEED MPH", false]
+        ["mph", SCRUB_SPEED, "rgba(255,122,69,0.16)", `SPEED ${VD.units.speedUnit().toUpperCase()}`, false]
       ];
       if (scrubHasElev) {
         tracks.push([
           "elevFt",
           SCRUB_ELEV,
           "rgba(139,148,173,0.18)",
-          "ELEVATION FT",
+          `ELEVATION ${metric ? "M" : "FT"}`,
           true
         ]);
       }
@@ -514,7 +537,7 @@
           "eff",
           SCRUB_EFF,
           "rgba(184,230,59,0.16)",
-          "EFFICIENCY MI/KWH",
+          `EFFICIENCY ${VD.units.efficiencyUnit().toUpperCase()}`,
           false
         ]);
       }
@@ -561,10 +584,12 @@
       // it shows speed + efficiency at the current scrubbed position.
       const eff =
         scrubHasEff && Number.isFinite(s.eff)
-          ? Number(s.eff).toFixed(1) + " mi/kWh"
+          ? VD.units.efficiencyText(Number(s.eff))
           : null;
       const grade = scrubHasElev ? scrubGrade(s.grade) : null;
-      const lines = [Math.round(s.mph) + " mph"];
+      const popupMetric = VD.units.system() === "metric";
+      const popupSpeed = Math.round(popupMetric ? s.mph / 0.621371 : s.mph);
+      const lines = [`${popupSpeed} ${VD.units.speedUnit()}`];
       if (eff) lines.push(eff);
       if (grade) lines.push("grade " + grade);
       scrubMarker.setPopupContent(

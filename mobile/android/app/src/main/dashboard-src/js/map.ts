@@ -298,12 +298,15 @@ import {
     const session = route.session || {};
     const duration = Number(session.endedAtMs || Date.now()) - Number(session.startedAtMs || 0);
     VD.setText("mapDuration", hasMapContent && duration > 0 ? VD.formatDuration(duration) : "--");
-    // Avg moving speed in mph from GPS: distance / duration, ignoring stopped
-    // time at the granularity of the route. More useful than GPS accuracy.
-    const avgMph = hasMapContent && duration > 0
-      ? (Number(route.distanceMeters || 0) / (duration / 1000)) * 2.2369363
+    // Avg moving speed from GPS: distance / duration, ignoring stopped time at the
+    // granularity of the route. More useful than GPS accuracy. Shown in the user's
+    // chosen unit (the label reflects it too).
+    const avgKph = hasMapContent && duration > 0
+      ? (Number(route.distanceMeters || 0) / (duration / 1000)) * 3.6
       : 0;
-    VD.setText("mapAvgMph", avgMph > 0 ? Math.round(avgMph) : "--");
+    const avgSpeed = VD.units.speed(avgKph);
+    VD.setText("mapAvgMph", avgKph > 0 ? avgSpeed.value : "--");
+    VD.setText("mapAvgSpeedLabel", `Avg ${avgSpeed.unit}`);
     const empty = el("mapEmpty");
     if (empty) empty.hidden = hasMapContent;
 
@@ -431,8 +434,8 @@ import {
       const meta = document.createElement("span");
       meta.className = "dm";
       const distance = document.createElement("b");
-      const distMi = (Number(route.distanceMeters || 0) / 1609.34).toFixed(1);
-      distance.textContent = live && Number(distMi) < 0.1 ? "current" : distMi + " mi";
+      const distConv = VD.units.distanceMeters(Number(route.distanceMeters || 0));
+      distance.textContent = live && Number(distConv.value) < 0.1 ? "current" : `${distConv.value} ${distConv.unit}`;
       meta.append(distance);
       if (live) {
         meta.append(document.createTextNode(" · "));
@@ -448,7 +451,7 @@ import {
         meta.append(document.createTextNode(" · "));
         const dot = document.createElement("u");
         dot.style.background = mapEffColor(avgEff);
-        meta.append(dot, document.createTextNode(" " + avgEff.toFixed(1) + " mi/kWh"));
+        meta.append(dot, document.createTextNode(" " + VD.units.efficiencyText(avgEff)));
       }
       button.append(date, meta);
       return button;
@@ -967,13 +970,12 @@ import {
   }
 
   // Re-renders every demo-backed surface (DB summary, Signals, DTC, vehicle, map,
-  // trips, insights) from the current state.storage. Shared by loadSampleData and
-  // the scenario switcher so a mutated payload paints everywhere consistently.
+  // insights) from the current state.storage. Shared by loadSampleData and the
+  // scenario switcher so a mutated payload paints everywhere consistently.
   function renderDemoSurfaces() {
     VD.updateStorageUi();
     VD.renderRealV2Ui();
     renderMap();
-    VD.renderRealTrips();
     VD.renderInsightStats();
   }
 

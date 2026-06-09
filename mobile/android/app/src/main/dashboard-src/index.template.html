@@ -30,16 +30,17 @@
     <!-- include: partials/error-banner.html -->
     <!-- include: partials/troubleshooter.html -->
     <!-- include: partials/app-dialog.html -->
+    <!-- include: partials/restore-progress.html -->
     <main class="app">
       <!-- include: partials/topbar.html -->
       <!-- include: partials/drive.html -->
-      <!-- include: partials/trips.html -->
       <!-- include: partials/map.html -->
       <!-- include: partials/charge.html -->
       <!-- include: partials/insights.html -->
+      <!-- include: partials/preferences.html -->
       <!-- include: partials/settings.html -->
-      <!-- include: partials/signals.html -->
       <!-- include: partials/connection-tools.html -->
+      <!-- include: partials/diagnostics.html -->
     </main>
 
     <nav class="bottom-nav" aria-label="Main navigation">
@@ -60,18 +61,6 @@
               stroke-linejoin="round"
             /></svg></i
         ><span>Drive</span>
-      </button>
-      <button type="button" data-nav="trips" aria-label="Trips">
-        <i
-          ><svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M5 7h10M5 12h14M5 17h7"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            /></svg></i
-        ><span>Trips</span>
       </button>
       <button type="button" data-nav="map" aria-label="Map">
         <i
@@ -104,6 +93,19 @@
             /></svg></i
         ><span>Insights</span>
       </button>
+      <button type="button" data-nav="diagnostics" aria-label="Diagnostics">
+        <i
+          ><svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M3 12h4l2.5-7 4 14 2.5-7H21"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg></i
+        ><span>Diag</span>
+      </button>
       <button type="button" data-nav="settings" aria-label="Settings">
         <i
           ><svg viewBox="0 0 24 24" aria-hidden="true">
@@ -115,18 +117,6 @@
               stroke-linecap="round"
             /></svg></i
         ><span>Settings</span>
-      </button>
-      <button type="button" data-nav="signals" aria-label="Detailed Signals">
-        <i
-          ><svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M4 6h4m4 0h8M4 12h10m4 0h2M4 18h6m4 0h6M8 4v4m6 8v4m4-10v4"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            /></svg></i
-        ><span>Signals</span>
       </button>
     </nav>
 

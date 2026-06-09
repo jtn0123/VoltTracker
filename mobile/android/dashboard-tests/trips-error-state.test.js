@@ -43,7 +43,6 @@ describe('panels.ts trips/insights error surfacing (C3)', () => {
     const VD = await freshLoad(bridge);
 
     const setStatus = vi.spyOn(VD, 'setStatus');
-    const callsBefore = bridge.getTrips.mock.calls.length;
     VD.loadTrips();
 
     expect(bridge.getTrips).toHaveBeenCalled();
@@ -57,12 +56,11 @@ describe('panels.ts trips/insights error surfacing (C3)', () => {
       'trips_read_failed',
       'Could not read logged trips.'
     );
-    // The failed read must not be mistaken for a successful empty result.
+    // The failed read must not be mistaken for a successful empty result. The Trips
+    // tab was removed, so loadTrips now maintains state.trips for Insights and
+    // surfaces the read error through the global status (not a Trips-tab empty state).
     expect(VD.state.trips).toEqual([]);
     expect(VD.state.tripsReadError).toBe('Could not read logged trips.');
-    expect(document.getElementById('tripsEmptyState').textContent).toContain('Trips could not load.');
-    document.querySelector('[data-retry-trips]').click();
-    expect(bridge.getTrips).toHaveBeenCalledTimes(callsBefore + 2);
   });
 
   it('routes a native getInsights error through setStatus(blocked) + logClientError', async () => {

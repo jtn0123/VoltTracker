@@ -806,6 +806,131 @@
     color: var(--muted);
   }
 
+  /* In-app DTC lookup (Insights → Check engine). */
+  .dtc-lookup {
+    margin-bottom: 12px;
+  }
+
+  .dtc-lookup-field {
+    display: block;
+  }
+
+  .dtc-lookup-field .kicker {
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .dtc-lookup-field input {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    font-size: 15px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.04em;
+  }
+
+  .dtc-lookup-result {
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: rgba(20, 20, 27, 0.55);
+  }
+
+  .dtc-lookup-code {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 800;
+    font-size: 16px;
+    letter-spacing: 0.04em;
+  }
+
+  .dtc-lookup-sev {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: capitalize;
+    letter-spacing: 0;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--muted);
+  }
+
+  .dtc-lookup-sev[data-severity="high"],
+  .dtc-lookup-sev[data-severity="severe"] {
+    background: rgba(255, 107, 95, 0.16);
+    color: #ff8a7e;
+  }
+
+  .dtc-lookup-sev[data-severity="medium"],
+  .dtc-lookup-sev[data-severity="moderate"] {
+    background: rgba(255, 184, 74, 0.16);
+    color: #ffce7a;
+  }
+
+  .dtc-lookup-desc {
+    margin: 6px 0 0;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .dtc-lookup-causes-label {
+    display: block;
+    margin-top: 10px;
+  }
+
+  .dtc-lookup-causes {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .dtc-lookup-web {
+    margin-top: 10px;
+  }
+
+  /* Charge energy + estimated-cost card (Charge tab). */
+  .charge-energy-card {
+    padding: var(--card-pad);
+  }
+
+  .charge-energy-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .charge-energy-head strong {
+    display: block;
+    font-size: 24px;
+    font-weight: 800;
+    margin-top: 2px;
+  }
+
+  .charge-energy-cost {
+    text-align: right;
+  }
+
+  .charge-energy-cost strong {
+    color: var(--ok, #b8e63b);
+  }
+
+  #chargeEnergyHint {
+    margin: 10px 0 0;
+  }
+
   .dtc-status-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -918,6 +1043,28 @@
     border-radius: 50%;
     background: var(--ok);
     box-shadow: 0 0 10px rgba(53,230,160,0.85);
+  }
+
+  .signal-status-pill[data-state="blocked"] {
+    border-color: rgba(255,107,95,0.34);
+    background: rgba(255,107,95,0.12);
+    color: #ffc2bd;
+  }
+
+  .signal-status-pill[data-state="blocked"]::before {
+    background: var(--bad);
+    box-shadow: 0 0 10px rgba(255,107,95,0.8);
+  }
+
+  .signal-status-pill[data-state="idle"] {
+    border-color: rgba(255,184,74,0.32);
+    background: rgba(255,184,74,0.1);
+    color: #ffd99a;
+  }
+
+  .signal-status-pill[data-state="idle"]::before {
+    background: var(--warn);
+    box-shadow: 0 0 10px rgba(255,184,74,0.75);
   }
 
   /* Quiet section dividers inside the signal console so the next-probe and
@@ -1756,6 +1903,134 @@
     border: 1px solid rgba(185, 205, 226, 0.28);
     background: rgba(255, 255, 255, 0.06);
     color: #d9e2ea;
+  }
+
+  .restore-progress {
+    position: fixed;
+    inset: 0;
+    z-index: 230;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+  }
+
+  .restore-progress[hidden] {
+    display: none;
+  }
+
+  .restore-progress-backdrop {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, rgba(6, 14, 20, 0.84), rgba(2, 5, 8, 0.9)),
+      rgba(4, 8, 12, 0.78);
+  }
+
+  .restore-progress-card {
+    position: relative;
+    width: min(100%, 440px);
+    border: 1px solid rgba(185, 205, 226, 0.25);
+    border-radius: 8px;
+    background: #101820;
+    color: #f3f7fb;
+    box-shadow: 0 26px 80px rgba(0, 0, 0, 0.5);
+    padding: 18px;
+  }
+
+  .restore-progress-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .restore-progress-kicker {
+    display: block;
+    margin-bottom: 5px;
+    color: #8fd4ff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .restore-progress-title {
+    margin: 0;
+    font-size: 1.08rem;
+    line-height: 1.25;
+  }
+
+  .restore-progress-close {
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(185, 205, 226, 0.28);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    color: inherit;
+    font-size: 1.35rem;
+    line-height: 1;
+  }
+
+  .restore-progress-close[hidden] {
+    display: none;
+  }
+
+  .restore-progress-meter {
+    height: 8px;
+    margin: 18px 0 14px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(185, 205, 226, 0.16);
+  }
+
+  .restore-progress-meter span {
+    display: block;
+    width: 42%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #7cd1ff, #78e0b8);
+    transform-origin: left center;
+  }
+
+  .restore-progress[data-busy="true"] .restore-progress-meter span {
+    animation: restore-progress-sweep 1.2s ease-in-out infinite;
+  }
+
+  .restore-progress[data-tone="ok"] .restore-progress-meter span {
+    width: 100%;
+    animation: none;
+    background: #78e0b8;
+  }
+
+  .restore-progress[data-tone="blocked"] .restore-progress-meter span {
+    width: 100%;
+    animation: none;
+    background: #ff9d7a;
+  }
+
+  .restore-progress-detail {
+    margin: 0;
+    color: #dce6ee;
+    line-height: 1.45;
+  }
+
+  .restore-progress-note {
+    margin: 10px 0 0;
+    color: #9fb1bf;
+    font-size: 0.85rem;
+    line-height: 1.4;
+  }
+
+  @keyframes restore-progress-sweep {
+    0% {
+      transform: translateX(-120%);
+    }
+    50% {
+      transform: translateX(75%);
+    }
+    100% {
+      transform: translateX(260%);
+    }
   }
 
   @media (min-width: 640px) {

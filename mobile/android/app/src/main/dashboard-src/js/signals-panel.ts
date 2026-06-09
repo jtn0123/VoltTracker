@@ -59,7 +59,7 @@
     const total = rows.length || Number(storage.fieldCapabilityCount || 0);
     const list = el("enhancedCapabilityList");
     VD.setText("enhancedTitle", total ? `${total} detailed signal${total === 1 ? "" : "s"} tracked` : "No detailed signal results yet");
-    VD.setText("enhancedBadge", counts.confirmed ? "working data" : total ? "evidence saved" : "ready");
+    setEnhancedBadge(counts.confirmed ? "working data" : total ? "evidence saved" : "ready", counts.confirmed ? "working" : total ? "saved" : "ready");
     // The scoreboard counts and the status filter chips share one control now,
     // so each count is written once to the chip that also filters by it.
     VD.setText("enhancedAllCount", total);
@@ -82,6 +82,14 @@
       return;
     }
     list.replaceChildren(...visible.slice(0, 18).map(buildEnhancedCapabilityRow));
+  }
+
+  function setEnhancedBadge(label: string, tone?: string) {
+    const badge = el("enhancedBadge") as HTMLElement | null;
+    if (!badge) return;
+    badge.textContent = label;
+    if (tone) badge.dataset.state = tone;
+    else delete badge.dataset.state;
   }
 
   function detailedSignalRows(storage: VoltStorageSummary): VoltEnhancedCapability[] {
@@ -257,7 +265,8 @@
   }
 
   Object.assign(VD, {
-    updateEnhancedCapabilityUi
+    updateEnhancedCapabilityUi,
+    setEnhancedBadge
   });
 
   (function bindEnhancedSignalFilters() {

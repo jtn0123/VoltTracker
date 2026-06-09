@@ -484,6 +484,14 @@ interface VoltStatus {
   [key: string]: unknown;
 }
 
+interface VoltRestoreProgress {
+  visible?: boolean;
+  busy?: boolean;
+  title?: string;
+  detail?: string;
+  tone?: string;
+}
+
   /** Leaflet runtime global. Kept as the untyped `L` because scrubber.ts and
    *  insights-panel.ts chain Leaflet methods (setLatLng / bindPopup-with-opts /
    *  number[] latlngs) that a minimal static type can't model without churn.
@@ -514,6 +522,31 @@ interface VoltStatus {
     ): boolean;
     /** Tears down the window-level error/rejection listeners on reset. */
     errorController?: AbortController;
+    // ----- prefs.ts ----------------------------------------------------------
+    /** Persisted display-layer user preferences (localStorage-backed). Prefs that
+     *  change native behaviour go through the bridge, not here. */
+    prefs: {
+      get<T>(key: string, fallback: T): T;
+      set(key: string, value: unknown): void;
+      subscribe(key: string, callback: (value: unknown) => void): () => void;
+    };
+    /** Unit-aware formatters driven by the `units` preference (imperial|metric).
+     *  Inputs are SI-ish (speed km/h, distance km/m/mi, temp °C, eff mi/kWh). */
+    units: {
+      system(): "imperial" | "metric";
+      speed(kph: number): { value: number; unit: string };
+      speedText(kph: number): string;
+      speedUnit(): string;
+      distanceKm(km: number): { value: string; unit: string };
+      distanceText(km: number): string;
+      distanceMeters(meters: number): { value: string; unit: string };
+      distanceMiles(miles: number): { value: string; unit: string };
+      distanceUnit(): string;
+      temp(celsius: number): { value: number; unit: string };
+      tempText(celsius: number): string;
+      efficiencyText(miPerKwh: number): string;
+      efficiencyUnit(): string;
+    };
     /** Mutable in-memory dashboard data (trips/sessions/hourly/insights). */
     data: {
       trips: unknown[];
@@ -534,6 +567,7 @@ interface VoltStatus {
     /** The currently-selected map session id (or null). */
     getSelectedMapSessionId(): string | null;
     reportClientError(label: string, detail?: string): void;
+    setRestoreProgress(payload: VoltRestoreProgress | string): void;
     escapeHtml(value: unknown): string;
     /**
      * Parse a native payload (JSON string or object); returns `fallback` on
@@ -599,18 +633,15 @@ interface VoltStatus {
 
     // ----- signals-panel.ts (split from the old panels.ts) -------------------
     updateEnhancedCapabilityUi(): void;
+    setEnhancedBadge(label: string, tone?: string): void;
 
     // ----- insights-panel.ts (split from the old panels.ts) ------------------
+    /** Data-loader only (the Trips tab was removed): populates state.trips for
+     *  Insights/map and surfaces read errors via the global status. */
     loadTrips(): void;
     loadInsights(): void;
-    renderRealTrips(): void;
-    renderTripRow(trip: VoltTrip): HTMLElement;
     renderInsightStats(): void;
     renderInsightScatter(): void;
-    selectRealTrip(id: string | number): void;
-    ensureRouteForTrip(trip: VoltTrip): VoltRoute | null;
-    renderRealTripDetail(): void;
-    renderRealTripLeafletMaps(options: { detailOnly?: boolean }): void;
     enrichRouteEff(route: VoltRoute): void;
 
     // ----- map.ts ------------------------------------------------------------

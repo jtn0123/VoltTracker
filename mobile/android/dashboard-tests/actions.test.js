@@ -167,6 +167,8 @@ describe('actions.ts — bridge dispatch', () => {
     expect(VD.state.status).toMatchObject({ state: 'blocked' });
     expect(document.getElementById('appStateSummary').textContent).toMatch(/adapter/i);
     expect(document.getElementById('reviewWarnings').textContent).toMatch(/adapter/i);
+    expect(document.getElementById('enhancedBadge').textContent).toBe('blocked');
+    expect(document.getElementById('enhancedBadge').dataset.state).toBe('blocked');
   });
 
   it('Last with no remembered adapter gives visible body feedback instead of a silent bridge call', () => {
@@ -221,17 +223,61 @@ describe('actions.ts — bridge dispatch', () => {
   });
 
   it('exportSignalLog() copies one exported evidence row', async () => {
+    const originalCreate = Object.getOwnPropertyDescriptor(window.URL, 'createObjectURL');
+    Object.defineProperty(window.URL, 'createObjectURL', {
+      configurable: true,
+      value: undefined,
+    });
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText },
     });
 
-    VD.actions.exportSignalLog(5);
-    await Promise.resolve();
+    try {
+      VD.actions.exportSignalLog(5);
+      await Promise.resolve();
 
-    expect(bridge.exportDetailedSignalLog).toHaveBeenCalledWith('5');
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"id"'));
+      expect(bridge.exportDetailedSignalLog).toHaveBeenCalledWith('5');
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"id"'));
+    } finally {
+      if (originalCreate) Object.defineProperty(window.URL, 'createObjectURL', originalCreate);
+      else delete window.URL.createObjectURL;
+    }
+  });
+
+  it('exportSignalLogs() downloads all evidence rows when browser downloads are available', () => {
+    const originalCreate = Object.getOwnPropertyDescriptor(window.URL, 'createObjectURL');
+    const originalRevoke = Object.getOwnPropertyDescriptor(window.URL, 'revokeObjectURL');
+    const createObjectURL = vi.fn(() => 'blob:volt-logs');
+    const revokeObjectURL = vi.fn();
+    let downloadedName = '';
+    const clickSpy = vi.spyOn(window.HTMLAnchorElement.prototype, 'click').mockImplementation(function click() {
+      downloadedName = this.download;
+    });
+    Object.defineProperty(window.URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(window.URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+
+    try {
+      VD.actions.exportSignalLogs();
+
+      expect(bridge.exportDetailedSignalLogs).toHaveBeenCalledTimes(1);
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(downloadedName).toBe('volttracker-detailed-signal-logs.json');
+      expect(VD.state.status.detail).toBe('Detailed signal logs exported.');
+    } finally {
+      if (originalCreate) Object.defineProperty(window.URL, 'createObjectURL', originalCreate);
+      else delete window.URL.createObjectURL;
+      if (originalRevoke) Object.defineProperty(window.URL, 'revokeObjectURL', originalRevoke);
+      else delete window.URL.revokeObjectURL;
+    }
   });
 
   it('clearStorage() bails when the user cancels the app dialog', async () => {

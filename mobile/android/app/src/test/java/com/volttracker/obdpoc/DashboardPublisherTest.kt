@@ -46,6 +46,22 @@ class DashboardPublisherTest {
     }
 
     @Test
+    fun restoreProgressFunctionIsAllowlisted() {
+        val webView = WebView(RuntimeEnvironment.getApplication())
+        val shadow: ShadowWebView = shadowOf(webView)
+        val publisher = publisherFor(webView, true)
+
+        publisher.publish("setRestoreProgress", "{\"visible\":true,\"busy\":true}")
+
+        val script = shadow.getLastEvaluatedJavascript()!!
+        assertTrue(
+            "expected the restore progress callback",
+            script.contains("window.VoltTrackerNative.setRestoreProgress("),
+        )
+        assertTrue(script.contains("\\\"visible\\\""))
+    }
+
+    @Test
     fun unknownFunctionIsRefused() {
         val webView = WebView(RuntimeEnvironment.getApplication())
         val publisher = publisherFor(webView, true)

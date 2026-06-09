@@ -18,6 +18,7 @@ class BackupController(
     private val executor: ExecutorService?,
 ) {
     private var pendingRestorePassphrase: String? = null
+    private val restoreLog = LogcatMirror(RollingAppLog(File(activity.filesDir, "app-log")))
 
     private enum class RestoreResult {
         OK,
@@ -179,26 +180,44 @@ class BackupController(
         uri: Uri?,
         passphrase: String?,
     ) {
+        val encrypted = hasPassphrase(passphrase)
+        showRestoreProgress(
+            if (encrypted) "Reading encrypted backup" else "Reading backup",
+            "Large backup files can take a minute. Keep Volt Tracker open while the file is checked.",
+        )
+        logRestore("stage_start", mapOf("encrypted" to encrypted))
         activity.publishStatus(
             "ready",
-            if (hasPassphrase(passphrase)) {
+            if (encrypted) {
                 "Reading and decrypting selected backup..."
             } else {
                 "Reading selected backup..."
             },
             false,
         )
-        runBackground("Could not start the restore worker.") {
-            val outcome = dataBackup.stageRestoreFileWithStatus(uri, passphrase)
-            activity.runOnUiThread {
-                val staged = outcome.file
-                if (!outcome.ok || staged == null) {
-                    publishRestoreStageFailure(outcome)
-                    return@runOnUiThread
+        if (!runBackground("Could not start the restore worker.") {
+                val outcome = dataBackup.stageRestoreFileWithStatus(uri, passphrase)
+                activity.runOnUiThread {
+                    val staged = outcome.file
+                    if (!outcome.ok || staged == null) {
+                        publishRestoreStageFailure(outcome)
+                        return@runOnUiThread
+                    }
+                    logRestore(
+                        "stage_ok",
+                        mapOf(
+                            "encrypted" to outcome.encrypted,
+                            "migrated" to outcome.migrated,
+                            "bytes" to outcome.bytesRead,
+                        ),
+                    )
+                    hideRestoreProgress()
+                    activity.publishStatus("ready", restoreVerifiedMessage(outcome), false)
+                    promptRestoreMode(staged)
                 }
-                activity.publishStatus("ready", restoreVerifiedMessage(outcome), false)
-                promptRestoreMode(staged)
             }
+        ) {
+            showRestoreProgress("Restore failed", "Could not start the restore worker.", busy = false, tone = "blocked")
         }
     }
 
@@ -224,80 +243,103 @@ class BackupController(
 
     private fun cancelStagedRestore(staged: File?) {
         DataBackup.deleteIfExists(staged)
+        hideRestoreProgress()
         activity.publishStatus("ready", "Restore cancelled.", false)
     }
 
     private fun performReplace(staged: File) {
+        showRestoreProgress(
+            "Restoring backup",
+            "Replacing the on-phone database. Large backups can take a minute.",
+        )
+        logRestore("replace_start", emptyMap<String, Any?>())
         activity.publishStatus("ready", "Restoring backup...", false)
-        runBackground("Could not start the restore worker.") {
-            val result = applyReplace(staged)
-            activity.runOnUiThread {
-                if (result == RestoreResult.OK) {
-                    activity.publishDeviceList()
-                    activity.publishStorageSummary()
-                    activity.publishStatus("ready", "Backup restored - reconnect to resume logging.", false)
-                } else {
-                    publishRestoreFailure(result)
+        if (!runBackground("Could not start the restore worker.") {
+                val result = applyReplace(staged)
+                activity.runOnUiThread {
+                    if (result == RestoreResult.OK) {
+                        activity.publishDeviceList()
+                        activity.publishStorageSummary()
+                        showRestoreProgress(
+                            "Restore complete",
+                            "Backup restored. Reconnect to resume logging.",
+                            busy = false,
+                            tone = "ok",
+                        )
+                        logRestore("replace_ok", emptyMap<String, Any?>())
+                        activity.publishStatus("ready", "Backup restored - reconnect to resume logging.", false)
+                    } else {
+                        publishRestoreFailure(result)
+                    }
                 }
             }
+        ) {
+            showRestoreProgress("Restore failed", "Could not start the restore worker.", busy = false, tone = "blocked")
         }
     }
 
     private fun performMerge(staged: File) {
+        showRestoreProgress(
+            "Merging backup",
+            "Adding the backup rows and skipping duplicate sessions. Large backups can take a minute.",
+        )
+        logRestore("merge_start", emptyMap<String, Any?>())
         activity.publishStatus("ready", "Merging backup...", false)
-        runBackground("Could not start the restore worker.") {
-            val outcome = applyMerge(staged)
-            activity.runOnUiThread {
-                if (outcome.result == RestoreResult.OK) {
-                    activity.publishDeviceList()
-                    activity.publishStorageSummary()
-                    activity.publishStatus("ready", outcome.message + " Reconnect to resume logging.", false)
-                } else if (outcome.result == RestoreResult.LOGGING_ACTIVE) {
-                    publishRestoreFailure(outcome.result)
-                } else {
-                    activity.publishStatus(
-                        "blocked",
-                        outcome.message ?: "Merge failed - the backup could not be merged.",
-                        true,
-                    )
+        if (!runBackground("Could not start the restore worker.") {
+                val outcome = applyMerge(staged)
+                activity.runOnUiThread {
+                    if (outcome.result == RestoreResult.OK) {
+                        activity.publishDeviceList()
+                        activity.publishStorageSummary()
+                        showRestoreProgress(
+                            "Merge complete",
+                            (outcome.message ?: "Backup merged.") + " Reconnect to resume logging.",
+                            busy = false,
+                            tone = "ok",
+                        )
+                        logRestore("merge_ok", emptyMap<String, Any?>())
+                        activity.publishStatus("ready", outcome.message + " Reconnect to resume logging.", false)
+                    } else if (outcome.result == RestoreResult.LOGGING_ACTIVE) {
+                        publishRestoreFailure(outcome.result)
+                    } else {
+                        val message = outcome.message ?: "Merge failed - the backup could not be merged."
+                        showRestoreProgress("Restore failed", message, busy = false, tone = "blocked")
+                        logRestore("merge_failed", mapOf("message" to message))
+                        activity.publishStatus(
+                            "blocked",
+                            message,
+                            true,
+                        )
+                    }
                 }
             }
+        ) {
+            showRestoreProgress("Restore failed", "Could not start the restore worker.", busy = false, tone = "blocked")
         }
     }
 
     private fun publishRestoreFailure(result: RestoreResult) {
-        val message =
-            if (result == RestoreResult.LOGGING_ACTIVE) {
-                "Restore failed - logging is still active. Stop logging and try again."
-            } else if (result == RestoreResult.INVALID_FILE) {
-                "Restore failed - that file is not a valid Volt Tracker backup."
-            } else {
-                "Restore failed - could not replace the on-device database."
-            }
+        val message = restoreFailureMessage(result)
+        showRestoreProgress("Restore failed", message, busy = false, tone = "blocked")
+        logRestore("apply_failed", mapOf("result" to result.name))
         activity.publishStatus("blocked", message, true)
     }
 
     private fun publishRestoreStageFailure(outcome: DataBackup.RestoreStageOutcome) {
-        val message =
-            when (outcome.status) {
-                DataBackup.RestoreStageStatus.NO_FILE -> "Restore cancelled - no file selected."
-                DataBackup.RestoreStageStatus.OPEN_FAILED ->
-                    "Restore failed - Android could not read the selected file."
-                DataBackup.RestoreStageStatus.TOO_LARGE ->
-                    "Restore failed - that backup is too large for the on-phone importer."
-                DataBackup.RestoreStageStatus.MISSING_PASSPHRASE ->
-                    "Restore failed - that backup is encrypted. Enter its passphrase first."
-                DataBackup.RestoreStageStatus.DECRYPT_FAILED ->
-                    "Restore failed - the passphrase did not unlock that backup."
-                DataBackup.RestoreStageStatus.TOO_NEW ->
-                    "Restore failed - that backup was created by a newer Volt Tracker app."
-                DataBackup.RestoreStageStatus.MIGRATION_FAILED ->
-                    "Restore failed - the backup could not be upgraded for this app."
-                DataBackup.RestoreStageStatus.NOT_A_BACKUP ->
-                    "Restore failed - that file is not a valid Volt Tracker backup."
-                DataBackup.RestoreStageStatus.OK ->
-                    "Restore failed - the selected backup could not be prepared."
-            }
+        val message = restoreStageFailureMessage(outcome.status)
+        if (outcome.status == DataBackup.RestoreStageStatus.NO_FILE) {
+            hideRestoreProgress()
+        } else {
+            showRestoreProgress("Restore failed", message, busy = false, tone = "blocked")
+        }
+        logRestore(
+            "stage_failed",
+            mapOf(
+                "status" to outcome.status.name,
+                "encrypted" to outcome.encrypted,
+                "bytes" to outcome.bytesRead,
+            ),
+        )
         activity.publishStatus(
             if (outcome.status == DataBackup.RestoreStageStatus.NO_FILE) "ready" else "blocked",
             message,
@@ -315,22 +357,80 @@ class BackupController(
         return parts.joinToString(" ")
     }
 
+    private fun restoreFailureMessage(result: RestoreResult): String =
+        if (result == RestoreResult.LOGGING_ACTIVE) {
+            "Restore failed - logging is still active. Stop logging and try again."
+        } else if (result == RestoreResult.INVALID_FILE) {
+            "Restore failed - that file is not a valid Volt Tracker backup."
+        } else {
+            "Restore failed - could not replace the on-device database."
+        }
+
+    private fun restoreStageFailureMessage(status: DataBackup.RestoreStageStatus): String =
+        when (status) {
+            DataBackup.RestoreStageStatus.NO_FILE -> "Restore cancelled - no file selected."
+            DataBackup.RestoreStageStatus.OPEN_FAILED ->
+                "Restore failed - Android could not read the selected file."
+            DataBackup.RestoreStageStatus.TOO_LARGE ->
+                "Restore failed - that backup is too large for the on-phone importer."
+            DataBackup.RestoreStageStatus.MISSING_PASSPHRASE ->
+                "Restore failed - that backup is encrypted. Enter its passphrase first."
+            DataBackup.RestoreStageStatus.DECRYPT_FAILED ->
+                "Restore failed - the passphrase did not unlock that backup."
+            DataBackup.RestoreStageStatus.TOO_NEW ->
+                "Restore failed - that backup was created by a newer Volt Tracker app."
+            DataBackup.RestoreStageStatus.MIGRATION_FAILED ->
+                "Restore failed - the backup could not be upgraded for this app."
+            DataBackup.RestoreStageStatus.NOT_A_BACKUP ->
+                "Restore failed - that file is not a valid Volt Tracker backup."
+            DataBackup.RestoreStageStatus.OK ->
+                "Restore failed - the selected backup could not be prepared."
+        }
+
+    private fun showRestoreProgress(
+        title: String,
+        detail: String,
+        busy: Boolean = true,
+        tone: String = "busy",
+    ) {
+        activity.publishRestoreProgress(true, busy, title, detail, tone)
+    }
+
+    private fun hideRestoreProgress() {
+        activity.publishRestoreProgress(false, false, null, null, "idle")
+    }
+
+    private fun logRestore(
+        event: String,
+        fields: Map<String, *>,
+    ) {
+        val suffix =
+            if (fields.isEmpty()) {
+                ""
+            } else {
+                fields.entries.joinToString(prefix = " ") { (key, value) -> "$key=${OBDLog.format(value)}" }
+            }
+        restoreLog.i(MainActivity.TAG, "backup_restore_$event$suffix")
+    }
+
     private fun runBackground(
         unavailableMessage: String,
         task: Runnable,
-    ) {
+    ): Boolean {
         val worker = executor
         if (worker == null) {
             activity.publishStatus("blocked", unavailableMessage, true)
-            return
+            return false
         }
         try {
             worker.execute(task)
+            return true
         } catch (ex: RejectedExecutionException) {
             activity.publishStatus("blocked", unavailableMessage, true)
         } catch (ex: RuntimeException) {
             activity.publishStatus("blocked", unavailableMessage, true)
         }
+        return false
     }
 
     private class MergeOutcome(

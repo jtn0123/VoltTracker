@@ -103,6 +103,16 @@ import type { BusyButton } from "./actions-storage";
     }
   }
 
+  function setEnhancedProbeBadge(label: string, tone: string) {
+    if (typeof VD.setEnhancedBadge === "function") {
+      VD.setEnhancedBadge(label, tone);
+      return;
+    }
+    VD.setText("enhancedBadge", label);
+    const badge = el("enhancedBadge");
+    if (badge) badge.dataset.state = tone;
+  }
+
   function showConnectionProgress(device: VoltDevice, scan: boolean) {
     const label = device.name || device.address || "OBD adapter";
     const status: VoltStatus = {
@@ -138,13 +148,16 @@ import type { BusyButton } from "./actions-storage";
     const selected = VD.getSelectedDevice();
     if (!selected) {
       showBlockedAdapterFeedback("Pick a paired or remembered OBD adapter first.");
+      setEnhancedProbeBadge("blocked", "blocked");
       return;
     }
     if (!bridge || typeof bridge.detailProbe !== "function") {
       VD.setStatus({ state: "idle", detail: "Detail Probe is only available inside the Android app." });
+      setEnhancedProbeBadge("app only", "idle");
       return;
     }
     const stage = String(state.signalProbeStage || "tires");
+    setEnhancedProbeBadge("probing", "working");
     withBusy(button, () => bridge.detailProbe(selected.address, selected.name, stage));
   }
 
@@ -272,6 +285,78 @@ import type { BusyButton } from "./actions-storage";
     }
   }
 
+  // In-app DTC lookup over the shipped ~3,000-code Volt database. The dictionary
+  // is a lazy chunk, so the first lookup loads it then re-renders. Falls back to a
+  // web search (the existing [data-dtc-search] delegation) for unknown codes.
+  function renderDtcLookup() {
+    const input = el("dtcSearchInput") as HTMLInputElement | null;
+    const out = el("dtcSearchResult");
+    if (!input || !out) return;
+    const raw = input.value.trim();
+    if (!raw) {
+      out.hidden = true;
+      out.replaceChildren();
+      return;
+    }
+    if (typeof VD.dtcInfo !== "function") {
+      out.hidden = false;
+      out.replaceChildren(document.createTextNode("Loading code database…"));
+      if (typeof VD.ensureDtcData === "function") {
+        VD.ensureDtcData().then(renderDtcLookup).catch(() => {
+          out.replaceChildren(document.createTextNode("Code database could not be loaded."));
+        });
+      }
+      return;
+    }
+    const info = VD.dtcInfo(raw);
+    const code = (info && info.code) || raw.toUpperCase();
+    out.hidden = false;
+    out.replaceChildren();
+
+    const head = document.createElement("div");
+    head.className = "dtc-lookup-code";
+    head.textContent = code;
+    if (info && info.severity) {
+      const sev = document.createElement("span");
+      sev.className = "dtc-lookup-sev";
+      sev.dataset.severity = String(info.severity).toLowerCase();
+      sev.textContent = String(info.severity);
+      head.appendChild(sev);
+    }
+    out.appendChild(head);
+
+    const desc = document.createElement("p");
+    desc.className = "dtc-lookup-desc";
+    desc.textContent =
+      info && info.description
+        ? info.description
+        : "Not in the on-device Volt database — try a web search.";
+    out.appendChild(desc);
+
+    const causes = info && Array.isArray(info.causes) ? info.causes : [];
+    if (causes.length) {
+      const label = document.createElement("div");
+      label.className = "kicker dtc-lookup-causes-label";
+      label.textContent = "Likely causes";
+      out.appendChild(label);
+      const list = document.createElement("ul");
+      list.className = "dtc-lookup-causes";
+      causes.slice(0, 5).forEach((cause) => {
+        const li = document.createElement("li");
+        li.textContent = String(cause);
+        list.appendChild(li);
+      });
+      out.appendChild(list);
+    }
+
+    const web = document.createElement("button");
+    web.type = "button";
+    web.className = "link-btn dtc-lookup-web";
+    web.dataset.dtcSearch = code;
+    web.textContent = "Search the web for " + code;
+    out.appendChild(web);
+  }
+
   function startDemo() {
     VD.ensureDemoData((error) => {
       if (error) {
@@ -333,7 +418,6 @@ import type { BusyButton } from "./actions-storage";
       VD.updateStorageUi();
       VD.renderRealV2Ui();
       VD.renderMap();
-      VD.renderRealTrips();
       VD.renderInsightStats();
       return;
     }
@@ -342,7 +426,6 @@ import type { BusyButton } from "./actions-storage";
     if (typeof VD.loadInsights === "function") VD.loadInsights();
     if (typeof VD.renderRealV2Ui === "function") VD.renderRealV2Ui();
     if (typeof VD.renderMap === "function") VD.renderMap();
-    if (typeof VD.renderRealTrips === "function") VD.renderRealTrips();
     if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
     VD.setState({
       demoPreviewStorage: null,
@@ -457,6 +540,7 @@ import type { BusyButton } from "./actions-storage";
       VD.renderMap();
     }, opts);
     document.addEventListener("click", handleDtcSearch, opts);
+    VD.bindListenerGuarded("dtcSearchInput", "input", renderDtcLookup, opts);
     document.addEventListener("change", (event) => {
       const target = event.target as HTMLInputElement | null;
       if (target && target.id === "dtcClearAckBox") {
@@ -475,36 +559,6 @@ import type { BusyButton } from "./actions-storage";
       if (signalDelete) {
         deleteSignalLog((signalDelete as HTMLElement).dataset.signalDelete);
         return;
-      }
-      const realTripButton = target && target.closest("[data-real-trip-id]");
-      if (realTripButton) {
-        if (typeof VD.selectRealTrip === "function") {
-          VD.selectRealTrip((realTripButton as HTMLElement).dataset.realTripId ?? "");
-        }
-        return;
-      }
-      const tripButton = target && target.closest("[data-trip-map]");
-      if (!tripButton) return;
-      const id = (tripButton as HTMLElement).dataset.tripMap;
-      const trip = (state.trips || []).find((t) => String(t.id) === String(id));
-      if (trip && trip.hasRoute) {
-        const route = typeof VD.ensureRouteForTrip === "function" ? VD.ensureRouteForTrip(trip) : null;
-        if (route && route.session) {
-          const routeKey = String(route.session.id || "");
-          const existingRoutes = (state.storage || {}).recentRoutes;
-          const routes: VoltRoute[] = Array.isArray(existingRoutes) ? existingRoutes : [];
-          state.storage = state.storage || {};
-          state.storage.recentRoutes = [
-            route,
-            ...routes.filter((existing) =>
-              String((existing.session || {}).id || "") !== routeKey
-            )
-          ];
-        }
-        VD.setState({ selectedMapSessionId: id ?? null });
-        VD.setView("map");
-      } else {
-        VD.setStatus({ state: "ready", detail: "This trip has no stored GPS route." });
       }
     }, opts);
     VD.bindListenerGuarded("permissionBtn", "click", () => handleAction("permissions"), opts);
@@ -588,6 +642,7 @@ import type { BusyButton } from "./actions-storage";
     setStatus: VD.setStatus,
     setStorage: VD.setStorage,
     setAppState: VD.setAppState,
+    setRestoreProgress: VD.setRestoreProgress,
     updateTelemetry: VD.updateTelemetry
   };
 

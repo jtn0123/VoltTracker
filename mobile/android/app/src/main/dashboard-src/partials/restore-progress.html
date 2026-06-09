@@ -1,0 +1,40 @@
+<div
+  id="restoreProgress"
+  class="restore-progress"
+  role="alertdialog"
+  aria-modal="true"
+  aria-labelledby="restoreProgressTitle"
+  aria-describedby="restoreProgressDetail"
+  tabindex="-1"
+  hidden
+>
+  <div class="restore-progress-backdrop"></div>
+  <section class="restore-progress-card" role="document">
+    <header class="restore-progress-head">
+      <div>
+        <span class="restore-progress-kicker">Backup restore</span>
+        <h2 id="restoreProgressTitle" class="restore-progress-title">
+          Preparing restore
+        </h2>
+      </div>
+      <button
+        type="button"
+        id="restoreProgressClose"
+        class="restore-progress-close"
+        aria-label="Close restore status"
+        hidden
+      >
+        ×
+      </button>
+    </header>
+    <div class="restore-progress-meter" aria-hidden="true">
+      <span id="restoreProgressFill"></span>
+    </div>
+    <p id="restoreProgressDetail" class="restore-progress-detail">
+      Checking the selected backup file.
+    </p>
+    <p id="restoreProgressNote" class="restore-progress-note">
+      Keep Volt Tracker open until this finishes.
+    </p>
+  </section>
+</div>

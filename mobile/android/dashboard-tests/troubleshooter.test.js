@@ -493,6 +493,18 @@ describe('connection-tools.ts — proactive adapter checks', () => {
     expect(status.textContent).toMatch(/manual connect/i);
   });
 
+  it('Auto-connect surfaces the post-failure cooldown', async () => {
+    await freshLoad(createVoltBridgeFixture({
+      getAutoConnectState: vi.fn(
+        () => '{"enabled":true,"available":true,"lastName":"Volt OBD","lastAddress":"AA:BB:CC:DD:EE:FF","cooldownRemainingMs":12000}'
+      ),
+      setAutoConnectEnabled: vi.fn(),
+    }));
+    const status = document.getElementById('autoConnectStatus');
+    expect(status.textContent).toMatch(/cooling down/i);
+    expect(status.textContent).toMatch(/12s/);
+  });
+
   it('Notify-when-ready schedules the clamped minutes when toggled on', () => {
     const toggle = document.getElementById('notifyWhenReadyToggle');
     const mins = document.getElementById('notifyWhenReadyMinutes');

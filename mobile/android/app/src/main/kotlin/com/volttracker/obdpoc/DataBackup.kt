@@ -203,6 +203,7 @@ class DataBackup(
         val status: RestoreStageStatus,
         val encrypted: Boolean = false,
         val migrated: Boolean = false,
+        val bytesRead: Long = 0L,
     ) {
         val ok: Boolean
             get() = status == RestoreStageStatus.OK && file != null
@@ -235,6 +236,7 @@ class DataBackup(
             return RestoreStageOutcome(null, RestoreStageStatus.NO_FILE)
         }
         val temp = File(context.cacheDir, "restore-${UUID.randomUUID()}.backup")
+        var total = 0L
         try {
             context.contentResolver.openInputStream(uri).use { input ->
                 FileOutputStream(temp).use { out ->
@@ -243,7 +245,6 @@ class DataBackup(
                         return RestoreStageOutcome(null, RestoreStageStatus.OPEN_FAILED)
                     }
                     val buffer = ByteArray(IO_BUFFER_BYTES)
-                    var total = 0L
                     while (true) {
                         val read = input.read(buffer)
                         if (read <= 0) {
@@ -252,7 +253,7 @@ class DataBackup(
                         total += read.toLong()
                         if (total > MAX_RESTORE_BYTES) {
                             temp.delete()
-                            return RestoreStageOutcome(null, RestoreStageStatus.TOO_LARGE)
+                            return RestoreStageOutcome(null, RestoreStageStatus.TOO_LARGE, bytesRead = total)
                         }
                         out.write(buffer, 0, read)
                     }
@@ -261,7 +262,7 @@ class DataBackup(
         } catch (ex: Exception) {
             if (ex is IOException || ex is RuntimeException) {
                 temp.delete()
-                return RestoreStageOutcome(null, RestoreStageStatus.OPEN_FAILED)
+                return RestoreStageOutcome(null, RestoreStageStatus.OPEN_FAILED, bytesRead = total)
             }
             throw ex
         }
@@ -272,7 +273,12 @@ class DataBackup(
             encrypted = true
             if (!hasPassphrase(passphrase)) {
                 temp.delete()
-                return RestoreStageOutcome(null, RestoreStageStatus.MISSING_PASSPHRASE, encrypted = true)
+                return RestoreStageOutcome(
+                    null,
+                    RestoreStageStatus.MISSING_PASSPHRASE,
+                    encrypted = true,
+                    bytesRead = total,
+                )
             }
             candidate = File(context.cacheDir, "restore-${UUID.randomUUID()}.db")
             try {
@@ -281,7 +287,12 @@ class DataBackup(
                 if (ex is IOException || ex is GeneralSecurityException || ex is RuntimeException) {
                     temp.delete()
                     candidate.delete()
-                    return RestoreStageOutcome(null, RestoreStageStatus.DECRYPT_FAILED, encrypted = true)
+                    return RestoreStageOutcome(
+                        null,
+                        RestoreStageStatus.DECRYPT_FAILED,
+                        encrypted = true,
+                        bytesRead = total,
+                    )
                 }
                 throw ex
             }
@@ -292,15 +303,20 @@ class DataBackup(
         when (migration) {
             BackupMigrator.Result.TOO_NEW -> {
                 candidate.delete()
-                return RestoreStageOutcome(null, RestoreStageStatus.TOO_NEW, encrypted = encrypted)
+                return RestoreStageOutcome(null, RestoreStageStatus.TOO_NEW, encrypted = encrypted, bytesRead = total)
             }
             BackupMigrator.Result.NOT_A_BACKUP -> {
                 candidate.delete()
-                return RestoreStageOutcome(null, RestoreStageStatus.NOT_A_BACKUP, encrypted = encrypted)
+                return RestoreStageOutcome(null, RestoreStageStatus.NOT_A_BACKUP, encrypted = encrypted, bytesRead = total)
             }
             BackupMigrator.Result.FAILED -> {
                 candidate.delete()
-                return RestoreStageOutcome(null, RestoreStageStatus.MIGRATION_FAILED, encrypted = encrypted)
+                return RestoreStageOutcome(
+                    null,
+                    RestoreStageStatus.MIGRATION_FAILED,
+                    encrypted = encrypted,
+                    bytesRead = total,
+                )
             }
             BackupMigrator.Result.ALREADY_CURRENT,
             BackupMigrator.Result.MIGRATED,
@@ -310,7 +326,7 @@ class DataBackup(
         }
         if (!isVoltTrackerBackup(candidate)) {
             candidate.delete()
-            return RestoreStageOutcome(null, RestoreStageStatus.NOT_A_BACKUP, encrypted = encrypted)
+            return RestoreStageOutcome(null, RestoreStageStatus.NOT_A_BACKUP, encrypted = encrypted, bytesRead = total)
         }
         clearRegenerableRollupCache(candidate)
         return RestoreStageOutcome(
@@ -318,6 +334,7 @@ class DataBackup(
             RestoreStageStatus.OK,
             encrypted = encrypted,
             migrated = migration == BackupMigrator.Result.MIGRATED,
+            bytesRead = total,
         )
     }
 

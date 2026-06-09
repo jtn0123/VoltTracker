@@ -113,6 +113,14 @@ interface DashboardStatePublisher {
         detail: String?,
         blocked: Boolean,
     )
+
+    fun publishRestoreProgress(
+        visible: Boolean,
+        busy: Boolean,
+        title: String?,
+        detail: String?,
+        tone: String?,
+    )
 }
 
 /**

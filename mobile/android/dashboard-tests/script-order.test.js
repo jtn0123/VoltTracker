@@ -14,9 +14,11 @@ const BUILD_MJS = resolve('build.mjs');
 // WebView, where `<script type="module">` is fetched with CORS semantics file://
 // cannot satisfy — so a module bootstrap silently never runs on-device.
 //
-// Dependency order: core first (it seeds window.VoltDashboard); actions' bootstrap
-// calls into map/drive/telemetry/etc., so it comes after them.
+// Dependency order: prefs first (seeds the preference store other modules read at
+// init), then core (it seeds window.VoltDashboard); actions' bootstrap calls into
+// map/drive/telemetry/etc., so it comes after them.
 const EXPECTED_EAGER_ORDER = [
+  'prefs',
   'core',
   'storage-status',
   'signals-panel',

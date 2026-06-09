@@ -36,12 +36,11 @@ describe('generated dashboard accessibility shell', () => {
     const navButtons = [...document.querySelectorAll('nav.bottom-nav [data-nav]')];
     expect(navButtons.map((button) => button.dataset.nav)).toEqual([
       'drive',
-      'trips',
       'map',
       'charge',
       'insights',
+      'diagnostics',
       'settings',
-      'signals',
     ]);
     expect(navButtons.every((button) => accessibleName(button).length > 0)).toBe(true);
     expect(navButtons.filter((button) => button.getAttribute('aria-current') === 'page')).toHaveLength(1);
@@ -55,10 +54,6 @@ describe('generated dashboard accessibility shell', () => {
     expect(liveRegions.some((node) => node.querySelector('#driveSocValue'))).toBe(true);
   });
 
-  it('gives the trip lists list semantics', () => {
-    const document = loadDocument();
-    expect(document.querySelector('#realTripsList')?.getAttribute('role')).toBe('list');
-  });
 
   it('gives every button an accessible name', () => {
     const document = loadDocument();

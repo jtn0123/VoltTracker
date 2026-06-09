@@ -25,6 +25,40 @@ function writeClipboard(text: unknown) {
   return Promise.resolve();
 }
 
+function jsonText(payload: unknown) {
+  return JSON.stringify(payload, null, 2);
+}
+
+function downloadTextFile(text: string, filename: string) {
+  try {
+    if (typeof Blob !== "function" || !window.URL || typeof window.URL.createObjectURL !== "function") return false;
+    const blob = new Blob([text], { type: "application/json" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.rel = "noopener";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+    return true;
+  } catch (_err) {
+    return false;
+  }
+}
+
+function deliverExport(VD: VoltDashboard, payload: unknown, filename: string, exportedDetail: string, copiedDetail: string) {
+  const text = jsonText(payload);
+  if (downloadTextFile(text, filename)) {
+    VD.setStatus({ state: "ready", detail: exportedDetail });
+    return;
+  }
+  writeClipboard(text)
+    .then(() => VD.setStatus({ state: "ready", detail: copiedDetail }))
+    .catch(() => VD.setStatus({ state: "blocked", detail: "Could not export detailed signal logs." }));
+}
+
 export function createSignalActions({ VD, bridge }: SignalActionContext) {
   function exportSignalLog(id: unknown) {
     if (!bridge || typeof bridge.exportDetailedSignalLog !== "function") {
@@ -37,9 +71,13 @@ export function createSignalActions({ VD, bridge }: SignalActionContext) {
       VD.setStatus({ state: "blocked", detail: parsed.message || "Signal log export failed." });
       return;
     }
-    writeClipboard(JSON.stringify(parsed, null, 2))
-      .then(() => VD.setStatus({ state: "ready", detail: "Detailed signal log copied." }))
-      .catch(() => VD.setStatus({ state: "blocked", detail: "Could not copy detailed signal log." }));
+    deliverExport(
+      VD,
+      parsed,
+      `volttracker-detailed-signal-${String(id || "log")}.json`,
+      "Detailed signal log exported.",
+      "Detailed signal log copied."
+    );
   }
 
   function exportSignalLogs() {
@@ -53,9 +91,13 @@ export function createSignalActions({ VD, bridge }: SignalActionContext) {
       VD.setStatus({ state: "blocked", detail: parsed.message || "Signal log export failed." });
       return;
     }
-    writeClipboard(JSON.stringify(parsed, null, 2))
-      .then(() => VD.setStatus({ state: "ready", detail: "Detailed signal logs copied." }))
-      .catch(() => VD.setStatus({ state: "blocked", detail: "Could not copy detailed signal logs." }));
+    deliverExport(
+      VD,
+      parsed,
+      "volttracker-detailed-signal-logs.json",
+      "Detailed signal logs exported.",
+      "Detailed signal logs copied."
+    );
   }
 
   function deleteSignalLog(id: unknown) {

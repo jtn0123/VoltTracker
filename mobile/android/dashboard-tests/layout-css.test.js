@@ -16,9 +16,10 @@ describe('dashboard layout css', () => {
     // Whitespace-tolerant so `overflow:clip` (no space) can't slip past this guard.
     expect(appRule).not.toMatch(/overflow\s*:\s*clip/);
     expect(bodyRule).toMatch(/display\s*:\s*flex/);
-    expect(bodyRule).toMatch(/overflow\s*:\s*hidden/);
-    expect(appRule).toMatch(/overflow-y\s*:\s*auto/);
-    expect(appRule).toMatch(/min-height\s*:\s*0/);
+    expect(bodyRule).not.toMatch(/overflow\s*:\s*hidden/);
+    expect(bodyRule).toMatch(/overflow-y\s*:\s*auto/);
+    expect(appRule).toMatch(/overflow-y\s*:\s*visible/);
+    expect(appRule).toMatch(/min-height\s*:\s*auto/);
   });
 
   it('keeps the empty map message below the overlay controls', () => {
@@ -28,7 +29,7 @@ describe('dashboard layout css', () => {
     expect(mapEmptyRule).toMatch(/padding\s*:\s*120px\s+20px\s+56px/);
   });
 
-  it('keeps all seven bottom nav items inside narrow Android WebView widths', () => {
+  it('keeps all six bottom nav items inside narrow Android WebView widths', () => {
     const screensCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens.css'), 'utf8');
     const baseCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/base.css'), 'utf8');
     const navRule = screensCss.match(/\.bottom-nav\s*\{[^}]+\}/)?.[0] || '';
@@ -41,7 +42,7 @@ describe('dashboard layout css', () => {
     expect(navRule).toMatch(/transform\s*:\s*translateX\(-50%\)/);
     expect(navRule).not.toMatch(/width\s*:\s*100%/);
     expect(navRule).not.toMatch(/padding-bottom\s*:\s*calc\(54px \+ env\(safe-area-inset-bottom\)\)/);
-    expect(navRule).toMatch(/grid-template-columns\s*:\s*repeat\(7,\s*minmax\(0,\s*1fr\)\)/);
+    expect(navRule).toMatch(/grid-template-columns\s*:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/);
     expect(navRule).toMatch(/gap\s*:\s*4px/);
     expect(navButtonRule).toMatch(/min-width\s*:\s*0/);
     expect(appRule).toMatch(/calc\(112px \+ env\(safe-area-inset-bottom\)\)/);

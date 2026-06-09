@@ -22,6 +22,14 @@
     connectCount?: number;
   };
 
+  type RestoreProgressPayload = {
+    visible?: boolean;
+    busy?: boolean;
+    title?: string;
+    detail?: string;
+    tone?: string;
+  };
+
   function installLegacyWebViewPolyfills() {
     const elementProto = typeof Element !== "undefined" ? Element.prototype : null;
     if (elementProto && typeof elementProto.replaceChildren !== "function") {
@@ -119,6 +127,59 @@
     } catch (ignored) {}
   }
 
+  function clearRestoreProgressTimer() {
+    if (restoreProgressHideTimer) {
+      clearTimeout(restoreProgressHideTimer);
+      restoreProgressHideTimer = null;
+    }
+  }
+
+  function hideRestoreProgress() {
+    clearRestoreProgressTimer();
+    const node = el("restoreProgress");
+    if (node) {
+      node.hidden = true;
+      node.dataset.busy = "false";
+      node.dataset.tone = "idle";
+    }
+    const close = el("restoreProgressClose");
+    if (close) close.hidden = true;
+    delete document.body.dataset.restoreBusy;
+  }
+
+  function setRestoreProgress(payload: unknown) {
+    const progress = VD.parsePayload<RestoreProgressPayload>(payload, {});
+    if (progress.visible === false) {
+      hideRestoreProgress();
+      return;
+    }
+    const node = el("restoreProgress");
+    if (!node) return;
+    clearRestoreProgressTimer();
+    const busy = progress.busy !== false;
+    const tone = String(progress.tone || (busy ? "busy" : "idle"));
+    node.hidden = false;
+    node.dataset.busy = String(busy);
+    node.dataset.tone = tone;
+    VD.setText("restoreProgressTitle", progress.title || (busy ? "Restoring backup" : "Restore status"));
+    VD.setText(
+      "restoreProgressDetail",
+      progress.detail || "Volt Tracker is processing the selected backup file."
+    );
+    VD.setText(
+      "restoreProgressNote",
+      busy ? "Keep Volt Tracker open until this finishes." : "The status line below keeps the result visible."
+    );
+    const close = el("restoreProgressClose");
+    if (close) close.hidden = busy;
+    if (busy) document.body.dataset.restoreBusy = "true";
+    else delete document.body.dataset.restoreBusy;
+    if (!busy && tone === "ok") {
+      restoreProgressHideTimer = setTimeout(hideRestoreProgress, 2200);
+    }
+    try { node.focus({ preventScroll: true }); } catch (ignored) {}
+  }
+
   window.addEventListener("error", (event) => {
     const stack = event && event.error && event.error.stack;
     reportClientError("window.error", stack || (event && event.message) || "Script error");
@@ -153,11 +214,21 @@
     }
   })();
 
+  (function bindRestoreProgressDismiss() {
+    const close = el("restoreProgressClose");
+    if (close) {
+      close.addEventListener("click", hideRestoreProgress, { signal: VD.errorController.signal });
+    }
+  })();
+
   const data: DashboardData = { trips: [], sessions: [], hourly: [], insights: [], demoLoaded: false };
   VD.data = data;
 
   let demoDataLoading = false;
   const demoDataCallbacks: DemoDataCallback[] = [];
+  let cachedViewNodes: HTMLElement[] | null = null;
+  let cachedNavNodes: HTMLElement[] | null = null;
+  let restoreProgressHideTimer: ReturnType<typeof setTimeout> | null = null;
 
   function cloneArray(value: unknown) {
     return Array.isArray(value) ? value.map((item) => (
@@ -361,24 +432,23 @@
 
   const realViewMeta: Record<string, [string, string]> = {
     drive: ["Volt Tracker Android", "Drive"],
-    trips: ["Logged drives", "Trips"],
     map: ["GPS route", "Map"],
     charge: ["Real charging", "Charge"],
     insights: ["Vehicle health", "Insights"],
     settings: ["Adapter setup", "Settings"],
-    signals: ["Enhanced discovery", "Detailed Signals"]
+    diagnostics: ["Adapter & debug", "Diagnostics"]
   };
 
   const viewIconPaths: Record<string, string> = {
     drive: "M13 2 5 13h6l-1 9 9-13h-6z",
-    trips: "M4 5h3v3H4V5zm5 0h11v3H9V5zM4 10.5h3v3H4v-3zm5 0h11v3H9v-3zM4 16h3v3H4v-3zm5 0h11v3H9v-3z",
     map: "M15 4 9 2 3 4v18l6-2 6 2 6-2V2l-6 2zm-1 15-4-1.35V5l4 1.35V19z",
     charge: "M14 2v7h5l-9 13v-7H5l9-13z",
     insights: "M4 19h16v2H2V3h2v16zm3-2V9h3v8H7zm5 0V5h3v12h-3zm5 0v-6h3v6h-3z",
     settings: "M12 2a3 3 0 0 1 3 3v1h2.2l1.1 1.9-1.6 1.6c.2.5.3 1 .3 1.5s-.1 1-.3 1.5l1.6 1.6-1.1 1.9H15v1a3 3 0 0 1-6 0v-1H6.8l-1.1-1.9 1.6-1.6A4.2 4.2 0 0 1 7 11c0-.5.1-1 .3-1.5L5.7 7.9 6.8 6H9V5a3 3 0 0 1 3-3zm0 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
-    signals: "M4 6h4m4 0h8M4 12h10m4 0h2M4 18h6m4 0h6M8 4v4m6 8v4m4-10v4"
+    diagnostics: "M3 12h4l2.5-7 4 14 2.5-7H21"
   };
-  const strokedViewIcons = new Set(["signals"]);
+  // The Diagnostics icon is a stroked pulse line (open path), not a filled glyph.
+  const strokedViewIcons = new Set(["diagnostics"]);
 
   function parsePayload(payload: unknown, fallback: unknown = null) {
     if (!payload) return fallback;
@@ -445,32 +515,26 @@
     return true;
   }
 
-  function appScroller(): HTMLElement | null {
-    return document.querySelector(".app");
-  }
-
   function scrollAppToTop() {
-    const scroller = appScroller();
-    if (scroller && typeof scroller.scrollTo === "function") {
-      scroller.scrollTo({ top: 0, behavior: "auto" });
-      return;
-    }
     window.scrollTo({ top: 0, behavior: "auto" });
   }
 
   function scrollAppBy(deltaY: number) {
-    const scroller = appScroller();
-    if (scroller && typeof scroller.scrollBy === "function") {
-      scroller.scrollBy({ top: deltaY, left: 0, behavior: "auto" });
-      return;
-    }
     window.scrollBy({ top: deltaY, left: 0, behavior: "auto" });
   }
 
   function canScrollApp() {
-    const scroller = appScroller();
-    if (scroller) return scroller.scrollHeight > scroller.clientHeight + 2;
-    return document.documentElement.scrollHeight > window.innerHeight + 2;
+    const root = document.scrollingElement || document.documentElement;
+    const bodyHeight = document.body ? document.body.scrollHeight : 0;
+    return Math.max(root.scrollHeight, bodyHeight) > window.innerHeight + 2;
+  }
+
+  function viewNodes(): HTMLElement[] {
+    return cachedViewNodes || (cachedViewNodes = Array.from(document.querySelectorAll<HTMLElement>(".view")));
+  }
+
+  function navNodes(): HTMLElement[] {
+    return cachedNavNodes || (cachedNavNodes = Array.from(document.querySelectorAll<HTMLElement>("[data-nav]")));
   }
 
   function setView(view: string) {
@@ -481,8 +545,8 @@
       document.body.classList.remove("map-full-active");
       VD.renderMap();
     }
-    queryAll(".view").forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
-    queryAll("[data-nav]").forEach((node) => {
+    viewNodes().forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
+    navNodes().forEach((node) => {
       const active = node.dataset.nav === view;
       node.classList.toggle("is-active", active);
       if (active) {
@@ -491,8 +555,7 @@
         node.removeAttribute("aria-current");
       }
     });
-    if (view === "trips") VD.loadTrips();
-    else if (view === "insights") VD.loadInsights();
+    if (view === "insights") VD.loadInsights();
     else if (view === "map") VD.renderMap();
     updateViewHeading();
     scrollAppToTop();
@@ -560,12 +623,15 @@
     if (banner) banner.hidden = !next;
     const bannerStop = el("demoStopBtn");
     if (bannerStop) bannerStop.hidden = !next;
-    queryAll('[data-action="stopDemo"]').forEach((button) => {
-      button.hidden = !next;
-    });
-    queryAll('[data-action="demo"]').forEach((button) => {
-      button.textContent = next ? "Demo on" : (button.dataset.demoLabel || "Demo");
-      button.classList.toggle("is-active", next);
+    // Single morphing demo toggle: "Start demo preview" <-> "Stop demo preview".
+    // Rewriting data-action in place keeps the existing [data-action] click
+    // delegation routing to startDemo / stopDemo with no extra binding, so the
+    // sandbox never shows a Start and a Stop button at the same time.
+    queryAll("[data-demo-toggle]").forEach((button) => {
+      button.dataset.action = next ? "stopDemo" : "demo";
+      button.textContent = next ? "Stop demo preview" : "Start demo preview";
+      button.classList.toggle("demo", !next);
+      button.classList.toggle("demo-stop", next);
     });
     if (detail) VD.setStatus({ state: next ? "demo" : "ready", detail });
     if (!changed) return;
@@ -686,6 +752,7 @@
 
   Object.assign(VD, {
     reportClientError,
+    setRestoreProgress,
     escapeHtml,
     parsePayload,
     setText,

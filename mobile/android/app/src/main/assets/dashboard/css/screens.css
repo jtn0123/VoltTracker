@@ -685,7 +685,7 @@
     width: min(760px, calc(100vw - 24px));
     max-width: calc(100vw - 24px);
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 4px;
     margin: 0;
     padding: 6px;
@@ -1146,6 +1146,27 @@
     width: 100%;
   }
 
+  /* Explicit heights: width:100% + viewBox alone collapses the SVG to 0px tall in
+     some engines (the chart silently disappears). These match the fixed pixel
+     heights the scrubber draws with (combo = 116, each detail track = 52), so the
+     viewBox maps 1:1 with no distortion at any width. */
+  #scrubChart svg {
+    height: 116px;
+  }
+
+  #scrubStack .scrub-track svg {
+    height: 52px;
+  }
+
+  /* Force monospace on the in-chart SVG <text> labels. The markup sets a
+     font-family presentation attribute, but it loses to the inherited sans-serif
+     body font once the SVG renders, so the labels came out in the wrong face. A
+     real CSS rule wins the cascade. */
+  .scrub-chart svg text,
+  .scrub-track svg text {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
   .scrub-cursor {
     position: absolute;
     top: 0;
@@ -1171,6 +1192,26 @@
     grid-template-columns: repeat(6, 1fr);
     margin-top: 8px;
     border-top: 1px solid var(--line);
+    background: rgba(10, 12, 17, 0.94);
+    color: var(--text);
+  }
+
+  /* Enhanced "More signals" card: optional Volt signals. 3 columns gives the
+     unit-bearing values room (4 columns clipped them and wrapped labels). It's a
+     standalone panel, so it drops the readout's footer border-top, and the
+     readout's single-row vertical dividers (which misalign once cells hide). */
+  .more-signals {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-top: none;
+    row-gap: 4px;
+  }
+
+  .more-signals div + div {
+    border-left: none;
+  }
+
+  .more-signals.is-empty {
+    display: none;
   }
 
   .scrub-readout div {
@@ -1184,6 +1225,7 @@
   }
 
   .scrub-readout .kicker {
+    color: #c9cbd4;
     font-size: 9px;
     letter-spacing: 0;
   }
@@ -1275,7 +1317,7 @@
     text-align: left;
     border: 1px solid var(--line-strong);
     border-radius: 14px;
-    background: rgba(16, 18, 22, 0.85);
+    background: rgba(16, 18, 22, 0.96);
     color: var(--text);
     cursor: pointer;
     scroll-snap-align: start;
@@ -1289,7 +1331,9 @@
 
   .map-drive-chip.is-active {
     border-color: #4cc4ff;
-    background: rgba(76, 196, 255, 0.18);
+    background:
+      linear-gradient(180deg, rgba(76,196,255,0.2), rgba(76,196,255,0.08)),
+      #10161d;
     box-shadow: 0 6px 14px rgba(76, 196, 255, 0.18);
   }
 
@@ -1301,11 +1345,12 @@
   }
 
   .map-drive-chip.is-active .dl {
-    color: #c7edff;
+    color: #f5f3ec;
   }
 
   .map-drive-chip .dl {
     display: block;
+    color: var(--text);
     font-size: 13px;
     font-weight: 750;
     overflow: hidden;

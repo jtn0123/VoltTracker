@@ -23,7 +23,9 @@ const { openDashboard, setView } = require('./harness');
 
 const FIXED = '2026-06-15T12:00:00.000Z';
 const SCENARIOS = ['typical', 'empty', 'fault', 'power-user', 'extreme'];
-const TABS = ['drive', 'trips', 'map', 'charge', 'insights', 'settings', 'signals'];
+// Trips was folded into Insights/Map. Diagnostics needs new Linux baselines
+// before it can join this pixel matrix; the functional/a11y suites cover it.
+const TABS = ['drive', 'map', 'charge', 'insights', 'settings'];
 
 test.describe('visual matrix — tab × demo scenario', () => {
   for (const scenario of SCENARIOS) {

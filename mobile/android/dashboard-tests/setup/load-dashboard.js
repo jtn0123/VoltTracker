@@ -38,6 +38,7 @@ const DASHBOARD_MODULE_LOADERS = {
   'dtc-lookup.js': () => import('../../app/src/main/dashboard-src/js/dtc-lookup.ts'),
   'insights-panel.js': () => import('../../app/src/main/dashboard-src/js/insights-panel.ts'),
   'map.js': () => import('../../app/src/main/dashboard-src/js/map.ts'),
+  'prefs.js': () => import('../../app/src/main/dashboard-src/js/prefs.ts'),
   'scrubber.js': () => import('../../app/src/main/dashboard-src/js/scrubber.ts'),
   'signals-panel.js': () => import('../../app/src/main/dashboard-src/js/signals-panel.ts'),
   'storage-status.js': () => import('../../app/src/main/dashboard-src/js/storage-status.ts'),
@@ -47,6 +48,7 @@ const DASHBOARD_MODULE_LOADERS = {
 
 // Loaded in the exact order that index.template.html lists the emitted production scripts.
 const DASHBOARD_EMITTED_JS_FILES = [
+  'prefs.js',
   'core.js',
   'storage-status.js',
   'signals-panel.js',
@@ -283,14 +285,15 @@ const REQUIRED_DOM = `
 // a no-op 2D context onto the prototype just for the test runtime — the tile
 // drawing path is irrelevant to what we're checking here. Idempotent so
 // multiple loadDashboard() calls per file are safe.
-// jsdom doesn't implement window.scrollTo; the bootstrap path calls it
-// twice during init, which jsdom would otherwise log as a noisy "Not
-// implemented" stderr line. A no-op keeps CI logs readable.
+// jsdom doesn't implement window.scrollTo/scrollBy; the bootstrap path calls
+// them during init and view switches, which would otherwise log noisy "Not
+// implemented" stderr lines. No-ops keep CI logs readable and timings stable.
 function installScrollShim() {
   if (typeof window.scrollTo === 'function' && window.scrollTo.__voltShim) return;
   const noop = () => {};
   noop.__voltShim = true;
   window.scrollTo = noop;
+  window.scrollBy = noop;
 }
 
 function installCanvasShim() {

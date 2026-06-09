@@ -38,6 +38,7 @@ for (const f of readdirSync(OUT)) {
 // panels.ts god-module was split into (C2); storage-status owns the shared
 // helpers (isNativeError/buildStatusCopy/toggleHidden) the other two read off VD.
 const EAGER = [
+  "prefs",
   "core",
   "storage-status",
   "signals-panel",

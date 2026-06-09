@@ -25,13 +25,13 @@
       <div
         class="speed-row"
         role="meter"
-        aria-label="Vehicle speed in MPH"
+        aria-label="Vehicle speed"
         aria-valuemin="0"
         aria-valuemax="120"
       >
         <div id="speedValue" class="speed-value" data-live-tile="true">--</div>
         <div class="speed-units">
-          <span class="speed-unit-main">MPH</span>
+          <span id="speedUnitMain" class="speed-unit-main">MPH</span>
           <span id="speedKph" class="speed-unit-sub" data-live-tile="true"
             >-- km/h</span
           >
@@ -135,32 +135,32 @@
       data-empty="Waiting for live OBD signals"
       aria-label="Live OBD signals"
     >
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="rpm">
         <span class="kicker" style="color: #ff7a45">RPM</span>
         <strong id="rpmValue" data-live-tile="true">--</strong>
       </div>
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="aux12v">
         <!-- This is ATRV (12V auxiliary battery, ~12-14 V) — NOT the HV traction
              pack. The 300+ V pack reading lives in the HV Battery panel above. -->
         <span class="kicker" style="color: #8b94ad">Aux 12V</span>
         <strong id="voltageValue" data-live-tile="true">--</strong>
       </div>
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="coolant">
         <span class="kicker" style="color: #ffb84a">Coolant</span>
         <strong id="coolantValue" data-live-tile="true">--</strong>
       </div>
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="throttle">
         <!-- Sourced from PID 0149 (drive-by-wire accelerator pedal) when the
              vehicle supports it; falls back to 0111 (ICE throttle body) for
              vehicles where 0149 isn't responding. -->
         <span class="kicker" style="color: #b8e63b">Throttle</span>
         <strong id="throttleValue" data-live-tile="true">--</strong>
       </div>
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="load">
         <span class="kicker" style="color: #b8e63b">Load</span>
         <strong id="loadValue" data-live-tile="true">--</strong>
       </div>
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="gps">
         <span class="kicker" style="color: #a48cff">GPS</span>
         <strong id="gpsValue" data-live-tile="true">--</strong>
       </div>
@@ -197,6 +197,51 @@
       </article>
     </section>
   </section>
+
+  <!-- Enhanced Volt signals — decoded from mode-22 PIDs and already shipped in the
+       telemetry payload (via TelemetryPayload extras passthrough). Optional per
+       vehicle: the whole card hides when none are reported. Rendered by telemetry.js. -->
+  <div
+    id="moreSignals"
+    class="scrub-readout more-signals panel"
+    role="group"
+    data-optional-live-group="true"
+    data-empty="No enhanced Volt signals reported by this adapter/vehicle"
+    aria-label="Enhanced Volt signals"
+  >
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #ff7a45">Motor A</span>
+      <strong id="moreMotorA" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #4cc4ff">Motor B</span>
+      <strong id="moreMotorB" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #b8e63b">Gear</span>
+      <strong id="moreGear" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #a48cff">EV range</span>
+      <strong id="moreEvRange" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #ffb84a">Trans temp</span>
+      <strong id="moreTransTemp" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #8b94ad">Ambient</span>
+      <strong id="moreAmbient" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #ffb84a">Oil life</span>
+      <strong id="moreOilLife" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #b8e63b">Torque</span>
+      <strong id="moreTorque" data-live-tile="true">--</strong>
+    </div>
+  </div>
 
   <!-- Live diagnostic counters (sample count, runtime, etc.) announced
        politely so screen readers track OBD progress without barging. -->

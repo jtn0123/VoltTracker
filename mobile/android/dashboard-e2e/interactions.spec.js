@@ -8,9 +8,9 @@ const { openDashboard, setView } = require('./harness');
 
 test('bottom-nav switches the active view', async ({ page }) => {
   await openDashboard(page);
-  await page.locator('nav.bottom-nav [data-nav="trips"]').click();
-  await expect(page.locator('body')).toHaveAttribute('data-active-view', 'trips');
-  await expect(page.locator('#view-trips')).toHaveClass(/is-active/);
+  await page.locator('nav.bottom-nav [data-nav="diagnostics"]').click();
+  await expect(page.locator('body')).toHaveAttribute('data-active-view', 'diagnostics');
+  await expect(page.locator('#view-diagnostics')).toHaveClass(/is-active/);
 
   await page.locator('nav.bottom-nav [data-nav="map"]').click();
   await expect(page.locator('body')).toHaveAttribute('data-active-view', 'map');
@@ -54,8 +54,8 @@ test('settings exposes connection actions without expanding a disclosure', async
 
 test('Start/Stop demo toggles demo state and calls the bridge', async ({ page }) => {
   await openDashboard(page);
-  // The demo controls live in Settings — make it active so they're clickable.
-  await setView(page, 'settings');
+  // The demo sandbox lives in Diagnostics — make it active so the controls are clickable.
+  await setView(page, 'diagnostics');
   await page.evaluate(() => {
     window.__demoCalls = 0;
     window.VoltTrackerAndroid.demo = () => {
@@ -99,7 +99,7 @@ test('browser preview Start/Stop demo owns the sample data boundary', async ({ p
 
 test('"Restore file" calls the native restore bridge', async ({ page }) => {
   await openDashboard(page);
-  await setView(page, 'settings');
+  await setView(page, 'diagnostics');
   await page.evaluate(() => {
     window.__restoreCalls = 0;
     window.VoltTrackerAndroid.restoreBackup = () => {
@@ -110,6 +110,6 @@ test('"Restore file" calls the native restore bridge', async ({ page }) => {
     });
   });
 
-  await page.locator('[data-action="restore"]').first().click();
+  await page.locator('#view-diagnostics [data-action="restore"]').click();
   expect(await page.evaluate(() => window.__restoreCalls)).toBe(1);
 });

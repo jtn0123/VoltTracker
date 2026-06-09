@@ -49,15 +49,15 @@ test('header action stays unclipped on the Charge tab too', async ({ page }) => 
   }
 });
 
-test('Signals header keeps a visible stroked title icon', async ({ page }) => {
+// Detailed Signals was folded into the Settings/Diag tab; its standalone header is
+// gone, and every remaining view now uses a filled title icon.
+test('Settings header renders a filled title icon', async ({ page }) => {
   await openDashboard(page);
-  await setView(page, 'signals');
+  await setView(page, 'settings');
 
-  await expect(page.locator('#screenTitle')).toHaveText('Detailed Signals');
+  await expect(page.locator('#screenTitle')).toHaveText('Settings');
   const icon = page.locator('#screenTitleIcon');
-  await expect(icon).toHaveAttribute('fill', 'none');
-  await expect(icon).toHaveAttribute('stroke', 'currentColor');
-  await expect(icon).toHaveAttribute('stroke-width', '2');
+  await expect(icon).toHaveAttribute('fill', 'currentColor');
 
   const box = await icon.evaluate((el) => {
     const b = el.getBBox();

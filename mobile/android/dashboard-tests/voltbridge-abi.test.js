@@ -9,7 +9,15 @@ import { createVoltBridgeFixture } from './setup/voltbridge.fixture.js';
 
 // Frozen list of method names actions.ts MUST expose on window.VoltTrackerNative.
 // Keep in sync with the literal object at the bottom of actions.ts.
-const NATIVE_METHODS = ['setDevices', 'setHistory', 'setStatus', 'setStorage', 'setAppState', 'updateTelemetry'];
+const NATIVE_METHODS = [
+  'setDevices',
+  'setHistory',
+  'setStatus',
+  'setStorage',
+  'setAppState',
+  'setRestoreProgress',
+  'updateTelemetry',
+];
 
 describe('window.VoltTrackerNative ABI', () => {
   beforeEach(async () => {
@@ -22,7 +30,7 @@ describe('window.VoltTrackerNative ABI', () => {
     await loadDashboard();
   });
 
-  it('exposes the 6 documented callback methods', () => {
+  it('exposes the 7 documented callback methods', () => {
     expect(window.VoltTrackerNative).toBeDefined();
     for (const name of NATIVE_METHODS) {
       expect(typeof window.VoltTrackerNative[name], `VoltTrackerNative.${name}`).toBe('function');

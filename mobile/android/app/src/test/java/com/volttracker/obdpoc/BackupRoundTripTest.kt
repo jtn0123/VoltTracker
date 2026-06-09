@@ -5,6 +5,8 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.VoltTrackerDb
+import com.volttracker.obdpoc.data.VoltTrackerSchema
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -305,6 +307,32 @@ class BackupRoundTripTest {
         )
     }
 
+    @Test
+    fun stageRestoreFileMigratesV7BackupAndRestoresRows() {
+        val legacy = createLegacyV7BackupFile()
+        val uri = registerAsSafUri(legacy)
+        val outcome = dataBackup.stageRestoreFileWithStatus(uri, null)
+
+        assertEquals(DataBackup.RestoreStageStatus.OK, outcome.status)
+        assertTrue("v7 backup should be upgraded during staging", outcome.migrated)
+        assertNotNull(outcome.file)
+        assertTrue(DataBackup.isVoltTrackerBackup(outcome.file))
+
+        val staged = outcome.file!!
+        swapStagedFileIntoLiveDb(staged)
+        staged.delete()
+        legacy.delete()
+
+        val restored = store!!.getSession(1L)
+        assertNotNull("legacy v7 session should survive restore", restored)
+        assertEquals("legacy-v7", restored!!.adapterName)
+        assertEquals(1, store!!.getRecentTelemetry(1L, 10).size)
+        assertEquals(
+            1L,
+            StorageSummaryJson.build(store!!.getStorageSummaryRecord()).optLong("sampleCount"),
+        )
+    }
+
     /**
      * A non-SQLite file passed to [DataBackup.stageRestoreFile] must be rejected (return null) and
      * must not touch the live store. We seed the target store first and verify it is untouched after
@@ -457,5 +485,130 @@ class BackupRoundTripTest {
             Files.delete(file.toPath())
             return file
         }
+    }
+
+    private fun createLegacyV7BackupFile(): File {
+        val file = File(context.cacheDir, "legacy-v7-${System.nanoTime()}.db")
+        DataBackup.deleteIfExists(file)
+        val db = SQLiteDatabase.openOrCreateDatabase(file, null)
+        try {
+            createV7BaseTables(db)
+            VoltTrackerSchema.createObservationTables(db)
+            VoltTrackerSchema.createObservationIndexes(db)
+            VoltTrackerSchema.createRoadmapTables(db)
+            VoltTrackerSchema.createRoadmapIndexes(db)
+            VoltTrackerSchema.createDiagnosticTables(db)
+            VoltTrackerSchema.createDiagnosticIndexes(db)
+            VoltTrackerSchema.createPruneIndexes(db)
+            db.execSQL(
+                "INSERT INTO ${VoltTrackerDb.TABLE_SESSIONS}" +
+                    " (_id, mode, adapter_address, adapter_name, started_at_ms, ended_at_ms, status," +
+                    " supported_pids, sample_count, last_event_at_ms, created_at_ms)" +
+                    " VALUES (1, 'obd', 'AA:BB:CC:DD:EE:FF', 'legacy-v7', 1000, 2000," +
+                    " 'complete', '0100,010C', 1, 2000, 1000)",
+            )
+            db.execSQL(
+                "INSERT INTO ${VoltTrackerDb.TABLE_TELEMETRY}" +
+                    " (_id, session_id, captured_at_ms, source, vehicle_state, speed_kph, rpm," +
+                    " coolant_c, load_pct, throttle_pct, voltage, soc, battery_temp, power_kw," +
+                    " latitude, longitude, accuracy_m, gps_speed_mps, bearing_deg, location_age_ms," +
+                    " sample_number, session_ms, charge_transition_hint, app_foreground, raw, json)" +
+                    " VALUES (1, 1, 1100, 'obd', 'drive', 42, 1500, 82, 24, 11, 13.9, 66.0," +
+                    " 24.0, 12.5, 32.71, -117.10, 4.0, 12.0, 180.0, 0, 1, 100, 0, 1," +
+                    " '410C1AF8', '{\"speedKph\":42,\"rpm\":1500}')",
+            )
+            db.version = 7
+        } finally {
+            db.close()
+        }
+        return file
+    }
+
+    private fun createV7BaseTables(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE ${VoltTrackerDb.TABLE_SESSIONS} (
+                _id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mode TEXT NOT NULL,
+                adapter_address TEXT,
+                adapter_name TEXT,
+                started_at_ms INTEGER NOT NULL,
+                ended_at_ms INTEGER,
+                status TEXT NOT NULL,
+                supported_pids TEXT,
+                sample_count INTEGER NOT NULL DEFAULT 0,
+                last_event_at_ms INTEGER,
+                created_at_ms INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE ${VoltTrackerDb.TABLE_TELEMETRY} (
+                _id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                captured_at_ms INTEGER NOT NULL,
+                source TEXT,
+                vehicle_state TEXT,
+                speed_kph INTEGER,
+                rpm INTEGER,
+                coolant_c INTEGER,
+                load_pct INTEGER,
+                throttle_pct INTEGER,
+                voltage REAL,
+                soc REAL,
+                battery_temp REAL,
+                power_kw REAL,
+                latitude REAL,
+                longitude REAL,
+                accuracy_m REAL,
+                gps_speed_mps REAL,
+                bearing_deg REAL,
+                location_age_ms INTEGER,
+                sample_number INTEGER,
+                session_ms INTEGER,
+                charge_transition_hint INTEGER,
+                app_foreground INTEGER,
+                raw TEXT,
+                json TEXT NOT NULL,
+                FOREIGN KEY(session_id) REFERENCES ${VoltTrackerDb.TABLE_SESSIONS}(_id) ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE ${VoltTrackerDb.TABLE_EVENTS} (
+                _id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER,
+                occurred_at_ms INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                state TEXT,
+                detail TEXT,
+                blocked INTEGER NOT NULL DEFAULT 0,
+                payload TEXT NOT NULL,
+                FOREIGN KEY(session_id) REFERENCES ${VoltTrackerDb.TABLE_SESSIONS}(_id) ON DELETE SET NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE ${VoltTrackerDb.TABLE_ADAPTER_HISTORY} (
+                adapter_key TEXT PRIMARY KEY,
+                address TEXT,
+                name TEXT,
+                first_seen_ms INTEGER NOT NULL,
+                last_seen_ms INTEGER NOT NULL,
+                connect_count INTEGER NOT NULL DEFAULT 0,
+                scan_count INTEGER NOT NULL DEFAULT 0,
+                demo_count INTEGER NOT NULL DEFAULT 0,
+                sample_count INTEGER NOT NULL DEFAULT 0,
+                last_session_id INTEGER,
+                last_mode TEXT,
+                last_status TEXT,
+                supported_pids TEXT,
+                last_event_detail TEXT
+            )
+            """.trimIndent(),
+        )
     }
 }

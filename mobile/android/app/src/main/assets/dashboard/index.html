@@ -302,6 +302,46 @@
     </footer>
   </div>
 </div>
+<div
+  id="restoreProgress"
+  class="restore-progress"
+  role="alertdialog"
+  aria-modal="true"
+  aria-labelledby="restoreProgressTitle"
+  aria-describedby="restoreProgressDetail"
+  tabindex="-1"
+  hidden
+>
+  <div class="restore-progress-backdrop"></div>
+  <section class="restore-progress-card" role="document">
+    <header class="restore-progress-head">
+      <div>
+        <span class="restore-progress-kicker">Backup restore</span>
+        <h2 id="restoreProgressTitle" class="restore-progress-title">
+          Preparing restore
+        </h2>
+      </div>
+      <button
+        type="button"
+        id="restoreProgressClose"
+        class="restore-progress-close"
+        aria-label="Close restore status"
+        hidden
+      >
+        ×
+      </button>
+    </header>
+    <div class="restore-progress-meter" aria-hidden="true">
+      <span id="restoreProgressFill"></span>
+    </div>
+    <p id="restoreProgressDetail" class="restore-progress-detail">
+      Checking the selected backup file.
+    </p>
+    <p id="restoreProgressNote" class="restore-progress-note">
+      Keep Volt Tracker open until this finishes.
+    </p>
+  </section>
+</div>
     <main class="app">
 <header class="topbar">
   <div class="top-main">
@@ -366,13 +406,13 @@
       <div
         class="speed-row"
         role="meter"
-        aria-label="Vehicle speed in MPH"
+        aria-label="Vehicle speed"
         aria-valuemin="0"
         aria-valuemax="120"
       >
         <div id="speedValue" class="speed-value" data-live-tile="true">--</div>
         <div class="speed-units">
-          <span class="speed-unit-main">MPH</span>
+          <span id="speedUnitMain" class="speed-unit-main">MPH</span>
           <span id="speedKph" class="speed-unit-sub" data-live-tile="true"
             >-- km/h</span
           >
@@ -476,32 +516,32 @@
       data-empty="Waiting for live OBD signals"
       aria-label="Live OBD signals"
     >
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="rpm">
         <span class="kicker" style="color: #ff7a45">RPM</span>
         <strong id="rpmValue" data-live-tile="true">--</strong>
       </div>
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="aux12v">
         <!-- This is ATRV (12V auxiliary battery, ~12-14 V) — NOT the HV traction
              pack. The 300+ V pack reading lives in the HV Battery panel above. -->
         <span class="kicker" style="color: #8b94ad">Aux 12V</span>
         <strong id="voltageValue" data-live-tile="true">--</strong>
       </div>
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="coolant">
         <span class="kicker" style="color: #ffb84a">Coolant</span>
         <strong id="coolantValue" data-live-tile="true">--</strong>
       </div>
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="throttle">
         <!-- Sourced from PID 0149 (drive-by-wire accelerator pedal) when the
              vehicle supports it; falls back to 0111 (ICE throttle body) for
              vehicles where 0149 isn't responding. -->
         <span class="kicker" style="color: #b8e63b">Throttle</span>
         <strong id="throttleValue" data-live-tile="true">--</strong>
       </div>
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="load">
         <span class="kicker" style="color: #b8e63b">Load</span>
         <strong id="loadValue" data-live-tile="true">--</strong>
       </div>
-      <div data-live-cell="true">
+      <div data-live-cell="true" data-tile-key="gps">
         <span class="kicker" style="color: #a48cff">GPS</span>
         <strong id="gpsValue" data-live-tile="true">--</strong>
       </div>
@@ -538,6 +578,51 @@
       </article>
     </section>
   </section>
+
+  <!-- Enhanced Volt signals — decoded from mode-22 PIDs and already shipped in the
+       telemetry payload (via TelemetryPayload extras passthrough). Optional per
+       vehicle: the whole card hides when none are reported. Rendered by telemetry.js. -->
+  <div
+    id="moreSignals"
+    class="scrub-readout more-signals panel"
+    role="group"
+    data-optional-live-group="true"
+    data-empty="No enhanced Volt signals reported by this adapter/vehicle"
+    aria-label="Enhanced Volt signals"
+  >
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #ff7a45">Motor A</span>
+      <strong id="moreMotorA" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #4cc4ff">Motor B</span>
+      <strong id="moreMotorB" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #b8e63b">Gear</span>
+      <strong id="moreGear" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #a48cff">EV range</span>
+      <strong id="moreEvRange" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #ffb84a">Trans temp</span>
+      <strong id="moreTransTemp" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #8b94ad">Ambient</span>
+      <strong id="moreAmbient" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #ffb84a">Oil life</span>
+      <strong id="moreOilLife" data-live-tile="true">--</strong>
+    </div>
+    <div data-live-cell="true">
+      <span class="kicker" style="color: #b8e63b">Torque</span>
+      <strong id="moreTorque" data-live-tile="true">--</strong>
+    </div>
+  </div>
 
   <!-- Live diagnostic counters (sample count, runtime, etc.) announced
        politely so screen readers track OBD progress without barging. -->
@@ -655,63 +740,6 @@
     </ol>
   </article>
 </section>
-<section id="view-trips" class="view" data-view="trips">
-  <article id="tripsEmptyState" class="panel empty-state">
-    <span class="kicker">Trips</span>
-    <h2>No real trips stored yet.</h2>
-    <p>
-      Trip capture will come after the OBD bridge is stable. This view will stay
-      empty until real sessions are materialized from stored GPS and PID
-      samples.
-    </p>
-  </article>
-  <article id="realTripsCard" class="panel list-card" hidden>
-    <header>
-      <div>
-        <span class="kicker">Logged drives</span>
-        <h2 id="realTripsTitle">Your trips</h2>
-      </div>
-      <button type="button" class="link-btn" data-nav-jump="map">Map</button>
-    </header>
-    <p class="status-copy">Each logged OBD session with movement.</p>
-    <div
-      id="realTripsList"
-      class="map-drive-chips real-trip-strip"
-      role="list"
-      aria-label="Logged drives"
-    ></div>
-  </article>
-  <section id="realTripDetailGrid" class="detail-grid real-trip-detail" hidden>
-    <article class="panel route-card">
-      <div class="card-head">
-        <div>
-          <span class="kicker">Route preview</span>
-          <h3 id="realTripRouteTitle">Select a drive</h3>
-        </div>
-        <button
-          id="realTripMapBtn"
-          type="button"
-          class="link-btn"
-          data-trip-map=""
-        >
-          map
-        </button>
-      </div>
-      <small id="realTripRouteMeta" class="status-copy">--</small>
-      <div id="realTripRouteBox" class="route-box real-route-box"></div>
-    </article>
-
-    <article class="panel route-card">
-      <div class="card-head">
-        <div>
-          <span class="kicker">Drive summary</span>
-          <h3 id="realTripEnergyTitle">--</h3>
-        </div>
-      </div>
-      <div id="realTripEnergyRows" class="energy-rows"></div>
-    </article>
-  </section>
-</section>
 <section id="view-map" class="view" data-view="map">
   <div
     id="mapDriveChips"
@@ -810,7 +838,8 @@
         <span class="kicker">Duration</span><strong id="mapDuration">--</strong>
       </div>
       <div>
-        <span class="kicker">Avg mph</span><strong id="mapAvgMph">--</strong>
+        <span class="kicker" id="mapAvgSpeedLabel">Avg mph</span
+        ><strong id="mapAvgMph">--</strong>
       </div>
     </div>
   </div>
@@ -908,6 +937,26 @@
       <small>Charge detection status</small>
     </article>
   </section>
+
+  <article id="chargeEnergyCard" class="panel charge-energy-card" hidden>
+    <div class="charge-energy-head">
+      <div>
+        <span class="kicker">Energy logged</span>
+        <strong id="chargeEnergyTotal">-- kWh</strong>
+        <small id="chargeEnergySub" class="status-copy"
+          >from logged charges</small
+        >
+      </div>
+      <div class="charge-energy-cost">
+        <span class="kicker">Est. cost</span>
+        <strong id="chargeEnergyCost">--</strong>
+      </div>
+    </div>
+    <p id="chargeEnergyHint" class="status-copy">
+      Set your electricity rate in Settings → Preferences to estimate charging
+      cost.
+    </p>
+  </article>
 
   <article
     id="chargeSessionsCard"
@@ -1050,7 +1099,26 @@
         >
           Clear codes
         </button>
-        <button type="button" data-nav-jump="settings">Debug logs</button>
+        <button type="button" data-nav-jump="diagnostics">Debug logs</button>
+      </div>
+
+      <!-- In-app DTC lookup over the shipped Volt code database (no need to leave
+           the app for a web search). Results rendered by actions.ts. -->
+      <div class="dtc-lookup">
+        <label class="dtc-lookup-field">
+          <span class="kicker">Look up a code</span>
+          <input
+            id="dtcSearchInput"
+            type="search"
+            inputmode="text"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            placeholder="e.g. P0420"
+            aria-label="Search diagnostic trouble codes"
+          />
+        </label>
+        <div id="dtcSearchResult" class="dtc-lookup-result" hidden></div>
       </div>
 
       <!-- Non-modal inline confirmation: role="group" (not alertdialog — we
@@ -1155,6 +1223,79 @@
     </article>
   </section>
 </section>
+<!--
+  Preferences — display-layer settings (units, electricity rate). Sits first on
+  the Settings tab. Wiring + persistence live in prefs.ts.
+-->
+<section id="view-preferences" class="view" data-view="settings">
+  <article class="panel pref-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Display</span>
+        <h3>Preferences</h3>
+      </div>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Units</strong>
+        <small>Distance, speed &amp; temperature</small>
+      </div>
+      <div
+        class="signal-stage-tabs pref-seg"
+        role="group"
+        aria-label="Measurement units"
+      >
+        <button
+          type="button"
+          data-pref-units="imperial"
+          class="is-active"
+          aria-pressed="true"
+        >
+          <span>mi &middot; &deg;F</span>
+        </button>
+        <button type="button" data-pref-units="metric" aria-pressed="false">
+          <span>km &middot; &deg;C</span>
+        </button>
+      </div>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Electricity rate</strong>
+        <small>Estimates charging cost on the Charge tab</small>
+      </div>
+      <label class="pref-price">
+        <span>$</span>
+        <input
+          id="pricePerKwhInput"
+          type="number"
+          inputmode="decimal"
+          min="0"
+          step="0.01"
+          placeholder="0.00"
+          aria-label="Electricity rate in dollars per kilowatt-hour"
+        />
+        <span>/kWh</span>
+      </label>
+    </div>
+  </article>
+
+  <article class="panel pref-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Drive tiles</span>
+        <h3>Customize live readout</h3>
+      </div>
+    </div>
+    <p class="status-copy">
+      Show, hide, and reorder the live signal tiles on the Drive tab.
+    </p>
+    <div
+      id="driveTilesEditor"
+      class="tiles-editor"
+      aria-label="Drive tile layout"
+    ></div>
+  </article>
+</section>
 <section id="view-settings" class="view" data-view="settings">
   <article class="panel connect-card">
     <div class="connection-head">
@@ -1228,202 +1369,12 @@
     </div>
   </article>
 
-  <details class="sandbox-tools" aria-label="Demo preview sandbox controls">
-    <summary aria-label="Toggle the demo preview sandbox controls">
-      Preview sandbox
-    </summary>
-    <p class="status-copy">
-      Demo preview is isolated here for UI debugging. Keep it off during real
-      car tests.
-    </p>
-    <div class="signal-section-label">Demo scenario</div>
-    <div
-      id="demoScenarioPicker"
-      class="signal-stage-tabs"
-      role="group"
-      aria-label="Demo scenario"
-    >
-      <button type="button" data-scenario="typical" class="is-active">
-        <span>Typical</span>
-      </button>
-      <button type="button" data-scenario="empty"><span>Empty</span></button>
-      <button type="button" data-scenario="power-user">
-        <span>Power user</span>
-      </button>
-      <button type="button" data-scenario="fault"><span>Fault</span></button>
-      <button type="button" data-scenario="extreme">
-        <span>Extremes</span>
-      </button>
-    </div>
-    <div class="button-grid">
-      <button
-        type="button"
-        data-action="demo"
-        data-demo-label="Start demo preview"
-        class="demo"
-      >
-        Start demo preview
-      </button>
-      <button type="button" data-action="stopDemo" class="demo-stop">
-        Stop demo
-      </button>
-      <button type="button" data-action="previewDtcCodes">
-        Preview DTC examples
-      </button>
-      <button type="button" data-action="clearPreviewDtcCodes">
-        Clear DTC examples
-      </button>
-    </div>
-    <a class="demo-link" href="demos/efficiency.html"
-      >&#9658; Efficiency &amp; scrubber demos</a
-    >
-  </details>
-
   <article id="historyCard" class="panel list-card" hidden>
     <header>
       <span class="kicker">Remembered adapters</span>
       <span id="historyHint" class="status-copy">tap to select</span>
     </header>
     <div id="historyList"></div>
-  </article>
-
-  <article id="reviewCard" class="panel list-card diagnostic-compact-card">
-    <header>
-      <div>
-        <span class="kicker">Last session review</span>
-        <h3 id="reviewTitle">No real session yet</h3>
-      </div>
-      <button type="button" class="link-btn" data-action="exportDebug">
-        Export
-      </button>
-    </header>
-    <div class="review-grid">
-      <div><span>Max speed</span><strong id="reviewMaxSpeed">--</strong></div>
-      <div><span>GPS samples</span><strong id="reviewGpsCount">--</strong></div>
-      <div><span>PID parse</span><strong id="reviewPidParse">--</strong></div>
-      <div>
-        <span>Avg interval</span><strong id="reviewInterval">--</strong>
-      </div>
-      <div>
-        <span>Background</span><strong id="reviewBackground">--</strong>
-      </div>
-      <div><span>Gaps</span><strong id="reviewGaps">--</strong></div>
-      <div><span>Useful</span><strong id="reviewUsefulSamples">--</strong></div>
-      <div><span>Empty</span><strong id="reviewEmptySamples">0</strong></div>
-    </div>
-    <div id="reviewWarnings" class="warning-list">
-      <p class="status-copy">
-        Connect or scan once, then this becomes the post-test review.
-      </p>
-    </div>
-    <div id="realInsightList" class="real-insight-list"></div>
-    <div id="reviewTimeline" class="timeline-list"></div>
-  </article>
-
-  <article class="panel list-card">
-    <header>
-      <div>
-        <span class="kicker">Recent PID frames</span>
-        <h3 id="pidFrameTitle">Waiting for scan data</h3>
-      </div>
-    </header>
-    <div id="pidFrameList" class="pid-frame-list"></div>
-  </article>
-
-  <article id="dbCard" class="panel list-card diagnostic-compact-card">
-    <header>
-      <div>
-        <span class="kicker">On-phone database</span>
-        <h3 id="dbSummaryTitle">No stored sessions yet</h3>
-      </div>
-      <button type="button" class="link-btn" data-action="refreshStorage">
-        Refresh
-      </button>
-    </header>
-    <div class="status-meta">
-      <div><span>Sessions</span><strong id="dbSessionCount">0</strong></div>
-      <div><span>Samples</span><strong id="dbSampleCount">0</strong></div>
-      <div><span>Events</span><strong id="dbEventCount">0</strong></div>
-      <div><span>PIDs</span><strong id="dbPidCount">0</strong></div>
-      <div><span>DTCs</span><strong id="dbDtcCount">0</strong></div>
-      <div><span>GPS</span><strong id="dbLocationCount">0</strong></div>
-      <div><span>Trips</span><strong id="dbTripCount">0</strong></div>
-      <div><span>Charge</span><strong id="dbChargeCount">0</strong></div>
-      <div><span>Battery</span><strong id="dbBatteryCount">0</strong></div>
-      <div><span>Size</span><strong id="dbSize">0 B</strong></div>
-      <div>
-        <span>Raw rows</span><strong id="dbRawTelemetryCount">0</strong>
-      </div>
-      <div><span>Empty</span><strong id="dbEmptyTelemetryCount">0</strong></div>
-    </div>
-    <div id="dbSessionList" style="margin-top: 12px"></div>
-    <details
-      class="db-backup-tools"
-      aria-label="Backup, restore, and diagnostics"
-    >
-      <summary>Backup, restore, and diagnostics</summary>
-      <p class="status-copy">
-        Encrypted backup is safest. When you restore a file you can choose to
-        merge it into your current data (duplicate trips are skipped) or replace
-        everything on this phone.
-      </p>
-      <p class="status-copy">
-        Diagnostics exports include recent command traces and app logs with
-        sensitive identifiers redacted. Map and Trips use remote basemap tiles
-        by default; route points and OBD history stay on this phone.
-      </p>
-      <div
-        class="db-action-grid"
-        role="group"
-        aria-label="Backup and restore actions"
-      >
-        <button
-          type="button"
-          data-action="backupEncrypted"
-          class="settings-command db-safe-action"
-        >
-          <span>Back up encrypted</span>
-          <small>Safest export</small>
-        </button>
-        <button
-          type="button"
-          data-action="restoreEncrypted"
-          class="settings-command db-safe-action"
-        >
-          <span>Restore encrypted</span>
-          <small>Needs passphrase</small>
-        </button>
-        <button type="button" data-action="backup" class="settings-command">
-          <span>Export plaintext</span>
-          <small>Readable database</small>
-        </button>
-        <button type="button" data-action="restore" class="settings-command">
-          <span>Restore file</span>
-          <small>Merge or replace</small>
-        </button>
-        <button
-          type="button"
-          id="sendDiagnosticsSettingsBtn"
-          class="settings-command"
-        >
-          <span>Send diagnostics</span>
-          <small>Redacted logs</small>
-        </button>
-        <button
-          type="button"
-          data-action="clearStorage"
-          class="danger settings-command"
-        >
-          <span>Clear debug data</span>
-          <small>Delete local rows</small>
-        </button>
-      </div>
-    </details>
-  </article>
-
-  <article class="panel raw">
-    <div class="kicker">Raw ELM327 frames</div>
-    <pre id="rawFrames">Waiting for telemetry...</pre>
   </article>
 
   <p
@@ -1433,113 +1384,6 @@
   >
     Volt Tracker
   </p>
-</section>
-<section id="view-signals" class="view" data-view="signals">
-  <article id="enhancedCard" class="panel list-card signal-console">
-    <header class="signal-console-head">
-      <div class="signal-console-title">
-        <span class="kicker">Enhanced discovery</span>
-        <h2 id="enhancedTitle">No detailed signal results yet</h2>
-        <small class="signal-console-sub">
-          Probe the car for signals beyond the standard dashboard — tire
-          pressure, battery internals, and other hidden PIDs.
-        </small>
-      </div>
-      <span id="enhancedBadge" class="signal-status-pill">ready</span>
-    </header>
-
-    <div class="signal-stage-panel">
-      <div class="signal-stage-copy">
-        <span class="kicker">Probe mode</span>
-        <strong id="signalStageLabel">Tires</strong>
-        <small id="signalStageHint">
-          Narrow tire receiver candidates; avoids DTC and freeze-frame reads.
-        </small>
-      </div>
-      <div
-        id="signalStageBar"
-        class="signal-stage-tabs"
-        role="group"
-        aria-label="Detail probe mode"
-      >
-        <button type="button" data-signal-stage="passive">
-          <span>Passive</span>
-        </button>
-        <button type="button" data-signal-stage="low-risk">
-          <span>Low-risk</span>
-        </button>
-        <button type="button" data-signal-stage="tires" class="is-active">
-          <span>Tires</span>
-        </button>
-        <button type="button" data-signal-stage="experimental">
-          <span>Experimental</span>
-        </button>
-      </div>
-      <div class="signal-stage-actions">
-        <button
-          id="detailProbeBtn"
-          type="button"
-          class="primary-action signal-probe-btn"
-          data-action="detailProbe"
-        >
-          Run probe
-        </button>
-        <button id="exportSignalLogsBtn" type="button" class="signal-ghost-btn">
-          Export logs
-        </button>
-      </div>
-    </div>
-
-    <div
-      id="enhancedFilterBar"
-      class="signal-filter-grid"
-      role="group"
-      aria-label="Filter detailed signals by status"
-    >
-      <button type="button" data-signal-filter="all" class="is-active">
-        <b id="enhancedAllCount">0</b><span>All</span>
-      </button>
-      <button
-        type="button"
-        data-signal-filter="confirmed"
-        data-status="confirmed"
-      >
-        <b id="enhancedConfirmedCount">0</b><span>Working</span>
-      </button>
-      <button
-        type="button"
-        data-signal-filter="candidate"
-        data-status="candidate"
-      >
-        <b id="enhancedCandidateCount">0</b><span>Candidate</span>
-      </button>
-      <button
-        type="button"
-        data-signal-filter="rejected"
-        data-status="rejected"
-      >
-        <b id="enhancedRejectedCount">0</b><span>No hit</span>
-      </button>
-      <button
-        type="button"
-        data-signal-filter="deferred"
-        data-status="deferred"
-      >
-        <b id="enhancedDeferredCount">0</b><span>Deferred</span>
-      </button>
-      <button type="button" data-signal-filter="tpms" data-status="tpms">
-        <b id="enhancedTiresTabCount">0</b><span>Tires</span>
-      </button>
-    </div>
-
-    <div class="signal-section-label" id="signalNextLabel">
-      Suggested next probes
-    </div>
-    <div id="enhancedNextList" class="enhanced-next-list"></div>
-
-    <div class="signal-section-label">Signal evidence</div>
-    <div id="enhancedCapabilityList" class="enhanced-capability-list"></div>
-  </article>
 </section>
 <!--
   Proactive adapter tools: test connection, send diagnostics, low-voltage hint,
@@ -1650,6 +1494,329 @@
     </fieldset>
   </article>
 </section>
+<!--
+  Diagnostics tab — its own top-level view (promoted out of the former in-Settings
+  sub-tab). Holds the demo/preview sandbox, detailed-signal discovery, and the
+  collapsed session-review / debug-log tooling. Day-to-day setup + preferences
+  live on the Settings tab.
+-->
+<section id="view-diagnostics" class="view" data-view="diagnostics">
+  <details class="sandbox-tools" aria-label="Demo preview sandbox controls">
+    <summary aria-label="Toggle the demo preview sandbox controls">
+      Preview sandbox
+    </summary>
+    <p class="status-copy">
+      Demo preview is isolated here for UI debugging. Keep it off during real
+      car tests.
+    </p>
+    <div class="signal-section-label">Demo scenario</div>
+    <div
+      id="demoScenarioPicker"
+      class="signal-stage-tabs"
+      role="group"
+      aria-label="Demo scenario"
+    >
+      <button type="button" data-scenario="typical" class="is-active">
+        <span>Typical</span>
+      </button>
+      <button type="button" data-scenario="empty"><span>Empty</span></button>
+      <button type="button" data-scenario="power-user">
+        <span>Power user</span>
+      </button>
+      <button type="button" data-scenario="fault"><span>Fault</span></button>
+      <button type="button" data-scenario="extreme">
+        <span>Extremes</span>
+      </button>
+    </div>
+    <!-- Single morphing demo toggle: "Start demo preview" <-> "Stop demo preview"
+         (driven by setDemoActive in core.js). Replaces the old Start + Stop pair
+         so only one of the two ever shows. -->
+    <button
+      type="button"
+      class="demo demo-toggle-btn"
+      data-demo-toggle
+      data-action="demo"
+    >
+      Start demo preview
+    </button>
+    <div class="button-grid">
+      <button type="button" data-action="previewDtcCodes">
+        Preview DTC examples
+      </button>
+      <button type="button" data-action="clearPreviewDtcCodes">
+        Clear DTC examples
+      </button>
+    </div>
+    <a class="demo-link" href="demos/efficiency.html"
+      >&#9658; Efficiency &amp; scrubber demos</a
+    >
+  </details>
+
+  <!-- Detailed Signals — enhanced PID discovery (tire pressure, battery
+       internals, hidden PIDs). Rendered by signals-panel.js. -->
+  <article id="enhancedCard" class="panel list-card signal-console">
+    <header class="signal-console-head">
+      <div class="signal-console-title">
+        <span class="kicker">Enhanced discovery</span>
+        <h2 id="enhancedTitle">No detailed signal results yet</h2>
+        <small class="signal-console-sub">
+          Probe the car for signals beyond the standard dashboard — tire
+          pressure, battery internals, and other hidden PIDs.
+        </small>
+      </div>
+      <span id="enhancedBadge" class="signal-status-pill">ready</span>
+    </header>
+
+    <div class="signal-stage-panel">
+      <div class="signal-stage-copy">
+        <span class="kicker">Probe mode</span>
+        <strong id="signalStageLabel">Tires</strong>
+        <small id="signalStageHint">
+          Narrow tire receiver candidates; avoids DTC and freeze-frame reads.
+        </small>
+      </div>
+      <div
+        id="signalStageBar"
+        class="signal-stage-tabs"
+        role="group"
+        aria-label="Detail probe mode"
+      >
+        <button type="button" data-signal-stage="passive">
+          <span>Passive</span>
+        </button>
+        <button type="button" data-signal-stage="low-risk">
+          <span>Low-risk</span>
+        </button>
+        <button type="button" data-signal-stage="tires" class="is-active">
+          <span>Tires</span>
+        </button>
+        <button type="button" data-signal-stage="experimental">
+          <span>Experimental</span>
+        </button>
+      </div>
+      <div class="signal-stage-actions">
+        <button
+          id="detailProbeBtn"
+          type="button"
+          class="primary-action signal-probe-btn"
+          data-action="detailProbe"
+        >
+          Run probe
+        </button>
+        <button id="exportSignalLogsBtn" type="button" class="signal-ghost-btn">
+          Export logs
+        </button>
+      </div>
+    </div>
+
+    <div
+      id="enhancedFilterBar"
+      class="signal-filter-grid"
+      role="group"
+      aria-label="Filter detailed signals by status"
+    >
+      <button type="button" data-signal-filter="all" class="is-active">
+        <b id="enhancedAllCount">0</b><span>All</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="confirmed"
+        data-status="confirmed"
+      >
+        <b id="enhancedConfirmedCount">0</b><span>Working</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="candidate"
+        data-status="candidate"
+      >
+        <b id="enhancedCandidateCount">0</b><span>Candidate</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="rejected"
+        data-status="rejected"
+      >
+        <b id="enhancedRejectedCount">0</b><span>No hit</span>
+      </button>
+      <button
+        type="button"
+        data-signal-filter="deferred"
+        data-status="deferred"
+      >
+        <b id="enhancedDeferredCount">0</b><span>Deferred</span>
+      </button>
+      <button type="button" data-signal-filter="tpms" data-status="tpms">
+        <b id="enhancedTiresTabCount">0</b><span>Tires</span>
+      </button>
+    </div>
+
+    <div class="signal-section-label" id="signalNextLabel">
+      Suggested next probes
+    </div>
+    <div id="enhancedNextList" class="enhanced-next-list"></div>
+
+    <div class="signal-section-label">Signal evidence</div>
+    <div id="enhancedCapabilityList" class="enhanced-capability-list"></div>
+  </article>
+
+  <!-- Heavy debug cards collapsed by default so the tab opens compact. -->
+  <details class="diag-advanced">
+    <summary>
+      <span class="diag-advanced-label">
+        <span class="kicker">Session review &amp; debug logs</span>
+        <span class="diag-advanced-hint"
+          >Last session, PID frames, database, raw output</span
+        >
+      </span>
+    </summary>
+
+    <article id="reviewCard" class="panel list-card diagnostic-compact-card">
+      <header>
+        <div>
+          <span class="kicker">Last session review</span>
+          <h3 id="reviewTitle">No real session yet</h3>
+        </div>
+        <button type="button" class="link-btn" data-action="exportDebug">
+          Export
+        </button>
+      </header>
+      <div class="review-grid">
+        <div><span>Max speed</span><strong id="reviewMaxSpeed">--</strong></div>
+        <div>
+          <span>GPS samples</span><strong id="reviewGpsCount">--</strong>
+        </div>
+        <div><span>PID parse</span><strong id="reviewPidParse">--</strong></div>
+        <div>
+          <span>Avg interval</span><strong id="reviewInterval">--</strong>
+        </div>
+        <div>
+          <span>Background</span><strong id="reviewBackground">--</strong>
+        </div>
+        <div><span>Gaps</span><strong id="reviewGaps">--</strong></div>
+        <div>
+          <span>Useful</span><strong id="reviewUsefulSamples">--</strong>
+        </div>
+        <div><span>Empty</span><strong id="reviewEmptySamples">0</strong></div>
+      </div>
+      <div id="reviewWarnings" class="warning-list">
+        <p class="status-copy">
+          Connect or scan once, then this becomes the post-test review.
+        </p>
+      </div>
+      <div id="realInsightList" class="real-insight-list"></div>
+      <div id="reviewTimeline" class="timeline-list"></div>
+    </article>
+
+    <article class="panel list-card">
+      <header>
+        <div>
+          <span class="kicker">Recent PID frames</span>
+          <h3 id="pidFrameTitle">Waiting for scan data</h3>
+        </div>
+      </header>
+      <div id="pidFrameList" class="pid-frame-list"></div>
+    </article>
+
+    <article id="dbCard" class="panel list-card diagnostic-compact-card">
+      <header>
+        <div>
+          <span class="kicker">On-phone database</span>
+          <h3 id="dbSummaryTitle">No stored sessions yet</h3>
+        </div>
+        <button type="button" class="link-btn" data-action="refreshStorage">
+          Refresh
+        </button>
+      </header>
+      <div class="status-meta">
+        <div><span>Sessions</span><strong id="dbSessionCount">0</strong></div>
+        <div><span>Samples</span><strong id="dbSampleCount">0</strong></div>
+        <div><span>Events</span><strong id="dbEventCount">0</strong></div>
+        <div><span>PIDs</span><strong id="dbPidCount">0</strong></div>
+        <div><span>DTCs</span><strong id="dbDtcCount">0</strong></div>
+        <div><span>GPS</span><strong id="dbLocationCount">0</strong></div>
+        <div><span>Trips</span><strong id="dbTripCount">0</strong></div>
+        <div><span>Charge</span><strong id="dbChargeCount">0</strong></div>
+        <div><span>Battery</span><strong id="dbBatteryCount">0</strong></div>
+        <div><span>Size</span><strong id="dbSize">0 B</strong></div>
+        <div>
+          <span>Raw rows</span><strong id="dbRawTelemetryCount">0</strong>
+        </div>
+        <div>
+          <span>Empty</span><strong id="dbEmptyTelemetryCount">0</strong>
+        </div>
+      </div>
+      <div id="dbSessionList" style="margin-top: 12px"></div>
+      <details
+        class="db-backup-tools"
+        aria-label="Backup, restore, and diagnostics"
+      >
+        <summary>Backup, restore, and diagnostics</summary>
+        <p class="status-copy">
+          Encrypted backup is safest. When you restore a file you can choose to
+          merge it into your current data (duplicate trips are skipped) or
+          replace everything on this phone.
+        </p>
+        <p class="status-copy">
+          Diagnostics exports include recent command traces and app logs with
+          sensitive identifiers redacted. Map uses remote basemap tiles by
+          default; route points and OBD history stay on this phone.
+        </p>
+        <div
+          class="db-action-grid"
+          role="group"
+          aria-label="Backup and restore actions"
+        >
+          <button
+            type="button"
+            data-action="backupEncrypted"
+            class="settings-command db-safe-action"
+          >
+            <span>Back up encrypted</span>
+            <small>Safest export</small>
+          </button>
+          <button
+            type="button"
+            data-action="restoreEncrypted"
+            class="settings-command db-safe-action"
+          >
+            <span>Restore encrypted</span>
+            <small>Needs passphrase</small>
+          </button>
+          <button type="button" data-action="backup" class="settings-command">
+            <span>Export plaintext</span>
+            <small>Readable database</small>
+          </button>
+          <button type="button" data-action="restore" class="settings-command">
+            <span>Restore file</span>
+            <small>Merge or replace</small>
+          </button>
+          <button
+            type="button"
+            id="sendDiagnosticsSettingsBtn"
+            class="settings-command"
+          >
+            <span>Send diagnostics</span>
+            <small>Redacted logs</small>
+          </button>
+          <button
+            type="button"
+            data-action="clearStorage"
+            class="danger settings-command"
+          >
+            <span>Clear debug data</span>
+            <small>Delete local rows</small>
+          </button>
+        </div>
+      </details>
+    </article>
+
+    <article class="panel raw">
+      <div class="kicker">Raw ELM327 frames</div>
+      <pre id="rawFrames">Waiting for telemetry...</pre>
+    </article>
+  </details>
+</section>
     </main>
 
     <nav class="bottom-nav" aria-label="Main navigation">
@@ -1670,18 +1837,6 @@
               stroke-linejoin="round"
             /></svg></i
         ><span>Drive</span>
-      </button>
-      <button type="button" data-nav="trips" aria-label="Trips">
-        <i
-          ><svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M5 7h10M5 12h14M5 17h7"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            /></svg></i
-        ><span>Trips</span>
       </button>
       <button type="button" data-nav="map" aria-label="Map">
         <i
@@ -1714,6 +1869,19 @@
             /></svg></i
         ><span>Insights</span>
       </button>
+      <button type="button" data-nav="diagnostics" aria-label="Diagnostics">
+        <i
+          ><svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M3 12h4l2.5-7 4 14 2.5-7H21"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg></i
+        ><span>Diag</span>
+      </button>
       <button type="button" data-nav="settings" aria-label="Settings">
         <i
           ><svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1725,18 +1893,6 @@
               stroke-linecap="round"
             /></svg></i
         ><span>Settings</span>
-      </button>
-      <button type="button" data-nav="signals" aria-label="Detailed Signals">
-        <i
-          ><svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M4 6h4m4 0h8M4 12h10m4 0h2M4 18h6m4 0h6M8 4v4m6 8v4m4-10v4"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            /></svg></i
-        ><span>Signals</span>
       </button>
     </nav>
 

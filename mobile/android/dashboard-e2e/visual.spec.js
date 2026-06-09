@@ -28,37 +28,6 @@ test('header — title, status pill, slim last-connected line', async ({ page })
   await expect(page.locator('.topbar')).toHaveScreenshot('header.png');
 });
 
-test('trips — compact logged-drive chips', async ({ page }) => {
-  await setView(page, 'trips');
-  await page.evaluate((t) => {
-    const VD = window.VoltDashboard;
-    VD.state.storage = { recentRoutes: [] };
-    VD.state.trips = [
-      { id: 1, startedAtMs: t.recent, durationMs: 1_500_000, distanceMeters: 18_400, maxSpeedKph: 140, sampleCount: 1200, pointCount: 480, hasRoute: true },
-      { id: 2, startedAtMs: t.older, durationMs: 600_000, distanceMeters: 0, sampleCount: 300, hasRoute: false },
-    ];
-    VD.renderRealTrips();
-  }, { recent: FIXED_MS - 2 * DAY, older: FIXED_MS - 3 * DAY });
-
-  await expect(page.locator('#realTripsList')).toHaveScreenshot('trips-chips.png');
-});
-
-test('trips — drive-summary bars (proportional, empty for "--")', async ({ page }) => {
-  await setView(page, 'trips');
-  await page.evaluate((t) => {
-    const VD = window.VoltDashboard;
-    VD.state.storage = { recentRoutes: [] };
-    VD.state.trips = [
-      { id: 1, startedAtMs: t.recent, durationMs: 1_500_000, distanceMeters: 18_400, sampleCount: 1200, hasRoute: false },
-      { id: 2, startedAtMs: t.older, durationMs: 600_000, distanceMeters: 0, sampleCount: 300, hasRoute: false },
-    ];
-    VD.renderRealTrips();
-    VD.selectRealTrip(1);
-  }, { recent: FIXED_MS - 2 * DAY, older: FIXED_MS - 3 * DAY });
-
-  await expect(page.locator('#realTripEnergyRows')).toHaveScreenshot('trips-summary-bars.png');
-});
-
 test('charge — KPI grid', async ({ page }) => {
   await page.evaluate(() =>
     window.VoltDashboard.setStorage({

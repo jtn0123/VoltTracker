@@ -7,7 +7,7 @@ const path = require('node:path');
 const { openDashboard, setView } = require('./harness');
 
 const AXE = path.join(__dirname, 'node_modules', 'axe-core', 'axe.min.js');
-const TABS = ['drive', 'trips', 'map', 'charge', 'insights', 'settings', 'signals'];
+const TABS = ['drive', 'map', 'charge', 'insights', 'diagnostics', 'settings'];
 // WCAG 2.2 "Target Size (Minimum)" 2.5.8 (AA) = 24x24 CSS px.
 const MIN_TARGET = 24;
 

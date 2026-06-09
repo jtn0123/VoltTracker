@@ -36,7 +36,7 @@ same-origin model the Android WebView gives `file:///android_asset`.
 
 `harness.openDashboard(page)` injects a stub `window.VoltTrackerAndroid` bridge (as the WebView
 would), loads `index.html`, and waits for `window.VoltDashboard` to wire up. Tests then seed
-`VoltDashboard.state` and call the real render entry points (`renderRealTrips`, `setAppState`,
+`VoltDashboard.state` and call the real render entry points (`setAppState`, `renderDriveLive`,
 `setView`, …) to drive a screen, then assert with real layout (`getBoundingClientRect`, computed
 styles) and text/interaction.
 

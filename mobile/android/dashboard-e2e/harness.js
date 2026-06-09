@@ -46,10 +46,27 @@ function installMockBridge() {
     tryReconnectNow: noop,
     openBluetoothSettings: noop,
     shareDiagnostics: noop,
+    detailProbe: noop,
+    exportDetailedSignalLog: json('{"ok":true,"item":{"id":5}}'),
+    exportDetailedSignalLogs: json('{"ok":true,"items":[{"id":1,"name":"TPMS candidate"}]}'),
+    deleteDetailedSignalLog: noop,
     startTestConnection: noop,
     scheduleAdapterReadyNotify: noop,
     cancelAdapterReadyNotify: noop,
   };
+}
+
+async function waitForDashboardReady(page, timeout) {
+  await page.waitForFunction(
+    () =>
+      typeof window.VoltDashboard === 'object' &&
+      window.VoltDashboard &&
+      window.VoltDashboard.state &&
+      typeof window.VoltDashboard.setView === 'function' &&
+      typeof window.VoltDashboard.setStatus === 'function',
+    undefined,
+    { timeout },
+  );
 }
 
 /**
@@ -60,6 +77,8 @@ function installMockBridge() {
  *   timestamps ("2 days ago") don't drift the baseline. Must be set before the page renders.
  */
 async function openDashboard(page, opts = {}) {
+  const pageErrors = [];
+  page.on('pageerror', (err) => pageErrors.push(err && err.message ? err.message : String(err)));
   if (opts.fixedTime !== undefined) {
     await page.clock.setFixedTime(new Date(opts.fixedTime));
   }
@@ -67,19 +86,38 @@ async function openDashboard(page, opts = {}) {
     await page.addInitScript(installMockBridge);
   }
   await page.goto('/index.html');
-  await page.waitForFunction(
-    () =>
-      typeof window.VoltDashboard === 'object' &&
-      window.VoltDashboard &&
-      window.VoltDashboard.state &&
-      typeof window.VoltDashboard.renderRealTrips === 'function',
-    undefined,
-    { timeout: 15_000 },
-  );
+  try {
+    await waitForDashboardReady(page, 15_000);
+  } catch (firstError) {
+    // The local static server can occasionally deliver the HTML/CSS while Chromium never executes
+    // the bundled app script for that page. A single cache-busted retry keeps the smoke suite from
+    // failing before it reaches the UI assertion, while persistent script errors still fail below.
+    await page.goto(`/index.html?e2eRetry=${Date.now()}`);
+    try {
+      await waitForDashboardReady(page, 20_000);
+    } catch (secondError) {
+      const detail = await page
+        .evaluate(() => ({
+          readyState: document.readyState,
+          hasVoltDashboard: typeof window.VoltDashboard,
+          dashboardKeys:
+            window.VoltDashboard && typeof window.VoltDashboard === 'object'
+              ? Object.keys(window.VoltDashboard).slice(0, 12)
+              : [],
+          title: document.getElementById('screenTitle')?.textContent || '',
+        }))
+        .catch(() => ({}));
+      throw new Error(
+        `Dashboard did not become ready after reload. First wait: ${firstError.message}; second wait: ${
+          secondError.message
+        }; pageErrors=${JSON.stringify(pageErrors)}; detail=${JSON.stringify(detail)}`,
+      );
+    }
+  }
 }
 
 /**
- * Switches the active view (drive/trips/map/charge/insights/settings).
+ * Switches the active view (drive/map/charge/insights/diagnostics/settings).
  * @param {import('@playwright/test').Page} page
  */
 async function setView(page, view) {

@@ -71,6 +71,7 @@ class DashboardPublisher(
                 "setHistory",
                 "setStorage",
                 "setAppState",
+                "setRestoreProgress",
             )
     }
 }

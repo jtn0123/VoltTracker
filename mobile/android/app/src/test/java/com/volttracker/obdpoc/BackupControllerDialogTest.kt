@@ -22,6 +22,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlertDialog
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.io.FileInputStream
 import java.util.concurrent.AbstractExecutorService
 import java.util.concurrent.TimeUnit
@@ -136,6 +137,22 @@ class BackupControllerDialogTest {
     }
 
     @Test
+    fun replaceButtonPublishesBusyAndCompleteRestoreProgress() {
+        val dialog = openRestoreDialog(stagedBackupOfOneClearedSession())
+
+        clickAndSettle(dialog, DialogInterface.BUTTON_NEGATIVE) // Replace all
+
+        val titles = activity.restoreProgress.map { it.title }
+        assertTrue("restore should publish a busy overlay phase", titles.contains("Restoring backup"))
+        val complete = activity.restoreProgress.last()
+        assertEquals(true, complete.visible)
+        assertEquals(false, complete.busy)
+        assertEquals("ok", complete.tone)
+        assertEquals("Restore complete", complete.title)
+        assertTrue(complete.detail!!.contains("Backup restored"))
+    }
+
+    @Test
     fun cancelButtonAbortsWithoutChangingData() {
         val dialog = openRestoreDialog(stagedBackupOfOneClearedSession())
 
@@ -159,6 +176,16 @@ class BackupControllerDialogTest {
 
         assertEquals("blocked", activity.lastState)
         assertTrue(activity.lastDetail!!.contains("not a valid Volt Tracker backup"))
+        val progress = activity.restoreProgress.last()
+        assertEquals(true, progress.visible)
+        assertEquals(false, progress.busy)
+        assertEquals("blocked", progress.tone)
+        assertEquals("Restore failed", progress.title)
+
+        val appLog = File(activity.filesDir, "app-log/app.log")
+        val logText = appLog.readText()
+        assertTrue(logText.contains("backup_restore_stage_failed"))
+        assertTrue(logText.contains("status=NOT_A_BACKUP"))
     }
 
     @Test
@@ -214,6 +241,8 @@ class BackupControllerDialogTest {
 
         @JvmField var lastDetail: String? = null
 
+        @JvmField val restoreProgress = ArrayList<RestoreProgressEvent>()
+
         override fun onCreate(savedInstanceState: Bundle?) {
             localStore = ObdLocalStore(this)
             backupController =
@@ -231,6 +260,16 @@ class BackupControllerDialogTest {
             lastDetail = detail
         }
 
+        override fun publishRestoreProgress(
+            visible: Boolean,
+            busy: Boolean,
+            title: String?,
+            detail: String?,
+            tone: String?,
+        ) {
+            restoreProgress.add(RestoreProgressEvent(visible, busy, title, detail, tone))
+        }
+
         override fun publishDeviceList() {
             // No WebView in the harness.
         }
@@ -239,4 +278,12 @@ class BackupControllerDialogTest {
             // No WebView in the harness.
         }
     }
+
+    data class RestoreProgressEvent(
+        val visible: Boolean,
+        val busy: Boolean,
+        val title: String?,
+        val detail: String?,
+        val tone: String?,
+    )
 }

@@ -121,7 +121,26 @@
         >
           Clear codes
         </button>
-        <button type="button" data-nav-jump="settings">Debug logs</button>
+        <button type="button" data-nav-jump="diagnostics">Debug logs</button>
+      </div>
+
+      <!-- In-app DTC lookup over the shipped Volt code database (no need to leave
+           the app for a web search). Results rendered by actions.ts. -->
+      <div class="dtc-lookup">
+        <label class="dtc-lookup-field">
+          <span class="kicker">Look up a code</span>
+          <input
+            id="dtcSearchInput"
+            type="search"
+            inputmode="text"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            placeholder="e.g. P0420"
+            aria-label="Search diagnostic trouble codes"
+          />
+        </label>
+        <div id="dtcSearchResult" class="dtc-lookup-result" hidden></div>
       </div>
 
       <!-- Non-modal inline confirmation: role="group" (not alertdialog — we

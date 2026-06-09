@@ -56,26 +56,45 @@ function autoConnectStatusText(state: Record<string, unknown>) {
   if (!enabled) {
     return "Off. Manual Connect still works.";
   }
+  // Surface the post-failure cooldown so the user knows why auto-connect is
+  // pausing rather than thinking it's broken. cooldownRemainingMs comes straight
+  // from getAutoConnectState (AutoConnectController).
+  const cooldownMs = Number(state.cooldownRemainingMs) || 0;
+  if (cooldownMs > 0) {
+    return `On. Cooling down ${Math.ceil(cooldownMs / 1000)}s before the next auto-connect attempt.`;
+  }
   if (!hasAdapter || state.available === false) {
     return "On. Connect once to remember an adapter.";
   }
   return "On. Uses " + label + " when the app sees it, without Bluetooth discovery.";
 }
 
+let autoConnectCooldownTimer = 0;
+
+// Paints the status line; while a cooldown is counting down it re-polls the bridge
+// once a second so the remaining seconds tick toward zero (then stops).
+function applyAutoConnectStatus(state: Record<string, unknown>, toggle: HTMLInputElement | null) {
+  const status = el("autoConnectStatus");
+  if (status) status.textContent = autoConnectStatusText(state);
+  window.clearTimeout(autoConnectCooldownTimer);
+  const cooldownMs = Number(state.cooldownRemainingMs) || 0;
+  if (state.enabled !== false && cooldownMs > 0) {
+    autoConnectCooldownTimer = window.setTimeout(() => {
+      applyAutoConnectStatus(parseBridgeJson(safeCall("getAutoConnectState")), toggle);
+    }, 1000);
+  }
+}
+
 function bindAutoConnect() {
   const toggle = el("autoConnectToggle") as HTMLInputElement | null;
-  const status = el("autoConnectStatus");
   if (!toggle) return;
   const state = parseBridgeJson(safeCall("getAutoConnectState"));
   toggle.checked = state.enabled !== false;
-  if (status) status.textContent = autoConnectStatusText(state);
+  applyAutoConnectStatus(state, toggle);
   toggle.addEventListener("change", () => {
     safeCall("setAutoConnectEnabled", toggle.checked);
-    const nextState = {
-      ...state,
-      enabled: toggle.checked,
-    };
-    if (status) status.textContent = autoConnectStatusText(nextState);
+    // Reflect the new toggle immediately (the bridge may not re-report synchronously).
+    applyAutoConnectStatus({ ...state, enabled: toggle.checked }, toggle);
   });
 }
 

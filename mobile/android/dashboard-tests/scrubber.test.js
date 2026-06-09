@@ -245,6 +245,25 @@ describe('scrubber.ts', () => {
     expect(readoutValue('Distance')).toMatch(/ mi$/);
     expect(readoutValue('Speed')).toMatch(/ mph$/);
     expect(readoutValue('Elevation')).toMatch(/ ft$/);
+    // The mi/kWh chip's label already carries the unit, so its value never
+    // repeats " mi/kWh" (that redundancy overflowed the compact readout cell).
+    expect(readoutValue('mi/kWh')).not.toMatch(/mi\/kWh/);
+  });
+
+  it('builds chart SVG nodes in the SVG namespace so traces actually render', () => {
+    const VD = window.VoltDashboard;
+    giveChartWidth();
+    VD.renderScrubber(withGappyRoute());
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    // Regression guard: scrubSvg() must declare xmlns. parseSvg() parses the
+    // markup as "image/svg+xml"; without the namespace declaration every node
+    // lands in the null namespace and renders nothing (fill/stroke/d go inert).
+    const svg = document.querySelector('#scrubChart svg');
+    expect(svg).not.toBeNull();
+    expect(svg.namespaceURI).toBe(SVG_NS);
+    const path = svg.querySelector('path');
+    expect(path).not.toBeNull();
+    expect(path.namespaceURI).toBe(SVG_NS);
   });
 
   it('renders elevation across altM gaps without collapsing the reading to a bogus value', () => {

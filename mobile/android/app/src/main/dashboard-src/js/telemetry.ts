@@ -33,9 +33,10 @@
   }
 
   function formatDistance(meters: unknown) {
-    const miles = Number(meters || 0) / 1609.344;
-    if (!Number.isFinite(miles) || miles <= 0) return "--";
-    return miles < 10 ? `${miles.toFixed(1)} mi` : `${Math.round(miles)} mi`;
+    const m = Number(meters || 0);
+    if (!Number.isFinite(m) || m <= 0) return "--";
+    const d = VD.units.distanceMeters(m);
+    return `${d.value} ${d.unit}`;
   }
 
   function escapeHtml(value: unknown) {
@@ -514,13 +515,24 @@
   function updateLiveUi() {
     const t = state.telemetry;
     const kph = Number(t.speedKph);
-    const mph = Number.isFinite(kph) ? Math.round(kph * 0.621371) : null;
-    VD.setText("speedValue", mph);
-    VD.setText("speedKph", Number.isFinite(kph) ? `${Math.round(kph)} km/h` : "-- km/h");
+    const hasSpeed = Number.isFinite(kph);
+    // Primary = the user's chosen unit; secondary readout = the other system so
+    // both are always visible. Driven by the units preference (prefs.ts).
+    const metric = VD.units.system() === "metric";
+    const primary = hasSpeed ? VD.units.speed(kph) : null;
+    const altValue = hasSpeed ? Math.round(metric ? kph * 0.621371 : kph) : null;
+    const altUnit = metric ? "mph" : "km/h";
+    VD.setText("speedValue", primary ? primary.value : null);
+    VD.setText("speedUnitMain", (primary ? primary.unit : altUnit).toUpperCase());
+    VD.setText("speedKph", hasSpeed ? `${altValue} ${altUnit}` : `-- ${altUnit}`);
     const speedMeter = el("speedValue")?.closest("[role='meter']");
     if (speedMeter) {
-      if (Number.isFinite(mph)) speedMeter.setAttribute("aria-valuenow", String(mph));
-      else speedMeter.removeAttribute("aria-valuenow");
+      if (primary) {
+        speedMeter.setAttribute("aria-valuenow", String(primary.value));
+        speedMeter.setAttribute("aria-label", `Vehicle speed in ${primary.unit}`);
+      } else {
+        speedMeter.removeAttribute("aria-valuenow");
+      }
     }
     setOptionalLiveText("rpmValue", t.rpm == null || t.rpm === "" ? "--" : `${t.rpm}`);
     // voltageValue is the aux 12V (ATRV from the ELM adapter), labelled accordingly
@@ -529,13 +541,46 @@
       "voltageValue",
       t.voltage == null || t.voltage === "" ? "--" : `${Number(t.voltage).toFixed(1)} V`
     );
-    setOptionalLiveText("coolantValue", t.coolantC != null ? `${t.coolantC} °C` : "--");
+    setOptionalLiveText("coolantValue", t.coolantC != null ? VD.units.tempText(Number(t.coolantC)) : "--");
     setOptionalLiveText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
     setOptionalLiveText("throttleValue", t.throttlePct != null ? `${t.throttlePct}%` : "--");
     const lat = Number(t.latitude);
     const lon = Number(t.longitude);
-    const _acc = Number(t.accuracyM);
-    setOptionalLiveText("gpsValue", Number.isFinite(lat) && Number.isFinite(lon) ? "locked" : "--");
+    const acc = Number(t.accuracyM);
+    // Surface fix quality, not just "locked": ±Nm tells the user whether the GPS
+    // is precise enough to trust the route. accuracyM is already in the payload.
+    const gpsTile = Number.isFinite(lat) && Number.isFinite(lon)
+      ? Number.isFinite(acc) && acc > 0
+        ? `±${Math.round(acc)} m`
+        : "locked"
+      : "--";
+    setOptionalLiveText("gpsValue", gpsTile);
+
+    // Enhanced Volt signals — decoded mode-22 PIDs that already ride to the
+    // dashboard via the telemetry extras passthrough but were never shown. Each is
+    // optional per vehicle; setOptionalLiveText hides empty cells and the whole
+    // "More signals" card when none are reported.
+    const finiteNum = (value: unknown) => {
+      const n = Number(value);
+      return value == null || value === "" || !Number.isFinite(n) ? null : n;
+    };
+    const motorA = finiteNum(t.motorAPowerKw);
+    setOptionalLiveText("moreMotorA", motorA != null ? `${motorA.toFixed(1)} kW` : "--");
+    const motorB = finiteNum(t.motorBPowerKw);
+    setOptionalLiveText("moreMotorB", motorB != null ? `${motorB.toFixed(1)} kW` : "--");
+    const gear = t.prndlState == null || t.prndlState === "" ? null : String(t.prndlState);
+    setOptionalLiveText("moreGear", gear || "--");
+    const evKm = finiteNum(t.evDistanceThisCycleKm);
+    setOptionalLiveText("moreEvRange", evKm != null ? VD.units.distanceText(evKm) : "--");
+    const transC = finiteNum(t.transmissionTempC);
+    setOptionalLiveText("moreTransTemp", transC != null ? VD.units.tempText(transC) : "--");
+    const ambientC = finiteNum(t.outsideTempC);
+    setOptionalLiveText("moreAmbient", ambientC != null ? VD.units.tempText(ambientC) : "--");
+    const oilLife = finiteNum(t.engineOilLifePct);
+    setOptionalLiveText("moreOilLife", oilLife != null ? `${Math.round(oilLife)}%` : "--");
+    const torque = finiteNum(t.engineTorqueNm);
+    setOptionalLiveText("moreTorque", torque != null ? `${Math.round(torque)} Nm` : "--");
+
     VD.setText("rawFrames", t.raw || "Waiting for telemetry...");
     const soc = t.soc == null || t.soc === "" ? NaN : Number(t.soc);
     const batteryTemp = t.batteryTemp == null || t.batteryTemp === "" ? NaN : Number(t.batteryTemp);
@@ -543,7 +588,7 @@
     // Pass the raw (possibly NaN) value through; setMeter clears the meter to an
     // indeterminate state for a missing reading rather than announcing a false 0%.
     VD.setMeter("driveSocMeter", soc);
-    VD.setText("drivePackTempValue", Number.isFinite(batteryTemp) ? `${Math.round(batteryTemp)} °C` : "--");
+    VD.setText("drivePackTempValue", Number.isFinite(batteryTemp) ? VD.units.tempText(batteryTemp) : "--");
     const power = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
     VD.setText("powerValue", Number.isFinite(power) ? `${power.toFixed(1)} kW` : "--");
     // HV traction-pack live readings (mode-22 PIDs 222429 / 222414). When the
@@ -606,7 +651,19 @@
     VD.setText("diagState", status.detail || (t.updatedAt ? "Live OBD data received." : "Waiting for adapter"));
     VD.setText("diagSamples", samples ? `${samples} samples` : "0 samples");
     VD.setText("diagAdapter", t.adapter || status.adapter || "OBD adapter");
-    VD.setText("diagVehicleState", vehicleState);
+    // Surface the classifier's confidence inline and its reason codes (the "why"
+    // behind driving/charging/parked) as a tooltip — both already reach JS via the
+    // app-state payload (vehicle.confidence / vehicle.reasons).
+    const stateConfidence = String(vehicle.confidence || t.vehicleStateConfidence || "").toLowerCase();
+    const stateReasons = Array.isArray(vehicle.reasons)
+      ? vehicle.reasons.filter(Boolean).map(String)
+      : [];
+    VD.setText("diagVehicleState", stateConfidence ? `${vehicleState} · ${stateConfidence}` : vehicleState);
+    const stateEl = el("diagVehicleState");
+    if (stateEl) {
+      if (stateReasons.length) stateEl.setAttribute("title", `Why: ${stateReasons.join("; ")}`);
+      else stateEl.removeAttribute("title");
+    }
     VD.setText("diagSession", t.sessionMs ? formatDuration(Number(t.sessionMs)) : "--");
     VD.setText("diagSupported", t.supportedPids ? summarizePidLine(t.supportedPids) : "unknown");
   }
@@ -670,13 +727,21 @@
       hasParsed ? `${vehicleState || "telemetry"} ${confidence ? "- " + confidence : ""}` : "Waiting for parsed values",
       hasParsed ? "active" : "unknown"
     );
+    // Android 13+ POST_NOTIFICATIONS: the background-logging foreground service
+    // needs it to keep its notice visible. Treat a missing field as granted
+    // (older payloads / pre-13 devices auto-grant) so we don't false-warn.
+    const notificationsGranted = ((app.permissions || {}).notifications) !== false;
+    const notifBlocked = foregroundService && !notificationsGranted;
+    const backgroundDetail = backgroundSamples
+      ? `${backgroundSamples} samples while minimized${gapCount ? `, ${gapCount} gaps` : ""}`
+      : (isBackgroundCandidate ? "Minimize during a drive; confirm sample counts keep rising" : "Start logging before testing minimized behavior");
     setValidationRow(
       "validateBackground",
-      backgroundSamples ? "ok" : (foregroundService ? "warn" : "warn"),
+      notifBlocked ? "warn" : (backgroundSamples ? "ok" : "warn"),
       "Background test",
-      backgroundSamples
-        ? `${backgroundSamples} samples while minimized${gapCount ? `, ${gapCount} gaps` : ""}`
-        : (isBackgroundCandidate ? "Minimize during a drive; confirm sample counts keep rising" : "Start logging before testing minimized behavior"),
+      notifBlocked
+        ? `${backgroundDetail} · notifications are off — turn them on to keep the logging notice visible`
+        : backgroundDetail,
       foregroundService ? (appForeground ? "armed" : "active") : "manual"
     );
     const okCount = document.querySelectorAll(".validation-row[data-tone='ok']").length;

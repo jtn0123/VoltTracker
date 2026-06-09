@@ -381,6 +381,26 @@ open class MainActivity :
         publishAppState()
     }
 
+    override fun publishRestoreProgress(
+        visible: Boolean,
+        busy: Boolean,
+        title: String?,
+        detail: String?,
+        tone: String?,
+    ) {
+        val payload = JSONObject()
+        try {
+            payload.put("visible", visible)
+            payload.put("busy", busy)
+            payload.put("title", title)
+            payload.put("detail", detail)
+            payload.put("tone", tone)
+        } catch (ignored: JSONException) {
+            // Values are local literals.
+        }
+        callDashboard("setRestoreProgress", payload.toString())
+    }
+
     private fun isBluetoothReady(): Boolean {
         val adapter = BluetoothAdapters.get(this)
         return adapter != null && adapter.isEnabled && requireDeviceCatalog().hasBluetoothConnectPermission()

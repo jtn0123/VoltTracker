@@ -105,7 +105,7 @@ describe('dashboard startup budget', () => {
   it('switches all primary tabs repeatedly inside the dashboard budget', async () => {
     await loadDashboard();
     const VD = window.VoltDashboard;
-    const tabs = ['drive', 'trips', 'map', 'charge', 'insights', 'settings', 'signals'];
+    const tabs = ['drive', 'map', 'charge', 'insights', 'diagnostics', 'settings'];
 
     const start = performance.now();
     for (let i = 0; i < TAB_SWITCH_REPEAT_COUNT; i += 1) {
@@ -115,7 +115,7 @@ describe('dashboard startup budget', () => {
     }
     const elapsedMs = performance.now() - start;
 
-    expect(document.body.dataset.activeView).toBe('signals');
+    expect(document.body.dataset.activeView).toBe('settings');
     expect(elapsedMs / (TAB_SWITCH_REPEAT_COUNT * tabs.length)).toBeLessThan(TAB_SWITCH_BUDGET_PER_SWITCH_MS);
   });
 

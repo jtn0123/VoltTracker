@@ -319,7 +319,7 @@
     VD.setText("reviewTitle", hasSession
       ? `${session.mode || "session"} · ${session.adapterName || "OBD adapter"}`
       : "No real session yet");
-    VD.setText("reviewMaxSpeed", maxSpeed ? `${Math.round(maxSpeed * 0.621371)} mph` : "--");
+    VD.setText("reviewMaxSpeed", maxSpeed ? VD.units.speedText(maxSpeed) : "--");
     VD.setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
     VD.setText("reviewPidParse", (parsed || unknown) ? `${parsed}/${parsed + unknown}` : "--");
     VD.setText("reviewInterval", interval ? VD.formatShortDuration(interval) : "--");
@@ -440,7 +440,7 @@
     const hasDriving = Object.keys(stateCounts).some((key) => key.includes("driving"));
     return [
       {
-        title: maxSpeed ? `Max speed ${Math.round(maxSpeed * 0.621371)} mph` : "No speed peak yet",
+        title: maxSpeed ? `Max speed ${VD.units.speedText(maxSpeed)}` : "No speed peak yet",
         detail: maxSpeed ? "Computed from accepted OBD speed samples for the latest session." : "Speed stays blank until accepted OBD speed samples are stored."
       },
       {
@@ -508,7 +508,7 @@
     const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
     VD.setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
     VD.setText("overviewDistanceSub", route.pointCount ? `${route.pointCount} GPS samples in latest route` : "waiting for route samples");
-    VD.setText("overviewMaxSpeed", overview.maxSpeedKph ? `${Math.round(Number(overview.maxSpeedKph) * 0.621371)} mph` : "--");
+    VD.setText("overviewMaxSpeed", overview.maxSpeedKph ? VD.units.speedText(Number(overview.maxSpeedKph)) : "--");
     const soc = Number(latest.soc);
     const power = Number(latest.powerKw ?? latest.packPowerKw);
     VD.setText("overviewBattery", Number.isFinite(soc) && soc > 0 ? `${Math.round(soc)}%` : (Number.isFinite(power) && power ? `${power.toFixed(1)} kW` : "--"));
@@ -541,9 +541,9 @@
     const maintenance = el("maintenanceList");
     if (maintenance) {
       const rows: Array<[string, string, string]> = [
-        ["Tire rotation", "Track manually until odometer PID is validated", "manual"],
-        ["Battery coolant", "Needs service interval data before app reminders are trusted", "watch"],
-        ["Engine oil", "Gas-engine runtime PID will make this useful", "pending"]
+        ["Tire rotation", "Log rotations against your odometer reading above", "manual"],
+        ["Battery coolant", "No service-interval data yet — track manually for now", "watch"],
+        ["Engine oil", "Log oil changes manually — live oil-life tracking is planned", "pending"]
       ];
       maintenance.replaceChildren(...rows.map(([name, detail, tag]) => buildMaintenanceRow(name, detail, tag)));
     }
@@ -593,6 +593,39 @@
     }
     VD.setText("chargeSessionsTitle", `${sessions.length} recent charge${sessions.length === 1 ? "" : "s"}`);
     list.replaceChildren(...sessions.slice(0, 12).map(buildChargeSessionRow));
+    renderChargeEnergy(sessions);
+  }
+
+  function formatMoney(value: number) {
+    return "$" + value.toFixed(2);
+  }
+
+  // Sums energy across the logged charge sessions and, when the user has set an
+  // electricity rate (Settings → Preferences), shows the estimated cost. The rate
+  // is a display-layer preference, so the math lives here in JS.
+  function renderChargeEnergy(sessions: VoltChargeSessionRow[]) {
+    const card = el("chargeEnergyCard");
+    if (!card) return;
+    const total = sessions.reduce((acc, session) => {
+      const e = chargeNum(session.energyKwh);
+      return Number.isFinite(e) && e > 0 ? acc + e : acc;
+    }, 0);
+    if (total <= 0) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    VD.setText("chargeEnergyTotal", `${total.toFixed(1)} kWh`);
+    VD.setText("chargeEnergySub", `across ${sessions.length} logged charge${sessions.length === 1 ? "" : "s"}`);
+    const price = VD.prefs.get<number>("pricePerKwh", 0);
+    const hint = el("chargeEnergyHint");
+    if (price > 0) {
+      VD.setText("chargeEnergyCost", formatMoney(total * price));
+      if (hint) hint.hidden = true;
+    } else {
+      VD.setText("chargeEnergyCost", "--");
+      if (hint) hint.hidden = false;
+    }
   }
 
   function chargeNum(value: unknown) {
@@ -640,9 +673,15 @@
     const right = document.createElement("b");
     const energy = chargeNum(session.energyKwh);
     const socGain = Number.isFinite(startSoc) && Number.isFinite(endSoc) ? endSoc - startSoc : NaN;
-    if (Number.isFinite(energy) && energy > 0) right.textContent = `${energy.toFixed(1)} kWh`;
-    else if (Number.isFinite(socGain) && socGain > 0) right.textContent = `+${Math.round(socGain)}%`;
-    else right.textContent = "--";
+    const price = VD.prefs.get<number>("pricePerKwh", 0);
+    if (Number.isFinite(energy) && energy > 0) {
+      right.textContent =
+        price > 0 ? `${energy.toFixed(1)} kWh · ${formatMoney(energy * price)}` : `${energy.toFixed(1)} kWh`;
+    } else if (Number.isFinite(socGain) && socGain > 0) {
+      right.textContent = `+${Math.round(socGain)}%`;
+    } else {
+      right.textContent = "--";
+    }
     row.append(center, right);
     return row;
   }
@@ -669,7 +708,7 @@
     const packPower = firstNum([latest.packPowerKw, latest.powerKw]);
     const stats: Array<[string, string | null]> = [
       ["Pack", Number.isFinite(voltage) ? `${Math.round(voltage)} V` : null],
-      ["Temp", Number.isFinite(temp) ? `${Math.round(temp)}°C` : null],
+      ["Temp", Number.isFinite(temp) ? VD.units.tempText(temp) : null],
       ["Health", Number.isFinite(soh) && soh > 0 ? `${Math.round(soh)}%` : null],
       ["Power", Number.isFinite(packPower) && packPower !== 0 ? `${packPower.toFixed(1)} kW` : null]
     ].filter((pair) => pair[1] != null) as Array<[string, string]>;
@@ -716,11 +755,16 @@
 
     const odoMiles = Number(vehicle.odometerMiles);
     const odoKm = Number(vehicle.odometerKm);
+    // Odometer keeps thousands separators (large numbers), so it formats locally
+    // rather than via units.distance which targets short trip/route figures.
+    const odoMetric = VD.units.system() === "metric";
     let odometer = "--";
     if (Number.isFinite(odoMiles) && odoMiles > 0) {
-      odometer = `${Math.round(odoMiles).toLocaleString()} mi`;
+      const v = odoMetric ? odoMiles / 0.621371 : odoMiles;
+      odometer = `${Math.round(v).toLocaleString()} ${odoMetric ? "km" : "mi"}`;
     } else if (Number.isFinite(odoKm) && odoKm > 0) {
-      odometer = `${Math.round(odoKm * 0.621371).toLocaleString()} mi`;
+      const v = odoMetric ? odoKm : odoKm * 0.621371;
+      odometer = `${Math.round(v).toLocaleString()} ${odoMetric ? "km" : "mi"}`;
     }
     VD.setText("vehicleOdometer", odometer);
 
