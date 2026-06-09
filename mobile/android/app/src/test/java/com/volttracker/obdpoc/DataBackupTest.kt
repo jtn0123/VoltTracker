@@ -172,6 +172,16 @@ class DataBackupTest {
     }
 
     @Test
+    fun restoreImportLimitAllowsTwoHundredMbBackups() {
+        val twoHundredMb = 200L * 1000L * 1000L
+
+        assertTrue(
+            "restore importer must accept 200 MB-class backups before SQLite validation",
+            DataBackup.MAX_RESTORE_BYTES > twoHundredMb,
+        )
+    }
+
+    @Test
     fun debugExportWritesJsonFile() {
         val context = RuntimeEnvironment.getApplication()
         val sessionLogDir = File(context.filesDir, "obd-logs")

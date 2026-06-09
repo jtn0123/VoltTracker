@@ -339,7 +339,8 @@ class DataBackup(
     }
 
     companion object {
-        private const val MAX_RESTORE_BYTES = 128L * 1024L * 1024L
+        internal const val MAX_RESTORE_MIB = 512L
+        internal const val MAX_RESTORE_BYTES = MAX_RESTORE_MIB * 1024L * 1024L
         private const val MAX_DEBUG_LOG_BYTES = 64 * 1024
         private const val MAX_DEBUG_SESSION_LOGS = 3
         private const val MAX_DEBUG_APP_LOGS = 2

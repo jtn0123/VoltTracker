@@ -372,7 +372,8 @@ class BackupController(
             DataBackup.RestoreStageStatus.OPEN_FAILED ->
                 "Restore failed - Android could not read the selected file."
             DataBackup.RestoreStageStatus.TOO_LARGE ->
-                "Restore failed - that backup is too large for the on-phone importer."
+                "Restore failed - that backup is larger than the " +
+                    "${DataBackup.MAX_RESTORE_MIB} MiB on-phone importer limit."
             DataBackup.RestoreStageStatus.MISSING_PASSPHRASE ->
                 "Restore failed - that backup is encrypted. Enter its passphrase first."
             DataBackup.RestoreStageStatus.DECRYPT_FAILED ->
