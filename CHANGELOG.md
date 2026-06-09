@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.9.0 (2026-06-09)
+
+### Features
+
+- **android**: Polish dashboard and restore feedback
+  ([`e1cb0aa`](https://github.com/jtn0123/VoltTracker/commit/e1cb0aa4116458041d48182dda1ffeec38c8776c))
+
+Merge dashboard polish, restore progress feedback, v7 backup restore coverage, and refreshed CI
+  baselines.
+
+
 ## v0.8.1 (2026-06-08)
 
 ### Bug Fixes
