@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.9.1 (2026-06-09)
+
+### Bug Fixes
+
+- **android**: Quiet offline dashboard and surface restore
+  ([#184](https://github.com/jtn0123/VoltTracker/pull/184),
+  [`8c8c6a2`](https://github.com/jtn0123/VoltTracker/commit/8c8c6a2485326f5d5c7c67c1e3a728a8934e6290))
+
+* fix(android): quiet offline dashboard and surface restore
+
+* test(dashboard): refresh settings visual baselines
+
+
 ## v0.9.0 (2026-06-09)
 
 ### Features
