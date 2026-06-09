@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.9.3 (2026-06-09)
+
+### Bug Fixes
+
+- **android**: Restore map data for matched backup sessions
+  ([#186](https://github.com/jtn0123/VoltTracker/pull/186),
+  [`1c2282e`](https://github.com/jtn0123/VoltTracker/commit/1c2282e21620fb1280628ec67156987273efe745))
+
+
 ## v0.9.2 (2026-06-09)
 
 ### Bug Fixes
