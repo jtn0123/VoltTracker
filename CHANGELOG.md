@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.9.2 (2026-06-09)
+
+### Bug Fixes
+
+- **android**: Allow 200 MB backup restores
+  ([#185](https://github.com/jtn0123/VoltTracker/pull/185),
+  [`5472231`](https://github.com/jtn0123/VoltTracker/commit/5472231c8a2483d99e4aaa3b7598c7984d15f8d6))
+
+
 ## v0.9.1 (2026-06-09)
 
 ### Bug Fixes
