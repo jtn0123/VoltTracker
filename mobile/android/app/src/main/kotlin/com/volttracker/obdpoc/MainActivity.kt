@@ -269,7 +269,7 @@ open class MainActivity :
         if (isLoggingActive()) {
             callDashboard("setStatus", lastStatus.toString())
         } else {
-            publishStatus("ready", "Pick a paired OBD adapter to start logging.", false)
+            publishStatus("ready", "Viewing local data. Connect only when you want live OBD logging.", false)
         }
         maybeAutoConnect(AutoConnectController.TRIGGER_DASHBOARD_READY, null)
     }

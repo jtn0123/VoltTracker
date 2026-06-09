@@ -31,9 +31,28 @@ class AutoConnectControllerTest {
     }
 
     @Test
+    fun autoConnectDefaultsOffSoOfflineViewingDoesNotStartAConnection() {
+        remember("AA:BB:CC:DD:EE:FF", "Volt OBD")
+        val controller = AutoConnectController(prefs, catalog) { now }
+
+        val didStart =
+            controller.maybeConnect(
+                AutoConnectController.TRIGGER_APP_RESUME,
+                null,
+                bluetoothReady = true,
+                loggingActive = false,
+                startConnect = { _, _ -> throw AssertionError("should not start by default") },
+                publishStatus = { _, _, _ -> throw AssertionError("should not publish by default") },
+            )
+
+        assertFalse(didStart)
+    }
+
+    @Test
     fun startsLastAdapterWhenEnabledReadyAndIdle() {
         remember("AA:BB:CC:DD:EE:FF", "Volt OBD")
         val controller = AutoConnectController(prefs, catalog) { now }
+        controller.setEnabled(true)
         val started = ArrayList<String>()
         var status = ""
 
@@ -75,6 +94,7 @@ class AutoConnectControllerTest {
     fun observedDifferentAddressDoesNotStart() {
         remember("AA:BB:CC:DD:EE:FF", "Volt OBD")
         val controller = AutoConnectController(prefs, catalog) { now }
+        controller.setEnabled(true)
 
         val didStart =
             controller.maybeConnect(
@@ -93,6 +113,7 @@ class AutoConnectControllerTest {
     fun cooldownPreventsRepeatedAttempts() {
         remember("AA:BB:CC:DD:EE:FF", "Volt OBD")
         val controller = AutoConnectController(prefs, catalog) { now }
+        controller.setEnabled(true)
         var attempts = 0
 
         assertTrue(

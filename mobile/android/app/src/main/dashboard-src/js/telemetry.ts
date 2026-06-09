@@ -164,7 +164,11 @@
         : (
             status.detail ||
             session.detail ||
-            (remembered ? "Ready to resume the remembered adapter." : "Pick a paired adapter to start logging.")
+            (
+              remembered
+                ? "Local data is available. Resume the remembered adapter only when you want live logging."
+                : "Local data is available offline. Connect when you want live OBD logging."
+            )
           )
     );
     // Compact status word, not a sample count — this tile is ~76px wide so

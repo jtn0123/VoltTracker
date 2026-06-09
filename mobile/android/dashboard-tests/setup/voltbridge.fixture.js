@@ -14,7 +14,7 @@ export function createVoltBridgeFixture(overrides = {}) {
     listDevices: stub('[]'),
     getLastDevice: stub('{}'),
     getDeviceHistory: stub('[]'),
-    getAutoConnectState: stub('{"enabled":true,"available":false}'),
+    getAutoConnectState: stub('{"enabled":false,"available":false}'),
     getStorageSummary: stub('{}'),
     exportDebugBundle: stub('{"ok":true,"path":"/tmp/debug"}'),
     getTrips: stub('[]'),

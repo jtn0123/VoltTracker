@@ -95,7 +95,7 @@ class AutoConnectController(
 
     companion object {
         const val PREF_AUTO_CONNECT_ENABLED = "auto_connect_enabled"
-        const val DEFAULT_AUTO_CONNECT_ENABLED = true
+        const val DEFAULT_AUTO_CONNECT_ENABLED = false
         const val TRIGGER_APP_RESUME = "app_resume"
         const val TRIGGER_DASHBOARD_READY = "dashboard_ready"
         const val TRIGGER_BLUETOOTH_CONNECTED = "bluetooth_connected"

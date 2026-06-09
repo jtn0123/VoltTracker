@@ -49,6 +49,8 @@ test('settings exposes connection actions without expanding a disclosure', async
   await expect(page.locator('#permissionBtn')).toBeVisible();
   await expect(page.locator('#scanBtn')).toBeVisible();
   await expect(page.locator('#lastBtn')).toBeVisible();
+  await expect(page.locator('#view-settings [data-action="restore"]')).toBeVisible();
+  await expect(page.locator('#view-settings [data-action="restoreEncrypted"]')).toBeVisible();
   await expect(page.locator('#disconnectBtn')).toHaveCount(0);
 });
 
@@ -99,17 +101,14 @@ test('browser preview Start/Stop demo owns the sample data boundary', async ({ p
 
 test('"Restore file" calls the native restore bridge', async ({ page }) => {
   await openDashboard(page);
-  await setView(page, 'diagnostics');
+  await setView(page, 'settings');
   await page.evaluate(() => {
     window.__restoreCalls = 0;
     window.VoltTrackerAndroid.restoreBackup = () => {
       window.__restoreCalls += 1;
     };
-    document.querySelectorAll('details').forEach((d) => {
-      d.open = true;
-    });
   });
 
-  await page.locator('#view-diagnostics [data-action="restore"]').click();
+  await page.locator('#view-settings [data-action="restore"]').click();
   expect(await page.evaluate(() => window.__restoreCalls)).toBe(1);
 });

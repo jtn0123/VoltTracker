@@ -86,6 +86,8 @@ describe('dashboard layout css', () => {
     expect(screensCss).toMatch(/@media\s*\(min-width:\s*640px\)\s*\{[\s\S]*\.connection-actions,\s*\.db-action-grid/);
     expect(dashboardHtml).toContain('class="settings-command"');
     expect(dashboardHtml).toContain('Reconnect last');
+    expect(dashboardHtml).toContain('Backup &amp; restore');
+    expect(dashboardHtml).toContain('data-action="restore"');
     expect(dashboardHtml).not.toContain('id="disconnectBtn"');
   });
 });
