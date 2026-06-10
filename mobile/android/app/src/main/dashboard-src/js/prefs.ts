@@ -301,6 +301,9 @@
   // storage-driven surfaces (charge cost, odometer, session review), and the
   // active stored view (trips/insights/map re-run their loaders via setView).
   function rerenderForUnits(): void {
+    // Re-running setView() scrolls the app to the top; a units/rate tweak
+    // shouldn't yank the user away from the control they're using.
+    const scrollY = window.scrollY;
     const safe = (fn: unknown) => {
       try {
         if (typeof fn === "function") (fn as () => void)();
@@ -316,6 +319,7 @@
     } catch (_err) {
       /* no-op */
     }
+    window.scrollTo({ top: scrollY, behavior: "auto" });
   }
 
   function bootPrefsUi(): void {
@@ -328,10 +332,14 @@
     if (priceInput) {
       const stored = get<number>("pricePerKwh", 0);
       if (stored > 0) priceInput.value = String(stored);
+      // Persist immediately, but debounce the dashboard-wide re-render so
+      // typing "0.14" doesn't re-render the whole UI four times.
+      let rateRerenderTimer = 0;
       priceInput.addEventListener("input", () => {
         const value = parseFloat(priceInput.value);
         set("pricePerKwh", Number.isFinite(value) && value >= 0 ? value : 0);
-        rerenderForUnits();
+        window.clearTimeout(rateRerenderTimer);
+        rateRerenderTimer = window.setTimeout(rerenderForUnits, 400);
       });
     }
     document.addEventListener("click", (event) => {

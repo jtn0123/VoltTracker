@@ -23,22 +23,40 @@
 
       <div class="map-overlay-top">
         <div class="map-layer-tabs" role="tablist" aria-label="Map layer">
-          <button type="button" data-map-layer="routes" aria-selected="false">
+          <button
+            type="button"
+            role="tab"
+            data-map-layer="routes"
+            aria-selected="false"
+          >
             <span>Routes</span>
           </button>
-          <button type="button" data-map-layer="heat" aria-selected="false">
+          <button
+            type="button"
+            role="tab"
+            data-map-layer="heat"
+            aria-selected="false"
+          >
             <span>Heat</span>
           </button>
-          <button type="button" data-map-layer="stops" aria-selected="false">
+          <button
+            type="button"
+            role="tab"
+            data-map-layer="stops"
+            aria-selected="false"
+          >
             <span>Stops</span><b id="mapStopsCount">0</b>
           </button>
           <button
             type="button"
+            role="tab"
             data-map-layer="eff"
             class="is-active"
             aria-selected="true"
+            aria-label="Efficiency"
+            title="Efficiency"
           >
-            <span>Eff</span>
+            <span>Effic.</span>
           </button>
         </div>
         <div class="map-top-right">
@@ -74,6 +92,9 @@
           permission enabled. The route will draw here from on-device SQLite
           samples.</span
         >
+        <button type="button" class="link-btn" data-nav-jump="settings">
+          Check permissions in Settings
+        </button>
       </div>
     </div>
   </article>
@@ -137,6 +158,9 @@
           Refresh
         </button>
       </header>
+      <p class="status-copy">
+        Long-press a drive to mark it as &ldquo;not a trip&rdquo;.
+      </p>
       <div id="mapSessionList" class="map-list"></div>
     </article>
   </section>

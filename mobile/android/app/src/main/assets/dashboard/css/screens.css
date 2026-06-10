@@ -414,6 +414,10 @@
     inset: 0;
     display: grid;
     place-items: center;
+    /* Keep the copy + CTA hugged together in the middle instead of letting
+       the two grid rows stretch apart. */
+    align-content: center;
+    gap: 12px;
     padding: 120px 20px 56px;
     text-align: center;
     color: var(--muted);
@@ -1997,4 +2001,11 @@
     #dbCard .status-meta {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+  }
+
+  /* Settings footer: app name + version (populated by telemetry.ts). */
+  .app-version-footer {
+    text-align: center;
+    margin-top: 16px;
+    opacity: 0.6;
   }

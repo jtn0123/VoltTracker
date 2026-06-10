@@ -123,9 +123,12 @@
 
   function reportClientError(label: unknown, detail?: unknown) {
     const message = String(detail || label || "Unknown error");
+    // The banner gets a single readable line; the full detail (stack traces
+    // included) still flows to logClientError below.
+    const display = message.split("\n")[0].slice(0, 140);
     try {
       const detailNode = el("errorBannerDetail");
-      if (detailNode) detailNode.textContent = message;
+      if (detailNode) detailNode.textContent = display;
       const node = el("errorBanner");
       if (node) node.hidden = false;
     } catch (ignored) {}
@@ -254,6 +257,7 @@
     const node = el("restoreProgress");
     if (!node) return;
     clearRestoreProgressTimer();
+    const wasHidden = node.hidden;
     const busy = progress.busy !== false;
     const tone = String(progress.tone || (busy ? "busy" : "idle"));
     node.hidden = false;
@@ -287,7 +291,11 @@
     if (!busy && tone === "ok") {
       restoreProgressHideTimer = setTimeout(hideRestoreProgress, 2200);
     }
-    try { node.focus({ preventScroll: true }); } catch (ignored) {}
+    // Only move focus when the dialog first appears — native pushes progress
+    // continuously, and re-focusing on every tick steals keyboard/SR focus.
+    if (wasHidden) {
+      try { node.focus({ preventScroll: true }); } catch (ignored) {}
+    }
   }
 
   window.addEventListener("error", (event) => {

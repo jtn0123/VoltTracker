@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <!--
   Content-Security-Policy: the dashboard ships entirely from app assets and fetches
@@ -68,6 +68,15 @@
   </span>
   <button id="errorBannerDismiss" type="button">Dismiss</button>
 </div>
+    <!-- Status toast: mirrors status.detail when the user is on a tab that
+         can't see #statusCopy (Settings). Shown/hidden by telemetry.ts. -->
+    <div
+      id="statusToast"
+      class="status-toast"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></div>
 <!--
   Connection troubleshooter modal.
 
@@ -798,6 +807,13 @@
         >
       </li>
     </ol>
+    <button
+      type="button"
+      class="primary primary-action"
+      data-nav-jump="settings"
+    >
+      Open Settings to connect
+    </button>
   </article>
 </section>
 <section id="view-map" class="view" data-view="map">
@@ -825,22 +841,40 @@
 
       <div class="map-overlay-top">
         <div class="map-layer-tabs" role="tablist" aria-label="Map layer">
-          <button type="button" data-map-layer="routes" aria-selected="false">
+          <button
+            type="button"
+            role="tab"
+            data-map-layer="routes"
+            aria-selected="false"
+          >
             <span>Routes</span>
           </button>
-          <button type="button" data-map-layer="heat" aria-selected="false">
+          <button
+            type="button"
+            role="tab"
+            data-map-layer="heat"
+            aria-selected="false"
+          >
             <span>Heat</span>
           </button>
-          <button type="button" data-map-layer="stops" aria-selected="false">
+          <button
+            type="button"
+            role="tab"
+            data-map-layer="stops"
+            aria-selected="false"
+          >
             <span>Stops</span><b id="mapStopsCount">0</b>
           </button>
           <button
             type="button"
+            role="tab"
             data-map-layer="eff"
             class="is-active"
             aria-selected="true"
+            aria-label="Efficiency"
+            title="Efficiency"
           >
-            <span>Eff</span>
+            <span>Effic.</span>
           </button>
         </div>
         <div class="map-top-right">
@@ -876,6 +910,9 @@
           permission enabled. The route will draw here from on-device SQLite
           samples.</span
         >
+        <button type="button" class="link-btn" data-nav-jump="settings">
+          Check permissions in Settings
+        </button>
       </div>
     </div>
   </article>
@@ -939,6 +976,9 @@
           Refresh
         </button>
       </header>
+      <p class="status-copy">
+        Long-press a drive to mark it as &ldquo;not a trip&rdquo;.
+      </p>
       <div id="mapSessionList" class="map-list"></div>
     </article>
   </section>
@@ -974,6 +1014,9 @@
         >
       </li>
     </ol>
+    <button type="button" class="link-btn" data-nav-jump="settings">
+      Set up the adapter in Settings
+    </button>
   </article>
   <section class="charge-grid" aria-label="Charging summary" aria-live="polite">
     <article class="panel charge-kpi">
@@ -982,9 +1025,9 @@
       <small>Charging sessions recorded</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Hints</span><span>detected</span></header>
+      <header><span>Plug-ins</span><span>detected</span></header>
       <strong id="realChargeHints">0</strong>
-      <small>Possible charges detected</small>
+      <small>Times the car looked plugged in</small>
     </article>
     <article class="panel charge-kpi">
       <header><span>Max power</span><span>observed</span></header>
@@ -1353,7 +1396,7 @@
       <div><span>Source</span><strong id="dataSourceState">real</strong></div>
     </div>
     <div class="control-row" data-demo-hidden="true">
-      <select id="deviceSelect">
+      <select id="deviceSelect" aria-label="Paired OBD adapter">
         <option value="">No paired adapters found</option>
       </select>
       <button id="refreshBtn" type="button" class="settings-refresh-btn">
@@ -1383,8 +1426,8 @@
         data-action="tpmsScan"
         class="settings-command"
       >
-        <span>Detail probe</span>
-        <small>Targeted signals</small>
+        <span>Extra signals</span>
+        <small>Tires, battery internals</small>
       </button>
     </div>
     <p id="statusCopy" class="status-copy" data-demo-hidden="true">
@@ -1409,11 +1452,7 @@
     <div id="historyList"></div>
   </article>
 
-  <p
-    id="appVersionFooter"
-    class="status-copy"
-    style="text-align: center; margin-top: 16px; opacity: 0.6"
-  >
+  <p id="appVersionFooter" class="status-copy app-version-footer">
     Volt Tracker
   </p>
 </section>

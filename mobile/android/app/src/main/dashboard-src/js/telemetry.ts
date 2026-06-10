@@ -51,6 +51,36 @@ import type { MapRoutePoint } from "./map-route-utils";
       .replace(/'/g, "&#39;");
   }
 
+  // Status detail lands in #statusCopy, which lives on the Settings tab — taps
+  // on other tabs ("Scan car codes" on Insights, blocked-adapter explanations)
+  // would otherwise appear to do nothing. Mirror new detail strings in a small
+  // aria-live toast whenever the user can't see #statusCopy.
+  let statusToastTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastToastDetail = "";
+  let toastBaselineSeen = false;
+
+  function showStatusToast(detail: unknown) {
+    const node = el("statusToast");
+    if (!node) return;
+    const text = String(detail || "").trim();
+    if (!text || text === lastToastDetail) return;
+    lastToastDetail = text;
+    // The very first detail is the boot-time status push ("Viewing local
+    // data…"), not feedback on a user action — set the baseline silently.
+    if (!toastBaselineSeen) {
+      toastBaselineSeen = true;
+      return;
+    }
+    if (text === "Ready.") return;
+    if (state.view === "settings") return;
+    node.textContent = text;
+    node.hidden = false;
+    if (statusToastTimer) clearTimeout(statusToastTimer);
+    statusToastTimer = setTimeout(() => {
+      node.hidden = true;
+    }, 3200);
+  }
+
   function setStatus(payload: unknown) {
     const wasActive = isActiveStatus();
     const status = VD.parsePayload<VoltStatus>(payload, {});
@@ -61,6 +91,7 @@ import type { MapRoutePoint } from "./map-route-utils";
     if (!wasActive && isActiveStatus() && !state.demoActive) resetTelemetry();
     VD.setText("stateText", next);
     VD.setText("statusCopy", status.detail || "Ready.");
+    showStatusToast(status.detail);
     if (status.lastAddress) state.lastDevice = { address: status.lastAddress, name: status.lastName || "" };
     renderOperationalState();
     updateDiagnostics();
@@ -564,6 +595,9 @@ import type { MapRoutePoint } from "./map-route-utils";
     VD.setText("speedKph", hasSpeed ? `${altValue} ${altUnit}` : `-- ${altUnit}`);
     const speedMeter = el("speedValue")?.closest("[role='meter']");
     if (speedMeter) {
+      // The markup's 120 ceiling is mph-shaped; aria-valuenow is written in the
+      // selected unit, so widen the range when the primary unit is km/h.
+      speedMeter.setAttribute("aria-valuemax", metric ? "200" : "120");
       if (primary) {
         speedMeter.setAttribute("aria-valuenow", String(primary.value));
         speedMeter.setAttribute("aria-label", `Vehicle speed in ${primary.unit}`);

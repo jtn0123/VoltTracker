@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <!--
   Content-Security-Policy: the dashboard ships entirely from app assets and fetches
@@ -29,6 +29,15 @@
   </head>
   <body data-active-view="drive">
     <!-- include: partials/error-banner.html -->
+    <!-- Status toast: mirrors status.detail when the user is on a tab that
+         can't see #statusCopy (Settings). Shown/hidden by telemetry.ts. -->
+    <div
+      id="statusToast"
+      class="status-toast"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></div>
     <!-- include: partials/troubleshooter.html -->
     <!-- include: partials/app-dialog.html -->
     <!-- include: partials/restore-progress.html -->

@@ -62,6 +62,12 @@
     line-height: 1.4;
   }
 
+  /* Call-to-action button under the numbered hints (jumps to Settings). */
+  .empty-state .primary-action,
+  .empty-state .link-btn {
+    margin-top: 14px;
+  }
+
   body[data-active-view="charge"] .empty-hints b {
     border-color: rgba(184,230,59,0.34);
     background: rgba(184,230,59,0.1);

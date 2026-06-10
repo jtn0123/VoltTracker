@@ -70,7 +70,7 @@
       <div><span>Source</span><strong id="dataSourceState">real</strong></div>
     </div>
     <div class="control-row" data-demo-hidden="true">
-      <select id="deviceSelect">
+      <select id="deviceSelect" aria-label="Paired OBD adapter">
         <option value="">No paired adapters found</option>
       </select>
       <button id="refreshBtn" type="button" class="settings-refresh-btn">
@@ -100,8 +100,8 @@
         data-action="tpmsScan"
         class="settings-command"
       >
-        <span>Detail probe</span>
-        <small>Targeted signals</small>
+        <span>Extra signals</span>
+        <small>Tires, battery internals</small>
       </button>
     </div>
     <p id="statusCopy" class="status-copy" data-demo-hidden="true">
@@ -126,11 +126,7 @@
     <div id="historyList"></div>
   </article>
 
-  <p
-    id="appVersionFooter"
-    class="status-copy"
-    style="text-align: center; margin-top: 16px; opacity: 0.6"
-  >
+  <p id="appVersionFooter" class="status-copy app-version-footer">
     Volt Tracker
   </p>
 </section>
