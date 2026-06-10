@@ -1,6 +1,38 @@
 # CHANGELOG
 
 
+## v0.10.0 (2026-06-10)
+
+### Features
+
+- **android**: Expand sensors and harden app flows
+  ([#187](https://github.com/jtn0123/VoltTracker/pull/187),
+  [`3a2dd59`](https://github.com/jtn0123/VoltTracker/commit/3a2dd59c2f498dab215a9a343729d80725ff2477))
+
+* feat(android): expand sensors and harden app flows
+
+* fix(android): address sensor-expansion review findings
+
+- Swap 2282B5/2282B7 decoders to match the catalog and Bolt BECM source (2282B5 = compressor speed
+  rpm, 2282B7 = compressor power W). - Restore accepts any non-empty passphrase again; the
+  8-character minimum gates creating new backups only, so pre-minimum encrypted backups stay
+  restorable (regression test included). - Widen capacity (10-60 Ah) and cell-voltage (1.5-4.5 V)
+  sanity bounds so degraded-but-real health readings are recorded instead of dropped. - Rename
+  usableKwh -> packEnergyKwh and anchor it (and sohPct) to named Gen 2 nominals (52 Ah / 355 V)
+  instead of instantaneous pack voltage. - Share one appendLiveRoutePoint helper between map.ts and
+  telemetry.ts so the live-route dedupe rules cannot drift (unit tests added). - Evict expired
+  active-trip cache entries instead of only same-session keys. - Pin DatabaseMerger donor column
+  lists to the live schema with a test, and drop the duplicated adapter-history list. - Record the
+  sensor-expansion wave, 2241A3 promotion caveat, and TPMS rejection in the discovery tracker;
+  commit the expansion plan doc.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+---------
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+
 ## v0.9.3 (2026-06-09)
 
 ### Bug Fixes
