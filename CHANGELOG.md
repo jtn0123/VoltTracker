@@ -1,6 +1,54 @@
 # CHANGELOG
 
 
+## v0.10.2 (2026-06-10)
+
+### Bug Fixes
+
+- **android**: Bluetooth permission feedback, auto-resume, and status badge popover
+  ([#190](https://github.com/jtn0123/VoltTracker/pull/190),
+  [`2d92f0e`](https://github.com/jtn0123/VoltTracker/commit/2d92f0ed7d864ced752360cb3cc47e58f2f1353c))
+
+* fix(android): give actionable feedback and auto-resume when Bluetooth permission blocks Connect
+
+On a fresh install the paired-device list is empty because BLUETOOTH_CONNECT has not been granted
+  yet, so tapping Connect hit the dashboard's no-device-selected guard, showed a bare 'blocked'
+  status, and never reached the Android side - the permission prompt never appeared and the user was
+  dead-ended.
+
+Dashboard: - explain WHY no adapter is selectable (permission missing / Bluetooth off / nothing
+  paired) instead of the one-size-fits-all 'Pick a paired adapter' - when the Bluetooth permission
+  is missing, fire the Android permission prompt directly from the Connect tap and auto-resume the
+  connection once the grant lands (device list refresh auto-selects the OBD candidate) - appState
+  permissions now carry split bluetoothPermission / bluetoothEnabled flags so the dashboard can tell
+  a missing permission from a disabled radio
+
+Android: - park a connect/scan that ensureConnectPermissions interrupted and retry it automatically
+  from onPermissionsResult after the grant - on denial, say how to recover; once Android suppresses
+  the prompt (permanent denial) open the app-settings screen for an active connect attempt so
+  'Nearby devices' can be re-enabled in one round trip
+
+https://claude.ai/code/session_014pNKKiSmCtaMQDy9Az5KBi
+
+* feat(dashboard): status popover behind the topbar badge + status-only badge colors
+
+The top-right state badge was display-only and its resting (ready/idle) colors echoed the active tab
+  accent, so it read as decoration rather than status. Make it a real status surface:
+
+- Colors now always encode connection state: green connected, amber while connecting/scanning, red
+  blocked/error/failed, purple demo, neutral when idle - the per-tab --status-accent treatment is
+  removed. - Tapping the badge (or the last-connected line, previously a dead button) opens a status
+  popover: live state + detail copy, adapter, Bluetooth readiness (split permission/radio flags),
+  logging, GPS, last connected, and a Trip section - distance, duration, SoC start->now, and samples
+  while recording, or the last trip duration when idle. - The popover re-renders on every
+  status/telemetry push while open, light- dismisses on outside tap/Escape, and the Android Back
+  gesture closes it before any other surface.
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.10.1 (2026-06-10)
 
 ### Bug Fixes
