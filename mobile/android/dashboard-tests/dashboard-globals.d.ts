@@ -252,7 +252,13 @@ interface VoltInsights {
  *  blocks are read defensively, so they remain open records. */
 interface VoltAppState {
   app?: { version?: string; schemaVersion?: number };
-  permissions?: { bluetooth?: boolean; location?: boolean; notifications?: boolean };
+  permissions?: {
+    bluetooth?: boolean;
+    bluetoothPermission?: boolean;
+    bluetoothEnabled?: boolean;
+    location?: boolean;
+    notifications?: boolean;
+  };
   adapter?: Record<string, unknown>;
   session?: Record<string, unknown>;
   vehicle?: Record<string, unknown>;
@@ -478,6 +484,7 @@ interface VoltStatus {
   detail?: string;
   adapter?: string;
   blocked?: boolean;
+  bluetoothReady?: boolean;
   competingApps?: unknown;
   failureClass?: string;
   lastAddress?: string;
@@ -672,6 +679,12 @@ interface VoltRestoreProgress {
     hideScrubber(): void;
     scrubberAttachMap(map: unknown): void;
     scrubAtLatLng(lat: number, lng: number): void;
+
+    // ----- connection-status.ts ----------------------------------------------
+    /** Toggle the topbar status popover (state badge / last-connected tap target). */
+    toggleStatusPopover?(): void;
+    /** Close the popover; true when it was open (Android Back consumes the press). */
+    closeStatusPopover?(): boolean;
 
     // ----- drive.ts ----------------------------------------------------------
     renderDriveLive(): void;

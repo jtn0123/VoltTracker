@@ -11,9 +11,23 @@
         <h1 id="screenTitle">Drive</h1>
       </div>
     </div>
-    <div id="stateBadge" class="badge" data-state="idle">
+    <!--
+      Status badge: color always encodes connection state (never the tab accent)
+      and tapping it opens the status popover below — connection-status.ts owns
+      both the toggle and the popover contents.
+    -->
+    <button
+      id="stateBadge"
+      type="button"
+      class="badge"
+      data-state="idle"
+      aria-haspopup="dialog"
+      aria-expanded="false"
+      aria-controls="statusPopover"
+      aria-label="Connection status details"
+    >
       <span class="dot"></span><span id="stateText">idle</span>
-    </div>
+    </button>
   </div>
   <!--
     Topbar-only surface for last-connected and adapter health.
@@ -26,11 +40,41 @@
       class="connection-status__line"
       data-state="unknown"
       hidden
-      aria-label="Open last connected adapter"
+      aria-label="Open connection status details"
+      aria-haspopup="dialog"
+      aria-controls="statusPopover"
     >
       <span class="connection-status__line-dot" aria-hidden="true"></span>
       <strong id="lastConnectedLabel">--</strong>
       <small id="lastConnectedAt">--</small>
     </button>
+  </div>
+  <!--
+    Status popover: tap target is the state badge (and the last-connected line).
+    Static shell only — connection-status.ts fills the state pill, detail copy,
+    and the connection/trip rows on every open and live update.
+  -->
+  <div
+    id="statusPopover"
+    class="status-popover"
+    role="dialog"
+    aria-labelledby="statusPopoverTitle"
+    tabindex="-1"
+    hidden
+  >
+    <div class="status-popover__head">
+      <h2 id="statusPopoverTitle" class="status-popover__title">Connection</h2>
+      <span
+        id="statusPopoverState"
+        class="badge status-popover__state"
+        data-state="idle"
+      >
+        <span class="dot"></span><span id="statusPopoverStateText">idle</span>
+      </span>
+    </div>
+    <p id="statusPopoverDetail" class="status-popover__detail">Ready.</p>
+    <dl id="statusPopoverConnection" class="status-popover__rows"></dl>
+    <h3 class="status-popover__section">Trip</h3>
+    <dl id="statusPopoverTrip" class="status-popover__rows"></dl>
   </div>
 </header>

@@ -104,6 +104,71 @@ import type { BusyButton } from "./actions-storage";
     }
   }
 
+  // A Connect/Scan tap that had to pause for the Android Bluetooth permission
+  // prompt. When a later native status broadcast reports bluetoothReady, the
+  // connection resumes automatically (the device-list refresh that precedes
+  // that status auto-selects the likely OBD adapter).
+  let pendingPermissionConnect: { scan: boolean; requestedAtMs: number } | null = null;
+  const PENDING_PERMISSION_CONNECT_TTL_MS = 2 * 60 * 1000;
+
+  function anyPairedAdapterListed() {
+    const select = el("deviceSelect") as HTMLSelectElement | null;
+    return Boolean(select && Array.from(select.options).some((option) => String(option.value || "").trim()));
+  }
+
+  // Replaces the old one-size-fits-all "Pick a paired adapter" dead end: figure
+  // out WHY no adapter is selectable and either fix it (fire the Android
+  // permission prompt) or tell the user the exact next step.
+  function explainMissingAdapter(scan: boolean, allowPermissionResume: boolean) {
+    const permissions = (state.appState && state.appState.permissions) || {};
+    if (bridge && permissions.bluetoothPermission === false && typeof bridge.requestPermissions === "function") {
+      if (allowPermissionResume) pendingPermissionConnect = { scan, requestedAtMs: Date.now() };
+      bridge.requestPermissions();
+      showBlockedAdapterFeedback(
+        'Bluetooth permission needed. Allow "Nearby devices" in the Android prompt' +
+          (allowPermissionResume ? " and the connection will continue automatically." : ", then try again.")
+      );
+      return;
+    }
+    if (bridge && permissions.bluetoothEnabled === false) {
+      showBlockedAdapterFeedback("Bluetooth is turned off. Turn it on in Android settings, then tap Connect again.");
+      return;
+    }
+    if (bridge && !anyPairedAdapterListed()) {
+      showBlockedAdapterFeedback(
+        "No paired OBD adapters found. Pair the adapter in Android's Bluetooth settings, then tap Refresh."
+      );
+      return;
+    }
+    showBlockedAdapterFeedback("Pick a paired or remembered OBD adapter first.");
+  }
+
+  function maybeResumePendingConnect(status: VoltStatus) {
+    const pending = pendingPermissionConnect;
+    if (!pending) return;
+    if (Date.now() - pending.requestedAtMs > PENDING_PERMISSION_CONNECT_TTL_MS) {
+      pendingPermissionConnect = null;
+      return;
+    }
+    // Only native broadcasts carry bluetoothReady; locally-set statuses (which
+    // include the "waiting for permission" copy itself) must not disarm this.
+    if (status.bluetoothReady === undefined) return;
+    if (status.bluetoothReady !== true) {
+      // A blocked broadcast while waiting means the permission was denied —
+      // disarm so a much later grant doesn't start a connection out of nowhere.
+      if (status.blocked || String(status.state || "") === "blocked") pendingPermissionConnect = null;
+      return;
+    }
+    pendingPermissionConnect = null;
+    if (VD.getSelectedDevice()) {
+      connectSelected(pending.scan, null);
+    } else {
+      showBlockedAdapterFeedback(
+        "Bluetooth is ready, but no paired OBD adapters were found. Pair the adapter in Android's Bluetooth settings, then tap Refresh."
+      );
+    }
+  }
+
   function setEnhancedProbeBadge(label: string, tone: string) {
     if (typeof VD.setEnhancedBadge === "function") {
       VD.setEnhancedBadge(label, tone);
@@ -128,7 +193,7 @@ import type { BusyButton } from "./actions-storage";
   function connectSelected(scan: boolean, button?: BusyButton | null) {
     const selected = VD.getSelectedDevice();
     if (!selected) {
-      showBlockedAdapterFeedback("Pick a paired or remembered OBD adapter first.");
+      explainMissingAdapter(scan, true);
       return;
     }
     if (!bridge) return;
@@ -148,7 +213,7 @@ import type { BusyButton } from "./actions-storage";
   function detailProbeSelected(button?: BusyButton | null) {
     const selected = VD.getSelectedDevice();
     if (!selected) {
-      showBlockedAdapterFeedback("Pick a paired or remembered OBD adapter first.");
+      explainMissingAdapter(false, false);
       setEnhancedProbeBadge("blocked", "blocked");
       return;
     }
@@ -855,6 +920,7 @@ import type { BusyButton } from "./actions-storage";
     const parsed = VD.parsePayload<VoltStatus>(payload, {});
     const result = priorSetStatus(parsed);
     maybeLoadTroubleshooterForStatus(payload);
+    maybeResumePendingConnect(parsed);
     return result;
   };
   VD.setStatus = statusWithTroubleshooterLoader;

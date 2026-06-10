@@ -104,11 +104,205 @@ function renderLowVoltageHint(status: LowVoltageStatus | null | undefined) {
   }
 }
 
+// ---- Status popover (opened from the topbar state badge) -------------------
+//
+// Tapping the state badge answers "what is going on?" in place: the live
+// connection picture (adapter, Bluetooth readiness, logging, GPS, last
+// connected) plus the current trip while logging — or the last trip when idle.
+// connection-status owns it because the data sources are the same status
+// broadcasts and session summaries this module already reads.
+
+type StatusRow = [string, string];
+
+const ACTIVE_TRIP_STATES = ["connected", "connecting", "initializing", "scanning", "scan-complete", "demo"];
+
+let popoverDismiss: AbortController | null = null;
+
+function dashboardState(): Record<string, unknown> {
+  return (VD.state || {}) as unknown as Record<string, unknown>;
+}
+
+function bag(value: unknown): Record<string, unknown> {
+  return (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+}
+
+function statusPopoverEl() {
+  return el("statusPopover");
+}
+
+function renderRows(target: HTMLElement | null, rows: StatusRow[]) {
+  if (!target) return;
+  const nodes: HTMLElement[] = [];
+  rows.forEach(([label, value]) => {
+    if (!value) return;
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    nodes.push(dt, dd);
+  });
+  target.replaceChildren(...nodes);
+}
+
+function bluetoothSummary(permissions: Record<string, unknown>, status: Record<string, unknown>) {
+  if (permissions.bluetoothPermission === false) return "Permission needed — tap Connect to grant";
+  if (permissions.bluetoothEnabled === false) return "Off — turn it on in Android settings";
+  if (permissions.bluetooth === true || status.bluetoothReady === true) return "Ready";
+  if (permissions.bluetooth === false) return "Not ready";
+  return "";
+}
+
+function connectionRows(status: Record<string, unknown>): StatusRow[] {
+  const state = dashboardState();
+  const app = bag(state.appState);
+  const adapter = bag(app.adapter);
+  const session = bag(app.session);
+  const gps = bag(app.gps);
+  const lastDevice = bag(state.lastDevice);
+  const demo = Boolean(state.demoActive);
+
+  const adapterName = demo
+    ? "Demo telemetry"
+    : String(adapter.name || status.lastName || lastDevice.name || "") || "None selected";
+  const address = demo ? "" : String(adapter.address || "");
+  const samples = Number(session.sampleCount || 0);
+  const sessionState = String(status.state || session.state || "idle");
+  const logging = ACTIVE_TRIP_STATES.includes(sessionState.toLowerCase())
+    ? (samples ? `${samples.toLocaleString()} samples` : "Waiting for data")
+    : "Not logging";
+  const last = parseSessions(8).find((s) => !isDemoSession(s));
+
+  return [
+    ["Adapter", address ? `${adapterName} (${address})` : adapterName],
+    ["Bluetooth", bluetoothSummary(bag(app.permissions), status)],
+    ["Logging", logging],
+    ["GPS", String(gps.state || "")],
+    ["Last connected", last ? `${last.adapter || "OBD adapter"} · ${formatRelative(last.endMs || last.startMs)}` : ""]
+  ];
+}
+
+function tripRows(status: Record<string, unknown>): StatusRow[] {
+  const state = dashboardState();
+  const app = bag(state.appState);
+  const session = bag(app.session);
+  const telemetry = bag(state.telemetry);
+  const stateName = String(status.state || session.state || "").toLowerCase();
+  const active = Boolean(state.demoActive) || ACTIVE_TRIP_STATES.includes(stateName);
+
+  if (!active) {
+    const last = parseSessions(8).find((s) => !isDemoSession(s));
+    const lastMs = Number(last && last.endMs) - Number(last && last.startMs);
+    if (last && Number.isFinite(lastMs) && lastMs > 0 && typeof VD.formatDuration === "function") {
+      return [["Last trip", `${VD.formatDuration(lastMs)} · ${formatRelative(last.endMs)}`]];
+    }
+    return [["Trip", "No trip yet — connect to start logging."]];
+  }
+
+  const rows: StatusRow[] = [];
+  const distanceM = Number(state.sessionDistanceM || 0);
+  if (distanceM > 0) rows.push(["Distance", VD.units.distanceText(distanceM / 1000)]);
+  const durationMs = Number(telemetry.sessionMs || session.sessionMs || 0);
+  if (durationMs > 0 && typeof VD.formatDuration === "function") {
+    rows.push(["Duration", VD.formatDuration(durationMs)]);
+  }
+  const startSoc = Number(state.sessionStartSoc);
+  const soc = Number(telemetry.soc);
+  if (Number.isFinite(soc)) {
+    rows.push([
+      "Battery",
+      Number.isFinite(startSoc) && Math.round(startSoc) !== Math.round(soc)
+        ? `${Math.round(startSoc)}% → ${Math.round(soc)}%`
+        : `${Math.round(soc)}%`
+    ]);
+  }
+  const samples = Number(session.sampleCount || telemetry.sampleCount || 0);
+  if (samples > 0) rows.push(["Samples", samples.toLocaleString()]);
+  if (!rows.length) rows.push(["Trip", "Waiting for the first samples..."]);
+  return rows;
+}
+
+function renderStatusPopover() {
+  const popover = statusPopoverEl();
+  if (!popover || popover.hidden) return;
+  const status = bag(dashboardState().status);
+  const stateName = String(status.state || "idle");
+  const pill = el("statusPopoverState");
+  if (pill) pill.dataset.state = stateName;
+  const pillText = el("statusPopoverStateText");
+  if (pillText) pillText.textContent = stateName;
+  const detail = el("statusPopoverDetail");
+  if (detail) detail.textContent = String(status.detail || "Ready.");
+  renderRows(el("statusPopoverConnection"), connectionRows(status));
+  renderRows(el("statusPopoverTrip"), tripRows(status));
+}
+
+function setBadgeExpanded(expanded: boolean) {
+  ["stateBadge", "lastConnectedBadge"].forEach((id) => {
+    const badge = el(id);
+    if (badge) badge.setAttribute("aria-expanded", expanded ? "true" : "false");
+  });
+}
+
+function closeStatusPopover(): boolean {
+  const popover = statusPopoverEl();
+  if (!popover || popover.hidden) return false;
+  popover.hidden = true;
+  setBadgeExpanded(false);
+  popoverDismiss?.abort();
+  popoverDismiss = null;
+  return true;
+}
+
+function openStatusPopover() {
+  const popover = statusPopoverEl();
+  if (!popover) return;
+  popover.hidden = false;
+  setBadgeExpanded(true);
+  renderStatusPopover();
+  popoverDismiss?.abort();
+  const controller = new AbortController();
+  popoverDismiss = controller;
+  // Light-dismiss: tap anywhere outside (the openers handle their own toggle)
+  // or Escape. The Android Back gesture goes through VD.closeStatusPopover.
+  document.addEventListener(
+    "click",
+    (event) => {
+      const target = event.target as Node | null;
+      if (!target || popover.contains(target)) return;
+      const badge = el("stateBadge");
+      const line = el("lastConnectedBadge");
+      if ((badge && badge.contains(target)) || (line && line.contains(target))) return;
+      closeStatusPopover();
+    },
+    { signal: controller.signal }
+  );
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key === "Escape") closeStatusPopover();
+    },
+    { signal: controller.signal }
+  );
+  if (typeof (popover as HTMLElement).focus === "function") (popover as HTMLElement).focus();
+}
+
+function toggleStatusPopover() {
+  if (!closeStatusPopover()) openStatusPopover();
+}
+
+function bindStatusPopover() {
+  const badge = el("stateBadge");
+  if (badge) badge.addEventListener("click", toggleStatusPopover);
+  const line = el("lastConnectedBadge");
+  if (line) line.addEventListener("click", toggleStatusPopover);
+}
+
 // Re-render on every status broadcast - session summaries can change when
 // a session ends, and lastVoltage updates inline.
 function noteStatus(payload: LowVoltageStatus | null | undefined) {
   renderLastConnected();
   renderLowVoltageHint(payload || {});
+  renderStatusPopover();
 }
 
 function installStatusObserver() {
@@ -134,8 +328,37 @@ function installStatusObserver() {
   }
 }
 
+// Trip numbers (duration / SoC / samples) move with telemetry, not status, so
+// keep an open popover live by re-rendering on telemetry pushes too.
+function installTelemetryObserver() {
+  const wrap = (prior: StatusHandler | undefined) =>
+    function (payload: unknown) {
+      let result;
+      if (typeof prior === "function") {
+        result = prior(payload);
+      }
+      try {
+        renderStatusPopover();
+      } catch (ignored) {
+        // Observer must never break the underlying updateTelemetry call.
+      }
+      return result;
+    };
+  VD.updateTelemetry = wrap(VD.updateTelemetry as StatusHandler | undefined) as typeof VD.updateTelemetry;
+  if (window.VoltTrackerNative) {
+    window.VoltTrackerNative.updateTelemetry =
+      wrap(window.VoltTrackerNative.updateTelemetry as StatusHandler | undefined) as typeof window.VoltTrackerNative.updateTelemetry;
+  }
+}
+
 // Initial render on load.
 renderLastConnected();
 installStatusObserver();
+installTelemetryObserver();
+bindStatusPopover();
+
+// Exposed for the Android Back handler (core.ts) and tests.
+VD.toggleStatusPopover = toggleStatusPopover;
+VD.closeStatusPopover = closeStatusPopover;
 
 export {};

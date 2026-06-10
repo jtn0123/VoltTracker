@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
@@ -7,6 +8,7 @@ import android.bluetooth.BluetoothDevice
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -85,6 +87,19 @@ open class MainActivity :
     private var autoConnectController: AutoConnectController? = null
     private var restoreFilePicker: ActivityResultLauncher<Intent>? = null
     private var permissionRequester: ActivityResultLauncher<Array<String>>? = null
+
+    /** Connect/scan request parked while Android shows the Bluetooth permission prompt. */
+    private data class PendingObdStart(
+        val action: String?,
+        val address: String?,
+        val name: String?,
+        val detailStage: String?,
+    ) {
+        fun label(): String =
+            name?.takeIf { it.isNotBlank() } ?: address?.takeIf { it.isNotBlank() } ?: "the OBD adapter"
+    }
+
+    private var pendingConnectStart: PendingObdStart? = null
     private var lastTelemetry = JSONObject()
     private var lastStatus = JSONObject()
     private var lastStorage = JSONObject()
@@ -304,8 +319,19 @@ open class MainActivity :
     open fun onPermissionsResult() {
         publishDeviceList()
         val gate = requirePermissionGate()
+        val pending = pendingConnectStart
+        pendingConnectStart = null
         if (!gate.hasBluetoothConnect()) {
-            publishStatus("blocked", "Bluetooth permission is required to talk to the OBD adapter.", true)
+            publishBluetoothPermissionDenied(wasConnecting = pending != null)
+        } else if (pending != null) {
+            // The user already asked for this connection and the permission was the only blocker,
+            // so continue automatically instead of bouncing them back to the Connect button.
+            publishStatus(
+                "connecting",
+                "Bluetooth permission granted. Connecting to ${pending.label()}...",
+                false,
+            )
+            startObdService(pending.action, pending.address, pending.name, pending.detailStage)
         } else if (!gate.hasLocation()) {
             publishStatus(
                 "ready",
@@ -322,6 +348,55 @@ open class MainActivity :
             publishStatus("ready", "Bluetooth permission granted. Pick a paired adapter.", false)
         }
     }
+
+    /**
+     * Explains a denied Bluetooth permission with a recovery path. Once Android suppresses the
+     * prompt (repeated denials), the only fix left is the app-settings screen — open it when the
+     * denial interrupted an active connect attempt so the user can finish in one round trip.
+     */
+    private fun publishBluetoothPermissionDenied(wasConnecting: Boolean) {
+        if (canAskForBluetoothConnectAgain()) {
+            publishStatus(
+                "blocked",
+                "Bluetooth permission was denied, so the OBD adapter can't be reached. " +
+                    "Tap Connect to try again and choose Allow.",
+                true,
+            )
+            return
+        }
+        val openedSettings = wasConnecting && openAppPermissionSettings()
+        publishStatus(
+            "blocked",
+            if (openedSettings) {
+                "Android is no longer showing the Bluetooth prompt. In the app settings screen that " +
+                    "just opened, choose Permissions > Nearby devices > Allow, then come back and tap Connect."
+            } else {
+                "Bluetooth permission is off for Volt Tracker. Open Android Settings > Apps > " +
+                    "Volt Tracker > Permissions and allow Nearby devices, then tap Connect again."
+            },
+            true,
+        )
+    }
+
+    /** True while Android would still show the Bluetooth permission prompt. Overridable in tests. */
+    protected open fun canAskForBluetoothConnectAgain(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            shouldShowRequestPermissionRationale(Manifest.permission.BLUETOOTH_CONNECT)
+
+    /** Opens this app's Android settings page so the user can re-enable "Nearby devices". */
+    protected open fun openAppPermissionSettings(): Boolean =
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", packageName, null),
+                ),
+            )
+            true
+        } catch (ex: RuntimeException) {
+            Log.w(TAG, "Could not open app settings for the Bluetooth permission", ex)
+            false
+        }
 
     override fun publishDeviceList() {
         val catalog = requireDeviceCatalog()
@@ -428,7 +503,15 @@ open class MainActivity :
         val isDemo = action == ObdService.ACTION_DEMO
         if (!isDemo) {
             if (!requirePermissionGate().ensureConnectPermissions()) {
-                publishStatus("blocked", "Grant Bluetooth permission, then connect again.", true)
+                // ensureConnectPermissions just launched the system prompt; park the request so
+                // onPermissionsResult can finish the connection instead of dead-ending the tap.
+                pendingConnectStart = PendingObdStart(action, address, name, detailStage)
+                publishStatus(
+                    "blocked",
+                    "Waiting for Bluetooth permission. Allow \"Nearby devices\" in the Android " +
+                        "prompt and the connection will continue.",
+                    true,
+                )
                 return
             }
             val adapter = BluetoothAdapters.get(this)
@@ -613,6 +696,8 @@ open class MainActivity :
         return AppStateJson.build(
             appVersionName(),
             isBluetoothReady(),
+            gate.hasBluetoothConnect(),
+            BluetoothAdapters.get(this)?.isEnabled == true,
             gate.hasLocation(),
             gate.hasNotifications(),
             catalog.lastAddress(),

@@ -158,6 +158,8 @@
   }
 
   .topbar {
+    /* Positioned so the status popover (absolute) anchors under the badge. */
+    position: relative;
     display: grid;
     gap: 6px;
     margin-bottom: 8px;
@@ -329,31 +331,36 @@
   .badge[data-state="connecting"] .dot,
   .badge[data-state="initializing"] .dot,
   .badge[data-state="scanning"] .dot { background: var(--warn); color: var(--warn); }
-  .badge[data-state="error"], .badge[data-state="blocked"] { color: var(--bad); }
-  .badge[data-state="error"] .dot, .badge[data-state="blocked"] .dot { background: var(--bad); color: var(--bad); }
+  .badge[data-state="connected"],
+  .badge[data-state="scan-complete"] { color: var(--ok); }
+  .badge[data-state="error"], .badge[data-state="blocked"], .badge[data-state="failed"] { color: var(--bad); }
+  .badge[data-state="error"] .dot, .badge[data-state="blocked"] .dot, .badge[data-state="failed"] .dot { background: var(--bad); color: var(--bad); }
+  .badge[data-state="demo"] { color: var(--mixed); }
+  .badge[data-state="demo"] .dot { background: var(--mixed); color: var(--mixed); }
 
-  /* Per-tab accent for the status badge — but ONLY in its resting states
-     (ready/idle). Semantic states (connected=green, scanning=amber,
-     blocked=red) keep their meaning via the rules above. The accent is carried
-     in vars set per active view so the dot + text echo the tab colour. */
-  body { --status-accent: var(--soft); --status-accent-soft: var(--muted); }
-  body[data-active-view="drive"],
-  body[data-active-view="trips"] { --status-accent: var(--volt); --status-accent-soft: #ffc0a6; }
-  body[data-active-view="map"] { --status-accent: #4cc4ff; --status-accent-soft: #c7edff; }
-  body[data-active-view="charge"] { --status-accent: var(--ev); --status-accent-soft: #d8f57e; }
-  body[data-active-view="insights"] { --status-accent: var(--mixed); --status-accent-soft: #d6ccff; }
-  body[data-active-view="settings"] { --status-accent: var(--warn); --status-accent-soft: #ffe0a3; }
-  body[data-active-view="signals"] { --status-accent: var(--ok); --status-accent-soft: #b9ffe1; }
-
+  /* The topbar status badge is a status surface AND a tap target (it opens the
+     status popover): its colors always encode connection state — green when
+     connected, amber while working, red when blocked/failed, purple for demo —
+     and the resting states stay neutral instead of echoing the tab accent. */
   #stateBadge[data-state="ready"],
   #stateBadge[data-state="idle"] {
-    color: var(--status-accent-soft);
+    color: var(--muted);
     border-color: var(--line-strong);
   }
   #stateBadge[data-state="ready"] .dot,
   #stateBadge[data-state="idle"] .dot {
-    background: var(--status-accent);
-    color: var(--status-accent);
+    background: var(--soft);
+    color: var(--soft);
+  }
+
+  button.badge {
+    appearance: none;
+    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
+  }
+  button.badge:focus-visible {
+    outline: 2px solid var(--line-strong);
+    outline-offset: 2px;
   }
 
   .panel {

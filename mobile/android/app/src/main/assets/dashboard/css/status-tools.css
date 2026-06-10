@@ -6,6 +6,81 @@
  * troubleshooter.css or the shared components.css.
  */
 
+/* ---- Topbar: status popover (opened from the state badge) ---- */
+
+.status-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: min(340px, calc(100vw - 24px));
+  padding: 12px 14px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 40%),
+    rgba(20, 21, 29, 0.97);
+  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.55);
+}
+
+.status-popover__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.status-popover__title {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Reuses .badge so the pill inherits the same state colors as the topbar badge. */
+.status-popover__state {
+  min-height: 24px;
+  padding: 0 10px;
+}
+
+.status-popover__detail {
+  margin: 8px 0 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.status-popover__section {
+  margin: 12px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+
+.status-popover__rows {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 12px;
+  margin: 8px 0 0;
+}
+
+.status-popover__rows dt {
+  color: var(--soft);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.status-popover__rows dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 /* ---- Topbar: last-connected badge + adapter-health pill ---- */
 
 .connection-status {

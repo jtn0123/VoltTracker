@@ -18,6 +18,8 @@ class AppStateJsonTest {
                     false,
                     false,
                     false,
+                    false,
+                    false,
                     "",
                     "",
                     JSONObject(),
@@ -29,6 +31,8 @@ class AppStateJsonTest {
         assertEquals("1.2.3", payload.getJSONObject("app").getString("version"))
         val permissions = payload.getJSONObject("permissions")
         assertFalse(permissions.getBoolean("bluetooth"))
+        assertFalse(permissions.getBoolean("bluetoothPermission"))
+        assertFalse(permissions.getBoolean("bluetoothEnabled"))
         assertFalse(permissions.getBoolean("location"))
         assertEquals("idle", payload.getJSONObject("session").getString("state"))
         assertEquals("unknown", payload.getJSONObject("vehicle").getString("state"))
@@ -48,6 +52,8 @@ class AppStateJsonTest {
             JSONObject(
                 AppStateJson.build(
                     "9.9",
+                    true,
+                    true,
                     true,
                     true,
                     true,
@@ -80,6 +86,8 @@ class AppStateJsonTest {
                     true,
                     true,
                     true,
+                    true,
+                    true,
                     "",
                     "",
                     telemetry,
@@ -106,6 +114,8 @@ class AppStateJsonTest {
                     true,
                     true,
                     true,
+                    true,
+                    true,
                     "",
                     "",
                     telemetry,
@@ -125,6 +135,8 @@ class AppStateJsonTest {
             JSONObject(
                 AppStateJson.build(
                     "1.0",
+                    false,
+                    false,
                     false,
                     false,
                     false,
@@ -148,6 +160,8 @@ class AppStateJsonTest {
             JSONObject(
                 AppStateJson.build(
                     "1.0",
+                    true,
+                    true,
                     true,
                     true,
                     true,
@@ -177,6 +191,8 @@ class AppStateJsonTest {
                     true,
                     true,
                     true,
+                    true,
+                    true,
                     "00:11:22:33:44:55",
                     "OBDLink",
                     telemetry,
@@ -196,6 +212,8 @@ class AppStateJsonTest {
         val payload =
             AppStatePayload(
                 "2.0",
+                true,
+                true,
                 true,
                 false,
                 true,

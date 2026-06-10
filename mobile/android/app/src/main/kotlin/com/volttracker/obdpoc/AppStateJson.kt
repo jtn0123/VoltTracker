@@ -12,6 +12,8 @@ object AppStateJson {
     fun build(
         version: String?,
         bluetoothReady: Boolean,
+        bluetoothPermissionGranted: Boolean,
+        bluetoothEnabled: Boolean,
         locationGranted: Boolean,
         notificationsGranted: Boolean,
         lastAddress: String?,
@@ -23,6 +25,8 @@ object AppStateJson {
         AppStatePayload(
             version,
             bluetoothReady,
+            bluetoothPermissionGranted,
+            bluetoothEnabled,
             locationGranted,
             notificationsGranted,
             lastAddress,

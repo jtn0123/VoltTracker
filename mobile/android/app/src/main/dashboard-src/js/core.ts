@@ -775,9 +775,13 @@
   }
 
   // Android hardware/gesture Back. The native OnBackPressedCallback calls this and only lets the
-  // OS exit/background the app when it returns false. Dismiss the most-nested surface first: an
-  // open troubleshooter modal, then a fullscreen map, then fall back to the Drive home tab.
+  // OS exit/background the app when it returns false. Dismiss the most-nested surface first: the
+  // topbar status popover, then an open troubleshooter modal, then a fullscreen map, then fall
+  // back to the Drive home tab.
   function handleAndroidBack(): boolean {
+    if (typeof VD.closeStatusPopover === "function" && VD.closeStatusPopover()) {
+      return true;
+    }
     const ts = VD.troubleshooter;
     const isOpen = ts && ts.isOpen;
     const close = ts && ts.close;

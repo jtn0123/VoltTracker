@@ -79,6 +79,7 @@ describe('actions.ts — bridge dispatch', () => {
       shareEncryptedBackup: vi.fn(),
       restoreBackup: vi.fn(),
       restoreEncryptedBackup: vi.fn(),
+      requestPermissions: vi.fn(),
     });
     await freshLoad(bridge);
     VD = window.VoltDashboard;
@@ -157,6 +158,94 @@ describe('actions.ts — bridge dispatch', () => {
     expect(document.getElementById('appStateSummary').textContent).toMatch(/adapter/i);
     expect(document.getElementById('statusCopy').textContent).toMatch(/adapter/i);
     expect(document.getElementById('reviewWarnings').textContent).toMatch(/adapter/i);
+  });
+
+  it('connectSelected with no device and a missing Bluetooth permission fires the Android prompt', () => {
+    VD.setDevices([]);
+    VD.setAppState(JSON.stringify({
+      permissions: { bluetooth: false, bluetoothPermission: false, bluetoothEnabled: true },
+    }));
+
+    VD.actions.connectSelected(false, button);
+
+    expect(bridge.requestPermissions).toHaveBeenCalledTimes(1);
+    expect(bridge.connect).not.toHaveBeenCalled();
+    expect(VD.state.status).toMatchObject({ state: 'blocked' });
+    expect(VD.state.status.detail).toMatch(/nearby devices/i);
+    expect(document.getElementById('statusCopy').textContent).toMatch(/nearby devices/i);
+  });
+
+  it('granting the Bluetooth permission auto-resumes the parked connect', () => {
+    VD.setDevices([]);
+    VD.setAppState(JSON.stringify({ permissions: { bluetoothPermission: false, bluetoothEnabled: true } }));
+    VD.actions.connectSelected(false, button);
+    expect(bridge.connect).not.toHaveBeenCalled();
+
+    // Android grant flow: the device list repopulates first (auto-selecting the
+    // OBD candidate), then the native status broadcast lands with bluetoothReady.
+    VD.setDevices([{ address: 'AA:BB:CC:DD:EE:FF', name: 'TestOBD', obdCandidate: true }]);
+    window.VoltTrackerNative.setStatus({
+      state: 'ready',
+      detail: 'Bluetooth permission granted.',
+      bluetoothReady: true,
+    });
+
+    expect(bridge.connect).toHaveBeenCalledTimes(1);
+    expect(bridge.connect).toHaveBeenCalledWith('AA:BB:CC:DD:EE:FF', 'TestOBD');
+    expect(VD.state.status).toMatchObject({ state: 'connecting' });
+  });
+
+  it('a denied-permission broadcast disarms the parked connect', () => {
+    VD.setDevices([]);
+    VD.setAppState(JSON.stringify({ permissions: { bluetoothPermission: false, bluetoothEnabled: true } }));
+    VD.actions.connectSelected(false, button);
+
+    window.VoltTrackerNative.setStatus({
+      state: 'blocked',
+      detail: 'Bluetooth permission was denied.',
+      blocked: true,
+      bluetoothReady: false,
+    });
+    VD.setDevices([{ address: 'AA:BB:CC:DD:EE:FF', name: 'TestOBD', obdCandidate: true }]);
+    window.VoltTrackerNative.setStatus({ state: 'ready', bluetoothReady: true });
+
+    expect(bridge.connect).not.toHaveBeenCalled();
+  });
+
+  it('grant with nothing paired explains pairing instead of connecting', () => {
+    VD.setDevices([]);
+    VD.setAppState(JSON.stringify({ permissions: { bluetoothPermission: false, bluetoothEnabled: true } }));
+    VD.actions.connectSelected(false, button);
+
+    window.VoltTrackerNative.setStatus({ state: 'ready', bluetoothReady: true });
+
+    expect(bridge.connect).not.toHaveBeenCalled();
+    expect(VD.state.status.detail).toMatch(/pair the adapter/i);
+  });
+
+  it('connectSelected with Bluetooth turned off says so instead of a generic block', () => {
+    VD.setDevices([]);
+    VD.setAppState(JSON.stringify({
+      permissions: { bluetooth: false, bluetoothPermission: true, bluetoothEnabled: false },
+    }));
+
+    VD.actions.connectSelected(false, button);
+
+    expect(bridge.requestPermissions).not.toHaveBeenCalled();
+    expect(bridge.connect).not.toHaveBeenCalled();
+    expect(VD.state.status.detail).toMatch(/turned off/i);
+  });
+
+  it('connectSelected with permission granted but nothing paired explains pairing', () => {
+    VD.setDevices([]);
+    VD.setAppState(JSON.stringify({
+      permissions: { bluetooth: true, bluetoothPermission: true, bluetoothEnabled: true },
+    }));
+
+    VD.actions.connectSelected(false, button);
+
+    expect(bridge.requestPermissions).not.toHaveBeenCalled();
+    expect(VD.state.status.detail).toMatch(/pair the adapter/i);
   });
 
   it('detailProbeSelected with no device mirrors the blocked reason into body copy', () => {

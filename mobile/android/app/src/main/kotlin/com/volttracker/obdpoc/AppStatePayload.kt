@@ -8,6 +8,8 @@ import org.json.JSONObject
 class AppStatePayload(
     version: String?,
     @JvmField val bluetoothReady: Boolean,
+    @JvmField val bluetoothPermissionGranted: Boolean,
+    @JvmField val bluetoothEnabled: Boolean,
     @JvmField val locationGranted: Boolean,
     @JvmField val notificationsGranted: Boolean,
     @JvmField val lastAddress: String?,
@@ -49,6 +51,10 @@ class AppStatePayload(
     private fun permissionsJson(): JSONObject =
         JSONObject()
             .put("bluetooth", bluetoothReady)
+            // "bluetooth" above is the combined ready flag (permission AND radio on); the split
+            // fields let the dashboard tell a missing permission apart from a disabled radio.
+            .put("bluetoothPermission", bluetoothPermissionGranted)
+            .put("bluetoothEnabled", bluetoothEnabled)
             .put("location", locationGranted)
             .put("notifications", notificationsGranted)
 
