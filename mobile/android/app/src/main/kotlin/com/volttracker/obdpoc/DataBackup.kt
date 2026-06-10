@@ -264,7 +264,9 @@ class DataBackup(
         var encrypted = false
         if (isEncryptedBackup(temp)) {
             encrypted = true
-            if (!hasMinimumPassphrase(passphrase)) {
+            // Any non-empty passphrase may unlock a restore; MIN_PASSPHRASE_LENGTH only gates
+            // creating new backups, and older backups can carry shorter passphrases.
+            if (passphrase.isNullOrBlank()) {
                 temp.delete()
                 return RestoreStageOutcome(
                     null,

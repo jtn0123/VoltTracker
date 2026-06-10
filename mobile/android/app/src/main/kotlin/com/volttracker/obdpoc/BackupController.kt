@@ -148,8 +148,11 @@ class BackupController(
     }
 
     fun launchEncryptedRestorePicker(passphrase: String?) {
-        if (!DataBackup.hasMinimumPassphrase(passphrase)) {
-            activity.publishStatus("blocked", minimumPassphraseMessage(), true)
+        // Restore accepts any non-empty passphrase: the minimum length only gates NEW backups,
+        // and older backups may have been created with a shorter passphrase that must stay
+        // restorable.
+        if (!hasPassphrase(passphrase)) {
+            activity.publishStatus("blocked", "Enter the backup passphrase first.", true)
             return
         }
         launchRestorePicker(passphrase)

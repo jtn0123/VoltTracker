@@ -83,3 +83,31 @@ export function haversineMetersJs(lat1: number, lng1: number, lat2: number, lng2
     * Math.sin(dLng / 2) ** 2;
   return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
+export const LIVE_ROUTE_MAX_POINTS = 600;
+
+/**
+ * Append a live GPS sample to a route buffer, deduping near-stationary samples (<1 m and <2 s
+ * from the previous point) and trimming the buffer to LIVE_ROUTE_MAX_POINTS. Shared by map.ts
+ * (module loaded) and telemetry.ts (queueing before the lazy map module arrives) so the two
+ * paths can never drift apart.
+ *
+ * Returns "skipped" when deduped, "first" when this point starts a new route (callers seed
+ * liveRouteStartedAtMs / selection from it), otherwise "appended".
+ */
+export function appendLiveRoutePoint(
+  points: MapRoutePoint[],
+  point: MapRoutePoint
+): "skipped" | "first" | "appended" {
+  const previousPoint = points[points.length - 1];
+  if (previousPoint) {
+    const meters = haversineMetersJs(previousPoint.lat, previousPoint.lng, point.lat, point.lng);
+    const ageMs = Math.abs(Number(point.atMs) - Number(previousPoint.atMs));
+    if (meters < 1 && ageMs < 2000) return "skipped";
+  }
+  const first = points.length === 0;
+  points.push(point);
+  const overflow = points.length - LIVE_ROUTE_MAX_POINTS;
+  if (overflow > 0) points.splice(0, overflow);
+  return first ? "first" : "appended";
+}

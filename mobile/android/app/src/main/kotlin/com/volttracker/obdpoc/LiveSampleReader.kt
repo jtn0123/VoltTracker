@@ -8,6 +8,11 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 
+// Gen 2 Volt pack nominals when new (96 series cell groups, ~18.4 kWh): the SOH and pack-energy
+// estimates derived from the 2241A3 capacity read are anchored to these.
+private const val GEN2_NOMINAL_CAPACITY_AH = 52.0
+private const val GEN2_NOMINAL_PACK_VOLTAGE = 355.0
+
 /** Builds one live OBD telemetry sample from the current PID polling state. */
 class LiveSampleReader(
     private val service: EngineHost,
@@ -271,10 +276,10 @@ class LiveSampleReader(
         if (capacity?.valueNumeric != null) {
             val capacityAh = capacity.valueNumeric
             sample.put("capacityAh", round1(capacityAh))
-            sample.put("sohPct", round1(capacityAh / 52.0 * 100.0))
-            if (packVoltage?.valueNumeric != null) {
-                sample.put("usableKwh", round1(capacityAh * packVoltage.valueNumeric / 1000.0))
-            }
+            sample.put("sohPct", round1(capacityAh / GEN2_NOMINAL_CAPACITY_AH * 100.0))
+            // Nominal voltage keeps the estimate stable; instantaneous pack voltage swings
+            // ~330-400 V with SOC and would make this number wobble between samples.
+            sample.put("packEnergyKwh", round1(capacityAh * GEN2_NOMINAL_PACK_VOLTAGE / 1000.0))
         }
         val powerKw = ObdProtocol.parsePackPowerKw(packVoltageRaw, packCurrentRaw)
         if (powerKw != null) {
@@ -336,7 +341,7 @@ class LiveSampleReader(
     ) {
         putStaleMsForPresentValue(sample, "capacityAh", "capacityAhStaleMs", "2241A3", now)
         putStaleMsForPresentValue(sample, "sohPct", "sohPctStaleMs", "2241A3", now)
-        putStaleMsForPresentValue(sample, "usableKwh", "usableKwhStaleMs", "2241A3", now)
+        putStaleMsForPresentValue(sample, "packEnergyKwh", "packEnergyKwhStaleMs", "2241A3", now)
     }
 
     @Throws(JSONException::class)

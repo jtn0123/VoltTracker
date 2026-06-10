@@ -307,6 +307,38 @@ class BackupRoundTripTest {
         )
     }
 
+    /**
+     * Backups created before the 8-character minimum existed can carry shorter passphrases. The
+     * minimum gates creating NEW backups only — restore must keep accepting any non-empty
+     * passphrase or those users are permanently locked out of their own data.
+     */
+    @Test
+    fun encryptedBackupWithLegacyShortPassphraseStillRestores() {
+        val sessionId = store!!.startSession("obd", "AA:BB:CC", "Adapter", 1_000L)
+        store!!.recordTelemetry(sessionId, telemetrySample(41, 1500, 32.70, -117.10, 1_100L))
+        assertNotNull(store!!.getSession(sessionId))
+
+        val shortPassphrase = "old1"
+        assertFalse(
+            "precondition: this passphrase is below today's creation minimum",
+            DataBackup.hasMinimumPassphrase(shortPassphrase),
+        )
+        // Encrypt directly through BackupCrypto, the way an older app version effectively did —
+        // buildEncryptedBackupFile now (correctly) refuses passphrases this short.
+        val plain = dataBackup.buildBackupFile(store)
+        assertNotNull(plain)
+        val legacyEncrypted = File(context.cacheDir, "legacy-short-pass.vtdb")
+        BackupCrypto.encryptFile(plain!!, legacyEncrypted, shortPassphrase)
+        assertTrue(DataBackup.isEncryptedBackup(legacyEncrypted))
+
+        val uri = registerAsSafUri(legacyEncrypted)
+        val staged = dataBackup.stageRestoreFile(uri, shortPassphrase)
+        assertNotNull("restore must accept the short passphrase the backup was created with", staged)
+        assertTrue(DataBackup.isVoltTrackerBackup(staged))
+        staged!!.delete()
+        legacyEncrypted.delete()
+    }
+
     @Test
     fun stageRestoreFileMigratesV7BackupAndRestoresRows() {
         val legacy = createLegacyV7BackupFile()

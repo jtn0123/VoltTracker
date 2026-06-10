@@ -466,15 +466,15 @@ object ObdProtocol {
                 ?.let {
                     value("battery heater commanded power", it, "W", 0)
                 }
-            "2282B5" -> return voltWordValue(response, cleanCommand, 1.0, true)
-                ?.let { bounded(it, HEATER_POWER_RANGE) }
-                ?.let {
-                    value("AC compressor alternate power", it, "W", 0)
-                }
-            "2282B7" -> return voltWordValue(response, cleanCommand, 1.0, false)
+            "2282B5" -> return voltWordValue(response, cleanCommand, 1.0, false)
                 ?.let { bounded(it, PUMP_RPM_RANGE) }
                 ?.let {
-                    value("AC compressor alternate speed", it, "rpm", 0)
+                    value("AC compressor speed", it, "rpm", 0)
+                }
+            "2282B7" -> return voltWordValue(response, cleanCommand, 1.0, true)
+                ?.let { bounded(it, HEATER_POWER_RANGE) }
+                ?.let {
+                    value("AC compressor power", it, "W", 0)
                 }
             "221141" -> return voltByteValue(response, cleanCommand, 0.1, 0.0)
                 ?.let { bounded(it, AUX_VOLTAGE_RANGE) }
@@ -1169,8 +1169,12 @@ object ObdProtocol {
     private val AC_VOLTAGE_RANGE = Range(0.0, 280.0)
     private val AC_CURRENT_RANGE = Range(0.0, 80.0)
     private val CURRENT_A_RANGE = Range(-500.0, 500.0)
-    private val CAPACITY_AH_RANGE = Range(30.0, 60.0)
-    private val CELL_VOLTAGE_RANGE = Range(3.0, 4.3)
+
+    // Health bounds reject decode garbage, not bad news: a worn pack below 30 Ah or a faulted
+    // cell below 3.0 V is exactly what long-term tracking exists to surface, so these floors sit
+    // at physically-possible rather than healthy values.
+    private val CAPACITY_AH_RANGE = Range(10.0, 60.0)
+    private val CELL_VOLTAGE_RANGE = Range(1.5, 4.5)
     private val CELL_NUMBER_RANGE = Range(1.0, 96.0)
     private val PERCENT_RANGE = Range(0.0, 100.0)
     private val PACK_RESISTANCE_RANGE = Range(0.0, 10_000.0)

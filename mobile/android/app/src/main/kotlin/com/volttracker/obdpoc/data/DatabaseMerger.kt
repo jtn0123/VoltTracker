@@ -318,7 +318,7 @@ object DatabaseMerger {
                         VoltTrackerDb.TABLE_ADAPTER_HISTORY,
                         "adapter_key = ?",
                         arrayOf(key),
-                        ADAPTER_HISTORY_MERGE_COLUMNS,
+                        ADAPTER_HISTORY_COLUMNS,
                     )
                 if (existing == null) {
                     target.insertOrThrow(VoltTrackerDb.TABLE_ADAPTER_HISTORY, null, cv)
@@ -598,7 +598,10 @@ object DatabaseMerger {
 
     private fun orZero(value: Long?): Long = value ?: 0L
 
-    private fun donorColumnsFor(table: String): Array<String> =
+    // Internal (not private) so DatabaseMergerColumnsTest can assert these lists stay in sync
+    // with the live schema — a migration that adds a column without updating them would
+    // otherwise silently drop that column's data during merges.
+    internal fun donorColumnsFor(table: String): Array<String> =
         when (table) {
             VoltTrackerDb.TABLE_VEHICLES -> VEHICLE_COLUMNS
             VoltTrackerDb.TABLE_SESSIONS -> SESSION_COLUMNS
@@ -819,23 +822,6 @@ object DatabaseMerger {
             "manifest_json",
         )
     private val ADAPTER_HISTORY_COLUMNS =
-        arrayOf(
-            "adapter_key",
-            "address",
-            "name",
-            "first_seen_ms",
-            "last_seen_ms",
-            "connect_count",
-            "scan_count",
-            "demo_count",
-            "sample_count",
-            "last_session_id",
-            "last_mode",
-            "last_status",
-            "supported_pids",
-            "last_event_detail",
-        )
-    private val ADAPTER_HISTORY_MERGE_COLUMNS =
         arrayOf(
             "adapter_key",
             "address",

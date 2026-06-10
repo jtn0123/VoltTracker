@@ -485,6 +485,45 @@ class DatabaseMergerTest {
         )
     }
 
+    @Test
+    fun donorColumnListsStayInSyncWithTheLiveSchema() {
+        // DatabaseMerger queries donors with explicit column lists (so older backups merge
+        // cleanly). The flip side: a migration that adds a column without updating the list would
+        // silently drop that column's data during merges. This pins the lists to the live schema.
+        val mergeTables =
+            arrayOf(
+                VoltTrackerDb.TABLE_VEHICLES,
+                VoltTrackerDb.TABLE_SESSIONS,
+                VoltTrackerDb.TABLE_TELEMETRY,
+                VoltTrackerDb.TABLE_EVENTS,
+                VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
+                VoltTrackerDb.TABLE_TRIP_SEGMENTS,
+                VoltTrackerDb.TABLE_CHARGE_SESSIONS,
+                VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS,
+                VoltTrackerDb.TABLE_CELL_SNAPSHOTS,
+                VoltTrackerDb.TABLE_EXPORTS,
+                VoltTrackerDb.TABLE_ADAPTER_HISTORY,
+                VoltTrackerDb.TABLE_DIAGNOSTIC_CODES,
+            )
+        for (table in mergeTables) {
+            val schemaColumns = HashSet<String>()
+            live.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                while (cursor.moveToNext()) {
+                    schemaColumns.add(cursor.getString(nameIndex))
+                }
+            }
+            assertEquals(
+                "DatabaseMerger's donor column list for '$table' is out of sync with the live " +
+                    "schema — update the list when a migration changes this table.",
+                schemaColumns,
+                DatabaseMerger.donorColumnsFor(table).toSet(),
+            )
+        }
+    }
+
     // ---- fixtures ---------------------------------------------------------------
 
     companion object {

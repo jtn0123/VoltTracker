@@ -304,8 +304,37 @@ class ObdProtocolTest {
         assertNotNull(minPackVoltage)
         assertEquals(352.0, minPackVoltage!!.valueNumeric!!, 0.1)
 
-        assertNull("capacity sanity rejects impossible values", ObdProtocol.parseKnownValue("2241A3", "6241A30064"))
+        assertNull("capacity sanity rejects impossible values", ObdProtocol.parseKnownValue("2241A3", "6241A3FFFF"))
         assertNull("cell-voltage sanity rejects zero", ObdProtocol.parseKnownValue("224329", "6243290000"))
+    }
+
+    @Test
+    fun degradedButRealHealthValuesStillDecode() {
+        // The bounds exist to reject decode garbage, not bad news: a worn pack and a faulted cell
+        // are exactly what long-term health tracking must surface.
+        val wornPack = ObdProtocol.parseKnownValue("2241A3", "6241A300FA") // 250 / 10 = 25.0 Ah
+        assertNotNull("a heavily degraded pack capacity must not be dropped", wornPack)
+        assertEquals(25.0, wornPack!!.valueNumeric!!, 0.01)
+
+        val faultCell = ObdProtocol.parseKnownValue("224329", "6243297FFF") // ~2.5 V
+        assertNotNull("a deeply discharged cell voltage must not be dropped", faultCell)
+        assertEquals(2.5, faultCell!!.valueNumeric!!, 0.01)
+    }
+
+    @Test
+    fun acCompressorAlternatePidsDecodeWithSpeedAndPowerOnTheRightDids() {
+        // Per the Bolt BECM list (and the EnhancedPidProfiles catalog): 2282B5 = speed, 2282B7 = power.
+        val speed = ObdProtocol.parseKnownValue("2282B5", "6282B50BB8")
+        assertNotNull(speed)
+        assertEquals("AC compressor speed", speed!!.name)
+        assertEquals("rpm", speed.unit)
+        assertEquals(3000.0, speed.valueNumeric!!, 0.01)
+
+        val power = ObdProtocol.parseKnownValue("2282B7", "6282B703E8")
+        assertNotNull(power)
+        assertEquals("AC compressor power", power!!.name)
+        assertEquals("W", power.unit)
+        assertEquals(1000.0, power.valueNumeric!!, 0.01)
     }
 
     @Test

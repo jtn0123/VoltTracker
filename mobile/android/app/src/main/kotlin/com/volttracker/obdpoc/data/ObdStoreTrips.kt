@@ -123,7 +123,7 @@ class ObdStoreTrips(
         trip.put("status", session.status)
         if (session.endedAtMs <= 0) {
             activeTripCache[cacheKey] = CachedTrip(trip.toString(), now)
-            pruneActiveTripCacheFor(session.id)
+            pruneActiveTripCache(now, session.id)
         }
         return trip
     }
@@ -355,7 +355,18 @@ class ObdStoreTrips(
         usefulSamples: Long,
     ): String = "${session.id}:${window.startedAtMs}:${window.endedAtMs}:$usefulSamples"
 
-    private fun pruneActiveTripCacheFor(sessionId: Long) {
+    private fun pruneActiveTripCache(
+        now: Long,
+        sessionId: Long,
+    ) {
+        // Expired entries are never read again (the TTL check on lookup skips them), so collect
+        // them here; the prefix prune alone would let stale entries from other sessions linger.
+        val entries = activeTripCache.entries.iterator()
+        while (entries.hasNext()) {
+            if (now - entries.next().value.createdAtMs > ACTIVE_TRIP_CACHE_TTL_MS) {
+                entries.remove()
+            }
+        }
         if (activeTripCache.size <= ACTIVE_TRIP_CACHE_MAX_ENTRIES) {
             return
         }

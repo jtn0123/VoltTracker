@@ -267,7 +267,16 @@ class BackupControllerShareTest {
 
         assertNull(activity.launchedRestoreIntent)
         assertEquals("blocked", activity.lastState)
-        assertEquals("Enter a backup passphrase with at least 8 characters.", activity.lastDetail)
+        assertEquals("Enter the backup passphrase first.", activity.lastDetail)
+    }
+
+    @Test
+    fun encryptedRestorePickerAcceptsAShortLegacyPassphrase() {
+        // The 8-character minimum gates CREATING backups only. Restore must accept any non-empty
+        // passphrase so backups created before the minimum existed stay restorable.
+        activity.backupController!!.launchEncryptedRestorePicker("old1")
+
+        assertNotNull(activity.launchedRestoreIntent)
     }
 
     @Test
