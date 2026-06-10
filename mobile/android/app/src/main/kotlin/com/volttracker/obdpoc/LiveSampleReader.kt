@@ -127,6 +127,7 @@ class LiveSampleReader(
             pidPolling.putStaleMsIfTracked(sample, "batteryTempStaleMs", "22434F", now)
             pidPolling.putStaleMsIfTracked(sample, "packVoltageStaleMs", "222429", now)
             pidPolling.putStaleMsIfTracked(sample, "packCurrentAStaleMs", "222414", now)
+            putBatteryHealthStaleMs(sample, now)
             putPowerStaleMsIfKnown(sample, now)
             putChargingStaleMs(sample, now)
             putEnhancedContextStaleMs(sample, now)
@@ -266,6 +267,15 @@ class LiveSampleReader(
         if (packVoltage?.valueNumeric != null) {
             sample.put("packVoltage", round1(packVoltage.valueNumeric))
         }
+        val capacity = ObdProtocol.parseKnownValue("2241A3", pidPolling.lastRaw("2241A3"))
+        if (capacity?.valueNumeric != null) {
+            val capacityAh = capacity.valueNumeric
+            sample.put("capacityAh", round1(capacityAh))
+            sample.put("sohPct", round1(capacityAh / 52.0 * 100.0))
+            if (packVoltage?.valueNumeric != null) {
+                sample.put("usableKwh", round1(capacityAh * packVoltage.valueNumeric / 1000.0))
+            }
+        }
         val powerKw = ObdProtocol.parsePackPowerKw(packVoltageRaw, packCurrentRaw)
         if (powerKw != null) {
             sample.put("powerKw", round1(powerKw))
@@ -317,6 +327,16 @@ class LiveSampleReader(
         if (voltageStaleMs != null && currentStaleMs != null) {
             sample.put("powerKwStaleMs", maxOf(voltageStaleMs, currentStaleMs))
         }
+    }
+
+    @Throws(JSONException::class)
+    private fun putBatteryHealthStaleMs(
+        sample: JSONObject,
+        now: Long,
+    ) {
+        putStaleMsForPresentValue(sample, "capacityAh", "capacityAhStaleMs", "2241A3", now)
+        putStaleMsForPresentValue(sample, "sohPct", "sohPctStaleMs", "2241A3", now)
+        putStaleMsForPresentValue(sample, "usableKwh", "usableKwhStaleMs", "2241A3", now)
     }
 
     @Throws(JSONException::class)

@@ -19,7 +19,7 @@
 // CI job). On a non-Linux dev box run `npm run test:visual:update` to preview;
 // those *-darwin.png are gitignored.
 const { test, expect } = require('@playwright/test');
-const { openDashboard, setView } = require('./harness');
+const { loadDemoScenario, openDashboard, setView } = require('./harness');
 
 const FIXED = '2026-06-15T12:00:00.000Z';
 const SCENARIOS = ['typical', 'empty', 'fault', 'power-user', 'extreme'];
@@ -32,7 +32,7 @@ test.describe('visual matrix — tab × demo scenario', () => {
     for (const tab of TABS) {
       test(`${scenario} — ${tab}`, async ({ page }) => {
         await openDashboard(page, { fixedTime: FIXED });
-        await page.evaluate((s) => window.VoltDashboard.loadDemoScenario(s), scenario);
+        await loadDemoScenario(page, scenario);
         await setView(page, tab);
         // rAF is throttled in a headless/occluded tab, so force the live
         // surfaces to paint their current state synchronously before capture.

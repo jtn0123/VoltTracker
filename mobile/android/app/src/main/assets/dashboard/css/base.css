@@ -267,6 +267,13 @@
     text-transform: uppercase;
   }
 
+  .kicker[data-tone="volt"] { color: var(--volt); }
+  .kicker[data-tone="ev"] { color: var(--ev); }
+  .kicker[data-tone="warn"] { color: var(--warn); }
+  .kicker[data-tone="mixed"] { color: var(--mixed); }
+  .kicker[data-tone="accent"] { color: var(--accent); }
+  .kicker[data-tone="muted"] { color: var(--muted); }
+
   h1, h2, h3, p {
     margin: 0;
   }

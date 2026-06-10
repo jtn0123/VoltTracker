@@ -20,6 +20,16 @@ package com.volttracker.obdpoc.materialize
  * actually split the window into two sessions.
  */
 object ChargeSessionMaterializer {
+    /**
+     * Charge-session thresholds are pinned to the policy in ADR 0004.
+     *
+     * The key calibration is the preference for Volt pack current over aux-voltage inference:
+     * negative pack current is high-confidence charging evidence, while `ATRV` above 13.5 V is
+     * only a fallback because post-drive 12V behavior can look charger-like. The split/merge
+     * windows protect short cable wiggles or polling stalls without joining genuinely separate
+     * charge sessions. See `docs/adr/0004-charge-detection-heuristics.md` and the materializer
+     * tests before changing these values.
+     */
     private object Tunables {
         /** Brief gap inside a session — counted as an interruption but not a split. */
         const val MAX_GAP_MS = 5L * 60_000L

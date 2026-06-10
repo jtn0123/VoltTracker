@@ -65,6 +65,7 @@ class ObdStoreWriter(
             "_id = ?",
             arrayOf(sessionId.toString()),
         )
+        checkpointWalPassive()
     }
 
     fun finalizeSession(
@@ -114,6 +115,15 @@ class ObdStoreWriter(
                 SQLiteDatabase.CONFLICT_REPLACE,
             )
         }
+        checkpointWalPassive()
+    }
+
+    private fun checkpointWalPassive() {
+        try {
+            helper.writableDatabase.execSQL("PRAGMA wal_checkpoint(PASSIVE)")
+        } catch (ex: RuntimeException) {
+            // Best-effort bound for very long sessions; regular maintenance still truncates.
+        }
     }
 
     fun recordTelemetry(
@@ -137,6 +147,7 @@ class ObdStoreWriter(
         var id = -1L
         db.transaction {
             id = statementCache.bindAndInsertTelemetry(db, sessionId, capturedAtMs, safeSample)
+            recordBatterySnapshotIfPresent(db, sessionId, capturedAtMs, safeSample)
             val supportedPids = ObdStoreSupport.clean(safeSample.optString("supportedPids", ""))
             db.execSQL(
                 ObdStatementCache.SQL_UPDATE_SESSION_AFTER_TELEMETRY,
@@ -144,6 +155,45 @@ class ObdStoreWriter(
             )
         }
         return id
+    }
+
+    private fun recordBatterySnapshotIfPresent(
+        db: SQLiteDatabase,
+        sessionId: Long,
+        capturedAtMs: Long,
+        sample: JSONObject,
+    ) {
+        if (!sample.has("capacityAh") || sample.isNull("capacityAh")) {
+            return
+        }
+        if (sample.has("capacityAhStaleMs") && sample.optLong("capacityAhStaleMs", Long.MAX_VALUE) > 2_500L) {
+            return
+        }
+        val values = ContentValues()
+        values.put("session_id", sessionId)
+        values.put("captured_at_ms", capturedAtMs)
+        putOptionalDouble(values, "soc", sample, "soc")
+        putOptionalDouble(values, "capacity_ah", sample, "capacityAh")
+        putOptionalDouble(values, "soh_pct", sample, "sohPct")
+        putOptionalDouble(values, "pack_voltage", sample, "packVoltage")
+        putOptionalDouble(values, "pack_current_a", sample, "packCurrentA")
+        putOptionalDouble(values, "pack_power_kw", sample, "powerKw")
+        putOptionalDouble(values, "battery_temp_c", sample, "batteryTemp")
+        putOptionalDouble(values, "odometer_km", sample, "odometerKm")
+        values.put("created_at_ms", System.currentTimeMillis())
+        values.put("json", sample.toString())
+        db.insertOrThrow(VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS, null, values)
+    }
+
+    private fun putOptionalDouble(
+        values: ContentValues,
+        column: String,
+        sample: JSONObject,
+        key: String,
+    ) {
+        if (sample.has(key) && !sample.isNull(key)) {
+            values.put(column, sample.optDouble(key))
+        }
     }
 
     fun recordPidObservation(

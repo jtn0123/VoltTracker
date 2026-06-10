@@ -337,6 +337,8 @@ interface DashboardState {
   mapRemoteTilesEnabled: boolean;
   mapFull: boolean;
   selectedMapSessionId: string | null;
+  liveRouteStartedAtMs: number | null;
+  liveRoutePoints: VoltRoutePoint[];
   status: VoltStatus;
   speedHistory: number[];
   powerHistory: number[];
@@ -590,6 +592,10 @@ interface VoltRestoreProgress {
     ensureDemoData(callback?: (error: Error | null, data: VoltDashboard["data"]) => void): void;
     ensureDtcData(): Promise<VoltDashboard>;
     dtcDataLoaded(): boolean;
+    ensureMapModule(): Promise<VoltDashboard>;
+    requestMapRender(): Promise<VoltDashboard>;
+    renderMapIfLoaded(): void;
+    ensureTroubleshooterModule(): Promise<VoltDashboard>;
     dtcSearchUrl(code: string): string;
     setDevices(payload: unknown): void;
     setHistory(payload: unknown): void;
@@ -645,6 +651,7 @@ interface VoltRestoreProgress {
     enrichRouteEff(route: VoltRoute): void;
 
     // ----- map.ts ------------------------------------------------------------
+    renderMapLoaded?: boolean;
     renderMap(): void;
     setMapTileError(show: boolean, detail?: string): void;
     retryMapTiles(): void;

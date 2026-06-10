@@ -4,10 +4,7 @@ import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
@@ -22,7 +19,6 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
@@ -93,7 +89,14 @@ open class MainActivity :
     private var lastStatus = JSONObject()
     private var lastStorage = JSONObject()
     private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-    private val broadcastReceivers = BroadcastReceiverGroup()
+    private val storageReader = DashboardStorageReader { localStore }
+    private val broadcastCoordinator =
+        DashboardBroadcastCoordinator(
+            onTelemetryJson = { json -> onTelemetryBroadcast(json) },
+            onStatusJson = { json -> onStatusBroadcast(json) },
+            onAutoConnectTrigger = { trigger, address -> maybeAutoConnect(trigger, address) },
+            bluetoothDeviceAddress = { intent -> bluetoothDeviceAddress(intent) },
+        )
     private val storageSummaryPublisher =
         StorageSummaryPublisher(
             submitBackground = { task -> submitBackground(task) },
@@ -113,11 +116,35 @@ open class MainActivity :
 
     override fun requireDataBackup(): DataBackup = checkNotNull(dataBackup) { "DataBackup is not ready" }
 
-    override fun requireBackupController(): BackupController = checkNotNull(backupController) { "BackupController is not ready" }
+    override fun requireBackupController(): BackupController =
+        checkNotNull(backupController) {
+            "BackupController is not ready"
+        }
 
-    override fun requirePermissionGate(): PermissionGate = checkNotNull(permissionGate) { "PermissionGate is not ready" }
+    override fun requirePermissionGate(): PermissionGate =
+        checkNotNull(permissionGate) { "PermissionGate is not ready" }
 
-    fun requireTroubleshooter(): TroubleshooterBridge = checkNotNull(troubleshooter) { "TroubleshooterBridge is not ready" }
+    fun requireTroubleshooter(): TroubleshooterBridge =
+        checkNotNull(troubleshooter) { "TroubleshooterBridge is not ready" }
+
+    private fun onTelemetryBroadcast(json: String) {
+        lastTelemetry = MainActivityUtils.parseJson(json)
+        markStorageSummaryDirty()
+        callDashboard("updateTelemetry", json)
+        publishAppState()
+    }
+
+    private fun onStatusBroadcast(json: String) {
+        lastStatus = MainActivityUtils.parseJson(json)
+        callDashboard("setStatus", json)
+        if ("idle" == lastStatus.optString("state", "")) {
+            publishStorageSummary()
+        } else {
+            publishStorageSummaryThrottled()
+        }
+        publishAppState()
+        onAdapterStatusForReadyNotify(lastStatus)
+    }
 
     private fun submitBackground(task: Runnable) {
         try {
@@ -151,55 +178,6 @@ open class MainActivity :
             }
         }
     }
-
-    private val obdReceiver =
-        object : BroadcastReceiver() {
-            override fun onReceive(
-                context: Context,
-                intent: Intent,
-            ) {
-                val action = intent.action
-                val json = intent.getStringExtra(ObdService.EXTRA_JSON) ?: "{}"
-                if (ObdService.BROADCAST_TELEMETRY == action) {
-                    lastTelemetry = MainActivityUtils.parseJson(json)
-                    markStorageSummaryDirty()
-                    callDashboard("updateTelemetry", json)
-                    publishAppState()
-                } else if (ObdService.BROADCAST_STATUS == action) {
-                    lastStatus = MainActivityUtils.parseJson(json)
-                    callDashboard("setStatus", json)
-                    if ("idle" == lastStatus.optString("state", "")) {
-                        publishStorageSummary()
-                    } else {
-                        publishStorageSummaryThrottled()
-                    }
-                    publishAppState()
-                    onAdapterStatusForReadyNotify(lastStatus)
-                }
-            }
-        }
-
-    private val autoConnectReceiver =
-        object : BroadcastReceiver() {
-            override fun onReceive(
-                context: Context,
-                intent: Intent,
-            ) {
-                when (intent.action) {
-                    BluetoothDevice.ACTION_ACL_CONNECTED ->
-                        maybeAutoConnect(
-                            AutoConnectController.TRIGGER_BLUETOOTH_CONNECTED,
-                            bluetoothDeviceAddress(intent),
-                        )
-                    BluetoothAdapter.ACTION_STATE_CHANGED -> {
-                        val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
-                        if (state == BluetoothAdapter.STATE_ON) {
-                            maybeAutoConnect(AutoConnectController.TRIGGER_BLUETOOTH_ON, null)
-                        }
-                    }
-                }
-            }
-        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -278,19 +256,7 @@ open class MainActivity :
 
     override fun onResume() {
         super.onResume()
-        val filter = IntentFilter()
-        filter.addAction(ObdService.BROADCAST_TELEMETRY)
-        filter.addAction(ObdService.BROADCAST_STATUS)
-        broadcastReceivers.register(this, obdReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        val autoConnectFilter = IntentFilter()
-        autoConnectFilter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
-        autoConnectFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
-        broadcastReceivers.register(
-            this,
-            autoConnectReceiver,
-            autoConnectFilter,
-            ContextCompat.RECEIVER_EXPORTED,
-        )
+        broadcastCoordinator.register(this)
         publishDeviceList()
         publishStorageSummary()
         publishAppState()
@@ -301,7 +267,7 @@ open class MainActivity :
     override fun onPause() {
         reportAppVisibility(false)
         super.onPause()
-        broadcastReceivers.unregisterAll(this)
+        broadcastCoordinator.unregisterAll(this)
     }
 
     override fun onDestroy() {
@@ -341,7 +307,11 @@ open class MainActivity :
         if (!gate.hasBluetoothConnect()) {
             publishStatus("blocked", "Bluetooth permission is required to talk to the OBD adapter.", true)
         } else if (!gate.hasLocation()) {
-            publishStatus("ready", "Bluetooth permission granted. Location is still off, so trips may not show a route.", false)
+            publishStatus(
+                "ready",
+                "Bluetooth permission granted. Location is still off, so trips may not show a route.",
+                false,
+            )
         } else if (!gate.hasNotifications()) {
             publishStatus(
                 "ready",
@@ -522,7 +492,8 @@ open class MainActivity :
         }
     }
 
-    override fun forceStopPackageFromBridge(packageName: String?): Boolean = requireTroubleshooter().forceStopPackage(packageName)
+    override fun forceStopPackageFromBridge(packageName: String?): Boolean =
+        requireTroubleshooter().forceStopPackage(packageName)
 
     override fun cancelRetryFromBridge() {
         requireTroubleshooter().cancelRetry()
@@ -583,47 +554,15 @@ open class MainActivity :
         storageSummaryPublisher.publish()
     }
 
-    override fun getStorageSummaryJson(): String {
-        val store = localStore ?: return MainActivityUtils.errorPayload("storage_unavailable", "Local storage is not ready yet.").toString()
-        return try {
-            StorageSummaryJson.build(store.getStorageSummaryRecord()).toString()
-        } catch (ex: RuntimeException) {
-            Log.w(TAG, "getStorageSummary failed", ex)
-            MainActivityUtils.errorPayload("storage_summary_failed", "Could not read local storage summary.").toString()
-        }
-    }
+    override fun getStorageSummaryJson(): String = storageReader.storageSummaryJson()
 
-    override fun getTripsJson(): String {
-        val store = localStore ?: return MainActivityUtils.errorPayload("storage_unavailable", "Local storage is not ready yet.").toString()
-        return try {
-            store.getTripsJson(40).toString()
-        } catch (ex: RuntimeException) {
-            Log.w(TAG, "getTripsJson failed", ex)
-            MainActivityUtils.errorPayload("trips_read_failed", "Could not read logged trips.").toString()
-        }
-    }
+    override fun getTripsJson(): String = storageReader.tripsJson()
 
     open fun getTripRouteJson(sessionId: Long): String = getTripRouteJson(sessionId.toString())
 
-    override fun getTripRouteJson(routeKey: String?): String {
-        val store = localStore ?: return MainActivityUtils.errorPayload("storage_unavailable", "Local storage is not ready yet.").toString()
-        return try {
-            store.getTripRouteJson(routeKey).toString()
-        } catch (ex: RuntimeException) {
-            Log.w(TAG, "getTripRouteJson failed", ex)
-            MainActivityUtils.errorPayload("trip_route_read_failed", "Could not read the trip route.").toString()
-        }
-    }
+    override fun getTripRouteJson(routeKey: String?): String = storageReader.tripRouteJson(routeKey)
 
-    override fun getInsightsJson(): String {
-        val store = localStore ?: return MainActivityUtils.errorPayload("storage_unavailable", "Local storage is not ready yet.").toString()
-        return try {
-            store.getInsightsJson().toString()
-        } catch (ex: RuntimeException) {
-            Log.w(TAG, "getInsightsJson failed", ex)
-            MainActivityUtils.errorPayload("insights_read_failed", "Could not read vehicle insights.").toString()
-        }
-    }
+    override fun getInsightsJson(): String = storageReader.insightsJson()
 
     open fun launchRestoreFilePicker(intent: Intent) {
         restoreFilePicker?.launch(intent)
@@ -706,7 +645,8 @@ open class MainActivity :
             }
         return try {
             device?.address ?: ""
-        } catch (_: SecurityException) {
+        } catch (ex: SecurityException) {
+            Log.w(TAG, "Bluetooth ACL device address read denied", ex)
             ""
         }
     }

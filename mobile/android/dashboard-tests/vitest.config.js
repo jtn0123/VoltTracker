@@ -39,6 +39,12 @@ export default {
       //   connection-tools.ts (measured 2026-06-07: stmts 90.4 / branch 61.5 /
       //                       funcs 100  / lines 97.8 — few branches, so the
       //                       branch floor is intentionally the lowest)
+      //   core.ts       (measured 2026-06-09: stmts 66.1 / branch 46.7 /
+      //                  funcs 65.6 / lines 67.3)
+      //   map.ts        (measured 2026-06-09: stmts 69.2 / branch 53.5 /
+      //                  funcs 76.6 / lines 71.5)
+      //   telemetry.ts  (measured 2026-06-09: stmts 82.8 / branch 77.8 /
+      //                  funcs 86.9 / lines 86.3)
       // Glob keys are matched (picomatch) against each file's path RELATIVE TO
       // the Vitest root, which is this `dashboard-tests/` dir. The instrumented
       // modules live one level up under `../app/src/main/dashboard-src/js/`, so
@@ -71,11 +77,23 @@ export default {
           functions: 90,
           lines: 90,
         },
+        '../**/dashboard-src/js/core.ts': {
+          statements: 61,
+          branches: 41,
+          functions: 60,
+          lines: 62,
+        },
+        '../**/dashboard-src/js/map.ts': {
+          statements: 64,
+          branches: 48,
+          functions: 71,
+          lines: 66,
+        },
         '../**/dashboard-src/js/telemetry.ts': {
-          statements: 50,
-          branches: 38,
-          functions: 50,
-          lines: 55,
+          statements: 77,
+          branches: 72,
+          functions: 81,
+          lines: 81,
         },
       },
     },

@@ -10,17 +10,94 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.io.OutputStream
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Drives the stream-backed [ElmConnection] methods — [ElmConnection.isOpen],
- * [ElmConnection.wakeNudge] and [ElmConnection.sendEscape] — against in-memory streams, mirroring
- * the fake-stream harness in `ElmConnectionTest`. No Bluetooth socket is involved.
- *
- * [ElmConnection.open] is intentionally not covered here: it creates a real `BluetoothSocket` via
- * `BluetoothDevice.createRfcommSocketToServiceRecord` and reads its streams, with no injection seam
- * for a fake socket, so it requires instrumentation rather than a JVM unit test.
+ * [ElmConnection.wakeNudge], [ElmConnection.sendEscape], and the socket-open lifecycle — against
+ * fake streams/sockets. No real Bluetooth socket is involved.
  */
 class ElmConnectionExtraTest {
+    // --- open socket lifecycle ---------------------------------------------------------------
+
+    @Test
+    fun openSocketRecordsTimingsAndMarksStreamsOpen() {
+        val input = ByteArrayInputStream(ByteArray(0))
+        val output = ByteArrayOutputStream()
+        val socket = FakeElmSocket(inputStreamValue = input, outputStreamValue = output)
+        val connection = ElmConnection(clock = SteppingClock(100L, 150L, 200L, 240L))
+
+        connection.openSocketForTest(socket, 500L)
+
+        assertTrue("successful socket open exposes both streams", connection.isOpen())
+        assertEquals("RFCOMM connect duration is measured from the injected clock", 50L, connection.rfcommConnectMs)
+        assertEquals("stream acquisition duration is measured separately", 40L, connection.getStreamsMs)
+        assertEquals("connect should be called once", 1, socket.connectCalls.get())
+    }
+
+    @Test
+    fun openSocketRecordsRfcommConnectFailurePhase() {
+        val socket = FakeElmSocket(connectFailure = IOException("connect boom"))
+        val connection = ElmConnection(clock = SteppingClock(10L, 25L))
+
+        val expected =
+            assertThrows(IOException::class.java) {
+                connection.openSocketForTest(socket, 500L)
+            }
+
+        assertEquals("connect boom", expected.message)
+        assertEquals("rfcomm_connect", connection.lastErrorPhase)
+        assertEquals(15L, connection.rfcommConnectMs)
+        assertFalse(connection.isOpen())
+    }
+
+    @Test
+    fun openSocketRecordsStreamFailurePhase() {
+        val socket = FakeElmSocket(inputFailure = IOException("streams boom"))
+        val connection = ElmConnection(clock = SteppingClock(1L, 2L, 10L, 15L))
+
+        val expected =
+            assertThrows(IOException::class.java) {
+                connection.openSocketForTest(socket, 500L)
+            }
+
+        assertEquals("streams boom", expected.message)
+        assertEquals("get_streams", connection.lastErrorPhase)
+        assertEquals(5L, connection.getStreamsMs)
+        assertFalse(connection.isOpen())
+    }
+
+    @Test
+    fun closeClosesStreamsAndUnderlyingSocket() {
+        val input = CloseCountingInputStream()
+        val output = CloseCountingOutputStream()
+        val socket = FakeElmSocket(inputStreamValue = input, outputStreamValue = output)
+        val connection = ElmConnection(clock = SteppingClock(0L, 0L, 0L, 0L))
+        connection.openSocketForTest(socket, 500L)
+
+        connection.close()
+
+        assertEquals("input stream closed", 1, input.closeCalls.get())
+        assertEquals("output stream closed", 1, output.closeCalls.get())
+        assertEquals("socket closed", 1, socket.closeCalls.get())
+        assertFalse("connection no longer reports open after close", connection.isOpen())
+    }
+
+    @Test
+    fun watchdogClosesSocketWhenConnectNeverCompletes() {
+        val socket = FakeElmSocket(connectDelayMs = 35L, failIfClosedDuringConnect = true)
+        val connection = ElmConnection()
+
+        assertThrows(IOException::class.java) {
+            connection.openSocketForTest(socket, 1L)
+        }
+
+        assertTrue("watchdog flag should record that it fired", connection.watchdogFired)
+        assertTrue("watchdog should close the pending socket", socket.closeCalls.get() >= 1)
+        assertEquals("rfcomm_connect", connection.lastErrorPhase)
+    }
+
     // --- isOpen -----------------------------------------------------------------------------
 
     @Test
@@ -57,7 +134,8 @@ class ElmConnectionExtraTest {
         val out = ByteArrayOutputStream()
         // Clock pinned at 0: the deadline (0 + tolerance) is always in the future for the first
         // iteration, so the loop runs, sees the available byte and returns immediately.
-        val connection = ElmConnection(ByteArrayInputStream(byteArrayOf('A'.code.toByte())), out) { 0L }
+        val connection =
+            ElmConnection(ByteArrayInputStream(byteArrayOf('A'.code.toByte())), out, clock = ElmConnection.Clock { 0L })
 
         connection.wakeNudge(200L)
 
@@ -68,7 +146,8 @@ class ElmConnectionExtraTest {
     @Test
     fun wakeNudgeReportsResponseWhenInputIsAvailable() {
         val out = ByteArrayOutputStream()
-        val connection = ElmConnection(ByteArrayInputStream(byteArrayOf('A'.code.toByte())), out) { 0L }
+        val connection =
+            ElmConnection(ByteArrayInputStream(byteArrayOf('A'.code.toByte())), out, clock = ElmConnection.Clock { 0L })
 
         val result = connection.wakeNudge(200L)
 
@@ -108,7 +187,7 @@ class ElmConnectionExtraTest {
     @Test
     fun wakeNudgePropagatesInputFailureAndRecordsErrorPhase() {
         val out = ByteArrayOutputStream()
-        val connection = ElmConnection(ThrowingInputStream(), out) { 0L }
+        val connection = ElmConnection(ThrowingInputStream(), out, clock = ElmConnection.Clock { 0L })
 
         val expected =
             assertThrows(IOException::class.java) {
@@ -170,5 +249,69 @@ class ElmConnectionExtraTest {
         override fun available(): Int = throw IOException("boom")
 
         override fun read(): Int = throw IOException("boom")
+    }
+
+    private class CloseCountingInputStream : ByteArrayInputStream(ByteArray(0)) {
+        val closeCalls = AtomicInteger()
+
+        override fun close() {
+            closeCalls.incrementAndGet()
+            super.close()
+        }
+    }
+
+    private class CloseCountingOutputStream : ByteArrayOutputStream() {
+        val closeCalls = AtomicInteger()
+
+        override fun close() {
+            closeCalls.incrementAndGet()
+            super.close()
+        }
+    }
+
+    private class FakeElmSocket(
+        private val inputStreamValue: InputStream = ByteArrayInputStream(ByteArray(0)),
+        private val outputStreamValue: OutputStream = ByteArrayOutputStream(),
+        private val connectFailure: IOException? = null,
+        private val inputFailure: IOException? = null,
+        private val connectDelayMs: Long = 0L,
+        private val failIfClosedDuringConnect: Boolean = false,
+    ) : ElmConnection.ElmSocket {
+        val connectCalls = AtomicInteger()
+        val closeCalls = AtomicInteger()
+
+        @Volatile private var closed = false
+
+        @Volatile private var connected = false
+
+        override val isConnected: Boolean
+            get() = connected
+
+        override val inputStream: InputStream
+            get() {
+                inputFailure?.let { throw it }
+                return inputStreamValue
+            }
+
+        override val outputStream: OutputStream
+            get() = outputStreamValue
+
+        override fun connect() {
+            connectCalls.incrementAndGet()
+            if (connectDelayMs > 0L) {
+                Thread.sleep(connectDelayMs)
+            }
+            connectFailure?.let { throw it }
+            if (failIfClosedDuringConnect && closed) {
+                throw IOException("socket closed by watchdog")
+            }
+            connected = true
+        }
+
+        override fun close() {
+            closed = true
+            connected = false
+            closeCalls.incrementAndGet()
+        }
     }
 }

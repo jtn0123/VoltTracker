@@ -31,13 +31,30 @@ object ObdProbes {
             "010F",
             "015C",
             "01A6",
+            "0132",
         )
 
     @JvmField
     val VOLT_7E1_PROBES: Array<String> =
-        arrayOf("222429", "222414", "222883", "222884", "222885", "222886", "222487", "222889")
+        arrayOf(
+            "222429",
+            "222414",
+            "222883",
+            "222884",
+            "222885",
+            "222886",
+            "222487",
+            "222889",
+            "221141",
+            "221C26",
+            "221C28",
+            "221C2A",
+            "2228CB",
+            "22242C",
+            "2224B0",
+        )
 
-    @JvmField val VOLT_7E0_PROBES: Array<String> = arrayOf("22119F", "22119F01", "221154", "22203F")
+    @JvmField val VOLT_7E0_PROBES: Array<String> = arrayOf("22119F", "22119F01", "221154", "22203F", "221C47")
 
     @JvmField val VOLT_7E2_PROBES: Array<String> = arrayOf("221940", "22194001")
 
@@ -53,6 +70,32 @@ object ObdProbes {
             "22437D",
             "2243A5",
             "2243AF",
+            "2241A3",
+            "2245F9",
+            "224329",
+            "22432A",
+            "22432B",
+            "22432C",
+            "22435F",
+            "2240E9",
+            "22433B",
+            "22433C",
+            "224349",
+            "22434A",
+            "22434B",
+            "22434C",
+            "221C43",
+            "2241A4",
+            "22433F",
+            "2241B0",
+            "22437E",
+            "2243A6",
+            "2241EC",
+            "2241B1",
+            "2241B3",
+            "2241B5",
+            "2282B5",
+            "2282B7",
             "224531",
             "228334",
             "2241B2",
@@ -62,9 +105,31 @@ object ObdProbes {
             "22801F",
         )
 
-    @JvmField
-    val TPMS_7E0_DISCOVERY_PROBES: Array<String> =
-        arrayOf("22248E", "22248F", "222490", "222491", "22C901", "22C902")
+    @JvmField val VOLT_7E6_PROBES: Array<String> = arrayOf("224501", "224502")
 
-    @JvmField val TPMS_760_DISCOVERY_PROBES: Array<String> = arrayOf("224051", "224052", "224053", "224054")
+    @JvmField
+    val VOLT_7E7_LAYOUT_PROBES: Array<String> =
+        arrayOf(
+            "2240D7",
+            "2240D9",
+            "2240DB",
+            "2240DD",
+            "2240DF",
+            "2240E1",
+            "224181",
+            "224182",
+            "22419F",
+            "2241E0",
+            "224200",
+            "224201",
+            "224240",
+            "22C218",
+            "2240D4",
+        )
+
+    // These candidates returned negative/no-data frames on the real car in the June 2026 scan.
+    // Keep the executable lists empty until a new TPMS header/addressing source is found.
+    @JvmField val TPMS_7E0_DISCOVERY_PROBES: Array<String> = emptyArray()
+
+    @JvmField val TPMS_760_DISCOVERY_PROBES: Array<String> = emptyArray()
 }

@@ -39,6 +39,10 @@ object WebViewBootstrap {
         settings.domStorageEnabled = true
         settings.allowFileAccess = false
         settings.allowContentAccess = false
+        @Suppress("DEPRECATION")
+        settings.allowUniversalAccessFromFileURLs = false
+        @Suppress("DEPRECATION")
+        settings.allowFileAccessFromFileURLs = false
         settings.textZoom = 100
         settings.builtInZoomControls = false
         settings.displayZoomControls = false

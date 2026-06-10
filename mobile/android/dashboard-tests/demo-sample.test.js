@@ -34,7 +34,8 @@ describe('demo sample data', () => {
     expect(document.getElementById('dtcTitle').textContent).toBe('No car-code scan yet');
   });
 
-  it('populates charge, battery, and signals so the demo exercises every tab', () => {
+  it('populates charge, battery, and signals so the demo exercises every tab', async () => {
+    await window.VoltDashboard.ensureMapModule();
     window.VoltDashboard.loadSampleData();
     const storage = window.VoltDashboard.state.storage;
 
@@ -66,6 +67,7 @@ describe('demo sample data', () => {
     await loadDashboard({ withBridge: false });
 
     const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
     VD.loadDemoScenario('typical');
     expect(VD.state.demoActive).toBe(true);
     expect(VD.state.storage.recentRoutes.length).toBeGreaterThan(0);

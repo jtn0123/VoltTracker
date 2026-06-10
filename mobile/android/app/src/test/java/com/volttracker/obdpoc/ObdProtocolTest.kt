@@ -118,6 +118,12 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun implausibleAdapterVoltageIsRejected() {
+        assertNull(ObdProtocol.parseVoltage("999.0V"))
+        assertNull(ObdProtocol.parseKnownValue("ATRV", "999.0V"))
+    }
+
+    @Test
     fun controlModuleVoltageDecodes() {
         val voltage = ObdProtocol.parseKnownValue("0142", "414236B0")
         assertNotNull(voltage)
@@ -153,6 +159,13 @@ class ObdProtocolTest {
         assertEquals("hv pack voltage", v!!.name)
         assertEquals(360.0, v.valueNumeric!!, 0.01)
         assertEquals("V", v.unit)
+    }
+
+    @Test
+    fun implausibleMode22ValuesAreRejected() {
+        assertNull(ObdProtocol.parseKnownValue("222429", "6224297FFF"))
+        assertNull(ObdProtocol.parseKnownValue("222414", "6224147FFF"))
+        assertNull(ObdProtocol.parseKnownValue("22434F", "62434FFF"))
     }
 
     @Test
@@ -248,6 +261,177 @@ class ObdProtocolTest {
         assertNotNull(displaySoc)
         assertEquals("hv battery displayed soc", displaySoc!!.name)
         assertEquals(47.45098, displaySoc.valueNumeric!!, 0.01)
+    }
+
+    @Test
+    fun batteryCapacityAndCellHealthPidsDecode() {
+        val capacity = ObdProtocol.parseKnownValue("2241A3", "6241A30205")
+        assertNotNull(capacity)
+        assertEquals("HV battery capacity", capacity!!.name)
+        assertEquals(51.7, capacity.valueNumeric!!, 0.01)
+        assertEquals("Ah", capacity.unit)
+
+        val fallback = ObdProtocol.parseKnownValue("2245F9", "6245F91432")
+        assertNotNull(fallback)
+        assertEquals(51.7, fallback!!.valueNumeric!!, 0.01)
+
+        val minCell = ObdProtocol.parseKnownValue("224329", "624329BD6F")
+        assertNotNull(minCell)
+        assertEquals("minimum cell voltage", minCell!!.name)
+        assertEquals(3.7, minCell.valueNumeric!!, 0.001)
+
+        val minCellNumber = ObdProtocol.parseKnownValue("22432A", "62432A20")
+        assertNotNull(minCellNumber)
+        assertEquals(32.0, minCellNumber!!.valueNumeric!!, 0.01)
+
+        val maxCell = ObdProtocol.parseKnownValue("22432B", "62432BBD6F")
+        assertNotNull(maxCell)
+        assertEquals(3.7, maxCell!!.valueNumeric!!, 0.001)
+
+        val maxCellNumber = ObdProtocol.parseKnownValue("22432C", "62432C60")
+        assertNotNull(maxCellNumber)
+        assertEquals(96.0, maxCellNumber!!.valueNumeric!!, 0.01)
+
+        val socVariation = ObdProtocol.parseKnownValue("22435F", "62435F80")
+        assertNotNull(socVariation)
+        assertEquals(50.2, socVariation!!.valueNumeric!!, 0.1)
+
+        val resistance = ObdProtocol.parseKnownValue("2240E9", "6240E90014")
+        assertNotNull(resistance)
+        assertEquals(10.0, resistance!!.valueNumeric!!, 0.01)
+
+        val minPackVoltage = ObdProtocol.parseKnownValue("22433B", "62433B02A5")
+        assertNotNull(minPackVoltage)
+        assertEquals(352.0, minPackVoltage!!.valueNumeric!!, 0.1)
+
+        assertNull("capacity sanity rejects impossible values", ObdProtocol.parseKnownValue("2241A3", "6241A30064"))
+        assertNull("cell-voltage sanity rejects zero", ObdProtocol.parseKnownValue("224329", "6243290000"))
+    }
+
+    @Test
+    fun batteryThermalExpansionPidsDecode() {
+        val maxTemp = ObdProtocol.parseKnownValue("224349", "62434940")
+        assertNotNull(maxTemp)
+        assertEquals("HV battery max temperature", maxTemp!!.name)
+        assertEquals(24.0, maxTemp.valueNumeric!!, 0.01)
+
+        val minTemp = ObdProtocol.parseKnownValue("22434A", "62434A3F")
+        assertNotNull(minTemp)
+        assertEquals(23.0, minTemp!!.valueNumeric!!, 0.01)
+
+        val maxModule = ObdProtocol.parseKnownValue("22434B", "62434B0C")
+        assertNotNull(maxModule)
+        assertEquals(12.0, maxModule!!.valueNumeric!!, 0.01)
+
+        val minModule = ObdProtocol.parseKnownValue("22434C", "62434C0D")
+        assertNotNull(minModule)
+        assertEquals(13.0, minModule!!.valueNumeric!!, 0.01)
+
+        val peCoolant = ObdProtocol.parseKnownValue("221C43", "621C4341")
+        assertNotNull(peCoolant)
+        assertEquals("power electronics coolant loop temperature", peCoolant!!.name)
+        assertEquals(25.0, peCoolant.valueNumeric!!, 0.01)
+
+        val batteryCoolant = ObdProtocol.parseKnownValue("2241A4", "6241A440")
+        assertNotNull(batteryCoolant)
+        assertEquals("battery coolant temperature", batteryCoolant!!.name)
+        assertEquals(24.0, batteryCoolant.valueNumeric!!, 0.01)
+
+        val minSocLimit = ObdProtocol.parseKnownValue("22433F", "62433F80")
+        assertNotNull(minSocLimit)
+        assertEquals(50.2, minSocLimit!!.valueNumeric!!, 0.1)
+    }
+
+    @Test
+    fun auxHvacIsolationAndBrakePidsDecode() {
+        val ignition = ObdProtocol.parseKnownValue("221141", "6211418C")
+        assertNotNull(ignition)
+        assertEquals(14.0, ignition!!.valueNumeric!!, 0.01)
+
+        val setpoint = ObdProtocol.parseKnownValue("221C47", "621C4791")
+        assertNotNull(setpoint)
+        assertEquals(14.5, setpoint!!.valueNumeric!!, 0.01)
+
+        val apmPower = ObdProtocol.parseKnownValue("2241B0", "6241B00400")
+        assertNotNull(apmPower)
+        assertEquals(64.0, apmPower!!.valueNumeric!!, 0.01)
+
+        val apmCurrent = ObdProtocol.parseKnownValue("22437E", "62437E00C8")
+        assertNotNull(apmCurrent)
+        assertEquals(10.0, apmCurrent!!.valueNumeric!!, 0.01)
+
+        val isolationKohm = ObdProtocol.parseKnownValue("2243A6", "6243A628")
+        assertNotNull(isolationKohm)
+        assertEquals(1000.0, isolationKohm!!.valueNumeric!!, 0.01)
+
+        val isolationOhm = ObdProtocol.parseKnownValue("2241EC", "6241EC2710")
+        assertNotNull(isolationOhm)
+        assertEquals(10000.0, isolationOhm!!.valueNumeric!!, 0.01)
+
+        val acCommand = ObdProtocol.parseKnownValue("2241B1", "6241B103E8")
+        assertNotNull(acCommand)
+        assertEquals(1000.0, acCommand!!.valueNumeric!!, 0.01)
+
+        val cabinHeat = ObdProtocol.parseKnownValue("2241B3", "6241B303E8")
+        assertNotNull(cabinHeat)
+        assertEquals(1000.0, cabinHeat!!.valueNumeric!!, 0.01)
+
+        val inverter = ObdProtocol.parseKnownValue("221C26", "621C2640")
+        assertNotNull(inverter)
+        assertEquals(24.0, inverter!!.valueNumeric!!, 0.01)
+
+        val motorTemp = ObdProtocol.parseKnownValue("2228CB", "6228CB41")
+        assertNotNull(motorTemp)
+        assertEquals(25.0, motorTemp!!.valueNumeric!!, 0.01)
+
+        val brakeTorque = ObdProtocol.parseKnownValue("22242C", "62242C03E8")
+        assertNotNull(brakeTorque)
+        assertEquals(250.0, brakeTorque!!.valueNumeric!!, 0.01)
+
+        val regen = ObdProtocol.parseKnownValue("2224B0", "6224B008")
+        assertNotNull(regen)
+        assertEquals("ACTIVE", regen!!.valueText)
+        assertEquals(1.0, regen.valueNumeric!!, 0.01)
+
+        val pedal = ObdProtocol.parseKnownValue("224501", "62450104D2")
+        assertNotNull(pedal)
+        assertEquals(12.34, pedal!!.valueNumeric!!, 0.01)
+    }
+
+    @Test
+    fun cellBecmLayoutProbePidsDecode() {
+        val section = ObdProtocol.parseKnownValue("2240D7", "6240D740")
+        assertNotNull(section)
+        assertEquals("battery section 1 temperature", section!!.name)
+        assertEquals(24.0, section.valueNumeric!!, 0.01)
+
+        val genOneCell = ObdProtocol.parseKnownValue("224200", "624200BD6F")
+        assertNotNull(genOneCell)
+        assertEquals("cell 32 voltage", genOneCell!!.name)
+        assertEquals(3.7, genOneCell.valueNumeric!!, 0.001)
+
+        val boltCell = ObdProtocol.parseKnownValue("2241E0", "6241E0BD6F")
+        assertNotNull(boltCell)
+        assertEquals("cell 96 voltage", boltCell!!.name)
+        assertEquals(3.7, boltCell.valueNumeric!!, 0.001)
+
+        val average = ObdProtocol.parseKnownValue("22C218", "62C218BD6F")
+        assertNotNull(average)
+        assertEquals("average cell voltage", average!!.name)
+        assertEquals(3.7, average.valueNumeric!!, 0.001)
+
+        val current = ObdProtocol.parseKnownValue("2240D4", "6240D400C8")
+        assertNotNull(current)
+        assertEquals(10.0, current!!.valueNumeric!!, 0.01)
+    }
+
+    @Test
+    fun evapVaporPressureDecodes() {
+        val pressure = ObdProtocol.parseKnownValue("0132", "4132FF9C")
+        assertNotNull(pressure)
+        assertEquals("EVAP vapor pressure", pressure!!.name)
+        assertEquals(-25.0, pressure.valueNumeric!!, 0.01)
+        assertEquals("Pa", pressure.unit)
     }
 
     @Test

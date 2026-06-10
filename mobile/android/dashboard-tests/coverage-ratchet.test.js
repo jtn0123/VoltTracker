@@ -54,11 +54,23 @@ const PER_GLOB_BASELINE = Object.freeze({
     functions: 90,
     lines: 90,
   }),
+  '../**/dashboard-src/js/core.ts': Object.freeze({
+    statements: 61,
+    branches: 41,
+    functions: 60,
+    lines: 62,
+  }),
+  '../**/dashboard-src/js/map.ts': Object.freeze({
+    statements: 64,
+    branches: 48,
+    functions: 71,
+    lines: 66,
+  }),
   '../**/dashboard-src/js/telemetry.ts': Object.freeze({
-    statements: 50,
-    branches: 38,
-    functions: 50,
-    lines: 55,
+    statements: 77,
+    branches: 72,
+    functions: 81,
+    lines: 81,
   }),
 });
 

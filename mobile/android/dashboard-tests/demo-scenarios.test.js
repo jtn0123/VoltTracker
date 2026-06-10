@@ -11,6 +11,7 @@ describe('demo scenarios', () => {
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
     await loadDashboard();
+    await window.VoltDashboard.ensureMapModule();
   });
 
   it('empty clears all data (exercises empty states)', () => {

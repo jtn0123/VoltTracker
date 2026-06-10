@@ -1000,6 +1000,9 @@
   }
   .eff-scatter-legend span { display: flex; align-items: center; gap: 5px; }
   .eff-scatter-legend i { width: 14px; height: 4px; border-radius: 2px; }
+  .eff-scatter-legend i[data-grade="downhill"] { background: #5cc8ff; }
+  .eff-scatter-legend i[data-grade="flat"] { background: var(--ev); }
+  .eff-scatter-legend i[data-grade="uphill"] { background: #ff6b5f; }
   .eff-scatter-stats {
     display: grid; grid-template-columns: repeat(3, 1fr);
     margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line);

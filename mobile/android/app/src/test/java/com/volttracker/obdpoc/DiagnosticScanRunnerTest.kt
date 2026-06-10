@@ -23,7 +23,9 @@ class DiagnosticScanRunnerTest {
         assertTrue(engine.commands.contains("03"))
         assertTrue(engine.commands.contains("0902"))
         assertTrue(engine.commands.contains("ATSH7E4"))
-        assertTrue(engine.commands.contains("ATSH760"))
+        assertTrue(engine.commands.contains("ATSH7E6"))
+        assertTrue(engine.commands.contains("ATSH7E7"))
+        assertTrue("known-rejected TPMS receiver header must not be selected", !engine.commands.contains("ATSH760"))
         assertEquals("ATSH7DF", engine.commands[engine.commands.size - 1])
 
         val telemetry = service.lastTelemetry()!!
@@ -37,7 +39,9 @@ class DiagnosticScanRunnerTest {
         assertTrue(raw.contains("adapter: Test adapter"))
         assertTrue(raw.contains("ATI: OK"))
         assertTrue(raw.contains("volt-discovery: restore auto protocol for live + Volt probes"))
-        assertTrue(raw.contains("tpms-discovery: ATSH760 candidate TPMS receiver probes"))
+        assertTrue(raw.contains("volt-discovery: ATSH7E6 brake-module probes"))
+        assertTrue(raw.contains("volt-discovery: ATSH7E7 BECM cell-interface layout probes"))
+        assertTrue("known-rejected TPMS probes must stay out of broad scans", !raw.contains("tpms-discovery:"))
     }
 
     private class FakeService : ObdService() {

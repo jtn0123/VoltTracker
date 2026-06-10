@@ -3,6 +3,7 @@ plugins {
     // Kotlin needs no plugin here: AGP 9.0+ compiles Kotlin via its built-in support.
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.spotless) apply false
+    alias(libs.plugins.test.retry) apply false
     id "com.github.ben-manes.versions" version "0.54.0"
 }
 
@@ -57,6 +58,7 @@ tasks.register("buildDashboardJs", Exec) {
     inputs.dir(file("app/src/main/dashboard-src/js"))
     inputs.file(file("${dashboardTestsDir}/build.mjs"))
     outputs.dir(file("app/src/main/assets/dashboard/js"))
+    outputs.dir(file("app/src/main/assets/dashboard/lib/leaflet"))
 }
 
 tasks.register("dashboardTest", Exec) {
@@ -100,7 +102,9 @@ tasks.register("verifyGeneratedDashboardClean") {
     description = "Fails when generated dashboard HTML is stale relative to dashboard-src."
     def srcDir = file("app/src/main/dashboard-src")
     def outFile = file("app/src/main/assets/dashboard/index.html")
+    def reportDir = file("build/reports/dashboard-html-diff")
     inputs.dir(srcDir)
+    outputs.dir(reportDir)
     doLast {
         def sb = new StringBuilder()
         new File(srcDir, "index.template.html").eachLine("UTF-8") { line ->
@@ -115,9 +119,18 @@ tasks.register("verifyGeneratedDashboardClean") {
         def expected = sb.toString().replaceAll(/\n+$/, "") + "\n"
         def current = outFile.exists() ? outFile.getText("UTF-8") : ""
         if (current != expected) {
+            reportDir.mkdirs()
+            new File(reportDir, "expected-index.html").setText(expected, "UTF-8")
+            new File(reportDir, "current-index.html").setText(current, "UTF-8")
+            new File(reportDir, "README.txt").setText(
+                    "Generated dashboard HTML drifted. expected-index.html is generated from " +
+                            "app/src/main/dashboard-src; current-index.html is the committed asset.\n",
+                    "UTF-8")
             outFile.setText(expected, "UTF-8")
             throw new GradleException(
-                    "Generated dashboard HTML was stale. Re-run ./gradlew generateDashboardHtml and include app/src/main/assets/dashboard/index.html.")
+                    "Generated dashboard HTML was stale. Re-run ./gradlew generateDashboardHtml " +
+                            "and include app/src/main/assets/dashboard/index.html. Diff inputs written to " +
+                            "${reportDir}.")
         }
     }
 }

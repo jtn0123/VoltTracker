@@ -87,5 +87,6 @@ class PermissionGate(
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             granted(Manifest.permission.POST_NOTIFICATIONS)
 
-    private fun granted(permission: String): Boolean = activity.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+    private fun granted(permission: String): Boolean =
+        activity.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 }

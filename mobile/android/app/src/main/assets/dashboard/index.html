@@ -21,6 +21,7 @@
     <script src="lib/leaflet/leaflet.js"></script>
     <link rel="stylesheet" href="css/base.css" />
     <link rel="stylesheet" href="css/components.css" />
+    <link rel="stylesheet" href="css/overlays.css" />
     <link rel="stylesheet" href="css/screens.css" />
     <!-- Connection recovery and proactive adapter-tool styles. -->
     <link rel="stylesheet" href="css/troubleshooter.css" />
@@ -517,32 +518,32 @@
       aria-label="Live OBD signals"
     >
       <div data-live-cell="true" data-tile-key="rpm">
-        <span class="kicker" style="color: #ff7a45">RPM</span>
+        <span class="kicker" data-tone="volt">RPM</span>
         <strong id="rpmValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="aux12v">
         <!-- This is ATRV (12V auxiliary battery, ~12-14 V) — NOT the HV traction
              pack. The 300+ V pack reading lives in the HV Battery panel above. -->
-        <span class="kicker" style="color: #8b94ad">Aux 12V</span>
+        <span class="kicker" data-tone="muted">Aux 12V</span>
         <strong id="voltageValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="coolant">
-        <span class="kicker" style="color: #ffb84a">Coolant</span>
+        <span class="kicker" data-tone="warn">Coolant</span>
         <strong id="coolantValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="throttle">
         <!-- Sourced from PID 0149 (drive-by-wire accelerator pedal) when the
              vehicle supports it; falls back to 0111 (ICE throttle body) for
              vehicles where 0149 isn't responding. -->
-        <span class="kicker" style="color: #b8e63b">Throttle</span>
+        <span class="kicker" data-tone="ev">Throttle</span>
         <strong id="throttleValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="load">
-        <span class="kicker" style="color: #b8e63b">Load</span>
+        <span class="kicker" data-tone="ev">Load</span>
         <strong id="loadValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="gps">
-        <span class="kicker" style="color: #a48cff">GPS</span>
+        <span class="kicker" data-tone="mixed">GPS</span>
         <strong id="gpsValue" data-live-tile="true">--</strong>
       </div>
     </div>
@@ -591,35 +592,35 @@
     aria-label="Enhanced Volt signals"
   >
     <div data-live-cell="true">
-      <span class="kicker" style="color: #ff7a45">Motor A</span>
+      <span class="kicker" data-tone="volt">Motor A</span>
       <strong id="moreMotorA" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" style="color: #4cc4ff">Motor B</span>
+      <span class="kicker" data-tone="accent">Motor B</span>
       <strong id="moreMotorB" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" style="color: #b8e63b">Gear</span>
+      <span class="kicker" data-tone="ev">Gear</span>
       <strong id="moreGear" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" style="color: #a48cff">EV range</span>
+      <span class="kicker" data-tone="mixed">EV range</span>
       <strong id="moreEvRange" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" style="color: #ffb84a">Trans temp</span>
+      <span class="kicker" data-tone="warn">Trans temp</span>
       <strong id="moreTransTemp" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" style="color: #8b94ad">Ambient</span>
+      <span class="kicker" data-tone="muted">Ambient</span>
       <strong id="moreAmbient" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" style="color: #ffb84a">Oil life</span>
+      <span class="kicker" data-tone="warn">Oil life</span>
       <strong id="moreOilLife" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" style="color: #b8e63b">Torque</span>
+      <span class="kicker" data-tone="ev">Torque</span>
       <strong id="moreTorque" data-live-tile="true">--</strong>
     </div>
   </div>
@@ -1121,13 +1122,11 @@
         <div id="dtcSearchResult" class="dtc-lookup-result" hidden></div>
       </div>
 
-      <!-- Non-modal inline confirmation: role="group" (not alertdialog — we
-           don't trap focus or make the background inert). Focus is moved here
-           on open and returned to the trigger on close by actions.js. -->
       <div
         id="dtcClearWarning"
         class="dtc-clear-warning"
-        role="group"
+        role="alertdialog"
+        aria-modal="true"
         aria-labelledby="dtcClearTitle"
         aria-describedby="dtcClearDesc"
         tabindex="-1"
@@ -1208,9 +1207,9 @@
       </header>
       <div class="eff-scatter" id="effScatter"></div>
       <div class="eff-scatter-legend">
-        <span><i style="background: #5cc8ff"></i>downhill</span>
-        <span><i style="background: #b8e63b"></i>flat</span>
-        <span><i style="background: #ff6b5f"></i>uphill</span>
+        <span><i data-grade="downhill"></i>downhill</span>
+        <span><i data-grade="flat"></i>flat</span>
+        <span><i data-grade="uphill"></i>uphill</span>
       </div>
       <div class="eff-scatter-stats" id="effScatterStats"></div>
     </article>

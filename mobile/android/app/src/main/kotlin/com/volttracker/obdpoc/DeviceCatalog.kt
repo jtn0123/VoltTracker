@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONException
@@ -43,7 +44,8 @@ class DeviceCatalog(
         val bonded: Set<BluetoothDevice> =
             try {
                 adapter.bondedDevices
-            } catch (_: SecurityException) {
+            } catch (ex: SecurityException) {
+                Log.w(TAG, "Bluetooth bonded-device read denied", ex)
                 return devices.toString()
             }
         val sorted = bonded.toMutableList()
@@ -68,7 +70,8 @@ class DeviceCatalog(
                 devices.put(item)
             } catch (_: JSONException) {
                 // Skip malformed device entries. Android-provided addresses should be valid.
-            } catch (_: SecurityException) {
+            } catch (ex: SecurityException) {
+                Log.w(TAG, "Bluetooth device entry became unreadable", ex)
                 // Skip entries that become unreadable while iterating bonded devices.
             }
         }
@@ -86,7 +89,8 @@ class DeviceCatalog(
         val sorted =
             try {
                 adapter.bondedDevices.toMutableList()
-            } catch (_: SecurityException) {
+            } catch (ex: SecurityException) {
+                Log.w(TAG, "Bluetooth candidate read denied", ex)
                 return candidates
             }
         sorted.sortWith { left, right ->
@@ -106,7 +110,8 @@ class DeviceCatalog(
                 candidates.put(item)
             } catch (_: JSONException) {
                 // Skip malformed device entries.
-            } catch (_: SecurityException) {
+            } catch (ex: SecurityException) {
+                Log.w(TAG, "Bluetooth candidate became unreadable", ex)
                 // Skip entries that become unreadable while iterating bonded devices.
             }
         }
@@ -242,12 +247,14 @@ class DeviceCatalog(
         const val PREF_LAST_NAME = "last_name"
         private const val PREF_DEVICE_HISTORY = "device_history"
         private const val MAX_DEVICE_HISTORY = 8
+        private const val TAG = "VoltTracker"
 
         @SuppressLint("MissingPermission")
         private fun safeAddress(device: BluetoothDevice): String =
             try {
                 device.address ?: ""
-            } catch (_: SecurityException) {
+            } catch (ex: SecurityException) {
+                Log.w(TAG, "Bluetooth address read denied", ex)
                 ""
             }
 
@@ -255,7 +262,8 @@ class DeviceCatalog(
         private fun safeType(device: BluetoothDevice): Int =
             try {
                 device.type
-            } catch (_: SecurityException) {
+            } catch (ex: SecurityException) {
+                Log.w(TAG, "Bluetooth device type read denied", ex)
                 BluetoothDevice.DEVICE_TYPE_UNKNOWN
             }
 
@@ -263,7 +271,8 @@ class DeviceCatalog(
         private fun safeBondState(device: BluetoothDevice): Int =
             try {
                 device.bondState
-            } catch (_: SecurityException) {
+            } catch (ex: SecurityException) {
+                Log.w(TAG, "Bluetooth bond-state read denied", ex)
                 BluetoothDevice.BOND_NONE
             }
 
@@ -272,7 +281,8 @@ class DeviceCatalog(
             val name =
                 try {
                     device.name
-                } catch (_: SecurityException) {
+                } catch (ex: SecurityException) {
+                    Log.w(TAG, "Bluetooth name read denied", ex)
                     return "OBD adapter"
                 }
             if (name == null || name.trim().isEmpty()) {

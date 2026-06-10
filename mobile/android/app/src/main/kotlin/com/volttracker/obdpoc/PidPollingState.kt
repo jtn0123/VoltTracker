@@ -37,7 +37,8 @@ class PidPollingState(
 
     fun isInitialCycle(): Boolean = cycleNum == 0
 
-    fun dueForCurrentCycle(): List<PidSpec> = if (isInitialCycle()) PidSchedule.SPECS else PidSchedule.dueOnCycle(cycleNum)
+    fun dueForCurrentCycle(): List<PidSpec> =
+        if (isInitialCycle()) PidSchedule.SPECS else PidSchedule.dueOnCycle(cycleNum)
 
     fun advanceCycle() {
         cycleNum += 1
@@ -108,7 +109,18 @@ class PidPollingState(
                 continue
             }
             if (header != Header.BROADCAST && header != lastHeaderSet) {
-                engine.sendCommand(header.atCommand!!, 1500)
+                val headerCommand = header.atCommand
+                if (headerCommand == null) {
+                    service.recorder?.logEvent(
+                        "pid_header_skipped",
+                        "header",
+                        header.name,
+                        "reason",
+                        "missing_at_command",
+                    )
+                    continue
+                }
+                engine.sendCommand(headerCommand, 1500)
                 switchedHeader = true
                 lastHeaderSet = header
             }
@@ -234,7 +246,8 @@ class PidPollingState(
             return out
         }
 
-        private fun isMode01Command(command: String?): Boolean = command != null && command.length == 4 && command.startsWith("01")
+        private fun isMode01Command(command: String?): Boolean =
+            command != null && command.length == 4 && command.startsWith("01")
 
         @JvmStatic
         fun wasPolledThisCycle(

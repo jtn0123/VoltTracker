@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.content.pm.PackageManager
+import android.util.Log
 import java.util.LinkedHashSet
 
 /**
@@ -74,7 +75,8 @@ open class CompetingAppDetector(
             true
         } catch (_: PackageManager.NameNotFoundException) {
             false
-        } catch (_: RuntimeException) {
+        } catch (ex: RuntimeException) {
+            Log.w("VoltTracker", "Competing-app package probe failed for $packageName", ex)
             false
         }
     }

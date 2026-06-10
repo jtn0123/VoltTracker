@@ -9,6 +9,7 @@ describe('map.ts — route selection regressions', () => {
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
     await loadDashboard();
+    await window.VoltDashboard.ensureMapModule();
   });
 
   it('repairs a stale selected route id when recentRoutes changes', () => {

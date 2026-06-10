@@ -36,8 +36,8 @@ class BackupController(
     }
 
     fun launchEncryptedShare(passphrase: String?) {
-        if (!hasPassphrase(passphrase)) {
-            activity.publishStatus("blocked", "Enter a backup passphrase first.", true)
+        if (!DataBackup.hasMinimumPassphrase(passphrase)) {
+            activity.publishStatus("blocked", minimumPassphraseMessage(), true)
             return
         }
         if (activity.isLoggingActive()) {
@@ -55,7 +55,8 @@ class BackupController(
             "• Redacted VIN and vehicle records if your car shared them\n" +
             "\n" +
             "Encrypted backups are protected by your passphrase; plaintext backups are not.\n" +
-            "Use a strong, unique passphrase. Volt Tracker cannot recover it if it is lost.\n" +
+            "Use a strong, unique passphrase with at least ${DataBackup.MIN_PASSPHRASE_LENGTH} characters. " +
+            "Volt Tracker cannot recover it if it is lost.\n" +
             "Only share with people you trust."
 
     private fun showShareDisclosure(onConfirmed: Runnable) {
@@ -147,8 +148,8 @@ class BackupController(
     }
 
     fun launchEncryptedRestorePicker(passphrase: String?) {
-        if (!hasPassphrase(passphrase)) {
-            activity.publishStatus("blocked", "Enter the backup passphrase first.", true)
+        if (!DataBackup.hasMinimumPassphrase(passphrase)) {
+            activity.publishStatus("blocked", minimumPassphraseMessage(), true)
             return
         }
         launchRestorePicker(passphrase)
@@ -546,6 +547,9 @@ class BackupController(
         private const val RESTORE_STOP_TIMEOUT_MS = 30_000L
 
         private fun hasPassphrase(passphrase: String?): Boolean = !passphrase?.trim().isNullOrEmpty()
+
+        private fun minimumPassphraseMessage(): String =
+            "Enter a backup passphrase with at least ${DataBackup.MIN_PASSPHRASE_LENGTH} characters."
 
         private fun restoreOriginalDatabase(
             dbFile: File,

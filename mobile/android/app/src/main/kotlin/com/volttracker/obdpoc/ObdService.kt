@@ -50,7 +50,9 @@ open class ObdService :
     override var recorder: SessionRecorder =
         SessionRecorder(
             Any(),
-            ObdSessionLog(File(System.getProperty("java.io.tmpdir"), "volttracker-service-recorder-${System.nanoTime()}")),
+            ObdSessionLog(
+                File(System.getProperty("java.io.tmpdir"), "volttracker-service-recorder-${System.nanoTime()}"),
+            ),
             null,
         )
     private lateinit var engine: ObdPollingEngine

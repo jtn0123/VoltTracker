@@ -1,3 +1,6 @@
+import { LIVE_ROUTE_ID, haversineMetersJs, liveSampleTimeMs } from "./map-route-utils";
+import type { MapRoutePoint } from "./map-route-utils";
+
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
@@ -20,6 +23,7 @@
     .filter(Boolean);
   // How long (ms) since the last accepted sample before we mark tiles stale.
   const STALE_THRESHOLD_MS = 3000;
+  const LIVE_ROUTE_MAX_POINTS = 600;
   let rateChipReconnectBound = false;
 
   function average(values: number[]) {
@@ -129,9 +133,42 @@
     state.sessionDistanceM = 0;
     state.sessionLastLat = null;
     state.sessionLastLng = null;
+    state.liveRouteStartedAtMs = null;
+    state.liveRoutePoints = [];
     state.lastSampleAt = 0;
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     applyStaleIndicator();
+  }
+
+  function liveRoutePoint(lat: number, lng: number): MapRoutePoint {
+    const sample = state.telemetry || {};
+    const updatedAt = liveSampleTimeMs(sample);
+    const point: MapRoutePoint = { lat, lng, atMs: updatedAt };
+    const speedKph = Number(sample.speedKph);
+    if (Number.isFinite(speedKph)) point.speedKph = speedKph;
+    const soc = Number(sample.soc);
+    if (Number.isFinite(soc)) point.soc = soc;
+    const powerKw = Number(sample.powerKw);
+    if (Number.isFinite(powerKw)) point.powerKw = powerKw;
+    return point;
+  }
+
+  function recordQueuedLivePosition(lat: number, lng: number) {
+    const point = liveRoutePoint(lat, lng);
+    const points = Array.isArray(state.liveRoutePoints) ? state.liveRoutePoints : [];
+    const previousPoint = points[points.length - 1];
+    if (previousPoint) {
+      const meters = haversineMetersJs(previousPoint.lat, previousPoint.lng, point.lat, point.lng);
+      const ageMs = Math.abs(Number(point.atMs) - Number(previousPoint.atMs));
+      if (meters < 1 && ageMs < 2000) return;
+    } else {
+      state.liveRouteStartedAtMs = point.atMs;
+      state.selectedMapSessionId = LIVE_ROUTE_ID;
+    }
+    points.push(point);
+    const overflow = points.length - LIVE_ROUTE_MAX_POINTS;
+    if (overflow > 0) points.splice(0, overflow);
+    state.liveRoutePoints = points;
   }
 
   function renderOperationalState() {
@@ -379,7 +416,7 @@
         Number.isFinite(state.sessionLastLat) &&
         Number.isFinite(state.sessionLastLng)
       ) {
-        const step = VD.haversineMetersJs(
+        const step = haversineMetersJs(
           Number(state.sessionLastLat),
           Number(state.sessionLastLng),
           lat,
@@ -392,6 +429,7 @@
       state.sessionLastLat = lat;
       state.sessionLastLng = lon;
       if (typeof VD.updateLivePosition === "function") VD.updateLivePosition(lat, lon);
+      else recordQueuedLivePosition(lat, lon);
     }
     scheduleRender();
   }

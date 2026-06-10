@@ -238,7 +238,13 @@ class ObdStoreSnapshots {
         }
         values.put("last_mode", mode)
         values.put("last_status", status)
-        values.put("supported_pids", ObdStoreSupport.chooseLatest(ObdStoreSupport.clean(supportedPids), existing?.supportedPids ?: ""))
+        values.put(
+            "supported_pids",
+            ObdStoreSupport.chooseLatest(
+                ObdStoreSupport.clean(supportedPids),
+                existing?.supportedPids ?: "",
+            ),
+        )
         values.put("last_event_detail", ObdStoreSupport.clean(lastEventDetail))
         return values
     }

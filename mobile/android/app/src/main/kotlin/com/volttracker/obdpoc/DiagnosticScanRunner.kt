@@ -92,15 +92,29 @@ class DiagnosticScanRunner(
         for (probe in ObdProbes.VOLT_7E2_PROBES) {
             probeCommand(probe, 4200, raw)
         }
-        ObdElmDecode.appendProbeLine(raw, "tpms-discovery", "ATSH7E0 candidate tire-pressure probes")
-        probeCommand("ATSH7E0", 1800, raw)
-        for (probe in ObdProbes.TPMS_7E0_DISCOVERY_PROBES) {
+        ObdElmDecode.appendProbeLine(raw, "volt-discovery", "ATSH7E6 brake-module probes")
+        probeCommand("ATSH7E6", 1800, raw)
+        for (probe in ObdProbes.VOLT_7E6_PROBES) {
             probeCommand(probe, 4200, raw)
         }
-        ObdElmDecode.appendProbeLine(raw, "tpms-discovery", "ATSH760 candidate TPMS receiver probes")
-        probeCommand("ATSH760", 1800, raw)
-        for (probe in ObdProbes.TPMS_760_DISCOVERY_PROBES) {
+        ObdElmDecode.appendProbeLine(raw, "volt-discovery", "ATSH7E7 BECM cell-interface layout probes")
+        probeCommand("ATSH7E7", 1800, raw)
+        for (probe in ObdProbes.VOLT_7E7_LAYOUT_PROBES) {
             probeCommand(probe, 4200, raw)
+        }
+        if (ObdProbes.TPMS_7E0_DISCOVERY_PROBES.isNotEmpty()) {
+            ObdElmDecode.appendProbeLine(raw, "tpms-discovery", "ATSH7E0 candidate tire-pressure probes")
+            probeCommand("ATSH7E0", 1800, raw)
+            for (probe in ObdProbes.TPMS_7E0_DISCOVERY_PROBES) {
+                probeCommand(probe, 4200, raw)
+            }
+        }
+        if (ObdProbes.TPMS_760_DISCOVERY_PROBES.isNotEmpty()) {
+            ObdElmDecode.appendProbeLine(raw, "tpms-discovery", "ATSH760 candidate TPMS receiver probes")
+            probeCommand("ATSH760", 1800, raw)
+            for (probe in ObdProbes.TPMS_760_DISCOVERY_PROBES) {
+                probeCommand(probe, 4200, raw)
+            }
         }
         probeCommand("ATSH7DF", 1800, raw)
 

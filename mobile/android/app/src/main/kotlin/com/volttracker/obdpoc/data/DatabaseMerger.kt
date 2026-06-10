@@ -27,7 +27,15 @@ object DatabaseMerger {
                 sb.append("no new sessions")
             }
             if (vehiclesAdded > 0) {
-                sb.append(", ").append(vehiclesAdded).append(if (vehiclesAdded == 1) " new vehicle" else " new vehicles")
+                sb.append(", ").append(vehiclesAdded).append(
+                    if (vehiclesAdded ==
+                        1
+                    ) {
+                        " new vehicle"
+                    } else {
+                        " new vehicles"
+                    },
+                )
             }
             if (vehiclesMerged > 0) {
                 sb
@@ -153,7 +161,7 @@ object DatabaseMerger {
             }
         }
         var inserted = 0L
-        donor.rawQuery("SELECT * FROM ${VoltTrackerDb.TABLE_VEHICLES}", null).use { c ->
+        donorRows(donor, VoltTrackerDb.TABLE_VEHICLES).use { c ->
             while (c.moveToNext()) {
                 val cv = readRow(c)
                 val oldId = cv.getAsLong("_id")
@@ -195,7 +203,7 @@ object DatabaseMerger {
                 }
             }
         var inserted = 0L
-        donor.rawQuery("SELECT * FROM ${VoltTrackerDb.TABLE_SESSIONS}", null).use { c ->
+        donorRows(donor, VoltTrackerDb.TABLE_SESSIONS).use { c ->
             while (c.moveToNext()) {
                 val cv = readRow(c)
                 val oldId = cv.getAsLong("_id")
@@ -231,7 +239,7 @@ object DatabaseMerger {
         outIdMap: MutableMap<Long, Long>?,
     ): Long {
         var inserted = 0L
-        donor.rawQuery("SELECT * FROM $table", null).use { c ->
+        donorRows(donor, table).use { c ->
             while (c.moveToNext()) {
                 val cv = readRow(c)
                 val oldId = cv.getAsLong("_id")
@@ -273,7 +281,7 @@ object DatabaseMerger {
         batteryMap: Map<Long, Long>,
     ): Long {
         var inserted = 0L
-        donor.rawQuery("SELECT * FROM ${VoltTrackerDb.TABLE_CELL_SNAPSHOTS}", null).use { c ->
+        donorRows(donor, VoltTrackerDb.TABLE_CELL_SNAPSHOTS).use { c ->
             while (c.moveToNext()) {
                 val cv = readRow(c)
                 val parent = cv.getAsLong("battery_snapshot_id")
@@ -298,13 +306,20 @@ object DatabaseMerger {
         sessionMap: Map<Long, Long>,
     ): Long {
         var touched = 0L
-        donor.rawQuery("SELECT * FROM ${VoltTrackerDb.TABLE_ADAPTER_HISTORY}", null).use { c ->
+        donorRows(donor, VoltTrackerDb.TABLE_ADAPTER_HISTORY).use { c ->
             while (c.moveToNext()) {
                 val cv = readRow(c)
                 val key = cv.getAsString("adapter_key") ?: continue
                 val canCopyLastSession = canCopyMappedReference(cv, "last_session_id", sessionMap)
                 remap(cv, "last_session_id", sessionMap)
-                val existing = queryOne(target, VoltTrackerDb.TABLE_ADAPTER_HISTORY, "adapter_key = ?", arrayOf(key))
+                val existing =
+                    queryOne(
+                        target,
+                        VoltTrackerDb.TABLE_ADAPTER_HISTORY,
+                        "adapter_key = ?",
+                        arrayOf(key),
+                        ADAPTER_HISTORY_MERGE_COLUMNS,
+                    )
                 if (existing == null) {
                     target.insertOrThrow(VoltTrackerDb.TABLE_ADAPTER_HISTORY, null, cv)
                 } else {
@@ -313,7 +328,10 @@ object DatabaseMerger {
                     sumLong(merged, "scan_count", existing, cv)
                     sumLong(merged, "demo_count", existing, cv)
                     sumLong(merged, "sample_count", existing, cv)
-                    merged.put("first_seen_ms", minLong(existing.getAsLong("first_seen_ms"), cv.getAsLong("first_seen_ms")))
+                    merged.put(
+                        "first_seen_ms",
+                        minLong(existing.getAsLong("first_seen_ms"), cv.getAsLong("first_seen_ms")),
+                    )
                     val liveLast = orZero(existing.getAsLong("last_seen_ms"))
                     val donorLast = orZero(cv.getAsLong("last_seen_ms"))
                     merged.put("last_seen_ms", maxOf(liveLast, donorLast))
@@ -342,7 +360,7 @@ object DatabaseMerger {
         sessionMap: Map<Long, Long>,
     ): Long {
         var touched = 0L
-        donor.rawQuery("SELECT * FROM ${VoltTrackerDb.TABLE_DIAGNOSTIC_CODES}", null).use { c ->
+        donorRows(donor, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES).use { c ->
             while (c.moveToNext()) {
                 val cv = readRow(c)
                 val moduleKey = cv.getAsString("module_key")
@@ -356,13 +374,23 @@ object DatabaseMerger {
                 remap(cv, "last_session_id", sessionMap)
                 val where = "module_key = ? AND dtc = ? AND status = ?"
                 val args = arrayOf(moduleKey, dtc, status)
-                val existing = queryOne(target, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES, where, args)
+                val existing =
+                    queryOne(
+                        target,
+                        VoltTrackerDb.TABLE_DIAGNOSTIC_CODES,
+                        where,
+                        args,
+                        DIAGNOSTIC_MERGE_COLUMNS,
+                    )
                 if (existing == null) {
                     target.insertOrThrow(VoltTrackerDb.TABLE_DIAGNOSTIC_CODES, null, cv)
                 } else {
                     val merged = ContentValues()
                     sumLong(merged, "seen_count", existing, cv)
-                    merged.put("first_seen_ms", minLong(existing.getAsLong("first_seen_ms"), cv.getAsLong("first_seen_ms")))
+                    merged.put(
+                        "first_seen_ms",
+                        minLong(existing.getAsLong("first_seen_ms"), cv.getAsLong("first_seen_ms")),
+                    )
                     val liveLast = orZero(existing.getAsLong("last_seen_ms"))
                     val donorLast = orZero(cv.getAsLong("last_seen_ms"))
                     merged.put("last_seen_ms", maxOf(liveLast, donorLast))
@@ -397,6 +425,25 @@ object DatabaseMerger {
             }
         }
         return cv
+    }
+
+    private fun donorRows(
+        db: SQLiteDatabase,
+        table: String,
+    ): Cursor = db.query(table, availableColumns(db, table, donorColumnsFor(table)), null, null, null, null, null)
+
+    private fun availableColumns(
+        db: SQLiteDatabase,
+        table: String,
+        desired: Array<String>,
+    ): Array<String> {
+        val existing = HashSet<String>()
+        db.rawQuery("PRAGMA table_info($table)", null).use { c ->
+            while (c.moveToNext()) {
+                existing.add(c.getString(1))
+            }
+        }
+        return desired.filter { existing.contains(it) }.toTypedArray()
     }
 
     private fun remap(
@@ -471,9 +518,25 @@ object DatabaseMerger {
         when (table) {
             VoltTrackerDb.TABLE_TELEMETRY -> arrayOf("session_id", "captured_at_ms", "json")
             VoltTrackerDb.TABLE_EVENTS -> arrayOf("session_id", "occurred_at_ms", "kind", "payload")
-            VoltTrackerDb.TABLE_PID_OBSERVATIONS -> arrayOf("session_id", "observed_at_ms", "command", "header", "pid", "json")
+            VoltTrackerDb.TABLE_PID_OBSERVATIONS ->
+                arrayOf(
+                    "session_id",
+                    "observed_at_ms",
+                    "command",
+                    "header",
+                    "pid",
+                    "json",
+                )
             VoltTrackerDb.TABLE_LOCATION_SAMPLES -> arrayOf("session_id", "captured_at_ms", "latitude", "longitude")
-            VoltTrackerDb.TABLE_FIELD_CAPABILITIES -> arrayOf("vehicle_id", "adapter_key", "protocol", "header", "command", "pid")
+            VoltTrackerDb.TABLE_FIELD_CAPABILITIES ->
+                arrayOf(
+                    "vehicle_id",
+                    "adapter_key",
+                    "protocol",
+                    "header",
+                    "command",
+                    "pid",
+                )
             VoltTrackerDb.TABLE_TRIP_SEGMENTS -> arrayOf("session_id", "started_at_ms", "ended_at_ms", "classification")
             VoltTrackerDb.TABLE_CHARGE_SESSIONS -> arrayOf("session_id", "started_at_ms", "ended_at_ms", "charger_type")
             VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS -> arrayOf("session_id", "captured_at_ms", "json")
@@ -487,8 +550,9 @@ object DatabaseMerger {
         table: String,
         where: String,
         args: Array<String>,
+        columns: Array<String> = donorColumnsFor(table),
     ): ContentValues? =
-        db.query(table, null, where, args, null, null, null, "1").use { c ->
+        db.query(table, columns, where, args, null, null, null, "1").use { c ->
             if (c.moveToFirst()) readRow(c) else null
         }
 
@@ -533,4 +597,290 @@ object DatabaseMerger {
     }
 
     private fun orZero(value: Long?): Long = value ?: 0L
+
+    private fun donorColumnsFor(table: String): Array<String> =
+        when (table) {
+            VoltTrackerDb.TABLE_VEHICLES -> VEHICLE_COLUMNS
+            VoltTrackerDb.TABLE_SESSIONS -> SESSION_COLUMNS
+            VoltTrackerDb.TABLE_TELEMETRY -> TELEMETRY_COLUMNS
+            VoltTrackerDb.TABLE_EVENTS -> EVENT_COLUMNS
+            VoltTrackerDb.TABLE_PID_OBSERVATIONS -> PID_OBSERVATION_COLUMNS
+            VoltTrackerDb.TABLE_LOCATION_SAMPLES -> LOCATION_SAMPLE_COLUMNS
+            VoltTrackerDb.TABLE_FIELD_CAPABILITIES -> FIELD_CAPABILITY_COLUMNS
+            VoltTrackerDb.TABLE_TRIP_SEGMENTS -> TRIP_SEGMENT_COLUMNS
+            VoltTrackerDb.TABLE_CHARGE_SESSIONS -> CHARGE_SESSION_COLUMNS
+            VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS -> BATTERY_SNAPSHOT_COLUMNS
+            VoltTrackerDb.TABLE_CELL_SNAPSHOTS -> CELL_SNAPSHOT_COLUMNS
+            VoltTrackerDb.TABLE_EXPORTS -> EXPORT_COLUMNS
+            VoltTrackerDb.TABLE_ADAPTER_HISTORY -> ADAPTER_HISTORY_COLUMNS
+            VoltTrackerDb.TABLE_DIAGNOSTIC_CODES -> DIAGNOSTIC_CODE_COLUMNS
+            else -> throw IllegalArgumentException("Unknown merge table: $table")
+        }
+
+    private val VEHICLE_COLUMNS =
+        arrayOf(
+            "_id",
+            "vehicle_key",
+            "display_name",
+            "make",
+            "model",
+            "model_year",
+            "vin_redacted",
+            "vin_hash",
+            "vin_source",
+            "first_seen_ms",
+            "last_seen_ms",
+            "created_at_ms",
+            "updated_at_ms",
+            "metadata_json",
+        )
+    private val SESSION_COLUMNS =
+        arrayOf(
+            "_id",
+            "mode",
+            "adapter_address",
+            "adapter_name",
+            "started_at_ms",
+            "ended_at_ms",
+            "status",
+            "supported_pids",
+            "sample_count",
+            "last_event_at_ms",
+            "created_at_ms",
+        )
+    private val TELEMETRY_COLUMNS =
+        arrayOf(
+            "_id",
+            "session_id",
+            "captured_at_ms",
+            "source",
+            "vehicle_state",
+            "speed_kph",
+            "rpm",
+            "coolant_c",
+            "load_pct",
+            "throttle_pct",
+            "voltage",
+            "soc",
+            "battery_temp",
+            "power_kw",
+            "pack_voltage",
+            "pack_current_a",
+            "latitude",
+            "longitude",
+            "accuracy_m",
+            "gps_speed_mps",
+            "bearing_deg",
+            "location_age_ms",
+            "sample_number",
+            "session_ms",
+            "charge_transition_hint",
+            "app_foreground",
+            "raw",
+            "json",
+        )
+    private val EVENT_COLUMNS =
+        arrayOf("_id", "session_id", "occurred_at_ms", "kind", "state", "detail", "blocked", "payload")
+    private val PID_OBSERVATION_COLUMNS =
+        arrayOf(
+            "_id",
+            "session_id",
+            "observed_at_ms",
+            "command",
+            "header",
+            "pid",
+            "name",
+            "value_text",
+            "value_numeric",
+            "unit",
+            "raw_request",
+            "raw_response",
+            "json",
+        )
+    private val LOCATION_SAMPLE_COLUMNS =
+        arrayOf(
+            "_id",
+            "session_id",
+            "captured_at_ms",
+            "provider",
+            "latitude",
+            "longitude",
+            "accuracy_m",
+            "altitude_m",
+            "speed_mps",
+            "bearing_deg",
+            "location_age_ms",
+            "elapsed_realtime_nanos",
+            "json",
+        )
+    private val FIELD_CAPABILITY_COLUMNS =
+        arrayOf(
+            "_id",
+            "vehicle_id",
+            "adapter_key",
+            "protocol",
+            "header",
+            "command",
+            "pid",
+            "name",
+            "unit",
+            "supported",
+            "response_count",
+            "first_seen_ms",
+            "last_seen_ms",
+            "sample_json",
+        )
+    private val TRIP_SEGMENT_COLUMNS =
+        arrayOf(
+            "_id",
+            "session_id",
+            "vehicle_id",
+            "started_at_ms",
+            "ended_at_ms",
+            "start_sample_id",
+            "end_sample_id",
+            "route_available",
+            "distance_m",
+            "max_speed_kph",
+            "avg_speed_kph",
+            "energy_kwh",
+            "classification",
+            "confidence",
+            "created_at_ms",
+            "summary_json",
+        )
+    private val CHARGE_SESSION_COLUMNS =
+        arrayOf(
+            "_id",
+            "session_id",
+            "vehicle_id",
+            "started_at_ms",
+            "ended_at_ms",
+            "charger_type",
+            "start_soc",
+            "end_soc",
+            "start_sample_id",
+            "end_sample_id",
+            "voltage",
+            "current_a",
+            "power_kw",
+            "energy_kwh",
+            "interrupted",
+            "confidence",
+            "created_at_ms",
+            "summary_json",
+        )
+    private val BATTERY_SNAPSHOT_COLUMNS =
+        arrayOf(
+            "_id",
+            "session_id",
+            "vehicle_id",
+            "captured_at_ms",
+            "soc",
+            "capacity_ah",
+            "soh_pct",
+            "pack_voltage",
+            "pack_current_a",
+            "pack_power_kw",
+            "battery_temp_c",
+            "odometer_km",
+            "created_at_ms",
+            "json",
+        )
+    private val CELL_SNAPSHOT_COLUMNS =
+        arrayOf(
+            "_id",
+            "battery_snapshot_id",
+            "cell_index",
+            "voltage",
+            "temperature_c",
+            "resistance_mohm",
+            "balance_mv",
+            "json",
+        )
+    private val EXPORT_COLUMNS =
+        arrayOf(
+            "_id",
+            "session_id",
+            "vehicle_id",
+            "created_at_ms",
+            "exported_at_ms",
+            "range_start_ms",
+            "range_end_ms",
+            "export_type",
+            "status",
+            "file_name",
+            "mime_type",
+            "bytes",
+            "destination",
+            "include_precise_location",
+            "include_raw_logs",
+            "error",
+            "manifest_json",
+        )
+    private val ADAPTER_HISTORY_COLUMNS =
+        arrayOf(
+            "adapter_key",
+            "address",
+            "name",
+            "first_seen_ms",
+            "last_seen_ms",
+            "connect_count",
+            "scan_count",
+            "demo_count",
+            "sample_count",
+            "last_session_id",
+            "last_mode",
+            "last_status",
+            "supported_pids",
+            "last_event_detail",
+        )
+    private val ADAPTER_HISTORY_MERGE_COLUMNS =
+        arrayOf(
+            "adapter_key",
+            "address",
+            "name",
+            "first_seen_ms",
+            "last_seen_ms",
+            "connect_count",
+            "scan_count",
+            "demo_count",
+            "sample_count",
+            "last_session_id",
+            "last_mode",
+            "last_status",
+            "supported_pids",
+            "last_event_detail",
+        )
+    private val DIAGNOSTIC_CODE_COLUMNS =
+        arrayOf(
+            "_id",
+            "dtc",
+            "status",
+            "status_label",
+            "module_key",
+            "module_name",
+            "header",
+            "first_seen_ms",
+            "last_seen_ms",
+            "seen_count",
+            "last_session_id",
+            "raw_response",
+            "json",
+        )
+    private val DIAGNOSTIC_MERGE_COLUMNS =
+        arrayOf(
+            "dtc",
+            "status",
+            "status_label",
+            "module_key",
+            "module_name",
+            "header",
+            "first_seen_ms",
+            "last_seen_ms",
+            "seen_count",
+            "last_session_id",
+            "raw_response",
+            "json",
+        )
 }

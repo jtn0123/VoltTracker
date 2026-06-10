@@ -33,8 +33,27 @@ class EnhancedPidProfilesTest {
         for (profile in EnhancedPidProfiles.forCategory("tpms")) {
             assertEquals("tpms", profile.category)
             assertEquals(EnhancedPidProfiles.STAGE_TIRES, profile.scanStage)
+            assertEquals(EnhancedPidProfiles.STATUS_REJECTED, profile.validationStatus)
         }
         assertTrue(EnhancedPidProfiles.forCategory("tpms").size >= 8)
+    }
+
+    @Test
+    fun sensorExpansionProfilesCoverNewHeadersAndStayDiagnosticOnlyUnlessConfirmed() {
+        assertNotNull(EnhancedPidProfiles.find("ATSH7E6", "224501"))
+        assertNotNull(EnhancedPidProfiles.find("ATSH7E7", "224181"))
+        assertNotNull(EnhancedPidProfiles.find("ATSH7E4", "224329"))
+        assertNotNull(EnhancedPidProfiles.find("", "0132"))
+
+        val capacity = EnhancedPidProfiles.find("ATSH7E4", "2241A3")
+        assertNotNull(capacity)
+        assertEquals(EnhancedPidProfiles.STATUS_CONFIRMED, capacity!!.validationStatus)
+        assertEquals("once_per_drive", capacity.pollLane)
+
+        for (profile in EnhancedPidProfiles.forCategory("brake")) {
+            assertEquals("diagnostic_only", profile.pollLane)
+            assertEquals(EnhancedPidProfiles.STATUS_CANDIDATE, profile.validationStatus)
+        }
     }
 
     @Test

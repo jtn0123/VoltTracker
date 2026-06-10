@@ -20,7 +20,9 @@ module.exports = defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: 1,
   timeout: 60_000,
-  reporter: process.env.CI ? [['github'], ['list']] : 'list',
+  reporter: process.env.CI
+    ? [['github'], ['list'], ['json', { outputFile: 'playwright-report/results.json' }]]
+    : 'list',
   use: {
     baseURL: BASE_URL,
     // A phone-ish portrait viewport at scale 1 so layout assertions and screenshots are stable.

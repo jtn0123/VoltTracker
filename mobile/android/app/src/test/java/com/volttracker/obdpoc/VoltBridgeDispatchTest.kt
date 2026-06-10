@@ -379,6 +379,17 @@ class VoltBridgeDispatchTest {
         assertTrue(payload.optBoolean("ok"))
     }
 
+    @Test
+    fun exportDetailedSignalLogsReturnsValidJsonWhenStorageUnavailable() {
+        activity.localStore = null
+
+        val payload = JSONObject(bridge.exportDetailedSignalLogs())
+
+        assertFalse(payload.optBoolean("ok", true))
+        assertEquals("storage_unavailable", payload.optString("error"))
+        assertEquals("Local storage is not ready.", payload.optString("message"))
+    }
+
     // ---- openExternalSearch ------------------------------------------------------------
 
     @Test

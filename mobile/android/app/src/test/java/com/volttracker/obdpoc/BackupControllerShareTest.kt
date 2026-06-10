@@ -133,7 +133,7 @@ class BackupControllerShareTest {
         )
         assertTrue(
             "encrypted backup disclosure should set passphrase-strength expectations",
-            shadow.message.toString().contains("strong, unique passphrase"),
+            shadow.message.toString().contains("at least 8 characters"),
         )
         assertTrue(
             "encrypted backup disclosure should explain lost passphrases cannot be recovered",
@@ -232,14 +232,14 @@ class BackupControllerShareTest {
         assertNull(ShadowAlertDialog.getLatestAlertDialog())
         assertNull(activity.lastStartedIntent)
         assertEquals("blocked", activity.lastState)
-        assertEquals("Enter a backup passphrase first.", activity.lastDetail)
+        assertEquals("Enter a backup passphrase with at least 8 characters.", activity.lastDetail)
     }
 
     @Test
     fun encryptedShareProducesEncryptedBackupAndShareIntent() {
         seedOneSession()
 
-        activity.backupController!!.launchEncryptedShare("hunter2")
+        activity.backupController!!.launchEncryptedShare("hunter22")
         latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
         settle()
 
@@ -267,12 +267,12 @@ class BackupControllerShareTest {
 
         assertNull(activity.launchedRestoreIntent)
         assertEquals("blocked", activity.lastState)
-        assertEquals("Enter the backup passphrase first.", activity.lastDetail)
+        assertEquals("Enter a backup passphrase with at least 8 characters.", activity.lastDetail)
     }
 
     @Test
     fun encryptedRestorePickerLaunchesSafIntentWhenIdle() {
-        activity.backupController!!.launchEncryptedRestorePicker("hunter2")
+        activity.backupController!!.launchEncryptedRestorePicker("hunter22")
 
         val started = activity.launchedRestoreIntent
         assertNotNull(started)

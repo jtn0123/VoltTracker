@@ -22,13 +22,36 @@ open class ElmConnection
         private var input: InputStream? = null,
         private var output: OutputStream? = null,
         private val clock: Clock = Clock { System.currentTimeMillis() },
+        private val socketFactory: SocketFactory =
+            SocketFactory { device, uuid ->
+                BluetoothElmSocket(device.createRfcommSocketToServiceRecord(uuid))
+            },
     ) {
         fun interface Clock {
             fun nowMs(): Long
         }
 
+        fun interface SocketFactory {
+            fun create(
+                device: BluetoothDevice,
+                uuid: UUID,
+            ): ElmSocket
+        }
+
         fun interface KeepWaiting {
             fun getAsBoolean(): Boolean
+        }
+
+        interface ElmSocket {
+            val isConnected: Boolean
+            val inputStream: InputStream
+            val outputStream: OutputStream
+
+            @Throws(IOException::class)
+            fun connect()
+
+            @Throws(IOException::class)
+            fun close()
         }
 
         @JvmField var rfcommConnectMs: Long = -1L
@@ -44,7 +67,7 @@ open class ElmConnection
 
         @JvmField var lastTransactTruncated: Boolean = false
 
-        private var socket: BluetoothSocket? = null
+        private var socket: ElmSocket? = null
 
         fun isOpen(): Boolean = input != null && output != null
 
@@ -59,19 +82,34 @@ open class ElmConnection
             uuid: UUID,
             connectTimeoutMs: Long,
         ) {
+            openSocket(socketFactory.create(device, uuid), connectTimeoutMs)
+        }
+
+        @Throws(IOException::class)
+        internal fun openSocketForTest(
+            pendingSocket: ElmSocket,
+            connectTimeoutMs: Long,
+        ) {
+            openSocket(pendingSocket, connectTimeoutMs)
+        }
+
+        private fun openSocket(
+            pendingSocket: ElmSocket,
+            connectTimeoutMs: Long,
+        ) {
             rfcommConnectMs = -1L
             getStreamsMs = -1L
             firstReadMs = -1L
             lastErrorPhase = ""
             watchdogFired = false
 
-            val pendingSocket = device.createRfcommSocketToServiceRecord(uuid)
             socket = pendingSocket
             val watchdog =
                 Thread {
                     try {
                         Thread.sleep(connectTimeoutMs)
-                    } catch (_: InterruptedException) {
+                    } catch (ex: InterruptedException) {
+                        Thread.currentThread().interrupt()
                         return@Thread
                     }
                     if (!pendingSocket.isConnected) {
@@ -244,6 +282,27 @@ open class ElmConnection
                 } catch (ex: InterruptedException) {
                     Thread.currentThread().interrupt()
                 }
+            }
+        }
+
+        private class BluetoothElmSocket(
+            private val delegate: BluetoothSocket,
+        ) : ElmSocket {
+            override val isConnected: Boolean
+                get() = delegate.isConnected
+
+            override val inputStream: InputStream
+                get() = delegate.inputStream
+
+            override val outputStream: OutputStream
+                get() = delegate.outputStream
+
+            override fun connect() {
+                delegate.connect()
+            }
+
+            override fun close() {
+                delegate.close()
             }
         }
     }

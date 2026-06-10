@@ -1,3 +1,5 @@
+import { haversineMetersJs } from "./map-route-utils";
+
   // Route scrubber for the Map tab. Drag through a logged drive to inspect
   // speed / elevation / grade / battery / efficiency at each point. Fed by
   // map.js renderScrubber(route); the marker rides the Leaflet map. Efficiency
@@ -6,7 +8,6 @@
 
   const VD = window.VoltDashboard;
   const el = VD.el;
-  const haversineMetersJs = VD.haversineMetersJs;
 
   type ScrubPoint = {
     lat: number;

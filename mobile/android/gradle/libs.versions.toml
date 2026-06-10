@@ -6,6 +6,7 @@ junit = "4.13.2"
 json = "20260522"
 robolectric = "4.16.1"
 spotless = "8.6.0"
+test-retry = "1.6.4"
 
 [libraries]
 androidx-core = { module = "androidx.core:core", version.ref = "androidx-core" }
@@ -17,3 +18,4 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+test-retry = { id = "org.gradle.test-retry", version.ref = "test-retry" }

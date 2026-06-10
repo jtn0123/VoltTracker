@@ -225,6 +225,17 @@ class PidPollingStateTest {
         assertFalse("must not also poll speed per-PID", engine.commandLog.contains("010D"))
     }
 
+    @Test
+    fun everyNonBroadcastHeaderHasASelectableAtCommand() {
+        for (header in PidSchedule.Header.entries) {
+            if (header == PidSchedule.Header.BROADCAST) {
+                assertNull(header.atCommand)
+            } else {
+                assertNotNull("non-broadcast header $header must declare an ATSH command", header.atCommand)
+            }
+        }
+    }
+
     // ---- helpers --------------------------------------------------------------------
 
     private companion object {

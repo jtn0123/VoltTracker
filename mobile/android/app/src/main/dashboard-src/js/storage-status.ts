@@ -50,7 +50,7 @@
       updateStorageUi();
       updateReviewUi();
       renderRealV2Ui();
-      VD.renderMap();
+      VD.renderMapIfLoaded();
       VD.updateValidationUi();
       return;
     }
@@ -69,7 +69,7 @@
     updateStorageUi();
     updateReviewUi();
     renderRealV2Ui();
-    VD.renderMap();
+    VD.renderMapIfLoaded();
     VD.updateValidationUi();
     VD.loadTrips();
     VD.loadInsights();
@@ -477,12 +477,25 @@
       .join(", ") || "Only unknown state samples stored.";
   }
 
+  function selectedRouteForOverview(storage: VoltStorageSummary): VoltRoute {
+    if (typeof VD.selectedMapRoute === "function") {
+      return VD.selectedMapRoute(storage);
+    }
+    const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
+    if (!routes.length) return {};
+    const selectedId = String(state.selectedMapSessionId || "");
+    const selected = selectedId
+      ? routes.find((route) => String((route.session || {}).id || "") === selectedId)
+      : null;
+    return (selected || routes[0] || {}) as VoltRoute;
+  }
+
   function renderRealV2Ui() {
     const storage = state.storage || {};
     const overview: Record<string, unknown> = storage.overview || {};
     const battery: Record<string, unknown> = storage.batterySummary || {};
     const charge = storage.chargeSummary || {};
-    const route = VD.selectedMapRoute(storage);
+    const route = selectedRouteForOverview(storage);
     const hasRows = VD.dbRowCount(storage) > 0;
     const _hasRoute = Number(route.pointCount || 0) >= 2;
     const hasCharge = Number(charge.chargeSessionCount || charge.chargingHintCount || 0) > 0;

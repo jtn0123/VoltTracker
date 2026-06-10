@@ -66,7 +66,8 @@ object ObdStoreRouteProjection {
         val windowsBySession = DriveWindowDetector.windowsForSessions(db, sessions)
         for (session in sessions) {
             for (window in windowsBySession[session.id].orEmpty()) {
-                val route = routeForSession(db, session, pointLimit, window.startedAtMs, window.endedAtMs, window.routeKey())
+                val route =
+                    routeForSession(db, session, pointLimit, window.startedAtMs, window.endedAtMs, window.routeKey())
                 val points = route.optJSONArray("points")
                 if (points == null || points.length() < 2) {
                     continue
@@ -121,7 +122,15 @@ object ObdStoreRouteProjection {
                 downsampledRoutePoints(
                     db,
                     VoltTrackerDb.TABLE_LOCATION_SAMPLES,
-                    arrayOf("captured_at_ms", "latitude", "longitude", "accuracy_m", "speed_mps", "bearing_deg", "altitude_m"),
+                    arrayOf(
+                        "captured_at_ms",
+                        "latitude",
+                        "longitude",
+                        "accuracy_m",
+                        "speed_mps",
+                        "bearing_deg",
+                        "altitude_m",
+                    ),
                     sessionWhere,
                     sessionArg,
                     locationTotal,
@@ -181,10 +190,20 @@ object ObdStoreRouteProjection {
         val stride = strideFor(total, target)
         val points = JSONArray()
         var tail: JSONObject? = null
-        db.query(table, columns, where, whereArgs, null, null, "captured_at_ms ASC").use { cursor ->
+        val cursor =
+            if (total > target && stride > 1L) {
+                sampledRouteCursor(db, table, columns, where, whereArgs, stride, target)
+            } else {
+                db.query(table, columns, where, whereArgs, null, null, "captured_at_ms ASC")
+            }
+        cursor.use { cursor ->
             var idx = 0L
             while (cursor.moveToNext()) {
                 val item = buildRoutePointItem(cursor, fromLocationSamples)
+                if (total > target && stride > 1L) {
+                    points.put(item)
+                    continue
+                }
                 if (cursor.isLast) {
                     tail = item
                     break
@@ -199,6 +218,27 @@ object ObdStoreRouteProjection {
         }
         tail?.let { points.put(it) }
         return points
+    }
+
+    private fun sampledRouteCursor(
+        db: SQLiteDatabase,
+        table: String,
+        columns: Array<String>,
+        where: String,
+        whereArgs: Array<String>,
+        stride: Long,
+        target: Int,
+    ): Cursor {
+        val projection = columns.joinToString(", ")
+        val sampledLimit = maxOf(1, target - 2)
+        val sql =
+            "SELECT $projection FROM $table WHERE ($where) AND (" +
+                "_id = (SELECT _id FROM $table WHERE ($where) ORDER BY captured_at_ms ASC, _id ASC LIMIT 1) " +
+                "OR _id IN (SELECT _id FROM $table WHERE ($where) AND (_id % $stride = 0) " +
+                "ORDER BY captured_at_ms ASC LIMIT $sampledLimit) " +
+                "OR _id = (SELECT _id FROM $table WHERE ($where) ORDER BY captured_at_ms DESC, _id DESC LIMIT 1)" +
+                ") ORDER BY captured_at_ms ASC, _id ASC"
+        return db.rawQuery(sql, whereArgs + whereArgs + whereArgs + whereArgs)
     }
 
     @Throws(JSONException::class)
@@ -273,8 +313,15 @@ object ObdStoreRouteProjection {
         }
         val stride = strideFor(total, target)
         db
-            .query(VoltTrackerDb.TABLE_TELEMETRY, arrayOf("captured_at_ms", column), where, args, null, null, "captured_at_ms ASC")
-            .use { cursor ->
+            .query(
+                VoltTrackerDb.TABLE_TELEMETRY,
+                arrayOf("captured_at_ms", column),
+                where,
+                args,
+                null,
+                null,
+                "captured_at_ms ASC",
+            ).use { cursor ->
                 val track = JSONArray()
                 var tail: JSONObject? = null
                 var idx = 0L

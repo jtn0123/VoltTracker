@@ -239,7 +239,7 @@ class ObdPollingEngineExtraTest {
      */
     private class TestObdPollingEngine(
         testService: EngineHost,
-    ) : ObdPollingEngine(testService) {
+    ) : ObdPollingEngine(testService, LoopSleeper { true }) {
         val openCount = AtomicInteger()
 
         override fun isBluetoothReady(): Boolean = true // bypass the real BluetoothAdapter for loop tests

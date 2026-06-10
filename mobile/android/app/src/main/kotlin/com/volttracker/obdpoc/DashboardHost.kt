@@ -78,6 +78,20 @@ interface BackupCommands {
 }
 
 /**
+ * Read-only app state and backup collaborators needed by bridge export paths. Keeping this seam
+ * separate lets export behavior be exercised without mocking the whole Activity.
+ */
+interface BridgeStateProvider {
+    fun requireDataBackup(): DataBackup
+
+    fun requireBackupController(): BackupController
+
+    fun getAppStateJson(): String
+
+    fun getStorageSummaryJson(): String
+}
+
+/**
  * Troubleshooter forwarders plus the diagnostics-oriented session reads they pair with.
  */
 interface DiagnosticsCommands {
@@ -159,7 +173,8 @@ interface DashboardHost :
     BackupCommands,
     DiagnosticsCommands,
     DashboardStatePublisher,
-    SessionDataReader {
+    SessionDataReader,
+    BridgeStateProvider {
     /** Hands an [Intent] to the platform; used for the external DTC search. */
     fun startActivity(intent: Intent?)
 }

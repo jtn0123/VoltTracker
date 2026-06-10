@@ -1,11 +1,9 @@
 package com.volttracker.obdpoc
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import com.volttracker.obdpoc.data.BackupMigrator
 import com.volttracker.obdpoc.data.ObdLocalStore
-import com.volttracker.obdpoc.data.VoltTrackerDb
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -18,18 +16,10 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 import java.security.GeneralSecurityException
-import java.security.SecureRandom
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
-import javax.crypto.Cipher
-import javax.crypto.CipherInputStream
-import javax.crypto.CipherOutputStream
-import javax.crypto.SecretKeyFactory
-import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.PBEKeySpec
-import javax.crypto.spec.SecretKeySpec
 
 /** Owns on-device backup file IO for [MainActivity]. */
 class DataBackup(
@@ -84,7 +74,10 @@ class DataBackup(
         val diagnostics = JSONObject()
         val sessionLogDir = File(context.filesDir, "obd-logs")
         val appLogDir = File(context.filesDir, "app-log")
-        diagnostics.put("sessionCommandTrace", recentLogEntries(sessionLogDir, "session-", ".jsonl", MAX_DEBUG_SESSION_LOGS))
+        diagnostics.put(
+            "sessionCommandTrace",
+            recentLogEntries(sessionLogDir, "session-", ".jsonl", MAX_DEBUG_SESSION_LOGS),
+        )
         diagnostics.put("appLog", recentLogEntries(appLogDir, "app.log", "", MAX_DEBUG_APP_LOGS))
         return diagnostics
     }
@@ -175,7 +168,7 @@ class DataBackup(
         store: ObdLocalStore?,
         passphrase: String?,
     ): File? {
-        if (store == null || !hasPassphrase(passphrase)) {
+        if (store == null || !hasMinimumPassphrase(passphrase)) {
             return null
         }
         return try {
@@ -191,7 +184,7 @@ class DataBackup(
             clearOldBackups(dir)
             val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
             val dest = File(dir, "volttracker-backup-$stamp.vtdb")
-            encryptFile(source, dest, requireNotNull(passphrase))
+            BackupCrypto.encryptFile(source, dest, requireNotNull(passphrase))
             dest
         } catch (ex: Exception) {
             if (ex is IOException || ex is GeneralSecurityException || ex is RuntimeException) null else throw ex
@@ -271,7 +264,7 @@ class DataBackup(
         var encrypted = false
         if (isEncryptedBackup(temp)) {
             encrypted = true
-            if (!hasPassphrase(passphrase)) {
+            if (!hasMinimumPassphrase(passphrase)) {
                 temp.delete()
                 return RestoreStageOutcome(
                     null,
@@ -282,7 +275,7 @@ class DataBackup(
             }
             candidate = File(context.cacheDir, "restore-${UUID.randomUUID()}.db")
             try {
-                decryptFile(temp, candidate, requireNotNull(passphrase), MAX_RESTORE_BYTES)
+                BackupCrypto.decryptFile(temp, candidate, requireNotNull(passphrase), MAX_RESTORE_BYTES)
             } catch (ex: Exception) {
                 if (ex is IOException || ex is GeneralSecurityException || ex is RuntimeException) {
                     temp.delete()
@@ -307,7 +300,12 @@ class DataBackup(
             }
             BackupMigrator.Result.NOT_A_BACKUP -> {
                 candidate.delete()
-                return RestoreStageOutcome(null, RestoreStageStatus.NOT_A_BACKUP, encrypted = encrypted, bytesRead = total)
+                return RestoreStageOutcome(
+                    null,
+                    RestoreStageStatus.NOT_A_BACKUP,
+                    encrypted = encrypted,
+                    bytesRead = total,
+                )
             }
             BackupMigrator.Result.FAILED -> {
                 candidate.delete()
@@ -341,6 +339,7 @@ class DataBackup(
     companion object {
         internal const val MAX_RESTORE_MIB = 512L
         internal const val MAX_RESTORE_BYTES = MAX_RESTORE_MIB * 1024L * 1024L
+        const val MIN_PASSPHRASE_LENGTH = 8
         private const val MAX_DEBUG_LOG_BYTES = 64 * 1024
         private const val MAX_DEBUG_SESSION_LOGS = 3
         private const val MAX_DEBUG_APP_LOGS = 2
@@ -352,68 +351,7 @@ class DataBackup(
                 RegexOption.IGNORE_CASE,
             )
 
-        // Track the live schema version so a future migration bump can't silently make restore
-        // reject freshly-created backups (a v11 backup must validate as current, not "too new").
-        private const val CURRENT_RESTORE_SCHEMA_VERSION = VoltTrackerDb.DATABASE_VERSION
         private const val IO_BUFFER_BYTES = 8192
-        private val ENCRYPTED_BACKUP_MAGIC =
-            byteArrayOf(
-                'V'.code.toByte(),
-                'T'.code.toByte(),
-                'B'.code.toByte(),
-                'K'.code.toByte(),
-                'E'.code.toByte(),
-                'N'.code.toByte(),
-                '1'.code.toByte(),
-                '\n'.code.toByte(),
-            )
-
-        // v2 = the v1 magic with the version byte ('1' at index 6) bumped to '2'. v2 backups feed
-        // the magic+salt+IV header to AES/GCM as AAD, so the auth tag authenticates the cleartext
-        // header (not just the ciphertext). v1 backups predate this; the decrypt branch below skips
-        // AAD for them so they still open. Same 8-byte length, so header parsing is unchanged.
-        private val ENCRYPTED_BACKUP_MAGIC_V2 =
-            ENCRYPTED_BACKUP_MAGIC.copyOf().also { it[6] = '2'.code.toByte() }
-        private const val ENCRYPTION_SALT_BYTES = 16
-        private const val ENCRYPTION_IV_BYTES = 12
-        private const val ENCRYPTION_KEY_BITS = 256
-        private const val ENCRYPTION_PBKDF2_ITERATIONS = 150_000
-        private val REQUIRED_RESTORE_TABLES =
-            arrayOf(
-                "obd_sessions",
-                "telemetry_samples",
-                "status_events",
-                "adapter_history",
-                "pid_observations",
-                "diagnostic_codes",
-                "location_samples",
-                "vehicles",
-                "field_capabilities",
-                "trip_segments",
-                "session_trip_rollups",
-                "charge_sessions",
-                "battery_snapshots",
-                "cell_snapshots",
-                "exports",
-            )
-        private val REQUIRED_RESTORE_COLUMNS =
-            arrayOf(
-                arrayOf("obd_sessions", "_id", "mode", "started_at_ms", "status", "sample_count"),
-                arrayOf("telemetry_samples", "_id", "session_id", "captured_at_ms", "pack_voltage", "pack_current_a", "json"),
-                arrayOf("status_events", "_id", "occurred_at_ms", "kind", "payload"),
-                arrayOf("adapter_history", "adapter_key", "last_seen_ms", "last_status"),
-                arrayOf("pid_observations", "_id", "session_id", "observed_at_ms", "json"),
-                arrayOf("diagnostic_codes", "_id", "dtc", "status", "last_seen_ms"),
-                arrayOf("location_samples", "_id", "session_id", "captured_at_ms", "latitude", "longitude"),
-                arrayOf("vehicles", "_id", "vin_hash", "vin_redacted", "last_seen_ms"),
-                arrayOf("field_capabilities", "_id", "command", "first_seen_ms", "last_seen_ms"),
-                arrayOf("trip_segments", "_id", "started_at_ms", "created_at_ms"),
-                arrayOf("session_trip_rollups", "session_id", "counted", "distance_m", "duration_ms", "started_at_ms", "rollup_version"),
-                arrayOf("charge_sessions", "_id", "started_at_ms", "created_at_ms"),
-                arrayOf("battery_snapshots", "_id", "captured_at_ms", "created_at_ms"),
-                arrayOf("cell_snapshots", "_id", "battery_snapshot_id", "cell_index"),
-                arrayOf("exports", "_id", "created_at_ms", "export_type", "status"),
-            )
 
         @JvmStatic
         fun redactDebugLogText(text: String?): String {
@@ -429,20 +367,7 @@ class DataBackup(
         }
 
         @JvmStatic
-        fun clearRegenerableRollupCache(file: File?) {
-            if (file == null) {
-                return
-            }
-            var db: SQLiteDatabase? = null
-            try {
-                db = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE)
-                db.execSQL("DELETE FROM session_trip_rollups")
-            } catch (ex: RuntimeException) {
-                // Best-effort: the cache rebuilds lazily.
-            } finally {
-                db?.close()
-            }
-        }
+        fun clearRegenerableRollupCache(file: File?) = RestoreValidator.clearRegenerableRollupCache(file)
 
         private fun clearOldBackups(dir: File) {
             cleanupTransientBackupFiles(dir)
@@ -479,182 +404,14 @@ class DataBackup(
         }
 
         @JvmStatic
-        fun isEncryptedBackup(file: File?): Boolean {
-            if (file == null) {
-                return false
-            }
-            val header = ByteArray(ENCRYPTED_BACKUP_MAGIC.size)
-            return try {
-                FileInputStream(file).use { input ->
-                    if (input.read(header) != header.size) {
-                        return false
-                    }
-                    isMagic(header)
-                }
-            } catch (ex: IOException) {
-                false
-            }
-        }
+        fun isEncryptedBackup(file: File?): Boolean = BackupCrypto.isEncryptedBackup(file)
 
         @JvmStatic
-        fun isVoltTrackerBackup(file: File?): Boolean {
-            if (file == null) {
-                return false
-            }
-            val header = ByteArray(16)
-            try {
-                FileInputStream(file).use { input ->
-                    if (input.read(header) != header.size ||
-                        !String(header, StandardCharsets.US_ASCII).startsWith("SQLite format 3")
-                    ) {
-                        return false
-                    }
-                }
-            } catch (ex: IOException) {
-                return false
-            }
+        fun isVoltTrackerBackup(file: File?): Boolean = RestoreValidator.isVoltTrackerBackup(file)
 
-            var db: SQLiteDatabase? = null
-            return try {
-                db = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY)
-                if (db.version != CURRENT_RESTORE_SCHEMA_VERSION) {
-                    return false
-                }
-                db.rawQuery(requiredTablesSql(), REQUIRED_RESTORE_TABLES).use { cursor ->
-                    if (!cursor.moveToFirst() || cursor.getInt(0) != REQUIRED_RESTORE_TABLES.size) {
-                        return false
-                    }
-                }
-                if (!hasRequiredColumns(db)) {
-                    return false
-                }
-                if (!integrityCheckOk(db)) {
-                    return false
-                }
-                foreignKeyCheckOk(db)
-            } catch (ex: RuntimeException) {
-                false
-            } finally {
-                db?.close()
-            }
-        }
-
-        private fun hasRequiredColumns(db: SQLiteDatabase): Boolean {
-            for (tableAndColumns in REQUIRED_RESTORE_COLUMNS) {
-                val table = tableAndColumns[0]
-                val columns = HashSet<String>()
-                db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
-                    val nameIndex = cursor.getColumnIndex("name")
-                    while (cursor.moveToNext()) {
-                        columns.add(cursor.getString(nameIndex))
-                    }
-                }
-                for (i in 1 until tableAndColumns.size) {
-                    if (!columns.contains(tableAndColumns[i])) {
-                        return false
-                    }
-                }
-            }
-            return true
-        }
-
-        private fun integrityCheckOk(db: SQLiteDatabase): Boolean =
-            db.rawQuery("PRAGMA integrity_check", null).use { cursor ->
-                cursor.moveToFirst() && "ok".equals(cursor.getString(0), ignoreCase = true)
-            }
-
-        private fun foreignKeyCheckOk(db: SQLiteDatabase): Boolean =
-            db.rawQuery("PRAGMA foreign_key_check", null).use { cursor ->
-                !cursor.moveToFirst()
-            }
-
-        private fun requiredTablesSql(): String {
-            val placeholders = REQUIRED_RESTORE_TABLES.joinToString(", ") { "?" }
-            return "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ($placeholders)"
-        }
-
-        private fun hasPassphrase(passphrase: String?): Boolean = !passphrase?.trim().isNullOrEmpty()
-
-        @Throws(IOException::class, GeneralSecurityException::class)
-        private fun encryptFile(
-            source: File,
-            dest: File,
-            passphrase: String,
-        ) {
-            val salt = ByteArray(ENCRYPTION_SALT_BYTES)
-            val iv = ByteArray(ENCRYPTION_IV_BYTES)
-            SecureRandom().apply {
-                nextBytes(salt)
-                nextBytes(iv)
-            }
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, deriveKey(passphrase, salt), GCMParameterSpec(128, iv))
-            // Authenticate the cleartext header into the GCM tag (must precede any encryption).
-            cipher.updateAAD(ENCRYPTED_BACKUP_MAGIC_V2)
-            cipher.updateAAD(salt)
-            cipher.updateAAD(iv)
-            FileInputStream(source).use { input ->
-                FileOutputStream(dest).use { fileOut ->
-                    fileOut.write(ENCRYPTED_BACKUP_MAGIC_V2)
-                    fileOut.write(salt)
-                    fileOut.write(iv)
-                    CipherOutputStream(fileOut, cipher).use { out -> copyStream(input, out) }
-                }
-            }
-        }
-
-        @Throws(IOException::class, GeneralSecurityException::class)
-        private fun decryptFile(
-            source: File,
-            dest: File,
-            passphrase: String,
-            maxPlaintextBytes: Long,
-        ) {
-            val magic = ByteArray(ENCRYPTED_BACKUP_MAGIC.size)
-            val salt = ByteArray(ENCRYPTION_SALT_BYTES)
-            val iv = ByteArray(ENCRYPTION_IV_BYTES)
-            FileInputStream(source).use { fileIn ->
-                if (fileIn.read(magic) != magic.size || !isMagic(magic)) {
-                    throw IOException("Not an encrypted Volt Tracker backup")
-                }
-                if (fileIn.read(salt) != salt.size || fileIn.read(iv) != iv.size) {
-                    throw IOException("Encrypted backup header is truncated")
-                }
-                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                cipher.init(Cipher.DECRYPT_MODE, deriveKey(passphrase, salt), GCMParameterSpec(128, iv))
-                // v2 backups authenticated the header as AAD at encrypt time; feed the SAME bytes
-                // back (a tampered header then fails the tag check). v1 backups had no AAD, so adding
-                // it would break their tag — skip it for them.
-                if (magic.contentEquals(ENCRYPTED_BACKUP_MAGIC_V2)) {
-                    cipher.updateAAD(magic)
-                    cipher.updateAAD(salt)
-                    cipher.updateAAD(iv)
-                }
-                CipherInputStream(fileIn, cipher).use { input ->
-                    FileOutputStream(dest).use { out ->
-                        copyStream(input, out, maxPlaintextBytes)
-                        out.fd.sync()
-                    }
-                }
-            }
-        }
-
-        @Throws(GeneralSecurityException::class)
-        private fun deriveKey(
-            passphrase: String,
-            salt: ByteArray,
-        ): SecretKeySpec {
-            val spec = PBEKeySpec(passphrase.toCharArray(), salt, ENCRYPTION_PBKDF2_ITERATIONS, ENCRYPTION_KEY_BITS)
-            return try {
-                val key = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
-                SecretKeySpec(key, "AES")
-            } finally {
-                spec.clearPassword()
-            }
-        }
-
-        private fun isMagic(header: ByteArray): Boolean =
-            header.contentEquals(ENCRYPTED_BACKUP_MAGIC) || header.contentEquals(ENCRYPTED_BACKUP_MAGIC_V2)
+        @JvmStatic
+        fun hasMinimumPassphrase(passphrase: String?): Boolean =
+            (passphrase?.trim()?.length ?: 0) >= MIN_PASSPHRASE_LENGTH
 
         @Throws(IOException::class)
         private fun copyStream(
