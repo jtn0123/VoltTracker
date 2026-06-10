@@ -345,6 +345,30 @@ class VoltBridgeDispatchTest {
         assertTrue(activity.lastStatusBlocked)
     }
 
+    @Test
+    fun markTripNotTripConfirmsAndRefreshesStorageOnSuccess() {
+        activity.store.markTripReturn = true
+
+        bridge.markTripNotTrip("12:1000:2000")
+        drain()
+
+        assertEquals("Mark as not a trip?", activity.lastConfirmationTitle)
+        assertEquals("12:1000:2000", activity.store.lastMarkedTripRouteKey)
+        assertEquals("ready", activity.lastStatusState)
+        assertFalse(activity.lastStatusBlocked)
+        assertTrue(activity.storageSummaryCalls > 0)
+    }
+
+    @Test
+    fun markTripNotTripRejectsBlankRouteKey() {
+        bridge.markTripNotTrip(" ")
+        drain()
+
+        assertNull(activity.store.lastMarkedTripRouteKey)
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+    }
+
     // ---- export detailed signal logs ---------------------------------------------------
 
     @Test
@@ -715,6 +739,8 @@ class VoltBridgeDispatchTest {
 
         var bulkExport = JSONObject()
         var lastBulkExportLimit = Int.MIN_VALUE
+        var markTripReturn = false
+        var lastMarkedTripRouteKey: String? = null
 
         override fun clearAllData() {
             clearAllDataCalls += 1
@@ -733,6 +759,11 @@ class VoltBridgeDispatchTest {
         override fun getEnhancedCapabilitiesExportJson(limit: Int): JSONObject {
             lastBulkExportLimit = limit
             return bulkExport
+        }
+
+        override fun markTripNotTrip(routeKey: String?): Boolean {
+            lastMarkedTripRouteKey = routeKey
+            return markTripReturn
         }
     }
 

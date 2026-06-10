@@ -167,6 +167,11 @@ class VoltBridge(
     }
 
     @JavascriptInterface
+    fun markTripNotTrip(routeKey: String?) {
+        dataExports.markTripNotTrip(routeKey)
+    }
+
+    @JavascriptInterface
     fun demo() {
         connections.demo()
     }

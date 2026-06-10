@@ -72,6 +72,7 @@ object RestoreValidator {
         try {
             db = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE)
             db.execSQL("DELETE FROM session_trip_rollups")
+            db.execSQL("DELETE FROM trip_list_cache")
         } catch (ex: RuntimeException) {
             // Best-effort: the cache rebuilds lazily.
         } finally {

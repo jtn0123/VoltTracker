@@ -357,6 +357,13 @@ open class MainActivity :
         title: String?,
         detail: String?,
         tone: String?,
+        phase: String?,
+        bytesDone: Long,
+        bytesTotal: Long,
+        rowsDone: Long,
+        rowsTotal: Long,
+        percent: Int,
+        etaSeconds: Long,
     ) {
         val payload = JSONObject()
         try {
@@ -365,6 +372,27 @@ open class MainActivity :
             payload.put("title", title)
             payload.put("detail", detail)
             payload.put("tone", tone)
+            if (!phase.isNullOrBlank()) {
+                payload.put("phase", phase)
+            }
+            if (bytesDone >= 0L) {
+                payload.put("bytesDone", bytesDone)
+            }
+            if (bytesTotal >= 0L) {
+                payload.put("bytesTotal", bytesTotal)
+            }
+            if (rowsDone >= 0L) {
+                payload.put("rowsDone", rowsDone)
+            }
+            if (rowsTotal >= 0L) {
+                payload.put("rowsTotal", rowsTotal)
+            }
+            if (percent >= 0) {
+                payload.put("percent", percent.coerceIn(0, 100))
+            }
+            if (etaSeconds >= 0L) {
+                payload.put("etaSeconds", etaSeconds)
+            }
         } catch (ignored: JSONException) {
             // Values are local literals.
         }

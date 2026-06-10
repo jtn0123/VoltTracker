@@ -120,6 +120,14 @@ class BackupControllerDialogTest {
         )
         // The cleared live store has the donor session back.
         assertEquals(1, activity.localStore!!.getRecentSessions(10).size)
+        assertTrue(
+            "merge should publish row progress for the restore overlay",
+            activity.restoreProgress.any {
+                it.title == "Merging backup" &&
+                    it.rowsTotal > 0L &&
+                    it.percent in 0..100
+            },
+        )
     }
 
     @Test
@@ -266,8 +274,30 @@ class BackupControllerDialogTest {
             title: String?,
             detail: String?,
             tone: String?,
+            phase: String?,
+            bytesDone: Long,
+            bytesTotal: Long,
+            rowsDone: Long,
+            rowsTotal: Long,
+            percent: Int,
+            etaSeconds: Long,
         ) {
-            restoreProgress.add(RestoreProgressEvent(visible, busy, title, detail, tone))
+            restoreProgress.add(
+                RestoreProgressEvent(
+                    visible,
+                    busy,
+                    title,
+                    detail,
+                    tone,
+                    phase,
+                    bytesDone,
+                    bytesTotal,
+                    rowsDone,
+                    rowsTotal,
+                    percent,
+                    etaSeconds,
+                ),
+            )
         }
 
         override fun publishDeviceList() {
@@ -285,5 +315,12 @@ class BackupControllerDialogTest {
         val title: String?,
         val detail: String?,
         val tone: String?,
+        val phase: String?,
+        val bytesDone: Long,
+        val bytesTotal: Long,
+        val rowsDone: Long,
+        val rowsTotal: Long,
+        val percent: Int,
+        val etaSeconds: Long,
     )
 }

@@ -140,11 +140,33 @@ class DataBackup(
         }
     }
 
-    fun buildBackupFile(store: ObdLocalStore?): File? {
+    data class ProgressSnapshot(
+        val phase: String,
+        val detail: String? = null,
+        val bytesDone: Long = -1L,
+        val bytesTotal: Long = -1L,
+        val rowsDone: Long = -1L,
+        val rowsTotal: Long = -1L,
+    )
+
+    fun interface ProgressListener {
+        fun onProgress(snapshot: ProgressSnapshot)
+    }
+
+    fun buildBackupFile(
+        store: ObdLocalStore?,
+        progress: ProgressListener? = null,
+    ): File? {
         if (store == null) {
             return null
         }
         return try {
+            progress?.onProgress(
+                ProgressSnapshot(
+                    "Preparing backup",
+                    "Making the latest database writes safe to copy.",
+                ),
+            )
             store.checkpoint()
             val source = store.getDatabaseFile()
             if (!source.exists()) {
@@ -157,7 +179,13 @@ class DataBackup(
             clearOldBackups(dir)
             val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
             val dest = File(dir, "volttracker-backup-$stamp.db")
-            copyFile(source, dest)
+            copyFile(
+                source,
+                dest,
+                progress,
+                "Writing backup",
+                "Copying your on-phone Volt Tracker data.",
+            )
             dest
         } catch (ex: Exception) {
             if (ex is IOException || ex is RuntimeException) null else throw ex
@@ -167,11 +195,18 @@ class DataBackup(
     fun buildEncryptedBackupFile(
         store: ObdLocalStore?,
         passphrase: String?,
+        progress: ProgressListener? = null,
     ): File? {
         if (store == null || !hasMinimumPassphrase(passphrase)) {
             return null
         }
         return try {
+            progress?.onProgress(
+                ProgressSnapshot(
+                    "Preparing backup",
+                    "Making the latest database writes safe to encrypt.",
+                ),
+            )
             store.checkpoint()
             val source = store.getDatabaseFile()
             if (!source.exists()) {
@@ -184,7 +219,23 @@ class DataBackup(
             clearOldBackups(dir)
             val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
             val dest = File(dir, "volttracker-backup-$stamp.vtdb")
+            progress?.onProgress(
+                ProgressSnapshot(
+                    "Encrypting backup",
+                    "Encrypting the backup before sharing.",
+                    bytesDone = 0L,
+                    bytesTotal = source.length(),
+                ),
+            )
             BackupCrypto.encryptFile(source, dest, requireNotNull(passphrase))
+            progress?.onProgress(
+                ProgressSnapshot(
+                    "Encrypting backup",
+                    "Backup encrypted.",
+                    bytesDone = source.length(),
+                    bytesTotal = source.length(),
+                ),
+            )
             dest
         } catch (ex: Exception) {
             if (ex is IOException || ex is GeneralSecurityException || ex is RuntimeException) null else throw ex
@@ -224,13 +275,23 @@ class DataBackup(
     fun stageRestoreFileWithStatus(
         uri: Uri?,
         passphrase: String?,
+        progress: ProgressListener? = null,
     ): RestoreStageOutcome {
         if (uri == null) {
             return RestoreStageOutcome(null, RestoreStageStatus.NO_FILE)
         }
         val temp = File(context.cacheDir, "restore-${UUID.randomUUID()}.backup")
         var total = 0L
+        val expectedBytes = contentLength(context, uri)
         try {
+            progress?.onProgress(
+                ProgressSnapshot(
+                    "Reading backup",
+                    "Copying the selected file into Volt Tracker.",
+                    bytesDone = 0L,
+                    bytesTotal = expectedBytes,
+                ),
+            )
             context.contentResolver.openInputStream(uri).use { input ->
                 FileOutputStream(temp).use { out ->
                     if (input == null) {
@@ -246,9 +307,25 @@ class DataBackup(
                         total += read.toLong()
                         if (total > MAX_RESTORE_BYTES) {
                             temp.delete()
+                            progress?.onProgress(
+                                ProgressSnapshot(
+                                    "Reading backup",
+                                    "The selected file is larger than Volt Tracker can import on this phone.",
+                                    bytesDone = total,
+                                    bytesTotal = expectedBytes,
+                                ),
+                            )
                             return RestoreStageOutcome(null, RestoreStageStatus.TOO_LARGE, bytesRead = total)
                         }
                         out.write(buffer, 0, read)
+                        progress?.onProgress(
+                            ProgressSnapshot(
+                                "Reading backup",
+                                "Copying the selected file into Volt Tracker.",
+                                bytesDone = total,
+                                bytesTotal = expectedBytes,
+                            ),
+                        )
                     }
                 }
             }
@@ -277,7 +354,23 @@ class DataBackup(
             }
             candidate = File(context.cacheDir, "restore-${UUID.randomUUID()}.db")
             try {
+                progress?.onProgress(
+                    ProgressSnapshot(
+                        "Decrypting backup",
+                        "Unlocking the encrypted backup with your passphrase.",
+                        bytesDone = 0L,
+                        bytesTotal = temp.length(),
+                    ),
+                )
                 BackupCrypto.decryptFile(temp, candidate, requireNotNull(passphrase), MAX_RESTORE_BYTES)
+                progress?.onProgress(
+                    ProgressSnapshot(
+                        "Decrypting backup",
+                        "Encrypted backup unlocked.",
+                        bytesDone = temp.length(),
+                        bytesTotal = temp.length(),
+                    ),
+                )
             } catch (ex: Exception) {
                 if (ex is IOException || ex is GeneralSecurityException || ex is RuntimeException) {
                     temp.delete()
@@ -294,6 +387,12 @@ class DataBackup(
             temp.delete()
         }
 
+        progress?.onProgress(
+            ProgressSnapshot(
+                "Checking backup",
+                "Verifying the database and applying any needed compatibility updates.",
+            ),
+        )
         val migration = BackupMigrator.migrateToCurrentVersion(context, candidate)
         when (migration) {
             BackupMigrator.Result.TOO_NEW -> {
@@ -328,7 +427,21 @@ class DataBackup(
             candidate.delete()
             return RestoreStageOutcome(null, RestoreStageStatus.NOT_A_BACKUP, encrypted = encrypted, bytesRead = total)
         }
+        progress?.onProgress(
+            ProgressSnapshot(
+                "Preparing restore",
+                "Clearing temporary trip summaries so maps and trips rebuild from restored data.",
+            ),
+        )
         clearRegenerableRollupCache(candidate)
+        progress?.onProgress(
+            ProgressSnapshot(
+                "Backup verified",
+                "Choose whether to merge it into this phone or replace everything.",
+                bytesDone = total,
+                bytesTotal = if (expectedBytes >= 0L) expectedBytes else total,
+            ),
+        )
         return RestoreStageOutcome(
             candidate,
             RestoreStageStatus.OK,
@@ -415,12 +528,26 @@ class DataBackup(
         fun hasMinimumPassphrase(passphrase: String?): Boolean =
             (passphrase?.trim()?.length ?: 0) >= MIN_PASSPHRASE_LENGTH
 
+        private fun contentLength(
+            context: Context,
+            uri: Uri,
+        ): Long =
+            try {
+                context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+                    descriptor.length
+                } ?: -1L
+            } catch (ex: RuntimeException) {
+                -1L
+            } catch (ex: IOException) {
+                -1L
+            }
+
         @Throws(IOException::class)
         private fun copyStream(
             input: InputStream,
             out: OutputStream,
         ) {
-            copyStream(input, out, Long.MAX_VALUE)
+            copyStream(input, out, Long.MAX_VALUE, null, null, null, -1L)
         }
 
         @Throws(IOException::class)
@@ -428,6 +555,10 @@ class DataBackup(
             input: InputStream,
             out: OutputStream,
             maxBytes: Long,
+            progress: ProgressListener? = null,
+            phase: String? = null,
+            detail: String? = null,
+            totalBytes: Long = -1L,
         ) {
             val buffer = ByteArray(IO_BUFFER_BYTES)
             var total = 0L
@@ -441,6 +572,16 @@ class DataBackup(
                     throw IOException("Restore file exceeds size limit")
                 }
                 out.write(buffer, 0, read)
+                if (progress != null && phase != null) {
+                    progress.onProgress(
+                        ProgressSnapshot(
+                            phase,
+                            detail,
+                            bytesDone = total,
+                            bytesTotal = totalBytes,
+                        ),
+                    )
+                }
             }
         }
 
@@ -449,11 +590,30 @@ class DataBackup(
         fun copyFile(
             source: File,
             dest: File,
+            progress: ProgressListener? = null,
+            phase: String = "Copying backup",
+            detail: String? = null,
         ) {
             FileInputStream(source).use { input ->
                 FileOutputStream(dest).use { out ->
-                    copyStream(input, out)
+                    progress?.onProgress(
+                        ProgressSnapshot(
+                            phase,
+                            detail,
+                            bytesDone = 0L,
+                            bytesTotal = source.length(),
+                        ),
+                    )
+                    copyStream(input, out, Long.MAX_VALUE, progress, phase, detail, source.length())
                     out.fd.sync()
+                    progress?.onProgress(
+                        ProgressSnapshot(
+                            phase,
+                            detail,
+                            bytesDone = source.length(),
+                            bytesTotal = source.length(),
+                        ),
+                    )
                 }
             }
         }

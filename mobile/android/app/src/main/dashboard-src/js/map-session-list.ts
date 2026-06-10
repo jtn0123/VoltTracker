@@ -50,6 +50,9 @@ function buildMapSessionRow(
   button.type = "button";
   button.className = "history-row" + (active ? " is-active" : "");
   button.dataset.mapSession = String(session.id || "");
+  if (!live) {
+    button.title = "Press and hold to mark this route as not a trip.";
+  }
 
   const center = document.createElement("span");
   const strong = document.createElement("strong");

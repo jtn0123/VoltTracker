@@ -132,9 +132,9 @@ class ObdStoreTripsRollupDbTest {
                     arrayOf(session.toString()),
                 ).use { cursor ->
                     assertTrue(cursor.moveToFirst())
-                    // Refreshed to the current ROLLUP_CACHE_VERSION (bumped to 3 when the
-                    // per-window trip_list_cache backfill was added).
-                    assertEquals(3, cursor.getInt(0))
+                    // Refreshed to the current ROLLUP_CACHE_VERSION (bumped to 5 when
+                    // stationary GPS drift and manual hides were excluded from trip/map totals).
+                    assertEquals(5, cursor.getInt(0))
                 }
         }
     }

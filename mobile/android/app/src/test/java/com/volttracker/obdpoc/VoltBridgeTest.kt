@@ -335,6 +335,7 @@ class VoltBridgeTest {
                 "exportDetailedSignalLog",
                 "exportDetailedSignalLogs",
                 "deleteDetailedSignalLog",
+                "markTripNotTrip",
                 "demo",
                 "disconnect",
                 "logClientError",

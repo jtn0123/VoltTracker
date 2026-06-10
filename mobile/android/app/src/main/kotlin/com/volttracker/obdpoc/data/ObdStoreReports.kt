@@ -42,9 +42,13 @@ class ObdStoreReports(
     fun tripRouteJson(routeKey: String?): JSONObject {
         val parsed = DriveWindowDetector.parseRouteKey(routeKey) ?: return JSONObject()
         val session = getSession(parsed.sessionId) ?: return JSONObject()
+        val db = helper.readableDatabase
+        if (ObdTripExclusions.isHidden(db, routeKey)) {
+            return JSONObject()
+        }
         return try {
             ObdStoreRouteProjection.routeForSession(
-                helper.readableDatabase,
+                db,
                 session,
                 ObdStoreRouteProjection.MAX_TRACK_POINTS,
                 parsed.startedAtMs,
@@ -505,6 +509,62 @@ class ObdStoreReports(
                 "confidence",
             )
 
+        private fun chargeSessionColumns(alias: String): String =
+            CHARGE_SESSION_COLUMNS.joinToString(", ") {
+                "$alias.$it AS $it"
+            }
+
+        private fun plausibleChargeWhere(alias: String): String =
+            "NOT EXISTS (" +
+                "SELECT 1 FROM ${VoltTrackerDb.TABLE_TELEMETRY} t " +
+                "WHERE t.session_id = $alias.session_id " +
+                "AND t.captured_at_ms >= $alias.started_at_ms " +
+                "AND t.captured_at_ms <= COALESCE($alias.ended_at_ms, $alias.started_at_ms) " +
+                "AND t.speed_kph IS NOT NULL AND t.speed_kph >= $CHARGE_DRIVING_SPEED_KPH" +
+                ") AND NOT EXISTS (" +
+                "SELECT 1 FROM ${VoltTrackerDb.TABLE_LOCATION_SAMPLES} l " +
+                "WHERE l.session_id = $alias.session_id " +
+                "AND l.captured_at_ms >= $alias.started_at_ms " +
+                "AND l.captured_at_ms <= COALESCE($alias.ended_at_ms, $alias.started_at_ms) " +
+                "AND l.speed_mps IS NOT NULL AND l.speed_mps >= $CHARGE_DRIVING_SPEED_MPS" +
+                ")"
+
+        private const val MIN_INFERRED_CHARGE_SOC_GAIN = 8.0
+        private const val MIN_INFERRED_CHARGE_GAP_MS = 10L * 60_000L
+        private const val MIN_OBSERVED_CHARGE_SOC_GAIN = 5.0
+        private const val MIN_OBSERVED_CHARGE_DURATION_MS = 10L * 60_000L
+        private const val MIN_OBSERVED_CHARGE_ENERGY_KWH = 1.0
+        private const val MIN_OBSERVED_ENERGY_DURATION_MS = 20L * 60_000L
+        private const val ESTIMATED_USABLE_BATTERY_KWH = 14.0
+        private const val CHARGE_DRIVING_SPEED_KPH = 5
+        private const val CHARGE_DRIVING_SPEED_MPS = CHARGE_DRIVING_SPEED_KPH / 3.6
+
+        private data class ChargeSummaryRow(
+            val id: Any,
+            val startedAtMs: Long,
+            val endedAtMs: Long?,
+            val chargerType: String?,
+            val startSoc: Double?,
+            val endSoc: Double?,
+            val powerKw: Double?,
+            val energyKwh: Double?,
+            val confidence: Double?,
+        )
+
+        private data class DriveSocBoundary(
+            val sessionId: Long,
+            val startedAtMs: Long,
+            val endedAtMs: Long,
+            val startSoc: Double,
+            val endSoc: Double,
+        )
+
+        private data class SocDriveSample(
+            val sessionId: Long,
+            val atMs: Long,
+            val soc: Double,
+        )
+
         private data class StorageCountsProjection(
             val database: String,
             val databaseBytes: Long,
@@ -657,9 +717,10 @@ class ObdStoreReports(
         }
 
         @Throws(JSONException::class)
-        private fun chargeSummaryJson(db: SQLiteDatabase): JSONObject =
-            JSONObject()
-                .put("chargeSessionCount", ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS))
+        private fun chargeSummaryJson(db: SQLiteDatabase): JSONObject {
+            val rows = chargeSummaryRows(db)
+            return JSONObject()
+                .put("chargeSessionCount", rows.size)
                 .put(
                     "chargingHintCount",
                     ObdStoreSupport.countRowsWhere(
@@ -668,9 +729,10 @@ class ObdStoreReports(
                         "charge_transition_hint = 1",
                         null,
                     ),
-                ).put("maxPowerKw", ObdStoreSupport.maxDouble(db, VoltTrackerDb.TABLE_TELEMETRY, "power_kw"))
-                .put("latest", latestChargeSessionJson(db))
-                .put("recentSessions", recentChargeSessionsJson(db, 12))
+                ).put("maxPowerKw", maxChargePowerKw(rows))
+                .put("latest", if (rows.isEmpty()) JSONObject() else chargeSummaryRowJson(rows[0]))
+                .put("recentSessions", chargeSummaryRowsJson(rows, 12))
+        }
 
         @Throws(JSONException::class)
         private fun batterySummaryJson(db: SQLiteDatabase): JSONObject =
@@ -727,58 +789,303 @@ class ObdStoreReports(
                 }
         }
 
-        @Throws(JSONException::class)
-        private fun chargeSessionRowJson(cursor: Cursor): JSONObject {
+        private fun boxedOrNull(value: Number?): Any = value ?: JSONObject.NULL
+
+        private fun chargeSummaryRows(db: SQLiteDatabase): List<ChargeSummaryRow> {
+            val inferred = inferredChargeRows(db)
+            val observed =
+                observedChargeRows(db)
+                    .filterNot { observed ->
+                        inferred.any { inferredRow -> isInsideInferredCharge(observed, inferredRow) }
+                    }
+            return (inferred + observed).sortedWith(
+                compareByDescending<ChargeSummaryRow> { it.startedAtMs }.thenByDescending { it.endedAtMs ?: 0L },
+            )
+        }
+
+        private fun observedChargeRows(db: SQLiteDatabase): List<ChargeSummaryRow> {
+            val rows = ArrayList<ChargeSummaryRow>()
+            db
+                .rawQuery(
+                    "SELECT ${chargeSessionColumns("c")} FROM ${VoltTrackerDb.TABLE_CHARGE_SESSIONS} c " +
+                        "WHERE ${plausibleChargeWhere("c")} ORDER BY c.started_at_ms DESC",
+                    null,
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val row = chargeSessionRow(cursor)
+                        if (isMeaningfulObservedCharge(row)) {
+                            rows.add(row)
+                        }
+                    }
+                }
+            return rows
+        }
+
+        private fun isMeaningfulObservedCharge(row: ChargeSummaryRow): Boolean {
+            val durationMs = (row.endedAtMs ?: row.startedAtMs) - row.startedAtMs
+            val startSoc = row.startSoc
+            val endSoc = row.endSoc
+            if (startSoc != null &&
+                endSoc != null &&
+                endSoc - startSoc >= MIN_OBSERVED_CHARGE_SOC_GAIN &&
+                durationMs >= MIN_OBSERVED_CHARGE_DURATION_MS
+            ) {
+                return true
+            }
+            val energyKwh = row.energyKwh
+            val powerKw = row.powerKw
+            return energyKwh != null &&
+                powerKw != null &&
+                energyKwh >= MIN_OBSERVED_CHARGE_ENERGY_KWH &&
+                powerKw > 0.0 &&
+                durationMs >= MIN_OBSERVED_ENERGY_DURATION_MS
+        }
+
+        private fun inferredChargeRows(db: SQLiteDatabase): List<ChargeSummaryRow> {
+            val rows = ArrayList<ChargeSummaryRow>()
+            rows.addAll(inferredChargeRowsBetweenDriveBoundaries(db))
+            rows.addAll(inferredChargeRowsWithinSessions(db))
+            return mergeInferredChargeRows(rows)
+        }
+
+        private fun inferredChargeRowsBetweenDriveBoundaries(db: SQLiteDatabase): List<ChargeSummaryRow> {
+            val boundaries = meaningfulDriveSocBoundaries(db)
+            if (boundaries.size < 2) {
+                return emptyList()
+            }
+            val rows = ArrayList<ChargeSummaryRow>()
+            var previous = boundaries[0]
+            for (i in 1 until boundaries.size) {
+                val current = boundaries[i]
+                val socGain = current.startSoc - previous.endSoc
+                val gapMs = current.startedAtMs - previous.endedAtMs
+                if (socGain >= MIN_INFERRED_CHARGE_SOC_GAIN && gapMs >= MIN_INFERRED_CHARGE_GAP_MS) {
+                    rows.add(
+                        ChargeSummaryRow(
+                            "inferred:${previous.sessionId}:${previous.endedAtMs}:${current.sessionId}:${current.startedAtMs}",
+                            previous.endedAtMs,
+                            current.startedAtMs,
+                            "inferred",
+                            previous.endSoc,
+                            current.startSoc,
+                            null,
+                            (socGain / 100.0) * ESTIMATED_USABLE_BATTERY_KWH,
+                            0.7,
+                        ),
+                    )
+                }
+                previous = current
+            }
+            return rows
+        }
+
+        private fun inferredChargeRowsWithinSessions(db: SQLiteDatabase): List<ChargeSummaryRow> {
+            val rows = ArrayList<ChargeSummaryRow>()
+            val sessions =
+                ObdStoreSupport
+                    .getAllSessions(db)
+                    .filter { ObdSessionClassifier.isTripSession(db, it) }
+                    .sortedBy { it.startedAtMs }
+            for (session in sessions) {
+                var previous: SocDriveSample? = null
+                db
+                    .rawQuery(
+                        "SELECT captured_at_ms, soc FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                            "WHERE session_id = ? AND soc IS NOT NULL AND speed_kph IS NOT NULL " +
+                            "AND speed_kph >= ? ORDER BY captured_at_ms ASC",
+                        arrayOf(session.id.toString(), CHARGE_DRIVING_SPEED_KPH.toString()),
+                    ).use { cursor ->
+                        while (cursor.moveToNext()) {
+                            val current = SocDriveSample(session.id, cursor.getLong(0), cursor.getDouble(1))
+                            val last = previous
+                            if (last != null) {
+                                maybeInferredChargeRow(last, current)?.let { rows.add(it) }
+                            }
+                            previous = current
+                        }
+                    }
+            }
+            return rows
+        }
+
+        private fun maybeInferredChargeRow(
+            previous: SocDriveSample,
+            current: SocDriveSample,
+        ): ChargeSummaryRow? {
+            val socGain = current.soc - previous.soc
+            val gapMs = current.atMs - previous.atMs
+            if (socGain < MIN_INFERRED_CHARGE_SOC_GAIN || gapMs < MIN_INFERRED_CHARGE_GAP_MS) {
+                return null
+            }
+            return ChargeSummaryRow(
+                "inferred:${previous.sessionId}:${previous.atMs}:${current.sessionId}:${current.atMs}",
+                previous.atMs,
+                current.atMs,
+                "inferred",
+                previous.soc,
+                current.soc,
+                null,
+                (socGain / 100.0) * ESTIMATED_USABLE_BATTERY_KWH,
+                0.7,
+            )
+        }
+
+        private fun mergeInferredChargeRows(rows: List<ChargeSummaryRow>): List<ChargeSummaryRow> {
+            if (rows.size < 2) {
+                return rows
+            }
+            val merged = ArrayList<ChargeSummaryRow>()
+            for (row in rows.sortedWith(compareBy<ChargeSummaryRow> { it.startedAtMs }.thenBy { it.endedAtMs ?: 0L })) {
+                val existingIndex = merged.indexOfFirst { existing -> chargeIntervalsOverlap(existing, row) }
+                if (existingIndex < 0) {
+                    merged.add(row)
+                    continue
+                }
+                if (socGain(row) > socGain(merged[existingIndex])) {
+                    merged[existingIndex] = row
+                }
+            }
+            return merged
+        }
+
+        private fun chargeIntervalsOverlap(
+            left: ChargeSummaryRow,
+            right: ChargeSummaryRow,
+        ): Boolean {
+            val leftEnd = left.endedAtMs ?: left.startedAtMs
+            val rightEnd = right.endedAtMs ?: right.startedAtMs
+            return left.startedAtMs <= rightEnd && right.startedAtMs <= leftEnd
+        }
+
+        private fun socGain(row: ChargeSummaryRow): Double {
+            val start = row.startSoc ?: return 0.0
+            val end = row.endSoc ?: return 0.0
+            return end - start
+        }
+
+        private fun meaningfulDriveSocBoundaries(db: SQLiteDatabase): List<DriveSocBoundary> {
+            val sessions =
+                ObdStoreSupport
+                    .getAllSessions(db)
+                    .filter { ObdSessionClassifier.isTripSession(db, it) }
+                    .sortedBy { it.startedAtMs }
+            if (sessions.isEmpty()) {
+                return emptyList()
+            }
+            val windowsBySession = DriveWindowDetector.windowsForSessions(db, sessions)
+            val boundaries = ArrayList<DriveSocBoundary>()
+            for (session in sessions) {
+                for (window in windowsBySession[session.id].orEmpty()) {
+                    val points =
+                        ObdStoreRouteProjection.routePointsForSessionJson(
+                            db,
+                            session.id,
+                            1000,
+                            window.startedAtMs,
+                            window.endedAtMs,
+                        )
+                    val distanceMeters = ObdStoreSupport.distanceMeters(points)
+                    val maxSpeed = ObdSessionClassifier.maxSpeedKphForWindow(db, session.id, window)
+                    if (!ObdSessionClassifier.isMeaningfulTrip(points.length(), distanceMeters, maxSpeed)) {
+                        continue
+                    }
+                    val startSoc = socForWindow(db, session.id, window, "ASC") ?: continue
+                    val endSoc = socForWindow(db, session.id, window, "DESC") ?: continue
+                    boundaries.add(DriveSocBoundary(session.id, window.startedAtMs, window.endedAtMs, startSoc, endSoc))
+                }
+            }
+            return boundaries.sortedBy { it.startedAtMs }
+        }
+
+        private fun socForWindow(
+            db: SQLiteDatabase,
+            sessionId: Long,
+            window: DriveWindowDetector.DriveWindow,
+            order: String,
+        ): Double? =
+            db
+                .rawQuery(
+                    "SELECT soc FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                        "WHERE session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? " +
+                        "AND soc IS NOT NULL ORDER BY captured_at_ms $order LIMIT 1",
+                    arrayOf(sessionId.toString(), window.startedAtMs.toString(), window.endedAtMs.toString()),
+                ).use { cursor ->
+                    if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getDouble(0) else null
+                }
+
+        private fun isInsideInferredCharge(
+            observed: ChargeSummaryRow,
+            inferred: ChargeSummaryRow,
+        ): Boolean {
+            val observedEnd = observed.endedAtMs ?: observed.startedAtMs
+            val inferredEnd = inferred.endedAtMs ?: inferred.startedAtMs
+            return observed.startedAtMs >= inferred.startedAtMs && observedEnd <= inferredEnd
+        }
+
+        private fun maxChargePowerKw(rows: List<ChargeSummaryRow>): Double {
+            var max = 0.0
+            for (row in rows) {
+                val power = row.powerKw
+                if (power != null && !power.isNaN() && !power.isInfinite() && power > max) {
+                    max = power
+                }
+            }
+            return max
+        }
+
+        private fun chargeSessionRow(cursor: Cursor): ChargeSummaryRow {
             val chargerType = cursor.getString(cursor.getColumnIndexOrThrow("charger_type"))
-            return JSONObject()
-                .put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")))
-                .put("startedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("started_at_ms")))
-                .put("endedAtMs", reportBoxed(ObdStoreSupport.nullableLongBoxed(cursor, "ended_at_ms")))
-                .put("chargerType", if (chargerType == null) JSONObject.NULL else ObdStoreSupport.clean(chargerType))
-                .put("startSoc", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "start_soc")))
-                .put("endSoc", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "end_soc")))
-                .put("powerKw", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "power_kw")))
-                .put("energyKwh", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "energy_kwh")))
-                .put("confidence", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "confidence")))
+            return ChargeSummaryRow(
+                cursor.getLong(cursor.getColumnIndexOrThrow("_id")),
+                cursor.getLong(cursor.getColumnIndexOrThrow("started_at_ms")),
+                ObdStoreSupport.nullableLongBoxed(cursor, "ended_at_ms"),
+                if (chargerType == null) null else ObdStoreSupport.clean(chargerType),
+                ObdStoreSupport.nullableDoubleBoxed(cursor, "start_soc"),
+                ObdStoreSupport.nullableDoubleBoxed(cursor, "end_soc"),
+                ObdStoreSupport.nullableDoubleBoxed(cursor, "power_kw"),
+                ObdStoreSupport.nullableDoubleBoxed(cursor, "energy_kwh"),
+                ObdStoreSupport.nullableDoubleBoxed(cursor, "confidence"),
+            )
         }
 
         @Throws(JSONException::class)
-        private fun latestChargeSessionJson(db: SQLiteDatabase): JSONObject =
-            db
-                .query(
-                    VoltTrackerDb.TABLE_CHARGE_SESSIONS,
-                    CHARGE_SESSION_COLUMNS,
-                    null,
-                    null,
-                    null,
-                    null,
-                    "started_at_ms DESC",
-                    "1",
-                ).use { cursor ->
-                    if (cursor.moveToFirst()) chargeSessionRowJson(cursor) else JSONObject()
-                }
+        private fun chargeSessionRowJson(cursor: Cursor): JSONObject {
+            val row = chargeSessionRow(cursor)
+            return JSONObject()
+                .put("id", row.id)
+                .put("startedAtMs", row.startedAtMs)
+                .put("endedAtMs", boxedOrNull(row.endedAtMs))
+                .put("chargerType", row.chargerType ?: JSONObject.NULL)
+                .put("startSoc", boxedOrNull(row.startSoc))
+                .put("endSoc", boxedOrNull(row.endSoc))
+                .put("powerKw", boxedOrNull(row.powerKw))
+                .put("energyKwh", boxedOrNull(row.energyKwh))
+                .put("confidence", boxedOrNull(row.confidence))
+        }
 
         @Throws(JSONException::class)
-        private fun recentChargeSessionsJson(
-            db: SQLiteDatabase,
+        private fun chargeSummaryRowJson(row: ChargeSummaryRow): JSONObject =
+            JSONObject()
+                .put("id", row.id)
+                .put("startedAtMs", row.startedAtMs)
+                .put("endedAtMs", boxedOrNull(row.endedAtMs))
+                .put("chargerType", row.chargerType ?: JSONObject.NULL)
+                .put("startSoc", boxedOrNull(row.startSoc))
+                .put("endSoc", boxedOrNull(row.endSoc))
+                .put("powerKw", boxedOrNull(row.powerKw))
+                .put("energyKwh", boxedOrNull(row.energyKwh))
+                .put("confidence", boxedOrNull(row.confidence))
+
+        @Throws(JSONException::class)
+        private fun chargeSummaryRowsJson(
+            rows: List<ChargeSummaryRow>,
             limit: Int,
         ): JSONArray {
             val out = JSONArray()
-            db
-                .query(
-                    VoltTrackerDb.TABLE_CHARGE_SESSIONS,
-                    CHARGE_SESSION_COLUMNS,
-                    null,
-                    null,
-                    null,
-                    null,
-                    "started_at_ms DESC",
-                    maxOf(1, limit).toString(),
-                ).use { cursor ->
-                    while (cursor.moveToNext()) {
-                        out.put(chargeSessionRowJson(cursor))
-                    }
-                }
+            val count = minOf(maxOf(1, limit), rows.size)
+            for (i in 0 until count) {
+                out.put(chargeSummaryRowJson(rows[i]))
+            }
             return out
         }
 

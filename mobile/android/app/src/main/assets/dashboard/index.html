@@ -309,7 +309,7 @@
   role="alertdialog"
   aria-modal="true"
   aria-labelledby="restoreProgressTitle"
-  aria-describedby="restoreProgressDetail"
+  aria-describedby="restoreProgressDetail restoreProgressStats restoreProgressNote"
   tabindex="-1"
   hidden
 >
@@ -317,7 +317,7 @@
   <section class="restore-progress-card" role="document">
     <header class="restore-progress-head">
       <div>
-        <span class="restore-progress-kicker">Backup restore</span>
+        <span class="restore-progress-kicker">Backup and restore</span>
         <h2 id="restoreProgressTitle" class="restore-progress-title">
           Preparing restore
         </h2>
@@ -332,11 +332,26 @@
         ×
       </button>
     </header>
-    <div class="restore-progress-meter" aria-hidden="true">
+    <div
+      id="restoreProgressMeter"
+      class="restore-progress-meter"
+      role="progressbar"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-label="Backup progress"
+    >
       <span id="restoreProgressFill"></span>
+    </div>
+    <div class="restore-progress-meta">
+      <span id="restoreProgressPhase">Preparing</span>
+      <span id="restoreProgressPercent">--</span>
+      <span id="restoreProgressEta">ETA calculating</span>
     </div>
     <p id="restoreProgressDetail" class="restore-progress-detail">
       Checking the selected backup file.
+    </p>
+    <p id="restoreProgressStats" class="restore-progress-stats">
+      Preparing work.
     </p>
     <p id="restoreProgressNote" class="restore-progress-note">
       Keep Volt Tracker open until this finishes.

@@ -134,6 +134,13 @@ interface DashboardStatePublisher {
         title: String?,
         detail: String?,
         tone: String?,
+        phase: String? = null,
+        bytesDone: Long = -1L,
+        bytesTotal: Long = -1L,
+        rowsDone: Long = -1L,
+        rowsTotal: Long = -1L,
+        percent: Int = -1,
+        etaSeconds: Long = -1L,
     )
 }
 

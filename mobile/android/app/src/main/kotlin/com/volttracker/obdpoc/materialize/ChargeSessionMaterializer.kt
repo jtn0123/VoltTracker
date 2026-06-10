@@ -97,9 +97,18 @@ object ChargeSessionMaterializer {
                     }
                 }
                 currentRun.add(sample)
+            } else if (currentRun.isNotEmpty() && breaksChargeRun(sample)) {
+                val finalized = finalizeRun(currentRun, interruptions, usedPackCurrent)
+                if (finalized != null) {
+                    result.add(finalized)
+                }
+                currentRun = ArrayList()
+                interruptions = 0
+                usedPackCurrent = false
             }
             // Non-plugged samples between plugged runs are ignored — only the gap timestamp matters
-            // and that is computed off the last plugged sample.
+            // and that is computed off the last plugged sample. Real movement/discharge is the
+            // exception: it breaks the candidate so a drive cannot be stitched into a charge.
         }
         if (currentRun.isNotEmpty()) {
             val finalized = finalizeRun(currentRun, interruptions, usedPackCurrent)
@@ -154,6 +163,22 @@ object ChargeSessionMaterializer {
             return PluggedReason.AUX_VOLTAGE
         }
         return PluggedReason.NOT_PLUGGED
+    }
+
+    private fun breaksChargeRun(sample: TelemetrySample?): Boolean {
+        if (sample == null) {
+            return false
+        }
+        val speed = sample.speedKph
+        if (speed != null && speed > Tunables.STATIONARY_SPEED_KPH) {
+            return true
+        }
+        val packCurrent = sample.packCurrentA
+        if (packCurrent != null && packCurrent > Tunables.CHARGING_PACK_CURRENT_A_THRESHOLD) {
+            return true
+        }
+        val power = sample.powerKw
+        return power != null && power > 1.0
     }
 
     private fun finalizeRun(

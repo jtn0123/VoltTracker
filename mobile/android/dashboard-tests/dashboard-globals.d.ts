@@ -492,6 +492,13 @@ interface VoltRestoreProgress {
   title?: string;
   detail?: string;
   tone?: string;
+  phase?: string;
+  bytesDone?: number | string;
+  bytesTotal?: number | string;
+  rowsDone?: number | string;
+  rowsTotal?: number | string;
+  percent?: number | string;
+  etaSeconds?: number | string;
 }
 
   /** Leaflet runtime global. Kept as the untyped `L` because scrubber.ts and
@@ -717,6 +724,7 @@ interface VoltRestoreProgress {
     exportDetailedSignalLog(id: string): string;
     exportDetailedSignalLogs(): string;
     deleteDetailedSignalLog(id: string): void;
+    markTripNotTrip(routeKey: string): void;
     shareBackup(): void;
     shareEncryptedBackup(passphrase: string): void;
     restoreBackup(): void;

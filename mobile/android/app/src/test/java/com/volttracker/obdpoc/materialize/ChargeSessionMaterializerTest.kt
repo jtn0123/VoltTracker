@@ -183,6 +183,18 @@ class ChargeSessionMaterializerTest {
         assertEquals(0, sessions.size)
     }
 
+    @Test
+    fun movingSampleBreaksPluggedCandidateInsteadOfStitchingDrive() {
+        val data = StubData()
+        data.telemetry.add(telWithPackCurrent(T_BASE, 0.0, -8.0))
+        data.telemetry.add(telFull(T_BASE + ONE_MINUTE_MS, 45.0, 13.9, +18.0))
+        data.telemetry.add(telWithPackCurrent(T_BASE + 2 * ONE_MINUTE_MS, 0.0, -8.0))
+
+        val sessions = ChargeSessionMaterializer.materialize(input(), data)
+
+        assertEquals(0, sessions.size)
+    }
+
     // ---- helpers ------------------------------------------------------------------
 
     class StubData : MaterializerData {

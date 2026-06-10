@@ -61,7 +61,10 @@ class ObdStoreMaintenance(
         }
     }
 
-    fun mergeFrom(donorDbFile: File?): DatabaseMerger.MergeResult {
+    fun mergeFrom(
+        donorDbFile: File?,
+        progressListener: DatabaseMerger.ProgressListener? = null,
+    ): DatabaseMerger.MergeResult {
         if (donorDbFile == null || !donorDbFile.exists()) {
             return DatabaseMerger.MergeResult.failure("Merge failed - backup file is missing.")
         }
@@ -74,7 +77,7 @@ class ObdStoreMaintenance(
                     "Merge failed - that backup is from a different app version.",
                 )
             }
-            return DatabaseMerger.merge(target, donor)
+            return DatabaseMerger.merge(target, donor, progressListener)
         } catch (ex: RuntimeException) {
             return DatabaseMerger.MergeResult.failure("Merge failed - could not open the backup file.")
         } finally {

@@ -65,14 +65,24 @@ object DatabaseMerger {
         }
     }
 
+    fun interface ProgressListener {
+        fun onProgress(
+            phase: String,
+            rowsDone: Long,
+            rowsTotal: Long,
+        )
+    }
+
     @JvmStatic
     fun merge(
         target: SQLiteDatabase?,
         donor: SQLiteDatabase?,
+        progressListener: ProgressListener? = null,
     ): MergeResult {
         if (target == null || donor == null) {
             return MergeResult.failure("Merge failed - database handle unavailable.")
         }
+        val progress = MergeProgress(progressListener, countDonorRows(donor))
         val sessionMap = HashMap<Long, Long>()
         val vehicleMap = HashMap<Long, Long>()
         val telemetryMap = HashMap<Long, Long>()
@@ -82,13 +92,44 @@ object DatabaseMerger {
         var rows = 0L
 
         try {
+            progress.publish("Preparing merge")
             target.transaction {
-                rows += copyVehicles(target, donor, vehicleMap, vehicleCounts)
-                rows += copySessions(target, donor, sessionMap, sessionCounts)
-                rows += copyChildren(target, donor, VoltTrackerDb.TABLE_TELEMETRY, sessionMap, null, null, telemetryMap)
-                rows += copyChildren(target, donor, VoltTrackerDb.TABLE_EVENTS, sessionMap, null, null, null)
-                rows += copyChildren(target, donor, VoltTrackerDb.TABLE_PID_OBSERVATIONS, sessionMap, null, null, null)
-                rows += copyChildren(target, donor, VoltTrackerDb.TABLE_LOCATION_SAMPLES, sessionMap, null, null, null)
+                rows += copyVehicles(target, donor, vehicleMap, vehicleCounts, progress)
+                rows += copySessions(target, donor, sessionMap, sessionCounts, progress)
+                rows +=
+                    copyChildren(
+                        target,
+                        donor,
+                        VoltTrackerDb.TABLE_TELEMETRY,
+                        sessionMap,
+                        null,
+                        null,
+                        telemetryMap,
+                        progress,
+                    )
+                rows += copyChildren(target, donor, VoltTrackerDb.TABLE_EVENTS, sessionMap, null, null, null, progress)
+                rows +=
+                    copyChildren(
+                        target,
+                        donor,
+                        VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+                        sessionMap,
+                        null,
+                        null,
+                        null,
+                        progress,
+                    )
+                rows +=
+                    copyChildren(
+                        target,
+                        donor,
+                        VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+                        sessionMap,
+                        null,
+                        null,
+                        null,
+                        progress,
+                    )
                 rows +=
                     copyChildren(
                         target,
@@ -98,6 +139,7 @@ object DatabaseMerger {
                         vehicleMap,
                         null,
                         null,
+                        progress,
                     )
                 rows +=
                     copyChildren(
@@ -108,6 +150,7 @@ object DatabaseMerger {
                         vehicleMap,
                         telemetryMap,
                         null,
+                        progress,
                     )
                 rows +=
                     copyChildren(
@@ -118,6 +161,7 @@ object DatabaseMerger {
                         vehicleMap,
                         telemetryMap,
                         null,
+                        progress,
                     )
                 rows +=
                     copyChildren(
@@ -128,15 +172,29 @@ object DatabaseMerger {
                         vehicleMap,
                         null,
                         batteryMap,
+                        progress,
                     )
-                rows += copyCellSnapshots(target, donor, batteryMap)
-                rows += copyChildren(target, donor, VoltTrackerDb.TABLE_EXPORTS, sessionMap, vehicleMap, null, null)
-                rows += copyAdapterHistory(target, donor, sessionMap)
-                rows += copyDiagnosticCodes(target, donor, sessionMap)
+                rows += copyCellSnapshots(target, donor, batteryMap, progress)
+                rows +=
+                    copyChildren(
+                        target,
+                        donor,
+                        VoltTrackerDb.TABLE_EXPORTS,
+                        sessionMap,
+                        vehicleMap,
+                        null,
+                        null,
+                        progress,
+                    )
+                rows += copyAdapterHistory(target, donor, sessionMap, progress)
+                rows += copyDiagnosticCodes(target, donor, sessionMap, progress)
+                progress.publish("Refreshing trip projections")
+                invalidateTripProjectionCaches(target, sessionMap.values)
             }
         } catch (ex: RuntimeException) {
             return MergeResult.failure("Merge failed - ${ex.javaClass.simpleName}, no changes were made.")
         }
+        progress.finish("Merge complete")
         return MergeResult(
             true,
             null,
@@ -153,6 +211,7 @@ object DatabaseMerger {
         donor: SQLiteDatabase,
         vehicleMap: MutableMap<Long, Long>,
         counts: IntArray,
+        progress: MergeProgress,
     ): Long {
         val existingByKey = HashMap<String, Long>()
         target.rawQuery("SELECT _id, vehicle_key FROM ${VoltTrackerDb.TABLE_VEHICLES}", null).use { c ->
@@ -163,6 +222,7 @@ object DatabaseMerger {
         var inserted = 0L
         donorRows(donor, VoltTrackerDb.TABLE_VEHICLES).use { c ->
             while (c.moveToNext()) {
+                progress.step("Merging vehicles")
                 val cv = readRow(c)
                 val oldId = cv.getAsLong("_id")
                 val key = cv.getAsString("vehicle_key")
@@ -191,6 +251,7 @@ object DatabaseMerger {
         donor: SQLiteDatabase,
         sessionMap: MutableMap<Long, Long>,
         counts: IntArray,
+        progress: MergeProgress,
     ): Long {
         val existingByKey = HashMap<String, Long>()
         target
@@ -205,6 +266,7 @@ object DatabaseMerger {
         var inserted = 0L
         donorRows(donor, VoltTrackerDb.TABLE_SESSIONS).use { c ->
             while (c.moveToNext()) {
+                progress.step("Merging sessions")
                 val cv = readRow(c)
                 val oldId = cv.getAsLong("_id")
                 val startedAt = cv.getAsLong("started_at_ms")
@@ -237,10 +299,12 @@ object DatabaseMerger {
         vehicleMap: Map<Long, Long>?,
         telemetryMap: Map<Long, Long>?,
         outIdMap: MutableMap<Long, Long>?,
+        progress: MergeProgress,
     ): Long {
         var inserted = 0L
         donorRows(donor, table).use { c ->
             while (c.moveToNext()) {
+                progress.step("Merging ${tableLabel(table)}")
                 val cv = readRow(c)
                 val oldId = cv.getAsLong("_id")
                 if (cv.containsKey("session_id")) {
@@ -279,10 +343,12 @@ object DatabaseMerger {
         target: SQLiteDatabase,
         donor: SQLiteDatabase,
         batteryMap: Map<Long, Long>,
+        progress: MergeProgress,
     ): Long {
         var inserted = 0L
         donorRows(donor, VoltTrackerDb.TABLE_CELL_SNAPSHOTS).use { c ->
             while (c.moveToNext()) {
+                progress.step("Merging cell snapshots")
                 val cv = readRow(c)
                 val parent = cv.getAsLong("battery_snapshot_id")
                 if (parent == null || !batteryMap.containsKey(parent)) {
@@ -300,14 +366,33 @@ object DatabaseMerger {
         return inserted
     }
 
+    private fun invalidateTripProjectionCaches(
+        db: SQLiteDatabase,
+        sessionIds: Collection<Long>,
+    ) {
+        val unique = LinkedHashSet<Long>()
+        for (sessionId in sessionIds) {
+            if (sessionId > 0L) {
+                unique.add(sessionId)
+            }
+        }
+        for (sessionId in unique) {
+            val args = arrayOf(sessionId.toString())
+            db.delete(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, "session_id = ?", args)
+            db.delete(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, "session_id = ?", args)
+        }
+    }
+
     private fun copyAdapterHistory(
         target: SQLiteDatabase,
         donor: SQLiteDatabase,
         sessionMap: Map<Long, Long>,
+        progress: MergeProgress,
     ): Long {
         var touched = 0L
         donorRows(donor, VoltTrackerDb.TABLE_ADAPTER_HISTORY).use { c ->
             while (c.moveToNext()) {
+                progress.step("Merging adapter history")
                 val cv = readRow(c)
                 val key = cv.getAsString("adapter_key") ?: continue
                 val canCopyLastSession = canCopyMappedReference(cv, "last_session_id", sessionMap)
@@ -358,10 +443,12 @@ object DatabaseMerger {
         target: SQLiteDatabase,
         donor: SQLiteDatabase,
         sessionMap: Map<Long, Long>,
+        progress: MergeProgress,
     ): Long {
         var touched = 0L
         donorRows(donor, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES).use { c ->
             while (c.moveToNext()) {
+                progress.step("Merging diagnostic codes")
                 val cv = readRow(c)
                 val moduleKey = cv.getAsString("module_key")
                 val dtc = cv.getAsString("dtc")
@@ -411,6 +498,66 @@ object DatabaseMerger {
         }
         return touched
     }
+
+    private class MergeProgress(
+        private val listener: ProgressListener?,
+        private val rowsTotal: Long,
+    ) {
+        private var rowsDone = 0L
+
+        fun publish(phase: String) {
+            listener?.onProgress(phase, rowsDone.coerceAtMost(rowsTotal), rowsTotal)
+        }
+
+        fun step(phase: String) {
+            if (rowsTotal > 0L) {
+                rowsDone = (rowsDone + 1L).coerceAtMost(rowsTotal)
+            }
+            publish(phase)
+        }
+
+        fun finish(phase: String) {
+            if (rowsTotal > 0L) {
+                rowsDone = rowsTotal
+            }
+            publish(phase)
+        }
+    }
+
+    private fun countDonorRows(donor: SQLiteDatabase): Long {
+        var total = 0L
+        for (table in MERGE_PROGRESS_TABLES) {
+            total += countRows(donor, table)
+        }
+        return total
+    }
+
+    private fun countRows(
+        db: SQLiteDatabase,
+        table: String,
+    ): Long =
+        try {
+            db.rawQuery("SELECT COUNT(*) FROM $table", null).use { c ->
+                if (c.moveToFirst()) c.getLong(0) else 0L
+            }
+        } catch (ex: RuntimeException) {
+            0L
+        }
+
+    private fun tableLabel(table: String): String =
+        when (table) {
+            VoltTrackerDb.TABLE_TELEMETRY -> "telemetry"
+            VoltTrackerDb.TABLE_EVENTS -> "status events"
+            VoltTrackerDb.TABLE_PID_OBSERVATIONS -> "PID observations"
+            VoltTrackerDb.TABLE_LOCATION_SAMPLES -> "map samples"
+            VoltTrackerDb.TABLE_FIELD_CAPABILITIES -> "field capabilities"
+            VoltTrackerDb.TABLE_TRIP_SEGMENTS -> "trip segments"
+            VoltTrackerDb.TABLE_CHARGE_SESSIONS -> "charge sessions"
+            VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS -> "battery snapshots"
+            VoltTrackerDb.TABLE_CELL_SNAPSHOTS -> "cell snapshots"
+            VoltTrackerDb.TABLE_EXPORTS -> "exports"
+            else -> table
+        }
 
     private fun readRow(c: Cursor): ContentValues {
         val cv = ContentValues()
@@ -868,5 +1015,23 @@ object DatabaseMerger {
             "last_session_id",
             "raw_response",
             "json",
+        )
+
+    private val MERGE_PROGRESS_TABLES =
+        arrayOf(
+            VoltTrackerDb.TABLE_VEHICLES,
+            VoltTrackerDb.TABLE_SESSIONS,
+            VoltTrackerDb.TABLE_TELEMETRY,
+            VoltTrackerDb.TABLE_EVENTS,
+            VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+            VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+            VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
+            VoltTrackerDb.TABLE_TRIP_SEGMENTS,
+            VoltTrackerDb.TABLE_CHARGE_SESSIONS,
+            VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS,
+            VoltTrackerDb.TABLE_CELL_SNAPSHOTS,
+            VoltTrackerDb.TABLE_EXPORTS,
+            VoltTrackerDb.TABLE_ADAPTER_HISTORY,
+            VoltTrackerDb.TABLE_DIAGNOSTIC_CODES,
         )
 }

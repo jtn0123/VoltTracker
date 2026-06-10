@@ -58,8 +58,9 @@ class ObdStoreTrips(
         session: ObdSessionRecord,
     ): List<JSONObject> {
         val trips = ArrayList<JSONObject>()
+        val hiddenRouteKeys = ObdTripExclusions.hiddenRouteKeys(db, listOf(session.id))
         for (window in DriveWindowDetector.windowsForSession(db, session)) {
-            val trip = tripJson(db, session, window)
+            val trip = tripJson(db, session, window, hiddenRouteKeys)
             if (trip != null) {
                 trips.add(trip)
             }
@@ -72,7 +73,11 @@ class ObdStoreTrips(
         db: SQLiteDatabase,
         session: ObdSessionRecord,
         window: DriveWindowDetector.DriveWindow,
+        hiddenRouteKeys: Set<String>,
     ): JSONObject? {
+        if (hiddenRouteKeys.contains(window.routeKey())) {
+            return null
+        }
         val usefulSamples =
             ObdStoreSupport.countRowsWhere(
                 db,
@@ -104,7 +109,15 @@ class ObdStoreTrips(
             startedAtMs = points.getJSONObject(0).optLong("atMs", startedAtMs)
             endedAtMs = points.getJSONObject(points.length() - 1).optLong("atMs", endedAtMs)
         }
+        val distanceMeters = ObdStoreSupport.distanceMeters(points)
+        val maxSpeed = maxIntForWindowBoxed(db, "speed_kph", session.id, window)
+        if (!ObdSessionClassifier.isMeaningfulTrip(points.length(), distanceMeters, maxSpeed)) {
+            return null
+        }
         val routeKey = "${session.id}:$startedAtMs:$endedAtMs"
+        if (hiddenRouteKeys.contains(routeKey)) {
+            return null
+        }
         val trip = JSONObject()
         trip.put("id", routeKey)
         trip.put("sessionId", session.id)
@@ -112,8 +125,7 @@ class ObdStoreTrips(
         trip.put("startedAtMs", startedAtMs)
         trip.put("endedAtMs", endedAtMs)
         trip.put("durationMs", maxOf(0L, endedAtMs - startedAtMs))
-        trip.put("distanceMeters", ObdStoreSupport.distanceMeters(points))
-        val maxSpeed = maxIntForWindowBoxed(db, "speed_kph", session.id, window)
+        trip.put("distanceMeters", distanceMeters)
         trip.put("maxSpeedKph", maxSpeed ?: JSONObject.NULL)
         trip.put("avgMovingSpeedKph", avgMovingSpeedKph(db, session.id, window))
         trip.put("sampleCount", usefulSamples)
@@ -198,16 +210,27 @@ class ObdStoreTrips(
         val db = helper.writableDatabase
         val active = ensureRollupsAndCollectActive(db)
         var total = 0.0
-        db.rawQuery("SELECT SUM(distance_m) FROM ${VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS}", null).use { cursor ->
-            if (cursor.moveToFirst() && !cursor.isNull(0)) {
-                total += cursor.getDouble(0)
+        db
+            .rawQuery(
+                "SELECT SUM(distance_m) FROM ${VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS} WHERE counted = 1",
+                null,
+            ).use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0)) {
+                    total += cursor.getDouble(0)
+                }
+            }
+        for (session in active) {
+            for (trip in tripJsons(db, session)) {
+                total += trip.optDouble("distanceMeters", 0.0)
             }
         }
-        for (session in active) {
-            val points = ObdStoreRouteProjection.routePointsForSessionJson(db, session.id, 1000)
-            total += ObdStoreSupport.distanceMeters(points)
-        }
         return total
+    }
+
+    fun invalidateSessionTripCache(sessionId: Long) {
+        val db = helper.writableDatabase
+        db.delete(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, "session_id = ?", arrayOf(sessionId.toString()))
+        db.delete(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, "session_id = ?", arrayOf(sessionId.toString()))
     }
 
     private fun ensureRollupsAndCollectActive(db: SQLiteDatabase): List<ObdSessionRecord> {
@@ -382,8 +405,8 @@ class ObdStoreTrips(
 
     companion object {
         // Bump to invalidate cached rollups + the trip-list cache (forces a one-time rebuild on
-        // the next read). v3 added the per-window trip_list_cache backfill.
-        private const val ROLLUP_CACHE_VERSION = 3
+        // the next read). v5 keeps stationary GPS drift and manual hides out of trip/map totals.
+        private const val ROLLUP_CACHE_VERSION = 5
         private const val ACTIVE_TRIP_CACHE_TTL_MS = 2_000L
         private const val ACTIVE_TRIP_CACHE_MAX_ENTRIES = 64
 

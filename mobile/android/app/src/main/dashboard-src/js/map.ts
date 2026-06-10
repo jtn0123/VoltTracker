@@ -153,20 +153,31 @@ import {
       attribution: "&copy; OpenStreetMap, &copy; CARTO"
     });
     // Track tile errors and swap to the plain OSM basemap if CARTO is unreachable (DNS block, CDN
-    // outage, regional restriction). Log only the first couple to avoid spamming when the whole
-    // basemap is down.
+    // outage, regional restriction). Single tile misses are common on mobile networks, so only a
+    // run of failures should surface as a user-visible map problem.
     let tileErrorCount = 0;
+    let fallbackErrorCount = 0;
     let fallbackActivated = false;
+    // In-flight requests on the removed primary layer can still settle after the
+    // fallback takes over; ignore them so they cannot clear or re-raise the banner.
+    tiles.on("tileload", () => {
+      if (fallbackActivated) return;
+      tileErrorCount = 0;
+      setMapTileError(false);
+    });
     tiles.on("tileerror", (event: LeafletTileErrorEvent) => {
+      if (fallbackActivated) return;
       tileErrorCount += 1;
       const src = (event && event.tile && event.tile.src) || "unknown";
-      setMapTileError(true, "Map tiles are not loading. Routes still work; retry when the network is back.");
       if (tileErrorCount <= 2) {
         if (bridge && typeof bridge.logClientError === "function") {
           bridge.logClientError("map.tileerror", "Basemap tile failed: " + src);
         }
       }
-      if (tileErrorCount > 5 && !fallbackActivated) {
+      if (tileErrorCount >= MAP_TILE_WARNING_THRESHOLD) {
+        setMapTileError(true, "Map tiles are not loading. Routes still work; retry when the network is back.");
+      }
+      if (tileErrorCount >= MAP_TILE_FALLBACK_THRESHOLD && !fallbackActivated) {
         fallbackActivated = true;
         try {
           map.removeLayer(tiles);
@@ -174,8 +185,15 @@ import {
             attribution: "© OpenStreetMap",
             maxZoom: 19
           });
+          fallback.on("tileload", () => {
+            fallbackErrorCount = 0;
+            setMapTileError(false);
+          });
           fallback.on("tileerror", () => {
-            setMapTileError(true, "Backup map tiles are also unavailable. Routes still work without basemap tiles.");
+            fallbackErrorCount += 1;
+            if (fallbackErrorCount >= MAP_TILE_WARNING_THRESHOLD) {
+              setMapTileError(true, "Backup map tiles are also unavailable. Routes still work without basemap tiles.");
+            }
           });
           fallback.addTo(map);
           remoteTileLayer = fallback;
@@ -211,6 +229,9 @@ import {
     }
     syncRemoteTiles();
   }
+
+  const MAP_TILE_WARNING_THRESHOLD = 3;
+  const MAP_TILE_FALLBACK_THRESHOLD = 6;
 
   function syncRemoteTiles() {
     const map = mapInstance;

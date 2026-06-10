@@ -28,6 +28,13 @@
     title?: string;
     detail?: string;
     tone?: string;
+    phase?: string;
+    bytesDone?: number | string;
+    bytesTotal?: number | string;
+    rowsDone?: number | string;
+    rowsTotal?: number | string;
+    percent?: number | string;
+    etaSeconds?: number | string;
   };
 
   function installLegacyWebViewPolyfills() {
@@ -143,10 +150,99 @@
       node.hidden = true;
       node.dataset.busy = "false";
       node.dataset.tone = "idle";
+      node.dataset.progress = "indeterminate";
     }
     const close = el("restoreProgressClose");
     if (close) close.hidden = true;
     delete document.body.dataset.restoreBusy;
+  }
+
+  function progressNumber(value: unknown) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  function knownProgressPercent(progress: RestoreProgressPayload, busy: boolean, tone: string) {
+    // Negative percent is the native "unknown" sentinel — fall through to the
+    // byte/row ratios instead of rendering a determinate 0%.
+    const explicit = progressNumber(progress.percent);
+    if (explicit != null && explicit >= 0) return Math.min(100, explicit);
+    const bytesDone = progressNumber(progress.bytesDone);
+    const bytesTotal = progressNumber(progress.bytesTotal);
+    if (bytesDone != null && bytesTotal != null && bytesTotal > 0) {
+      return Math.max(0, Math.min(100, (bytesDone / bytesTotal) * 100));
+    }
+    const rowsDone = progressNumber(progress.rowsDone);
+    const rowsTotal = progressNumber(progress.rowsTotal);
+    if (rowsDone != null && rowsTotal != null && rowsTotal > 0) {
+      return Math.max(0, Math.min(100, (rowsDone / rowsTotal) * 100));
+    }
+    if (!busy && tone === "ok") return 100;
+    return null;
+  }
+
+  function formatProgressBytes(value: number) {
+    if (!Number.isFinite(value) || value <= 0) return "0 B";
+    if (value < 1024) return `${Math.round(value)} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+    return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  }
+
+  function formatProgressCount(value: number) {
+    if (!Number.isFinite(value) || value < 0) return "0";
+    return Math.round(value).toLocaleString("en-US");
+  }
+
+  function restoreProgressStats(progress: RestoreProgressPayload) {
+    const bytesDone = progressNumber(progress.bytesDone);
+    const bytesTotal = progressNumber(progress.bytesTotal);
+    if (bytesDone != null && bytesTotal != null && bytesTotal > 0) {
+      return `${formatProgressBytes(bytesDone)} of ${formatProgressBytes(bytesTotal)}`;
+    }
+    if (bytesDone != null && bytesDone >= 0) {
+      return `${formatProgressBytes(bytesDone)} processed`;
+    }
+    const rowsDone = progressNumber(progress.rowsDone);
+    const rowsTotal = progressNumber(progress.rowsTotal);
+    if (rowsDone != null && rowsTotal != null && rowsTotal > 0) {
+      return `${formatProgressCount(rowsDone)} of ${formatProgressCount(rowsTotal)} rows`;
+    }
+    if (rowsDone != null && rowsDone >= 0) {
+      return `${formatProgressCount(rowsDone)} rows processed`;
+    }
+    return "Preparing work.";
+  }
+
+  function formatRestoreEta(progress: RestoreProgressPayload, busy: boolean, tone: string, percent: number | null) {
+    if (!busy) return tone === "ok" ? "Done" : "Needs attention";
+    const etaSeconds = progressNumber(progress.etaSeconds);
+    if (etaSeconds == null || etaSeconds < 0) {
+      return percent == null ? "ETA calculating" : "ETA soon";
+    }
+    if (etaSeconds <= 0) return "Finishing up";
+    if (etaSeconds < 60) return `ETA ${Math.ceil(etaSeconds)}s`;
+    const minutes = Math.ceil(etaSeconds / 60);
+    if (minutes < 60) return `ETA ${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    return remainder > 0 ? `ETA ${hours}h ${remainder}m` : `ETA ${hours}h`;
+  }
+
+  function updateRestoreProgressMeter(node: HTMLElement, percent: number | null) {
+    const meter = el("restoreProgressMeter");
+    const fill = el("restoreProgressFill") as HTMLElement | null;
+    const hasPercent = percent != null;
+    node.dataset.progress = hasPercent ? "determinate" : "indeterminate";
+    if (fill) {
+      fill.style.width = hasPercent ? `${Math.round(percent)}%` : "";
+    }
+    if (!meter) return;
+    if (hasPercent) {
+      meter.setAttribute("aria-valuenow", String(Math.round(percent)));
+    } else {
+      meter.removeAttribute("aria-valuenow");
+    }
   }
 
   function setRestoreProgress(payload: unknown) {
@@ -163,11 +259,23 @@
     node.hidden = false;
     node.dataset.busy = String(busy);
     node.dataset.tone = tone;
+    const percent = knownProgressPercent(progress, busy, tone);
+    updateRestoreProgressMeter(node, percent);
     VD.setText("restoreProgressTitle", progress.title || (busy ? "Restoring backup" : "Restore status"));
+    VD.setText(
+      "restoreProgressPhase",
+      progress.phase || (busy ? "Working" : tone === "ok" ? "Complete" : "Review needed")
+    );
+    VD.setText(
+      "restoreProgressPercent",
+      percent == null ? (busy ? "--" : tone === "ok" ? "100%" : "--") : `${Math.round(percent)}%`
+    );
+    VD.setText("restoreProgressEta", formatRestoreEta(progress, busy, tone, percent));
     VD.setText(
       "restoreProgressDetail",
       progress.detail || "Volt Tracker is processing the selected backup file."
     );
+    VD.setText("restoreProgressStats", restoreProgressStats(progress));
     VD.setText(
       "restoreProgressNote",
       busy ? "Keep Volt Tracker open until this finishes." : "The status line below keeps the result visible."

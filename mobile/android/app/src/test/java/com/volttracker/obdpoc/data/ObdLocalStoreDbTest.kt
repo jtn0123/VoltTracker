@@ -375,6 +375,9 @@ class ObdLocalStoreDbTest {
         locationSample(id, 1000L, 32.70, -117.10, 5.0)
         locationSample(id, 2000L, 32.71, -117.10, 5.0)
         locationSample(id, 3000L, 32.72, -117.10, 5.0)
+        store.recordTelemetry(id, sample(35, 1500, 32.70, -117.10, 1000L))
+        store.recordTelemetry(id, sample(40, 1600, 32.71, -117.10, 2000L))
+        store.recordTelemetry(id, sample(45, 1700, 32.72, -117.10, 3000L))
 
         val routes =
             StorageSummaryJson
@@ -408,6 +411,9 @@ class ObdLocalStoreDbTest {
         locationSample(id, 3000L, 32.72, -117.10, 5.0)
         locationSample(id, 1000L, 32.70, -117.10, 5.0)
         locationSample(id, 2000L, 32.71, -117.10, 5.0)
+        store.recordTelemetry(id, sample(45, 1700, 32.72, -117.10, 3000L))
+        store.recordTelemetry(id, sample(35, 1500, 32.70, -117.10, 1000L))
+        store.recordTelemetry(id, sample(40, 1600, 32.71, -117.10, 2000L))
 
         val points =
             StorageSummaryJson
@@ -425,6 +431,8 @@ class ObdLocalStoreDbTest {
         val id = store.startSession("obd", "00:11", "Adapter")
         locationSample(id, 1000L, 32.70, -117.10, 7.5)
         locationSample(id, 2000L, 32.71, -117.10, 9.0)
+        store.recordTelemetry(id, sample(35, 1500, 32.70, -117.10, 1000L))
+        store.recordTelemetry(id, sample(40, 1600, 32.71, -117.10, 2000L))
 
         val points =
             StorageSummaryJson

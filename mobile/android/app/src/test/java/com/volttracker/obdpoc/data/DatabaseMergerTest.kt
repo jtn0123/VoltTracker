@@ -120,6 +120,31 @@ class DatabaseMergerTest {
     }
 
     @Test
+    fun matchedDuplicateInvalidatesStaleTripProjectionCaches() {
+        val liveSession = insertSession(live, 1000L)
+        finishSession(live, liveSession, 4000L)
+        insertCurrentNoTripRollup(live, liveSession, 1000L)
+        assertEquals(0, ObdStoreTrips(liveHelper).tripsJson(40).length())
+
+        val duplicateDonorSession = insertSession(donor, 1000L)
+        finishSession(donor, duplicateDonorSession, 4000L)
+        insertTelemetry(donor, duplicateDonorSession, 1000L)
+        insertTelemetry(donor, duplicateDonorSession, 2000L)
+        insertLocationSample(donor, duplicateDonorSession, 1000L, 37.000, -122.000)
+        insertLocationSample(donor, duplicateDonorSession, 2000L, 37.010, -122.000)
+
+        val result = DatabaseMerger.merge(live, donor)
+
+        assertTrue(result.ok)
+        val trips = ObdStoreTrips(liveHelper).tripsJson(40)
+        assertEquals(1, trips.length())
+        val trip = trips.getJSONObject(0)
+        assertEquals(liveSession, trip.optLong("sessionId"))
+        assertEquals(2, trip.optInt("pointCount"))
+        assertForeignKeysIntact(live)
+    }
+
+    @Test
     fun importsSameTimestampSessionWhenAdapterDiffers() {
         val liveSession = insertSession(live, 1000L, "obd", "AA:AA:AA:AA:AA:AA")
         insertTelemetry(live, liveSession, 1000L)
@@ -550,6 +575,17 @@ class DatabaseMergerTest {
             return db.insertOrThrow(VoltTrackerDb.TABLE_SESSIONS, null, cv)
         }
 
+        private fun finishSession(
+            db: SQLiteDatabase,
+            sessionId: Long,
+            endedAtMs: Long,
+        ) {
+            val cv = ContentValues()
+            cv.put("ended_at_ms", endedAtMs)
+            cv.put("status", "complete")
+            db.update(VoltTrackerDb.TABLE_SESSIONS, cv, "_id = ?", arrayOf(sessionId.toString()))
+        }
+
         private fun insertTelemetry(
             db: SQLiteDatabase,
             sessionId: Long,
@@ -640,14 +676,38 @@ class DatabaseMergerTest {
             db: SQLiteDatabase,
             sessionId: Long,
             capturedAtMs: Long,
+        ) = insertLocationSample(db, sessionId, capturedAtMs, 37.0, -122.0)
+
+        private fun insertLocationSample(
+            db: SQLiteDatabase,
+            sessionId: Long,
+            capturedAtMs: Long,
+            latitude: Double,
+            longitude: Double,
         ) {
             val cv = ContentValues()
             cv.put("session_id", sessionId)
             cv.put("captured_at_ms", capturedAtMs)
-            cv.put("latitude", 37.0)
-            cv.put("longitude", -122.0)
+            cv.put("latitude", latitude)
+            cv.put("longitude", longitude)
             cv.put("json", "{}")
             db.insertOrThrow(VoltTrackerDb.TABLE_LOCATION_SAMPLES, null, cv)
+        }
+
+        private fun insertCurrentNoTripRollup(
+            db: SQLiteDatabase,
+            sessionId: Long,
+            startedAtMs: Long,
+        ) {
+            val cv = ContentValues()
+            cv.put("session_id", sessionId)
+            cv.put("counted", 0)
+            cv.put("distance_m", 0.0)
+            cv.put("duration_ms", 0L)
+            cv.put("has_route", 0)
+            cv.put("started_at_ms", startedAtMs)
+            cv.put("rollup_version", Int.MAX_VALUE)
+            db.insertOrThrow(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, null, cv)
         }
 
         private fun insertFieldCapability(

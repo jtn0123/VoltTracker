@@ -266,6 +266,44 @@ class BackupRoundTripTest {
     }
 
     @Test
+    fun stageRestoreFileReportsReadableByteProgress() {
+        val sessionId = store!!.startSession("obd", "AA:BB:CC", "Adapter", 1_000L)
+        store!!.recordTelemetry(sessionId, telemetrySample(41, 1500, 32.70, -117.10, 1_100L))
+        store!!.finalizeSession(
+            sessionId,
+            ObdLocalStore.STATUS_COMPLETE,
+            2_000L,
+            "0100",
+            "AA:BB:CC",
+            "Adapter",
+            "obd",
+            1,
+            "done",
+        )
+        val backup = dataBackup.buildBackupFile(store)
+        assertNotNull(backup)
+        val uri = registerAsSafUri(backup!!)
+        val snapshots = ArrayList<DataBackup.ProgressSnapshot>()
+
+        val outcome =
+            dataBackup.stageRestoreFileWithStatus(
+                uri,
+                null,
+                DataBackup.ProgressListener { snapshots.add(it) },
+            )
+
+        assertEquals(DataBackup.RestoreStageStatus.OK, outcome.status)
+        assertTrue(
+            "restore staging should report file bytes",
+            snapshots.any { it.phase == "Reading backup" && it.bytesDone > 0L },
+        )
+        val verified = snapshots.last { it.phase == "Backup verified" }
+        assertEquals(outcome.bytesRead, verified.bytesDone)
+        assertEquals(outcome.bytesRead, verified.bytesTotal)
+        outcome.file?.delete()
+    }
+
+    @Test
     fun encryptedBackupRequiresPassphraseAndRestoresWithCorrectPassphrase() {
         val sessionId = store!!.startSession("obd", "AA:BB:CC", "Adapter", 1_000L)
         store!!.recordTelemetry(sessionId, telemetrySample(41, 1500, 32.70, -117.10, 1_100L))

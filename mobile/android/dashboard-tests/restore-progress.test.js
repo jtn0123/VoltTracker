@@ -24,6 +24,11 @@ describe('restore progress overlay', () => {
         title: 'Reading backup',
         detail: 'Large backup files can take a minute.',
         tone: 'busy',
+        phase: 'Reading backup',
+        bytesDone: 1024 * 1024,
+        bytesTotal: 4 * 1024 * 1024,
+        percent: 25,
+        etaSeconds: 90,
       }),
     );
 
@@ -31,10 +36,54 @@ describe('restore progress overlay', () => {
     expect(overlay.hidden).toBe(false);
     expect(overlay.dataset.busy).toBe('true');
     expect(overlay.dataset.tone).toBe('busy');
+    expect(overlay.dataset.progress).toBe('determinate');
     expect(document.body.dataset.restoreBusy).toBe('true');
     expect(document.getElementById('restoreProgressTitle').textContent).toBe('Reading backup');
+    expect(document.getElementById('restoreProgressPhase').textContent).toBe('Reading backup');
+    expect(document.getElementById('restoreProgressPercent').textContent).toBe('25%');
+    expect(document.getElementById('restoreProgressEta').textContent).toBe('ETA 2m');
+    expect(document.getElementById('restoreProgressStats').textContent).toBe('1.0 MB of 4.0 MB');
+    expect(document.getElementById('restoreProgressMeter').getAttribute('aria-valuenow')).toBe('25');
+    expect(document.getElementById('restoreProgressFill').style.width).toBe('25%');
     expect(document.getElementById('restoreProgressDetail').textContent).toContain('minute');
     expect(document.getElementById('restoreProgressClose').hidden).toBe(true);
+  });
+
+  it('renders merge row progress without byte totals', () => {
+    window.VoltTrackerNative.setRestoreProgress({
+      visible: true,
+      busy: true,
+      title: 'Merging backup',
+      detail: 'Adding backup rows and matching existing sessions.',
+      tone: 'busy',
+      phase: 'Merging map samples',
+      rowsDone: 1000,
+      rowsTotal: 5000,
+      etaSeconds: 12,
+    });
+
+    const overlay = document.getElementById('restoreProgress');
+    expect(overlay.dataset.progress).toBe('determinate');
+    expect(document.getElementById('restoreProgressPhase').textContent).toBe('Merging map samples');
+    expect(document.getElementById('restoreProgressPercent').textContent).toBe('20%');
+    expect(document.getElementById('restoreProgressStats').textContent).toBe('1,000 of 5,000 rows');
+    expect(document.getElementById('restoreProgressEta').textContent).toBe('ETA 12s');
+  });
+
+  it('keeps the meter indeterminate when percent is the unknown sentinel', () => {
+    window.VoltTrackerNative.setRestoreProgress({
+      visible: true,
+      busy: true,
+      title: 'Reading backup',
+      tone: 'busy',
+      percent: -1,
+    });
+
+    const overlay = document.getElementById('restoreProgress');
+    expect(overlay.dataset.progress).toBe('indeterminate');
+    expect(document.getElementById('restoreProgressPercent').textContent).toBe('--');
+    expect(document.getElementById('restoreProgressMeter').getAttribute('aria-valuenow')).toBeNull();
+    expect(document.getElementById('restoreProgressFill').style.width).toBe('');
   });
 
   it('keeps failed restore feedback visible until the user dismisses it', () => {

@@ -347,6 +347,65 @@ import type { BusyButton } from "./actions-storage";
     VD.setStatus({ state: "ready", detail: "DTC examples cleared." });
   }
 
+  let mapLongPressTimer = 0;
+  let suppressNextMapClick = false;
+  let mapLongPressHandled = false;
+
+  function mapSessionButtonFromEvent(event: Event) {
+    const target = event.target as Element | null;
+    return target && target.closest("[data-map-session]") as HTMLElement | null;
+  }
+
+  function clearMapLongPressTimer() {
+    if (mapLongPressTimer) {
+      window.clearTimeout(mapLongPressTimer);
+      mapLongPressTimer = 0;
+    }
+  }
+
+  function markMapSessionNotTrip(routeKey: string | undefined) {
+    const clean = String(routeKey || "").trim();
+    if (!clean || clean === "__live_current__") return;
+    if (!bridge || typeof bridge.markTripNotTrip !== "function") {
+      VD.setStatus({ state: "idle", detail: "Map cleanup is available inside the Android app." });
+      return;
+    }
+    bridge.markTripNotTrip(clean);
+  }
+
+  function onMapSessionPointerDown(event: Event) {
+    const button = mapSessionButtonFromEvent(event);
+    if (!button) return;
+    // A new gesture starts: drop any suppress flag left over from a contextmenu
+    // that never produced a click (e.g. desktop right-click).
+    suppressNextMapClick = false;
+    mapLongPressHandled = false;
+    clearMapLongPressTimer();
+    mapLongPressTimer = window.setTimeout(() => {
+      mapLongPressTimer = 0;
+      mapLongPressHandled = true;
+      suppressNextMapClick = true;
+      markMapSessionNotTrip(button.dataset.mapSession);
+    }, 650);
+  }
+
+  function onMapSessionPointerEnd() {
+    clearMapLongPressTimer();
+  }
+
+  function onMapSessionContextMenu(event: Event) {
+    const button = mapSessionButtonFromEvent(event);
+    if (!button) return;
+    event.preventDefault();
+    // The WebView's own long-press contextmenu and the 650ms timer cover the same
+    // gesture — whichever fires first wins so the confirm dialog shows only once.
+    clearMapLongPressTimer();
+    if (mapLongPressHandled) return;
+    mapLongPressHandled = true;
+    suppressNextMapClick = true;
+    markMapSessionNotTrip(button.dataset.mapSession);
+  }
+
   function handleDtcSearch(event: Event) {
     const target = event.target as Element | null;
     if (!target) return;
@@ -622,6 +681,11 @@ import type { BusyButton } from "./actions-storage";
     // Bind through bindListenerGuarded so a renamed partial ID logs a warn + skips
     // rather than throwing and aborting every binding below it.
     const onSessionClick = (event: Event) => {
+      if (suppressNextMapClick) {
+        suppressNextMapClick = false;
+        event.preventDefault();
+        return;
+      }
       const target = event.target as Element | null;
       const button = target && target.closest("[data-map-session]");
       if (!button) return;
@@ -629,9 +693,19 @@ import type { BusyButton } from "./actions-storage";
       void VD.requestMapRender().catch(() => {});
     };
     VD.bindListenerGuarded("mapSessionList", "click", onSessionClick, opts);
+    VD.bindListenerGuarded("mapSessionList", "pointerdown", onMapSessionPointerDown, opts);
+    VD.bindListenerGuarded("mapSessionList", "pointerup", onMapSessionPointerEnd, opts);
+    VD.bindListenerGuarded("mapSessionList", "pointerleave", onMapSessionPointerEnd, opts);
+    VD.bindListenerGuarded("mapSessionList", "pointercancel", onMapSessionPointerEnd, opts);
+    VD.bindListenerGuarded("mapSessionList", "contextmenu", onMapSessionContextMenu, opts);
     // The new drive-chip strip uses the same [data-map-session] attribute, so
     // share the handler. Without this, tapping a chip did nothing.
     VD.bindListenerGuarded("mapDriveChips", "click", onSessionClick, opts);
+    VD.bindListenerGuarded("mapDriveChips", "pointerdown", onMapSessionPointerDown, opts);
+    VD.bindListenerGuarded("mapDriveChips", "pointerup", onMapSessionPointerEnd, opts);
+    VD.bindListenerGuarded("mapDriveChips", "pointerleave", onMapSessionPointerEnd, opts);
+    VD.bindListenerGuarded("mapDriveChips", "pointercancel", onMapSessionPointerEnd, opts);
+    VD.bindListenerGuarded("mapDriveChips", "contextmenu", onMapSessionContextMenu, opts);
     VD.bindListenerGuarded("mapFullBtn", "click", () => {
       state.mapFull = !state.mapFull;
       void VD.requestMapRender().catch(() => {});
@@ -688,6 +762,9 @@ import type { BusyButton } from "./actions-storage";
   // window-level handlers in core.js if you also reset VD.errorController) and
   // re-arms them with a fresh AbortController.
   function resetListeners() {
+    clearMapLongPressTimer();
+    suppressNextMapClick = false;
+    mapLongPressHandled = false;
     controller.abort();
     controller = new AbortController();
     bindListeners();

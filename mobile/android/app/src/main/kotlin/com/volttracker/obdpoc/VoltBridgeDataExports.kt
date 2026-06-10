@@ -132,4 +132,45 @@ internal class VoltBridgeDataExports(
             .put("error", error)
             .put("message", message)
             .toString()
+
+    fun markTripNotTrip(routeKey: String?) {
+        val cleanRouteKey = VoltBridge.safe(routeKey, VoltBridge.MAX_LABEL_LEN)
+        if (cleanRouteKey.isEmpty()) {
+            activity.runOnUiThread {
+                activity.publishStatus("blocked", "Choose a stored map trip to mark as not a trip.", true)
+            }
+            return
+        }
+        activity.confirmBridgeAction(
+            "Mark as not a trip?",
+            "This hides the selected route from Maps and Trips. Raw samples stay on the phone for diagnostics and backups.",
+            "Mark not trip",
+        ) {
+            markTripNotTripConfirmed(cleanRouteKey)
+        }
+    }
+
+    private fun markTripNotTripConfirmed(routeKey: String) {
+        activity.runOnBackground {
+            val changed =
+                try {
+                    activity.localStore?.markTripNotTrip(routeKey) == true
+                } catch (ex: RuntimeException) {
+                    Log.w(MainActivity.TAG, "markTripNotTrip failed", ex)
+                    false
+                }
+            activity.runOnUiThread {
+                activity.publishStorageSummary()
+                activity.publishStatus(
+                    if (changed) "ready" else "blocked",
+                    if (changed) {
+                        "Trip marked as not a trip. Raw data was kept."
+                    } else {
+                        "That map row could not be marked as not a trip."
+                    },
+                    !changed,
+                )
+            }
+        }
+    }
 }

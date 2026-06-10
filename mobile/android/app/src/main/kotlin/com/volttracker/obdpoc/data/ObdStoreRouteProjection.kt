@@ -62,14 +62,26 @@ object ObdStoreRouteProjection {
         val sessions =
             ObdStoreSupport
                 .getRecentSessions(db, maxOf(100, sessionLimit))
-                .filter { ObdLocalStore.MODE_OBD == it.mode }
+                .filter { ObdSessionClassifier.isTripSession(db, it) }
         val windowsBySession = DriveWindowDetector.windowsForSessions(db, sessions)
+        val hiddenRouteKeys = ObdTripExclusions.hiddenRouteKeys(db, sessions.map { it.id })
         for (session in sessions) {
             for (window in windowsBySession[session.id].orEmpty()) {
+                if (hiddenRouteKeys.contains(window.routeKey())) {
+                    continue
+                }
                 val route =
                     routeForSession(db, session, pointLimit, window.startedAtMs, window.endedAtMs, window.routeKey())
                 val points = route.optJSONArray("points")
                 if (points == null || points.length() < 2) {
+                    continue
+                }
+                if (!ObdSessionClassifier.isMeaningfulTrip(
+                        points.length(),
+                        route.optDouble("distanceMeters", 0.0),
+                        ObdSessionClassifier.maxSpeedKphForWindow(db, session.id, window),
+                    )
+                ) {
                     continue
                 }
                 payload.put(route)

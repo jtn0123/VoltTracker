@@ -5,11 +5,13 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.volttracker.obdpoc.data.DatabaseMerger
 import com.volttracker.obdpoc.data.ObdLocalStore
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.RejectedExecutionException
+import kotlin.math.ceil
 
 /** Drives the Activity-facing backup/restore user flows. */
 class BackupController(
@@ -93,15 +95,37 @@ class BackupController(
             if (encrypted) "Preparing encrypted data backup..." else "Preparing data backup...",
             false,
         )
+        val title = if (encrypted) "Preparing encrypted backup" else "Preparing backup"
+        val detail =
+            if (encrypted) {
+                "Encrypting your on-phone Volt Tracker data before sharing."
+            } else {
+                "Writing your on-phone Volt Tracker data to a shareable file."
+            }
+        showRestoreProgress(title, detail, phase = "Preparing backup")
         runBackground("Could not start the backup worker.") {
+            val progress = ProgressEmitter(title, detail)
             val backup =
                 if (encrypted) {
-                    dataBackup.buildEncryptedBackupFile(activity.localStore, passphrase)
+                    dataBackup.buildEncryptedBackupFile(
+                        activity.localStore,
+                        passphrase,
+                        DataBackup.ProgressListener { snapshot -> progress.onDataBackupProgress(snapshot) },
+                    )
                 } else {
-                    dataBackup.buildBackupFile(activity.localStore)
+                    dataBackup.buildBackupFile(
+                        activity.localStore,
+                        DataBackup.ProgressListener { snapshot -> progress.onDataBackupProgress(snapshot) },
+                    )
                 }
             activity.runOnUiThread {
                 if (backup == null) {
+                    showRestoreProgress(
+                        "Backup failed",
+                        "Could not create the backup file.",
+                        busy = false,
+                        tone = "blocked",
+                    )
                     activity.publishStatus("blocked", "Could not create the backup file.", true)
                     return@runOnUiThread
                 }
@@ -113,6 +137,18 @@ class BackupController(
                     share.putExtra(Intent.EXTRA_SUBJECT, backup.name)
                     share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     activity.startActivity(Intent.createChooser(share, "Back up Volt Tracker data"))
+                    showRestoreProgress(
+                        "Backup ready",
+                        if (encrypted) {
+                            "Encrypted backup ready. Choose where to save it."
+                        } else {
+                            "Backup ready. Choose where to save it."
+                        },
+                        busy = false,
+                        tone = "ok",
+                        phase = "Ready to share",
+                        percent = 100,
+                    )
                     activity.publishStatus(
                         "ready",
                         if (encrypted) {
@@ -123,6 +159,12 @@ class BackupController(
                         false,
                     )
                 } catch (ex: RuntimeException) {
+                    showRestoreProgress(
+                        "Backup failed",
+                        "Could not open the share sheet.",
+                        busy = false,
+                        tone = "blocked",
+                    )
                     activity.publishStatus("blocked", "Could not open the share sheet.", true)
                 }
             }
@@ -200,7 +242,21 @@ class BackupController(
             false,
         )
         if (!runBackground("Could not start the restore worker.") {
-                val outcome = dataBackup.stageRestoreFileWithStatus(uri, passphrase)
+                val progress =
+                    ProgressEmitter(
+                        if (encrypted) "Reading encrypted backup" else "Reading backup",
+                        if (encrypted) {
+                            "Reading and decrypting the selected backup."
+                        } else {
+                            "Reading and checking the selected backup."
+                        },
+                    )
+                val outcome =
+                    dataBackup.stageRestoreFileWithStatus(
+                        uri,
+                        passphrase,
+                        DataBackup.ProgressListener { snapshot -> progress.onDataBackupProgress(snapshot) },
+                    )
                 activity.runOnUiThread {
                     val staged = outcome.file
                     if (!outcome.ok || staged == null) {
@@ -259,7 +315,12 @@ class BackupController(
         logRestore("replace_start", emptyMap<String, Any?>())
         activity.publishStatus("ready", "Restoring backup...", false)
         if (!runBackground("Could not start the restore worker.") {
-                val result = applyReplace(staged)
+                val progress =
+                    ProgressEmitter(
+                        "Restoring backup",
+                        "Replacing the on-phone database with the selected backup.",
+                    )
+                val result = applyReplace(staged, progress)
                 activity.runOnUiThread {
                     if (result == RestoreResult.OK) {
                         activity.publishDeviceList()
@@ -290,7 +351,12 @@ class BackupController(
         logRestore("merge_start", emptyMap<String, Any?>())
         activity.publishStatus("ready", "Merging backup...", false)
         if (!runBackground("Could not start the restore worker.") {
-                val outcome = applyMerge(staged)
+                val progress =
+                    ProgressEmitter(
+                        "Merging backup",
+                        "Adding backup rows and matching existing sessions.",
+                    )
+                val outcome = applyMerge(staged, progress)
                 activity.runOnUiThread {
                     if (outcome.result == RestoreResult.OK) {
                         activity.publishDeviceList()
@@ -397,12 +463,40 @@ class BackupController(
         detail: String,
         busy: Boolean = true,
         tone: String = "busy",
+        phase: String? = null,
+        bytesDone: Long = -1L,
+        bytesTotal: Long = -1L,
+        rowsDone: Long = -1L,
+        rowsTotal: Long = -1L,
+        percent: Int = -1,
+        etaSeconds: Long = -1L,
     ) {
-        activity.publishRestoreProgress(true, busy, title, detail, tone)
+        val resolvedPercent =
+            if (percent >= 0) {
+                percent.coerceIn(0, 100)
+            } else if (!busy && tone == "ok") {
+                100
+            } else {
+                progressPercent(bytesDone, bytesTotal, rowsDone, rowsTotal)
+            }
+        activity.publishRestoreProgress(
+            true,
+            busy,
+            title,
+            detail,
+            tone,
+            phase,
+            bytesDone,
+            bytesTotal,
+            rowsDone,
+            rowsTotal,
+            resolvedPercent,
+            etaSeconds,
+        )
     }
 
     private fun hideRestoreProgress() {
-        activity.publishRestoreProgress(false, false, null, null, "idle")
+        activity.publishRestoreProgress(false, false, null, null, "idle", null, -1L, -1L, -1L, -1L, -1, -1L)
     }
 
     private fun logRestore(
@@ -438,12 +532,81 @@ class BackupController(
         return false
     }
 
+    private inner class ProgressEmitter(
+        private val title: String,
+        private val fallbackDetail: String,
+    ) {
+        private val startedAtMs = System.currentTimeMillis()
+        private var lastPublishedAtMs = 0L
+
+        fun onDataBackupProgress(snapshot: DataBackup.ProgressSnapshot) {
+            publish(
+                phase = snapshot.phase,
+                detail = snapshot.detail,
+                bytesDone = snapshot.bytesDone,
+                bytesTotal = snapshot.bytesTotal,
+                rowsDone = snapshot.rowsDone,
+                rowsTotal = snapshot.rowsTotal,
+            )
+        }
+
+        fun onMergeProgress(
+            phase: String,
+            rowsDone: Long,
+            rowsTotal: Long,
+        ) {
+            publish(
+                phase = phase,
+                detail = fallbackDetail,
+                rowsDone = rowsDone,
+                rowsTotal = rowsTotal,
+            )
+        }
+
+        private fun publish(
+            phase: String?,
+            detail: String?,
+            bytesDone: Long = -1L,
+            bytesTotal: Long = -1L,
+            rowsDone: Long = -1L,
+            rowsTotal: Long = -1L,
+        ) {
+            val now = System.currentTimeMillis()
+            val percent = progressPercent(bytesDone, bytesTotal, rowsDone, rowsTotal)
+            val complete = percent >= 100
+            if (lastPublishedAtMs > 0L &&
+                now - lastPublishedAtMs < PROGRESS_UPDATE_INTERVAL_MS &&
+                !complete
+            ) {
+                return
+            }
+            lastPublishedAtMs = now
+            val etaSeconds = estimateEtaSeconds(bytesDone, bytesTotal, rowsDone, rowsTotal, startedAtMs, now)
+            activity.runOnUiThread {
+                showRestoreProgress(
+                    title,
+                    detail ?: fallbackDetail,
+                    phase = phase,
+                    bytesDone = bytesDone,
+                    bytesTotal = bytesTotal,
+                    rowsDone = rowsDone,
+                    rowsTotal = rowsTotal,
+                    percent = percent,
+                    etaSeconds = etaSeconds,
+                )
+            }
+        }
+    }
+
     private class MergeOutcome(
         val result: RestoreResult,
         val message: String?,
     )
 
-    private fun applyMerge(staged: File): MergeOutcome {
+    private fun applyMerge(
+        staged: File,
+        progress: ProgressEmitter,
+    ): MergeOutcome {
         try {
             val store = activity.localStore
             if (store == null) {
@@ -452,7 +615,13 @@ class BackupController(
             if (!stopLoggingForRestore()) {
                 return MergeOutcome(RestoreResult.LOGGING_ACTIVE, null)
             }
-            val merged = store.mergeFrom(staged)
+            val merged =
+                store.mergeFrom(
+                    staged,
+                    DatabaseMerger.ProgressListener { phase, rowsDone, rowsTotal ->
+                        progress.onMergeProgress(phase, rowsDone, rowsTotal)
+                    },
+                )
             if (!merged.ok) {
                 return MergeOutcome(RestoreResult.OTHER, merged.summary())
             }
@@ -464,7 +633,10 @@ class BackupController(
         }
     }
 
-    private fun applyReplace(staged: File): RestoreResult {
+    private fun applyReplace(
+        staged: File,
+        progress: ProgressEmitter,
+    ): RestoreResult {
         var restoreTemp: File? = null
         var restoreBackup: File? = null
         try {
@@ -482,7 +654,13 @@ class BackupController(
             restoreBackup = File(dbFile.path + ".restore-backup")
             DataBackup.deleteIfExists(restoreTemp)
             DataBackup.deleteIfExists(restoreBackup)
-            DataBackup.copyFile(staged, restoreTemp)
+            DataBackup.copyFile(
+                staged,
+                restoreTemp,
+                DataBackup.ProgressListener { snapshot -> progress.onDataBackupProgress(snapshot) },
+                "Copying backup into place",
+                "Replacing the on-phone database with the selected backup.",
+            )
             DataBackup.deleteIfExists(File(dbFile.path + "-wal"))
             DataBackup.deleteIfExists(File(dbFile.path + "-shm"))
             if (dbFile.exists()) {
@@ -548,11 +726,66 @@ class BackupController(
     companion object {
         const val REQUEST_RESTORE = 4202
         private const val RESTORE_STOP_TIMEOUT_MS = 30_000L
+        private const val PROGRESS_UPDATE_INTERVAL_MS = 250L
 
         private fun hasPassphrase(passphrase: String?): Boolean = !passphrase?.trim().isNullOrEmpty()
 
         private fun minimumPassphraseMessage(): String =
             "Enter a backup passphrase with at least ${DataBackup.MIN_PASSPHRASE_LENGTH} characters."
+
+        private fun progressPercent(
+            bytesDone: Long,
+            bytesTotal: Long,
+            rowsDone: Long,
+            rowsTotal: Long,
+        ): Int {
+            val done: Long
+            val total: Long
+            if (bytesTotal > 0L && bytesDone >= 0L) {
+                done = bytesDone
+                total = bytesTotal
+            } else if (rowsTotal > 0L && rowsDone >= 0L) {
+                done = rowsDone
+                total = rowsTotal
+            } else {
+                return -1
+            }
+            return ((done.toDouble() / total.toDouble()) * 100.0).toInt().coerceIn(0, 100)
+        }
+
+        private fun estimateEtaSeconds(
+            bytesDone: Long,
+            bytesTotal: Long,
+            rowsDone: Long,
+            rowsTotal: Long,
+            startedAtMs: Long,
+            nowMs: Long,
+        ): Long {
+            val done: Long
+            val total: Long
+            if (bytesTotal > 0L && bytesDone >= 0L) {
+                done = bytesDone
+                total = bytesTotal
+            } else if (rowsTotal > 0L && rowsDone >= 0L) {
+                done = rowsDone
+                total = rowsTotal
+            } else {
+                return -1L
+            }
+            if (done >= total) {
+                return 0L
+            }
+            val elapsedMs = nowMs - startedAtMs
+            if (done <= 0L || elapsedMs < 500L) {
+                return -1L
+            }
+            val unitsPerMs = done.toDouble() / elapsedMs.toDouble()
+            if (unitsPerMs <= 0.0) {
+                return -1L
+            }
+            val remainingMs = (total - done).toDouble() / unitsPerMs
+            return ceil(remainingMs / 1000.0).toLong().coerceAtLeast(1L)
+        }
 
         private fun restoreOriginalDatabase(
             dbFile: File,

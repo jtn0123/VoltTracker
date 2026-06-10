@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
+import { createVoltBridgeFixture } from './setup/voltbridge.fixture.js';
 
 describe('map.ts — route selection regressions', () => {
   beforeEach(async () => {
@@ -109,5 +110,139 @@ describe('map.ts — route selection regressions', () => {
 
     document.getElementById('mapTileRetryBtn').click();
     expect(banner.hidden).toBe(true);
+  });
+
+  it('long-pressing a stored map route marks it as not a trip', async () => {
+    vi.useFakeTimers();
+    try {
+      const markTripNotTrip = vi.fn();
+      document.body.innerHTML = '';
+      delete window.VoltDashboard;
+      delete window.VoltTrackerNative;
+      delete window.VoltTrackerAndroid;
+      await loadDashboard({ bridge: createVoltBridgeFixture({ markTripNotTrip }) });
+      const VD = window.VoltDashboard;
+      await VD.ensureMapModule();
+      VD.state.storage = {
+        recentRoutes: [
+          {
+            session: { id: '42:1000:2000', startedAtMs: 1000, endedAtMs: 2000 },
+            points: [
+              { lat: 32.7, lng: -117.1, atMs: 1000 },
+              { lat: 32.8, lng: -117.2, atMs: 2000 },
+            ],
+            distanceMeters: 1000,
+          },
+        ],
+      };
+      VD.renderMap();
+
+      document
+        .querySelector('[data-map-session="42:1000:2000"]')
+        .dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      vi.advanceTimersByTime(700);
+
+      expect(markTripNotTrip).toHaveBeenCalledWith('42:1000:2000');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('marks a route only once when the WebView contextmenu fires during a long-press', async () => {
+    vi.useFakeTimers();
+    try {
+      const markTripNotTrip = vi.fn();
+      document.body.innerHTML = '';
+      delete window.VoltDashboard;
+      delete window.VoltTrackerNative;
+      delete window.VoltTrackerAndroid;
+      await loadDashboard({ bridge: createVoltBridgeFixture({ markTripNotTrip }) });
+      const VD = window.VoltDashboard;
+      await VD.ensureMapModule();
+      VD.state.storage = {
+        recentRoutes: [
+          {
+            session: { id: '42:1000:2000', startedAtMs: 1000, endedAtMs: 2000 },
+            points: [
+              { lat: 32.7, lng: -117.1, atMs: 1000 },
+              { lat: 32.8, lng: -117.2, atMs: 2000 },
+            ],
+            distanceMeters: 1000,
+          },
+        ],
+      };
+      VD.renderMap();
+      const row = document.querySelector('[data-map-session="42:1000:2000"]');
+
+      // Android WebView fires contextmenu ~500ms into a long-press, before the
+      // 650ms fallback timer. The route must be marked exactly once, and the
+      // suppressed click must not leak into the next tap.
+      row.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      vi.advanceTimersByTime(500);
+      row.dispatchEvent(new Event('contextmenu', { bubbles: true, cancelable: true }));
+      vi.advanceTimersByTime(400);
+      row.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      expect(markTripNotTrip).toHaveBeenCalledTimes(1);
+
+      // The next ordinary tap selects the route instead of being swallowed.
+      row.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      vi.advanceTimersByTime(50);
+      row.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      row.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+      expect(VD.state.selectedMapSessionId).toBe('42:1000:2000');
+      expect(markTripNotTrip).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the basemap warning after tiles recover', async () => {
+    const tileHandlers = {};
+    const fakeMap = {
+      fitBounds: vi.fn(),
+      invalidateSize: vi.fn(),
+      on: vi.fn(() => fakeMap),
+      remove: vi.fn(),
+      removeLayer: vi.fn(() => fakeMap),
+      setView: vi.fn(() => fakeMap),
+    };
+    const fakeLayer = {
+      addTo: vi.fn(() => fakeLayer),
+      bindTooltip: vi.fn(() => fakeLayer),
+      on: vi.fn((event, handler) => {
+        tileHandlers[event] = handler;
+        return fakeLayer;
+      }),
+    };
+    const previousLeaflet = window.L;
+
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    window.L = {
+      map: vi.fn(() => fakeMap),
+      tileLayer: vi.fn(() => fakeLayer),
+    };
+    try {
+      await loadDashboard();
+
+      const VD = window.VoltDashboard;
+      await VD.ensureMapModule();
+      const banner = document.getElementById('mapTileError');
+
+      VD.ensureMap();
+      tileHandlers.tileerror({ tile: { src: 'https://a.basemaps.cartocdn.com/bad.png' } });
+      tileHandlers.tileerror({ tile: { src: 'https://b.basemaps.cartocdn.com/bad.png' } });
+      expect(banner.hidden).toBe(true);
+
+      tileHandlers.tileerror({ tile: { src: 'https://c.basemaps.cartocdn.com/bad.png' } });
+      expect(banner.hidden).toBe(false);
+
+      tileHandlers.tileload({});
+      expect(banner.hidden).toBe(true);
+    } finally {
+      window.L = previousLeaflet;
+    }
   });
 });

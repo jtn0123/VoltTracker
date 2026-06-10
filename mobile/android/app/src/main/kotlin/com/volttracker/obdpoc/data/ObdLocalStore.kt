@@ -284,6 +284,21 @@ open class ObdLocalStore(
 
     open fun getTripRouteJson(routeKey: String?): JSONObject = reports.tripRouteJson(routeKey)
 
+    open fun markTripNotTrip(routeKey: String?): Boolean {
+        val canonical = ObdTripExclusions.canonicalRouteKey(routeKey) ?: return false
+        val parsed = DriveWindowDetector.parseRouteKey(canonical) ?: return false
+        writer.recordEvent(
+            parsed.sessionId,
+            ObdTripExclusions.EVENT_KIND,
+            "hidden",
+            canonical,
+            false,
+            ObdTripExclusions.eventPayload(canonical, ObdTripExclusions.REASON_NOT_TRIP),
+        )
+        trips.invalidateSessionTripCache(parsed.sessionId)
+        return true
+    }
+
     open override fun readLocationSamples(sessionId: Long): List<LocationSample> =
         materialize.readLocationSamples(sessionId)
 
@@ -327,7 +342,10 @@ open class ObdLocalStore(
         maintenance.checkpoint()
     }
 
-    open fun mergeFrom(donorDbFile: File?): DatabaseMerger.MergeResult = maintenance.mergeFrom(donorDbFile)
+    open fun mergeFrom(
+        donorDbFile: File?,
+        progressListener: DatabaseMerger.ProgressListener? = null,
+    ): DatabaseMerger.MergeResult = maintenance.mergeFrom(donorDbFile, progressListener)
 
     open override fun pruneRawDataOlderThan(keepDays: Int): Int = maintenance.pruneRawDataOlderThan(keepDays)
 

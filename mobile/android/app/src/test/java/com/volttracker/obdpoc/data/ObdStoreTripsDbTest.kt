@@ -111,7 +111,7 @@ class ObdStoreTripsDbTest {
     }
 
     @Test
-    fun zeroMovementSessionHasZeroDistance() {
+    fun zeroMovementSessionIsNotReportedAsATrip() {
         val id = store.startSession("obd", "00:11", "Adapter")
         // All samples at the exact same coordinate — distance must be 0.
         store.recordTelemetry(id, gpsSample(0, 32.70, -117.10, 1000L))
@@ -119,11 +119,41 @@ class ObdStoreTripsDbTest {
         store.recordTelemetry(id, gpsSample(0, 32.70, -117.10, 3000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000L, "")
 
-        val trips = store.getTripsJson(40)
-        assertEquals(1, trips.length())
-        val trip = trips.getJSONObject(0)
-        assertEquals(0.0, trip.optDouble("distanceMeters"), 0.001)
-        assertEquals(0, trip.optInt("maxSpeedKph"))
+        assertEquals(0, store.getTripsJson(40).length())
+        assertEquals(0, StorageSummaryJson.build(store.getStorageSummaryRecord()).getJSONArray("recentRoutes").length())
+        assertEquals(0, store.getInsightsJson().optInt("tripCount"))
+    }
+
+    @Test
+    fun tinyTwoPointStationaryRouteIsNotReportedAsATrip() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, gpsSample(0, 32.70000, -117.10000, 1000L))
+        store.recordTelemetry(id, gpsSample(0, 32.70001, -117.10000, 2000L))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
+
+        assertEquals(0, store.getTripsJson(40).length())
+        assertEquals(0, StorageSummaryJson.build(store.getStorageSummaryRecord()).getJSONArray("recentRoutes").length())
+        assertEquals(0, store.getInsightsJson().optInt("tripCount"))
+    }
+
+    @Test
+    fun markedTripIsHiddenFromTripAndMapProjections() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
+
+        val routeKey =
+            StorageSummaryJson
+                .build(store.getStorageSummaryRecord())
+                .getJSONArray("recentRoutes")
+                .getJSONObject(0)
+                .getJSONObject("session")
+                .getString("id")
+
+        assertTrue(store.markTripNotTrip(routeKey))
+        assertEquals(0, store.getTripsJson(40).length())
+        assertEquals(0, StorageSummaryJson.build(store.getStorageSummaryRecord()).getJSONArray("recentRoutes").length())
     }
 
     @Test
