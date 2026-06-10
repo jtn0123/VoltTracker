@@ -41,7 +41,7 @@ jobs:
       # dashboard source in dashboard-src/js into the shipped assets/dashboard/js).
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
       - name: Run unit tests
@@ -51,6 +51,46 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon --configuration-cache :app:testDebugUnitTest
+      - name: Summarize unit test results
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import os
+          import xml.etree.ElementTree as ET
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if not summary:
+              raise SystemExit(0)
+          paths = glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml")
+          tests = failures = skipped = 0
+          slow = []
+          failed_cases = []
+          for path in paths:
+              root = ET.parse(path).getroot()
+              tests += int(root.attrib.get("tests", "0"))
+              failures += int(root.attrib.get("failures", "0")) + int(root.attrib.get("errors", "0"))
+              skipped += int(root.attrib.get("skipped", "0"))
+              for case in root.findall("testcase"):
+                  name = f"{case.attrib.get('classname', '')}.{case.attrib.get('name', '')}".strip(".")
+                  elapsed = float(case.attrib.get("time", "0"))
+                  if elapsed >= 0.5:
+                      slow.append((elapsed, name))
+                  if case.find("failure") is not None or case.find("error") is not None:
+                      failed_cases.append(name)
+
+          with open(summary, "a", encoding="utf-8") as fh:
+              fh.write("\n### Android unit tests\n\n")
+              fh.write(f"- Tests: {tests}\n- Failures/errors: {failures}\n- Skipped: {skipped}\n")
+              if failed_cases:
+                  fh.write("\nFailed cases:\n")
+                  for name in failed_cases[:20]:
+                      fh.write(f"- `{name}`\n")
+              if slow:
+                  fh.write("\nSlowest cases over 500 ms:\n")
+                  for elapsed, name in sorted(slow, reverse=True)[:10]:
+                      fh.write(f"- `{name}` - {elapsed:.2f}s\n")
+          PY
       - name: Spotless check
         run: ./gradlew --no-daemon --configuration-cache :app:spotlessCheck
       - name: Android Lint
@@ -59,6 +99,13 @@ jobs:
         run: ./gradlew --no-daemon --configuration-cache :app:assembleDebug
       - name: Verify generated dashboard is committed
         run: ./gradlew --no-daemon --configuration-cache verifyGeneratedDashboardClean
+      - name: Upload generated dashboard diff
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generated-dashboard-html-diff
+          path: mobile/android/build/reports/dashboard-html-diff/
+          if-no-files-found: ignore
       - name: Verify dashboard bundle budget
         run: ./gradlew --no-daemon --configuration-cache verifyDashboardBundleSize
       - name: JaCoCo coverage report
@@ -98,7 +145,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
       - name: Install dashboard test deps
@@ -128,7 +175,52 @@ jobs:
         # fails the job if coverage drops below the ratchet in vitest.config.js.
         # This is the dashboard half of verifyActiveApp, kept as its own job for
         # npm dependency caching and coverage artifact isolation.
-        run: npm run test:coverage
+        run: npm run test:coverage:ci
+      - name: Summarize dashboard test results
+        if: always()
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const summary = process.env.GITHUB_STEP_SUMMARY;
+          const path = 'coverage/vitest-results.json';
+          if (!summary || !fs.existsSync(path)) process.exit(0);
+          const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const cases = [];
+          function walk(value) {
+            if (Array.isArray(value)) {
+              value.forEach(walk);
+              return;
+            }
+            if (!value || typeof value !== 'object') return;
+            const hasCaseShape =
+              typeof value.status === 'string' &&
+              (typeof value.fullName === 'string' || typeof value.name === 'string' || typeof value.title === 'string');
+            if (hasCaseShape) {
+              const name = value.fullName || value.name || value.title;
+              cases.push({
+                name,
+                status: value.status,
+                duration: Number(value.duration || 0),
+              });
+            }
+            Object.values(value).forEach(walk);
+          }
+          walk(report);
+          const failed = cases.filter((item) => !['passed', 'todo', 'skipped', 'pending'].includes(item.status));
+          const slow = cases.filter((item) => item.duration >= 500).sort((a, b) => b.duration - a.duration).slice(0, 10);
+          let out = '\n### Dashboard unit tests\n\n';
+          out += `- Test cases reported: ${cases.length}\n`;
+          out += `- Failed cases: ${failed.length}\n`;
+          if (failed.length) {
+            out += '\nFailed cases:\n';
+            for (const item of failed.slice(0, 20)) out += `- \`${item.name}\` (${item.status})\n`;
+          }
+          if (slow.length) {
+            out += '\nSlowest dashboard cases over 500 ms:\n';
+            for (const item of slow) out += `- \`${item.name}\` - ${(item.duration / 1000).toFixed(2)}s\n`;
+          }
+          fs.appendFileSync(summary, out);
+          NODE
       - name: Upload dashboard coverage report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -175,7 +267,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-e2e/package-lock.json
       - name: Install e2e deps
@@ -199,6 +291,39 @@ jobs:
         # committed *-linux.png baselines (download the dashboard-visual-snapshots
         # artifact and commit it), or the dashboard-visual gate stays red.
         run: npx playwright test --project=chromium
+      - name: Report retried Playwright tests
+        if: always()
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = 'playwright-report/results.json';
+          const summary = process.env.GITHUB_STEP_SUMMARY;
+          if (!fs.existsSync(path) || !summary) process.exit(0);
+          const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const retried = [];
+          function visitSuite(suite, prefix = []) {
+            for (const child of suite.suites || []) visitSuite(child, prefix.concat(child.title).filter(Boolean));
+            for (const spec of suite.specs || []) {
+              for (const test of spec.tests || []) {
+                const retries = (test.results || []).filter((result) => result.retry > 0);
+                if (retries.length) {
+                  const title = prefix.concat(spec.title).filter(Boolean).join(' > ');
+                  retried.push({ title, project: test.projectName || 'default', count: retries.length });
+                }
+              }
+            }
+          }
+          for (const suite of report.suites || []) visitSuite(suite);
+          if (!retried.length) {
+            fs.appendFileSync(summary, '\n### Playwright retries\n\nNo dashboard e2e tests needed a retry.\n');
+            process.exit(0);
+          }
+          fs.appendFileSync(summary, '\n### Playwright retries\n\n| Test | Project | Retries |\n|------|---------|---------|\n');
+          for (const item of retried) {
+            console.log(`::warning title=Playwright retry::${item.project}: ${item.title} retried ${item.count} time(s)`);
+            fs.appendFileSync(summary, `| ${item.title.replace(/\|/g, '\\|')} | ${item.project} | ${item.count} |\n`);
+          }
+          NODE
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -223,7 +348,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-e2e/package-lock.json
       - name: Install e2e deps
@@ -319,7 +444,7 @@ jobs:
       # the shipped dashboard bundle.
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
       - name: Build debug APK

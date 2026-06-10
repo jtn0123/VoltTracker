@@ -4,22 +4,18 @@
 // dense / empty / fault / extreme states are all checked, not just the happy path.
 const { test, expect } = require('@playwright/test');
 const path = require('node:path');
-const { openDashboard, setView } = require('./harness');
+const { loadDemoScenario, openDashboard, setView } = require('./harness');
 
 const AXE = path.join(__dirname, 'node_modules', 'axe-core', 'axe.min.js');
 const TABS = ['drive', 'map', 'charge', 'insights', 'diagnostics', 'settings'];
 // WCAG 2.2 "Target Size (Minimum)" 2.5.8 (AA) = 24x24 CSS px.
 const MIN_TARGET = 24;
 
-async function loadScenario(page, scenario) {
-  await page.evaluate((s) => window.VoltDashboard.loadDemoScenario(s), scenario);
-}
-
 test.describe('a11y — touch targets >= 24px (WCAG 2.2 AA)', () => {
   for (const scenario of ['typical', 'empty', 'fault', 'extreme']) {
     test(`scenario: ${scenario}`, async ({ page }) => {
       await openDashboard(page);
-      await loadScenario(page, scenario);
+      await loadDemoScenario(page, scenario);
       for (const tab of TABS) {
         await setView(page, tab);
         const tooSmall = await page.evaluate(
@@ -53,7 +49,7 @@ test.describe('a11y — colour contrast (axe-core)', () => {
   for (const scenario of ['typical', 'fault']) {
     test(`scenario: ${scenario}`, async ({ page }) => {
       await openDashboard(page);
-      await loadScenario(page, scenario);
+      await loadDemoScenario(page, scenario);
       await page.addScriptTag({ path: AXE });
       for (const tab of TABS) {
         await setView(page, tab);
@@ -70,4 +66,30 @@ test.describe('a11y — colour contrast (axe-core)', () => {
       }
     });
   }
+});
+
+test.describe('a11y — destructive DTC dialog keyboard behavior', () => {
+  test('clear-codes warning traps and restores focus', async ({ page }) => {
+    await openDashboard(page);
+    await setView(page, 'insights');
+
+    await page.locator('#dtcClearOpenBtn').click();
+    const dialog = page.locator('#dtcClearWarning');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute('role', 'alertdialog');
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
+    await expect(page.locator('[data-dtc-dialog-inert="true"]')).not.toHaveCount(0);
+    await expect(page.locator('#dtcClearWarning')).toBeFocused();
+
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#dtcClearAckBox')).toBeFocused();
+
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.locator('[data-action="cancelClearDtc"]')).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('#dtcClearOpenBtn')).toBeFocused();
+    await expect(page.locator('[data-dtc-dialog-inert="true"]')).toHaveCount(0);
+  });
 });

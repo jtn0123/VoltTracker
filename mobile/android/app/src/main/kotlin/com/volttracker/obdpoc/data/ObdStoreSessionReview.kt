@@ -268,7 +268,13 @@ object ObdStoreSessionReview {
             payload.put(warning("pid-unparsed", "Some PID responses are stored but not parsed yet.", unknownPids))
         }
         if (sampleGaps > 0) {
-            payload.put(warning("sample-gap", "Logging had one or more long sample gaps while the session was active.", sampleGaps))
+            payload.put(
+                warning(
+                    "sample-gap",
+                    "Logging had one or more long sample gaps while the session was active.",
+                    sampleGaps,
+                ),
+            )
         }
         if (backgroundEvents > 0) {
             payload.put(
@@ -347,7 +353,10 @@ object ObdStoreSessionReview {
                     item.put("state", ObdStoreSupport.clean(cursor.getString(cursor.getColumnIndexOrThrow("state"))))
                     item.put("detail", ObdStoreSupport.clean(cursor.getString(cursor.getColumnIndexOrThrow("detail"))))
                     item.put("blocked", cursor.getInt(cursor.getColumnIndexOrThrow("blocked")) != 0)
-                    item.put("payload", ObdStoreSupport.parseObject(cursor.getString(cursor.getColumnIndexOrThrow("payload"))))
+                    item.put(
+                        "payload",
+                        ObdStoreSupport.parseObject(cursor.getString(cursor.getColumnIndexOrThrow("payload"))),
+                    )
                     payload.put(item)
                 }
             }

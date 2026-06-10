@@ -12,17 +12,44 @@
 //
 // - The eager scripts (loaded up front, in dependency order by index.html) bundle
 //   into a single app.js.
-// - The lazy chunks (dtc-lookup / dtc-causes / demo-data, injected on demand by
+// - The lazy chunks (map / troubleshooter / dtc-lookup / dtc-causes / demo-data, injected on demand by
 //   core.ts) keep their emitted filenames so the existing loadDashboardScript() paths
 //   resolve unchanged.
 import { build } from "esbuild";
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "../app/src/main/dashboard-src/js");
 const OUT = resolve(HERE, "../app/src/main/assets/dashboard/js");
+const LEAFLET_SRC = resolve(HERE, "node_modules/leaflet/dist");
+const LEAFLET_OUT = resolve(HERE, "../app/src/main/assets/dashboard/lib/leaflet");
+const LEAFLET_ASSETS = [
+  "leaflet.css",
+  "leaflet.js",
+  "images/layers.png",
+  "images/layers-2x.png",
+  "images/marker-icon.png",
+  "images/marker-icon-2x.png",
+  "images/marker-shadow.png",
+];
+
+function copyAssetTree(srcRoot, outRoot, files) {
+  for (const file of files) {
+    const src = resolve(srcRoot, file);
+    if (!existsSync(src)) {
+      throw new Error(`Missing managed asset ${src}`);
+    }
+    const out = resolve(outRoot, file);
+    mkdirSync(dirname(out), { recursive: true });
+    if (file.endsWith(".css") || file.endsWith(".js")) {
+      writeFileSync(out, readFileSync(src, "utf8").replace(/\r\n/g, "\n"));
+    } else {
+      copyFileSync(src, out);
+    }
+  }
+}
 
 // Clean the output dir so stale artifacts (e.g. an old build's *.map files) never
 // linger into the packaged APK. Only this build writes here — it's gitignored.
@@ -32,6 +59,9 @@ for (const f of readdirSync(OUT)) {
     rmSync(resolve(OUT, f));
   }
 }
+
+rmSync(LEAFLET_OUT, { recursive: true, force: true });
+copyAssetTree(LEAFLET_SRC, LEAFLET_OUT, LEAFLET_ASSETS);
 
 // Keep this order in sync with index.template.html (and script-order.test.js).
 // storage-status / signals-panel / insights-panel are the three modules the old
@@ -43,17 +73,15 @@ const EAGER = [
   "storage-status",
   "signals-panel",
   "insights-panel",
-  "map",
   "scrubber",
   "drive",
   "telemetry",
   "actions",
-  "troubleshooter",
   "connection-status",
   "connection-tools",
 ];
 
-const LAZY = ["dtc-lookup", "dtc-causes", "demo-data"];
+const LAZY = ["map", "troubleshooter", "dtc-lookup", "dtc-causes", "demo-data"];
 
 function sourceFor(name) {
   const file = `${SRC}/${name}.ts`;

@@ -129,7 +129,8 @@ class LocationFilter(
         const val DEFAULT_MAX_CONSECUTIVE_REJECTS = 5
 
         @JvmStatic
-        fun isNetworkProvider(provider: String?): Boolean = provider != null && provider.lowercase(Locale.US).contains("network")
+        fun isNetworkProvider(provider: String?): Boolean =
+            provider != null && provider.lowercase(Locale.US).contains("network")
 
         @JvmStatic
         fun haversineMeters(

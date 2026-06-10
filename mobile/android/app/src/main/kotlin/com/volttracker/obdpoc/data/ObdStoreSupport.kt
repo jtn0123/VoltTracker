@@ -323,6 +323,8 @@ object ObdStoreSupport {
             sample.has("longitude") ||
             sample.has("soc") ||
             sample.has("batteryTemp") ||
+            sample.has("capacityAh") ||
+            sample.has("sohPct") ||
             sample.has("powerKw") ||
             sample.has("clearDtcOk") ||
             sample.has("clearDtcCode")
@@ -333,6 +335,22 @@ object ObdStoreSupport {
 
     @JvmStatic
     fun boundedLimit(limit: Int): String = maxOf(1, minOf(limit, 500)).toString()
+
+    private const val DEFAULT_SESSION_READ_LIMIT = 500
+
+    private val SESSION_COLUMNS =
+        arrayOf(
+            "_id",
+            "mode",
+            "adapter_address",
+            "adapter_name",
+            "started_at_ms",
+            "ended_at_ms",
+            "status",
+            "supported_pids",
+            "sample_count",
+            "last_event_at_ms",
+        )
 
     private fun requireKnownTable(table: String): String {
         if (!VoltTrackerDb.KNOWN_TABLES.contains(table)) {
@@ -520,18 +538,29 @@ object ObdStoreSupport {
     ): List<ObdSessionRecord> = getSessions(db, boundedLimit(limit))
 
     @JvmStatic
-    fun getAllSessions(db: SQLiteDatabase): List<ObdSessionRecord> = getSessions(db, null)
+    fun getAllSessions(db: SQLiteDatabase): List<ObdSessionRecord> =
+        getSessions(db, boundedLimit(DEFAULT_SESSION_READ_LIMIT))
 
     private fun getSessions(
         db: SQLiteDatabase,
         limit: String?,
     ): List<ObdSessionRecord> {
         val records = ArrayList<ObdSessionRecord>()
-        db.query(VoltTrackerDb.TABLE_SESSIONS, null, null, null, null, null, "started_at_ms DESC", limit).use { cursor ->
-            while (cursor.moveToNext()) {
-                records.add(readSession(cursor))
+        db
+            .query(
+                VoltTrackerDb.TABLE_SESSIONS,
+                SESSION_COLUMNS,
+                null,
+                null,
+                null,
+                null,
+                "started_at_ms DESC",
+                limit,
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    records.add(readSession(cursor))
+                }
             }
-        }
         return records
     }
 
@@ -564,7 +593,13 @@ object ObdStoreSupport {
             }
             val prior = previous
             if (prior != null && hasFiniteLatLng(prior)) {
-                total += haversineMeters(prior.optDouble("lat"), prior.optDouble("lng"), point.optDouble("lat"), point.optDouble("lng"))
+                total +=
+                    haversineMeters(
+                        prior.optDouble("lat"),
+                        prior.optDouble("lng"),
+                        point.optDouble("lat"),
+                        point.optDouble("lng"),
+                    )
             }
             previous = point
         }

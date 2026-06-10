@@ -16,19 +16,18 @@ const BUILD_MJS = resolve('build.mjs');
 //
 // Dependency order: prefs first (seeds the preference store other modules read at
 // init), then core (it seeds window.VoltDashboard); actions' bootstrap calls into
-// map/drive/telemetry/etc., so it comes after them.
+// drive/telemetry/etc., so it comes after them. Map and the troubleshooter are
+// lazy chunks loaded by core.ts on demand.
 const EXPECTED_EAGER_ORDER = [
   'prefs',
   'core',
   'storage-status',
   'signals-panel',
   'insights-panel',
-  'map',
   'scrubber',
   'drive',
   'telemetry',
   'actions',
-  'troubleshooter',
   'connection-status',
   'connection-tools',
 ];
@@ -62,6 +61,14 @@ describe('dashboard production script bundle', () => {
     expect(match).not.toBeNull();
     const order = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     expect(order).toEqual(EXPECTED_EAGER_ORDER);
+  });
+
+  it('keeps heavy support modules in the lazy chunk list', () => {
+    const build = readFileSync(BUILD_MJS, 'utf8');
+    const match = build.match(/const LAZY = \[([\s\S]*?)\];/);
+    expect(match).not.toBeNull();
+    const lazy = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(lazy).toEqual(['map', 'troubleshooter', 'dtc-lookup', 'dtc-causes', 'demo-data']);
   });
 
   it('ships syntax that Android 9 WebView can parse', () => {

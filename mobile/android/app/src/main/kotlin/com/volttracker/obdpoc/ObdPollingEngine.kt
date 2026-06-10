@@ -12,9 +12,23 @@ import java.io.IOException
  * Runs the OBD adapter IO on the [ObdService] worker thread: connect/reconnect, ELM327 init,
  * and live-data polling.
  */
+private fun defaultPollingSleep(millis: Long): Boolean =
+    try {
+        Thread.sleep(millis)
+        true
+    } catch (ex: InterruptedException) {
+        Thread.currentThread().interrupt()
+        false
+    }
+
 open class ObdPollingEngine(
     private val service: EngineHost,
+    private val sleeper: LoopSleeper = LoopSleeper { millis -> defaultPollingSleep(millis) },
 ) : LiveSampleReader.SampleContext {
+    fun interface LoopSleeper {
+        fun sleep(millis: Long): Boolean
+    }
+
     private var connection = ElmConnection()
     private val speedFilter = SpeedPlausibilityFilter()
     private val demoLoop: DemoPollingLoop
@@ -32,7 +46,7 @@ open class ObdPollingEngine(
         sessionHealth = SessionHealthTracker(service)
         pidPolling = PidPollingState(service, this)
         liveSampleReader = LiveSampleReader(service, speedFilter, pidPolling)
-        demoLoop = DemoPollingLoop(service, this)
+        demoLoop = DemoPollingLoop(service, this, sleeper)
         scanRunner = DiagnosticScanRunner(service, this)
         tpmsDiscoveryRunner = TpmsDiscoveryRunner(service, this)
         clearDtcRunner = ClearDtcRunner(service, this)
@@ -262,7 +276,9 @@ open class ObdPollingEngine(
                         },
                         false,
                     )
-                    sleep(decision.backoffMs)
+                    if (!sleeper.sleep(decision.backoffMs)) {
+                        return
+                    }
                     if (service.cancelRetryRequested) {
                         service.cancelRetryRequested = false
                         service.recorder.logEvent(
@@ -387,7 +403,8 @@ open class ObdPollingEngine(
     @SuppressLint("MissingPermission")
     @Throws(IOException::class)
     open fun openBluetoothSocket(address: String?) {
-        val adapter = BluetoothAdapters.get(service.androidContext) ?: throw IOException("Bluetooth adapter unavailable")
+        val adapter =
+            BluetoothAdapters.get(service.androidContext) ?: throw IOException("Bluetooth adapter unavailable")
         if (service.hasBluetoothScanPermission()) {
             adapter.cancelDiscovery()
         } else {
@@ -411,7 +428,9 @@ open class ObdPollingEngine(
                 continue
             }
             service.broadcastTelemetry(sample)
-            sleep(850)
+            if (!sleeper.sleep(850)) {
+                return
+            }
         }
     }
 
@@ -628,7 +647,8 @@ open class ObdPollingEngine(
         const val RAW_TRANSCRIPT_MAX_CHARS = 4000
 
         @JvmStatic
-        fun boundedRawTranscript(rawThisCycle: StringBuilder?): String = PidPollingState.boundedRawTranscript(rawThisCycle)
+        fun boundedRawTranscript(rawThisCycle: StringBuilder?): String =
+            PidPollingState.boundedRawTranscript(rawThisCycle)
 
         @JvmStatic
         fun computeBackoffMs(
@@ -677,14 +697,6 @@ open class ObdPollingEngine(
                 return ""
             }
             return "…" + vin.substring(vin.length - 4)
-        }
-
-        private fun sleep(millis: Long) {
-            try {
-                Thread.sleep(millis)
-            } catch (ex: InterruptedException) {
-                Thread.currentThread().interrupt()
-            }
         }
     }
 }

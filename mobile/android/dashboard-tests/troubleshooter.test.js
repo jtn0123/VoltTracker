@@ -23,7 +23,9 @@ async function freshLoad(bridge) {
   delete window.VoltDashboard;
   delete window.VoltTrackerNative;
   delete window.VoltTrackerAndroid;
-  return loadDashboard({ bridge });
+  const result = await loadDashboard({ bridge });
+  await window.VoltDashboard.ensureTroubleshooterModule();
+  return result;
 }
 
 // Push a status payload through the same seam the Android side uses

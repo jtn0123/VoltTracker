@@ -111,6 +111,8 @@
   // don't accumulate across re-renders. Each render aborts the previous batch
   // before binding the new one.
   let historyController: AbortController | null = null;
+  let mapModulePromise: Promise<VoltDashboard> | null = null;
+  let troubleshooterModulePromise: Promise<VoltDashboard> | null = null;
 
   function reportClientError(label: unknown, detail?: unknown) {
     const message = String(detail || label || "Unknown error");
@@ -230,10 +232,30 @@
   let cachedNavNodes: HTMLElement[] | null = null;
   let restoreProgressHideTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function cloneArray(value: unknown) {
-    return Array.isArray(value) ? value.map((item) => (
-      item && typeof item === "object" ? { ...item } : item
-    )) : [];
+  function cloneDemoArray(record: Record<string, unknown>, key: "trips" | "sessions" | "hourly" | "insights") {
+    const value = record[key];
+    if (!Array.isArray(value)) {
+      console.warn(`Ignoring malformed demo data: ${key} must be an array.`);
+      return null;
+    }
+    const cloned: unknown[] = [];
+    value.forEach((item, index) => {
+      if (key === "hourly") {
+        const count = Number(item);
+        if (!Number.isFinite(count)) {
+          console.warn(`Ignoring malformed demo data: ${key}[${index}] is not a number.`);
+          return;
+        }
+        cloned.push(count);
+        return;
+      }
+      if (item == null || typeof item !== "object") {
+        console.warn(`Ignoring malformed demo data: ${key}[${index}] is not an object.`);
+        return;
+      }
+      cloned.push({ ...item });
+    });
+    return cloned;
   }
 
   function asRecord(value: unknown): Record<string, unknown> {
@@ -243,12 +265,19 @@
   function applyDemoData(source: unknown) {
     const next = typeof source === "function" ? source() : source;
     const record = asRecord(next);
-    data.trips = cloneArray(record.trips);
-    data.sessions = cloneArray(record.sessions);
-    data.hourly = cloneArray(record.hourly);
-    data.insights = cloneArray(record.insights);
+    const trips = cloneDemoArray(record, "trips");
+    const sessions = cloneDemoArray(record, "sessions");
+    const hourly = cloneDemoArray(record, "hourly");
+    const insights = cloneDemoArray(record, "insights");
+    if (!trips || !sessions || !hourly || !insights) {
+      return false;
+    }
+    data.trips = trips;
+    data.sessions = sessions;
+    data.hourly = hourly;
+    data.insights = insights;
     data.demoLoaded = true;
-    return data;
+    return true;
   }
 
   function flushDemoDataCallbacks(error: Error | null) {
@@ -265,9 +294,14 @@
     }
     if (callback) demoDataCallbacks.push(callback);
     if (window.VoltDashboardDemoData) {
-      applyDemoData(window.VoltDashboardDemoData);
-      flushDemoDataCallbacks(null);
-      return true;
+      if (applyDemoData(window.VoltDashboardDemoData)) {
+        flushDemoDataCallbacks(null);
+        return true;
+      }
+      const error = new Error("Malformed dashboard demo data.");
+      reportClientError("demoData.shape", error.message);
+      flushDemoDataCallbacks(error);
+      return false;
     }
     if (demoDataLoading) return false;
     demoDataLoading = true;
@@ -275,8 +309,13 @@
     script.src = "js/demo-data.js";
     script.onload = () => {
       demoDataLoading = false;
-      applyDemoData(window.VoltDashboardDemoData || {});
-      flushDemoDataCallbacks(null);
+      if (applyDemoData(window.VoltDashboardDemoData || {})) {
+        flushDemoDataCallbacks(null);
+      } else {
+        const error = new Error("Malformed dashboard demo data.");
+        reportClientError("demoData.shape", error.message);
+        flushDemoDataCallbacks(error);
+      }
     };
     script.onerror = () => {
       demoDataLoading = false;
@@ -336,6 +375,70 @@
     return dtcDataPromise;
   }
 
+  function mapModuleLoaded() {
+    return VD.renderMapLoaded === true;
+  }
+
+  function ensureMapModule() {
+    if (mapModuleLoaded()) return Promise.resolve(VD);
+    if (!mapModulePromise) {
+      mapModulePromise = loadDashboardScript("js/map.js")
+        .then(() => {
+          if (!mapModuleLoaded() || typeof VD.renderMap !== "function") {
+            throw new Error("Map script loaded but expected globals were not registered.");
+          }
+          return VD;
+        })
+        .catch((err) => {
+          mapModulePromise = null;
+          reportClientError("map.load", err && err.message);
+          throw err;
+        });
+    }
+    return mapModulePromise;
+  }
+
+  function renderMapIfLoaded() {
+    if (mapModuleLoaded() && typeof VD.renderMap === "function") {
+      VD.renderMap();
+    }
+  }
+
+  function requestMapRender() {
+    if (mapModuleLoaded() && typeof VD.renderMap === "function") {
+      VD.renderMap();
+      return Promise.resolve(VD);
+    }
+    return ensureMapModule().then((dashboard) => {
+      if (typeof dashboard.renderMap === "function") dashboard.renderMap();
+      return dashboard;
+    });
+  }
+
+  function troubleshooterModuleLoaded() {
+    const ts = VD.troubleshooter;
+    return Boolean(ts && typeof ts.open === "function" && typeof ts.noteStatus === "function");
+  }
+
+  function ensureTroubleshooterModule() {
+    if (troubleshooterModuleLoaded()) return Promise.resolve(VD);
+    if (!troubleshooterModulePromise) {
+      troubleshooterModulePromise = loadDashboardScript("js/troubleshooter.js")
+        .then(() => {
+          if (!troubleshooterModuleLoaded()) {
+            throw new Error("Troubleshooter script loaded but expected globals were not registered.");
+          }
+          return VD;
+        })
+        .catch((err) => {
+          troubleshooterModulePromise = null;
+          reportClientError("troubleshooter.load", err && err.message);
+          throw err;
+        });
+    }
+    return troubleshooterModulePromise;
+  }
+
   function dtcSearchUrl(code: unknown) {
     const key = String(code || "").trim().toUpperCase();
     const q = encodeURIComponent((key || "OBD-II") + " Chevy Volt DTC");
@@ -367,6 +470,8 @@
     mapRemoteTilesEnabled: true,
     mapFull: false,
     selectedMapSessionId: null,
+    liveRouteStartedAtMs: null,
+    liveRoutePoints: [],
     status: {},
     speedHistory: [],
     // Drive-tab live charts: power bars (last ~60s) and SOC trace across the
@@ -543,7 +648,7 @@
     if (view !== "map" && state.mapFull) {
       state.mapFull = false;
       document.body.classList.remove("map-full-active");
-      VD.renderMap();
+      VD.renderMapIfLoaded();
     }
     viewNodes().forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
     navNodes().forEach((node) => {
@@ -556,7 +661,7 @@
       }
     });
     if (view === "insights") VD.loadInsights();
-    else if (view === "map") VD.renderMap();
+    else if (view === "map") void VD.requestMapRender().catch(() => {});
     updateViewHeading();
     scrollAppToTop();
   }
@@ -575,7 +680,7 @@
     if (state.mapFull) {
       state.mapFull = false;
       document.body.classList.remove("map-full-active");
-      if (typeof VD.renderMap === "function") VD.renderMap();
+      VD.renderMapIfLoaded();
       return true;
     }
     if (state.view && state.view !== "drive") {
@@ -671,8 +776,11 @@
       sessionStartSoc: null,
       sessionDistanceM: 0,
       sessionLastLat: null,
-      sessionLastLng: null
+      sessionLastLng: null,
+      liveRouteStartedAtMs: null,
+      liveRoutePoints: []
     });
+    if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
   }
 
   function setDevices(payload: unknown) {
@@ -768,6 +876,10 @@
     ensureDemoData,
     ensureDtcData,
     dtcDataLoaded,
+    ensureMapModule,
+    requestMapRender,
+    renderMapIfLoaded,
+    ensureTroubleshooterModule,
     dtcSearchUrl,
     setDevices,
     setHistory,

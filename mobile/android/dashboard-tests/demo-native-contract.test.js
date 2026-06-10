@@ -115,6 +115,7 @@ describe('demo ↔ native shape contract', () => {
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
     await loadDashboard();
+    await window.VoltDashboard.ensureMapModule();
   });
 
   it('extracted native contracts are non-empty (parser sanity)', () => {

@@ -926,7 +926,8 @@ class ObdLocalStoreDbTest {
             return observation
         }
 
-        private fun routeKeys(windows: List<DriveWindowDetector.DriveWindow>): List<String> = windows.map { it.routeKey() }
+        private fun routeKeys(windows: List<DriveWindowDetector.DriveWindow>): List<String> =
+            windows.map { it.routeKey() }
 
         private fun adapterFor(
             records: List<AdapterHistoryRecord>,

@@ -133,6 +133,8 @@ design decisions.
 Historical audit reports and dependency snapshots are indexed in
 [`docs/reports-index.md`](docs/reports-index.md). Privacy/data-handling behavior
 is summarized in [`docs/privacy-data-handling.md`](docs/privacy-data-handling.md).
+Release packaging lives in [`docs/release.md`](docs/release.md), and shared
+domain language lives in [`docs/glossary.md`](docs/glossary.md).
 
 ## Coverage floors
 

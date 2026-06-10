@@ -162,6 +162,39 @@ class ObdStoreReportsDbTest {
     }
 
     @Test
+    fun freshCapacityTelemetryCreatesBatterySnapshotForTrend() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        val sample = sample(40, 50.0, 32.70, -117.10, 1000L)
+        sample.put("capacityAh", 51.7)
+        sample.put("capacityAhStaleMs", 0L)
+        sample.put("sohPct", 99.4)
+        sample.put("packVoltage", 355.0)
+        sample.put("packCurrentA", -4.0)
+        sample.put("powerKw", -1.4)
+        sample.put("batteryTemp", 24.0)
+        store.recordTelemetry(id, sample)
+
+        val battery = store.getBatterySummaryJson()
+        assertEquals(1L, battery.optLong("snapshotCount"))
+        val latest = battery.getJSONObject("latestBatterySnapshot")
+        assertEquals(51.7, latest.optDouble("capacityAh"), 0.001)
+        assertEquals(99.4, latest.optDouble("sohPct"), 0.001)
+        assertEquals(355.0, latest.optDouble("packVoltage"), 0.001)
+        assertEquals(24.0, latest.optDouble("batteryTempC"), 0.001)
+    }
+
+    @Test
+    fun staleCapacityTelemetryDoesNotSpamBatterySnapshots() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        val sample = sample(40, 50.0, 32.70, -117.10, 1000L)
+        sample.put("capacityAh", 51.7)
+        sample.put("capacityAhStaleMs", 12_000L)
+        store.recordTelemetry(id, sample)
+
+        assertEquals(0L, store.getBatterySummaryJson().optLong("snapshotCount"))
+    }
+
+    @Test
     fun insightsReportsRightMaxSpeedAndDistance() {
         val id = store.startSession("obd", "00:11", "Adapter")
         store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L))

@@ -1,32 +1,37 @@
 package com.volttracker.obdpoc
 
 import android.util.Log
+import org.json.JSONObject
 
 internal class VoltBridgeDataExports(
     private val activity: DashboardHost,
+    private val stateProvider: BridgeStateProvider,
 ) {
     fun exportDebugBundle(): String =
-        activity.requireDataBackup().exportDebugBundle(activity.getAppStateJson(), activity.getStorageSummaryJson())
+        stateProvider.requireDataBackup().exportDebugBundle(
+            stateProvider.getAppStateJson(),
+            stateProvider.getStorageSummaryJson(),
+        )
 
     fun shareBackup() {
-        activity.runOnUiThread(activity.requireBackupController()::launchShare)
+        activity.runOnUiThread(stateProvider.requireBackupController()::launchShare)
     }
 
     fun shareEncryptedBackup(passphrase: String?) {
         val cleanPassphrase = VoltBridge.safe(passphrase, VoltBridge.MAX_PASSPHRASE_LEN)
         activity.runOnUiThread {
-            activity.requireBackupController().launchEncryptedShare(cleanPassphrase)
+            stateProvider.requireBackupController().launchEncryptedShare(cleanPassphrase)
         }
     }
 
     fun restoreBackup() {
-        activity.runOnUiThread(activity.requireBackupController()::launchRestorePicker)
+        activity.runOnUiThread(stateProvider.requireBackupController()::launchRestorePicker)
     }
 
     fun restoreEncryptedBackup(passphrase: String?) {
         val cleanPassphrase = VoltBridge.safe(passphrase, VoltBridge.MAX_PASSPHRASE_LEN)
         activity.runOnUiThread {
-            activity.requireBackupController().launchEncryptedRestorePicker(cleanPassphrase)
+            stateProvider.requireBackupController().launchEncryptedRestorePicker(cleanPassphrase)
         }
     }
 
@@ -74,7 +79,7 @@ internal class VoltBridgeDataExports(
         val rowId = VoltBridge.parsePositiveId(id)
         val store = activity.localStore
         if (rowId <= 0L || store == null) {
-            return "{\"ok\":false,\"error\":\"invalid_id\",\"message\":\"Choose a saved detailed signal log.\"}"
+            return errorPayload("invalid_id", "Choose a saved detailed signal log.")
         }
         return store.getEnhancedCapabilityExportJson(rowId).toString()
     }
@@ -82,7 +87,7 @@ internal class VoltBridgeDataExports(
     fun exportDetailedSignalLogs(): String {
         val store = activity.localStore
         if (store == null) {
-            return "{\"ok\":false,\"error\":\"storage_unavailable\",\"message\":\"Local storage is not ready.\"}"
+            return errorPayload("storage_unavailable", "Local storage is not ready.")
         }
         return store.getEnhancedCapabilitiesExportJson(250).toString()
     }
@@ -117,4 +122,14 @@ internal class VoltBridgeDataExports(
             }
         }
     }
+
+    private fun errorPayload(
+        error: String,
+        message: String,
+    ): String =
+        JSONObject()
+            .put("ok", false)
+            .put("error", error)
+            .put("message", message)
+            .toString()
 }

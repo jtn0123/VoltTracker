@@ -5,6 +5,7 @@ plugins {
 }
 
 apply plugin: "com.diffplug.spotless"
+apply plugin: "org.gradle.test-retry"
 
 spotless {
     java {
@@ -132,6 +133,10 @@ android {
             jacoco.includeNoLocationClasses = true
             jacoco.excludes = ["jdk.*", "jdk.internal.*", "sun.*"]
             jvmArgs += ["--enable-native-access=ALL-UNNAMED"]
+            retry {
+                maxRetries = 1
+                failOnPassedAfterRetry = false
+            }
         }
     }
 

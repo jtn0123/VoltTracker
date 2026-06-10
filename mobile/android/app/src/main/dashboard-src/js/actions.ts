@@ -32,6 +32,7 @@ import type { BusyButton } from "./actions-storage";
 
   // Element that opened the clear-DTC alertdialog, so focus can return to it.
   let clearDtcOpener: Element | null = null;
+  let dtcInertedNodes: HTMLElement[] = [];
 
   // Lightweight in-flight guard for bridge-triggering buttons. The Android
   // bridge calls are sync-fire-and-forget so we can't await completion; a short
@@ -206,6 +207,7 @@ import type { BusyButton } from "./actions-storage";
     // Remember the trigger so focus can return to it when the panel closes.
     clearDtcOpener = document.activeElement;
     panel.hidden = false;
+    setDtcBackgroundInert(true);
     if (ack) ack.checked = false;
     if (confirm) confirm.disabled = true;
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -216,11 +218,87 @@ import type { BusyButton } from "./actions-storage";
   function closeClearDtcWarning() {
     const panel = el("dtcClearWarning");
     if (panel) panel.hidden = true;
+    setDtcBackgroundInert(false);
     // Return focus to whatever opened the panel (the "Clear codes" button).
     if (clearDtcOpener instanceof HTMLElement && typeof clearDtcOpener.focus === "function") {
       clearDtcOpener.focus();
     }
     clearDtcOpener = null;
+  }
+
+  function dtcDialogOpen() {
+    const panel = el("dtcClearWarning");
+    return Boolean(panel && !panel.hidden);
+  }
+
+  function setDtcBackgroundInert(open: boolean) {
+    if (!open) {
+      dtcInertedNodes.forEach((node) => {
+        (node as HTMLElement & { inert?: boolean }).inert = false;
+        node.removeAttribute("aria-hidden");
+        node.removeAttribute("data-dtc-dialog-inert");
+      });
+      dtcInertedNodes = [];
+      return;
+    }
+    const panel = el("dtcClearWarning");
+    if (!panel) return;
+    const keep = new Set<Element>();
+    let cursor: Element | null = panel;
+    while (cursor && cursor !== document.body) {
+      keep.add(cursor);
+      cursor = cursor.parentElement;
+    }
+    const candidates = Array.from(document.querySelectorAll("body > *, main.app > *, .diagnostic-report-card > *"));
+    dtcInertedNodes = [];
+    candidates.forEach((node) => {
+      if (!(node instanceof HTMLElement) || keep.has(node) || panel.contains(node) || node.contains(panel)) return;
+      (node as HTMLElement & { inert?: boolean }).inert = true;
+      node.setAttribute("aria-hidden", "true");
+      node.setAttribute("data-dtc-dialog-inert", "true");
+      dtcInertedNodes.push(node);
+    });
+  }
+
+  function focusableInDtcDialog() {
+    const panel = el("dtcClearWarning");
+    if (!panel || panel.hidden) return [];
+    const nodes = Array.from(
+      panel.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+      )
+    );
+    return nodes.filter((node) => !node.hidden && node.offsetParent !== null);
+  }
+
+  function trapDtcDialogKeydown(event: KeyboardEvent) {
+    if (!dtcDialogOpen()) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeClearDtcWarning();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusables = focusableInDtcDialog();
+    if (focusables.length === 0) {
+      event.preventDefault();
+      const panel = el("dtcClearWarning");
+      if (panel && typeof panel.focus === "function") panel.focus();
+      return;
+    }
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (!focusables.includes(active as HTMLElement)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function confirmClearDtc(button?: BusyButton | null) {
@@ -380,6 +458,13 @@ import type { BusyButton } from "./actions-storage";
     const scenario = currentDemoScenario();
     if (typeof VD.loadDemoScenario === "function") {
       VD.loadDemoScenario(scenario);
+    } else if (typeof VD.ensureMapModule === "function") {
+      void VD.ensureMapModule()
+        .then(() => {
+          if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
+          else if (typeof VD.loadSampleData === "function") VD.loadSampleData();
+        })
+        .catch(() => {});
     } else if (typeof VD.loadSampleData === "function") {
       VD.loadSampleData();
     }
@@ -417,7 +502,7 @@ import type { BusyButton } from "./actions-storage";
       });
       VD.updateStorageUi();
       VD.renderRealV2Ui();
-      VD.renderMap();
+      VD.renderMapIfLoaded();
       VD.renderInsightStats();
       return;
     }
@@ -425,7 +510,7 @@ import type { BusyButton } from "./actions-storage";
     if (typeof VD.loadTrips === "function") VD.loadTrips();
     if (typeof VD.loadInsights === "function") VD.loadInsights();
     if (typeof VD.renderRealV2Ui === "function") VD.renderRealV2Ui();
-    if (typeof VD.renderMap === "function") VD.renderMap();
+    VD.renderMapIfLoaded();
     if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
     VD.setState({
       demoPreviewStorage: null,
@@ -504,7 +589,16 @@ import type { BusyButton } from "./actions-storage";
     document.querySelectorAll("[data-scenario]").forEach((node) => {
       const button = node as HTMLElement;
       button.addEventListener("click", () => {
-        if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(button.dataset.scenario);
+        const scenario = button.dataset.scenario;
+        if (typeof VD.loadDemoScenario === "function") {
+          VD.loadDemoScenario(scenario);
+        } else if (typeof VD.ensureMapModule === "function") {
+          void VD.ensureMapModule()
+            .then(() => {
+              if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
+            })
+            .catch(() => {});
+        }
         // Tapping a scenario is an explicit preview action; keep demo isolation
         // active so native storage/app-state pushes cannot overwrite the sample.
         if (typeof VD.setDemoActive === "function") VD.setDemoActive(true, "Demo preview is running.");
@@ -518,8 +612,11 @@ import type { BusyButton } from "./actions-storage";
         // The [data-map-layer] selector guarantees the attribute is present.
         state.mapLayer = button.dataset.mapLayer as string;
         button.blur();
-        VD.renderMap();
-        window.setTimeout(VD.renderMap, 80);
+        void VD.requestMapRender()
+          .then(() => {
+            window.setTimeout(VD.renderMap, 80);
+          })
+          .catch(() => {});
       }, opts);
     });
     // Bind through bindListenerGuarded so a renamed partial ID logs a warn + skips
@@ -529,7 +626,7 @@ import type { BusyButton } from "./actions-storage";
       const button = target && target.closest("[data-map-session]");
       if (!button) return;
       VD.setState({ selectedMapSessionId: (button as HTMLElement).dataset.mapSession as string });
-      VD.renderMap();
+      void VD.requestMapRender().catch(() => {});
     };
     VD.bindListenerGuarded("mapSessionList", "click", onSessionClick, opts);
     // The new drive-chip strip uses the same [data-map-session] attribute, so
@@ -537,7 +634,16 @@ import type { BusyButton } from "./actions-storage";
     VD.bindListenerGuarded("mapDriveChips", "click", onSessionClick, opts);
     VD.bindListenerGuarded("mapFullBtn", "click", () => {
       state.mapFull = !state.mapFull;
-      VD.renderMap();
+      void VD.requestMapRender().catch(() => {});
+    }, opts);
+    VD.bindListenerGuarded("errorBannerHelp", "click", () => {
+      if (typeof VD.ensureTroubleshooterModule !== "function") return;
+      void VD.ensureTroubleshooterModule()
+        .then((dashboard) => {
+          const ts = dashboard.troubleshooter;
+          if (ts && typeof ts.open === "function") ts.open();
+        })
+        .catch(() => {});
     }, opts);
     document.addEventListener("click", handleDtcSearch, opts);
     VD.bindListenerGuarded("dtcSearchInput", "input", renderDtcLookup, opts);
@@ -548,6 +654,7 @@ import type { BusyButton } from "./actions-storage";
         if (confirm) confirm.disabled = !target.checked;
       }
     }, opts);
+    document.addEventListener("keydown", trapDtcDialogKeydown, opts);
     document.addEventListener("click", (event) => {
       const target = event.target as Element | null;
       const signalExport = target && target.closest("[data-signal-export]");
@@ -646,12 +753,42 @@ import type { BusyButton } from "./actions-storage";
     updateTelemetry: VD.updateTelemetry
   };
 
+  function maybeLoadTroubleshooterForStatus(payload: unknown) {
+    if (typeof VD.ensureTroubleshooterModule !== "function") return;
+    const status = VD.parsePayload<VoltStatus>(payload, {});
+    const stateName = String(status.state || "").toLowerCase();
+    const detail = String(status.detail || "").toLowerCase();
+    const hasFailureClass = Boolean(status.failureClass || status.blocked);
+    const needsHelp =
+      hasFailureClass ||
+      stateName === "failed" ||
+      stateName === "blocked" ||
+      detail.includes("retrying");
+    if (!needsHelp) return;
+    void VD.ensureTroubleshooterModule()
+      .then((dashboard) => {
+        const ts = dashboard.troubleshooter;
+        if (ts && typeof ts.noteStatus === "function") ts.noteStatus(status);
+      })
+      .catch(() => {});
+  }
+
+  const priorSetStatus = VD.setStatus;
+  const statusWithTroubleshooterLoader = function (payload: unknown) {
+    const parsed = VD.parsePayload<VoltStatus>(payload, {});
+    const result = priorSetStatus(parsed);
+    maybeLoadTroubleshooterForStatus(payload);
+    return result;
+  };
+  VD.setStatus = statusWithTroubleshooterLoader;
+  window.VoltTrackerNative.setStatus = statusWithTroubleshooterLoader;
+
   bindListeners();
   VD.setDemoActive(false);
   VD.renderOperationalState();
   VD.updateLiveUi();
   VD.renderRealV2Ui();
-  VD.renderMap();
+  VD.renderMapIfLoaded();
   VD.loadTrips();
   VD.loadInsights();
   if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();

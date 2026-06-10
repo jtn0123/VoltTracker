@@ -11,11 +11,7 @@ const ALLOWED_DOM_SINKS = [
   {
     file: 'core.ts',
     source: 'select.innerHTML = "";',
-  },
-  {
-    file: 'insights-panel.ts',
-    source: 'chart.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${inner}</svg>`;',
-  },
+  }
 ];
 
 function findDomSinks(file) {
@@ -29,7 +25,7 @@ function findDomSinks(file) {
 }
 
 describe('dashboard DOM sink guardrail', () => {
-  it('keeps HTML-writing sinks limited to audited chart/clear paths', () => {
+  it('keeps HTML-writing sinks limited to audited clear paths', () => {
     const files = readdirSync(DASHBOARD_TS)
       .filter((name) => name.endsWith('.ts'))
       .sort();

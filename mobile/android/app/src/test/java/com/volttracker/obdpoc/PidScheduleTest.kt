@@ -107,6 +107,7 @@ class PidScheduleTest {
             "22801F",
             "2243A5",
             "22437D",
+            "2241A3",
         )
         ) {
             val spec = findByCommand(command)
@@ -120,6 +121,7 @@ class PidScheduleTest {
         assertEquals(240, findByCommand("22119F").periodCycles)
         assertEquals(240, findByCommand("22119F01").periodCycles)
         assertEquals(240, findByCommand("01A6").periodCycles)
+        assertEquals(240, findByCommand("2241A3").periodCycles)
     }
 
     @Test

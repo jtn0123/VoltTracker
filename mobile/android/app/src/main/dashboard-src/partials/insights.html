@@ -143,13 +143,11 @@
         <div id="dtcSearchResult" class="dtc-lookup-result" hidden></div>
       </div>
 
-      <!-- Non-modal inline confirmation: role="group" (not alertdialog — we
-           don't trap focus or make the background inert). Focus is moved here
-           on open and returned to the trigger on close by actions.js. -->
       <div
         id="dtcClearWarning"
         class="dtc-clear-warning"
-        role="group"
+        role="alertdialog"
+        aria-modal="true"
         aria-labelledby="dtcClearTitle"
         aria-describedby="dtcClearDesc"
         tabindex="-1"
@@ -230,9 +228,9 @@
       </header>
       <div class="eff-scatter" id="effScatter"></div>
       <div class="eff-scatter-legend">
-        <span><i style="background: #5cc8ff"></i>downhill</span>
-        <span><i style="background: #b8e63b"></i>flat</span>
-        <span><i style="background: #ff6b5f"></i>uphill</span>
+        <span><i data-grade="downhill"></i>downhill</span>
+        <span><i data-grade="flat"></i>flat</span>
+        <span><i data-grade="uphill"></i>uphill</span>
       </div>
       <div class="eff-scatter-stats" id="effScatterStats"></div>
     </article>

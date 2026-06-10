@@ -12,6 +12,13 @@ pre-commit:
       glob: "mobile/android/app/src/main/{assets/dashboard,dashboard-src}/**/*.{js,css,html}"
       run: cd mobile/android && ./gradlew --no-daemon :app:spotlessDashboardCheck
       stage_fixed: false
+    generate-dashboard-html:
+      glob: "mobile/android/app/src/main/dashboard-src/{index.template.html,partials/**/*.html}"
+      run: |
+        cd mobile/android
+        ./gradlew --no-daemon generateDashboardHtml
+        git add app/src/main/assets/dashboard/index.html
+      stage_fixed: true
     # I1: catch undefined globals, redeclared names, and unreachable code locally before
     # they ride to CI. Spotless handles formatting; this catches semantic issues Spotless
     # can't see. Skipped if dashboard-tests/node_modules is missing so first-time clones

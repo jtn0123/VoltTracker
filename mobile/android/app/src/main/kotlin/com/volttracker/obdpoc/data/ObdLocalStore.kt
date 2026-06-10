@@ -83,7 +83,17 @@ open class ObdLocalStore(
         sampleCount: Int,
         lastEventDetail: String?,
     ) {
-        writer.finalizeSession(sessionId, status, endedAtMs, supportedPids, address, adapterName, mode, sampleCount, lastEventDetail)
+        writer.finalizeSession(
+            sessionId,
+            status,
+            endedAtMs,
+            supportedPids,
+            address,
+            adapterName,
+            mode,
+            sampleCount,
+            lastEventDetail,
+        )
     }
 
     open override fun recordTelemetry(
@@ -274,11 +284,14 @@ open class ObdLocalStore(
 
     open fun getTripRouteJson(routeKey: String?): JSONObject = reports.tripRouteJson(routeKey)
 
-    open override fun readLocationSamples(sessionId: Long): List<LocationSample> = materialize.readLocationSamples(sessionId)
+    open override fun readLocationSamples(sessionId: Long): List<LocationSample> =
+        materialize.readLocationSamples(sessionId)
 
-    open override fun readPidObservations(sessionId: Long): List<PidObservation> = materialize.readPidObservations(sessionId)
+    open override fun readPidObservations(sessionId: Long): List<PidObservation> =
+        materialize.readPidObservations(sessionId)
 
-    open override fun readTelemetrySamples(sessionId: Long): List<TelemetrySample> = materialize.readTelemetrySamples(sessionId)
+    open override fun readTelemetrySamples(sessionId: Long): List<TelemetrySample> =
+        materialize.readTelemetrySamples(sessionId)
 
     open override fun persistTrips(
         sessionId: Long,

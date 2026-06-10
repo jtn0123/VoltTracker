@@ -15,7 +15,16 @@ import kotlin.math.sqrt
  * cautious; we'd rather drop a borderline trip than fabricate one.
  */
 object TripMaterializer {
-    /** All thresholds in one place so they're easy to retune from tests. */
+    /**
+     * All thresholds in one place so they're easy to retune from tests.
+     *
+     * These defaults are conservative by design: field-test logs showed phones can keep logging
+     * sparse GPS after the car is parked, while OBD speed/RPM/aux voltage can briefly disagree
+     * during startup, shutdown, or adapter stalls. The values below prefer losing a borderline trip
+     * over inventing drive time. Shared readiness thresholds come from [VehicleActivityThresholds];
+     * the trip-specific window and distance limits are regression-tested in
+     * `TripMaterializerTest` and summarized in `docs/field-test-2026-05-19.md`.
+     */
     private object Tunables {
         /** Two samples farther apart than this end the current trip window. */
         const val MAX_GAP_MS: Long = 5L * 60_000L

@@ -26,10 +26,10 @@ class ObdProbeConfigTest {
 
     @Test
     fun everyVoltProbeHasAMatchingDecoder() {
-        // Build a minimal valid positive response ("62" + PID + two zero data bytes) and
+        // Build a minimal valid positive response ("62" + PID + plausible data bytes) and
         // require ObdProtocol to decode it. A probe with no decoder branch fails here.
         for (probe in allVoltProbes()) {
-            val response = "62" + probe.substring(2) + "0000"
+            val response = samplePositiveResponse(probe)
             val parsed: ParsedPidValue? = ObdProtocol.parseKnownValue(probe, response)
             assertNotNull("no decoder for Volt probe $probe", parsed)
         }
@@ -46,28 +46,14 @@ class ObdProbeConfigTest {
     }
 
     @Test
-    fun tpmsDiscoveryProbesAreWellFormedModeTwentyTwoRequests() {
-        for (probe in ObdProbes.TPMS_7E0_DISCOVERY_PROBES) {
-            assertTrue("malformed TPMS 7E0 probe: $probe", probe.matches(Regex("^22[0-9A-F]{4}$")))
-        }
-        for (probe in ObdProbes.TPMS_760_DISCOVERY_PROBES) {
-            assertTrue("malformed TPMS 760 probe: $probe", probe.matches(Regex("^22[0-9A-F]{4}$")))
-        }
-    }
-
-    @Test
-    fun tpmsDiscoveryIncludesKnownChevroletCandidates() {
+    fun rejectedTpmsCandidatesAreNotReprobedByTheBroadScan() {
         assertTrue(
-            "front-left tire-pressure candidate missing",
-            contains(ObdProbes.TPMS_7E0_DISCOVERY_PROBES, "22248E"),
+            "TPMS 7E0 probes were already rejected on this car; keep the executable list empty",
+            ObdProbes.TPMS_7E0_DISCOVERY_PROBES.isEmpty(),
         )
         assertTrue(
-            "grouped tire-pressure candidate missing",
-            contains(ObdProbes.TPMS_7E0_DISCOVERY_PROBES, "22C901"),
-        )
-        assertTrue(
-            "TPMS receiver slot candidate missing",
-            contains(ObdProbes.TPMS_760_DISCOVERY_PROBES, "224051"),
+            "TPMS 760 probes were already rejected on this car; keep the executable list empty",
+            ObdProbes.TPMS_760_DISCOVERY_PROBES.isEmpty(),
         )
     }
 
@@ -96,6 +82,10 @@ class ObdProbeConfigTest {
         assertTrue(
             "standard SOC PID 015B missing from live probes",
             contains(ObdProbes.LIVE_PROBES, "015B"),
+        )
+        assertTrue(
+            "standard EVAP vapor pressure PID 0132 missing from scan probes",
+            contains(ObdProbes.LIVE_PROBES, "0132"),
         )
         assertTrue(
             "validated raw SOC PID 2243AF missing",
@@ -133,6 +123,18 @@ class ObdProbeConfigTest {
             "transmission temperature selector PID 22194001 missing",
             contains(ObdProbes.VOLT_7E2_PROBES, "22194001"),
         )
+        assertTrue(
+            "HV battery capacity PID 2241A3 missing",
+            contains(ObdProbes.VOLT_7E4_PROBES, "2241A3"),
+        )
+        assertTrue(
+            "brake pedal PID 224501 missing",
+            contains(ObdProbes.VOLT_7E6_PROBES, "224501"),
+        )
+        assertTrue(
+            "BECM cell-interface probe 224181 missing",
+            contains(ObdProbes.VOLT_7E7_LAYOUT_PROBES, "224181"),
+        )
     }
 
     private companion object {
@@ -140,7 +142,36 @@ class ObdProbeConfigTest {
             ObdProbes.VOLT_7E0_PROBES +
                 ObdProbes.VOLT_7E1_PROBES +
                 ObdProbes.VOLT_7E2_PROBES +
-                ObdProbes.VOLT_7E4_PROBES
+                ObdProbes.VOLT_7E4_PROBES +
+                ObdProbes.VOLT_7E6_PROBES +
+                ObdProbes.VOLT_7E7_LAYOUT_PROBES
+
+        private fun samplePositiveResponse(probe: String): String {
+            val data =
+                when (probe) {
+                    "2241A3" -> "0205" // 51.7 Ah
+                    "2245F9" -> "1432" // 51.70 Ah
+                    "224329", "22432B", "224181", "224182", "22419F", "2241E0", "224200", "224201",
+                    "224240", "22C218",
+                    -> "BD6F" // ~3.7 V
+                    "22432A", "22432C", "22434B", "22434C" -> "20"
+                    "22435F", "22433F" -> "80"
+                    "2240E9" -> "0014"
+                    "22433B", "22433C" -> "02A5"
+                    "224349", "22434A", "221C43", "2241A4", "221C26", "221C28", "221C2A", "2228CB",
+                    "2240D7", "2240D9", "2240DB", "2240DD", "2240DF", "2240E1",
+                    -> "40"
+                    "2243A6" -> "28"
+                    "2241EC" -> "2710"
+                    "22437E", "2240D4" -> "00C8"
+                    "221141", "221C47" -> "8C"
+                    "22242C" -> "03E8"
+                    "2224B0" -> "08"
+                    "224501", "224502" -> "04D2"
+                    else -> "0000"
+                }
+            return "62" + probe.substring(2) + data
+        }
 
         private fun contains(
             values: Array<String>,

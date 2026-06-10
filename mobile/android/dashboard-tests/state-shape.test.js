@@ -24,6 +24,8 @@ const REQUIRED_STATE_KEYS = [
   'mapFull',
   'mapRemoteTilesEnabled',
   'selectedMapSessionId',
+  'liveRouteStartedAtMs',
+  'liveRoutePoints',
   'status',
   'speedHistory',
   'lastSampleAt',
@@ -84,6 +86,9 @@ describe('window.VoltDashboard.state shape', () => {
     expect(state.mapLayer).toBe('eff');
     expect(state.mapFull).toBe(false);
     expect(state.mapRemoteTilesEnabled).toBe(true);
+    expect(state.liveRouteStartedAtMs).toBe(null);
+    expect(Array.isArray(state.liveRoutePoints)).toBe(true);
+    expect(state.liveRoutePoints.length).toBe(0);
     // lastSampleAt is the stale-tile clock; it starts at 0 so the first
     // tick reports stale until a real sample arrives.
     expect(state.lastSampleAt).toBe(0);

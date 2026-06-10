@@ -33,6 +33,7 @@ not, and what is still only a candidate.
 | Charging mode/level | `224373`, `224531` | Slow context lane | Real-car scan positive | `224373` is charging mode, not HV output power. |
 | HV raw/displayed SOC | `2243AF`, `228334` | Slow/detail context | `2243AF` positive; `228334` questionable | Keep `228334` scan-only until another capture proves meaning. |
 | HV battery charge count | `2243A5` | Slow context lane | Real-car scan positive | Useful long-term battery history signal. |
+| HV battery capacity | `ATSH7E4` / `2241A3` | Once-per-drive lane (240 cycles) | Community-confirmed on a 2018 Volt (gm-volt 333039; OVMS); **not yet confirmed on this car** | Promoted ahead of an on-car scan as a deliberate exception; decode is bounded 10-60 Ah and feeds `capacityAh`/`sohPct`/`packEnergyKwh` + `battery_snapshots`. Verify a positive `6241A3` frame on the next drive — demote if absent. |
 
 ## Current Derived Signals
 
@@ -69,6 +70,8 @@ not, and what is still only a candidate.
 | Torque | GM/SAE calculated engine or motor torque PID | Candidate | Needs clear source; likely diagnostic-only first. |
 | EV miles/km | Vehicle lifetime/trip counters | Candidate | Prefer derived trip distance unless a real odometer/EV counter is proven. |
 | Cell group voltages | GM battery module enhanced PIDs | Candidate | High value, but only probe with exact source and low cadence. |
+| Sensor-expansion wave (2026-06) | See `sensor-expansion-plan-2026-06-09.md` | Candidate | ~35 new diagnostic-only candidates now in the catalog and broad-scan probe lists: cell min/max voltage + numbers (`224329`-`22432C`), SOC variation `22435F`, pack resistance `2240E9`, pack min/max V `22433B`/`22433C`, pack temp min/max + modules (`224349`-`22434C`), PE-loop temp `221C43`, battery coolant temp `2241A4`, min SOC limit `22433F`, HVAC commanded powers `2241B1`/`2241B3`/`2241B5` + compressor `2282B5`/`2282B7`, APM `2241B0`/`22437E`, isolation `2243A6`/`2241EC`, ignition V `221141`, 14V setpoint `221C47`, inverter/motor temps (`221C26`/`221C28`/`221C2A`/`2228CB`), brake `22242C`/`2224B0` + 7E6 pedal `224501`/`224502`, 7E7 section temps + cell-layout probes, capacity fallback `2245F9`, EVAP `0132`. One broad Scan validates the whole wave; move rows here afterwards. |
+| Tire pressure (catalog state) | Previous 7E0/760 candidates | Rejected | Catalog now marks all ten TPMS profiles `rejected_on_this_vehicle` and the executable probe lists are empty — do not re-probe without a new header/addressing source. |
 
 ## Update Log
 
@@ -76,6 +79,7 @@ not, and what is still only a candidate.
 | --- | --- | --- | --- |
 | 2026-06-03 | `0.6.2-dev` | Broad Scan on user's Volt | Battery/charger/SOC fields positive; tire-pressure candidates negative. |
 | 2026-06-03 | `0.6.2-dev` | Detail Probe UI and persisted capability panel | App now shows Working/No hit/Candidate/Deferred counts from SQLite `field_capabilities`. |
+| 2026-06-09 | `0.9.3-dev` (PR #187) | Sensor-expansion wave added in code (no on-car test yet) | ~35 new diagnostic-only candidates + 7E6/7E7 scan coverage; `2241A3` capacity promoted to rare live polling on community evidence (needs on-car confirmation); TPMS candidates marked rejected. |
 
 ## After Each Scan
 

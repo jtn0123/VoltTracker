@@ -11,7 +11,7 @@ class VoltBridge(
     private val activity: DashboardHost,
 ) {
     private val connections = VoltBridgeConnections(activity)
-    private val dataExports = VoltBridgeDataExports(activity)
+    private val dataExports = VoltBridgeDataExports(activity, activity)
     private val diagnostics = VoltBridgeDiagnostics(activity)
     private val clientErrorLock = Any()
     private var clientErrorTokens = LOG_CLIENT_ERROR_BURST.toDouble()

@@ -6,9 +6,22 @@ import org.json.JSONObject
 /**
  * Emits the synthetic demo telemetry stream that runs in place of a real OBD adapter loop.
  */
+private fun defaultDemoSleep(millis: Long): Boolean =
+    try {
+        Thread.sleep(millis)
+        true
+    } catch (ex: InterruptedException) {
+        Thread.currentThread().interrupt()
+        false
+    }
+
 class DemoPollingLoop(
     private val service: EngineHost,
     private val engine: ObdPollingEngine,
+    private val sleeper: ObdPollingEngine.LoopSleeper =
+        ObdPollingEngine.LoopSleeper { millis ->
+            defaultDemoSleep(millis)
+        },
 ) {
     fun run() {
         service.broadcastStatus("connected", "Demo telemetry is running without an OBD adapter.", false)
@@ -46,16 +59,8 @@ class DemoPollingLoop(
                 // Local numeric values are safe.
             }
             service.broadcastTelemetry(sample)
-            sleep(1000)
-        }
-    }
-
-    companion object {
-        private fun sleep(millis: Long) {
-            try {
-                Thread.sleep(millis)
-            } catch (ex: InterruptedException) {
-                Thread.currentThread().interrupt()
+            if (!sleeper.sleep(1000)) {
+                return
             }
         }
     }

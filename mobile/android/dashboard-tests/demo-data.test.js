@@ -51,6 +51,28 @@ describe('dashboard demo data', () => {
     expect(VD.data.insights.some((insight) => /Best month yet/.test(insight.title))).toBe(true);
   }, 10_000);
 
+  it('rejects malformed demo payloads instead of marking demo data loaded', async () => {
+    await loadDashboard();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    window.VoltDashboardDemoData = () => ({
+      trips: null,
+      sessions: [],
+      hourly: [],
+      insights: [],
+    });
+
+    let callbackError = null;
+    const loaded = window.VoltDashboard.ensureDemoData((error) => {
+      callbackError = error;
+    });
+
+    expect(loaded).toBe(false);
+    expect(callbackError).toBeInstanceOf(Error);
+    expect(window.VoltDashboard.data.demoLoaded).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('trips must be an array'));
+    warn.mockRestore();
+  });
+
   it('seeds the selected sample scenario before starting the native demo stream', async () => {
     const bridge = await loadDashboard({ extras: ['demo-data.js'] });
     bridge.demo = vi.fn();
@@ -70,6 +92,7 @@ describe('dashboard demo data', () => {
     bridge.getInsights = vi.fn(() => '{}');
 
     const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
     VD.state.demoScenario = 'power-user';
     VD.state.storage = {};
     VD.state.trips = [];
@@ -112,6 +135,7 @@ describe('dashboard demo data', () => {
     await loadDashboard({ withBridge: false, extras: ['demo-data.js'] });
 
     const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
     VD.actions.startDemo();
 
     expect(VD.state.demoActive).toBe(true);

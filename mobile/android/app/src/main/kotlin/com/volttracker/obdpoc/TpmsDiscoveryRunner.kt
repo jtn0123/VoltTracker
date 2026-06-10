@@ -99,7 +99,11 @@ class TpmsDiscoveryRunner(
                     continue
                 }
                 if (shouldSkip(profile, adapterAddress)) {
-                    ObdElmDecode.appendProbeLine(raw, profile.command, "skipped cached unsupported; profile=${profile.key}")
+                    ObdElmDecode.appendProbeLine(
+                        raw,
+                        profile.command,
+                        "skipped cached unsupported; profile=${profile.key}",
+                    )
                     continue
                 }
                 probeCommand(profile.command, 4200, raw)
@@ -136,6 +140,9 @@ class TpmsDiscoveryRunner(
         profile: EnhancedPidProfile,
         adapterAddress: String,
     ): Boolean {
+        if (EnhancedPidProfiles.STATUS_REJECTED == profile.validationStatus) {
+            return true
+        }
         if (EnhancedPidProfiles.STATUS_CONFIRMED == profile.validationStatus) {
             return false
         }

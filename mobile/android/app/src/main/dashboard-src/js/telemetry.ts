@@ -1,3 +1,6 @@
+import { LIVE_ROUTE_ID, appendLiveRoutePoint, haversineMetersJs, liveSampleTimeMs } from "./map-route-utils";
+import type { MapRoutePoint } from "./map-route-utils";
+
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
@@ -129,9 +132,38 @@
     state.sessionDistanceM = 0;
     state.sessionLastLat = null;
     state.sessionLastLng = null;
+    state.liveRouteStartedAtMs = null;
+    state.liveRoutePoints = [];
     state.lastSampleAt = 0;
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     applyStaleIndicator();
+  }
+
+  function liveRoutePoint(lat: number, lng: number): MapRoutePoint {
+    const sample = state.telemetry || {};
+    const updatedAt = liveSampleTimeMs(sample);
+    const point: MapRoutePoint = { lat, lng, atMs: updatedAt };
+    const speedKph = Number(sample.speedKph);
+    if (Number.isFinite(speedKph)) point.speedKph = speedKph;
+    const soc = Number(sample.soc);
+    if (Number.isFinite(soc)) point.soc = soc;
+    const powerKw = Number(sample.powerKw);
+    if (Number.isFinite(powerKw)) point.powerKw = powerKw;
+    return point;
+  }
+
+  function recordQueuedLivePosition(lat: number, lng: number) {
+    const point = liveRoutePoint(lat, lng);
+    const points: MapRoutePoint[] = Array.isArray(state.liveRoutePoints)
+      ? state.liveRoutePoints as MapRoutePoint[]
+      : [];
+    const result = appendLiveRoutePoint(points, point);
+    if (result === "skipped") return;
+    if (result === "first") {
+      state.liveRouteStartedAtMs = point.atMs;
+      state.selectedMapSessionId = LIVE_ROUTE_ID;
+    }
+    state.liveRoutePoints = points;
   }
 
   function renderOperationalState() {
@@ -379,7 +411,7 @@
         Number.isFinite(state.sessionLastLat) &&
         Number.isFinite(state.sessionLastLng)
       ) {
-        const step = VD.haversineMetersJs(
+        const step = haversineMetersJs(
           Number(state.sessionLastLat),
           Number(state.sessionLastLng),
           lat,
@@ -392,6 +424,7 @@
       state.sessionLastLat = lat;
       state.sessionLastLng = lon;
       if (typeof VD.updateLivePosition === "function") VD.updateLivePosition(lat, lon);
+      else recordQueuedLivePosition(lat, lon);
     }
     scheduleRender();
   }

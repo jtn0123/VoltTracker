@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   LIVE_ROUTE_ID,
+  LIVE_ROUTE_MAX_POINTS,
+  appendLiveRoutePoint,
   haversineMetersJs,
   isValidRoutePoint,
   liveSampleTimeMs,
@@ -47,5 +49,33 @@ describe('map-route-utils.ts', () => {
     const meters = haversineMetersJs(32.7, -117.1, 32.71, -117.1);
     expect(meters).toBeGreaterThan(1100);
     expect(meters).toBeLessThan(1120);
+  });
+
+  it('appendLiveRoutePoint reports the first point of a new route', () => {
+    const points = [];
+    expect(appendLiveRoutePoint(points, { lat: 32.7, lng: -117.1, atMs: 1000 })).toBe('first');
+    expect(points).toHaveLength(1);
+  });
+
+  it('appendLiveRoutePoint dedupes near-stationary samples but keeps moved or aged ones', () => {
+    const points = [{ lat: 32.7, lng: -117.1, atMs: 1000 }];
+    // Same spot, fresh: skipped.
+    expect(appendLiveRoutePoint(points, { lat: 32.7, lng: -117.1, atMs: 1500 })).toBe('skipped');
+    expect(points).toHaveLength(1);
+    // Same spot but >2s later: kept (stationary heartbeat).
+    expect(appendLiveRoutePoint(points, { lat: 32.7, lng: -117.1, atMs: 3500 })).toBe('appended');
+    // Moved >1m within 2s: kept.
+    expect(appendLiveRoutePoint(points, { lat: 32.701, lng: -117.1, atMs: 3600 })).toBe('appended');
+    expect(points).toHaveLength(3);
+  });
+
+  it('appendLiveRoutePoint trims the buffer to the live route cap', () => {
+    const points = [];
+    for (let i = 0; i < LIVE_ROUTE_MAX_POINTS + 5; i += 1) {
+      appendLiveRoutePoint(points, { lat: 32.7 + i * 0.001, lng: -117.1, atMs: 1000 + i });
+    }
+    expect(points).toHaveLength(LIVE_ROUTE_MAX_POINTS);
+    // Oldest points fall off the front.
+    expect(points[0].atMs).toBe(1005);
   });
 });

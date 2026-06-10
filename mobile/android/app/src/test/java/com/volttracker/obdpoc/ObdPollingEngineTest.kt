@@ -40,8 +40,8 @@ import java.util.concurrent.atomic.AtomicLong
  * the engine's collaborators (`recorder`, `activeName`, `running`, `ioLock`, etc.) are live and
  * observable.
  *
- * Tests targeting the live-poll loop sleep through one 850 ms inter-sample tick by design — the
- * loop's own `Thread.sleep(850)` is part of the contract being verified.
+ * Tests targeting the live-poll loop inject a no-op sleeper, so they verify the sleep request
+ * without spending wall-clock time.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30]) // sdk < S so service.hasBluetoothConnectPermission() short-circuits to true.
@@ -359,26 +359,18 @@ class ObdPollingEngineTest {
     }
 
     @Test
-    fun tpmsScanOnlyRunsTpmsDiscoveryCommands() {
+    fun tpmsScanSkipsKnownRejectedTpmsDiscoveryCommands() {
         fake.defaultResponse = ">"
         fake.responses["0100"] = "41 00 00 00 00 00>"
         fake.responses["ATRV"] = "13.8V\r>"
-        fake.responses["22248E"] = "7F2231\r>"
-        fake.responses["224051"] = "NO DATA\r>"
 
         openSession()
         runEngineUntilFinished { engine.runTpmsScanLoop("AA:BB:CC:DD:EE:FF") }
 
-        assertTrue("TPMS 7E0 header must be selected", fake.commandLog.contains("ATSH7E0"))
-        assertTrue("TPMS receiver header must be selected", fake.commandLog.contains("ATSH760"))
-        assertTrue(
-            "known 7E0 TPMS candidate must be probed",
-            fake.commandLog.contains(ObdProbes.TPMS_7E0_DISCOVERY_PROBES[0]),
-        )
-        assertTrue(
-            "known 760 TPMS candidate must be probed",
-            fake.commandLog.contains(ObdProbes.TPMS_760_DISCOVERY_PROBES[0]),
-        )
+        assertFalse("rejected TPMS 7E0 header must not be selected", fake.commandLog.contains("ATSH7E0"))
+        assertFalse("rejected TPMS receiver header must not be selected", fake.commandLog.contains("ATSH760"))
+        assertFalse("rejected front-left TPMS candidate must not be probed", fake.commandLog.contains("22248E"))
+        assertFalse("rejected receiver-slot TPMS candidate must not be probed", fake.commandLog.contains("224051"))
         assertFalse("TPMS-only scan must not read stored DTCs", fake.commandLog.contains("03"))
         assertFalse("TPMS-only scan must not read pending DTCs", fake.commandLog.contains("07"))
         assertFalse("TPMS-only scan must not read permanent DTCs", fake.commandLog.contains("0A"))
@@ -558,7 +550,7 @@ class ObdPollingEngineTest {
     private class TestObdPollingEngine(
         private val testService: EngineHost,
         val scriptedConnection: FakeElmConnection,
-    ) : ObdPollingEngine(testService) {
+    ) : ObdPollingEngine(testService, LoopSleeper { true }) {
         val openCount = AtomicInteger()
 
         // Session ids are long on the recorder; use AtomicLong so the comparison stays

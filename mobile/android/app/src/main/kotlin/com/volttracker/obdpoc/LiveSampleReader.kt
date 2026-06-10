@@ -8,6 +8,11 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 
+// Gen 2 Volt pack nominals when new (96 series cell groups, ~18.4 kWh): the SOH and pack-energy
+// estimates derived from the 2241A3 capacity read are anchored to these.
+private const val GEN2_NOMINAL_CAPACITY_AH = 52.0
+private const val GEN2_NOMINAL_PACK_VOLTAGE = 355.0
+
 /** Builds one live OBD telemetry sample from the current PID polling state. */
 class LiveSampleReader(
     private val service: EngineHost,
@@ -127,6 +132,7 @@ class LiveSampleReader(
             pidPolling.putStaleMsIfTracked(sample, "batteryTempStaleMs", "22434F", now)
             pidPolling.putStaleMsIfTracked(sample, "packVoltageStaleMs", "222429", now)
             pidPolling.putStaleMsIfTracked(sample, "packCurrentAStaleMs", "222414", now)
+            putBatteryHealthStaleMs(sample, now)
             putPowerStaleMsIfKnown(sample, now)
             putChargingStaleMs(sample, now)
             putEnhancedContextStaleMs(sample, now)
@@ -266,6 +272,15 @@ class LiveSampleReader(
         if (packVoltage?.valueNumeric != null) {
             sample.put("packVoltage", round1(packVoltage.valueNumeric))
         }
+        val capacity = ObdProtocol.parseKnownValue("2241A3", pidPolling.lastRaw("2241A3"))
+        if (capacity?.valueNumeric != null) {
+            val capacityAh = capacity.valueNumeric
+            sample.put("capacityAh", round1(capacityAh))
+            sample.put("sohPct", round1(capacityAh / GEN2_NOMINAL_CAPACITY_AH * 100.0))
+            // Nominal voltage keeps the estimate stable; instantaneous pack voltage swings
+            // ~330-400 V with SOC and would make this number wobble between samples.
+            sample.put("packEnergyKwh", round1(capacityAh * GEN2_NOMINAL_PACK_VOLTAGE / 1000.0))
+        }
         val powerKw = ObdProtocol.parsePackPowerKw(packVoltageRaw, packCurrentRaw)
         if (powerKw != null) {
             sample.put("powerKw", round1(powerKw))
@@ -317,6 +332,16 @@ class LiveSampleReader(
         if (voltageStaleMs != null && currentStaleMs != null) {
             sample.put("powerKwStaleMs", maxOf(voltageStaleMs, currentStaleMs))
         }
+    }
+
+    @Throws(JSONException::class)
+    private fun putBatteryHealthStaleMs(
+        sample: JSONObject,
+        now: Long,
+    ) {
+        putStaleMsForPresentValue(sample, "capacityAh", "capacityAhStaleMs", "2241A3", now)
+        putStaleMsForPresentValue(sample, "sohPct", "sohPctStaleMs", "2241A3", now)
+        putStaleMsForPresentValue(sample, "packEnergyKwh", "packEnergyKwhStaleMs", "2241A3", now)
     }
 
     @Throws(JSONException::class)

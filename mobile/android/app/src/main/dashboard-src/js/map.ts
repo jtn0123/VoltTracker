@@ -1,5 +1,6 @@
 import {
   LIVE_ROUTE_ID,
+  appendLiveRoutePoint,
   haversineMetersJs,
   isValidRoutePoint,
   liveSampleTimeMs,
@@ -84,9 +85,16 @@ import {
     const group = mapLayerGroups[layer] || mapLayerGroups.routes;
     if (group) group.addTo(map);
   }
-  const LIVE_ROUTE_MAX_POINTS = 600;
-  let liveRouteStartedAtMs: number | null = null;
-  let liveRoutePoints: MapRoutePoint[] = [];
+  const seededLiveRouteStartedAtMs = Number(state.liveRouteStartedAtMs);
+  let liveRouteStartedAtMs =
+    state.liveRouteStartedAtMs != null && Number.isFinite(seededLiveRouteStartedAtMs)
+      ? seededLiveRouteStartedAtMs
+      : null;
+  let liveRoutePoints: MapRoutePoint[] = Array.isArray(state.liveRoutePoints)
+    ? state.liveRoutePoints as MapRoutePoint[]
+    : [];
+  state.liveRouteStartedAtMs = liveRouteStartedAtMs;
+  state.liveRoutePoints = liveRoutePoints;
 
   /** Store a demo/real GPS sample as the selectable Current route on the map. */
   function updateLivePosition(lat: unknown, lng: unknown) {
@@ -94,19 +102,15 @@ import {
     const ln = Number(lng);
     if (!Number.isFinite(la) || !Number.isFinite(ln)) return;
     const point = liveRoutePoint(la, ln);
-    const previousPoint = liveRoutePoints[liveRoutePoints.length - 1];
-    if (previousPoint) {
-      const meters = haversineMetersJs(previousPoint.lat, previousPoint.lng, point.lat, point.lng);
-      const ageMs = Math.abs(Number(point.atMs) - Number(previousPoint.atMs));
-      if (meters < 1 && ageMs < 2000) return;
-    } else {
+    const result = appendLiveRoutePoint(liveRoutePoints, point);
+    if (result === "skipped") return;
+    if (result === "first") {
       liveRouteStartedAtMs = point.atMs;
+      state.liveRouteStartedAtMs = liveRouteStartedAtMs;
       state.selectedMapSessionId = LIVE_ROUTE_ID;
       mapFitKey = null;
     }
-    liveRoutePoints.push(point);
-    const overflow = liveRoutePoints.length - LIVE_ROUTE_MAX_POINTS;
-    if (overflow > 0) liveRoutePoints.splice(0, overflow);
+    state.liveRoutePoints = liveRoutePoints;
     if (state.selectedMapSessionId === LIVE_ROUTE_ID && state.view === "map") {
       renderMap();
     }
@@ -117,6 +121,8 @@ import {
     const wasSelected = String(state.selectedMapSessionId || "") === LIVE_ROUTE_ID;
     liveRouteStartedAtMs = null;
     liveRoutePoints = [];
+    state.liveRouteStartedAtMs = null;
+    state.liveRoutePoints = liveRoutePoints;
     if (wasSelected) state.selectedMapSessionId = null;
     mapFitKey = null;
     if (state.view === "map") renderMap();
@@ -1060,6 +1066,7 @@ import {
   }
 
   Object.assign(VD, {
+    renderMapLoaded: true,
     ensureMap,
     renderMap,
     drawMapRoute,

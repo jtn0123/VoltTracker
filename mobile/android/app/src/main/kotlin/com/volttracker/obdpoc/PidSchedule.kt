@@ -33,6 +33,8 @@ object PidSchedule {
         HV_PACK_7E1("ATSH7E1"),
         TRANSMISSION_7E2("ATSH7E2"),
         HV_PACK_7E4("ATSH7E4"),
+        BRAKE_7E6("ATSH7E6"),
+        CELL_BECM_7E7("ATSH7E7"),
     }
 
     /** Restore the broadcast header after a non-broadcast block of reads. */
@@ -51,9 +53,12 @@ object PidSchedule {
     val MODE_01_BATCH_PIDS_HEX: List<String> = listOf("0D", "0C", "49")
 
     /**
-     * Polling spec for a single PID. `periodCycles == 1` means "every cycle"; higher values stagger
-     * this PID across cycles. `phaseOffset` picks which slot inside that period this PID lands on, so
-     * two slow PIDs of the same period can be spread out instead of stacking on the same cycle.
+     * Polling spec for a single PID.
+     *
+     * @property command full ELM command, e.g. `010D` or `222414`.
+     * @property header CAN header to select before polling [command].
+     * @property periodCycles `1` means every cycle; higher values poll less often.
+     * @property phaseOffset slot inside [periodCycles], used to spread slow PIDs across cycles.
      */
     class PidSpec(
         command: String?,
@@ -78,6 +83,11 @@ object PidSchedule {
 
     // Full schedule. Keep PIDs of the same header grouped here so the diff between this list and
     // runtime header-grouping in ObdPollingEngine stays obvious.
+    //
+    // Volt-specific Mode-22 PIDs are field/community-derived rather than SAE-standard. Source
+    // notes live in docs/volt-pid-research-2026-05-20.md and docs/volt-pids-community-sheet.csv;
+    // decode formulas are centralized in ObdElmDecode.kt. Do not promote a new Mode-22 PID into
+    // this live schedule until fresh target-car evidence exists.
     @JvmField
     val SPECS: List<PidSpec> =
         listOf(
@@ -130,6 +140,7 @@ object PidSchedule {
             PidSpec("22801F", Header.HV_PACK_7E4, 120, 102), // outside temp filtered
             PidSpec("2243A5", Header.HV_PACK_7E4, 120, 84), // charge count
             PidSpec("22437D", Header.HV_PACK_7E4, 120, 90), // last charge energy
+            PidSpec("2241A3", Header.HV_PACK_7E4, 240, 210), // HV battery capacity, rare trend sample
         )
 
     /** True if [spec] is due on the given (zero-based) cycle number. */

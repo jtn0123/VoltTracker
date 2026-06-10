@@ -242,20 +242,68 @@
     const yS = (e: number) => padT + (1 - e / 7) * (h - padT - padB);
     const gColor = (g: number) =>
       g <= -0.006 ? "#5cc8ff" : g >= 0.006 ? "#ff6b5f" : "#b8e63b";
-    let inner = "";
+    const svgNs = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNs, "svg");
+    svg.setAttribute("width", String(w));
+    svg.setAttribute("height", String(h));
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    const setSvgAttrs = (node: SVGElement, attrs: Record<string, string | number>) => {
+      Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
+      return node;
+    };
+    const appendLine = (attrs: Record<string, string | number>) => {
+      svg.append(setSvgAttrs(document.createElementNS(svgNs, "line"), attrs));
+    };
+    const appendText = (text: string, attrs: Record<string, string | number>) => {
+      const node = setSvgAttrs(document.createElementNS(svgNs, "text"), attrs);
+      node.textContent = text;
+      svg.append(node);
+    };
     for (let gx = 0; gx <= 75; gx += 15) {
-      inner +=
-        `<line x1="${xOf(gx)}" y1="${padT}" x2="${xOf(gx)}" y2="${h - padB}" stroke="rgba(255,255,255,0.06)"/>` +
-        `<text x="${xOf(gx)}" y="${h - padB + 15}" fill="#8b8c99" font-size="9" font-family="ui-monospace,monospace" text-anchor="middle">${gx}</text>`;
+      appendLine({
+        x1: xOf(gx),
+        y1: padT,
+        x2: xOf(gx),
+        y2: h - padB,
+        stroke: "rgba(255,255,255,0.06)"
+      });
+      appendText(String(gx), {
+        x: xOf(gx),
+        y: h - padB + 15,
+        fill: "#8b8c99",
+        "font-size": 9,
+        "font-family": "ui-monospace,monospace",
+        "text-anchor": "middle"
+      });
     }
     for (let gy = 0; gy <= 7; gy += 1) {
-      inner +=
-        `<line x1="${padL}" y1="${yS(gy)}" x2="${w - padR}" y2="${yS(gy)}" stroke="rgba(255,255,255,0.06)"/>` +
-        `<text x="${padL - 6}" y="${yS(gy) + 3}" fill="#8b8c99" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">${gy}</text>`;
+      appendLine({
+        x1: padL,
+        y1: yS(gy),
+        x2: w - padR,
+        y2: yS(gy),
+        stroke: "rgba(255,255,255,0.06)"
+      });
+      appendText(String(gy), {
+        x: padL - 6,
+        y: yS(gy) + 3,
+        fill: "#8b8c99",
+        "font-size": 9,
+        "font-family": "ui-monospace,monospace",
+        "text-anchor": "end"
+      });
     }
     const bins: number[][] = [];
     pool.forEach((p) => {
-      inner += `<circle cx="${xOf(p.mph).toFixed(1)}" cy="${yS(p.eff).toFixed(1)}" r="3.2" fill="${gColor(p.grade)}" fill-opacity="0.5"/>`;
+      svg.append(
+        setSvgAttrs(document.createElementNS(svgNs, "circle"), {
+          cx: xOf(p.mph).toFixed(1),
+          cy: yS(p.eff).toFixed(1),
+          r: 3.2,
+          fill: gColor(p.grade),
+          "fill-opacity": 0.5
+        })
+      );
       const b = Math.floor(p.mph / 10);
       (bins[b] = bins[b] || []).push(p.eff);
     });
@@ -270,16 +318,24 @@
       started = true;
       if (e > best.e) best = { e: e, mph: mph };
     });
-    inner +=
-      `<path d="${trend}" fill="none" stroke="#ff7a45" stroke-width="2.5" stroke-linejoin="round"/>` +
-      `<text x="${w - padR}" y="${h - 4}" fill="#8b8c99" font-size="9" font-family="ui-monospace,monospace" text-anchor="end">speed (mph) -></text>`;
-    // SAFE SINK: `inner` is composed exclusively from computed numbers (chart
-    // geometry via xOf/yS/.toFixed, loop integers, and the fixed gColor palette) —
-    // never from telemetry strings or any user/bridge input, so no markup can be
-    // injected. This is one of two innerHTML sinks allowlisted in
-    // dashboard-tests/dom-sinks.test.js; keep it geometry-only. If you ever need to
-    // render a label from data, build it with createElementNS, not string interp.
-    chart.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${inner}</svg>`;
+    svg.append(
+      setSvgAttrs(document.createElementNS(svgNs, "path"), {
+        d: trend,
+        fill: "none",
+        stroke: "#ff7a45",
+        "stroke-width": 2.5,
+        "stroke-linejoin": "round"
+      })
+    );
+    appendText("speed (mph) ->", {
+      x: w - padR,
+      y: h - 4,
+      fill: "#8b8c99",
+      "font-size": 9,
+      "font-family": "ui-monospace,monospace",
+      "text-anchor": "end"
+    });
+    chart.replaceChildren(svg);
     if (head) {
       head.replaceChildren();
       if (best.e > 0) {

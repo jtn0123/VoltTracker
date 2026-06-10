@@ -3,6 +3,13 @@ package com.volttracker.obdpoc
 import java.util.Locale
 
 object ObdProtocol {
+    internal data class Range(
+        val min: Double,
+        val max: Double,
+    ) {
+        fun contains(value: Double): Boolean = value >= min && value <= max
+    }
+
     class ParsedPidValue(
         name: String?,
         valueText: String?,
@@ -46,7 +53,7 @@ object ObdProtocol {
         if (bytes == null || bytes[0] == 0xFF) {
             return null
         }
-        return bytes[0]
+        return boundedInt(bytes[0], SPEED_KPH_RANGE)
     }
 
     @JvmStatic
@@ -58,23 +65,40 @@ object ObdProtocol {
     @JvmStatic
     fun parseRpm(response: String?): Float? {
         val bytes = mode01Bytes(response, "0C", 2) ?: return null
-        return ((bytes[0] * 256f) + bytes[1]) / 4f
+        return boundedFloat(((bytes[0] * 256f) + bytes[1]) / 4f, RPM_RANGE)
     }
 
     @JvmStatic
-    fun parseCoolantC(response: String?): Int? = mode01Bytes(response, "05", 1)?.let { it[0] - 40 }
+    fun parseCoolantC(response: String?): Int? =
+        mode01Bytes(response, "05", 1)?.let { boundedInt(it[0] - 40, TEMP_C_RANGE) }
 
     @JvmStatic
-    fun parseEngineLoadPct(response: String?): Int? = mode01Bytes(response, "04", 1)?.let { Math.round(it[0] * 100f / 255f) }
+    fun parseEngineLoadPct(response: String?): Int? =
+        mode01Bytes(response, "04", 1)?.let {
+            Math.round(
+                it[0] * 100f / 255f,
+            )
+        }
 
     @JvmStatic
-    fun parseThrottlePct(response: String?): Int? = mode01Bytes(response, "11", 1)?.let { Math.round(it[0] * 100f / 255f) }
+    fun parseThrottlePct(response: String?): Int? =
+        mode01Bytes(response, "11", 1)?.let { Math.round(it[0] * 100f / 255f) }
 
     @JvmStatic
-    fun parseAccelPedalPct(response: String?): Int? = mode01Bytes(response, "49", 1)?.let { Math.round(it[0] * 100f / 255f) }
+    fun parseAccelPedalPct(response: String?): Int? =
+        mode01Bytes(response, "49", 1)?.let {
+            Math.round(
+                it[0] * 100f / 255f,
+            )
+        }
 
     @JvmStatic
-    fun parseStateOfChargePct(response: String?): Int? = mode01Bytes(response, "5B", 1)?.let { Math.round(it[0] * 100f / 255f) }
+    fun parseStateOfChargePct(response: String?): Int? =
+        mode01Bytes(response, "5B", 1)?.let {
+            Math.round(
+                it[0] * 100f / 255f,
+            )
+        }
 
     @JvmStatic
     fun buildMode01MultiCommand(pidHex: List<String>): String =
@@ -138,7 +162,7 @@ object ObdProtocol {
             }
         }
         return try {
-            cleaned.substring(start + 1, end).toFloat()
+            boundedFloat(cleaned.substring(start + 1, end).toFloat(), AUX_VOLTAGE_RANGE)
         } catch (ex: NumberFormatException) {
             null
         }
@@ -162,15 +186,27 @@ object ObdProtocol {
         response: String?,
     ): ParsedPidValue? {
         val cleanCommand = command?.trim()?.uppercase(Locale.US) ?: ""
+        return ObdKnownValueParserRegistry.parse(cleanCommand, response)
+    }
+
+    internal fun parseKnownValueLegacy(
+        cleanCommand: String,
+        response: String?,
+    ): ParsedPidValue? {
         when (cleanCommand) {
             "ATRV" -> return parseVoltage(response)?.let { value("adapter voltage", it.toDouble(), "V", 1) }
             "010D" -> return parseSpeedKph(response)?.let { value("vehicle speed", it.toDouble(), "km/h", 0) }
             "010C" -> return parseRpm(response)?.let { value("engine rpm", it.toDouble(), "rpm", 0) }
-            "0142" -> return parseControlModuleVoltage(response)?.let { value("control module voltage", it, "V", 3) }
-            "011F" -> return parseUnsignedMode01Word(response, "1F")?.let { value("engine run time", it.toDouble(), "s", 0) }
+            "0142" -> return parseControlModuleVoltage(response)?.let { bounded(it, AUX_VOLTAGE_RANGE) }?.let {
+                value("control module voltage", it, "V", 3)
+            }
+            "011F" -> return parseUnsignedMode01Word(
+                response,
+                "1F",
+            )?.let { value("engine run time", it.toDouble(), "s", 0) }
             "01A6" -> return parseOdometerKm(response)?.let { value("odometer", it, "km", 1) }
             "0105" -> return parseCoolantC(response)?.let { value("coolant temperature", it.toDouble(), "deg C", 0) }
-            "010F" -> return parseOffsetMode01Byte(response, "0F", -40)?.let {
+            "010F" -> return parseOffsetMode01Byte(response, "0F", -40)?.let { boundedInt(it, TEMP_C_RANGE) }?.let {
                 value("intake air temperature", it.toDouble(), "deg C", 0)
             }
             "012F" -> return parsePercentMode01Byte(response, "2F")?.let { value("fuel level", it.toDouble(), "%", 0) }
@@ -180,8 +216,11 @@ object ObdProtocol {
                 value("accelerator pedal position", it.toDouble(), "%", 0)
             }
             "015B" -> return parseStateOfChargePct(response)?.let { value("state of charge", it.toDouble(), "%", 0) }
-            "015C" -> return parseOffsetMode01Byte(response, "5C", -40)?.let {
+            "015C" -> return parseOffsetMode01Byte(response, "5C", -40)?.let { boundedInt(it, TEMP_C_RANGE) }?.let {
                 value("engine oil temperature", it.toDouble(), "deg C", 0)
+            }
+            "0132" -> return parseSignedMode01Word(response, "32")?.let { it / 4.0 }?.let {
+                value("EVAP vapor pressure", it, "Pa", 0)
             }
             // ---- GM/Volt mode-22 (manufacturer-specific) PIDs --------------------------------
             // NOT OBD-II standard: the PID list and the scale/offset constants below are
@@ -193,53 +232,116 @@ object ObdProtocol {
             //   voltByteValue(resp, cmd, scale, offset)   = payload[0] * scale + offset      (1 byte)
             //   voltWordValue(resp, cmd, divisor, signed) = word / divisor, word = 2 bytes big-endian,
             //                                               two's-complement when signed = true
-            "222429" -> return voltWordValue(response, cleanCommand, 64.0, true)?.let {
+            "222429" -> return voltWordValue(
+                response,
+                cleanCommand,
+                64.0,
+                true,
+            )?.let { bounded(it, HV_VOLTAGE_RANGE) }?.let {
                 value("hv pack voltage", it, "V", 1)
             }
-            "222414" -> return voltWordValue(response, cleanCommand, 20.0, true)?.let {
+            "222414" -> return voltWordValue(
+                response,
+                cleanCommand,
+                20.0,
+                true,
+            )?.let { bounded(it, CURRENT_A_RANGE) }?.let {
                 value("hv pack current", it, "A", 2)
             }
             "22119F", "22119F01" -> return voltByteValue(response, cleanCommand, 100.0 / 255.0, 0.0)?.let {
                 value("engine oil life", it, "%", 0)
             }
-            "221154" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)?.let {
+            "221154" -> return voltByteValue(
+                response,
+                cleanCommand,
+                1.0,
+                -40.0,
+            )?.let { bounded(it, TEMP_C_RANGE) }?.let {
                 value("engine oil temperature", it, "deg C", 0)
             }
             "22203F" -> return voltWordValue(response, cleanCommand, 4.0, false)?.let {
                 value("engine torque", it, "Nm", 1)
             }
-            "222883" -> return voltWordValue(response, cleanCommand, 20.0, true)?.let {
+            "222883" -> return voltWordValue(
+                response,
+                cleanCommand,
+                20.0,
+                true,
+            )?.let { bounded(it, CURRENT_A_RANGE) }?.let {
                 value("motor A current", it, "A", 2)
             }
-            "222884" -> return voltWordValue(response, cleanCommand, 20.0, true)?.let {
+            "222884" -> return voltWordValue(
+                response,
+                cleanCommand,
+                20.0,
+                true,
+            )?.let { bounded(it, CURRENT_A_RANGE) }?.let {
                 value("motor B current", it, "A", 2)
             }
-            "222885" -> return voltWordValue(response, cleanCommand, 100.0, false)?.let {
+            "222885" -> return voltWordValue(
+                response,
+                cleanCommand,
+                100.0,
+                false,
+            )?.let { bounded(it, HV_VOLTAGE_RANGE) }?.let {
                 value("motor A voltage", it, "V", 2)
             }
-            "222886" -> return voltWordValue(response, cleanCommand, 100.0, false)?.let {
+            "222886" -> return voltWordValue(
+                response,
+                cleanCommand,
+                100.0,
+                false,
+            )?.let { bounded(it, HV_VOLTAGE_RANGE) }?.let {
                 value("motor B voltage", it, "V", 2)
             }
             "222487" -> return voltWordValue(response, cleanCommand, 100.0, true)?.let {
                 value("ev distance this cycle", it, "km", 2)
             }
             "222889" -> return rawByteValue(response, cleanCommand, "prndl state", "")
-            "221940", "22194001" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)?.let {
-                value("transmission temperature", it, "deg C", 0)
-            }
-            "22434F" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)?.let {
+            "221940", "22194001" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)
+                ?.let {
+                    bounded(it, TEMP_C_RANGE)
+                }?.let {
+                    value("transmission temperature", it, "deg C", 0)
+                }
+            "22434F" -> return voltByteValue(
+                response,
+                cleanCommand,
+                1.0,
+                -40.0,
+            )?.let { bounded(it, TEMP_C_RANGE) }?.let {
                 value("hv battery temperature", it, "deg C", 0)
             }
-            "224368" -> return voltByteValue(response, cleanCommand, 2.0, 0.0)?.let {
+            "224368" -> return voltByteValue(
+                response,
+                cleanCommand,
+                2.0,
+                0.0,
+            )?.let { bounded(it, AC_VOLTAGE_RANGE) }?.let {
                 value("charger ac voltage", it, "V", 0)
             }
-            "224369" -> return voltByteValue(response, cleanCommand, 0.2, 0.0)?.let {
+            "224369" -> return voltByteValue(
+                response,
+                cleanCommand,
+                0.2,
+                0.0,
+            )?.let { bounded(it, AC_CURRENT_RANGE) }?.let {
                 value("charger ac current", it, "A", 1)
             }
-            "22436B" -> return voltWordValue(response, cleanCommand, 2.0, true)?.let {
+            "22436B" -> return voltWordValue(
+                response,
+                cleanCommand,
+                2.0,
+                true,
+            )?.let { bounded(it, HV_VOLTAGE_RANGE) }?.let {
                 value("charger hv voltage", it, "V", 1)
             }
-            "22436C" -> return voltWordValue(response, cleanCommand, 20.0, true)?.let {
+            "22436C" -> return voltWordValue(
+                response,
+                cleanCommand,
+                20.0,
+                true,
+            )?.let { bounded(it, CURRENT_A_RANGE) }?.let {
                 value("charger hv current", it, "A", 2)
             }
             "224373" -> return chargeModeValue(response, cleanCommand)
@@ -252,23 +354,222 @@ object ObdProtocol {
             "2243AF" -> return voltWordPercentValue(response, cleanCommand)?.let {
                 value("hv battery raw soc", it, "%", 2)
             }
+            "2241A3" -> return voltWordValue(response, cleanCommand, 10.0, false)
+                ?.let { bounded(it, CAPACITY_AH_RANGE) }
+                ?.let {
+                    value("HV battery capacity", it, "Ah", 1)
+                }
+            "2245F9" -> return voltWordValue(response, cleanCommand, 100.0, false)
+                ?.let { bounded(it, CAPACITY_AH_RANGE) }
+                ?.let {
+                    value("HV battery capacity fallback", it, "Ah", 2)
+                }
+            "224329" -> return cellVoltageValue(response, cleanCommand, "minimum cell voltage")
+            "22432B" -> return cellVoltageValue(response, cleanCommand, "maximum cell voltage")
+            "22432A" -> return voltByteValue(response, cleanCommand, 1.0, 0.0)
+                ?.let { bounded(it, CELL_NUMBER_RANGE) }
+                ?.let {
+                    value("minimum cell number", it, "", 0)
+                }
+            "22432C" -> return voltByteValue(response, cleanCommand, 1.0, 0.0)
+                ?.let { bounded(it, CELL_NUMBER_RANGE) }
+                ?.let {
+                    value("maximum cell number", it, "", 0)
+                }
+            "22435F" -> return voltByteValue(response, cleanCommand, 1.0 / 2.55, 0.0)
+                ?.let { bounded(it, PERCENT_RANGE) }
+                ?.let {
+                    value("SOC variation", it, "%", 1)
+                }
+            "2240E9" -> return voltWordValue(response, cleanCommand, 2.0, false)
+                ?.let { bounded(it, PACK_RESISTANCE_RANGE) }
+                ?.let {
+                    value("pack resistance", it, "ohm", 1)
+                }
+            "22433B" -> return voltWordLinearValue(response, cleanCommand, 0.52, 0.0, false)
+                ?.let { bounded(it, HV_VOLTAGE_RANGE) }
+                ?.let {
+                    value("minimum pack voltage", it, "V", 1)
+                }
+            "22433C" -> return voltWordLinearValue(response, cleanCommand, 0.52, 0.0, false)
+                ?.let { bounded(it, HV_VOLTAGE_RANGE) }
+                ?.let {
+                    value("maximum pack voltage", it, "V", 1)
+                }
+            "224349" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)
+                ?.let { bounded(it, TEMP_C_RANGE) }
+                ?.let {
+                    value("HV battery max temperature", it, "deg C", 0)
+                }
+            "22434A" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)
+                ?.let { bounded(it, TEMP_C_RANGE) }
+                ?.let {
+                    value("HV battery min temperature", it, "deg C", 0)
+                }
+            "22434B" -> return voltByteValue(response, cleanCommand, 1.0, 0.0)
+                ?.let { bounded(it, CELL_NUMBER_RANGE) }
+                ?.let {
+                    value("HV battery max-temp module", it, "", 0)
+                }
+            "22434C" -> return voltByteValue(response, cleanCommand, 1.0, 0.0)
+                ?.let { bounded(it, CELL_NUMBER_RANGE) }
+                ?.let {
+                    value("HV battery min-temp module", it, "", 0)
+                }
+            "221C43" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)
+                ?.let { bounded(it, TEMP_C_RANGE) }
+                ?.let {
+                    value("power electronics coolant loop temperature", it, "deg C", 0)
+                }
+            "2241A4" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)
+                ?.let { bounded(it, TEMP_C_RANGE) }
+                ?.let {
+                    value("battery coolant temperature", it, "deg C", 0)
+                }
+            "22433F" -> return voltByteValue(response, cleanCommand, 1.0 / 2.55, 0.0)
+                ?.let { bounded(it, PERCENT_RANGE) }
+                ?.let {
+                    value("minimum SOC limit", it, "%", 1)
+                }
+            "2241B0" -> return voltWordValue(response, cleanCommand, 16.0, false)
+                ?.let { bounded(it, HEATER_POWER_RANGE) }
+                ?.let {
+                    value("APM output power", it, "W", 1)
+                }
+            "22437E" -> return voltWordValue(response, cleanCommand, 20.0, true)
+                ?.let { bounded(it, CURRENT_A_RANGE) }
+                ?.let {
+                    value("APM output current", it, "A", 2)
+                }
+            "2243A6" -> return voltByteValue(response, cleanCommand, 25.0, 0.0)
+                ?.let { bounded(it, ISOLATION_KOHM_RANGE) }
+                ?.let {
+                    value("HV isolation resistance", it, "kOhm", 0)
+                }
+            "2241EC" -> return voltWordValue(response, cleanCommand, 1.0, false)
+                ?.let { bounded(it, ISOLATION_OHM_RANGE) }
+                ?.let {
+                    value("HV isolation resistance", it, "ohm", 0)
+                }
+            "2241B1" -> return voltWordValue(response, cleanCommand, 1.0, true)
+                ?.let { bounded(it, HEATER_POWER_RANGE) }
+                ?.let {
+                    value("AC compressor commanded power", it, "W", 0)
+                }
+            "2241B3" -> return voltWordValue(response, cleanCommand, 1.0, true)
+                ?.let { bounded(it, HEATER_POWER_RANGE) }
+                ?.let {
+                    value("cabin heater commanded power", it, "W", 0)
+                }
+            "2241B5" -> return voltWordValue(response, cleanCommand, 1.0, true)
+                ?.let { bounded(it, HEATER_POWER_RANGE) }
+                ?.let {
+                    value("battery heater commanded power", it, "W", 0)
+                }
+            "2282B5" -> return voltWordValue(response, cleanCommand, 1.0, false)
+                ?.let { bounded(it, PUMP_RPM_RANGE) }
+                ?.let {
+                    value("AC compressor speed", it, "rpm", 0)
+                }
+            "2282B7" -> return voltWordValue(response, cleanCommand, 1.0, true)
+                ?.let { bounded(it, HEATER_POWER_RANGE) }
+                ?.let {
+                    value("AC compressor power", it, "W", 0)
+                }
+            "221141" -> return voltByteValue(response, cleanCommand, 0.1, 0.0)
+                ?.let { bounded(it, AUX_VOLTAGE_RANGE) }
+                ?.let {
+                    value("ignition / 12V voltage", it, "V", 1)
+                }
+            "221C47" -> return voltByteValue(response, cleanCommand, 0.1, 0.0)
+                ?.let { bounded(it, AUX_VOLTAGE_RANGE) }
+                ?.let {
+                    value("14V setpoint voltage", it, "V", 1)
+                }
+            "221C26" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)
+                ?.let { bounded(it, TEMP_C_RANGE) }
+                ?.let {
+                    value("inverter temperature 1", it, "deg C", 0)
+                }
+            "221C28" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)
+                ?.let { bounded(it, TEMP_C_RANGE) }
+                ?.let {
+                    value("inverter temperature 2", it, "deg C", 0)
+                }
+            "221C2A" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)
+                ?.let { bounded(it, TEMP_C_RANGE) }
+                ?.let {
+                    value("inverter temperature 3", it, "deg C", 0)
+                }
+            "2228CB" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)
+                ?.let { bounded(it, TEMP_C_RANGE) }
+                ?.let {
+                    value("motor temperature", it, "deg C", 0)
+                }
+            "22242C" -> return voltWordValue(response, cleanCommand, 4.0, true)
+                ?.let { bounded(it, BRAKE_TORQUE_RANGE) }
+                ?.let {
+                    value("brake torque demand", it, "Nm", 1)
+                }
+            "2224B0" -> return regenActiveValue(response, cleanCommand)
+            "224501" -> return voltWordValue(response, cleanCommand, 100.0, true)
+                ?.let { bounded(it, BRAKE_PEDAL_MM_RANGE) }
+                ?.let {
+                    value("brake pedal position 1", it, "mm", 2)
+                }
+            "224502" -> return voltWordValue(response, cleanCommand, 100.0, true)
+                ?.let { bounded(it, BRAKE_PEDAL_MM_RANGE) }
+                ?.let {
+                    value("brake pedal position 2", it, "mm", 2)
+                }
+            "2240D7", "2240D9", "2240DB", "2240DD", "2240DF", "2240E1" ->
+                return cellSectionTemperatureValue(response, cleanCommand)
+            "22C218" -> return cellVoltageValue(response, cleanCommand, "average cell voltage")
+            "2240D4" -> return voltWordValue(response, cleanCommand, 20.0, true)
+                ?.let { bounded(it, CURRENT_A_RANGE) }
+                ?.let {
+                    value("HD pack current", it, "A", 2)
+                }
             "224531" -> return chargeLevelValue(response, cleanCommand)
             "228334" -> return voltByteValue(response, cleanCommand, 100.0 / 255.0, 0.0)?.let {
                 value("hv battery displayed soc", it, "%", 2)
             }
-            "2241B2" -> return voltWordValue(response, cleanCommand, 1.0, true)?.let {
+            "2241B2" -> return voltWordValue(
+                response,
+                cleanCommand,
+                1.0,
+                true,
+            )?.let { bounded(it, PUMP_RPM_RANGE) }?.let {
                 value("battery coolant pump rpm", it, "rpm", 0)
             }
             "2241B4" -> return rawByteValue(response, cleanCommand, "battery coolant valve", "raw")
-            "2241B6" -> return voltWordValue(response, cleanCommand, 1.0, true)?.let {
+            "2241B6" -> return voltWordValue(
+                response,
+                cleanCommand,
+                1.0,
+                true,
+            )?.let { bounded(it, HEATER_POWER_RANGE) }?.let {
                 value("battery heater power", it, "W", 0)
             }
-            "22801E" -> return voltByteValue(response, cleanCommand, 0.125, -5.0)?.let {
+            "22801E" -> return voltByteValue(
+                response,
+                cleanCommand,
+                0.125,
+                -5.0,
+            )?.let { bounded(it, TEMP_C_RANGE) }?.let {
                 value("outside air temperature raw", it, "deg C", 1)
             }
-            "22801F" -> return voltByteValue(response, cleanCommand, 0.125, -5.0)?.let {
+            "22801F" -> return voltByteValue(
+                response,
+                cleanCommand,
+                0.125,
+                -5.0,
+            )?.let { bounded(it, TEMP_C_RANGE) }?.let {
                 value("outside air temperature filtered", it, "deg C", 1)
             }
+        }
+        if (isCellVoltageProbe(cleanCommand)) {
+            return cellVoltageValue(response, cleanCommand, cellVoltageProbeName(cleanCommand))
         }
         return null
     }
@@ -303,13 +604,33 @@ object ObdProtocol {
             if (index < 0 && collectingMultiFrame) {
                 val continuation = continuationPayload(hex)
                 if (continuation.isNotEmpty()) {
-                    parseDiagnosticPayload(continuation, status, statusLabel, moduleKey, moduleName, cleanHeader, raw, seen, codes)
+                    parseDiagnosticPayload(
+                        continuation,
+                        status,
+                        statusLabel,
+                        moduleKey,
+                        moduleName,
+                        cleanHeader,
+                        raw,
+                        seen,
+                        codes,
+                    )
                 }
                 continue
             }
             while (index >= 0) {
                 val payload = hex.substring(index + marker.length)
-                parseDiagnosticPayload(payload, status, statusLabel, moduleKey, moduleName, cleanHeader, raw, seen, codes)
+                parseDiagnosticPayload(
+                    payload,
+                    status,
+                    statusLabel,
+                    moduleKey,
+                    moduleName,
+                    cleanHeader,
+                    raw,
+                    seen,
+                    codes,
+                )
                 collectingMultiFrame = true
                 index = hex.indexOf(marker, index + marker.length)
             }
@@ -387,26 +708,35 @@ object ObdProtocol {
 
     private fun mode01PayloadBytes(pidHex: String): Int = if (pidHex == "0C") 2 else 1
 
-    private fun parseControlModuleVoltage(response: String?): Double? =
+    internal fun parseControlModuleVoltage(response: String?): Double? =
         mode01Bytes(response, "42", 2)?.let { ((it[0] * 256.0) + it[1]) / 1000.0 }
 
-    private fun parseUnsignedMode01Word(
+    internal fun parseUnsignedMode01Word(
         response: String?,
         pid: String,
     ): Int? = mode01Bytes(response, pid, 2)?.let { it[0] * 256 + it[1] }
 
-    private fun parseOdometerKm(response: String?): Double? {
+    private fun parseSignedMode01Word(
+        response: String?,
+        pid: String,
+    ): Int? =
+        parseUnsignedMode01Word(response, pid)?.let {
+            if (it > 0x7FFF) it - 0x10000 else it
+        }
+
+    internal fun parseOdometerKm(response: String?): Double? {
         val bytes = mode01Bytes(response, "A6", 4) ?: return null
-        val raw = (bytes[0].toLong() shl 24) or (bytes[1].toLong() shl 16) or (bytes[2].toLong() shl 8) or bytes[3].toLong()
+        val raw =
+            (bytes[0].toLong() shl 24) or (bytes[1].toLong() shl 16) or (bytes[2].toLong() shl 8) or bytes[3].toLong()
         return raw / 10.0
     }
 
-    private fun parsePercentMode01Byte(
+    internal fun parsePercentMode01Byte(
         response: String?,
         pid: String,
     ): Int? = mode01Bytes(response, pid, 1)?.let { Math.round(it[0] * 100f / 255f) }
 
-    private fun parseOffsetMode01Byte(
+    internal fun parseOffsetMode01Byte(
         response: String?,
         pid: String,
         offset: Int,
@@ -461,7 +791,8 @@ object ObdProtocol {
             else -> "Stored/current"
         }
 
-    private fun cleanHeader(header: String?): String = header?.trim()?.uppercase(Locale.US)?.replace(Regex("[^0-9A-F]"), "") ?: ""
+    private fun cleanHeader(header: String?): String =
+        header?.trim()?.uppercase(Locale.US)?.replace(Regex("[^0-9A-F]"), "") ?: ""
 
     /**
      * Extracts the DTC payload from an ISO-TP CONSECUTIVE frame (one of the continuation lines that
@@ -538,7 +869,9 @@ object ObdProtocol {
                 val code = decodeDtc(first, second)
                 val key = "$moduleKey|$status|$code"
                 if (seen.add(key)) {
-                    output.add(DiagnosticTroubleCode(code, status, statusLabel, moduleKey, moduleName, header, rawResponse))
+                    output.add(
+                        DiagnosticTroubleCode(code, status, statusLabel, moduleKey, moduleName, header, rawResponse),
+                    )
                 }
             }
             i += 4
@@ -587,6 +920,30 @@ object ObdProtocol {
         return word / divisor
     }
 
+    private fun voltWordLinearValue(
+        response: String?,
+        command: String?,
+        scale: Double,
+        offset: Double,
+        signed: Boolean,
+    ): Double? = mode22Word(response, command, signed)?.let { it * scale + offset }
+
+    private fun mode22Word(
+        response: String?,
+        command: String?,
+        signed: Boolean,
+    ): Int? {
+        val payload = mode22Payload(response, command)
+        if (payload == null || payload.size < 2) {
+            return null
+        }
+        var word = payload[0] * 256 + payload[1]
+        if (signed && word > 0x7FFF) {
+            word -= 0x10000
+        }
+        return word
+    }
+
     private fun voltWordPercentValue(
         response: String?,
         command: String?,
@@ -597,6 +954,68 @@ object ObdProtocol {
         }
         val word = payload[0] * 256 + payload[1]
         return word * 100.0 / 65535.0
+    }
+
+    private fun cellVoltageValue(
+        response: String?,
+        command: String?,
+        name: String,
+    ): ParsedPidValue? =
+        voltWordLinearValue(response, command, 5.0 / 65535.0, 0.0, false)
+            ?.let { bounded(it, CELL_VOLTAGE_RANGE) }
+            ?.let {
+                value(name, it, "V", 3)
+            }
+
+    private fun cellSectionTemperatureValue(
+        response: String?,
+        command: String,
+    ): ParsedPidValue? =
+        voltByteValue(response, command, 1.0, -40.0)
+            ?.let { bounded(it, TEMP_C_RANGE) }
+            ?.let {
+                value("battery section ${cellSectionIndex(command)} temperature", it, "deg C", 0)
+            }
+
+    private fun cellSectionIndex(command: String): Int =
+        when (command) {
+            "2240D7" -> 1
+            "2240D9" -> 2
+            "2240DB" -> 3
+            "2240DD" -> 4
+            "2240DF" -> 5
+            "2240E1" -> 6
+            else -> 0
+        }
+
+    private fun isCellVoltageProbe(command: String): Boolean {
+        val did = mode22Did(command) ?: return false
+        return did in 0x4181..0x41E0 || did in 0x4200..0x4240
+    }
+
+    private fun cellVoltageProbeName(command: String): String {
+        val did = mode22Did(command) ?: return "cell voltage"
+        val cellIndex =
+            if (did in 0x4181..0x41E0) {
+                did - 0x4180
+            } else if (did in 0x4200..0x4240) {
+                did - 0x4200 + 32
+            } else {
+                0
+            }
+        return if (cellIndex > 0) "cell $cellIndex voltage" else "cell voltage"
+    }
+
+    private fun mode22Did(command: String?): Int? {
+        val clean = command?.trim()?.uppercase(Locale.US)?.replace(Regex("[^0-9A-F]"), "") ?: return null
+        if (!clean.startsWith("22") || clean.length < 6) {
+            return null
+        }
+        return try {
+            clean.substring(2, 6).toInt(16)
+        } catch (ex: NumberFormatException) {
+            null
+        }
     }
 
     private fun chargeModeValue(
@@ -636,6 +1055,23 @@ object ObdProtocol {
                 else -> "UNKNOWN"
             }
         return ParsedPidValue("charging level", text, value.toDouble(), "")
+    }
+
+    private fun regenActiveValue(
+        response: String?,
+        command: String?,
+    ): ParsedPidValue? {
+        val payload = mode22Payload(response, command)
+        if (payload == null || payload.isEmpty()) {
+            return null
+        }
+        val active = payload[0] > 7
+        return ParsedPidValue(
+            "regen braking active",
+            if (active) "ACTIVE" else "INACTIVE",
+            if (active) 1.0 else 0.0,
+            "",
+        )
     }
 
     private fun rawByteValue(
@@ -698,8 +1134,54 @@ object ObdProtocol {
         return ParsedPidValue(name, format(value, decimals), value, unit)
     }
 
+    internal fun knownValue(
+        name: String,
+        value: Double?,
+        unit: String,
+        decimals: Int,
+    ): ParsedPidValue? = value(name, value, unit, decimals)
+
+    internal fun bounded(
+        value: Double,
+        range: Range,
+    ): Double? = if (range.contains(value)) value else null
+
+    internal fun boundedInt(
+        value: Int,
+        range: Range,
+    ): Int? = if (range.contains(value.toDouble())) value else null
+
+    private fun boundedFloat(
+        value: Float,
+        range: Range,
+    ): Float? = if (range.contains(value.toDouble())) value else null
+
     private fun format(
         value: Double,
         decimals: Int,
     ): String = String.format(Locale.US, "%.${decimals}f", value)
+
+    private val SPEED_KPH_RANGE = Range(0.0, 250.0)
+    private val RPM_RANGE = Range(0.0, 8_000.0)
+    internal val TEMP_C_RANGE = Range(-50.0, 150.0)
+    internal val AUX_VOLTAGE_RANGE = Range(0.0, 50.0)
+    private val HV_VOLTAGE_RANGE = Range(0.0, 500.0)
+    private val AC_VOLTAGE_RANGE = Range(0.0, 280.0)
+    private val AC_CURRENT_RANGE = Range(0.0, 80.0)
+    private val CURRENT_A_RANGE = Range(-500.0, 500.0)
+
+    // Health bounds reject decode garbage, not bad news: a worn pack below 30 Ah or a faulted
+    // cell below 3.0 V is exactly what long-term tracking exists to surface, so these floors sit
+    // at physically-possible rather than healthy values.
+    private val CAPACITY_AH_RANGE = Range(10.0, 60.0)
+    private val CELL_VOLTAGE_RANGE = Range(1.5, 4.5)
+    private val CELL_NUMBER_RANGE = Range(1.0, 96.0)
+    private val PERCENT_RANGE = Range(0.0, 100.0)
+    private val PACK_RESISTANCE_RANGE = Range(0.0, 10_000.0)
+    private val ISOLATION_KOHM_RANGE = Range(0.0, 25_000.0)
+    private val ISOLATION_OHM_RANGE = Range(0.0, 5_000_000.0)
+    private val BRAKE_TORQUE_RANGE = Range(-10_000.0, 10_000.0)
+    private val BRAKE_PEDAL_MM_RANGE = Range(-200.0, 200.0)
+    private val PUMP_RPM_RANGE = Range(0.0, 10_000.0)
+    private val HEATER_POWER_RANGE = Range(-100.0, 10_000.0)
 }

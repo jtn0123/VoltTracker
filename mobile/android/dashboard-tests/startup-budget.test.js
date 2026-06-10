@@ -48,11 +48,13 @@ describe('dashboard startup budget', () => {
     const elapsedMs = performance.now() - start;
 
     expect(elapsedMs).toBeLessThan(5000);
+    expect(window.VoltDashboard.renderMapLoaded).not.toBe(true);
   });
 
   it('keeps long-route distance math inside the dashboard budget', async () => {
     await loadDashboard();
     const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
     const route = makeRoute();
 
     const start = performance.now();
@@ -66,6 +68,7 @@ describe('dashboard startup budget', () => {
   it('renders a long route scrubber inside the dashboard budget', async () => {
     await loadDashboard();
     const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
     const route = makeRoute();
     route.distanceMeters = VD.routeDistanceMeters(route.points);
     Object.defineProperty(document.getElementById('scrubChart'), 'clientWidth', {
@@ -85,6 +88,7 @@ describe('dashboard startup budget', () => {
   it('renders long map history lists inside the dashboard budget', async () => {
     await loadDashboard();
     const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
     const routes = Array.from({ length: MAP_SESSION_COUNT }, (_, index) => {
       const route = makeRoute(18);
       route.session.id = `budget-session-${index}`;
@@ -105,6 +109,7 @@ describe('dashboard startup budget', () => {
   it('switches all primary tabs repeatedly inside the dashboard budget', async () => {
     await loadDashboard();
     const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
     const tabs = ['drive', 'map', 'charge', 'insights', 'diagnostics', 'settings'];
 
     const start = performance.now();

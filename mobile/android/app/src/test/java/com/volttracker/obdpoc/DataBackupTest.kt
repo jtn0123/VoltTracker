@@ -23,6 +23,13 @@ import java.nio.file.Files
 @Config(sdk = [34])
 class DataBackupTest {
     @Test
+    fun encryptedBackupPassphraseMustMeetMinimumLength() {
+        assertFalse(DataBackup.hasMinimumPassphrase(null))
+        assertFalse(DataBackup.hasMinimumPassphrase("hunter2"))
+        assertTrue(DataBackup.hasMinimumPassphrase("hunter22"))
+    }
+
+    @Test
     fun rejectsAFileThatIsNotSqlite() {
         val file = File.createTempFile("not-sqlite", ".db")
         FileWriter(file).use { writer ->

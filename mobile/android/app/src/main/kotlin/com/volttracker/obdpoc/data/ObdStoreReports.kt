@@ -157,7 +157,7 @@ class ObdStoreReports(
             ).use { cursor ->
                 while (cursor.moveToNext()) {
                     try {
-                        items.put(capabilityJsonFromCursor(cursor))
+                        items.put(ObdStoreReportJson.capabilityFromCursor(cursor))
                     } catch (ignored: JSONException) {
                         // Skip malformed rows instead of breaking the debug payload.
                     }
@@ -179,15 +179,15 @@ class ObdStoreReports(
                 "1",
             ).use { cursor ->
                 if (!cursor.moveToFirst()) {
-                    return notFound("detailed signal log not found")
+                    return ObdStoreReportJson.notFound("detailed signal log not found")
                 }
                 return try {
                     JSONObject()
                         .put("ok", true)
                         .put("kind", "detailed-signal-log")
-                        .put("item", capabilityJsonFromCursor(cursor))
+                        .put("item", ObdStoreReportJson.capabilityFromCursor(cursor))
                 } catch (ex: JSONException) {
-                    error("detailed signal log could not be exported")
+                    ObdStoreReportJson.exportError("detailed signal log could not be exported")
                 }
             }
     }
@@ -289,7 +289,13 @@ class ObdStoreReports(
             recentSessionSummaries(db, 6),
             getAdapterHistory(6),
             latestDiagnosticCodeReports(db, 12),
-            if (reviewSession == null) JSONObject() else safeJson { ObdStoreSessionReview.sessionReview(db, reviewSession) },
+            if (reviewSession ==
+                null
+            ) {
+                JSONObject()
+            } else {
+                safeJson { ObdStoreSessionReview.sessionReview(db, reviewSession) }
+            },
             if (reviewSession == null) {
                 JSONObject()
             } else {
@@ -304,7 +310,8 @@ class ObdStoreReports(
         )
     }
 
-    fun storageCountsJson(databaseFile: File): JSONObject = storageCountsProjection(helper.readableDatabase, databaseFile).toJson()
+    fun storageCountsJson(databaseFile: File): JSONObject =
+        storageCountsProjection(helper.readableDatabase, databaseFile).toJson()
 
     fun recentRoutesProjectionJson(
         limit: Int,
@@ -319,7 +326,7 @@ class ObdStoreReports(
         }
         return JSONObject()
             .put("diagnosticCodeCount", ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES))
-            .put("statusCounts", diagnosticCodeStatusCountsJson(diagnosticCodeStatusCounts(db)))
+            .put("statusCounts", ObdStoreReportJson.statusCounts(diagnosticCodeStatusCounts(db)))
             .put("latestDiagnosticCodes", latest)
     }
 
@@ -354,7 +361,16 @@ class ObdStoreReports(
         db
             .query(
                 VoltTrackerDb.TABLE_VEHICLES,
-                arrayOf("_id", "display_name", "make", "model", "model_year", "vin_redacted", "first_seen_ms", "last_seen_ms"),
+                arrayOf(
+                    "_id",
+                    "display_name",
+                    "make",
+                    "model",
+                    "model_year",
+                    "vin_redacted",
+                    "first_seen_ms",
+                    "last_seen_ms",
+                ),
                 null,
                 null,
                 null,
@@ -523,7 +539,7 @@ class ObdStoreReports(
                     .put("adapterCount", adapterCount)
                     .put("pidObservationCount", pidObservationCount)
                     .put("diagnosticCodeCount", diagnosticCodeCount)
-                    .put("diagnosticCodeStatusCounts", diagnosticCodeStatusCountsJson(diagnosticCodeStatusCounts))
+                    .put("diagnosticCodeStatusCounts", ObdStoreReportJson.statusCounts(diagnosticCodeStatusCounts))
                     .put("locationSampleCount", locationSampleCount)
                     .put("vehicleCount", vehicleCount)
                     .put("fieldCapabilityCount", fieldCapabilityCount)
@@ -585,29 +601,6 @@ class ObdStoreReports(
             )
         }
 
-        @Throws(JSONException::class)
-        private fun capabilityJsonFromCursor(cursor: Cursor): JSONObject =
-            JSONObject()
-                .put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")))
-                .put("adapterKey", ObdStoreSupport.clean(cursor.getString(cursor.getColumnIndexOrThrow("adapter_key"))))
-                .put("protocol", ObdStoreSupport.clean(cursor.getString(cursor.getColumnIndexOrThrow("protocol"))))
-                .put("header", ObdStoreSupport.clean(cursor.getString(cursor.getColumnIndexOrThrow("header"))))
-                .put("command", ObdStoreSupport.clean(cursor.getString(cursor.getColumnIndexOrThrow("command"))))
-                .put("pid", ObdStoreSupport.clean(cursor.getString(cursor.getColumnIndexOrThrow("pid"))))
-                .put("name", ObdStoreSupport.clean(cursor.getString(cursor.getColumnIndexOrThrow("name"))))
-                .put("unit", ObdStoreSupport.clean(cursor.getString(cursor.getColumnIndexOrThrow("unit"))))
-                .put("supported", cursor.getInt(cursor.getColumnIndexOrThrow("supported")) == 1)
-                .put("responseCount", cursor.getLong(cursor.getColumnIndexOrThrow("response_count")))
-                .put("firstSeenMs", cursor.getLong(cursor.getColumnIndexOrThrow("first_seen_ms")))
-                .put("lastSeenMs", cursor.getLong(cursor.getColumnIndexOrThrow("last_seen_ms")))
-                .put("sample", ObdStoreSupport.parseObject(cursor.getString(cursor.getColumnIndexOrThrow("sample_json"))))
-
-        private fun notFound(message: String): JSONObject =
-            JSONObject().safePut("ok", false).safePut("error", "not_found").safePut("message", message)
-
-        private fun error(message: String): JSONObject =
-            JSONObject().safePut("ok", false).safePut("error", "export_failed").safePut("message", message)
-
         private inline fun safeJson(block: () -> JSONObject?): JSONObject =
             try {
                 block() ?: JSONObject()
@@ -660,14 +653,6 @@ class ObdStoreReports(
                         payload[key] = cursor.getLong(cursor.getColumnIndexOrThrow("count"))
                     }
                 }
-            return payload
-        }
-
-        private fun diagnosticCodeStatusCountsJson(counts: Map<String, Long>): JSONObject {
-            val payload = JSONObject()
-            for ((key, value) in counts) {
-                payload.put(key, value)
-            }
             return payload
         }
 
@@ -730,19 +715,17 @@ class ObdStoreReports(
                         "vehicleState",
                         ObdStoreSupport.clean(cursor.getString(cursor.getColumnIndexOrThrow("vehicle_state"))),
                     )
-                    item.put("speedKph", boxedOrNull(ObdStoreSupport.nullableIntBoxed(cursor, "speed_kph")))
-                    item.put("rpm", boxedOrNull(ObdStoreSupport.nullableIntBoxed(cursor, "rpm")))
-                    item.put("voltage", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "voltage")))
-                    item.put("soc", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "soc")))
-                    item.put("batteryTemp", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "battery_temp")))
-                    item.put("powerKw", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "power_kw")))
-                    item.put("packVoltage", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_voltage")))
-                    item.put("packCurrentA", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_current_a")))
+                    item.put("speedKph", reportBoxed(ObdStoreSupport.nullableIntBoxed(cursor, "speed_kph")))
+                    item.put("rpm", reportBoxed(ObdStoreSupport.nullableIntBoxed(cursor, "rpm")))
+                    item.put("voltage", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "voltage")))
+                    item.put("soc", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "soc")))
+                    item.put("batteryTemp", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "battery_temp")))
+                    item.put("powerKw", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "power_kw")))
+                    item.put("packVoltage", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_voltage")))
+                    item.put("packCurrentA", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_current_a")))
                     return item
                 }
         }
-
-        private fun boxedOrNull(value: Number?): Any = value ?: JSONObject.NULL
 
         @Throws(JSONException::class)
         private fun chargeSessionRowJson(cursor: Cursor): JSONObject {
@@ -750,13 +733,13 @@ class ObdStoreReports(
             return JSONObject()
                 .put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")))
                 .put("startedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("started_at_ms")))
-                .put("endedAtMs", boxedOrNull(ObdStoreSupport.nullableLongBoxed(cursor, "ended_at_ms")))
+                .put("endedAtMs", reportBoxed(ObdStoreSupport.nullableLongBoxed(cursor, "ended_at_ms")))
                 .put("chargerType", if (chargerType == null) JSONObject.NULL else ObdStoreSupport.clean(chargerType))
-                .put("startSoc", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "start_soc")))
-                .put("endSoc", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "end_soc")))
-                .put("powerKw", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "power_kw")))
-                .put("energyKwh", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "energy_kwh")))
-                .put("confidence", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "confidence")))
+                .put("startSoc", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "start_soc")))
+                .put("endSoc", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "end_soc")))
+                .put("powerKw", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "power_kw")))
+                .put("energyKwh", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "energy_kwh")))
+                .put("confidence", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "confidence")))
         }
 
         @Throws(JSONException::class)
@@ -828,24 +811,16 @@ class ObdStoreReports(
                     return JSONObject()
                         .put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")))
                         .put("capturedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")))
-                        .put("soc", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "soc")))
-                        .put("capacityAh", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "capacity_ah")))
-                        .put("sohPct", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "soh_pct")))
-                        .put("packVoltage", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_voltage")))
-                        .put("packCurrentA", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_current_a")))
-                        .put("packPowerKw", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_power_kw")))
-                        .put("batteryTempC", boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "battery_temp_c")))
+                        .put("soc", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "soc")))
+                        .put("capacityAh", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "capacity_ah")))
+                        .put("sohPct", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "soh_pct")))
+                        .put("packVoltage", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_voltage")))
+                        .put("packCurrentA", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_current_a")))
+                        .put("packPowerKw", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_power_kw")))
+                        .put("batteryTempC", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "battery_temp_c")))
                 }
         }
 
-        private fun JSONObject.safePut(
-            key: String,
-            value: Any?,
-        ): JSONObject =
-            try {
-                put(key, value)
-            } catch (ignored: JSONException) {
-                this
-            }
+        private fun reportBoxed(value: Number?): Any = ObdStoreReportJson.boxedOrNull(value)
     }
 }

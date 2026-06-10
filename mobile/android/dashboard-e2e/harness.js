@@ -116,12 +116,32 @@ async function openDashboard(page, opts = {}) {
   }
 }
 
+async function ensureMapModule(page) {
+  await page.evaluate(async () => {
+    const VD = window.VoltDashboard;
+    if (VD && typeof VD.ensureMapModule === 'function') {
+      await VD.ensureMapModule();
+    }
+  });
+}
+
+async function loadDemoScenario(page, scenario) {
+  await ensureMapModule(page);
+  await page.evaluate((s) => window.VoltDashboard.loadDemoScenario(s), scenario);
+}
+
 /**
  * Switches the active view (drive/map/charge/insights/diagnostics/settings).
  * @param {import('@playwright/test').Page} page
  */
 async function setView(page, view) {
-  await page.evaluate((v) => window.VoltDashboard.setView(v), view);
+  await page.evaluate(async (v) => {
+    const VD = window.VoltDashboard;
+    VD.setView(v);
+    if (v === 'map' && typeof VD.requestMapRender === 'function') {
+      await VD.requestMapRender();
+    }
+  }, view);
 }
 
-module.exports = { openDashboard, setView };
+module.exports = { ensureMapModule, loadDemoScenario, openDashboard, setView };

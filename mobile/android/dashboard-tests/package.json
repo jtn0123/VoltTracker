@@ -3,12 +3,13 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "20.x"
+    "node": "22.x"
   },
   "scripts": {
     "build": "node build.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:ci": "vitest run --coverage --reporter=default --reporter=json --outputFile=coverage/vitest-results.json",
     "setup": "npm ci",
     "lint": "cd .. && eslint \"app/src/main/dashboard-src/js/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.json"
@@ -18,6 +19,7 @@
     "esbuild": "^0.25.0",
     "eslint": "^10.4.1",
     "jsdom": "^29.1.1",
+    "leaflet": "1.9.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.1",
     "vitest": "^4.1.7"

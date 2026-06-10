@@ -53,12 +53,10 @@ const DASHBOARD_EMITTED_JS_FILES = [
   'storage-status.js',
   'signals-panel.js',
   'insights-panel.js',
-  'map.js',
   'scrubber.js',
   'drive.js',
   'telemetry.js',
   'actions.js',
-  'troubleshooter.js',
   'connection-status.js',
   'connection-tools.js',
 ];

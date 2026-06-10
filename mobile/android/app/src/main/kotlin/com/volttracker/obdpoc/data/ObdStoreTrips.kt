@@ -13,6 +13,8 @@ import java.util.Collections
 class ObdStoreTrips(
     private val helper: VoltTrackerDb,
 ) {
+    private val activeTripCache = HashMap<String, CachedTrip>()
+
     fun tripsJson(limit: Int): JSONArray {
         val payload = JSONArray()
         // Writable: ensureRollupsAndCollectActive backfills the rollup + trip-list caches.
@@ -75,13 +77,27 @@ class ObdStoreTrips(
             ObdStoreSupport.countRowsWhere(
                 db,
                 VoltTrackerDb.TABLE_TELEMETRY,
-                "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? AND ${ObdStoreSupport.USEFUL_TELEMETRY_WHERE}",
+                "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? " +
+                    "AND ${ObdStoreSupport.USEFUL_TELEMETRY_WHERE}",
                 arrayOf(session.id.toString(), window.startedAtMs.toString(), window.endedAtMs.toString()),
             )
         if (usefulSamples <= 0) {
             return null
         }
-        val points = ObdStoreRouteProjection.routePointsForSessionJson(db, session.id, 1000, window.startedAtMs, window.endedAtMs)
+        val cacheKey = activeTripCacheKey(session, window, usefulSamples)
+        val now = System.currentTimeMillis()
+        val cached = activeTripCache[cacheKey]
+        if (cached != null && now - cached.createdAtMs <= ACTIVE_TRIP_CACHE_TTL_MS) {
+            return JSONObject(cached.json)
+        }
+        val points =
+            ObdStoreRouteProjection.routePointsForSessionJson(
+                db,
+                session.id,
+                1000,
+                window.startedAtMs,
+                window.endedAtMs,
+            )
         var startedAtMs = window.startedAtMs
         var endedAtMs = window.endedAtMs
         if (points.length() > 0) {
@@ -105,6 +121,10 @@ class ObdStoreTrips(
         trip.put("hasRoute", points.length() >= 2)
         trip.put("adapterName", session.adapterName)
         trip.put("status", session.status)
+        if (session.endedAtMs <= 0) {
+            activeTripCache[cacheKey] = CachedTrip(trip.toString(), now)
+            pruneActiveTripCache(now, session.id)
+        }
         return trip
     }
 
@@ -126,7 +146,13 @@ class ObdStoreTrips(
                 ).use { cursor ->
                     while (cursor.moveToNext()) {
                         val maxSpeed = if (cursor.isNull(2)) null else cursor.getInt(2)
-                        agg.addTrip(cursor.getDouble(0), cursor.getLong(1), maxSpeed, cursor.getInt(3) != 0, cursor.getLong(4))
+                        agg.addTrip(
+                            cursor.getDouble(0),
+                            cursor.getLong(1),
+                            maxSpeed,
+                            cursor.getInt(3) != 0,
+                            cursor.getLong(4),
+                        )
                     }
                 }
             for (session in active) {
@@ -153,7 +179,12 @@ class ObdStoreTrips(
             payload.put("sessionCount", ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_SESSIONS))
             payload.put(
                 "sampleCount",
-                ObdStoreSupport.countRowsWhere(db, VoltTrackerDb.TABLE_TELEMETRY, ObdStoreSupport.USEFUL_TELEMETRY_WHERE, null),
+                ObdStoreSupport.countRowsWhere(
+                    db,
+                    VoltTrackerDb.TABLE_TELEMETRY,
+                    ObdStoreSupport.USEFUL_TELEMETRY_WHERE,
+                    null,
+                ),
             )
             payload.put("locationSampleCount", ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES))
         } catch (ignored: JSONException) {
@@ -173,7 +204,8 @@ class ObdStoreTrips(
             }
         }
         for (session in active) {
-            total += ObdStoreSupport.distanceMeters(ObdStoreRouteProjection.routePointsForSessionJson(db, session.id, 1000))
+            val points = ObdStoreRouteProjection.routePointsForSessionJson(db, session.id, 1000)
+            total += ObdStoreSupport.distanceMeters(points)
         }
         return total
     }
@@ -182,7 +214,8 @@ class ObdStoreTrips(
         val active = ArrayList<ObdSessionRecord>()
         db
             .rawQuery(
-                "SELECT s.* FROM ${VoltTrackerDb.TABLE_SESSIONS} s LEFT JOIN ${VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS}" +
+                "SELECT s.* FROM ${VoltTrackerDb.TABLE_SESSIONS} s " +
+                    "LEFT JOIN ${VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS}" +
                     " r ON r.session_id = s._id WHERE s.mode = ? AND (s.ended_at_ms <= 0 OR r.session_id IS NULL" +
                     " OR r.rollup_version < ?) ORDER BY s.started_at_ms DESC",
                 arrayOf(ObdLocalStore.MODE_OBD, ROLLUP_CACHE_VERSION.toString()),
@@ -311,10 +344,48 @@ class ObdStoreTrips(
         }
     }
 
+    private class CachedTrip(
+        val json: String,
+        val createdAtMs: Long,
+    )
+
+    private fun activeTripCacheKey(
+        session: ObdSessionRecord,
+        window: DriveWindowDetector.DriveWindow,
+        usefulSamples: Long,
+    ): String = "${session.id}:${window.startedAtMs}:${window.endedAtMs}:$usefulSamples"
+
+    private fun pruneActiveTripCache(
+        now: Long,
+        sessionId: Long,
+    ) {
+        // Expired entries are never read again (the TTL check on lookup skips them), so collect
+        // them here; the prefix prune alone would let stale entries from other sessions linger.
+        val entries = activeTripCache.entries.iterator()
+        while (entries.hasNext()) {
+            if (now - entries.next().value.createdAtMs > ACTIVE_TRIP_CACHE_TTL_MS) {
+                entries.remove()
+            }
+        }
+        if (activeTripCache.size <= ACTIVE_TRIP_CACHE_MAX_ENTRIES) {
+            return
+        }
+        val prefix = "$sessionId:"
+        val iterator = activeTripCache.keys.iterator()
+        while (iterator.hasNext()) {
+            val key = iterator.next()
+            if (key.startsWith(prefix)) {
+                iterator.remove()
+            }
+        }
+    }
+
     companion object {
         // Bump to invalidate cached rollups + the trip-list cache (forces a one-time rebuild on
         // the next read). v3 added the per-window trip_list_cache backfill.
         private const val ROLLUP_CACHE_VERSION = 3
+        private const val ACTIVE_TRIP_CACHE_TTL_MS = 2_000L
+        private const val ACTIVE_TRIP_CACHE_MAX_ENTRIES = 64
 
         private fun maxIntForWindowBoxed(
             db: SQLiteDatabase,
@@ -324,7 +395,8 @@ class ObdStoreTrips(
         ): Int? =
             db
                 .rawQuery(
-                    "SELECT MAX($column) FROM ${VoltTrackerDb.TABLE_TELEMETRY} WHERE session_id = ? AND captured_at_ms >= ?" +
+                    "SELECT MAX($column) FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                        "WHERE session_id = ? AND captured_at_ms >= ?" +
                         " AND captured_at_ms <= ? AND $column IS NOT NULL",
                     arrayOf(sessionId.toString(), window.startedAtMs.toString(), window.endedAtMs.toString()),
                 ).use { cursor ->
@@ -338,7 +410,8 @@ class ObdStoreTrips(
         ): Double =
             db
                 .rawQuery(
-                    "SELECT AVG(speed_kph) FROM ${VoltTrackerDb.TABLE_TELEMETRY} WHERE session_id = ? AND captured_at_ms >= ?" +
+                    "SELECT AVG(speed_kph) FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                        "WHERE session_id = ? AND captured_at_ms >= ?" +
                         " AND captured_at_ms <= ? AND speed_kph > 0 AND ${ObdStoreSupport.USEFUL_TELEMETRY_WHERE}",
                     arrayOf(sessionId.toString(), window.startedAtMs.toString(), window.endedAtMs.toString()),
                 ).use { cursor ->
