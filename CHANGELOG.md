@@ -1,6 +1,50 @@
 # CHANGELOG
 
 
+## v0.11.0 (2026-06-10)
+
+### Features
+
+- **dashboard**: 17 UI/UX improvements across tabs
+  ([#191](https://github.com/jtn0123/VoltTracker/pull/191),
+  [`be2e4e6`](https://github.com/jtn0123/VoltTracker/commit/be2e4e6969863a07c71fab69c713e5933d218c47))
+
+* feat(dashboard): 17 UI/UX improvements across tabs
+
+Feedback visibility: - Mirror status.detail in an aria-live toast on non-Settings tabs, so taps like
+  "Scan car codes" on Insights no longer appear to do nothing; the boot-time status push sets the
+  baseline silently (new status-toast.test.js) - Show a single friendly line in the error banner
+  instead of raw JS stack traces (full detail still flows to logClientError)
+
+Scroll/focus stability: - Stop the units/rate re-render from scroll-jumping the page to the top -
+  Debounce the $/kWh input's dashboard-wide re-render (was per keystroke) - Focus the
+  restore-progress dialog only when it first appears, not on every native progress tick
+
+Actionable empty states: - Drive, Charge, and Map empty states gain a jump-to-Settings CTA via the
+  existing data-nav-jump delegation
+
+Accessibility: - Re-enable pinch-zoom (drop maximum-scale=1 / user-scalable=no) - Add role="tab" to
+  the map layer tablist buttons - Label the paired-adapter <select> - Sync the speed meter's
+  aria-valuemax with the selected unit (200 km/h)
+
+Copy and polish: - "Eff" map layer -> "Effic." with aria-label/title "Efficiency" - "Detail probe /
+  Targeted signals" -> "Extra signals / Tires, battery internals" - Charge "Hints" KPI -> "Plug-ins
+  detected / Times the car looked plugged in" - Surface the hidden long-press "not a trip" gesture
+  with a hint line - Move the version footer's inline style into screens.css
+
+https://claude.ai/code/session_01Hw7U48edt2AiTAyKgpAVno
+
+* test(dashboard): refresh visual baselines for empty-state CTAs
+
+The drive/map/charge empty states gained jump-to-Settings buttons, so the empty-scenario screenshots
+  intentionally changed. Regenerated on Ubuntu 24.04 with the pinned Playwright Chromium; full
+  visual project passes 28/28 against the new baselines.
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.10.2 (2026-06-10)
 
 ### Bug Fixes
