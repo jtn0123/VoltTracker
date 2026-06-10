@@ -1,6 +1,45 @@
 # CHANGELOG
 
 
+## v0.10.1 (2026-06-10)
+
+### Bug Fixes
+
+- **android**: Restore progress, map cleanup, charge inference
+  ([#188](https://github.com/jtn0123/VoltTracker/pull/188),
+  [`1da0d3e`](https://github.com/jtn0123/VoltTracker/commit/1da0d3e88ff43a5291d6ec8fa705f4adae5c345d))
+
+* Improve restore progress, map cleanup, and charge inference
+
+* Polish charge session filtering
+
+* test(android): align map tests after rebase
+
+* fix(android): debounce map long-press against WebView contextmenu
+
+The WebView fires contextmenu ~500ms into a long-press, before the 650ms fallback timer, so a held
+  map row marked the route twice and stacked two confirm dialogs. Whichever signal fires first now
+  wins, and pointerdown resets the click-suppress flag so a contextmenu without a follow-up click
+  (desktop right-click) cannot swallow the next tap.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+* fix(android): address review feedback on map tiles, progress, dedup
+
+- Reset the map long-press timer and suppress flags in resetListeners() so a pending timeout cannot
+  fire against torn-down listeners. - Treat a negative percent as the unknown sentinel in the
+  restore overlay instead of rendering a determinate 0%. - Ignore in-flight primary basemap tile
+  events once the OSM fallback is active so they cannot clear or re-raise the tile warning banner. -
+  Share one maxSpeedKphForWindow helper via ObdSessionClassifier instead of duplicating the SQL in
+  reports and route projection.
+
+* test(android): cover unknown-percent sentinel in restore overlay
+
+---------
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+
 ## v0.10.0 (2026-06-10)
 
 ### Features
