@@ -276,7 +276,7 @@ import {
         state.selectedMapSessionId = firstId == null ? null : String(firstId);
       }
     }
-    const route = selectedMapRoute(storage, routes);
+    const route = ensureRoutePoints(selectedMapRoute(storage, routes));
     const points = Array.isArray(route.points) ? route.points : [];
     const hasRoute = points.length >= 2;
     const isLiveRoute = routeIsLive(route);
@@ -392,14 +392,116 @@ import {
 
   function mapRoutes(storage: VoltStorageSummary): MapRoute[] {
     const history = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
+    const stored = history
+      .concat(olderTripStubRoutes(history))
+      .sort((a, b) => sessionStartMs(b) - sessionStartMs(a));
     const live = buildLiveRoute();
-    if (!live) return history;
+    if (!live) return stored;
     return [
       live,
-      ...history.filter((route: MapRoute) =>
+      ...stored.filter((route: MapRoute) =>
         String((route.session || {}).id || "") !== LIVE_ROUTE_ID
       )
     ];
+  }
+
+  function sessionStartMs(route: MapRoute) {
+    const value = Number((route.session || {}).startedAtMs);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  // The storage summary ships full point geometry for only the most recent few
+  // drives (payload size), which used to silently cap the map's history at a
+  // handful of days. The trips rollup goes back much further and shares the
+  // same routeKey ids, so every older route-bearing trip joins the list as a
+  // point-less stub; its geometry is fetched on demand via bridge.getTripRoute
+  // when selected (see ensureRoutePoints).
+  function olderTripStubRoutes(history: MapRoute[]): MapRoute[] {
+    syncRouteCacheWithTrips();
+    const trips = Array.isArray(state.trips) ? state.trips : [];
+    const stubs: MapRoute[] = [];
+    for (const trip of trips) {
+      if (!trip || trip.hasRoute === false || Number(trip.pointCount || 0) < 2) continue;
+      const id = trip.id == null ? "" : String(trip.id);
+      if (!id || id === LIVE_ROUTE_ID) continue;
+      if (history.some((route) => routeCoversTrip(route, trip))) continue;
+      stubs.push(fetchedRouteCache.get(id) || tripStubRoute(trip, id));
+    }
+    return stubs;
+  }
+
+  // True when a detailed recentRoutes entry already represents this trip.
+  // recentRoutes ids use the drive window's bounds while trip ids use the
+  // point-clipped bounds, so the same drive can carry two different keys —
+  // fall back to matching any time overlap within the same session.
+  function routeCoversTrip(route: MapRoute, trip: VoltTrip) {
+    const session = route.session || {};
+    const routeId = session.id == null ? "" : String(session.id);
+    const tripId = trip.id == null ? "" : String(trip.id);
+    if (routeId && routeId === tripId) return true;
+    const routeSessionId = session.sessionId == null ? routeId : String(session.sessionId);
+    const tripSessionId = trip.sessionId == null ? "" : String(trip.sessionId);
+    if (!routeSessionId || routeSessionId !== tripSessionId) return false;
+    const routeStart = Number(session.startedAtMs);
+    const tripStart = Number(trip.startedAtMs);
+    if (!Number.isFinite(routeStart) || !Number.isFinite(tripStart)) return true;
+    const routeEnd = Number.isFinite(Number(session.endedAtMs)) ? Number(session.endedAtMs) : Infinity;
+    const tripEnd = Number.isFinite(Number(trip.endedAtMs)) ? Number(trip.endedAtMs) : Infinity;
+    return tripStart <= routeEnd && tripEnd >= routeStart;
+  }
+
+  function tripStubRoute(trip: VoltTrip, id: string): MapRoute {
+    return {
+      session: {
+        id,
+        sessionId: trip.sessionId,
+        adapterName: trip.adapterName,
+        startedAtMs: trip.startedAtMs,
+        endedAtMs: trip.endedAtMs,
+        status: trip.status,
+        sampleCount: trip.sampleCount
+      },
+      points: [],
+      pointCount: Number(trip.pointCount) || 0,
+      distanceMeters: Number(trip.distanceMeters) || 0
+    };
+  }
+
+  // Fetched full routes for trips beyond the storage summary's recentRoutes
+  // window, keyed by routeKey. Cleared whenever the trips payload refreshes so
+  // a restore/merge/hide can never serve stale geometry.
+  const fetchedRouteCache = new Map<string, MapRoute>();
+  let fetchedRouteCacheTripsRef: unknown = null;
+
+  function syncRouteCacheWithTrips() {
+    if (state.trips !== fetchedRouteCacheTripsRef) {
+      fetchedRouteCacheTripsRef = state.trips;
+      fetchedRouteCache.clear();
+    }
+  }
+
+  /** Resolve a stub route's full geometry via the native bridge (one synchronous
+   *  read, cached). Failed lookups cache the stub so a render loop can't hammer
+   *  the bridge. Detailed routes and the live route pass through untouched. */
+  function ensureRoutePoints(route: MapRoute): MapRoute {
+    const session = route.session || {};
+    const id = session.id == null ? "" : String(session.id);
+    if (!id || routeIsLive(route)) return route;
+    if (Array.isArray(route.points) && route.points.length >= 2) return route;
+    if (Number(route.pointCount || 0) < 2) return route;
+    const cached = fetchedRouteCache.get(id);
+    if (cached) return cached;
+    if (!bridge || typeof bridge.getTripRoute !== "function") return route;
+    let fetched: MapRoute | null = null;
+    try {
+      fetched = VD.parsePayload<MapRoute>(bridge.getTripRoute(id), {});
+    } catch (ignored) {
+      fetched = null;
+    }
+    const resolved =
+      fetched && Array.isArray(fetched.points) && fetched.points.length >= 2 ? fetched : route;
+    fetchedRouteCache.set(id, resolved);
+    return resolved;
   }
 
   function buildLiveRoute(): MapRoute | null {
@@ -1031,6 +1133,9 @@ import {
         batterySummary: {}, detailedSignalCatalog: [], enhancedCapabilities: [],
         latestDiagnosticCodes: [], diagnosticCodeCount: 0
       };
+      // Trips feed the map's stub rows, so the empty scenario must clear them
+      // too or leftover real trips would repopulate the demo map.
+      state.trips = [];
       state.insights = { tripCount: 0 };
       state.appState = Object.assign({}, state.appState, { vehicle: null });
       state.demoScenario = "empty";

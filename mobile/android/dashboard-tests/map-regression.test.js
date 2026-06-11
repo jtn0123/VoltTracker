@@ -192,6 +192,124 @@ describe('map.ts — route selection regressions', () => {
     expect(document.getElementById('mapDuration').textContent).not.toBe('--');
   });
 
+  it('lists older trips beyond recentRoutes as selectable history, deduping overlaps', () => {
+    const VD = window.VoltDashboard;
+    const now = Date.now();
+    const day = 86_400_000;
+    // The storage summary only ships detailed geometry for the most recent few
+    // drives; the trips rollup reaches back weeks. The map list must include
+    // those older trips instead of silently capping history.
+    VD.state.storage = {
+      recentRoutes: [
+        {
+          session: {
+            id: '12:900:2100',
+            sessionId: 12,
+            startedAtMs: now - day + 900,
+            endedAtMs: now - day + 2100,
+          },
+          points: [
+            { lat: 32.7, lng: -117.1, atMs: now - day + 1000 },
+            { lat: 32.8, lng: -117.2, atMs: now - day + 2000 },
+          ],
+          distanceMeters: 1000,
+        },
+      ],
+    };
+    VD.state.trips = [
+      // Same drive as the detailed route, but keyed by point-clipped bounds —
+      // must dedupe via session + time overlap, not appear twice.
+      {
+        id: '12:1000:2000',
+        sessionId: 12,
+        hasRoute: true,
+        pointCount: 2,
+        startedAtMs: now - day + 1000,
+        endedAtMs: now - day + 2000,
+        distanceMeters: 1000,
+      },
+      // A three-week-old drive beyond the recentRoutes window: shows as a stub.
+      {
+        id: '3:5000:9000',
+        sessionId: 3,
+        hasRoute: true,
+        pointCount: 40,
+        startedAtMs: now - 21 * day,
+        endedAtMs: now - 21 * day + 600_000,
+        distanceMeters: 8000,
+        adapterName: 'OBDLink MX+',
+      },
+      // Route-less trips never reach the map list.
+      {
+        id: '2:100:200',
+        sessionId: 2,
+        hasRoute: false,
+        pointCount: 0,
+        startedAtMs: now - 22 * day,
+        endedAtMs: now - 22 * day + 60_000,
+      },
+    ];
+
+    VD.renderMap();
+
+    const rows = Array.from(document.querySelectorAll('#mapSessionList [data-map-session]'));
+    expect(rows.map((row) => row.dataset.mapSession)).toEqual(['12:900:2100', '3:5000:9000']);
+  });
+
+  it('fetches full geometry over the bridge when an older trip stub is selected', async () => {
+    const now = Date.now();
+    const day = 86_400_000;
+    const fullRoute = {
+      session: {
+        id: '3:5000:9000',
+        sessionId: 3,
+        startedAtMs: now - 21 * day,
+        endedAtMs: now - 21 * day + 600_000,
+        adapterName: 'OBDLink MX+',
+        mode: 'obd',
+      },
+      points: [
+        { lat: 32.7, lng: -117.1, atMs: now - 21 * day },
+        { lat: 32.75, lng: -117.15, atMs: now - 21 * day + 300_000 },
+        { lat: 32.8, lng: -117.2, atMs: now - 21 * day + 600_000 },
+      ],
+      pointCount: 3,
+      distanceMeters: 8000,
+    };
+    const getTripRoute = vi.fn(() => JSON.stringify(fullRoute));
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    await loadDashboard({ bridge: createVoltBridgeFixture({ getTripRoute }) });
+    const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
+    VD.state.storage = { recentRoutes: [] };
+    VD.state.trips = [
+      {
+        id: '3:5000:9000',
+        sessionId: 3,
+        hasRoute: true,
+        pointCount: 3,
+        startedAtMs: now - 21 * day,
+        endedAtMs: now - 21 * day + 600_000,
+        distanceMeters: 8000,
+        adapterName: 'OBDLink MX+',
+      },
+    ];
+    VD.state.selectedMapSessionId = '3:5000:9000';
+
+    VD.renderMap();
+
+    expect(getTripRoute).toHaveBeenCalledWith('3:5000:9000');
+    expect(document.getElementById('mapPointBadge').textContent).toBe('3 pts');
+    expect(document.getElementById('mapDistance').textContent).not.toBe('--');
+
+    // Re-rendering serves the cached geometry instead of re-reading the bridge.
+    VD.renderMap();
+    expect(getTripRoute).toHaveBeenCalledTimes(1);
+  });
+
   it('surfaces basemap tile failures with a retry affordance', () => {
     const VD = window.VoltDashboard;
     const banner = document.getElementById('mapTileError');

@@ -23,7 +23,11 @@ class DashboardStorageReader(
     fun tripsJson(): String {
         val store = storeOrUnavailable() ?: return storageUnavailable()
         return try {
-            store.getTripsJson(40).toString()
+            // Rows come from the trip-list cache (no per-session recomputation) and are
+            // small metadata objects, so a deep window is cheap. The map's session list
+            // is fed from these beyond the storage summary's few detailed recentRoutes,
+            // so this limit decides how many weeks of drives stay reachable there.
+            store.getTripsJson(TRIP_LIST_LIMIT).toString()
         } catch (ex: RuntimeException) {
             Log.w(TAG, "getTripsJson failed", ex)
             MainActivityUtils.errorPayload("trips_read_failed", "Could not read logged trips.").toString()
@@ -61,5 +65,6 @@ class DashboardStorageReader(
 
     private companion object {
         const val TAG = "DashboardStorageReader"
+        const val TRIP_LIST_LIMIT = 120
     }
 }
