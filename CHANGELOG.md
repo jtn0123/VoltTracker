@@ -1,6 +1,42 @@
 # CHANGELOG
 
 
+## v0.11.3 (2026-06-11)
+
+### Bug Fixes
+
+- Restore determinate progress bar and weeks-deep map history
+  ([#194](https://github.com/jtn0123/VoltTracker/pull/194),
+  [`de427f9`](https://github.com/jtn0123/VoltTracker/commit/de427f9551c7dfa55c75666010d47f02fb3ddf14))
+
+Two regressions:
+
+Restore progress overlay showed the indeterminate sweep instead of the live percent bar. PR #187
+  split the app-dialog/restore-progress styles into overlays.css; PR #188 (rebased in parallel) then
+  re-added a newer determinate-capable copy to components.css without removing the split file.
+  overlays.css loaded last, so its stale unconditional [data-busy="true"] sweep rule out-cascaded
+  the data-progress gating and animated the fill even when a percent was known. Delete the stale
+  overlays.css (every other rule in it was a byte-identical or older duplicate of components.css)
+  and drop its stylesheet link.
+
+Map history capped at the last few days. The Map tab's session list was fed solely by the storage
+  summary's recentRoutes, which ships full geometry for only the 8 most recent drive windows — a few
+  days of driving, not the weeks actually stored. The trips rollup already goes back much further
+  and shares routeKey ids with the route projection, so map.ts now merges older route-bearing trips
+  into the list as point-less stubs and fetches their full geometry on demand through the existing
+  bridge.getTripRoute(routeKey) call when selected (cached until the trips payload refreshes). The
+  trips read limit rises 40 -> 120 (cached metadata rows) so several weeks of drives stay reachable;
+  the demo "empty" scenario clears state.trips so stale real trips can't leak into the preview map.
+
+Tests: two new map-regression cases (stub listing with clipped-vs-window key dedupe, on-demand
+  geometry fetch + caching); 281 dashboard tests, tsc, eslint, spotlessCheck, and the full Android
+  unit suite pass.
+
+https://claude.ai/code/session_019t7TQDQDXUFq5n6zctt41V
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.11.2 (2026-06-11)
 
 ### Bug Fixes

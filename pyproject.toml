@@ -10,7 +10,7 @@
 # Source of truth for the released version is the `version` key below. The
 # build_command keeps the plaintext VERSION file (read by build.gradle) in
 # sync on every bump.
-version = "0.11.2"
+version = "0.11.3"
 # Self-anchor on this same key so PSR rewrites it on every bump.
 version_toml = [
   "pyproject.toml:tool.semantic_release.version",
