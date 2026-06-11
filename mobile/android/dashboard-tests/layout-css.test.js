@@ -48,6 +48,24 @@ describe('dashboard layout css', () => {
     expect(appRule).toMatch(/calc\(112px \+ env\(safe-area-inset-bottom\)\)/);
   });
 
+  it('keeps tab content from overflowing the viewport horizontally', () => {
+    const baseCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/base.css'), 'utf8');
+    const componentsCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/components.css'), 'utf8');
+    const viewRule = baseCss.match(/(?:^|\n)\s*\.view\s*\{[^}]+\}/)?.[0] || '';
+    const heroRule = componentsCss.match(/\.hero\s*\{[^}]+\}/)?.[0] || '';
+    const statusMetaRule = componentsCss.match(/\.status-meta\s*\{[^}]+\}/)?.[0] || '';
+
+    // The .view and .hero stacks are single-column grids. Without an explicit
+    // minmax(0, 1fr) column, the implicit `auto` track sizes to the widest
+    // card's min-content, so one card with long nowrap text (the OBD session
+    // adapter/PIDs values) stretched every Drive card past the screen edge.
+    expect(viewRule).toMatch(/grid-template-columns\s*:\s*minmax\(0,\s*1fr\)/);
+    expect(heroRule).toMatch(/grid-template-columns\s*:\s*minmax\(0,\s*1fr\)/);
+    // Bare 1fr columns also kept the nowrap+ellipsis <strong> values from ever
+    // truncating; minmax(0, 1fr) restores the intended ellipsis behavior.
+    expect(statusMetaRule).toMatch(/grid-template-columns\s*:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  });
+
   it('keeps the floating nav readable over scrollable page content', () => {
     const screensCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens.css'), 'utf8');
     const navRule = screensCss.match(/\.bottom-nav\s*\{[^}]+\}/)?.[0] || '';

@@ -375,6 +375,11 @@
   .view {
     display: none;
     gap: 12px;
+    /* Single explicit column with a 0 minimum. The implicit `auto` column sized
+       tracks to the widest card's min-content, so one card with long nowrap text
+       (e.g. the OBD session adapter/PIDs values) stretched EVERY card in the tab
+       past the viewport — body overflow-x:hidden then clipped the right edge. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .view.is-active {
