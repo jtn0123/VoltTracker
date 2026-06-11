@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v0.11.2 (2026-06-11)
+
+### Bug Fixes
+
+- **dashboard**: Stop Drive tab cards overflowing the viewport width
+  ([#193](https://github.com/jtn0123/VoltTracker/pull/193),
+  [`4ae5b3c`](https://github.com/jtn0123/VoltTracker/commit/4ae5b3cdb301df39e93c5304ab71acff2623ee4a))
+
+The OBD session card's .status-meta grid used bare repeat(2, 1fr) columns, whose auto minimum sizes
+  tracks to the full width of the nowrap adapter/PIDs <strong> values instead of letting them
+  truncate. Because .view.is-active and .hero are single-column grids with an implicit auto track,
+  that one card's min-content stretched every card in the Drive tab wider than the screen; body
+  overflow-x:hidden then clipped the right edge (Pack temp / Pack kW / +80 scale cut off).
+
+- .status-meta: repeat(2, minmax(0, 1fr)) so the ellipsis engages (matches the existing #dbCard
+  .status-meta convention) - .view / .hero: explicit minmax(0, 1fr) column so no card's min-content
+  can ever widen a whole tab again
+
+Verified in headless Chromium at a 346px viewport with 120 live telemetry samples and a long adapter
+  name: body scrollWidth now equals the viewport with zero elements past the right edge. Added a
+  layout-css regression test for all three guards.
+
+https://claude.ai/code/session_01XwXXuJfUBqCX5XGAMZ9M8S
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.11.1 (2026-06-11)
 
 ### Bug Fixes
