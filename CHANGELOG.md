@@ -1,6 +1,166 @@
 # CHANGELOG
 
 
+## v0.11.1 (2026-06-11)
+
+### Bug Fixes
+
+- 39 bugs across OBD protocol, data layer, services, and dashboard
+  ([#192](https://github.com/jtn0123/VoltTracker/pull/192),
+  [`fe076ba`](https://github.com/jtn0123/VoltTracker/commit/fe076baea97b750524d20f429ac682cf8c2ba27d))
+
+* Fix threading, lifecycle, and probe-vs-session bugs in app-level services/UI
+
+- VoltBridge.setAutoConnectEnabled now marshals via runOnUiThread like every other state-mutating
+  @JavascriptInterface entry, instead of driving publishStatus/maybeAutoConnect/startObdService on
+  the WebView JavaBridge thread. - TroubleshooterBridge: the 30s notify-when-ready tick and
+  startTestConnection now refuse to probe while a real logging session is active. Previously the
+  probe restarted the live session (ObdService.startSession stops the current one first) and the 25s
+  auto-stop then killed it. The tick silently skips and reschedules; a direct test-connection
+  request surfaces a blocked status. - ObdService.startSession increments sessionToken BEFORE
+  stopCurrentSession so a stale interrupted runner can never pass canCurrentThreadCleanupSession()
+  with its old token and tear down the new session's state. - ObdService.onStartCommand stops the
+  service (stopSelf(startId), START_NOT_STICKY) on a null-intent sticky restart or unrecognized
+  action when no session is active, instead of lingering as an invisible orphaned service. -
+  ObdService startForegroundSession/reevaluateForegroundServiceType also catch IllegalStateException
+  (API 31+ ForegroundServiceStartNotAllowedException) and route it to the existing "blocked"
+  fallback instead of crashing. - MainActivity lastTelemetry/lastStatus/lastStorage are @Volatile
+  with a documented replace-don't-mutate contract (read off-thread by
+  exportDebugBundle/getAppStateJson/isLoggingActive). - MainActivity.localStore is @Volatile;
+  documented the close-then-reopen swap in BackupController.applyReplace (same DB file, so the brief
+  null window is unavoidable and covered by existing null checks / RuntimeException handling). -
+  ObdNotifications content PendingIntent adds FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TOP,
+  matching the adapter-ready notification.
+
+Tests: new active-session guards in TroubleshooterBridgeConnectionTest, null/unknown-intent dispatch
+  cases in ObdServiceIntegrationTest, auto-connect forwarding in VoltBridgeDispatchTest, and a new
+  ObdNotificationsTest pinning the content-intent flags.
+
+https://claude.ai/code/session_019XRvscsdsDoxF23KCJfJyE
+
+* Fix OBD protocol layer: DTC count byte, ELM segmented frames, header matching, 7F false negatives,
+  OAT scaling
+
+- DTC parsing (modes 03/07/0A): consume the ISO 15765-4 DTC-count byte after the 43/47/4A positive
+  marker instead of decoding it as DTC data; the count (bounded by available payload) now limits how
+  many 2-byte pairs are read, "43 00" decodes as zero codes, and 0000 padding tolerance is kept.
+  Mode 02 freeze-frame replies now skip the echoed frame-number byte (42 02 00 ...). Remaining-pair
+  tracking carries the count across ISO-TP consecutive frames.
+
+- ELM segmented multi-frame output (ATH0 + CAF1, the app's actual init): parseVin and the DTC parser
+  now detect the segmented format (3-digit hex total-length line + "N:"-prefixed data lines), strip
+  the length line and segment indices, and reassemble the data before hex parsing. Previously the
+  VIN probe could never decode a segmented 0902 reply and multi-frame DTC responses lost every code
+  beyond the first segment.
+
+- EnhancedPidProfiles.find: normalize headers by stripping a leading "ATSH" on both sides so the
+  catalog's "ATSH7E4" matches the bare "7E4" tracked by SessionRecorder; header-scoped
+  field-capability tracking works again.
+
+- EnhancedPidProfiles.isPositiveResponse: only treat a frame as a UDS negative response when it
+  STARTS with 7F + the echoed service id, instead of rejecting any response containing "7F" (which
+  misclassified positives like 410D7F = 127 km/h under ATS0). 7F xx 78 (response pending) lines are
+  skipped rather than treated as rejection.
+
+- 22801E/22801F outside air temperature: switch to the GM convention A/2 - 40 (-40..+87.5 C); the
+  old 0.125/-5 encoding could only express -5.0..+26.9 C, physically impossible for an OAT signal.
+
+Tests rewritten with realistic count-byte/segmented frames and extended to cover zero-code replies,
+  count-bounded padding, segmented VIN and DTC transcripts, bare/ATSH header lookups, and 7F
+  payload-vs-negative cases.
+
+* Fix dashboard core bugs: demo temp units, stale clock, dead drawTrace, toast dedupe, nav-jump
+  delegation, map duration
+
+- actions-demo.ts: browser demo emitted batteryTemp as 72+sin (Fahrenheit- shaped) into a Celsius
+  field, so units.tempText re-converted it to ~162 F. Now 24+sin C, matching DemoPollingLoop.kt. -
+  telemetry.ts setAppState: native re-delivers the LAST sample on every status broadcast, so
+  stamping lastSampleAt = Date.now() on each accepted appState push kept a wedged adapter reading
+  "live". Track the highest sample updatedAt seen (shared with updateTelemetry) and only advance
+  lastSampleAt when updatedAt actually moves, stamping the sample's own clock. - telemetry.ts
+  drawTrace: rendered to #speedCanvas, which exists in no partial/template (the shipped speed trace
+  is drive.ts #liveTraceCanvas). Implementation deleted; an exported no-op stub remains because
+  core.ts/actions.ts demo+stop paths (owned by a parallel change) still call VD.drawTrace(). Removed
+  the actions.ts resize debouncer that only served it and the #speedCanvas fixture in the test
+  harness. - telemetry.ts status toast: clear the dedupe key when the toast hides so a repeated
+  identical action detail re-toasts, and consume the boot baseline on the FIRST setStatus call even
+  when its detail is empty. - telemetry.ts gpsState: Number.isFinite guard (same as the gpsValue
+  tile) so latitude 0 no longer reads as "waiting". - actions.ts: [data-nav-jump] is now a single
+  document-level click delegation (mirroring [data-map-session]) so link chips drive.ts creates at
+  render time navigate; the boot-time per-node binding is gone, so no double-fire. - map.ts: session
+  duration/avg speed need BOTH timestamps. A crash-ended stored session (no endedAtMs) showed
+  duration = time-since-drive with avg ~ 0, and a missing startedAtMs gave an epoch-scale span; both
+  now render "--". Live-route behavior unchanged (its session carries endedAtMs).
+
+Tests: new nav-jump.test.js; extended stale-indicator, status-toast, map-regression, demo-sample
+  suites. 260/260 green, tsc + eslint clean.
+
+* Fix data-layer bugs: cache races, downsampling, merge and summary gaps
+
+- ObdStoreTrips: synchronize all activeTripCache access (reached concurrently from the JS-bridge and
+  OBD polling threads), wrap the trip-list cache delete+inserts in a transaction, and stop the
+  over-capacity prune from evicting the entry it just inserted. - ObdStoreRouteProjection: use
+  ceiling division for the downsampling stride so routes/scalar tracks with totals just above the
+  target are sampled evenly across the whole span instead of keeping the head and collapsing the
+  middle-to-tail into a straight chord; make the map projection honor hidden trips by their
+  point-clipped list id so hiding a post-split trip also removes it from recentRoutes. -
+  ChargeSessionMaterializer: finalize a run split by SPLIT_GAP_MS with the pack-current flag state
+  of its own samples, so a weak-evidence run no longer borrows the next run's OBSERVED confidence. -
+  DiagnosticCodeReport: read last_session_id with nullableLongBoxed so SQL NULL serializes as JSON
+  null instead of session id 0. - DatabaseMerger: make adapter-history/DTC counter merges idempotent
+  for re-imports - when the donor's [first_seen, last_seen] interval is contained in the existing
+  row's, take max per counter instead of summing (documented heuristic). - SessionRecorder: record
+  the session-summary end row whenever the start row was recorded, even when the per-session .jsonl
+  failed to open; only the session_end detail-log line stays gated on the log.
+
+Adds/extends Robolectric and unit tests for every fix.
+
+* fix(dashboard): null-coercion, modal reopen, stale-state and axis bugs in aux panels
+
+Eleven verified fixes across the WebView dashboard's auxiliary modules:
+
+- scrubber: treat null/undefined eff (and other readings) as missing BEFORE Number() coercion —
+  Number(null) is 0, so regen segments rendered as a fake 0.0 readout and an eff trace diving to the
+  chart floor; also re-bind the rebuilt detail tracks after the debounced resize re-render so
+  expanded tracks keep their drag handlers after rotate/resize. - troubleshooter: a dismissed modal
+  no longer reopens on the very next retry status — a dismissed-this-burst flag suppresses both
+  auto-open triggers (retry threshold + consecutive failures) until a clean connect/scan resets the
+  burst; bindHelpAffordance now passes LISTEN_OPTS like every other binding so resetListeners()
+  tears it down. - storage-status: the empty charge-sessions path now runs renderChargeEnergy so
+  clearing data hides (and blanks) the Energy logged card; a legitimate rawTelemetryCount of 0
+  renders as 0 instead of falling back to sampleCount. - insights empty state: extracted
+  VD.hasInsightContent() and re-toggle insightsEmptyState from the insights render path, so the gate
+  is evaluated AFTER loadInsights() refreshes state.insights (setStorage and bootstrap both run
+  renderRealV2Ui before the fresh payload lands). - app-dialog: closeDialog settles the pending
+  promise directly — opening a second dialog used to abort the first one's listeners, leaving its
+  promise pending forever; every path now settles exactly once. - insights scatter: x-axis max grows
+  with the data (next 5 mph, floor 75) so 85-100 mph samples stay inside the viewBox;
+  Highway/Downhill stats use the units helper instead of hardcoding " mi/kWh". - connection-tools:
+  the auto-connect change handler re-polls getAutoConnectState instead of reusing the bind-time
+  snapshot, so the status line shows the current adapter name/cooldown.
+
+Tests added/extended in dashboard-tests for each fix (266 passing).
+
+* Remove drawTrace no-op stub and remaining call sites
+
+The #speedCanvas render path was deleted with the dashboard-core fixes; this drops the temporary
+  compatibility stub, its callers in core.ts/actions.ts, and the test-globals declaration.
+
+* chore: retrigger CI (emulator-smoke tap flake)
+
+The charge-tab tap produced no screenshot change in one of three otherwise-identical emulator-smoke
+  runs on the same commit.
+
+* fix: require both coordinates for the gpsState locked fallback
+
+Review feedback: latitude alone isn't a fix — match the gpsValue tile and require finite latitude
+  AND longitude.
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.11.0 (2026-06-10)
 
 ### Features
