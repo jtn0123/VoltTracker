@@ -66,6 +66,30 @@ describe('dashboard charge session history', () => {
     expect(rows[1].querySelector('b').textContent).toBe('--');
   });
 
+  it('hides and clears the energy card when the charge sessions go away', () => {
+    // Populate: a session with logged energy reveals the energy card.
+    window.VoltDashboard.setStorage({
+      chargeSummary: {
+        chargeSessionCount: 1,
+        recentSessions: [
+          { id: 3, startedAtMs: Date.now() - 3_600_000, endedAtMs: Date.now() - 600_000, chargerType: 'level2', startSoc: 40, endSoc: 90, powerKw: 7.2, energyKwh: 9.6 },
+        ],
+      },
+    });
+    const energyCard = document.getElementById('chargeEnergyCard');
+    expect(energyCard.hidden).toBe(false);
+    expect(document.getElementById('chargeEnergyTotal').textContent).toBe('9.6 kWh');
+
+    // Clear the stored data: the energy card must hide too (its hidden flag is
+    // owned by renderChargeEnergy, which must also run on the empty path) and
+    // drop the stale kWh total.
+    window.VoltDashboard.setStorage({ chargeSummary: { chargeSessionCount: 0 } });
+    expect(document.getElementById('chargeSessionsCard').hidden).toBe(true);
+    expect(energyCard.hidden).toBe(true);
+    expect(document.getElementById('chargeEnergyTotal').textContent).toBe('-- kWh');
+    expect(document.getElementById('chargeEnergyCost').textContent).toBe('--');
+  });
+
   it('marks an in-progress (still plugged in) charge as charging', () => {
     window.VoltDashboard.setStorage({
       chargeSummary: {

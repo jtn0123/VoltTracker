@@ -77,7 +77,11 @@ class VoltBridge(
 
     @JavascriptInterface
     fun setAutoConnectEnabled(enabled: Boolean) {
-        activity.setAutoConnectEnabledFromBridge(enabled)
+        // State-mutating entry point: like its siblings, marshal off the WebView JavaBridge
+        // thread before touching Activity state (publishStatus/maybeAutoConnect/startObdService).
+        activity.runOnUiThread {
+            activity.setAutoConnectEnabledFromBridge(enabled)
+        }
     }
 
     @JavascriptInterface

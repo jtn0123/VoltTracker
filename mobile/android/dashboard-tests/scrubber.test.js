@@ -43,6 +43,24 @@ function withSinglePointRoute() {
 // scrubber.ts must interpolate across the gaps for SOC (nearest-by-time over
 // route.socTrack) and tolerate missing altM for elevation (window-average that
 // skips NaN), never letting a gap collapse a reading to a bogus 0.
+// A route whose eff field has GAPS (null where power data was missing — e.g.
+// regen segments tagged null by insights-panel's enrichRouteEff). Number(null)
+// is 0 (finite!), so these nulls must be screened BEFORE coercion or they
+// render as a bogus 0.0 reading and a trace diving to the chart floor.
+function withNullEffRoute() {
+  const base = 1_700_000_000_000;
+  const effs = [2.5, null, null, 3.1, 3.4];
+  return {
+    points: effs.map((eff, i) => ({
+      lat: 32.700 + i * 0.001,
+      lng: -117.100,
+      atMs: base + i * 10_000,
+      speedMps: 10,
+      eff,
+    })),
+  };
+}
+
 function withGappyRoute() {
   const base = 1_700_000_000_000;
   return {
@@ -278,6 +296,80 @@ describe('scrubber.ts', () => {
     const elev = readoutValue('Elevation');
     expect(elev).not.toBe('--');
     expect(Number(elev.replace(/\s*ft$/, ''))).toBeGreaterThan(0);
+  });
+
+  // ----- null-eff samples must stay missing, never coerce to 0 ---------------
+
+  it('shows the "soon" readout at a null-eff point instead of a fake 0.0', () => {
+    const VD = window.VoltDashboard;
+    const route = withNullEffRoute();
+    giveChartWidth();
+    VD.renderScrubber(route);
+    // Snap to the 2nd point (eff: null). The readout must take the missing-
+    // sample path, not print Number(null) === 0 as "0.0".
+    const nullPoint = route.points[1];
+    VD.scrubAtLatLng(nullPoint.lat, nullPoint.lng);
+    expect(readoutValue('mi/kWh')).toBe('soon');
+
+    // A point that does carry eff still renders its real value.
+    const realPoint = route.points[3];
+    VD.scrubAtLatLng(realPoint.lat, realPoint.lng);
+    expect(readoutValue('mi/kWh')).toBe('3.1');
+  });
+
+  it('the eff polyline skips null points (restarts with M, no point at the chart floor)', () => {
+    const VD = window.VoltDashboard;
+    giveChartWidth();
+    VD.renderScrubber(withNullEffRoute());
+    // The eff trace is the lime path in the combo chart.
+    const effPath = document.querySelector('#scrubChart svg path[stroke="#b8e63b"]');
+    expect(effPath).not.toBeNull();
+    const d = effPath.getAttribute('d');
+    // Points 1-2 are null: the line breaks and restarts (two M commands),
+    // drawing only the 3 real points (one L continuation).
+    expect((d.match(/M/g) || [])).toHaveLength(2);
+    expect((d.match(/L/g) || [])).toHaveLength(1);
+    // eff scale is 0..7 over h=116 padT=12 padB=9, so a coerced null→0 would
+    // land at y=107.0 (the chart floor). It must not.
+    expect(d).not.toContain('107.0');
+  });
+
+  it('a route whose eff is entirely null never lights up the eff trace', () => {
+    const VD = window.VoltDashboard;
+    const route = withNullEffRoute();
+    route.points.forEach((p) => { p.eff = null; });
+    giveChartWidth();
+    VD.renderScrubber(route);
+    // Number(null) === 0 used to flip scrubHasEff on for all-null routes.
+    expect(document.querySelector('#scrubChart svg path[stroke="#b8e63b"]')).toBeNull();
+  });
+
+  // ----- resize must re-bind the rebuilt detail tracks ------------------------
+
+  it('re-binds the expanded detail tracks after a window resize re-render', () => {
+    const VD = window.VoltDashboard;
+    giveChartWidth();
+    VD.renderScrubber(withGappyRoute());
+    // Expand details — tracks render and get their pointer bindings.
+    document.getElementById('scrubToggle').click();
+    const before = Array.from(document.querySelectorAll('#scrubStack .scrub-track'));
+    expect(before.length).toBeGreaterThan(0);
+    before.forEach((track) => expect(track.dataset.scrubBound).toBe('1'));
+
+    // Resize rebuilds the .scrub-track nodes from scratch (debounced 160 ms).
+    vi.useFakeTimers();
+    try {
+      window.dispatchEvent(new window.Event('resize'));
+      vi.advanceTimersByTime(200);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const after = Array.from(document.querySelectorAll('#scrubStack .scrub-track'));
+    expect(after.length).toBe(before.length);
+    // The rebuilt nodes are NEW elements; each must have been re-bound or
+    // dragging on an expanded track dies after rotate/resize.
+    after.forEach((track) => expect(track.dataset.scrubBound).toBe('1'));
   });
 
   afterEach(() => {

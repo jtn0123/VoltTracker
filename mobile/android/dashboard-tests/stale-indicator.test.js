@@ -90,6 +90,57 @@ describe('stale-tile indicator', () => {
     expect(label.textContent).toBe('stale');
   });
 
+  it('does not treat a status broadcast that re-delivers the last sample as fresh', () => {
+    const VD = window.VoltDashboard;
+    const sampleAt = Date.now();
+    window.VoltTrackerNative.updateTelemetry({
+      source: 'real',
+      speedKph: 42,
+      sampleCount: 1,
+      updatedAt: sampleAt,
+    });
+    vi.advanceTimersByTime(1100);
+    const speed = document.getElementById('speedValue');
+    expect(speed.classList.contains('stale')).toBe(false);
+
+    // Adapter wedges: no new samples, but native keeps re-broadcasting the
+    // app state — which carries the LAST sample verbatim — on every status
+    // push. That must NOT keep the tiles/rate chip reporting "live".
+    vi.advanceTimersByTime(4000);
+    VD.setAppState({
+      session: { state: 'connected', sampleCount: 1 },
+      latestTelemetry: { source: 'real', speedKph: 42, sampleCount: 1, updatedAt: sampleAt },
+    });
+    vi.advanceTimersByTime(1100);
+    expect(speed.classList.contains('stale')).toBe(true);
+    expect(document.getElementById('liveRateChip').dataset.state).toBe('stale');
+    // lastSampleAt stayed pinned to the wedged sample's own clock.
+    expect(VD.state.lastSampleAt).toBe(sampleAt);
+  });
+
+  it('accepts an app-state sample whose updatedAt actually advances', () => {
+    const VD = window.VoltDashboard;
+    const sampleAt = Date.now();
+    window.VoltTrackerNative.updateTelemetry({
+      source: 'real',
+      speedKph: 42,
+      sampleCount: 1,
+      updatedAt: sampleAt,
+    });
+    vi.advanceTimersByTime(4100);
+    expect(document.getElementById('speedValue').classList.contains('stale')).toBe(true);
+
+    // A genuinely newer sample arriving via the app-state path clears stale,
+    // and lastSampleAt is stamped with the sample's own updatedAt.
+    const freshAt = Date.now();
+    VD.setAppState({
+      session: { state: 'connected', sampleCount: 2 },
+      latestTelemetry: { source: 'real', speedKph: 44, sampleCount: 2, updatedAt: freshAt },
+    });
+    expect(document.getElementById('speedValue').classList.contains('stale')).toBe(false);
+    expect(VD.state.lastSampleAt).toBe(freshAt);
+  });
+
   it('explains stale telemetry and lets keyboard users reconnect', async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;

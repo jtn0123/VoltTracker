@@ -527,6 +527,22 @@ class VoltBridgeDispatchTest {
         assertEquals(1, activity.cancelAdapterReadyNotifyCalls)
     }
 
+    // ---- auto-connect ------------------------------------------------------------------
+
+    @Test
+    fun setAutoConnectEnabledForwardsFlagViaTheUiThread() {
+        // Regression: this used to call setAutoConnectEnabledFromBridge directly on the WebView
+        // JavaBridge thread; it must marshal through runOnUiThread like every other
+        // state-mutating bridge entry, and still deliver the flag.
+        bridge.setAutoConnectEnabled(true)
+        drain()
+        assertEquals(true, activity.lastAutoConnectEnabled)
+
+        bridge.setAutoConnectEnabled(false)
+        drain()
+        assertEquals(false, activity.lastAutoConnectEnabled)
+    }
+
     // ---- read-through getter -----------------------------------------------------------
 
     @Test
@@ -587,6 +603,7 @@ class VoltBridgeDispatchTest {
 
         var tripRouteJson = "{}"
         var lastTripRouteKey: String? = null
+        var lastAutoConnectEnabled: Boolean? = null
 
         var lastStartedActivity: Intent? = null
 
@@ -715,6 +732,10 @@ class VoltBridgeDispatchTest {
         override fun getTripRouteJson(routeKey: String?): String {
             lastTripRouteKey = routeKey
             return tripRouteJson
+        }
+
+        override fun setAutoConnectEnabledFromBridge(enabled: Boolean) {
+            lastAutoConnectEnabled = enabled
         }
 
         // openExternalSearch's only observable effect is the browser Intent it fires; capture it

@@ -157,6 +157,121 @@ class ObdStoreTripsDbTest {
     }
 
     @Test
+    fun hidingAPostSplitTripByItsListIdAlsoHidesItFromTheMapProjection() {
+        // Post-split windows start at "last inactive sample + 1ms", where no telemetry row exists,
+        // so the LIST id (point-clipped times) always differs from the detector's window key. The
+        // map projection must honor the clipped id too, or a hidden trip keeps rendering as a route.
+        val startMs = 2_000_000L
+        val minuteMs = 60_000L
+        val id = store.startSession("obd", "00:11", "Adapter", startMs)
+        addMovingTelemetryRun(id, startMs, 0, 5, 32.7000)
+        addStoppedTelemetryRun(id, startMs, 6, 12, 32.7100)
+        addMovingTelemetryRun(id, startMs, 13, 18, 32.7200)
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, startMs + 19 * minuteMs, "")
+
+        val trips = store.getTripsJson(40)
+        assertEquals(2, trips.length())
+        val newest = trips.getJSONObject(0)
+        // Sanity: the list id is point-clipped (13m), not the window-key start (12m + 1ms).
+        assertEquals(startMs + 13 * minuteMs, newest.optLong("startedAtMs"))
+        assertEquals(2, store.getRecentRoutesJson(8, 500).length())
+
+        assertTrue(store.markTripNotTrip(newest.getString("id")))
+
+        assertEquals(1, store.getTripsJson(40).length())
+        val routesAfter = store.getRecentRoutesJson(8, 500)
+        assertEquals(
+            "a trip hidden by its list id must disappear from the map projection too",
+            1,
+            routesAfter.length(),
+        )
+        // The surviving route is the FIRST window, not the hidden one.
+        val remainingPoints = routesAfter.getJSONObject(0).getJSONArray("points")
+        assertEquals(startMs, remainingPoints.getJSONObject(0).optLong("atMs"))
+    }
+
+    @Test
+    fun activeTripCachePruneKeepsTheJustInsertedEntryUnderPressure() {
+        // Active (unfinished) session with one meaningful drive window.
+        val id = store.startSession("obd", "00:11", "Adapter", 1000L)
+        store.recordTelemetry(id, gpsSample(35, 32.7000, -117.1000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 32.7100, -117.1000, 2000L))
+
+        // Push the active-trip cache over capacity with same-session keys so the size-pressure
+        // prune fires when tripsJson inserts the freshly computed trip.
+        val cache = activeTripCacheOf(store)
+        val cachedTripCtor =
+            Class
+                .forName("com.volttracker.obdpoc.data.ObdStoreTrips\$CachedTrip")
+                .getDeclaredConstructor(String::class.java, Long::class.javaPrimitiveType)
+        cachedTripCtor.isAccessible = true
+        // Future-dated createdAtMs so the TTL sweep cannot evict the dummies before the
+        // size-pressure prune runs, even on a slow test machine.
+        val createdAtMs = System.currentTimeMillis() + 60_000L
+        synchronized(cache) {
+            for (i in 0 until 64) {
+                cache["$id:dummy:$i"] = cachedTripCtor.newInstance("{}", createdAtMs)
+            }
+        }
+
+        assertEquals(1, store.getTripsJson(40).length())
+
+        synchronized(cache) {
+            assertEquals(
+                "the prune must evict the dummies but keep the entry tripJson just inserted",
+                1,
+                cache.size,
+            )
+            val survivor = cache.keys.iterator().next()
+            assertTrue("survivor must be the real cache key, got $survivor", survivor.startsWith("$id:"))
+            assertTrue("survivor must not be a dummy entry, got $survivor", !survivor.contains("dummy"))
+        }
+    }
+
+    @Test
+    fun concurrentProjectionReadsOnAnActiveSessionShareTheCacheSafely() {
+        // Mirrors production: the WebView JS-bridge thread (getTrips/getInsights) and the OBD
+        // polling thread (storage summary -> totalDistanceMeters) hit the active-trip cache
+        // concurrently. The cache must be safe to read/write/iterate from multiple threads.
+        val id = store.startSession("obd", "00:11", "Adapter", 1000L)
+        store.recordTelemetry(id, gpsSample(35, 32.7000, -117.1000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 32.7100, -117.1000, 2000L))
+        // Left unfinished on purpose — only active sessions exercise the cache.
+
+        val threads = 4
+        val iterations = 25
+        val firstError =
+            java.util.concurrent.atomic
+                .AtomicReference<Throwable>()
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val done = java.util.concurrent.CountDownLatch(threads)
+        for (t in 0 until threads) {
+            Thread {
+                try {
+                    gate.await()
+                    for (i in 0 until iterations) {
+                        store.getTripsJson(40)
+                        store.getInsightsJson()
+                    }
+                } catch (ex: Throwable) {
+                    firstError.compareAndSet(null, ex)
+                } finally {
+                    done.countDown()
+                }
+            }.start()
+        }
+        gate.countDown()
+        assertTrue(
+            "concurrent readers should finish in time",
+            done.await(30, java.util.concurrent.TimeUnit.SECONDS),
+        )
+        val error = firstError.get()
+        if (error != null) {
+            throw AssertionError("concurrent projection reads must not fail", error)
+        }
+    }
+
+    @Test
     fun tripDurationExcludesSustainedInactiveTail() {
         val startMs = 1_000_000L
         val minuteMs = 60_000L
@@ -493,6 +608,17 @@ class ObdStoreTripsDbTest {
     }
 
     companion object {
+        /** Reflects the private active-trip cache out of [ObdLocalStore] -> [ObdStoreTrips]. */
+        @Suppress("UNCHECKED_CAST")
+        private fun activeTripCacheOf(store: ObdLocalStore): HashMap<String, Any> {
+            val tripsField = ObdLocalStore::class.java.getDeclaredField("trips")
+            tripsField.isAccessible = true
+            val trips = tripsField.get(store)
+            val cacheField = trips.javaClass.getDeclaredField("activeTripCache")
+            cacheField.isAccessible = true
+            return cacheField.get(trips) as HashMap<String, Any>
+        }
+
         /**
          * Builds a telemetry sample with GPS, speed and a source marker so the row is counted as
          * "useful" by [ObdStoreSupport.isUsefulTelemetry].

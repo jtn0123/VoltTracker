@@ -551,19 +551,23 @@ object ObdProtocol {
             )?.let { bounded(it, HEATER_POWER_RANGE) }?.let {
                 value("battery heater power", it, "W", 0)
             }
+            // 22801E/22801F: outside air temperature uses the GM convention A/2 - 40
+            // (range -40..+87.5 C). The earlier 0.125/-5 encoding could only express
+            // -5.0..+26.9 C, which is physically impossible for an OAT signal — it could
+            // never report a freezing morning or a hot summer day.
             "22801E" -> return voltByteValue(
                 response,
                 cleanCommand,
-                0.125,
-                -5.0,
+                0.5,
+                -40.0,
             )?.let { bounded(it, TEMP_C_RANGE) }?.let {
                 value("outside air temperature raw", it, "deg C", 1)
             }
             "22801F" -> return voltByteValue(
                 response,
                 cleanCommand,
-                0.125,
-                -5.0,
+                0.5,
+                -40.0,
             )?.let { bounded(it, TEMP_C_RANGE) }?.let {
                 value("outside air temperature filtered", it, "deg C", 1)
             }
@@ -597,15 +601,45 @@ object ObdProtocol {
         val statusLabel = dtcStatusLabel(status)
         val raw = summarize(response)
         val seen = HashSet<String>()
-        var collectingMultiFrame = false
-        for (line in response.split(Regex("[\\r\\n]+"))) {
-            val hex = line.uppercase(Locale.US).replace(Regex("[^0-9A-F]"), "")
+        // ATH0 + CAF1 multi-frame replies print in ELM segmented form (a 3-digit total-length
+        // line, then "N:"-prefixed data lines). Reassemble those into one contiguous payload
+        // before parsing; otherwise the length line and segment indices would pollute the hex.
+        val segmented = elmSegmentedHex(response)
+        val lines =
+            segmented?.let { listOf(it) }
+                ?: response.split(Regex("[\\r\\n]+")).map {
+                    it.uppercase(Locale.US).replace(NON_HEX, "")
+                }
+        var sawMarker = false
+        var remainingPairs = 0
+        for (hex in lines) {
             var index = hex.indexOf(marker)
-            if (index < 0 && collectingMultiFrame) {
-                val continuation = continuationPayload(hex)
-                if (continuation.isNotEmpty()) {
-                    parseDiagnosticPayload(
-                        continuation,
+            if (index < 0) {
+                if (sawMarker && remainingPairs > 0) {
+                    val continuation = continuationPayload(hex)
+                    if (continuation.isNotEmpty()) {
+                        remainingPairs -=
+                            parseDiagnosticPayload(
+                                continuation,
+                                remainingPairs,
+                                status,
+                                statusLabel,
+                                moduleKey,
+                                moduleName,
+                                cleanHeader,
+                                raw,
+                                seen,
+                                codes,
+                            )
+                    }
+                }
+                continue
+            }
+            while (index >= 0) {
+                remainingPairs =
+                    parseDtcMessageStart(
+                        hex.substring(index + marker.length),
+                        marker,
                         status,
                         statusLabel,
                         moduleKey,
@@ -615,32 +649,18 @@ object ObdProtocol {
                         seen,
                         codes,
                     )
-                }
-                continue
-            }
-            while (index >= 0) {
-                val payload = hex.substring(index + marker.length)
-                parseDiagnosticPayload(
-                    payload,
-                    status,
-                    statusLabel,
-                    moduleKey,
-                    moduleName,
-                    cleanHeader,
-                    raw,
-                    seen,
-                    codes,
-                )
-                collectingMultiFrame = true
+                sawMarker = true
                 index = hex.indexOf(marker, index + marker.length)
             }
         }
-        if (codes.isEmpty()) {
-            val hex = response.uppercase(Locale.US).replace(Regex("[^0-9A-F]"), "")
+        if (!sawMarker) {
+            // The marker may straddle a line break (partial socket reads); retry on joined hex.
+            val hex = response.uppercase(Locale.US).replace(NON_HEX, "")
             val index = hex.indexOf(marker)
             if (index >= 0) {
-                parseDiagnosticPayload(
+                parseDtcMessageStart(
                     hex.substring(index + marker.length),
+                    marker,
                     status,
                     statusLabel,
                     moduleKey,
@@ -660,7 +680,11 @@ object ObdProtocol {
         if (response == null) {
             return null
         }
-        val hex = response.uppercase(Locale.US).replace(Regex("[^0-9A-F]"), "")
+        // With ATH0 + CAF1 the 0902 reply is multi-frame and the ELM prints it in segmented
+        // form ("014" total-length line + "N:"-prefixed data lines). Blindly stripping non-hex
+        // characters would keep the length line and segment indices in the stream and misalign
+        // every byte, so reassemble the segments first when that format is detected.
+        val hex = elmSegmentedHex(response) ?: response.uppercase(Locale.US).replace(NON_HEX, "")
         var index = hex.indexOf("490201")
         if (index < 0) {
             index = hex.indexOf("4902")
@@ -840,8 +864,60 @@ object ObdProtocol {
 
     private fun isLikelyStandardCanFrame(hex: String): Boolean = hex.length >= 5 && hex.startsWith("7")
 
-    private fun parseDiagnosticPayload(
-        payload: String?,
+    /**
+     * Reassembles ELM327 "segmented" multi-frame output (the format printed under ATH0 + CAF1):
+     * a 3-digit hex total-length line followed by `N:`-prefixed data lines, e.g.
+     * ```
+     * 014
+     * 0: 49 02 01 31 47 31
+     * 1: 5A 44 35 53 54 38 4A
+     * ```
+     * Returns the concatenated data hex (truncated to the announced total length when present),
+     * or null when the response is not in segmented form.
+     */
+    internal fun elmSegmentedHex(response: String?): String? {
+        if (response == null || !response.contains(':')) {
+            return null
+        }
+        var totalBytes = -1
+        var sawSegment = false
+        val data = StringBuilder()
+        for (rawLine in response.split(Regex("[\\r\\n]+"))) {
+            val line = rawLine.trim().uppercase(Locale.US)
+            if (line.isEmpty() || line == ">") {
+                continue
+            }
+            val segment = ELM_SEGMENT_LINE.matchEntire(line)
+            if (segment != null) {
+                sawSegment = true
+                data.append(segment.groupValues[2].replace(NON_HEX, ""))
+                continue
+            }
+            if (!sawSegment && ELM_LENGTH_LINE.matches(line)) {
+                totalBytes = line.toInt(16)
+            }
+        }
+        if (!sawSegment) {
+            return null
+        }
+        var hex = data.toString()
+        if (totalBytes in 0..(hex.length / 2)) {
+            hex = hex.substring(0, totalBytes * 2)
+        }
+        return hex
+    }
+
+    /**
+     * Parses the head of a positive DTC reply, starting right after the positive-response
+     * marker. On ISO 15765-4 (the only protocol this car speaks) the modes 03/07/0A replies
+     * carry a DTC-count byte before the first code (`43 02 0133 25A2` = "2 codes: P0133,
+     * P25A2"), and mode 02 freeze-frame replies echo the requested frame number
+     * (`42 02 00 0133`). Returns the number of DTC pairs still expected in ISO-TP
+     * consecutive frames (0 when the message is complete or unparseable).
+     */
+    private fun parseDtcMessageStart(
+        afterMarker: String,
+        marker: String,
         status: String,
         statusLabel: String,
         moduleKey: String,
@@ -850,20 +926,77 @@ object ObdProtocol {
         rawResponse: String,
         seen: MutableSet<String>,
         output: MutableList<DiagnosticTroubleCode>,
-    ) {
+    ): Int {
+        if (afterMarker.length < 2) {
+            return 0
+        }
+        var payload = afterMarker
+        var expectedPairs = -1
+        if (marker == "4202") {
+            // Freeze frame: skip the echoed frame-number byte; no count byte follows.
+            payload = payload.substring(2)
+        } else {
+            // Modes 03/07/0A: consume the DTC-count byte and use it (bounded by what is
+            // actually available) to know how many 2-byte DTC pairs to read. "43 00" means
+            // zero stored codes.
+            expectedPairs =
+                try {
+                    payload.substring(0, 2).toInt(16)
+                } catch (ex: NumberFormatException) {
+                    return 0
+                }
+            payload = payload.substring(2)
+            if (expectedPairs == 0) {
+                return 0
+            }
+        }
+        val consumed =
+            parseDiagnosticPayload(
+                payload,
+                expectedPairs,
+                status,
+                statusLabel,
+                moduleKey,
+                moduleName,
+                header,
+                rawResponse,
+                seen,
+                output,
+            )
+        return if (expectedPairs > consumed) expectedPairs - consumed else 0
+    }
+
+    /**
+     * Reads up to [maxPairs] 2-byte DTC pairs from [payload] (negative = unlimited), skipping
+     * `0000` padding/terminator pairs. Returns how many pairs were consumed, so multi-frame
+     * callers can track how many codes the count byte still owes them.
+     */
+    private fun parseDiagnosticPayload(
+        payload: String?,
+        maxPairs: Int,
+        status: String,
+        statusLabel: String,
+        moduleKey: String,
+        moduleName: String,
+        header: String,
+        rawResponse: String,
+        seen: MutableSet<String>,
+        output: MutableList<DiagnosticTroubleCode>,
+    ): Int {
         if (payload == null) {
-            return
+            return 0
         }
         val limit = payload.length - (payload.length % 4)
         var i = 0
-        while (i + 3 < limit) {
+        var consumed = 0
+        while (i + 3 < limit && (maxPairs < 0 || consumed < maxPairs)) {
             val first: Int
             val second: Int
             try {
                 first = payload.substring(i, i + 2).toInt(16)
                 second = payload.substring(i + 2, i + 4).toInt(16)
             } catch (ex: NumberFormatException) {
-                return
+                return consumed
             }
             if (first != 0 || second != 0) {
                 val code = decodeDtc(first, second)
@@ -874,8 +1007,10 @@ object ObdProtocol {
                     )
                 }
             }
+            consumed++
             i += 4
         }
+        return consumed
     }
 
     private fun decodeDtc(
@@ -1160,6 +1295,12 @@ object ObdProtocol {
         value: Double,
         decimals: Int,
     ): String = String.format(Locale.US, "%.${decimals}f", value)
+
+    private val NON_HEX = Regex("[^0-9A-F]")
+
+    // ELM segmented multi-frame output (ATH0 + CAF1): "N:" data lines + 3-digit length line.
+    private val ELM_SEGMENT_LINE = Regex("([0-9A-F]{1,3}):\\s*(.*)")
+    private val ELM_LENGTH_LINE = Regex("[0-9A-F]{3}")
 
     private val SPEED_KPH_RANGE = Range(0.0, 250.0)
     private val RPM_RANGE = Range(0.0, 8_000.0)

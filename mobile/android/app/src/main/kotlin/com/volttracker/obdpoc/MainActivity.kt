@@ -80,7 +80,13 @@ open class MainActivity :
 
     @JvmField var permissionGate: PermissionGate? = null
 
-    override var localStore: ObdLocalStore? = null
+    // Threading contract: written on the UI thread (onCreate/onDestroy) and on the backup
+    // executor during a Replace restore (BackupController.applyReplace closes the store, nulls
+    // this, then reopens the same DB file — close-then-open is unavoidable because both stores
+    // would target one SQLite file). @Volatile keeps JS-bridge readers from seeing a stale
+    // reference; a reader that still races the brief null/closed window is covered by the
+    // existing null checks and RuntimeException handling around store reads.
+    @Volatile override var localStore: ObdLocalStore? = null
 
     @JvmField var troubleshooter: TroubleshooterBridge? = null
 
@@ -100,9 +106,17 @@ open class MainActivity :
     }
 
     private var pendingConnectStart: PendingObdStart? = null
-    private var lastTelemetry = JSONObject()
-    private var lastStatus = JSONObject()
-    private var lastStorage = JSONObject()
+
+    // Threading contract: these payload snapshots are REPLACED wholesale on the UI thread and
+    // never mutated in place. @Volatile makes each swapped-in JSONObject safely publishable to
+    // the WebView JavaBridge thread (exportDebugBundle/getAppStateJson/isLoggingActive read them
+    // off the UI thread). Anyone adding a `.put(...)` on these after assignment must instead
+    // build a fresh object and reassign.
+    @Volatile private var lastTelemetry = JSONObject()
+
+    @Volatile private var lastStatus = JSONObject()
+
+    @Volatile private var lastStorage = JSONObject()
     private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val storageReader = DashboardStorageReader { localStore }
     private val broadcastCoordinator =

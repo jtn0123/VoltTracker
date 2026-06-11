@@ -45,7 +45,14 @@ class TroubleshooterBridge(
                     adapterReadyActive = false
                     return
                 }
-                startTestConnection()
+                // Never probe while a real logging session is running: ObdService.startSession
+                // begins with stopCurrentSession (restarting the user's live session) and the
+                // probe's 25 s auto-stop would then kill it. Skip this tick and reschedule —
+                // the "adapter ready" notification stays driven by probe-initiated statuses
+                // only (probeInFlight), so a user session never fakes a probe result.
+                if (!activity.isLoggingActive()) {
+                    startTestConnection()
+                }
                 if (adapterReadyHandler != null && adapterReadyActive) {
                     adapterReadyHandler?.postDelayed(this, ADAPTER_READY_INTERVAL_MS)
                 }
@@ -203,6 +210,16 @@ class TroubleshooterBridge(
      * Start a one-shot probe session against the last-known adapter and schedule a stop.
      */
     fun startTestConnection() {
+        if (activity.isLoggingActive()) {
+            // A probe would restart the live session (ObdService.startSession stops the current
+            // one first) and the scheduled auto-stop below would then kill it 25 s later.
+            activity.publishStatus(
+                "blocked",
+                "Logging is already running — stop it before starting a test connection.",
+                true,
+            )
+            return
+        }
         val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
         val address = device.optString("address", "")
         val name = device.optString("name", "Test connection")

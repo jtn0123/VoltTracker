@@ -27,6 +27,13 @@ class SessionRecorder {
     private var lastPersistedStatusKey = ""
     private var lastPersistedStatusAtMs = 0L
 
+    /**
+     * True once [SessionSummaryStore.recordStart] succeeded for the active session, so closeSession
+     * can write the matching end row even when the per-session `.jsonl` log failed to open —
+     * storage-failure sessions are exactly the ones the troubleshooter needs summaries for.
+     */
+    private var summaryStartRecorded = false
+
     private val recentStatusWriteMs = LongArray(STATUS_RATE_MAX_PER_WINDOW)
     private var recentStatusWriteCount = 0
     private var recentStatusWriteHead = 0
@@ -91,6 +98,7 @@ class SessionRecorder {
                 if (summaryStore != null && ObdLocalStore.MODE_DEMO != mode) {
                     try {
                         summaryStore.recordStart(startedAtMs, activeAdapterName, activeAddress)
+                        summaryStartRecorded = true
                     } catch (ex: RuntimeException) {
                         Log.w(MainActivity.TAG, "summaryStore.recordStart failed", ex)
                     }
@@ -144,19 +152,23 @@ class SessionRecorder {
             val closingAddress = activeAddress
             if (sessionLog.isOpen()) {
                 logEvent("session_end")
-                if (summaryStore != null && ObdLocalStore.MODE_DEMO != closingMode) {
-                    try {
-                        summaryStore.recordEnd(
-                            System.currentTimeMillis(),
-                            outcomeFor(state, sampleCount),
-                            sampleCount,
-                            failureClassFor(state, sessionFailureClass),
-                        )
-                    } catch (ex: RuntimeException) {
-                        Log.w(MainActivity.TAG, "summaryStore.recordEnd failed", ex)
-                    }
+            }
+            // The summary end row is written whenever a start row was recorded — even when the
+            // per-session .jsonl never opened (storage failure). Only the "session_end" detail-log
+            // line above stays conditional on the log being open.
+            if (summaryStartRecorded && summaryStore != null && ObdLocalStore.MODE_DEMO != closingMode) {
+                try {
+                    summaryStore.recordEnd(
+                        System.currentTimeMillis(),
+                        outcomeFor(state, sampleCount),
+                        sampleCount,
+                        failureClassFor(state, sessionFailureClass),
+                    )
+                } catch (ex: RuntimeException) {
+                    Log.w(MainActivity.TAG, "summaryStore.recordEnd failed", ex)
                 }
             }
+            summaryStartRecorded = false
             sessionLog.close()
             val store = localStore
             if (closingSessionId > 0 && store != null) {

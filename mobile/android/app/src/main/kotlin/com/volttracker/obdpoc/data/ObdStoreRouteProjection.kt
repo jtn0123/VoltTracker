@@ -76,6 +76,12 @@ object ObdStoreRouteProjection {
                 if (points == null || points.length() < 2) {
                     continue
                 }
+                // The trip list exposes ids built from the point-clipped start/end (which differ
+                // from the window bounds for post-split windows), so a trip hidden by its list id
+                // must also be honored here or it would stay visible on the map.
+                if (hiddenRouteKeys.contains(clippedRouteKey(session.id, points, window))) {
+                    continue
+                }
                 if (!ObdSessionClassifier.isMeaningfulTrip(
                         points.length(),
                         route.optDouble("distanceMeters", 0.0),
@@ -91,6 +97,21 @@ object ObdStoreRouteProjection {
             }
         }
         return payload
+    }
+
+    /**
+     * Route key in the same point-clipped form `ObdStoreTrips.tripJson` uses for the trip-list id:
+     * `sessionId:firstPointAtMs:lastPointAtMs`, falling back to the window bounds.
+     */
+    @Throws(JSONException::class)
+    private fun clippedRouteKey(
+        sessionId: Long,
+        points: JSONArray,
+        window: DriveWindowDetector.DriveWindow,
+    ): String {
+        val startedAtMs = points.getJSONObject(0).optLong("atMs", window.startedAtMs)
+        val endedAtMs = points.getJSONObject(points.length() - 1).optLong("atMs", window.endedAtMs)
+        return "$sessionId:$startedAtMs:$endedAtMs"
     }
 
     @JvmStatic
@@ -364,7 +385,13 @@ object ObdStoreRouteProjection {
         if (total <= target || target <= 1) {
             return 1L
         }
-        return maxOf(1L, (total - 1L) / (target - 1).toLong())
+        // Ceiling division so the stride covers the WHOLE span in at most target-1 steps. Floor
+        // division yielded stride == 1 for total in (target, 2*target-2], which made the caller
+        // keep the first target-1 rows plus the final row — collapsing the route's middle-to-tail
+        // into a single straight chord instead of sampling evenly.
+        val span = total - 1L
+        val slots = (target - 1).toLong()
+        return maxOf(1L, (span + slots - 1L) / slots)
     }
 
     private class RoutePointTotals(

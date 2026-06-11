@@ -323,7 +323,20 @@ import {
     );
     VD.setText("mapDistance", hasMapContent ? VD.formatDistance(route.distanceMeters || 0) : "--");
     const session = route.session || {};
-    const duration = Number(session.endedAtMs || Date.now()) - Number(session.startedAtMs || 0);
+    // Duration needs BOTH timestamps to be real. A stored session that crashed
+    // before writing endedAtMs would otherwise read as time-since-the-drive
+    // (and avg ≈ 0), and a missing startedAtMs yields an epoch-scale span —
+    // show "--" instead, like every other missing value. The live route has no
+    // endedAtMs yet by design; "now" is the honest end of the current drive.
+    const startedAtMs = Number(session.startedAtMs);
+    const endedAtMsRaw = Number(session.endedAtMs);
+    const endedAtMs = Number.isFinite(endedAtMsRaw) && endedAtMsRaw > 0
+      ? endedAtMsRaw
+      : (isLiveRoute ? Date.now() : NaN);
+    const hasTimestamps =
+      Number.isFinite(startedAtMs) && startedAtMs > 0 &&
+      Number.isFinite(endedAtMs) && endedAtMs > 0;
+    const duration = hasTimestamps ? endedAtMs - startedAtMs : 0;
     VD.setText("mapDuration", hasMapContent && duration > 0 ? VD.formatDuration(duration) : "--");
     // Avg moving speed from GPS: distance / duration, ignoring stopped time at the
     // granularity of the route. More useful than GPS accuracy. Shown in the user's

@@ -69,9 +69,9 @@ object ChargeSessionMaterializer {
             return result
         }
 
-        // Walk the samples once to find out whether the high-confidence pack-current signal ever
-        // fires in this session; if it does we materialize OBSERVED, otherwise the fallback voltage
-        // heuristic produces WEAK rows.
+        // Walk the samples once, tracking per run whether the high-confidence pack-current signal
+        // ever fires inside it; if it does that run materializes OBSERVED, otherwise the fallback
+        // voltage heuristic produces a WEAK row.
         var usedPackCurrent = false
         var currentRun = ArrayList<TelemetrySample>()
         var interruptions = 0
@@ -79,22 +79,25 @@ object ChargeSessionMaterializer {
         for (sample in telemetry) {
             val plugged = isPluggedSample(sample)
             if (plugged != PluggedReason.NOT_PLUGGED) {
-                if (plugged == PluggedReason.PACK_CURRENT) {
-                    usedPackCurrent = true
-                }
                 if (currentRun.isNotEmpty()) {
                     val gap = sample.capturedAtMs - currentRun[currentRun.size - 1].capturedAtMs
                     if (gap > Tunables.SPLIT_GAP_MS) {
+                        // Finalize the old run with the flag state as of ITS OWN samples — the
+                        // incoming sample's evidence belongs to the run that starts with it, not
+                        // to the one being closed.
                         val finalized = finalizeRun(currentRun, interruptions, usedPackCurrent)
                         if (finalized != null) {
                             result.add(finalized)
                         }
                         currentRun = ArrayList()
                         interruptions = 0
-                        usedPackCurrent = plugged == PluggedReason.PACK_CURRENT
+                        usedPackCurrent = false
                     } else if (gap > Tunables.MAX_GAP_MS) {
                         interruptions += 1
                     }
+                }
+                if (plugged == PluggedReason.PACK_CURRENT) {
+                    usedPackCurrent = true
                 }
                 currentRun.add(sample)
             } else if (currentRun.isNotEmpty() && breaksChargeRun(sample)) {

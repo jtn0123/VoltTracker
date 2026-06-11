@@ -95,6 +95,11 @@ import { haversineMetersJs } from "./map-route-utils";
 
   const scrubClamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+  // Number(null) is 0 (finite!), which would silently coerce missing samples
+  // into real readings. Treat null/undefined as NaN BEFORE coercion so a
+  // null-eff regen segment stays "missing" instead of becoming 0.0.
+  const scrubNum = (v: unknown) => (v == null ? NaN : Number(v));
+
   function scrubberAttachMap(map: ScrubMapHandle) {
     scrubMap = map;
   }
@@ -184,7 +189,7 @@ import { haversineMetersJs } from "./map-route-utils";
 
     scrubHasElev = pts.some((p) => Number.isFinite(Number(p.altM)));
     const rawElev = pts.map((p) => Number(p.altM));
-    scrubHasEff = pts.some((p) => Number.isFinite(Number(p.eff)));
+    scrubHasEff = pts.some((p) => Number.isFinite(scrubNum(p.eff)));
     const track = Array.isArray(route.socTrack) ? route.socTrack as ScrubSocPoint[] : [];
     scrubHasSoc = track.length >= 2;
 
@@ -197,7 +202,7 @@ import { haversineMetersJs } from "./map-route-utils";
       point.soc = scrubHasSoc ? scrubSocAt(track, point.atMs) : null;
       // Don't coerce null -> 0; missing samples must remain null so the chart
       // can skip them and the readout can show "soon" rather than "0.0".
-      const eff = Number(routePoint.eff);
+      const eff = scrubNum(routePoint.eff);
       point.eff = scrubHasEff && Number.isFinite(eff) ? eff : null;
     }
     for (let i = 0; i < n; i += 1) {
@@ -278,7 +283,7 @@ import { haversineMetersJs } from "./map-route-utils";
     for (let i = 0; i < scrubData.length; i += 1) {
       const point = scrubData[i];
       if (!point) continue;
-      const v = Number(point[key]);
+      const v = scrubNum(point[key]);
       if (!Number.isFinite(v)) {
         started = false;
         continue;
@@ -299,7 +304,7 @@ import { haversineMetersJs } from "./map-route-utils";
     let lo = Infinity;
     let hi = -Infinity;
     scrubData.forEach((p) => {
-      const v = Number(p[key]);
+      const v = scrubNum(p[key]);
       if (!Number.isFinite(v)) return;
       if (v < lo) lo = v;
       if (v > hi) hi = v;
@@ -621,6 +626,16 @@ import { haversineMetersJs } from "./map-route-utils";
     });
   }
 
+  // Re-attach drag handlers to every expanded stack track. renderScrubCharts()
+  // rebuilds the .scrub-track nodes from scratch (no listeners), so every
+  // re-render path — initial render, the Details toggle, AND window resize —
+  // must re-run the binding or expanded tracks silently lose drag.
+  function bindScrubTracks() {
+    Array.prototype.slice
+      .call(document.querySelectorAll("#scrubStack .scrub-track"))
+      .forEach((node) => bindScrubChart(node as HTMLElement));
+  }
+
   function hideScrubber() {
     const node = el("scrubber");
     if (node) node.hidden = true;
@@ -670,14 +685,8 @@ import { haversineMetersJs } from "./map-route-utils";
       }
     }
     renderScrubCharts();
-    [el("scrubChart")]
-      .concat(
-        Array.prototype.slice.call(
-          document.querySelectorAll("#scrubStack .scrub-track")
-        )
-      )
-      .filter(Boolean)
-      .forEach(bindScrubChart);
+    bindScrubChart(el("scrubChart"));
+    bindScrubTracks();
     setScrubCursor(0.5);
   }
 
@@ -692,9 +701,7 @@ import { haversineMetersJs } from "./map-route-utils";
       if (stack) stack.hidden = !scrubExpanded;
       if (scrubData.length) {
         renderScrubCharts();
-        Array.prototype.slice
-          .call(document.querySelectorAll("#scrubStack .scrub-track"))
-          .forEach((node) => bindScrubChart(node));
+        bindScrubTracks();
         setScrubCursor(scrubFrac);
       }
     });
@@ -766,6 +773,7 @@ import { haversineMetersJs } from "./map-route-utils";
       const node = el("scrubber");
       if (scrubData.length && node && !node.hidden) {
         renderScrubCharts();
+        bindScrubTracks();
         setScrubCursor(scrubFrac);
       }
     }, 160);

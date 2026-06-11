@@ -470,6 +470,46 @@ class SessionRecorderTest {
         assertEquals("OBDLink MX+", recent[0].adapter)
     }
 
+    /**
+     * Storage-failure sessions are exactly the ones the troubleshooter needs summaries for: when
+     * the per-session `.jsonl` fails to open (the recorder logs "session_log_unavailable"), the
+     * summary store must still record both the start AND the end of the session — previously
+     * recordEnd was gated on the detail log being open, so those sessions silently vanished from
+     * `sessions-summary.jsonl`.
+     */
+    @Test
+    fun summaryEndIsRecordedEvenWhenTheDetailLogFailsToOpen() {
+        SessionSummaryStore.resetForTests()
+        val filesDir =
+            File(System.getProperty("java.io.tmpdir"), "summary-store-" + System.nanoTime())
+        filesDir.mkdirs()
+        val summary = SessionSummaryStore.getInstance(filesDir)
+
+        // A plain FILE where the logs directory should be makes ObdSessionLog.open() fail
+        // (mkdirs fails and it isn't a directory), so the detail log never opens.
+        val bogusLogsDir =
+            File(System.getProperty("java.io.tmpdir"), "sr-bad-logs-" + System.nanoTime())
+        assertTrue(bogusLogsDir.createNewFile())
+        val sessionLog = ObdSessionLog(bogusLogsDir)
+        val recorder = SessionRecorder(Any(), sessionLog, RecordingStore(), summary, null)
+
+        recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "OBDLink MX+", 3_000L)
+        assertFalse("precondition: the detail log must have failed to open", sessionLog.isOpen())
+        recorder.closeSession("connected", "ok", "0100", 7)
+        recorder.shutdown()
+
+        val recent = summary.getRecent(5)
+        assertEquals(
+            "the session summary must record start AND end despite the failed detail log",
+            1,
+            recent.size,
+        )
+        assertEquals(3_000L, recent[0].startMs)
+        assertTrue("endMs must be recorded", recent[0].endMs >= recent[0].startMs)
+        assertEquals("OBDLink MX+", recent[0].adapter)
+        assertEquals(SessionSummary.OUTCOME_SUCCESS, recent[0].outcome)
+    }
+
     // ---- helpers ------------------------------------------------------------------
 
     private fun newRecorderWithSummary(

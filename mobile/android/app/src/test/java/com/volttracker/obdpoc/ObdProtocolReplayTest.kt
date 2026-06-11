@@ -73,7 +73,8 @@ class ObdProtocolReplayTest {
 
     @Test
     fun diagnosticTranscriptReplaysStoredAndContinuationCodes() {
-        val stored = "7E8 10 08 43 01 33 25 A2\r7E8 21 C0 73 00 00 00 00\r>"
+        // FF carries 43 + DTC-count 03 + the first two codes; the CF carries the third.
+        val stored = "7E8 10 08 43 03 01 33 25 A2\r7E8 21 C0 73 00 00 00 00\r>"
 
         val codes = ObdProtocol.parseDiagnosticTroubleCodes("03", stored, "7E8")
 
@@ -98,6 +99,8 @@ class ObdProtocolReplayTest {
     // ISO-TP PCI (first data byte after the header):
     //   * First Frame (FF)       : "1L LL" — high nibble 1, then a 12-bit total length.
     //   * Consecutive Frame (CF) : "2N"    — high nibble 2, low nibble = sequence number 0..F.
+    // ISO 15765-4 DTC payload: the mode 03/07/0A positive marker is immediately followed by a
+    // DTC-COUNT byte, then the 2-byte DTC pairs ("43 02 01 33 25 A2" = 2 codes).
     // The marker "43" (mode-03 positive reply) lives in the FF, so the FF is decoded by the main
     // loop and only CFs flow through `continuationPayload`.
     // DTC decode reference (decodeDtc): 0x0133->P0133, 0x25A2->P25A2, 0xC073->U0073,
@@ -106,9 +109,9 @@ class ObdProtocolReplayTest {
     @Test
     fun singleFrameDtcResponseDecodesBothCodes() {
         // 11-bit single frame (SF, PCI high nibble 0). One CAN frame carries everything:
-        //   7E8 | 06 | 43 | 01 33 | 25 A2 | 00 00
-        //   ^ID   ^SF len=6  ^mode  ^DTC1   ^DTC2   ^padding (00 00 -> skipped)
-        val codes = ObdProtocol.parseDiagnosticTroubleCodes("03", "7E8 06 43 01 33 25 A2 00 00\r>", "7E8")
+        //   7E8 | 06 | 43 | 02 | 01 33 | 25 A2
+        //   ^ID   ^SF len=6  ^mode ^count  ^DTC1   ^DTC2
+        val codes = ObdProtocol.parseDiagnosticTroubleCodes("03", "7E8 06 43 02 01 33 25 A2\r>", "7E8")
 
         assertEquals(2, codes.size)
         assertEquals("P0133", codes[0].code)
@@ -122,10 +125,10 @@ class ObdProtocolReplayTest {
         // contains 0x18 — the exact bytes the per-line sniff in `continuationPayload` keys on for
         // 11-bit / 29-bit headers. Correct reassembly must ignore payload content and slice using
         // the CAN-ID-prefix offset only.
-        //   FF: 7E8 | 10 0A | 43 | 01 33 | 25 A2     (FF, total ISO-TP length 0x00A=10 bytes)
-        //   CF: 7E8 | 21    | 73 11 | 18 42 | 00 00  (CF seq 1; payload bytes 73 11 18 42, then pad)
-        // DTCs: FF -> P0133, P25A2 ; CF -> 0x7311=C3311, 0x1842=P1842 (0x0000 padding skipped).
-        val response = "7E8 10 0A 43 01 33 25 A2\r7E8 21 73 11 18 42 00 00\r>"
+        //   FF: 7E8 | 10 0A | 43 | 04 | 01 33 | 25 A2   (FF, total ISO-TP length 0x00A=10 bytes)
+        //   CF: 7E8 | 21    | 73 11 | 18 42 | 00 00     (CF seq 1; payload bytes 73 11 18 42, then pad)
+        // DTCs: FF -> P0133, P25A2 ; CF -> 0x7311=C3311, 0x1842=P1842 (count=4 stops at the pad).
+        val response = "7E8 10 0A 43 04 01 33 25 A2\r7E8 21 73 11 18 42 00 00\r>"
 
         val codes = ObdProtocol.parseDiagnosticTroubleCodes("03", response, "7E8")
 
@@ -141,11 +144,11 @@ class ObdProtocolReplayTest {
         // 29-bit extended addressing: 8-hex header "18 DA F1 10" precedes every frame. The CF
         // payload deliberately STARTS with 0x18 — colliding with the "18" extended-header sniff —
         // to prove reassembly slices after header(8)+PCI(2), not at the payload's leading bytes.
-        //   FF: 18 DA F1 10 | 10 08 | 43 | 01 33 | 25 A2 | 00     (FF, total length 0x008=8)
-        //   CF: 18 DA F1 10 | 21    | 18 42 | C0 73 | 00 00 00     (CF seq 1; payload 18 42 C0 73 ...)
-        // DTCs: FF -> P0133, P25A2 ; CF -> 0x1842=P1842, 0xC073=U0073 (trailing 00s skipped).
+        //   FF: 18 DA F1 10 | 10 0A | 43 | 04 | 01 33 | 25 A2  (FF, total length 0x00A=10)
+        //   CF: 18 DA F1 10 | 21    | 18 42 | C0 73 | 00 00 00 (CF seq 1; payload 18 42 C0 73 ...)
+        // DTCs: FF -> P0133, P25A2 ; CF -> 0x1842=P1842, 0xC073=U0073 (count=4 stops at the pad).
         val response =
-            "18 DA F1 10 10 08 43 01 33 25 A2 00\r18 DA F1 10 21 18 42 C0 73 00 00 00\r>"
+            "18 DA F1 10 10 0A 43 04 01 33 25 A2\r18 DA F1 10 21 18 42 C0 73 00 00 00\r>"
 
         val codes = ObdProtocol.parseDiagnosticTroubleCodes("03", response, "18DAF110")
 
@@ -161,10 +164,10 @@ class ObdProtocolReplayTest {
     fun multiFrameDtcHeadersOffWithAdversarialConsecutivePayload() {
         // Headers-off (ATH0): no CAN ID is printed, so each line is just PCI + data. The CF payload
         // starts with 0x73 ("7x"); with no CAN ID the sniff must NOT mistake it for an 11-bit header.
-        //   FF: 10 08 | 43 | 01 33 | 25 A2 | 00       (FF, total length 0x008=8)
-        //   CF: 21    | 73 11 | 00 00 00 00 00        (CF seq 1; payload 73 11, then pad)
-        // DTCs: FF -> P0133, P25A2 ; CF -> 0x7311=C3311 (trailing 00s skipped).
-        val response = "10 08 43 01 33 25 A2 00\r21 73 11 00 00 00 00 00\r>"
+        //   FF: 10 08 | 43 | 03 | 01 33 | 25 A2     (FF, total length 0x008=8)
+        //   CF: 21    | 73 11 | 00 00 00 00 00      (CF seq 1; payload 73 11, then pad)
+        // DTCs: FF -> P0133, P25A2 ; CF -> 0x7311=C3311 (count=3 stops at the pad).
+        val response = "10 08 43 03 01 33 25 A2\r21 73 11 00 00 00 00 00\r>"
 
         val codes = ObdProtocol.parseDiagnosticTroubleCodes("03", response, "")
 
@@ -176,12 +179,28 @@ class ObdProtocolReplayTest {
     }
 
     @Test
+    fun segmentedElmDtcTranscriptReassemblesAcrossSegments() {
+        // ELM segmented output, the format the app's actual init (ATH0 + CAF1) produces for
+        // multi-frame replies: 3-digit total-length line then "N:"-prefixed segment lines.
+        //   total 0x00A = 10 bytes: 43 | 04 | 01 33 | 25 A2 | C0 73 | 18 42
+        val response = "00A\r0: 43 04 01 33 25 A2\r1: C0 73 18 42 00 00 00\r\r>"
+
+        val codes = ObdProtocol.parseDiagnosticTroubleCodes("03", response, "")
+
+        assertEquals(4, codes.size)
+        assertEquals("P0133", codes[0].code)
+        assertEquals("P25A2", codes[1].code)
+        assertEquals("U0073", codes[2].code)
+        assertEquals("P1842", codes[3].code)
+    }
+
+    @Test
     fun multiFramePendingDtcMode07ReassemblesAcrossFrames() {
         // Same reassembly path for mode 07 (pending codes -> marker "47"). 11-bit FF + CF.
-        //   FF: 7E8 | 10 08 | 47 | 01 33 | 25 A2          (FF, total length 8)
-        //   CF: 7E8 | 21    | C0 73 | 00 00 00 00         (CF seq 1; payload C0 73, then pad)
+        //   FF: 7E8 | 10 08 | 47 | 03 | 01 33 | 25 A2      (FF, total length 8)
+        //   CF: 7E8 | 21    | C0 73 | 00 00 00 00          (CF seq 1; payload C0 73, then pad)
         // DTCs: P0133, P25A2 (FF) ; U0073 (CF), all flagged "pending".
-        val response = "7E8 10 08 47 01 33 25 A2\r7E8 21 C0 73 00 00 00 00\r>"
+        val response = "7E8 10 08 47 03 01 33 25 A2\r7E8 21 C0 73 00 00 00 00\r>"
 
         val codes = ObdProtocol.parseDiagnosticTroubleCodes("07", response, "7E8")
 

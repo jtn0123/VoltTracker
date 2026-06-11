@@ -92,7 +92,7 @@ class DiagnosticCodeReport(
                 cursor.getLong(cursor.getColumnIndexOrThrow("first_seen_ms")),
                 cursor.getLong(cursor.getColumnIndexOrThrow("last_seen_ms")),
                 cursor.getLong(cursor.getColumnIndexOrThrow("seen_count")),
-                ObdStoreSupport.nullableLong(cursor, "last_session_id"),
+                ObdStoreSupport.nullableLongBoxed(cursor, "last_session_id"),
                 cursor.getString(cursor.getColumnIndexOrThrow("raw_response")),
             )
     }

@@ -98,6 +98,100 @@ describe('map.ts — route selection regressions', () => {
     expect(document.querySelector('[data-map-session="__live_current__"]').classList.contains('is-active')).toBe(true);
   });
 
+  it('shows duration and avg speed for a stored session with both timestamps', () => {
+    const VD = window.VoltDashboard;
+    const start = Date.now() - 3_600_000;
+    VD.state.storage = {
+      recentRoutes: [
+        {
+          session: { id: 'full-route', startedAtMs: start, endedAtMs: start + 600_000 },
+          points: [
+            { lat: 32.7, lng: -117.1 },
+            { lat: 32.8, lng: -117.2 },
+          ],
+          distanceMeters: 10_000,
+        },
+      ],
+    };
+
+    VD.renderMap();
+
+    expect(document.getElementById('mapDuration').textContent).toBe('10m 00s');
+    expect(document.getElementById('mapAvgMph').textContent).not.toBe('--');
+  });
+
+  it('renders "--" duration/avg for a crash-ended session missing endedAtMs', () => {
+    const VD = window.VoltDashboard;
+    // A session whose recording crashed before endedAtMs was written. The old
+    // code fell back to Date.now(), showing duration = time-since-the-drive
+    // and an average speed of ~0.
+    VD.state.storage = {
+      recentRoutes: [
+        {
+          session: { id: 'crashed-route', startedAtMs: Date.now() - 86_400_000 },
+          points: [
+            { lat: 32.7, lng: -117.1 },
+            { lat: 32.8, lng: -117.2 },
+          ],
+          distanceMeters: 10_000,
+        },
+      ],
+    };
+
+    VD.renderMap();
+
+    expect(document.getElementById('mapDuration').textContent).toBe('--');
+    expect(document.getElementById('mapAvgMph').textContent).toBe('--');
+    // Distance is still real and still shown.
+    expect(document.getElementById('mapDistance').textContent).not.toBe('--');
+  });
+
+  it('renders "--" duration for a session missing startedAtMs instead of an epoch-scale span', () => {
+    const VD = window.VoltDashboard;
+    VD.state.storage = {
+      recentRoutes: [
+        {
+          session: { id: 'no-start-route', endedAtMs: Date.now() },
+          points: [
+            { lat: 32.7, lng: -117.1 },
+            { lat: 32.8, lng: -117.2 },
+          ],
+          distanceMeters: 10_000,
+        },
+      ],
+    };
+
+    VD.renderMap();
+
+    expect(document.getElementById('mapDuration').textContent).toBe('--');
+    expect(document.getElementById('mapAvgMph').textContent).toBe('--');
+  });
+
+  it('keeps live-route duration ticking against the current clock', () => {
+    const VD = window.VoltDashboard;
+    const start = Date.now() - 120_000;
+    VD.updateTelemetry({
+      source: 'demo',
+      latitude: 32.7001,
+      longitude: -117.1001,
+      speedKph: 24,
+      sampleCount: 1,
+      updatedAt: start,
+    });
+    VD.updateTelemetry({
+      source: 'demo',
+      latitude: 32.7012,
+      longitude: -117.1014,
+      speedKph: 31,
+      sampleCount: 2,
+      updatedAt: Date.now(),
+    });
+    VD.renderMap();
+
+    expect(VD.state.selectedMapSessionId).toBe('__live_current__');
+    expect(document.getElementById('mapDuration').textContent).not.toBe('--');
+  });
+
   it('surfaces basemap tile failures with a retry affordance', () => {
     const VD = window.VoltDashboard;
     const banner = document.getElementById('mapTileError');

@@ -14,10 +14,37 @@ class EnhancedPidProfilesTest {
     }
 
     @Test
+    fun findMatchesBareAndAtshHeaderSpellings() {
+        // The catalog stores the full ELM command ("ATSH7E4") while SessionRecorder tracks
+        // the bare CAN id ("7E4"); both spellings must resolve to the same profile.
+        val viaAtsh = EnhancedPidProfiles.find("ATSH7E4", "224329")
+        val viaBare = EnhancedPidProfiles.find("7E4", "224329")
+        assertNotNull(viaAtsh)
+        assertNotNull(viaBare)
+        assertEquals(viaAtsh!!.key, viaBare!!.key)
+
+        // A bare id must still respect header scoping — the wrong module stays null.
+        assertEquals(null, EnhancedPidProfiles.find("7E2", "221154"))
+    }
+
+    @Test
     fun positiveResponseRecognizesMode22AndRejectsNegativeFrames() {
         assertTrue(EnhancedPidProfiles.isPositiveResponse("221154", "62115460"))
         assertFalse(EnhancedPidProfiles.isPositiveResponse("22119F01", "7F2212"))
         assertFalse(EnhancedPidProfiles.isPositiveResponse("221940", "NO DATA"))
+    }
+
+    @Test
+    fun positiveResponseOnlyRejectsFramesThatStartWithNegativeMarker() {
+        // 0x7F in the payload is data, not a refusal: with ATS0, 410D7F is 127 km/h.
+        assertTrue(EnhancedPidProfiles.isPositiveResponse("010D", "410D7F"))
+        // A frame starting 7F + echoed service id is a real UDS negative response.
+        assertFalse(EnhancedPidProfiles.isPositiveResponse("221154", "7F2231"))
+        assertFalse(EnhancedPidProfiles.isPositiveResponse("221154", "7F 22 31"))
+        // 7F xx 78 = response pending: not a rejection when the real answer follows...
+        assertTrue(EnhancedPidProfiles.isPositiveResponse("221154", "7F2278\r62115460"))
+        // ...but a pending line with no answer is still not a positive response.
+        assertFalse(EnhancedPidProfiles.isPositiveResponse("221154", "7F2278"))
     }
 
     @Test

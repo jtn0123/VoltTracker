@@ -24,6 +24,10 @@ class ObdNotifications(
             Intent()
                 .setClass(context, MainActivity::class.java)
                 .setPackage(context.packageName)
+                // Activities launched from a notification PendingIntent start outside any
+                // activity task, so NEW_TASK is required; CLEAR_TOP matches the sibling
+                // adapter-ready notification in TroubleshooterBridge.
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val pendingIntent = PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_IMMUTABLE)
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
         return builder

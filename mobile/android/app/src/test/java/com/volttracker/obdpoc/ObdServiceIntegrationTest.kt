@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -176,6 +177,48 @@ class ObdServiceIntegrationTest {
         assertNotNull("CANCEL_RETRY must broadcast a status", status)
         assertEquals("idle", status!!.optString("state"))
         assertEquals("Retry cancelled.", status.optString("detail"))
+    }
+
+    // ---- null / unrecognized start commands ------------------------------------------
+
+    @Test
+    fun nullIntentRestartStopsTheIdleService() {
+        // A START_STICKY restart after process death redelivers a null intent. With no session
+        // to resume, the service must stop itself instead of lingering as an invisible orphan
+        // (onCreate already opened the store, registered receivers, and started executors).
+        val controller = newController(null)
+        val service = controller.create().get()
+
+        val result = service.onStartCommand(null, 0, 1)
+
+        assertEquals("a null-intent restart must not re-stick", Service.START_NOT_STICKY, result)
+        assertTrue("an idle service must stop itself on a null-intent restart", shadowOf(service).isStoppedBySelf)
+    }
+
+    @Test
+    fun unrecognizedActionStopsTheIdleService() {
+        val controller = newController(null)
+        val service = controller.create().get()
+        val bogus = Intent(RuntimeEnvironment.getApplication(), TestObdService::class.java)
+        bogus.action = "com.volttracker.obdpoc.action.BOGUS"
+
+        val result = service.onStartCommand(bogus, 0, 1)
+
+        assertEquals(Service.START_NOT_STICKY, result)
+        assertTrue("an idle service must stop itself on an unknown action", shadowOf(service).isStoppedBySelf)
+    }
+
+    @Test
+    fun nullIntentRestartDoesNotStopAnActiveSession() {
+        val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
+        val service = controller.create().get()
+        controller.startCommand(0, 1)
+        assertTrue("precondition: a session is running", service.running.get())
+
+        service.onStartCommand(null, 0, 2)
+
+        assertTrue("a live session must survive a null-intent dispatch", service.running.get())
+        assertFalse("the service must not stop itself while a session is active", shadowOf(service).isStoppedBySelf)
     }
 
     // ---- EngineHost broadcast helpers ----------------------------------------------

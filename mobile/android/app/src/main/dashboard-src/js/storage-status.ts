@@ -99,7 +99,11 @@
     VD.setText("dbChargeCount", chargeRows);
     VD.setText("dbBatteryCount", batteryRows + cellRows);
     VD.setText("dbSize", VD.formatBytes(Number(storage.databaseBytes || 0)));
-    VD.setText("dbRawTelemetryCount", Number(storage.rawTelemetryCount || samples || 0));
+    // Presence check, not truthiness: a legitimate rawTelemetryCount of 0 must
+    // render as 0 — only fall back to the sample count when the field is
+    // missing (null/undefined) or non-numeric.
+    const rawTelemetry = storage.rawTelemetryCount == null ? NaN : Number(storage.rawTelemetryCount);
+    VD.setText("dbRawTelemetryCount", Number.isFinite(rawTelemetry) ? rawTelemetry : samples);
     VD.setText("dbEmptyTelemetryCount", Number(storage.emptyTelemetryCount || 0));
     VD.setText("dbState", VD.dbRowCount(storage) ? `${VD.dbRowCount(storage)} rows` : "ready");
     const last = storage.lastEventAtMs || storage.lastStartedAtMs;
@@ -490,34 +494,49 @@
     return (selected || routes[0] || {}) as VoltRoute;
   }
 
+  // The latest battery/telemetry reading the Insights hero renders — preferring
+  // the stored battery snapshot, then the battery/overview telemetry echoes.
+  function latestInsightReading(storage: VoltStorageSummary): Record<string, unknown> {
+    const overview: Record<string, unknown> = storage.overview || {};
+    const battery: Record<string, unknown> = storage.batterySummary || {};
+    const latestSnapshot = battery.latestBatterySnapshot as Record<string, unknown> | undefined;
+    return latestSnapshot && Object.keys(latestSnapshot).length
+      ? latestSnapshot
+      : ((battery.latestTelemetry as Record<string, unknown>) || (overview.latestTelemetry as Record<string, unknown>) || {});
+  }
+
+  // Gate the Insights first-run guide on actual insight content, not raw dbRowCount. dbRowCount
+  // sums unrelated tables (PID observations, location samples, diagnostic codes...), so a single
+  // connect/scan that writes any row but completes no trip used to hide the guide while every
+  // Insights stat still read "--" — a screen that looked broken. Mirror the chargeEmptyState
+  // pattern and key on the data the Insights screen actually renders: a logged trip/distance or
+  // a battery reading. Shared with insights-panel.ts (via VD) so the empty-state toggle can be
+  // re-evaluated AFTER loadInsights() refreshes state.insights — setStorage runs renderRealV2Ui
+  // before the insights payload lands, so this single render pass would otherwise gate on stale
+  // data.
+  function hasInsightContent(): boolean {
+    const storage = state.storage || {};
+    const insightsSummary = state.insights || {};
+    const insightSoc = Number(latestInsightReading(storage).soc);
+    return (
+      Number(insightsSummary.tripCount || 0) > 0 ||
+      Number(insightsSummary.totalDistanceMeters || 0) > 0 ||
+      (Number.isFinite(insightSoc) && insightSoc > 0)
+    );
+  }
+
   function renderRealV2Ui() {
     const storage = state.storage || {};
     const overview: Record<string, unknown> = storage.overview || {};
-    const battery: Record<string, unknown> = storage.batterySummary || {};
     const charge = storage.chargeSummary || {};
     const route = selectedRouteForOverview(storage);
     const hasRows = VD.dbRowCount(storage) > 0;
     const _hasRoute = Number(route.pointCount || 0) >= 2;
     const hasCharge = Number(charge.chargeSessionCount || charge.chargingHintCount || 0) > 0;
-    const latestSnapshot = battery.latestBatterySnapshot as Record<string, unknown> | undefined;
-    const latest: Record<string, unknown> = latestSnapshot && Object.keys(latestSnapshot).length
-      ? latestSnapshot
-      : ((battery.latestTelemetry as Record<string, unknown>) || (overview.latestTelemetry as Record<string, unknown>) || {});
+    const latest = latestInsightReading(storage);
     toggleHidden("appEmptyState", hasRows);
     toggleHidden("chargeEmptyState", hasCharge);
-    // Gate the Insights first-run guide on actual insight content, not raw dbRowCount. dbRowCount
-    // sums unrelated tables (PID observations, location samples, diagnostic codes...), so a single
-    // connect/scan that writes any row but completes no trip used to hide the guide while every
-    // Insights stat still read "--" — a screen that looked broken. Mirror the chargeEmptyState
-    // pattern and key on the data the Insights screen actually renders: a logged trip/distance or
-    // a battery reading.
-    const insightsSummary = state.insights || {};
-    const insightSoc = Number(latest.soc);
-    const hasInsights =
-      Number(insightsSummary.tripCount || 0) > 0 ||
-      Number(insightsSummary.totalDistanceMeters || 0) > 0 ||
-      (Number.isFinite(insightSoc) && insightSoc > 0);
-    toggleHidden("insightsEmptyState", hasInsights);
+    toggleHidden("insightsEmptyState", hasInsightContent());
     const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
     VD.setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
     VD.setText("overviewDistanceSub", route.pointCount ? `${route.pointCount} GPS samples in latest route` : "waiting for route samples");
@@ -602,6 +621,10 @@
     if (!list) return;
     if (!sessions.length) {
       list.replaceChildren();
+      // renderChargeEnergy owns the energy card's hidden flag — it must run on
+      // the empty path too, or a stale "Energy logged" total survives clearing
+      // the stored data.
+      renderChargeEnergy(sessions);
       return;
     }
     VD.setText("chargeSessionsTitle", `${sessions.length} recent charge${sessions.length === 1 ? "" : "s"}`);
@@ -625,6 +648,10 @@
     }, 0);
     if (total <= 0) {
       card.hidden = true;
+      // Clear the previous totals so a momentary unhide can never flash stale
+      // kWh / cost figures from a cleared database.
+      VD.setText("chargeEnergyTotal", "-- kWh");
+      VD.setText("chargeEnergyCost", "--");
       return;
     }
     card.hidden = false;
@@ -794,6 +821,7 @@
     isNativeError,
     reportNativeReadError,
     buildStatusCopy,
+    hasInsightContent,
     setStorage,
     updateStorageUi,
     updateDiagnosticCodeUi,

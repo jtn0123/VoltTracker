@@ -208,6 +208,8 @@ class DatabaseMergerTest {
     fun mergingTwiceIsIdempotent() {
         val donorSession = insertSession(donor, 8000L)
         insertTelemetry(donor, donorSession, 8000L)
+        insertAdapterHistoryFull(donor, "AD:1", 7, firstSeenMs = 10L, lastSeenMs = 200L)
+        insertDiagnosticCode(donor, "MOD", "P0001", "current", 4, 300L)
 
         val first = DatabaseMerger.merge(live, donor)
         val second = DatabaseMerger.merge(live, donor)
@@ -219,6 +221,28 @@ class DatabaseMergerTest {
         assertEquals(1, second.sessionsSkipped)
         assertEquals(1, count(live, VoltTrackerDb.TABLE_SESSIONS))
         assertEquals(1, count(live, VoltTrackerDb.TABLE_TELEMETRY))
+        // The aggregated counter rows must be idempotent too: re-importing the same backup adds
+        // no new [first_seen, last_seen] span, so counters must not double.
+        assertEquals(
+            "re-importing the same backup must not inflate adapter connect_count",
+            7,
+            scalar(
+                live,
+                "SELECT connect_count FROM " +
+                    VoltTrackerDb.TABLE_ADAPTER_HISTORY +
+                    " WHERE adapter_key = 'AD:1'",
+            ),
+        )
+        assertEquals(
+            "re-importing the same backup must not inflate DTC seen_count",
+            4,
+            scalar(
+                live,
+                "SELECT seen_count FROM " +
+                    VoltTrackerDb.TABLE_DIAGNOSTIC_CODES +
+                    " WHERE dtc = 'P0001'",
+            ),
+        )
     }
 
     @Test

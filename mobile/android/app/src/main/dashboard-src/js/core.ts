@@ -862,7 +862,6 @@
     if (!changed) return;
     updateViewHeading();
     VD.updateLiveUi();
-    VD.drawTrace();
     VD.loadTrips();
     VD.loadInsights();
   }

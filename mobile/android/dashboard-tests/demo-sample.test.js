@@ -59,6 +59,30 @@ describe('demo sample data', () => {
     ).toBeGreaterThan(0);
   });
 
+  it('streams browser-demo battery temp in °C like the native demo loop', async () => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    await loadDashboard({ withBridge: false });
+
+    const VD = window.VoltDashboard;
+    VD.actions.runBrowserDemo();
+    try {
+      // DemoPollingLoop.kt emits 24.0 + sin(t/8) °C; telemetry.ts renders the
+      // field through units.tempText, which converts °C→°F. A Fahrenheit-shaped
+      // value here (the old 72 + sin) displayed as ~162 °F pack temp.
+      const temp = Number(VD.state.telemetry.batteryTemp);
+      expect(temp).toBeGreaterThan(22);
+      expect(temp).toBeLessThan(26);
+      VD.updateLiveUi();
+      expect(document.getElementById('drivePackTempValue').textContent)
+        .toBe(VD.units.tempText(temp));
+    } finally {
+      window.clearInterval(window.__voltDemoTimer ?? undefined);
+    }
+  });
+
   it('clears browser-preview demo rows when demo stops', async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;

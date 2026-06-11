@@ -286,10 +286,10 @@ object EnhancedPidProfiles {
         header: String?,
         command: String?,
     ): EnhancedPidProfile? {
-        val cleanHeader = clean(header)
+        val cleanHeader = normalizeHeader(header)
         val cleanCommand = clean(command)
         for (profile in ALL) {
-            if (profile.command == cleanCommand && profile.header == cleanHeader) {
+            if (profile.command == cleanCommand && normalizeHeader(profile.header) == cleanHeader) {
                 return profile
             }
         }
@@ -299,6 +299,16 @@ object EnhancedPidProfiles {
             }
         }
         return null
+    }
+
+    /**
+     * Headers arrive in two spellings: the catalog stores the full ELM command ("ATSH7E4")
+     * while SessionRecorder tracks the bare CAN id it sets ("7E4"). Strip a leading "ATSH"
+     * from both sides so a lookup with either spelling matches the same profile.
+     */
+    private fun normalizeHeader(header: String?): String {
+        val clean = clean(header)
+        return if (clean.startsWith("ATSH")) clean.substring(4).trim() else clean
     }
 
     @JvmStatic
@@ -393,10 +403,27 @@ object EnhancedPidProfiles {
             raw.contains("CAN ERROR") ||
             raw.contains("UNABLE TO CONNECT") ||
             raw.contains("STOPPED") ||
-            raw.contains("ERROR") ||
-            raw.contains("7F")
+            raw.contains("ERROR")
         ) {
             return false
+        }
+        // A UDS negative response is a frame that STARTS with 7F followed by the echoed
+        // service id (e.g. "7F 22 31"). A bare contains("7F") check would misclassify
+        // positive frames whose payload merely contains 0x7F — with ATS0, "410D7F" is a
+        // legitimate 127 km/h reading, and a 0x7F digram can even straddle two bytes.
+        // "7F xx 78" (requestCorrectlyReceived-ResponsePending) is not a final rejection:
+        // the real positive frame may follow on a later line, so pending lines are skipped
+        // and the verdict falls to whether a positive marker is present at all.
+        if (cleanCommand.length >= 2) {
+            val negativePrefix = "7F" + cleanCommand.substring(0, 2)
+            for (line in raw.split(Regex("[\\r\\n]+"))) {
+                val compactLine = line.trim().replace(" ", "")
+                if (compactLine.startsWith(negativePrefix) &&
+                    !compactLine.startsWith(negativePrefix + "78")
+                ) {
+                    return false
+                }
+            }
         }
         val compact = raw.replace(" ", "")
         if (cleanCommand.startsWith("01") && cleanCommand.length >= 4) {

@@ -92,6 +92,21 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun vinParsesFromElmSegmentedMultiFrameResponse() {
+        // With ATH0 + CAF1 (the app's actual init) the 0902 reply is multi-frame and the ELM
+        // prints it in segmented form: a 3-digit hex total-length line ("014" = 20 bytes)
+        // followed by "N:"-prefixed data lines. The length line and segment indices must be
+        // stripped before hex decoding or every byte after them is misaligned.
+        val response =
+            "014\r" +
+                "0: 49 02 01 31 47 31\r" +
+                "1: 5A 44 35 53 54 38 4A\r" +
+                "2: 46 32 30 32 30 32 30\r" +
+                "\r>"
+        assertEquals("1G1ZD5ST8JF202020", ObdProtocol.parseVin(response))
+    }
+
+    @Test
     fun vinRejectsInvalidCharacters() {
         // Embed an "I" (forbidden under SAE J853) in the middle — parser must reject the run.
         val hex = StringBuilder("490201")
@@ -553,10 +568,19 @@ class ObdProtocolTest {
         assertEquals("battery heater power", heater!!.name)
         assertEquals(2000.0, heater.valueNumeric!!, 0.01)
 
-        val outside = ObdProtocol.parseKnownValue("22801F", "62801FC8")
+        // 22801E/F outside air temperature uses the GM convention A/2 - 40, covering the
+        // full -40..+87.5 C span a real OAT sensor needs (the old 0.125/-5 encoding topped
+        // out below 27 C). 0x96 = 150 -> 150/2 - 40 = 35.0 C, a plausible hot summer day.
+        val outside = ObdProtocol.parseKnownValue("22801F", "62801F96")
         assertNotNull(outside)
         assertEquals("outside air temperature filtered", outside!!.name)
-        assertEquals(20.0, outside.valueNumeric!!, 0.01)
+        assertEquals(35.0, outside.valueNumeric!!, 0.01)
+
+        // 0x28 = 40 -> 40/2 - 40 = -20.0 C: sub-freezing values must be representable.
+        val outsideRaw = ObdProtocol.parseKnownValue("22801E", "62801E28")
+        assertNotNull(outsideRaw)
+        assertEquals("outside air temperature raw", outsideRaw!!.name)
+        assertEquals(-20.0, outsideRaw.valueNumeric!!, 0.01)
     }
 
     @Test
@@ -683,8 +707,10 @@ class ObdProtocolTest {
 
     @Test
     fun storedDiagnosticTroubleCodesDecode() {
+        // ISO 15765-4 single frame: SF PCI 06, then 43 (mode 03 positive) + DTC-count 02 +
+        // two 2-byte codes. The count byte must be skipped, not decoded as DTC data.
         val codes =
-            ObdProtocol.parseDiagnosticTroubleCodes("03", "7E8 06 43 01 33 25 A2 00 00\r>", "")
+            ObdProtocol.parseDiagnosticTroubleCodes("03", "7E8 06 43 02 01 33 25 A2\r>", "")
 
         assertEquals(2, codes.size)
         assertEquals("P0133", codes[0].code)
@@ -696,11 +722,22 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun dtcCountByteBoundsHowManyPairsAreRead() {
+        // Count says 1 code; the trailing 25 A2 is padding/junk and must NOT become a DTC.
+        val codes =
+            ObdProtocol.parseDiagnosticTroubleCodes("03", "43 01 01 33 25 A2\r>", "")
+
+        assertEquals(1, codes.size)
+        assertEquals("P0133", codes[0].code)
+    }
+
+    @Test
     fun multilineDiagnosticTroubleCodesDecodeContinuationFrames() {
+        // FF: PCI 10 08 + 43 + count 03 + first two codes; CF: PCI 21 + third code + padding.
         val codes =
             ObdProtocol.parseDiagnosticTroubleCodes(
                 "03",
-                "7E8 10 08 43 01 33 25 A2\r7E8 21 C0 73 00 00 00 00\r>",
+                "7E8 10 08 43 03 01 33 25 A2\r7E8 21 C0 73 00 00 00 00\r>",
                 "",
             )
 
@@ -712,25 +749,46 @@ class ObdProtocolTest {
 
     @Test
     fun multilineDiagnosticTroubleCodesSkipNonContinuationFrames() {
+        // Count promises 3 codes but the second line is a negative response (7F ...), not an
+        // ISO-TP consecutive frame — it must be skipped, leaving only the FF's two codes.
         val codes =
             ObdProtocol.parseDiagnosticTroubleCodes(
                 "03",
-                "7E8 10 06 43 01 33 00 00\r7E8 7F 03 11 00 00 00 00\r>",
+                "7E8 10 08 43 03 01 33 25 A2\r7E8 7F 03 11 00 00 00 00\r>",
                 "",
             )
 
-        assertEquals(1, codes.size)
+        assertEquals(2, codes.size)
         assertEquals("P0133", codes[0].code)
+        assertEquals("P25A2", codes[1].code)
+    }
+
+    @Test
+    fun segmentedDiagnosticTroubleCodesDecodeAcrossElmSegments() {
+        // ELM segmented output (ATH0 + CAF1): total-length line "00A" (10 bytes) then
+        // "N:"-indexed data lines. 43 + count 04 + four codes spread over two segments.
+        val codes =
+            ObdProtocol.parseDiagnosticTroubleCodes(
+                "03",
+                "00A\r0: 43 04 01 33 25 A2\r1: C0 73 18 42 00 00 00\r\r>",
+                "",
+            )
+
+        assertEquals(4, codes.size)
+        assertEquals("P0133", codes[0].code)
+        assertEquals("P25A2", codes[1].code)
+        assertEquals("U0073", codes[2].code)
+        assertEquals("P1842", codes[3].code)
     }
 
     @Test
     fun pendingAndPermanentDiagnosticStatusesDecode() {
-        val pending = ObdProtocol.parseDiagnosticTroubleCodes("07", "47 C0 73 00 00", "7DF")
+        val pending = ObdProtocol.parseDiagnosticTroubleCodes("07", "47 01 C0 73 00 00", "7DF")
         assertEquals(1, pending.size)
         assertEquals("U0073", pending[0].code)
         assertEquals("pending", pending[0].status)
 
-        val permanent = ObdProtocol.parseDiagnosticTroubleCodes("0A", "4A 25 A2 00 00", "7E0")
+        val permanent = ObdProtocol.parseDiagnosticTroubleCodes("0A", "4A 01 25 A2 00 00", "7E0")
         assertEquals(1, permanent.size)
         assertEquals("P25A2", permanent[0].code)
         assertEquals("permanent", permanent[0].status)
@@ -739,7 +797,9 @@ class ObdProtocolTest {
 
     @Test
     fun freezeFrameDiagnosticCodeDecodes() {
-        val codes = ObdProtocol.parseDiagnosticTroubleCodes("0202", "42 02 01 33", "")
+        // Mode 02 echoes PID and frame number: 42 02 00 then the DTC bytes. The frame-number
+        // byte (00) must be skipped, not parsed as part of a code.
+        val codes = ObdProtocol.parseDiagnosticTroubleCodes("0202", "42 02 00 01 33", "")
 
         assertEquals(1, codes.size)
         assertEquals("P0133", codes[0].code)
@@ -748,6 +808,8 @@ class ObdProtocolTest {
 
     @Test
     fun zeroAndNoDataDiagnosticResponsesYieldNoCodes() {
+        // "43 00" is the CAN zero-codes reply; padded variants must also stay empty.
+        assertTrue(ObdProtocol.parseDiagnosticTroubleCodes("03", "43 00", "").isEmpty())
         assertTrue(ObdProtocol.parseDiagnosticTroubleCodes("03", "43 00 00 00 00", "").isEmpty())
         assertTrue(ObdProtocol.parseDiagnosticTroubleCodes("03", "NO DATA", "").isEmpty())
         assertTrue(ObdProtocol.parseDiagnosticTroubleCodes("010C", "410C1880", "").isEmpty())

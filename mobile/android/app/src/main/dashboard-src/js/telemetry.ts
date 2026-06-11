@@ -24,6 +24,11 @@ import type { MapRoutePoint } from "./map-route-utils";
   // How long (ms) since the last accepted sample before we mark tiles stale.
   const STALE_THRESHOLD_MS = 3000;
   let rateChipReconnectBound = false;
+  // Highest telemetry `updatedAt` observed so far. Native re-delivers the LAST
+  // sample on every status broadcast, so setAppState must only treat a sample
+  // as fresh when its updatedAt actually advances past this marker — otherwise
+  // a wedged adapter keeps the stale indicator and rate chip reporting "live".
+  let lastSeenSampleUpdatedAt = 0;
 
   function average(values: number[]) {
     return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
@@ -62,15 +67,16 @@ import type { MapRoutePoint } from "./map-route-utils";
   function showStatusToast(detail: unknown) {
     const node = el("statusToast");
     if (!node) return;
+    // The very first setStatus call is the boot-time status push ("Viewing
+    // local data…"), not feedback on a user action — consume the baseline
+    // silently even when its detail is empty, so the first user-triggered
+    // detail after a detail-less boot push still toasts.
+    const isBaseline = !toastBaselineSeen;
+    toastBaselineSeen = true;
     const text = String(detail || "").trim();
     if (!text || text === lastToastDetail) return;
     lastToastDetail = text;
-    // The very first detail is the boot-time status push ("Viewing local
-    // data…"), not feedback on a user action — set the baseline silently.
-    if (!toastBaselineSeen) {
-      toastBaselineSeen = true;
-      return;
-    }
+    if (isBaseline) return;
     if (text === "Ready.") return;
     if (state.view === "settings") return;
     node.textContent = text;
@@ -78,6 +84,10 @@ import type { MapRoutePoint } from "./map-route-utils";
     if (statusToastTimer) clearTimeout(statusToastTimer);
     statusToastTimer = setTimeout(() => {
       node.hidden = true;
+      // Reset the dedupe baseline once the toast is gone so a later repeat of
+      // the SAME action detail (e.g. tapping "Scan car codes" twice) gives
+      // feedback again instead of silently doing nothing.
+      lastToastDetail = "";
     }, 3200);
   }
 
@@ -113,7 +123,15 @@ import type { MapRoutePoint } from "./map-route-utils";
     const nextTelemetry = state.appState.latestTelemetry || {};
     if (shouldAcceptTelemetry(nextTelemetry)) {
       state.telemetry = { ...state.telemetry, ...nextTelemetry };
-      state.lastSampleAt = Date.now();
+      // Status broadcasts re-deliver the last sample verbatim; only an
+      // updatedAt that advances counts as freshness, and we stamp the sample's
+      // own clock (the same wall clock updateTelemetry's Date.now() uses on
+      // live delivery) rather than the broadcast arrival time.
+      const updatedAt = Number(nextTelemetry.updatedAt || 0);
+      if (Number.isFinite(updatedAt) && updatedAt > lastSeenSampleUpdatedAt) {
+        lastSeenSampleUpdatedAt = updatedAt;
+        state.lastSampleAt = updatedAt;
+      }
     } else if (!isActiveStatus()) {
       resetTelemetry();
     }
@@ -166,6 +184,7 @@ import type { MapRoutePoint } from "./map-route-utils";
     state.liveRouteStartedAtMs = null;
     state.liveRoutePoints = [];
     state.lastSampleAt = 0;
+    lastSeenSampleUpdatedAt = 0;
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     applyStaleIndicator();
   }
@@ -238,7 +257,12 @@ import type { MapRoutePoint } from "./map-route-utils";
     // "1,911 samples" just clips to "1,911 sa…". The live count is shown in the
     // drive pill, the OBD-session card, and the database card.
     VD.setText("loggingState", connected ? (samples ? "live" : (sessionState || "ready")) : "idle");
-    VD.setText("gpsState", gps.state || (state.telemetry.latitude ? "locked" : "waiting"));
+    // Number.isFinite guard (same as the gpsValue tile below) so a legitimate
+    // coordinate of exactly 0 still reads as locked; both axes must be valid.
+    const hasFix =
+      Number.isFinite(Number(state.telemetry.latitude)) &&
+      Number.isFinite(Number(state.telemetry.longitude));
+    VD.setText("gpsState", gps.state || (hasFix ? "locked" : "waiting"));
     VD.setText("dataSourceState", state.demoActive ? "demo" : "real");
     VD.setText("dbState", dbRowCount(storage) ? `${dbRowCount(storage)} rows` : "ready");
     const appInfo = app.app || {};
@@ -384,7 +408,7 @@ import type { MapRoutePoint } from "./map-route-utils";
   }
 
   // Stash the latest sample; defer the heavy renders (updateLiveUi,
-  // drawTrace, renderOperationalState, updateValidationUi) to the next animation
+  // renderOperationalState, updateValidationUi) to the next animation
   // frame so a high-rate OBD source can't cause render thrash.
   function updateTelemetry(payload: unknown) {
     const sample = VD.parsePayload(payload, {});
@@ -409,6 +433,13 @@ import type { MapRoutePoint } from "./map-route-utils";
     }
     state.telemetry = { ...state.telemetry, ...sample };
     state.lastSampleAt = Date.now();
+    // Record the sample's own timestamp so a later status broadcast that
+    // re-delivers this exact sample (setAppState) is not mistaken for a fresh
+    // one and cannot move lastSampleAt backwards.
+    const sampleUpdatedAt = Number(sample.updatedAt || 0);
+    if (Number.isFinite(sampleUpdatedAt) && sampleUpdatedAt > lastSeenSampleUpdatedAt) {
+      lastSeenSampleUpdatedAt = sampleUpdatedAt;
+    }
     const kph = Number(sample.speedKph);
     if (Number.isFinite(kph)) {
       pushBounded(state.speedHistory, kph, 48);
@@ -470,11 +501,11 @@ import type { MapRoutePoint } from "./map-route-utils";
 
   function flushRender() {
     // updateLiveUi() already calls renderOperationalState() + updateValidationUi()
-    // (see below) plus renderDriveLive() at its tail, so the rAF burst is just
-    // these two — keep them in lockstep with the tail of updateLiveUi() if
-    // either ever needs to call something new.
+    // (see below) plus renderDriveLive() at its tail (which draws the shipped
+    // #liveTraceCanvas speed trace), so the rAF burst is just this one call —
+    // keep it in lockstep with the tail of updateLiveUi() if either ever needs
+    // to call something new.
     updateLiveUi();
-    drawTrace();
   }
 
   // Toggle the `.stale` class on each live tile when no new sample has
@@ -861,48 +892,6 @@ import type { MapRoutePoint } from "./map-route-utils";
     return `${hours}h ${String(minutes % 60).padStart(2, "0")}m`;
   }
 
-  function drawTrace() {
-    const canvas = el("speedCanvas") as HTMLCanvasElement | null;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(1, rect.width * dpr);
-    canvas.height = Math.max(1, rect.height * dpr);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.scale(dpr, dpr);
-    const w = rect.width;
-    const h = rect.height;
-    ctx.clearRect(0, 0, w, h);
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    ctx.lineWidth = 1;
-    for (let i = 1; i < 4; i++) {
-      const y = (h / 4) * i;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
-    }
-    const samples = state.speedHistory;
-    if (samples.length < 2) return;
-    const max = Math.max(120, ...samples);
-    ctx.beginPath();
-    samples.forEach((value: number, index: number) => {
-      const x = (index / (samples.length - 1)) * w;
-      const y = h - (value / max) * (h - 18) - 8;
-      if (index === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.strokeStyle = "#ff7a45";
-    ctx.lineWidth = 4;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.shadowColor = "rgba(255,122,69,0.32)";
-    ctx.shadowBlur = 14;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
   // 1Hz heartbeat so the .stale class is applied even when no new sample
   // arrives (and removed promptly once one does). Cheap; touches a handful of
   // DOM nodes.
@@ -936,8 +925,7 @@ import type { MapRoutePoint } from "./map-route-utils";
     setValidationRow,
     formatAge,
     summarizePidLine,
-    formatDuration,
-    drawTrace
+    formatDuration
   });
 
 export {};

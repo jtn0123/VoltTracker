@@ -274,15 +274,14 @@ const REQUIRED_DOM = `
   <button id="scanBtn"></button>
   <button id="connectBtn"></button>
   <button id="disconnectBtn"></button>
-
-  <canvas id="speedCanvas"></canvas>
 `;
 
 // jsdom ships with no Canvas implementation, so HTMLCanvasElement.getContext
-// returns null and telemetry.ts#drawTrace blows up at `ctx.scale(...)`. Patch
-// a no-op 2D context onto the prototype just for the test runtime — the tile
-// drawing path is irrelevant to what we're checking here. Idempotent so
-// multiple loadDashboard() calls per file are safe.
+// returns null and canvas renderers (drive.ts#drawLiveSpeedTrace, the map
+// charts) blow up at the first ctx call. Patch a no-op 2D context onto the
+// prototype just for the test runtime — the pixel-drawing path is irrelevant
+// to what we're checking here. Idempotent so multiple loadDashboard() calls
+// per file are safe.
 // jsdom doesn't implement window.scrollTo/scrollBy; the bootstrap path calls
 // them during init and view switches, which would otherwise log noisy "Not
 // implemented" stderr lines. No-ops keep CI logs readable and timings stable.

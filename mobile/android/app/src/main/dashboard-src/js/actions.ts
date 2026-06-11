@@ -652,7 +652,6 @@ import type { BusyButton } from "./actions-storage";
     VD.setDemoActive(false);
     refreshNativeDataAfterDemo();
     VD.updateLiveUi();
-    VD.drawTrace();
     VD.setStatus({ state: "idle", detail: "Demo stopped. Real data and captured history will appear here." });
   }
 
@@ -669,24 +668,11 @@ import type { BusyButton } from "./actions-storage";
     // trips until the next native push. Mirror stopDemo()'s cleanup.
     if (wasDemo) refreshNativeDataAfterDemo();
     VD.updateLiveUi();
-    VD.drawTrace();
     VD.setStatus({ state: "idle", detail: "Stopped." });
   }
 
   function runBrowserDemo() {
     runBrowserDemoStream(VD, state);
-  }
-
-  // Window resize handler is debounced to 100ms — drawTrace recomputes canvas
-  // backing-store size, which is genuinely expensive to do on every resize event
-  // from a runaway WebView layout pass.
-  let resizeTimer = 0;
-  function debouncedResize() {
-    if (resizeTimer) window.clearTimeout(resizeTimer);
-    resizeTimer = window.setTimeout(() => {
-      resizeTimer = 0;
-      VD.drawTrace();
-    }, 100);
   }
 
   function bindListeners() {
@@ -699,13 +685,18 @@ import type { BusyButton } from "./actions-storage";
         button.blur();
       }, opts);
     });
-    document.querySelectorAll("[data-nav-jump]").forEach((node) => {
-      const button = node as HTMLElement;
-      button.addEventListener("click", () => {
-        VD.setView(button.dataset.navJump ?? "");
-        button.blur();
-      }, opts);
-    });
+    // [data-nav-jump] is delegated at the document level (mirroring the
+    // [data-map-session] click delegation) because drive.ts builds link chips
+    // with dataset.navJump at render time — a boot-time per-node binding would
+    // never see them. One mechanism covers static partials and dynamic chips,
+    // so static elements can't double-fire.
+    document.addEventListener("click", (event) => {
+      const target = event.target as Element | null;
+      const button = target && (target.closest("[data-nav-jump]") as HTMLElement | null);
+      if (!button) return;
+      VD.setView(button.dataset.navJump ?? "");
+      button.blur();
+    }, opts);
     document.querySelectorAll("[data-action]").forEach((node) => {
       const button = node as HTMLElement;
       button.addEventListener("click", (event) => handleAction(button.dataset.action, event.currentTarget as BusyButton), opts);
@@ -820,7 +811,6 @@ import type { BusyButton } from "./actions-storage";
     }, opts);
     VD.bindListenerGuarded("demoStopBtn", "click", stopDemo, opts);
     bindPageDragScroll(VD, opts);
-    window.addEventListener("resize", debouncedResize, opts);
   }
 
   // Reset hook. Aborts every listener bound by bindListeners() (and the
@@ -935,7 +925,6 @@ import type { BusyButton } from "./actions-storage";
   VD.loadTrips();
   VD.loadInsights();
   if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
-  VD.drawTrace();
   // Initial paint of the Drive-tab live polish — without this the session chip
   // strip + micro-charts stay empty until the first telemetry sample arrives.
   if (typeof VD.renderDriveLive === "function") VD.renderDriveLive();

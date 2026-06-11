@@ -67,6 +67,15 @@
   function renderInsightsEmptyState() {
     const empty = el("insightsEmptyState");
     if (!empty) return;
+    // Re-evaluate the gate here, AFTER loadInsights() has refreshed
+    // state.insights. setStorage runs renderRealV2Ui (which also toggles this
+    // node) before the insights payload lands, so without this re-toggle the
+    // empty state would be gated on stale data.
+    // A read error must stay visible (it carries the Retry affordance) even
+    // when a stray battery reading would otherwise hide the guide.
+    if (typeof VD.hasInsightContent === "function" && typeof VD.toggleHidden === "function") {
+      VD.toggleHidden("insightsEmptyState", !state.insightsReadError && VD.hasInsightContent());
+    }
     const title = empty.querySelector("h2");
     const copy = empty.querySelector("p");
     const hints = empty.querySelector(".empty-hints") as HTMLElement | null;
@@ -238,7 +247,12 @@
     const padR = 12;
     const padT = 14;
     const padB = 28;
-    const xOf = (mph: number) => padL + (mph / 75) * (w - padL - padR);
+    // The x-axis grows with the data (a Volt reaches ~100 mph) so fast samples
+    // never render outside the viewBox; 75 mph stays the floor so sparse city
+    // drives keep a familiar scale. Rounded up to the next 5 mph.
+    const fastest = pool.reduce((m, p) => Math.max(m, p.mph), 0);
+    const axisMaxMph = Math.max(75, Math.ceil(fastest / 5) * 5);
+    const xOf = (mph: number) => padL + (mph / axisMaxMph) * (w - padL - padR);
     const yS = (e: number) => padT + (1 - e / 7) * (h - padT - padB);
     const gColor = (g: number) =>
       g <= -0.006 ? "#5cc8ff" : g >= 0.006 ? "#ff6b5f" : "#b8e63b";
@@ -259,7 +273,7 @@
       node.textContent = text;
       svg.append(node);
     };
-    for (let gx = 0; gx <= 75; gx += 15) {
+    for (let gx = 0; gx <= axisMaxMph; gx += 15) {
       appendLine({
         x1: xOf(gx),
         y1: padT,
@@ -354,12 +368,14 @@
     if (statsEl) {
       const hwy = pool.filter((p) => p.mph > 55).map((p) => p.eff);
       const down = pool.filter((p) => p.grade <= -0.012).map((p) => p.eff);
-      const avg = (a: number[]) =>
-        a.length ? (a.reduce((s, x) => s + x, 0) / a.length).toFixed(1) : "--";
+      // Pool eff is always mi/kWh (see enrichRouteEff); efficiencyText does the
+      // single metric conversion, matching the headline above.
+      const avgText = (a: number[]) =>
+        a.length ? VD.units.efficiencyText(a.reduce((s, x) => s + x, 0) / a.length) : "--";
       statsEl.replaceChildren(
         insightStat("Samples", String(pool.length)),
-        insightStat("Highway avg", avg(hwy) + " mi/kWh"),
-        insightStat("Downhill avg", avg(down) + " mi/kWh")
+        insightStat("Highway avg", avgText(hwy)),
+        insightStat("Downhill avg", avgText(down))
       );
     }
   }

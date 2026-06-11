@@ -121,6 +121,32 @@ class ChargeSessionMaterializerTest {
     }
 
     @Test
+    fun splitFinalizesWeakRunWithItsOwnConfidenceNotTheNextRuns() {
+        // First run: aux-voltage-only evidence (documented WEAK). Then a gap above SPLIT_GAP_MS,
+        // then a pack-current run (OBSERVED). The first session must be finalized with the flag
+        // state as of ITS OWN samples — before the fix it inherited the next run's pack-current
+        // flag and was wrongly reported OBSERVED.
+        val data = StubData()
+        for (i in 0..5) {
+            data.telemetry.add(tel(T_BASE + i * ONE_MINUTE_MS, 14.2, 0.0))
+        }
+        val resumeAt = T_BASE + (5 + 45) * ONE_MINUTE_MS
+        for (i in 0..5) {
+            data.telemetry.add(telWithPackCurrent(resumeAt + i * ONE_MINUTE_MS, 0.0, -25.0))
+        }
+
+        val sessions = ChargeSessionMaterializer.materialize(input(), data)
+
+        assertEquals(2, sessions.size)
+        assertEquals(
+            "weak-evidence first run must not borrow the next run's pack-current flag",
+            Confidence.WEAK,
+            sessions[0].confidence,
+        )
+        assertEquals(Confidence.OBSERVED, sessions[1].confidence)
+    }
+
+    @Test
     fun positivePackCurrentSuppressesAuxVoltageFalsePositive() {
         // Aux voltage is up (14.4 V) AND speed is zero — the legacy heuristic would call
         // this "plugged". But pack current is positive (discharging via DC-DC into the

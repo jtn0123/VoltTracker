@@ -93,8 +93,11 @@ function bindAutoConnect() {
   applyAutoConnectStatus(state, toggle);
   toggle.addEventListener("change", () => {
     safeCall("setAutoConnectEnabled", toggle.checked);
-    // Reflect the new toggle immediately (the bridge may not re-report synchronously).
-    applyAutoConnectStatus({ ...state, enabled: toggle.checked }, toggle);
+    // Re-poll instead of reusing the bind-time snapshot so the status line
+    // reflects the bridge's CURRENT adapter name / cooldown, then overlay the
+    // new toggle value (the bridge may not re-report it synchronously).
+    const fresh = parseBridgeJson(safeCall("getAutoConnectState"));
+    applyAutoConnectStatus({ ...fresh, enabled: toggle.checked }, toggle);
   });
 }
 

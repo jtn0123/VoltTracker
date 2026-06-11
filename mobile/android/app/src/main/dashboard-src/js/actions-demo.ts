@@ -75,7 +75,10 @@ export function runBrowserDemoStream(
       throttlePct,
       voltage,
       soc,
-      batteryTemp: 72 + Math.sin(t / 8),
+      // °C, matching DemoPollingLoop.kt's 24.0 + sin(t/8) — telemetry.ts renders
+      // batteryTemp via units.tempText which converts °C→°F when needed, so a
+      // Fahrenheit-shaped value here would show as ~162 °F pack temp.
+      batteryTemp: 24 + Math.sin(t / 8),
       powerKw: powerKw,
       latitude: lat,
       longitude: lng,

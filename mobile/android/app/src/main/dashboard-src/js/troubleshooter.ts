@@ -102,6 +102,10 @@
     consecutiveFailedSessions: 0,
     retriesThisBurst: 0,
     autoOpened: false,
+    // Set when the user dismisses the modal; suppresses auto-reopen until the
+    // current failure burst ends (clean connect/scan resets it). Without this
+    // a dismissed modal would pop straight back on the very next retry status.
+    dismissedThisBurst: false,
     forgetMode: false,
     lastSessionState: "",
     // Latest telemetry payload — captured by the observer so the stale step
@@ -162,6 +166,10 @@
     node.hidden = true;
     restoreModalInert();
     ts.autoOpened = false;
+    // Every close of this modal originates from a user action on it (dismiss
+    // buttons, Escape, or the primary action), so treat it as a dismissal:
+    // don't auto-reopen again until the current burst resets.
+    ts.dismissedThisBurst = true;
     // Restore focus to whatever opened the modal so keyboard users aren't stranded.
     const prior = ts.priorFocus;
     if (prior && typeof prior.focus === "function" && document.contains(prior)) {
@@ -549,16 +557,19 @@
       if (
         t.retriesThisBurst >= RETRY_OPEN_THRESHOLD &&
         !t.autoOpened &&
+        !t.dismissedThisBurst &&
         !isOpen()
       ) {
         t.autoOpened = true;
         open("retry-threshold");
       }
     } else if (stateName === "connected" || stateName === "scanning" || stateName === "scan-complete") {
-      // A successful connect/scan resets the retry burst + failure counter.
+      // A successful connect/scan resets the retry burst + failure counter,
+      // and re-arms the auto-open for the next (fresh) burst.
       t.retriesThisBurst = 0;
       t.consecutiveFailedSessions = 0;
       t.autoOpened = false;
+      t.dismissedThisBurst = false;
     }
 
     // Track session terminations: edge from connecting/scanning -> failed/idle.
@@ -571,6 +582,7 @@
       if (
         t.consecutiveFailedSessions >= FAILED_SESSION_OPEN_THRESHOLD &&
         !t.autoOpened &&
+        !t.dismissedThisBurst &&
         !isOpen()
       ) {
         t.autoOpened = true;
@@ -595,7 +607,10 @@
   function bindHelpAffordance() {
     const help = el("errorBannerHelp");
     if (!help) return;
-    help.addEventListener("click", () => show());
+    // LISTEN_OPTS keeps this handler under the module's AbortController like
+    // every other binding here — without it the listener survives
+    // resetListeners() and stacks across reloads.
+    help.addEventListener("click", () => show(), LISTEN_OPTS);
   }
 
   // Hook into the existing setStatus pipeline without touching telemetry.js

@@ -226,6 +226,13 @@ open class ObdService :
                 return START_STICKY
             }
         }
+        // Null intent (START_STICKY restart after process death) or an unrecognized action:
+        // there is nothing to do, but onCreate already opened the SQLite store, registered
+        // receivers, and started executors. Without a session, stop instead of lingering as
+        // an invisible orphaned service.
+        if (!running.get()) {
+            stopSelf(startId)
+        }
         return START_NOT_STICKY
     }
 
@@ -343,6 +350,10 @@ open class ObdService :
     }
 
     private fun startSession(request: SessionStartRequest) {
+        // Invalidate the previous runner's token BEFORE interrupting it: a stale runner that
+        // races canCurrentThreadCleanupSession() after the interrupt must never match the
+        // current token, or it could tear down the NEW session's running flag / session log.
+        val token = sessionToken.incrementAndGet()
         stopCurrentSession(null)
         if (request.resetCancelRetry) {
             cancelRetryRequested = false
@@ -350,7 +361,6 @@ open class ObdService :
         if (request.refreshCompetingApps) {
             refreshCompetingAppsAsync()
         }
-        val token = sessionToken.incrementAndGet()
         if (!startForegroundSession(request.foregroundText)) {
             broadcastStatus(
                 "blocked",
@@ -515,11 +525,24 @@ open class ObdService :
                 true
             }
         } catch (ex: SecurityException) {
-            Log.w(MainActivity.TAG, "startForegroundSession refused", ex)
-            foregroundServiceActive = false
-            activeForegroundServiceType = 0
+            onStartForegroundRefused("startForegroundSession", ex)
+            false
+        } catch (ex: IllegalStateException) {
+            // API 31+ throws ForegroundServiceStartNotAllowedException (an IllegalStateException
+            // subclass) instead of SecurityException when background FGS starts are blocked;
+            // route it to the same "blocked" fallback instead of crashing the process.
+            onStartForegroundRefused("startForegroundSession", ex)
             false
         }
+    }
+
+    private fun onStartForegroundRefused(
+        where: String,
+        ex: RuntimeException,
+    ) {
+        Log.w(MainActivity.TAG, "$where refused", ex)
+        foregroundServiceActive = false
+        activeForegroundServiceType = 0
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
@@ -555,6 +578,10 @@ open class ObdService :
                 hasLocationPermission().toString(),
             )
         } catch (ex: SecurityException) {
+            Log.w(MainActivity.TAG, "reevaluateForegroundServiceType refused", ex)
+        } catch (ex: IllegalStateException) {
+            // See startForegroundSession: API 31+ ForegroundServiceStartNotAllowedException.
+            // The session keeps its existing foreground type; only the upgrade is skipped.
             Log.w(MainActivity.TAG, "reevaluateForegroundServiceType refused", ex)
         }
     }

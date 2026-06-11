@@ -300,6 +300,7 @@ interface VoltTroubleshooterState {
   consecutiveFailedSessions: number;
   retriesThisBurst: number;
   autoOpened: boolean;
+  dismissedThisBurst: boolean;
   forgetMode: boolean;
   lastSessionState: string;
   lastTelemetry: VoltTelemetry | null;
@@ -626,7 +627,6 @@ interface VoltRestoreProgress {
     setAppState(payload: unknown): void;
     updateTelemetry(payload: VoltPayload): void;
     updateLiveUi(): void;
-    drawTrace(): void;
     renderOperationalState(): void;
     updateValidationUi(): void;
     formatDistance(meters: unknown): string;
@@ -650,6 +650,9 @@ interface VoltRestoreProgress {
     reportNativeReadError(payload: unknown, fallbackDetail: string): void;
     buildStatusCopy(text: string): HTMLParagraphElement;
     toggleHidden(id: string, hidden: unknown): void;
+    /** True when the Insights screen has real content to show (logged trip /
+     *  distance or a battery reading) — gates insightsEmptyState. */
+    hasInsightContent(): boolean;
 
     // ----- signals-panel.ts (split from the old panels.ts) -------------------
     updateEnhancedCapabilityUi(): void;

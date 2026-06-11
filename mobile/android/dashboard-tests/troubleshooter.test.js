@@ -103,6 +103,50 @@ describe('troubleshooter.ts — auto-open triggers', () => {
     expect(isModalOpen()).toBe(false);
   });
 
+  it('a dismissed modal stays closed for the rest of the retry burst, then re-arms', () => {
+    pushStatus({ state: 'connecting', detail: 'retrying (1/5)' });
+    pushStatus({ state: 'connecting', detail: 'retrying (2/5)' });
+    pushStatus({ state: 'connecting', detail: 'retrying (3/5)' });
+    expect(isModalOpen()).toBe(true);
+
+    // User dismisses mid-burst. The very next retry status must NOT reopen it.
+    VD.troubleshooter.close();
+    expect(isModalOpen()).toBe(false);
+    pushStatus({ state: 'connecting', detail: 'retrying (4/5)' });
+    expect(isModalOpen()).toBe(false);
+    pushStatus({ state: 'connecting', detail: 'retrying (5/5)' });
+    expect(isModalOpen()).toBe(false);
+
+    // A clean connect ends the burst and re-arms the auto-open for the next one.
+    pushStatus({ state: 'connected', detail: 'OBDLink MX+' });
+    pushStatus({ state: 'connecting', detail: 'retrying (1/5)' });
+    pushStatus({ state: 'connecting', detail: 'retrying (2/5)' });
+    pushStatus({ state: 'connecting', detail: 'retrying (3/5)' });
+    expect(isModalOpen()).toBe(true);
+  });
+
+  it('dismissing after consecutive failures suppresses reopen until a clean connect', () => {
+    pushStatus({ state: 'connecting', detail: 'connecting...' });
+    pushStatus({ state: 'failed', detail: 'handshake failed' });
+    pushStatus({ state: 'connecting', detail: 'connecting...' });
+    pushStatus({ state: 'failed', detail: 'handshake failed' });
+    expect(isModalOpen()).toBe(true);
+
+    // Dismiss, then a third failed session: it must not pop straight back.
+    VD.troubleshooter.close();
+    pushStatus({ state: 'connecting', detail: 'connecting...' });
+    pushStatus({ state: 'failed', detail: 'handshake failed' });
+    expect(isModalOpen()).toBe(false);
+
+    // After a clean connect the trigger is live again.
+    pushStatus({ state: 'connected', detail: 'OBDLink MX+' });
+    pushStatus({ state: 'connecting', detail: 'connecting...' });
+    pushStatus({ state: 'failed', detail: 'handshake failed' });
+    pushStatus({ state: 'connecting', detail: 'connecting...' });
+    pushStatus({ state: 'failed', detail: 'handshake failed' });
+    expect(isModalOpen()).toBe(true);
+  });
+
   it('reopens manually via the error-banner "Get help" affordance', () => {
     const help = document.getElementById('errorBannerHelp');
     help.click();
@@ -493,6 +537,31 @@ describe('connection-tools.ts — proactive adapter checks', () => {
 
     expect(bridge.setAutoConnectEnabled).toHaveBeenCalledWith(false);
     expect(status.textContent).toMatch(/manual connect/i);
+  });
+
+  it('the change handler re-polls auto-connect state instead of reusing the bind-time snapshot', async () => {
+    const getAutoConnectState = vi.fn(
+      () => '{"enabled":true,"available":true,"lastName":"New Adapter","lastAddress":"11:22:33:44:55:66"}'
+    );
+    getAutoConnectState.mockReturnValueOnce(
+      '{"enabled":true,"available":true,"lastName":"Old Adapter","lastAddress":"AA:BB:CC:DD:EE:FF"}'
+    );
+    await freshLoad(createVoltBridgeFixture({
+      getAutoConnectState,
+      setAutoConnectEnabled: vi.fn(),
+    }));
+    const toggle = document.getElementById('autoConnectToggle');
+    const status = document.getElementById('autoConnectStatus');
+    expect(status.textContent).toMatch(/Old Adapter/);
+
+    // Re-toggling on must repaint from a FRESH bridge poll, not the snapshot
+    // captured when the handler was bound.
+    toggle.checked = true;
+    toggle.dispatchEvent(new window.Event('change'));
+
+    expect(getAutoConnectState.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(status.textContent).toMatch(/New Adapter/);
+    expect(status.textContent).not.toMatch(/Old Adapter/);
   });
 
   it('Auto-connect surfaces the post-failure cooldown', async () => {

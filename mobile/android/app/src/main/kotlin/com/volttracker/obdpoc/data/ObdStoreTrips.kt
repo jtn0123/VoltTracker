@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.data
 
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
+import androidx.core.database.sqlite.transaction
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -13,6 +14,11 @@ import java.util.Collections
 class ObdStoreTrips(
     private val helper: VoltTrackerDb,
 ) {
+    /**
+     * Reached concurrently from the WebView JS-bridge thread (getTrips/getInsights) and the OBD
+     * polling thread (storage summary -> totalDistanceMeters), so every read/write/iteration must
+     * hold the map's monitor.
+     */
     private val activeTripCache = HashMap<String, CachedTrip>()
 
     fun tripsJson(limit: Int): JSONArray {
@@ -91,7 +97,7 @@ class ObdStoreTrips(
         }
         val cacheKey = activeTripCacheKey(session, window, usefulSamples)
         val now = System.currentTimeMillis()
-        val cached = activeTripCache[cacheKey]
+        val cached = synchronized(activeTripCache) { activeTripCache[cacheKey] }
         if (cached != null && now - cached.createdAtMs <= ACTIVE_TRIP_CACHE_TTL_MS) {
             return JSONObject(cached.json)
         }
@@ -134,8 +140,10 @@ class ObdStoreTrips(
         trip.put("adapterName", session.adapterName)
         trip.put("status", session.status)
         if (session.endedAtMs <= 0) {
-            activeTripCache[cacheKey] = CachedTrip(trip.toString(), now)
-            pruneActiveTripCache(now, session.id)
+            synchronized(activeTripCache) {
+                activeTripCache[cacheKey] = CachedTrip(trip.toString(), now)
+                pruneActiveTripCache(now, session.id, cacheKey)
+            }
         }
         return trip
     }
@@ -322,14 +330,18 @@ class ObdStoreTrips(
         sessionId: Long,
         trips: List<JSONObject>,
     ) {
-        db.delete(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, "session_id = ?", arrayOf(sessionId.toString()))
-        for (trip in trips) {
-            val values = ContentValues()
-            values.put("session_id", sessionId)
-            values.put("ended_at_ms", trip.optLong("endedAtMs", 0L))
-            values.put("rollup_version", ROLLUP_CACHE_VERSION)
-            values.put("trip_json", trip.toString())
-            db.insert(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, null, values)
+        // Atomic delete+insert so a concurrent reader never observes a half-rebuilt cache for
+        // this session (and a crash mid-rebuild can't leave it empty).
+        db.transaction {
+            db.delete(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, "session_id = ?", arrayOf(sessionId.toString()))
+            for (trip in trips) {
+                val values = ContentValues()
+                values.put("session_id", sessionId)
+                values.put("ended_at_ms", trip.optLong("endedAtMs", 0L))
+                values.put("rollup_version", ROLLUP_CACHE_VERSION)
+                values.put("trip_json", trip.toString())
+                db.insert(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, null, values)
+            }
         }
     }
 
@@ -378,9 +390,11 @@ class ObdStoreTrips(
         usefulSamples: Long,
     ): String = "${session.id}:${window.startedAtMs}:${window.endedAtMs}:$usefulSamples"
 
+    /** Caller must hold the [activeTripCache] monitor. */
     private fun pruneActiveTripCache(
         now: Long,
         sessionId: Long,
+        keepKey: String,
     ) {
         // Expired entries are never read again (the TTL check on lookup skips them), so collect
         // them here; the prefix prune alone would let stale entries from other sessions linger.
@@ -397,7 +411,9 @@ class ObdStoreTrips(
         val iterator = activeTripCache.keys.iterator()
         while (iterator.hasNext()) {
             val key = iterator.next()
-            if (key.startsWith(prefix)) {
+            // Keep the entry the caller inserted one line earlier — pruning it would defeat the
+            // cache exactly when it is under pressure.
+            if (key != keepKey && key.startsWith(prefix)) {
                 iterator.remove()
             }
         }

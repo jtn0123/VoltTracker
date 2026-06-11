@@ -409,10 +409,11 @@ object DatabaseMerger {
                     target.insertOrThrow(VoltTrackerDb.TABLE_ADAPTER_HISTORY, null, cv)
                 } else {
                     val merged = ContentValues()
-                    sumLong(merged, "connect_count", existing, cv)
-                    sumLong(merged, "scan_count", existing, cv)
-                    sumLong(merged, "demo_count", existing, cv)
-                    sumLong(merged, "sample_count", existing, cv)
+                    val donorContained = donorIntervalContained(existing, cv)
+                    mergeCounter(merged, "connect_count", existing, cv, donorContained)
+                    mergeCounter(merged, "scan_count", existing, cv, donorContained)
+                    mergeCounter(merged, "demo_count", existing, cv, donorContained)
+                    mergeCounter(merged, "sample_count", existing, cv, donorContained)
                     merged.put(
                         "first_seen_ms",
                         minLong(existing.getAsLong("first_seen_ms"), cv.getAsLong("first_seen_ms")),
@@ -473,7 +474,7 @@ object DatabaseMerger {
                     target.insertOrThrow(VoltTrackerDb.TABLE_DIAGNOSTIC_CODES, null, cv)
                 } else {
                     val merged = ContentValues()
-                    sumLong(merged, "seen_count", existing, cv)
+                    mergeCounter(merged, "seen_count", existing, cv, donorIntervalContained(existing, cv))
                     merged.put(
                         "first_seen_ms",
                         minLong(existing.getAsLong("first_seen_ms"), cv.getAsLong("first_seen_ms")),
@@ -703,13 +704,40 @@ object DatabaseMerger {
             if (c.moveToFirst()) readRow(c) else null
         }
 
-    private fun sumLong(
+    /**
+     * Idempotency heuristic for aggregated counter rows (adapter history, diagnostic codes), which
+     * have no per-event row identity to dedupe on: when the donor row's
+     * `[first_seen_ms, last_seen_ms]` interval is fully contained within the existing row's
+     * interval, the donor adds no new time span — it is almost certainly a re-import of a backup
+     * that was already merged, so summing would double the counters on every re-import. A donor
+     * that extends the interval on either side genuinely carries new activity and keeps summing.
+     */
+    private fun donorIntervalContained(
+        existing: ContentValues,
+        donor: ContentValues,
+    ): Boolean {
+        val donorFirst = orZero(donor.getAsLong("first_seen_ms"))
+        val donorLast = orZero(donor.getAsLong("last_seen_ms"))
+        val liveFirst = orZero(existing.getAsLong("first_seen_ms"))
+        val liveLast = orZero(existing.getAsLong("last_seen_ms"))
+        return donorFirst >= liveFirst && donorLast <= liveLast
+    }
+
+    /**
+     * Sums the counter, except when [donorContained] says the donor is a re-import of an
+     * already-merged span — then the larger of the two values is kept so re-importing the same
+     * backup leaves counters unchanged. See [donorIntervalContained].
+     */
+    private fun mergeCounter(
         out: ContentValues,
         column: String,
-        a: ContentValues,
-        b: ContentValues,
+        existing: ContentValues,
+        donor: ContentValues,
+        donorContained: Boolean,
     ) {
-        out.put(column, orZero(a.getAsLong(column)) + orZero(b.getAsLong(column)))
+        val live = orZero(existing.getAsLong(column))
+        val donated = orZero(donor.getAsLong(column))
+        out.put(column, if (donorContained) maxOf(live, donated) else live + donated)
     }
 
     private fun copyIfPresent(

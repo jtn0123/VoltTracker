@@ -14,6 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import java.time.Duration
 
 /**
  * Behavior tests for [TroubleshooterBridge.startTestConnection] — the one-shot probe the dashboard
@@ -105,6 +106,50 @@ class TroubleshooterBridgeConnectionTest {
         assertEquals("only the surviving scheduled stop should run", 1, activity.stopCalls)
     }
 
+    @Test
+    fun startTestConnectionBlocksWithoutTouchingServiceWhileSessionActive() {
+        // Regression: ObdService.startSession begins with stopCurrentSession, so a probe issued
+        // while a real logging session is running would restart it — and the 25 s auto-stop
+        // would then kill the user's live session. The bridge must refuse to probe instead.
+        activity.requireDeviceCatalog().remember(REMEMBERED_ADDRESS, REMEMBERED_NAME)
+        activity.loggingActive = true
+
+        bridge.startTestConnection()
+
+        assertEquals("an active session must surface a blocked status", "blocked", activity.lastState)
+        assertNull("no connect may be issued while a session is active", activity.connectAddress)
+        assertEquals("no device should be remembered on the refused path", 0, activity.rememberCalls)
+
+        shadowOf(Looper.getMainLooper()).runToEndOfTasks()
+
+        assertEquals("no auto-stop may be scheduled while a session is active", 0, activity.stopCalls)
+    }
+
+    @Test
+    fun adapterReadyTickSkipsProbeWhileSessionActiveAndReschedules() {
+        // The notify-when-ready tick must not probe over a live session (see above), but the
+        // schedule itself stays armed: once the session ends, the next tick probes again.
+        activity.requireDeviceCatalog().remember(REMEMBERED_ADDRESS, REMEMBERED_NAME)
+        activity.loggingActive = true
+
+        bridge.scheduleAdapterReadyNotify(5)
+        // Run only the immediately-posted first tick; the reschedule stays queued at +30 s.
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertNull("the tick must not connect while a session is active", activity.connectAddress)
+        assertEquals("the tick must not schedule a stop while a session is active", 0, activity.stopCalls)
+
+        // Session ends; advancing to the rescheduled tick must resume probing.
+        activity.loggingActive = false
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(30))
+
+        assertEquals(
+            "the rescheduled tick must probe once the session is over",
+            REMEMBERED_ADDRESS,
+            activity.connectAddress,
+        )
+    }
+
     /**
      * [MainActivity] override that records the bridge's outbound dispatches instead of touching the
      * real service / store plumbing. Mirrors the recording-harness pattern in [TroubleshooterBridgeTest].
@@ -117,6 +162,7 @@ class TroubleshooterBridgeConnectionTest {
         var connectAddress: String? = null
         var connectName: String? = null
         var stopCalls = 0
+        var loggingActive = false
 
         override fun onCreate(savedInstanceState: Bundle?) {
             deviceCatalog = DeviceCatalog(this, getSharedPreferences("troubleshooter-connection-test", 0))
@@ -151,6 +197,8 @@ class TroubleshooterBridgeConnectionTest {
         override fun stopObdService() {
             stopCalls += 1
         }
+
+        override fun isLoggingActive(): Boolean = loggingActive
     }
 
     private companion object {

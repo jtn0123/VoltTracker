@@ -25,6 +25,11 @@ type InertElement = HTMLElement & { inert?: boolean };
 
 let dialogController: AbortController | null = null;
 let dialogOpener: Element | null = null;
+// Resolver for the currently-open dialog's promise. closeDialog() settles it
+// directly — relying on the (abortable) listeners to resolve would leave the
+// promise pending forever when a second dialog aborts the first one's
+// controller before any listener fires.
+let dialogSettle: ((value: boolean | string | null) => void) | null = null;
 
 function node<T extends HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
@@ -69,6 +74,10 @@ function focusableNodes(root: HTMLElement): HTMLElement[] {
 
 function closeDialog(result: boolean | string | null): boolean | string | null {
   const n = nodes();
+  // Detach the resolver before aborting/settling so re-entrant closes (or a
+  // stacked openDialog) can never settle the same promise twice.
+  const settlePending = dialogSettle;
+  dialogSettle = null;
   if (dialogController) {
     dialogController.abort();
     dialogController = null;
@@ -83,6 +92,7 @@ function closeDialog(result: boolean | string | null): boolean | string | null {
   if (opener instanceof HTMLElement && document.contains(opener)) {
     opener.focus();
   }
+  if (settlePending) settlePending(result);
   return result;
 }
 
@@ -108,7 +118,10 @@ function openDialog(options: AppPromptOptions & { mode: "confirm" | "prompt" }):
   setBackgroundInert(true);
 
   return new Promise((resolve) => {
-    const settle = (value: boolean | string | null) => resolve(closeDialog(value));
+    // closeDialog() resolves via dialogSettle, so the promise settles exactly
+    // once even when a second dialog opens and force-closes this one.
+    dialogSettle = resolve;
+    const settle = (value: boolean | string | null) => closeDialog(value);
     const confirmValue = () => {
       if (options.mode === "prompt") {
         const trimmed = n.input.value.trim();
