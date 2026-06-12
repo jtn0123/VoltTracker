@@ -1,6 +1,93 @@
 # CHANGELOG
 
 
+## v0.12.1 (2026-06-12)
+
+### Bug Fixes
+
+- Implement the codebase-eval polish items across data, dashboard, app, and CI
+  ([#198](https://github.com/jtn0123/VoltTracker/pull/198),
+  [`b4f688e`](https://github.com/jtn0123/VoltTracker/commit/b4f688eef6f85ba5414d4c8215a57637aa52cd2a))
+
+* ci: surface flaky retries, single-source bundle budgets, document tooling contracts
+
+- CI test summary now groups retried executions per test, lists tests that passed only after retry
+  as flaky (with ::warning annotations), and keeps never-passed tests out of that bucket;
+  failed/flaky/slowest lists print "...and N more" instead of truncating silently. - Dashboard
+  bundle budgets in the workflow headroom step are now extracted from mobile/android/build.gradle
+  (the hard gate) instead of duplicated literals, with rename protection. - Spotless test glob
+  broadened to src/test/**/*.kt; detekt.yml documents that tests are analysed by correctness rules
+  (complexity rules exclude them). - jacoco.gradle coverage-history legend explains the audit-ID
+  naming (D4 etc.) and EmulatorSmokeContractTest KDoc is rewritten in plain language. -
+  emulator-smoke.sh logcat error patterns documented case by case (no behavior change); serial
+  Spotless/Detekt/Lint lane justified inline. - CONTRIBUTING.md: stale "Java tests remain" note
+  replaced with a Java test inventory (currently 0 .java / 91 .kt) and the conversion policy.
+
+https://claude.ai/code/session_01CwuZUdBadFVmQ6yeRfWr1g
+
+* fix: harden app-layer lifecycle, location, and backup edge cases
+
+- MainActivity: ObdLocalStore construction no longer crashes startup on a corrupt DB/full disk — the
+  store stays null (already tolerated everywhere) and the dashboard shows a blocked status instead
+  of "viewing local data"; WebView teardown is guarded against Chromium throwing during destroy();
+  isDashboardReadyForTest() is internal + @VisibleForTesting. - ObdService: sessionStateMachine is
+  private (nothing outside the service read or wrote it). - ElmConnection: lastTransactTruncated
+  resets at session boundaries so a new session can't observe the previous session's truncation
+  verdict. - LocationManagerTracker: 60s watchdog detects a hung provider, logs, and re-subscribes
+  instead of waiting forever; any incoming fix re-arms it. - BackupController: dialog-show sites
+  guard isFinishing (restore prompt also cleans up the staged file), and backup build/share failures
+  log context before the failure UI. - Bluetooth receivers (DashboardBroadcastCoordinator,
+  BluetoothStateReporter) register NOT_EXPORTED — Bluetooth ACTION_* are protected system
+  broadcasts, so exported registration was never required.
+
+* fix(dashboard): zero innerHTML sinks, shared state factory, payload-error reporting
+
+- core.ts: the last innerHTML sink is now replaceChildren(); the dom-sinks allowlist is ratcheted to
+  zero. parsePayload() reports JSON failures through the rate-limited client-error path instead of
+  silently returning the fallback. - New telemetry-state.ts factory seeds initial telemetry state
+  for core init, clearDemoTelemetry, and resetTelemetry — fixing real drift (resetTelemetry had
+  dropped the source key). - insights-panel.ts uses the shared haversineMetersJs instead of a local
+  copy; "Current drive" label extracted to a shared constant. - payload-validators.ts warn-once set
+  is capped at 256 entries. - drive.ts caches chart host widths, invalidated by the existing
+  debounced resize handler. - CSS: new --volt-rgb token replaces 56 hardcoded rgba(255,122,69,...)
+  literals (pixel-identical), with a guard test against regressions. - Tests: app-dialog
+  keyboard/focus-trap coverage, CSS data-state/tone selector drift check, bridge-failure degrade
+  pins for the connection badge; global coverage floors raised (lines 76->81, statements 72->78,
+  functions 75->80, branches 66->69) with dated audit entries.
+
+* fix(data): per-session adapter-key cache, batched pruning, parsed migration backfill
+
+- ObdStoreWriter: field-capability upserts resolve the adapter key through a bounded per-writer LRU
+  instead of querying obd_sessions on every PID observation; passive WAL checkpoint failures now log
+  on the 1st and every 10th consecutive failure instead of accumulating silently. -
+  ObdStoreMaintenance: pruning deletes raw rows in 500-row batches (each its own short transaction,
+  so one giant DELETE can't hold the writer lock) and invalidates trip rollups/caches only for the
+  affected sessions instead of flushing globally. - VoltTrackerDb: the v5 backfill parses telemetry
+  JSON per row instead of LIKE pattern matching, so spacing variants backfill correctly and nested
+  false positives are excluded. - ObdStoreRouteProjection: routes over 300 points are simplified
+  with Douglas-Peucker (12 m tolerance, endpoints and timestamps preserved); ROLLUP_CACHE_VERSION
+  bumped so cached trip JSON rebuilds consistently. - BackupMigrator: stale restore-migrate-*
+  working files are swept at the start of every run, and an integrity_check gates the migrated copy
+  before it replaces the staged file. - DriveWindowDetector: session reads merged from 6 scans to 4
+  with a defensive row cap; ObdStoreTrips logs corrupt rollup JSON instead of dropping it silently;
+  ObdStatementCache recompiles against closed handles; schema delete-policy and GCM IV-uniqueness
+  invariants documented. - Tests: new ObdStoreRouteSimplifyTest plus coverage for batched pruning,
+  scoped cache invalidation, adapter-key isolation, JSON-parsed migration backfill, and the
+  stale-working-file sweep.
+
+* fix: drop MainActivity's duplicate openBluetoothSettings helper
+
+The onboarding dialog now routes through TroubleshooterBridge's openBluetoothSettings(), which
+  already handles the same intent with blocked status feedback on failure. This also keeps
+  MainActivity at 60 functions, under the detekt TooManyFunctions ratchet.
+
+* style: apply ktlint chaining format to onboarding dialog builder
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.12.0 (2026-06-12)
 
 ### Features
