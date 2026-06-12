@@ -214,7 +214,10 @@ import {
     const banner = el("mapTileError");
     if (!banner) return;
     banner.hidden = !show;
-    if (detail) VD.setText("mapTileErrorCopy", detail);
+    // Always refresh the copy when showing, so a generic show can't surface a
+    // stale message from an earlier, different failure (e.g. the fallback-tiles
+    // text after the primary layer recovers and fails again).
+    if (show) VD.setText("mapTileErrorCopy", detail || "Map tiles are not loading.");
   }
 
   function retryMapTiles() {

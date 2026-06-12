@@ -121,7 +121,7 @@ class SessionRecorder {
                     "reason",
                     ex.javaClass.simpleName,
                     "message",
-                    ex.message.toString(),
+                    ex.message ?: "",
                 )
             }
         }

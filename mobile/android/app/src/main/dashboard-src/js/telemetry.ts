@@ -631,9 +631,13 @@ import type { MapRoutePoint } from "./map-route-utils";
       speedMeter.setAttribute("aria-valuemax", metric ? "200" : "120");
       if (primary) {
         speedMeter.setAttribute("aria-valuenow", String(primary.value));
+        speedMeter.setAttribute("aria-valuetext", `${primary.value} ${primary.unit}`);
         speedMeter.setAttribute("aria-label", `Vehicle speed in ${primary.unit}`);
       } else {
+        // Without valuenow the meter is indeterminate; valuetext keeps screen
+        // readers announcing "no data yet" instead of a bare "--".
         speedMeter.removeAttribute("aria-valuenow");
+        speedMeter.setAttribute("aria-valuetext", "no data yet");
       }
     }
     setOptionalLiveText("rpmValue", t.rpm == null || t.rpm === "" ? "--" : `${t.rpm}`);
@@ -727,8 +731,13 @@ import type { MapRoutePoint } from "./map-route-utils";
     }
     const powerMeter = el("powerMeter");
     if (powerMeter) {
-      if (Number.isFinite(power)) powerMeter.setAttribute("aria-valuenow", String(Math.round(power)));
-      else powerMeter.removeAttribute("aria-valuenow");
+      if (Number.isFinite(power)) {
+        powerMeter.setAttribute("aria-valuenow", String(Math.round(power)));
+        powerMeter.setAttribute("aria-valuetext", `${Math.round(power)} kilowatts`);
+      } else {
+        powerMeter.removeAttribute("aria-valuenow");
+        powerMeter.setAttribute("aria-valuetext", "no data yet");
+      }
     }
     renderOperationalState();
     updateDiagnostics();

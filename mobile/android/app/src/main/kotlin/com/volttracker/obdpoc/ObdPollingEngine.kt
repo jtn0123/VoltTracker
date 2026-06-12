@@ -531,7 +531,7 @@ open class ObdPollingEngine(
                 }
             }
         } catch (ex: IOException) {
-            service.recorder.logEvent("vin_probe_failed", "error", ex.message.toString())
+            service.recorder.logEvent("vin_probe_failed", "error", ex.message ?: ex.javaClass.simpleName)
         }
     }
 
@@ -560,7 +560,7 @@ open class ObdPollingEngine(
             )
         } catch (ex: IOException) {
             pidPolling.setMode01BatchSupported(false)
-            service.recorder.logEvent("mode01_batch_probe_failed", "error", ex.message.toString())
+            service.recorder.logEvent("mode01_batch_probe_failed", "error", ex.message ?: ex.javaClass.simpleName)
         }
     }
 

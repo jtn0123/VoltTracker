@@ -553,17 +553,31 @@
     const chargingNow = (Array.isArray(charge.recentSessions) ? charge.recentSessions : [])
       .some(isChargeInProgress);
     VD.setText("realChargeStatus", chargingNow ? "charging" : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data")));
+    // Keep the status pill's color in sync with the text (see base.css badge states).
+    const chargeBadge = el("realChargeStatusBadge");
+    if (chargeBadge) {
+      chargeBadge.dataset.state = chargingNow
+        ? "charging"
+        : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs-review" : "waiting"));
+    }
     renderChargeSessions(charge);
 
     const ring = el("realPackRing");
     const ringValue = el("realPackValue");
     if (Number.isFinite(soc) && soc > 0) {
-      if (ring) ring.style.setProperty("--v", String(Math.max(0, Math.min(100, soc))));
+      if (ring) {
+        ring.style.setProperty("--v", String(Math.max(0, Math.min(100, soc))));
+        // Leave the "waiting" neutral track once a real SOC reading exists.
+        ring.removeAttribute("data-state");
+      }
       if (ringValue) ringValue.textContent = `${Math.round(soc)}%`;
       VD.setText("realPackTitle", "Latest battery reading captured.");
       VD.setText("realPackCopy", `${Number.isFinite(power) ? power.toFixed(1) + " kW · " : ""}${latest.vehicleState || "vehicle state unknown"} · accuracy improves as more drives are logged.`);
     } else {
-      if (ring) ring.style.setProperty("--v", "0");
+      if (ring) {
+        ring.style.setProperty("--v", "0");
+        ring.setAttribute("data-state", "waiting");
+      }
       if (ringValue) ringValue.textContent = "--";
       VD.setText("realPackTitle", "Waiting for battery readings.");
       VD.setText("realPackCopy", "Battery charge, power, and pack health appear here once the adapter has logged a few readings.");

@@ -785,6 +785,17 @@ import type { BusyButton } from "./actions-storage";
       }
     }, opts);
     document.addEventListener("keydown", trapDtcDialogKeydown, opts);
+    // Tapping outside the open Clear-codes dialog dismisses it, matching the
+    // Esc path. The background is inert while the dialog is open, so this
+    // click lands on a non-interactive ancestor and can't trigger anything
+    // else. Skip the opener's own click (it bubbles here after opening).
+    document.addEventListener("click", (event) => {
+      if (!dtcDialogOpen()) return;
+      const target = event.target as Element | null;
+      if (target && target.closest("[data-action='openClearDtc']")) return;
+      const panel = el("dtcClearWarning");
+      if (panel && (!target || !panel.contains(target))) closeClearDtcWarning();
+    }, opts);
     document.addEventListener("click", (event) => {
       const target = event.target as Element | null;
       const signalExport = target && target.closest("[data-signal-export]");

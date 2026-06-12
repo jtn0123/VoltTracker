@@ -389,6 +389,17 @@
     color: var(--muted);
   }
 
+  /* The Status KPI renders a badge where the other charge KPIs render a bare
+     number; block-level + max-content keeps the pill on its own line so the
+     caption below stays in place, matching the .charge-kpi strong layout. */
+  .charge-kpi .badge {
+    display: flex;
+    width: max-content;
+    max-width: 100%;
+    margin-top: 9px;
+    margin-bottom: 4px;
+  }
+
   /* HV-pack detail stats beneath the SOC ring on the Insights hero. */
   .pack-stat-row {
     display: flex;
@@ -532,6 +543,15 @@
     box-shadow: inset 0 0 0 14px rgba(0,0,0,0.28);
   }
 
+  /* Before the first SOC reading the ring shows a neutral full track instead
+     of a 0% arc that reads as an empty battery. */
+  .ring[data-state="waiting"] {
+    background: rgba(255,255,255,0.08);
+  }
+  .ring[data-state="waiting"] strong {
+    color: var(--muted);
+  }
+
   .ring strong {
     font-size: 31px;
   }
@@ -593,7 +613,7 @@
     margin-top: 12px;
   }
 
-  .list-card header, .charge-card header {
+  .list-card header, .charge-card header, #insightStatsCard header {
     display: flex;
     align-items: center;
     justify-content: space-between;

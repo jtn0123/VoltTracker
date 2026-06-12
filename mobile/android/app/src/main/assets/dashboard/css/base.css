@@ -338,6 +338,16 @@
   .badge[data-state="demo"] { color: var(--mixed); }
   .badge[data-state="demo"] .dot { background: var(--mixed); color: var(--mixed); }
 
+  /* Charge-detection states (Charge tab status KPI): green once charging is
+     live or sessions are recorded, amber while plug-in hints await review,
+     and the neutral default while there is no data yet ("waiting"). */
+  .badge[data-state="charging"],
+  .badge[data-state="recorded"] { color: var(--ok); }
+  .badge[data-state="charging"] .dot,
+  .badge[data-state="recorded"] .dot { background: var(--ok); color: var(--ok); }
+  .badge[data-state="needs-review"] { color: var(--warn); }
+  .badge[data-state="needs-review"] .dot { background: var(--warn); color: var(--warn); }
+
   /* The topbar status badge is a status surface AND a tap target (it opens the
      status popover): its colors always encode connection state — green when
      connected, amber while working, red when blocked/failed, purple for demo —

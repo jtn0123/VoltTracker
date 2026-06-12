@@ -30,7 +30,9 @@
   </article>
 
   <article class="panel ratio-card insights-hero">
-    <div id="realPackRing" class="ring" style="--v: 0">
+    <!-- data-state="waiting" renders a neutral track instead of a misleading
+         0% arc until the first SOC reading; storage-status.ts clears it. -->
+    <div id="realPackRing" class="ring" style="--v: 0" data-state="waiting">
       <strong id="realPackValue">--</strong>
     </div>
     <div>
@@ -206,6 +208,9 @@
     <article class="panel" id="insightStatsCard">
       <header>
         <span class="kicker">More lifetime stats</span>
+        <button type="button" class="link-btn" data-action="refreshStorage">
+          Refresh
+        </button>
       </header>
       <div class="state-grid" aria-label="Additional lifetime totals">
         <div>

@@ -1035,7 +1035,12 @@
     </article>
     <article class="panel charge-kpi">
       <header><span>Status</span><span>charging</span></header>
-      <strong id="realChargeStatus">needs data</strong>
+      <!-- Color-coded like the other status badges; storage-status.ts keeps
+           data-state in sync with the text (waiting/needs-review/recorded/charging). -->
+      <span id="realChargeStatusBadge" class="badge" data-state="waiting"
+        ><span class="dot"></span
+        ><span id="realChargeStatus">needs data</span></span
+      >
       <small>Charge detection status</small>
     </article>
   </section>
@@ -1070,6 +1075,9 @@
         <span class="kicker">Recent charges</span>
         <h3 id="chargeSessionsTitle">Charge sessions</h3>
       </div>
+      <button type="button" class="link-btn" data-action="refreshStorage">
+        Refresh
+      </button>
     </header>
     <div
       id="chargeSessionsList"
@@ -1110,7 +1118,9 @@
   </article>
 
   <article class="panel ratio-card insights-hero">
-    <div id="realPackRing" class="ring" style="--v: 0">
+    <!-- data-state="waiting" renders a neutral track instead of a misleading
+         0% arc until the first SOC reading; storage-status.ts clears it. -->
+    <div id="realPackRing" class="ring" style="--v: 0" data-state="waiting">
       <strong id="realPackValue">--</strong>
     </div>
     <div>
@@ -1286,6 +1296,9 @@
     <article class="panel" id="insightStatsCard">
       <header>
         <span class="kicker">More lifetime stats</span>
+        <button type="button" class="link-btn" data-action="refreshStorage">
+          Refresh
+        </button>
       </header>
       <div class="state-grid" aria-label="Additional lifetime totals">
         <div>

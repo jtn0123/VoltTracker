@@ -39,6 +39,9 @@ object WebViewBootstrap {
         settings.domStorageEnabled = true
         settings.allowFileAccess = false
         settings.allowContentAccess = false
+        // Both file-URL settings are deprecated (and default to false on API 16+),
+        // but they are still honored by the WebView, so the hardened profile pins
+        // them off explicitly rather than trusting the platform default.
         @Suppress("DEPRECATION")
         settings.allowUniversalAccessFromFileURLs = false
         @Suppress("DEPRECATION")

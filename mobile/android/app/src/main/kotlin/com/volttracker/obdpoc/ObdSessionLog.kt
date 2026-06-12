@@ -101,7 +101,10 @@ class ObdSessionLog(
             }
         } catch (ex: IOException) {
             noteFailure("write_failed", ex)
-        } catch (ignored: JSONException) {
+        } catch (ex: JSONException) {
+            // The line is dropped, but record it so lastWriteFailure() surfaces
+            // the loss instead of the log silently missing entries.
+            noteFailure("encode_failed", ex)
         }
     }
 
@@ -144,7 +147,7 @@ class ObdSessionLog(
 
     private fun noteFailure(
         stage: String,
-        ex: IOException?,
+        ex: Exception?,
     ) {
         val detail = if (ex == null) stage else "$stage: ${ex.javaClass.simpleName}: ${ex.message}"
         lastFailure = detail
