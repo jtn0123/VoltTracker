@@ -1,3 +1,6 @@
+  /* Dark is the default (and primary, in-car) scheme; a light token palette
+     lives in the `prefers-color-scheme: light` block at the end of this file,
+     which also flips color-scheme to `light` so form controls follow. */
   :root {
     color-scheme: dark;
     --bg: #07080c;
@@ -18,6 +21,71 @@
     --mixed: #a48cff;
     --gas: #ff7141;
     --on-volt: #190a04;
+    /* NOTE: --accent is intentionally NOT defined in the dark scheme — the
+       `var(--accent, #4cc4ff)` fallback (focus ring) and the inherit behavior
+       of `.kicker[data-tone="accent"]` predate the token migration and must
+       not change dark rendering. The light scheme defines it. Blue map chrome
+       uses the explicit --map-accent pair below instead. */
+    /* ── Component role tokens ────────────────────────────────────────────
+       Dark values are the exact colors components shipped with (dark mode
+       must stay pixel-identical); the light block flips each role. The
+       Chrome 66 WebView has no color-mix(), so alpha pairs are spelled out. */
+    /* Opaque-ish surfaces */
+    --surface-raised: rgba(20,20,27,0.92);   /* card body under gradients */
+    --surface-veil: rgba(20,20,27,0.55);     /* translucent sub-card */
+    --surface-float: rgba(20,21,29,0.97);    /* toast / popover / map popup */
+    --surface-modal: #15171f;                /* sheets + dialogs */
+    --surface-overlay: rgba(16,18,22,0.85);  /* glass chrome over the map */
+    --surface-chip: rgba(14,15,20,0.78);     /* trip/drive chips */
+    --surface-chip-strong: rgba(16,18,22,0.96);
+    --surface-map: #0a0b10;                  /* map frame behind tiles */
+    --surface-nav: rgba(21,23,32,0.92);      /* floating bottom nav */
+    --surface-nav-hi: rgba(43,45,56,0.94);
+    --surface-nav-lo: rgba(13,14,20,0.94);
+    --map-veil: rgba(9,10,14,0.9);           /* "no routes" cover over the map */
+    /* Scrims + shadows */
+    --scrim: rgba(4,8,12,0.72);
+    --scrim-soft: rgba(10,12,18,0.62);
+    --scrim-strong: rgba(4,8,12,0.86);
+    --shadow: rgba(0,0,0,0.5);
+    --shadow-soft: rgba(0,0,0,0.34);
+    /* Neutral fills: lighten-on-dark, darken-on-light */
+    --fill-ghost: rgba(255,255,255,0.025);
+    --fill-soft: rgba(255,255,255,0.035);
+    --fill: rgba(255,255,255,0.045);
+    --fill-strong: rgba(255,255,255,0.055);
+    --fill-bold: rgba(255,255,255,0.07);
+    --fill-active: rgba(255,255,255,0.1);
+    /* Hairlines + recessed wells */
+    --line-soft: rgba(255,255,255,0.07);
+    --line-marker: rgba(255,255,255,0.28);   /* meter zero-line, neutral dots */
+    --inset: rgba(0,0,0,0.14);
+    --inset-strong: rgba(0,0,0,0.2);
+    --inset-deep: rgba(0,0,0,0.34);
+    /* Card-top gloss gradients (disabled in light) */
+    --sheen: rgba(255,255,255,0.065);
+    --sheen-soft: rgba(255,255,255,0.05);
+    --sheen-faint: rgba(255,255,255,0.04);
+    /* Page background gradient stops */
+    --bg-top: #12131a;
+    --bg-glow: rgba(255,122,69,0.14);
+    /* Map-tab blue accent */
+    --map-accent: #4cc4ff;
+    --on-map-accent: #04222e;
+    --accent-soft: #c7edff;
+    /* Per-tone "soft" text: readable on that tone's alpha-tinted fills */
+    --volt-soft: #ffd3bf;
+    --volt-soft-dim: #ffad88;
+    --ev-soft: #e7ff9a;
+    --ok-soft: #a9ffd7;
+    --ok-bright: #74f2c2;
+    --on-ok: #06231a;
+    --warn-soft: #ffd37f;
+    --bad-soft: #ffc0bb;
+    --bad-text: #ff8a7e;
+    --bad-line: rgba(255,192,187,0.5);
+    --bad-fill: rgba(255,192,187,0.12);
+    --mixed-soft: #d6ccff;
     --space-xs: 4px;
     --space-sm: 8px;
     --space-md: 14px;
@@ -93,8 +161,8 @@
     width: 100%;
     overflow-x: hidden;
     background:
-      radial-gradient(680px 430px at 68% -90px, rgba(255,122,69,0.14), transparent 62%),
-      linear-gradient(180deg, #12131a 0%, var(--bg) 52%);
+      radial-gradient(680px 430px at 68% -90px, var(--bg-glow), transparent 62%),
+      linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 52%);
     color: var(--text);
     font-family: Inter, Roboto, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -116,7 +184,7 @@
     min-height: 42px;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
-    background: rgba(255,255,255,0.055);
+    background: var(--fill-strong);
     color: var(--text);
     cursor: pointer;
     padding: 0 11px;
@@ -317,7 +385,7 @@
     padding: 0 12px;
     border: 1px solid var(--line);
     border-radius: 999px;
-    background: rgba(255,255,255,0.045);
+    background: var(--fill);
     color: var(--muted);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11px;
@@ -386,9 +454,9 @@
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
     background:
-      linear-gradient(180deg, rgba(255,255,255,0.065), transparent 45%),
-      rgba(20,20,27,0.92);
-    box-shadow: 0 18px 48px rgba(0,0,0,0.34);
+      linear-gradient(180deg, var(--sheen), transparent 45%),
+      var(--surface-raised);
+    box-shadow: 0 18px 48px var(--shadow-soft);
   }
 
   .view {
@@ -440,7 +508,7 @@
   .primary-action.is-stop {
     border-color: rgba(255,107,95,0.3);
     background: rgba(255,107,95,0.12);
-    color: #ffc0bb;
+    color: var(--bad-soft);
   }
 
   .state-grid {
@@ -455,7 +523,7 @@
     padding: 9px 8px;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
-    background: rgba(0,0,0,0.14);
+    background: var(--inset);
   }
 
   .state-grid span {
@@ -495,7 +563,7 @@
     padding: 9px 10px;
     border: 1px solid var(--line);
     border-radius: 13px;
-    background: rgba(0,0,0,0.13);
+    background: var(--inset);
   }
 
   .validation-row::before {
@@ -617,7 +685,7 @@
     padding: 12px;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.055);
+    background: var(--fill-strong);
     color: var(--text);
     text-align: center;
     text-decoration: none;
@@ -639,7 +707,7 @@
   .diag-advanced {
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
-    background: rgba(20, 20, 27, 0.55);
+    background: var(--surface-veil);
   }
 
   .diag-advanced > summary {
@@ -747,7 +815,7 @@
     padding: 6px 8px;
     border: 1px solid var(--line-strong);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--fill-soft);
     color: var(--text);
     font-size: 15px;
     font-variant-numeric: tabular-nums;
@@ -769,7 +837,7 @@
     padding: 6px 8px;
     border: 1px solid var(--line);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--fill-soft);
   }
 
   .tile-move {
@@ -814,7 +882,7 @@
   .primary {
     border-color: transparent;
     background: var(--volt);
-    color: #101015;
+    color: var(--on-volt);
     font-weight: 850;
   }
 
@@ -825,12 +893,12 @@
 
   .demo {
     border-color: rgba(164,140,255,0.32);
-    color: #d9d1ff;
+    color: var(--mixed-soft);
   }
 
   .danger {
     border-color: rgba(255,107,95,0.3);
-    color: #ffc0bb;
+    color: var(--bad-soft);
   }
 
   .status-copy {
@@ -895,4 +963,128 @@
     display: block;
     font-size: 13px;
     color: #ff8f86;
+  }
+
+  /* ---------------------------------------------------------------------------
+     Light palette (prefers-color-scheme: light).
+
+     The component CSS (components/screens/troubleshooter/status-tools) now
+     references the role tokens above, so this block is mostly a token swap:
+     every surface, fill, hairline, scrim and tone gets a light counterpart and
+     the components follow automatically. Tones are darkened so text holds
+     WCAG AA contrast (>= 4.5:1) against the light surfaces. The handful of
+     rules below the token block re-tint accent gradients that tokens alone
+     can't express; the floating-nav gloss companion lives in screens.css. */
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg: #f3f2ee;
+      --panel: #ffffff;
+      --panel-2: #eceae4;
+      --panel-3: #f8f7f3;
+      --line: rgba(15,18,28,0.16);
+      --line-strong: rgba(15,18,28,0.28);
+      --text: #1b1c22;
+      --muted: #555661;
+      --soft: #62646f;
+      --volt: #b8410d;
+      --volt-deep: #92330a;
+      --ev: #4d7c0f;
+      --ok: #047857;
+      --warn: #946300;
+      --bad: #b42318;
+      --mixed: #6539c0;
+      --gas: #b8410d;
+      --on-volt: #ffffff;
+      /* The default #4cc4ff focus ring is below the 3:1 non-text minimum on a
+         light page; --accent exists only in this scheme (see the dark note). */
+      --accent: #0b6dc2;
+      /* Component role tokens (light counterparts) */
+      --surface-raised: #ffffff;
+      --surface-veil: rgba(0,0,0,0.03);
+      --surface-float: rgba(255,255,255,0.98);
+      --surface-modal: #fbfaf7;
+      --surface-overlay: rgba(251,250,247,0.92);
+      --surface-chip: rgba(255,255,255,0.88);
+      --surface-chip-strong: rgba(255,255,255,0.97);
+      --surface-map: #e3e1db;
+      --surface-nav: rgba(251,250,247,0.94);
+      --surface-nav-hi: rgba(255,255,255,0.96);
+      --surface-nav-lo: rgba(243,242,238,0.94);
+      --map-veil: rgba(243,242,238,0.94);
+      --scrim: rgba(23,26,34,0.45);
+      --scrim-soft: rgba(23,26,34,0.38);
+      --scrim-strong: rgba(23,26,34,0.55);
+      --shadow: rgba(24,26,34,0.2);
+      --shadow-soft: rgba(24,26,34,0.1);
+      --fill-ghost: rgba(0,0,0,0.02);
+      --fill-soft: rgba(0,0,0,0.03);
+      --fill: rgba(0,0,0,0.045);
+      --fill-strong: rgba(0,0,0,0.05);
+      --fill-bold: rgba(0,0,0,0.06);
+      --fill-active: rgba(0,0,0,0.09);
+      --line-soft: rgba(15,18,28,0.1);
+      --line-marker: rgba(15,18,28,0.3);
+      --inset: rgba(0,0,0,0.045);
+      --inset-strong: rgba(0,0,0,0.06);
+      --inset-deep: rgba(0,0,0,0.08);
+      --sheen: rgba(255,255,255,0);
+      --sheen-soft: rgba(255,255,255,0);
+      --sheen-faint: rgba(255,255,255,0);
+      --bg-top: #fbfaf7;
+      --bg-glow: rgba(232,90,31,0.1);
+      --map-accent: #0b6dc2;
+      --on-map-accent: #ffffff;
+      --accent-soft: #0a5e86;
+      --volt-soft: #9c3a10;
+      --volt-soft-dim: #9c3a10;
+      --ev-soft: #3f6212;
+      --ok-soft: #047857;
+      --ok-bright: #0a9a70;
+      --on-ok: #ffffff;
+      --warn-soft: #8a5a00;
+      --bad-soft: #b42318;
+      --bad-text: #b42318;
+      --bad-line: rgba(180,35,24,0.4);
+      --bad-fill: rgba(180,35,24,0.08);
+      --mixed-soft: #5b34b5;
+    }
+
+    .top-main {
+      background:
+        radial-gradient(220px 54px at 8px 2px, rgba(232, 90, 31, 0.08), transparent 68%),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0));
+    }
+
+    .primary-action.is-stop,
+    .danger {
+      border-color: rgba(180,35,24,0.35);
+    }
+
+    .primary-action.is-stop {
+      background: rgba(180,35,24,0.08);
+    }
+
+    /* Per-view accent tints on the title mark: reuse the darkened tone tokens
+       so the glyph keeps AA contrast on the light chrome. */
+    .drive-title-mark,
+    body[data-active-view="trips"] .drive-title-mark {
+      color: var(--volt-deep);
+      box-shadow: 0 10px 24px rgba(232, 90, 31, 0.14);
+    }
+    body[data-active-view="map"] .drive-title-mark { color: #0a5e86; }
+    body[data-active-view="charge"] .drive-title-mark { color: var(--ev); }
+    body[data-active-view="insights"] .drive-title-mark { color: var(--mixed); }
+    body[data-active-view="settings"] .drive-title-mark { color: var(--warn); }
+    body[data-active-view="signals"] .drive-title-mark { color: var(--ok); }
+
+    .error-banner {
+      background: rgba(252,236,233,0.97);
+      border-bottom: 1px solid rgba(180,35,24,0.4);
+      color: #8a1c12;
+    }
+
+    .error-banner strong {
+      color: var(--bad);
+    }
   }

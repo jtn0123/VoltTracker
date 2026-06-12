@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.app.AlertDialog
+import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.net.Uri
@@ -8,8 +9,10 @@ import android.os.Bundle
 import android.os.Looper
 import androidx.core.content.FileProvider
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.ObdStoreMaintenance
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -223,6 +226,70 @@ class BackupControllerShareTest {
         )
     }
 
+    // --- integrity warning surfacing ------------------------------------------
+
+    @Test
+    fun shareWithHealthyDatabaseDoesNotWarnAboutIntegrity() {
+        seedOneSession()
+
+        activity.backupController!!.launchShare()
+        latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        settle()
+
+        assertEquals("ready", activity.lastState)
+        assertTrue(activity.lastDetail!!.contains("Backup ready"))
+        assertFalse(
+            "a healthy database must not surface an integrity warning, got: " + activity.lastDetail,
+            activity.lastDetail!!.contains("integrity check"),
+        )
+    }
+
+    @Test
+    fun shareWithCorruptDatabaseStillSharesAndWarnsInFinalStatus() {
+        seedOneSession()
+        activity.localStore!!.close()
+        activity.localStore = CorruptQuickCheckStore(activity)
+
+        activity.backupController!!.launchShare()
+        latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        settle()
+
+        // A possibly damaged backup beats no backup: the share must still go out…
+        val share = startedShareIntent()
+        assertEquals(Intent.ACTION_SEND, share.action)
+        // …but the final success status must carry the integrity warning instead of
+        // leaving it buried in logcat.
+        assertEquals("ready", activity.lastState)
+        assertTrue(activity.lastDetail!!.contains("Backup ready"))
+        assertTrue(
+            "final status should surface the quick_check warning, got: " + activity.lastDetail,
+            activity.lastDetail!!.contains("integrity check reported problems"),
+        )
+    }
+
+    @Test
+    fun encryptedShareWithCorruptDatabaseWarnsInFinalStatus() {
+        seedOneSession()
+        activity.localStore!!.close()
+        activity.localStore = CorruptQuickCheckStore(activity)
+
+        activity.backupController!!.launchEncryptedShare("hunter22")
+        latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        settle()
+
+        val share = startedShareIntent()
+        assertTrue(
+            "encrypted backups use the .vtdb extension",
+            share.getStringExtra(Intent.EXTRA_SUBJECT)!!.endsWith(".vtdb"),
+        )
+        assertEquals("ready", activity.lastState)
+        assertTrue(activity.lastDetail!!.contains("Encrypted backup ready"))
+        assertTrue(
+            "final encrypted-share status should surface the quick_check warning, got: " + activity.lastDetail,
+            activity.lastDetail!!.contains("integrity check reported problems"),
+        )
+    }
+
     // --- launchEncryptedShare ------------------------------------------------
 
     @Test
@@ -291,6 +358,17 @@ class BackupControllerShareTest {
             "the picker should accept openable documents",
             started.categories?.contains(Intent.CATEGORY_OPENABLE) == true,
         )
+    }
+
+    /** Real store whose `PRAGMA quick_check` is stubbed to always report corruption. */
+    private class CorruptQuickCheckStore(
+        context: Context,
+    ) : ObdLocalStore(context) {
+        override fun quickCheck(): ObdStoreMaintenance.IntegrityResult =
+            ObdStoreMaintenance.IntegrityResult(
+                false,
+                listOf("row 7 missing from index idx_samples"),
+            )
     }
 
     /** Inline executor: build/share work runs synchronously so the test can assert outcomes. */

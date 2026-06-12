@@ -6,6 +6,15 @@ plugins {
 
 apply plugin: "com.diffplug.spotless"
 apply plugin: "org.gradle.test-retry"
+apply plugin: "io.gitlab.arturbosch.detekt"
+
+// Static analysis (complexity, smells, bug patterns) — complements ktlint, which is
+// formatting-only. Thresholds/exclusions live in app/detekt.yml; CI gates on :app:detekt.
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(files("detekt.yml"))
+    source.setFrom(files("src/main/kotlin", "src/test/java"))
+}
 
 spotless {
     java {
@@ -64,6 +73,7 @@ android {
         targetSdk = 36
         versionCode = repoVersionCode
         versionName = "${repoVersionName}-${repoVersionSuffix}"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // Release signing activates only when mobile/android/keystore.properties exists
@@ -104,6 +114,9 @@ android {
         }
         release {
             minifyEnabled = true
+            // Strip resources unreferenced after R8 code shrinking (keep.xml not needed:
+            // the dashboard ships as assets/, which resource shrinking never touches).
+            shrinkResources = true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             if (rootProject.file("keystore.properties").exists()) {
                 signingConfig = signingConfigs.release
@@ -156,11 +169,19 @@ dependencies {
     implementation libs.androidx.activity
     // FileProvider, for handing the data-backup file to the Android share sheet.
     implementation libs.androidx.core
+    // Installs the packaged baseline profile (src/main/baseline-prof.txt) on devices that
+    // don't get Play-delivered compilation, so the profiled startup path is AOT-compiled.
+    implementation libs.androidx.profileinstaller
     testImplementation libs.junit
     // Real org.json implementation; the android.jar stub returns no-op defaults in unit tests.
     testImplementation libs.json
     // Robolectric runs the real Android SQLite layer on the JVM for ObdLocalStore tests.
     testImplementation libs.robolectric
+    // Instrumented smoke (src/androidTest): launches MainActivity on the emulator and waits
+    // for the dashboard JS handshake. Run by the emulator-smoke CI job, not the JVM suite.
+    androidTestImplementation libs.androidx.test.core
+    androidTestImplementation libs.androidx.test.junit
+    androidTestImplementation libs.androidx.test.runner
 }
 
 // Dependency locking — only the shipped release runtime classpath is locked against

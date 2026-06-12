@@ -2,6 +2,12 @@
 
 Date: 2026-05-27
 
+> **Note (2026-06-12):** the single combined budget below is a historical
+> snapshot. The budget has since been **split** — core bundle 400,000 bytes,
+> lazy DTC data 380,000 bytes — see [`bundle-budget.md`](bundle-budget.md) and
+> `dashboardCoreBudgetBytes` / `dashboardDtcDataBudgetBytes` in
+> `mobile/android/build.gradle` for the current numbers.
+
 Scope: first-party dashboard JavaScript and CSS under
 `mobile/android/app/src/main/assets/dashboard`, excluding vendored
 `lib/leaflet`.
@@ -16,6 +22,16 @@ Scope: first-party dashboard JavaScript and CSS under
 
 `verifyActiveApp` runs `verifyDashboardBundleSize`, which fails when the
 first-party dashboard bundle exceeds the budget.
+
+## CI Headroom Report
+
+The `dashboard-tests` job in `.github/workflows/android.yml` appends a bundle
+report to the workflow run summary after building the bundle: per-file sizes,
+plus a "Budget headroom" table showing actual bytes vs the core and DTC-data
+budgets. When either bundle is within **15 KB** of its budget the step emits a
+workflow warning annotation (it does not fail the job — the hard gate stays
+`verifyDashboardBundleSize` in the `unit-tests` job). Use the report to spot a
+shrinking margin before a PR trips the hard budget.
 
 ## Largest Assets
 

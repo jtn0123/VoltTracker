@@ -108,18 +108,22 @@ class BackupController(
         showRestoreProgress(title, detail, phase = activity.getString(R.string.progress_preparing_backup_title))
         runBackground(activity.getString(R.string.status_backup_worker_failed)) {
             val progress = ProgressEmitter(title, detail)
+            // Set when DataBackup's pre-export quick_check reports problems. The backup still
+            // proceeds (a possibly damaged backup beats no backup), but the final success status
+            // must tell the user instead of burying the warning in logcat.
+            var integrityWarning = false
+            val listener =
+                DataBackup.ProgressListener { snapshot ->
+                    if (snapshot.warning) {
+                        integrityWarning = true
+                    }
+                    progress.onDataBackupProgress(snapshot)
+                }
             val backup =
                 if (encrypted) {
-                    dataBackup.buildEncryptedBackupFile(
-                        activity.localStore,
-                        passphrase,
-                        DataBackup.ProgressListener { snapshot -> progress.onDataBackupProgress(snapshot) },
-                    )
+                    dataBackup.buildEncryptedBackupFile(activity.localStore, passphrase, listener)
                 } else {
-                    dataBackup.buildBackupFile(
-                        activity.localStore,
-                        DataBackup.ProgressListener { snapshot -> progress.onDataBackupProgress(snapshot) },
-                    )
+                    dataBackup.buildBackupFile(activity.localStore, listener)
                 }
             activity.runOnUiThread {
                 if (backup == null) {
@@ -132,6 +136,12 @@ class BackupController(
                     activity.publishStatus("blocked", activity.getString(R.string.status_backup_create_failed), true)
                     return@runOnUiThread
                 }
+                val warningSuffix =
+                    if (integrityWarning) {
+                        " " + activity.getString(R.string.status_backup_integrity_warning)
+                    } else {
+                        ""
+                    }
                 try {
                     val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", backup)
                     val share = Intent(Intent.ACTION_SEND)
@@ -150,7 +160,7 @@ class BackupController(
                             } else {
                                 R.string.progress_backup_ready_detail
                             },
-                        ),
+                        ) + warningSuffix,
                         busy = false,
                         tone = "ok",
                         phase = activity.getString(R.string.progress_phase_ready_to_share),
@@ -160,7 +170,7 @@ class BackupController(
                         "ready",
                         activity.getString(
                             if (encrypted) R.string.status_encrypted_backup_ready else R.string.status_backup_ready,
-                        ),
+                        ) + warningSuffix,
                         false,
                     )
                 } catch (ex: RuntimeException) {

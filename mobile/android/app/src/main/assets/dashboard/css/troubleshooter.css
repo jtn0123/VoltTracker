@@ -23,7 +23,7 @@
 .troubleshooter-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(10, 12, 18, 0.62);
+  background: var(--scrim-soft);
   backdrop-filter: blur(2px);
 }
 
@@ -34,11 +34,11 @@
   max-height: 92vh;
   margin: 0 auto;
   padding: 18px 18px max(18px, env(safe-area-inset-bottom));
-  background: #15171f;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface-modal);
+  border-top: 1px solid var(--line-soft);
   border-radius: 18px 18px 0 0;
-  box-shadow: 0 -16px 38px rgba(0, 0, 0, 0.5);
-  color: #e7e9f2;
+  box-shadow: 0 -16px 38px var(--shadow);
+  color: var(--text);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -51,7 +51,7 @@
   }
   .troubleshooter-card {
     border-radius: var(--radius-lg);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--line-soft);
     max-height: 80vh;
   }
 }
@@ -68,7 +68,7 @@
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #ff9c91;
+  color: var(--bad-text);
   margin-bottom: 2px;
 }
 
@@ -76,14 +76,14 @@
   margin: 0;
   font-size: 18px;
   line-height: 1.25;
-  color: #ffd9d4;
+  color: var(--bad-soft);
 }
 
 .troubleshooter-close {
   appearance: none;
   border: none;
-  background: rgba(255, 255, 255, 0.06);
-  color: #e7e9f2;
+  background: var(--fill-bold);
+  color: var(--text);
   width: 32px;
   height: 32px;
   border-radius: 16px;
@@ -95,14 +95,14 @@
 
 .troubleshooter-close:hover,
 .troubleshooter-close:focus-visible {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--fill-active);
 }
 
 .troubleshooter-intro {
   margin: 0;
   font-size: 13px;
   line-height: 1.45;
-  color: #c8ccda;
+  color: var(--muted);
 }
 
 .troubleshooter-steps {
@@ -115,9 +115,9 @@
 }
 
 .troubleshooter-step {
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line-soft);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--fill-ghost);
   overflow: hidden;
 }
 
@@ -142,7 +142,7 @@
 
 .troubleshooter-step-head:hover,
 .troubleshooter-step-head:focus-visible {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--fill-soft);
 }
 
 .troubleshooter-step-number {
@@ -153,7 +153,7 @@
   height: 24px;
   border-radius: var(--radius-md);
   background: rgba(255, 156, 145, 0.16);
-  color: #ff9c91;
+  color: var(--bad-text);
   font-weight: 600;
   font-size: 12px;
   flex: none;
@@ -163,12 +163,12 @@
   flex: 1;
   font-size: 14px;
   font-weight: 600;
-  color: #f1f3fa;
+  color: var(--text);
 }
 
 .troubleshooter-chevron {
   font-size: 14px;
-  color: #8a8f9d;
+  color: var(--soft);
   transition: transform var(--motion-fast) var(--motion-ease);
 }
 
@@ -180,7 +180,7 @@
   padding: 0 14px 14px 50px;
   font-size: 13px;
   line-height: 1.5;
-  color: #c8ccda;
+  color: var(--muted);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -200,8 +200,8 @@
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 11px;
   line-height: 1.3;
-  color: #b9bdcc;
-  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  background: var(--fill-soft);
   border-radius: 8px;
   white-space: pre;
   overflow-x: auto;
@@ -209,7 +209,7 @@
 
 .troubleshooter-hint {
   font-size: 12px;
-  color: #8a8f9d;
+  color: var(--soft);
 }
 
 .troubleshooter-competing-list {
@@ -220,7 +220,7 @@
 
 .troubleshooter-competing-empty {
   font-size: 12px;
-  color: #8a8f9d;
+  color: var(--soft);
 }
 
 .troubleshooter-competing-row {
@@ -229,7 +229,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--fill-soft);
   border-radius: 8px;
   font-size: 13px;
 }
@@ -237,7 +237,7 @@
 .troubleshooter-competing-pkg {
   font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 12px;
-  color: #c8ccda;
+  color: var(--muted);
   word-break: break-all;
   flex: 1;
   min-width: 0;
@@ -245,9 +245,9 @@
 
 .troubleshooter-force-stop {
   appearance: none;
-  border: 1px solid rgba(255, 156, 145, 0.4);
-  background: rgba(255, 156, 145, 0.12);
-  color: #ffd9d4;
+  border: 1px solid var(--bad-line);
+  background: var(--bad-fill);
+  color: var(--bad-soft);
   border-radius: var(--radius-sm);
   padding: 6px 10px;
   font-size: 12px;
@@ -259,6 +259,13 @@
 .troubleshooter-force-stop:hover,
 .troubleshooter-force-stop:focus-visible {
   background: rgba(255, 156, 145, 0.22);
+}
+
+@media (prefers-color-scheme: light) {
+  .troubleshooter-force-stop:hover,
+  .troubleshooter-force-stop:focus-visible {
+    background: rgba(180, 35, 24, 0.16);
+  }
 }
 
 .troubleshooter-force-stop[disabled] {
@@ -281,7 +288,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--fill-soft);
   border-radius: 8px;
   font-size: 13px;
 }
@@ -289,13 +296,13 @@
 .troubleshooter-stale-label {
   flex: 1;
   min-width: 0;
-  color: #e7e9f2;
+  color: var(--text);
 }
 
 .troubleshooter-stale-age {
   flex: none;
   font-size: 12px;
-  color: #ff9c91;
+  color: var(--bad-text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -310,8 +317,8 @@
   min-height: 40px;
   border-radius: 10px;
   border: none;
-  background: #ff7a45;
-  color: #1a0d08;
+  background: var(--volt);
+  color: var(--on-volt);
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
@@ -319,7 +326,7 @@
 
 .troubleshooter-primary:hover,
 .troubleshooter-primary:focus-visible {
-  background: #ff8d5e;
+  background: var(--volt-deep);
 }
 
 .troubleshooter-secondary {
@@ -327,16 +334,16 @@
   min-height: 40px;
   padding: 0 14px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--line-strong);
   background: transparent;
-  color: #e7e9f2;
+  color: var(--text);
   font-size: 14px;
   cursor: pointer;
 }
 
 .troubleshooter-secondary:hover,
 .troubleshooter-secondary:focus-visible {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--fill-bold);
 }
 
 /* --------------------------------------------------------------------------
@@ -361,9 +368,9 @@
 
 .error-copy-action {
   appearance: none;
-  border: 1px solid rgba(255, 192, 187, 0.5);
-  background: rgba(255, 192, 187, 0.12);
-  color: #ffc0bb;
+  border: 1px solid var(--bad-line);
+  background: var(--bad-fill);
+  color: var(--bad-soft);
   border-radius: var(--radius-sm);
   padding: 6px 12px;
   font-size: 12px;
@@ -379,12 +386,23 @@
 
 .error-copy-action.is-cancel {
   border-color: rgba(255, 122, 69, 0.55);
-  color: #ffd9c4;
+  color: var(--volt-soft);
 }
 
 .error-copy-hint {
   display: block;
   margin-top: 6px;
   font-size: 11px;
-  color: rgba(255, 192, 187, 0.7);
+  color: var(--bad-soft);
+}
+
+@media (prefers-color-scheme: light) {
+  .error-copy-action:hover,
+  .error-copy-action:focus-visible {
+    background: rgba(180, 35, 24, 0.16);
+  }
+
+  .error-copy-action.is-cancel {
+    border-color: rgba(184, 65, 13, 0.5);
+  }
 }

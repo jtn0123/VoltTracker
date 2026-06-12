@@ -77,7 +77,7 @@ class ObdStoreVehicles(
             val hashed = digest.digest(value.toByteArray(StandardCharsets.UTF_8))
             val hex = StringBuilder(hashed.size * 2)
             for (byte in hashed) {
-                hex.append(String.format("%02x", byte))
+                hex.append(String.format(Locale.US, "%02x", byte))
             }
             return hex.toString()
         } catch (ex: NoSuchAlgorithmException) {

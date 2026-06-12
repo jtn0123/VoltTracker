@@ -155,7 +155,9 @@ open class MainActivity :
         try {
             backgroundExecutor.execute(task)
         } catch (ex: RejectedExecutionException) {
-            Log.d(TAG, "background task dropped; executor is shut down (activity tearing down)", ex)
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "background task dropped; executor is shut down (activity tearing down)", ex)
+            }
         }
     }
 
@@ -204,7 +206,7 @@ open class MainActivity :
             try {
                 val retentionDays =
                     activityPrefs.getInt("raw_retention_days", ObdLocalStore.DEFAULT_RAW_RETENTION_DAYS)
-                val pruned = localStore?.pruneRawDataOlderThan(retentionDays) ?: 0
+                val pruned = localStore?.runStartupMaintenance(retentionDays) ?: 0
                 if (pruned > 0) {
                     markStorageSummaryDirty()
                     Log.i(TAG, "Pruned $pruned raw rows older than $retentionDays days")
@@ -255,6 +257,40 @@ open class MainActivity :
             publishStatus("ready", getString(R.string.status_viewing_local_data), false)
         }
         maybeAutoConnect(AutoConnectController.TRIGGER_DASHBOARD_READY, null)
+        maybeShowFirstLaunchOnboarding()
+    }
+
+    /** One-time explainer for a fresh install: how to pair an adapter, and that demo exists. */
+    private fun maybeShowFirstLaunchOnboarding() {
+        val activityPrefs = prefs ?: return
+        val onboarding = FirstLaunchOnboarding(activityPrefs)
+        val hasAdapterHistory = deviceCatalog?.lastAddress()?.isNotEmpty() == true
+        if (!onboarding.shouldShow(hasAdapterHistory, isLoggingActive())) {
+            return
+        }
+        try {
+            AlertDialog
+                .Builder(this)
+                .setTitle(R.string.onboarding_title)
+                .setMessage(R.string.onboarding_message)
+                .setPositiveButton(R.string.onboarding_dismiss, null)
+                .setNeutralButton(R.string.onboarding_bt_settings) { _, _ -> openBluetoothSettings() }
+                .show()
+            // Marked only after show() succeeds: if a dying Activity aborts the dialog, the
+            // next launch gets another chance instead of suppressing onboarding forever.
+            onboarding.markShown()
+        } catch (ex: RuntimeException) {
+            // Same contract as confirmBridgeAction: a dying Activity must not crash over a dialog.
+            Log.w(TAG, "onboarding dialog failed to show", ex)
+        }
+    }
+
+    private fun openBluetoothSettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+        } catch (ex: RuntimeException) {
+            Log.w(TAG, "Bluetooth settings screen unavailable", ex)
+        }
     }
 
     fun isDashboardReadyForTest(): Boolean = dashboardPublisher?.isPageReady() == true

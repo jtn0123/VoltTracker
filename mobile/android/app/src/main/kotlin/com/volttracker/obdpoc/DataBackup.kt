@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import com.volttracker.obdpoc.data.BackupMigrator
 import com.volttracker.obdpoc.data.ObdLocalStore
 import org.json.JSONArray
@@ -147,6 +148,8 @@ class DataBackup(
         val bytesTotal: Long = -1L,
         val rowsDone: Long = -1L,
         val rowsTotal: Long = -1L,
+        /** True when this snapshot reports a non-fatal problem the user should see (work continues). */
+        val warning: Boolean = false,
     )
 
     fun interface ProgressListener {
@@ -168,6 +171,7 @@ class DataBackup(
                 ),
             )
             store.checkpoint()
+            warnIfIntegrityCheckFails(store, progress)
             val source = store.getDatabaseFile()
             if (!source.exists()) {
                 return null
@@ -208,6 +212,7 @@ class DataBackup(
                 ),
             )
             store.checkpoint()
+            warnIfIntegrityCheckFails(store, progress)
             val source = store.getDatabaseFile()
             if (!source.exists()) {
                 return null
@@ -239,6 +244,35 @@ class DataBackup(
             dest
         } catch (ex: Exception) {
             if (ex is IOException || ex is GeneralSecurityException || ex is RuntimeException) null else throw ex
+        }
+    }
+
+    /**
+     * Pre-export integrity gate: runs `PRAGMA quick_check` (never throws) and, when the live
+     * database reports corruption, logs loudly AND emits a [ProgressSnapshot] flagged with
+     * [ProgressSnapshot.warning] through [progress] so the UI can tell the user. The export
+     * still proceeds — a backup of a partially corrupt database beats no backup — so callers
+     * surface the warning alongside the success status instead of aborting.
+     */
+    private fun warnIfIntegrityCheckFails(
+        store: ObdLocalStore,
+        progress: ProgressListener?,
+    ) {
+        val integrity = store.quickCheck()
+        if (!integrity.ok) {
+            Log.w(
+                TAG,
+                "Backup integrity warning: quick_check reported problems; exporting current file anyway: " +
+                    integrity.problems.joinToString("; "),
+            )
+            val firstProblem = integrity.problems.firstOrNull() ?: "unknown integrity problem"
+            progress?.onProgress(
+                ProgressSnapshot(
+                    "Integrity warning",
+                    "The database check reported a problem ($firstProblem). Creating the backup anyway.",
+                    warning = true,
+                ),
+            )
         }
     }
 
@@ -452,6 +486,7 @@ class DataBackup(
     }
 
     companion object {
+        private const val TAG = "DataBackup"
         internal const val MAX_RESTORE_MIB = 512L
         internal const val MAX_RESTORE_BYTES = MAX_RESTORE_MIB * 1024L * 1024L
         const val MIN_PASSPHRASE_LENGTH = 8

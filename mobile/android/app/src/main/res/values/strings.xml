@@ -5,6 +5,12 @@
     <string name="dialog_cancel">Cancel</string>
     <string name="dialog_share_anyway">Share anyway</string>
 
+    <!-- One-time first-launch explainer (FirstLaunchOnboarding) -->
+    <string name="onboarding_title">Welcome to Volt Tracker</string>
+    <string name="onboarding_message">To record real drives, pair your Bluetooth OBD-II adapter in Android’s Bluetooth settings first — it will then show up here under Connect.\n\nNo adapter handy? Tap Demo to explore the dashboard with sample data.</string>
+    <string name="onboarding_dismiss">Got it</string>
+    <string name="onboarding_bt_settings">Open Bluetooth settings</string>
+
     <!-- Bluetooth permission flow (ConnectPermissionFlow) -->
     <string name="obd_adapter_fallback_label">the OBD adapter</string>
     <string name="status_waiting_bluetooth_permission">Waiting for Bluetooth permission. Allow \"Nearby devices\" in the Android prompt and the connection will continue.</string>
@@ -93,6 +99,7 @@
     <string name="progress_phase_ready_to_share">Ready to share</string>
     <string name="status_backup_ready">Backup ready - choose where to save it.</string>
     <string name="status_encrypted_backup_ready">Encrypted backup ready - choose where to save it.</string>
+    <string name="status_backup_integrity_warning">Warning: the database integrity check reported problems, so this backup may be damaged. It was still created - a possibly damaged backup beats no backup - but consider exporting diagnostics.</string>
     <string name="status_share_sheet_failed">Could not open the share sheet.</string>
     <string name="status_restore_cancelled_no_file">Restore cancelled - no file selected.</string>
     <string name="status_stop_logging_before_restore">Stop logging before restoring a backup.</string>

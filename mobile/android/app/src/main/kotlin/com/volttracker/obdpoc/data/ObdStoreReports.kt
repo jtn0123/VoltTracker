@@ -1049,21 +1049,6 @@ class ObdStoreReports(
         }
 
         @Throws(JSONException::class)
-        private fun chargeSessionRowJson(cursor: Cursor): JSONObject {
-            val row = chargeSessionRow(cursor)
-            return JSONObject()
-                .put("id", row.id)
-                .put("startedAtMs", row.startedAtMs)
-                .put("endedAtMs", boxedOrNull(row.endedAtMs))
-                .put("chargerType", row.chargerType ?: JSONObject.NULL)
-                .put("startSoc", boxedOrNull(row.startSoc))
-                .put("endSoc", boxedOrNull(row.endSoc))
-                .put("powerKw", boxedOrNull(row.powerKw))
-                .put("energyKwh", boxedOrNull(row.energyKwh))
-                .put("confidence", boxedOrNull(row.confidence))
-        }
-
-        @Throws(JSONException::class)
         private fun chargeSummaryRowJson(row: ChargeSummaryRow): JSONObject =
             JSONObject()
                 .put("id", row.id)

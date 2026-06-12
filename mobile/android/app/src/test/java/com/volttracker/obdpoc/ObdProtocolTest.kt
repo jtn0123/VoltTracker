@@ -6,6 +6,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 /**
  * Decode tests for [ObdProtocol]. Hex responses are real captures from the test vehicle
@@ -80,13 +81,13 @@ class ObdProtocolTest {
         val hex = StringBuilder("490201")
         val vin = "1G1ZD5ST8JF202020"
         for (c in vin.toCharArray()) {
-            hex.append(String.format("%02X", c.code))
+            hex.append(String.format(Locale.US, "%02X", c.code))
         }
         assertEquals(vin, ObdProtocol.parseVin(hex.toString()))
         // Tolerate the bare 4902 prefix used by adapters that strip the frame-counter byte.
         val hex2 = StringBuilder("4902")
         for (c in vin.toCharArray()) {
-            hex2.append(String.format("%02X", c.code))
+            hex2.append(String.format(Locale.US, "%02X", c.code))
         }
         assertEquals(vin, ObdProtocol.parseVin(hex2.toString()))
     }
@@ -111,7 +112,7 @@ class ObdProtocolTest {
         // Embed an "I" (forbidden under SAE J853) in the middle — parser must reject the run.
         val hex = StringBuilder("490201")
         for (c in "1G1ZD5STIJF202020".toCharArray()) {
-            hex.append(String.format("%02X", c.code))
+            hex.append(String.format(Locale.US, "%02X", c.code))
         }
         assertNull(ObdProtocol.parseVin(hex.toString()))
         assertNull(ObdProtocol.parseVin("NO SO ABCD"))

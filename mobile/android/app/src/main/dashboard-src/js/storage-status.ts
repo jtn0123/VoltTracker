@@ -43,6 +43,7 @@ import { setDataState } from "./dataset-state";
 
   function setStorage(payload: unknown) {
     const parsed = VD.parsePayload<VoltStorageSummary>(payload, {});
+    if (typeof VD.validatePayload === "function") VD.validatePayload("setStorage", parsed);
     if (isNativeError(parsed)) {
       const err = parsed as VoltNativeError;
       reportNativeReadError(parsed, "Could not read local storage summary.");

@@ -47,6 +47,27 @@ stored routes have geographic context. Route points and OBD samples are still
 rendered from local storage, but tile providers can see tile coordinates
 requested by the device.
 
+### Map Tiles
+
+The Map and Trips basemap is fetched at view time from the CARTO basemap CDN
+(`basemaps.cartocdn.com`), with `tile.openstreetmap.org` as an automatic
+fallback when CARTO is unreachable. Tile requests are the only routine network
+traffic the app generates.
+
+Tiles are deliberately **not persistently cached** by the app. There is no
+offline tile store: caching tiles to disk would accumulate a
+location-revealing archive of everywhere the map has been viewed, and an
+unbounded one as zoom levels and areas pile up. Aside from the WebView's
+standard transient HTTP caching (app-private and removed with app data),
+viewed tile imagery is not written to device storage.
+
+Offline behavior: routes, OBD history, and GPS traces always render from local
+storage, with or without a basemap. When tiles repeatedly fail to load, the
+map shows a "Map tiles are not loading" banner with a retry control; after a
+sustained run of CARTO failures the map switches itself to the OSM fallback
+layer (see `dashboard-src/js/map.ts`). If the fallback also fails, the banner
+notes that routes still work without basemap tiles.
+
 ## Unusual Permissions
 
 The app declares `KILL_BACKGROUND_PROCESSES` so the troubleshooter can offer a

@@ -4,11 +4,11 @@ import { describe, expect, it } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
-const ROUTE_POINT_COUNT = 2000;
-const MAP_SESSION_COUNT = 250;
-const TELEMETRY_BURST_COUNT = 300;
-const TAB_SWITCH_REPEAT_COUNT = 25;
-const TAB_SWITCH_BUDGET_PER_SWITCH_MS = 4;
+const ROUTE_POINT_COUNT = 2000; // ~33min drive at 1 GPS fix/s — the long-route worst case the map must digest.
+const MAP_SESSION_COUNT = 250; // months of daily driving in the session list — well past the native 40-trip page.
+const TELEMETRY_BURST_COUNT = 300; // a wedged native queue flushing at once; must coalesce into ONE rAF render.
+const TAB_SWITCH_REPEAT_COUNT = 25; // repeats x6 tabs = 150 switches, enough samples to average out jsdom jitter.
+const TAB_SWITCH_BUDGET_PER_SWITCH_MS = 4; // ~1/4 of a 16.7ms 60fps frame, leaving the rest for WebView paint.
 
 function makeRoutePoint(index) {
   const capturedAtMs = 1_720_000_000_000 + index * 1000;
@@ -47,6 +47,8 @@ describe('dashboard startup budget', () => {
     await loadDashboard();
     const elapsedMs = performance.now() - start;
 
+    // 5s = cold-WebView worst case (old device, first run, no cached bytecode);
+    // generous on purpose so CI noise can't flake it, but a runaway boot loop still fails.
     expect(elapsedMs).toBeLessThan(5000);
     expect(window.VoltDashboard.renderMapLoaded).not.toBe(true);
   });

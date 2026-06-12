@@ -17,6 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.util.Locale
 
 /**
  * Exercises the remembered-device history, last-device JSON, and bonded-adapter discovery in
@@ -145,7 +146,7 @@ class DeviceCatalogHistoryTest {
     fun historyIsCappedAtEightDevicesKeepingTheMostRecent() {
         // Remember nine distinct adapters; history keeps the newest MAX_DEVICE_HISTORY (8).
         for (i in 1..9) {
-            catalog.remember(String.format("AA:BB:CC:DD:EE:%02X", i), "Adapter $i")
+            catalog.remember(String.format(Locale.US, "AA:BB:CC:DD:EE:%02X", i), "Adapter $i")
         }
 
         val history = JSONArray(catalog.getDeviceHistoryJson())

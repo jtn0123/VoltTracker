@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest an improvement to the Volt Tracker Android app
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Note the project scope: a standalone, on-device OBD-II companion for
+        the Gen 2 Chevy Volt. Features that need a server or send data off the
+        phone are generally out of scope.
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: >-
+        What problem does this solve? What do you do today instead (Torque,
+        spreadsheets, nothing)?
+      placeholder: >-
+        e.g. I want to compare charging sessions across weeks, but the Charge
+        tab only shows the most recent ones.
+    validations:
+      required: true
+  - type: textarea
+    id: user-story
+    attributes:
+      label: User story
+      description: Describe the feature from the user's point of view.
+      placeholder: >-
+        As a Volt driver, I want <capability>, so that <benefit>.
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: >-
+        Optional — mockups, PIDs/community formulas involved, links to prior
+        discussion.
+    validations:
+      required: false

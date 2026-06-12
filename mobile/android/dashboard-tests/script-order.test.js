@@ -21,6 +21,10 @@ const BUILD_MJS = resolve('build.mjs');
 const EXPECTED_EAGER_ORDER = [
   'prefs',
   'core',
+  // payload-validators sits right after core: it reads window.VoltDashboard
+  // (seeded by core) and must publish VD.validatePayload before the setter
+  // owners (storage-status / telemetry) handle their first native payload.
+  'payload-validators',
   'storage-status',
   'signals-panel',
   'insights-panel',

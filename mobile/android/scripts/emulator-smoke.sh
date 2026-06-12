@@ -128,11 +128,13 @@ tap_bottom_nav() {
   # idempotent — you stay on that view — so retries can NOT mask a real problem:
   # a genuine geometry/selector break never changes the screen and still fails
   # after every attempt.
-  local attempts=4
+  local attempts=6
   local attempt=1
   while :; do
     adb shell input tap "$x" "$y"
-    sleep 2
+    # Settle longer on later retries: a flaky adb daemon both drops taps and
+    # delivers them late, so a fixed 2s can screenshot before a slow tap lands.
+    sleep $((1 + attempt))
     screenshot "nav-$index-$label"
     if [ "$expect_change" != "1" ] || [ -z "$PREVIOUS_NAV_SCREENSHOT" ] \
       || ! cmp -s "$PREVIOUS_NAV_SCREENSHOT" "$shot"; then
@@ -144,6 +146,10 @@ tap_bottom_nav() {
       exit 1
     fi
     echo "  No view change after tapping $label; retrying ($attempt/$attempts)."
+    # Observed flake mode: the adb daemon that logged "device offline" during
+    # boot keeps dropping input events afterward. Give it a health re-check so
+    # the next tap goes to a connected transport instead of the void.
+    adb wait-for-device >/dev/null 2>&1 || true
     attempt=$((attempt + 1))
   done
   PREVIOUS_NAV_SCREENSHOT="$shot"

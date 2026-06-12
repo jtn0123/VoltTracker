@@ -1,0 +1,96 @@
+# VoltTracker detekt configuration. Builds on detekt's bundled defaults
+# (buildUponDefaultConfig = true in app/build.gradle), so only deviations live here.
+#
+# Philosophy: detekt gates the correctness-leaning rule sets — potential-bugs, unused
+# code, naming, empty blocks, performance — at zero findings. Formatting (line length,
+# import order, wrapping) is ktlint's job via Spotless. The disables below are default
+# rules that conflict with deliberate, reviewed idioms in this codebase; each says why.
+# Tighten incrementally: prefer re-enabling a rule over growing this list.
+
+complexity:
+  # RATCHETING THRESHOLDS — production code only (tests are repetitive by design and
+  # excluded). Each value is pinned at the current worst offender (named below) so new
+  # code cannot exceed it (detekt flags at >= threshold, so each value is worst+1);
+  # when a refactor shrinks a hotspot, LOWER the threshold to
+  # the new maximum in the same PR. Never raise one without a review conversation.
+  ComplexCondition:
+    active: true
+    threshold: 7 # ObdStoreVehicles.guessMakeFromWmi is 6
+    excludes: ['**/src/test/**', '**/src/androidTest/**']
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 213 # ObdProtocol.parseKnownValueLegacy (212) — the PID decoder when-table
+    excludes: ['**/src/test/**', '**/src/androidTest/**']
+  LargeClass:
+    active: true
+    threshold: 1150 # ObdProtocol (1149) — cohesive stateless decoder
+    excludes: ['**/src/test/**', '**/src/androidTest/**']
+  LongMethod:
+    active: true
+    threshold: 428 # EnhancedPidProfiles.addSensorExpansionProfiles (427) — PID data table
+    excludes: ['**/src/test/**', '**/src/androidTest/**']
+  LongParameterList:
+    active: true
+    functionThreshold: 16 # DashboardPayloadJson.restoreProgress (15)
+    constructorThreshold: 32 # StorageSummaryRecord (31)
+    excludes: ['**/src/test/**', '**/src/androidTest/**']
+  NestedBlockDepth:
+    active: true
+    threshold: 6 # DataBackup.stageRestoreFileWithStatus (5)
+    excludes: ['**/src/test/**', '**/src/androidTest/**']
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 66
+    thresholdInClasses: 61 # MainActivity (60)
+    thresholdInInterfaces: 25 # ObdSessionStore (24)
+    thresholdInObjects: 61 # ObdProtocol (60)
+    thresholdInEnums: 12
+    excludes: ['**/src/test/**', '**/src/androidTest/**']
+
+empty-blocks:
+  EmptyFunctionBlock:
+    # No-op Android listener overrides (LocationListener) and neutralized test seams.
+    ignoreOverridden: true
+
+exceptions:
+  # Catch-log-classify at the boundary is the house pattern: the Bluetooth and SQLite
+  # layers catch RuntimeException, log via OBDLog/SessionRecorder, classify failures
+  # (ConnectionFailureClassifier), and keep the drive session alive instead of crashing.
+  InstanceOfCheckForException:
+    active: false
+  SwallowedException:
+    active: false
+  TooGenericExceptionCaught:
+    active: false
+  TooGenericExceptionThrown:
+    active: false
+
+performance:
+  SpreadOperator:
+    # Structured key=value log forwarding (OBDLog/SessionRecorder varargs).
+    active: false
+
+style:
+  # Protocol byte offsets, PID scaling factors, and SQL schema literals make a blanket
+  # magic-number rule pure noise in this domain; named constants are still used where
+  # a value's meaning isn't local (see ObdProbes, EnhancedPidProfiles).
+  MagicNumber:
+    active: false
+  # ktlint (Spotless) owns formatting, including line length.
+  MaxLineLength:
+    active: false
+  # Early-return guard clauses are the house style (ObdPollingEngine, VoltBridge).
+  LoopWithTooManyJumpStatements:
+    active: false
+  ReturnCount:
+    active: false
+  # Multi-throw guard sequences in the staged-restore and wake-nudge paths are clearer
+  # than collapsing them; the catch-side classification is what's load-bearing here.
+  ThrowsCount:
+    active: false
+  # Explicit IllegalArgumentException/IllegalStateException with formatted messages is
+  # preferred over require()/check() for the SQL-identifier and lifecycle guards.
+  UseCheckOrError:
+    active: false
+  UseRequire:
+    active: false

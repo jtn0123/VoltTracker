@@ -69,7 +69,8 @@ object WebViewBootstrap {
                     when (message.messageLevel()) {
                         ConsoleMessage.MessageLevel.ERROR -> Log.e(MainActivity.TAG, line)
                         ConsoleMessage.MessageLevel.WARNING -> Log.w(MainActivity.TAG, line)
-                        ConsoleMessage.MessageLevel.DEBUG -> Log.d(MainActivity.TAG, line)
+                        ConsoleMessage.MessageLevel.DEBUG ->
+                            if (BuildConfig.DEBUG) Log.d(MainActivity.TAG, line)
                         ConsoleMessage.MessageLevel.TIP,
                         ConsoleMessage.MessageLevel.LOG,
                         null,

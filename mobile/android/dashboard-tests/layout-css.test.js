@@ -68,12 +68,17 @@ describe('dashboard layout css', () => {
 
   it('keeps the floating nav readable over scrollable page content', () => {
     const screensCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens.css'), 'utf8');
+    const baseCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/base.css'), 'utf8');
     const navRule = screensCss.match(/\.bottom-nav\s*\{[^}]+\}/)?.[0] || '';
     const navButtonRule = screensCss.match(/\.bottom-nav button\s*\{[^}]+\}/)?.[0] || '';
 
     expect(navRule).toMatch(/isolation\s*:\s*isolate/);
-    expect(navRule).toMatch(/background-color\s*:\s*rgba\(21,23,32,0\.92\)/);
-    expect(navRule).toMatch(/border\s*:\s*1px\s+solid\s+rgba\(255,255,255,0\.14\)/);
+    // The nav surface is opaque-enough glass via the theme token (dark
+    // rgba(21,23,32,0.92) / light counterpart in the light block) — a solid
+    // background-color fallback must stay so content can't bleed through.
+    expect(navRule).toMatch(/background-color\s*:\s*var\(--surface-nav\)/);
+    expect(baseCss).toMatch(/--surface-nav\s*:\s*rgba\(21,23,32,0\.92\)/);
+    expect(navRule).toMatch(/border\s*:\s*1px\s+solid\s+var\(--line-strong\)/);
     expect(navRule).toMatch(/border-radius\s*:\s*24px/);
     expect(navRule).toMatch(/z-index\s*:\s*40/);
     expect(navButtonRule).toMatch(/z-index\s*:\s*1/);

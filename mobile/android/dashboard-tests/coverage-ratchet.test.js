@@ -54,6 +54,13 @@ const PER_GLOB_BASELINE = Object.freeze({
     functions: 90,
     lines: 90,
   }),
+  // core.ts sits BELOW the global floors (e.g. lines 62 vs the global 76) on
+  // purpose: it is the init-heavy bootstrap module — one-shot wiring, legacy
+  // WebView polyfills, and defensive guard clauses (missing-element /
+  // missing-bridge fallbacks) that only fire on degraded devices, which a
+  // jsdom suite can't meaningfully reach. The focused floor pins today's
+  // level so it can't backslide further, without pretending those paths are
+  // testable.
   '../**/dashboard-src/js/core.ts': Object.freeze({
     statements: 61,
     branches: 41,

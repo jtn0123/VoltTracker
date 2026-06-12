@@ -97,7 +97,7 @@ interface VoltDtcRow {
   rawResponse?: string;
 }
 
-/** A charge-session row (data/ObdStoreReports.chargeSessionRowJson). */
+/** A charge-session row (data/ObdStoreReports.chargeSummaryRowJson). */
 interface VoltChargeSessionRow {
   id?: string | number;
   startedAtMs?: number;
@@ -663,6 +663,8 @@ interface VoltRestoreProgress {
     clearDemoTelemetry(): void;
     ensureDemoData(callback?: (error: Error | null, data: VoltDashboard["data"]) => void): void;
     ensureDtcData(): Promise<VoltDashboard>;
+    /** Harness seam: settles when in-flight lazy-chunk loads have run their handlers. */
+    pendingLazyLoads(): Promise<unknown[]>;
     dtcDataLoaded(): boolean;
     ensureMapModule(): Promise<VoltDashboard>;
     requestMapRender(): Promise<VoltDashboard>;
@@ -678,6 +680,12 @@ interface VoltRestoreProgress {
     getSelectedDevice(): { address: string; name: string } | null;
     relativeTime(value: unknown): string;
     realViewMeta: Record<string, [string, string]>;
+
+    // ----- payload-validators.ts ---------------------------------------------
+    /** Warn-only runtime shape check for the critical native payloads
+     *  (setStatus / setStorage / setAppState — see docs/bridge-abi.md). Never
+     *  throws; logs one console.warn per distinct (kind, field, issue). */
+    validatePayload(kind: string, payload: unknown): void;
 
     // ----- telemetry.ts ------------------------------------------------------
     setStatus(payload: VoltStatus): void;

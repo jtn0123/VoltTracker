@@ -34,7 +34,8 @@ object OBDLog {
         }
         val line = sb.toString()
         val safeTag = tag ?: "obd"
-        Log.d(safeTag, line)
+        // Debug-level logcat is dev-only noise; the rolling log below is the release surface.
+        if (BuildConfig.DEBUG) Log.d(safeTag, line)
         mirror?.write("D", safeTag, line)
     }
 

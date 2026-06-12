@@ -107,6 +107,9 @@ and existing Java tests remain as legacy coverage unless they are being material
   built-in Kotlin inherits the same `jvmTarget` from it automatically.
 - **Formatting:** Spotless runs ktlint on `.kt` (`./gradlew :app:spotlessApply` to fix,
   `:app:spotlessCheck` is the CI gate) — the same lane that formats Java tests and the dashboard HTML.
+- **Static analysis:** detekt gates the correctness-leaning Kotlin rules (`./gradlew :app:detekt`
+  locally; CI runs it in the unit-tests job). Config and the rationale for every disabled default
+  rule live in `app/detekt.yml` — keep it at zero findings rather than suppressing inline.
 - **Coverage:** JaCoCo measures Kotlin classes too (`app/jacoco.gradle` scans both the javac and
   kotlin-classes outputs), so new Kotlin is held to the same ratcheting floors as Java — write
   tests for it.

@@ -95,6 +95,7 @@ import type { MapRoutePoint } from "./map-route-utils";
   function setStatus(payload: unknown) {
     const wasActive = isActiveStatus();
     const status = VD.parsePayload<VoltStatus>(payload, {});
+    if (typeof VD.validatePayload === "function") VD.validatePayload("setStatus", status);
     state.status = status;
     const badge = el("stateBadge");
     const next = status.state || "idle";
@@ -111,6 +112,7 @@ import type { MapRoutePoint } from "./map-route-utils";
 
   function setAppState(payload: unknown) {
     const parsed = VD.parsePayload<VoltAppState>(payload, {});
+    if (typeof VD.validatePayload === "function") VD.validatePayload("setAppState", parsed);
     if (state.demoActive && state.demoPreviewAppState) {
       // Park the real app-state behind the demo preview (cross-module demo invariant).
       VD.setState({ realAppState: parsed });

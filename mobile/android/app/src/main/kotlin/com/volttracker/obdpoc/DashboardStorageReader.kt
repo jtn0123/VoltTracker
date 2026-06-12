@@ -54,7 +54,10 @@ class DashboardStorageReader(
         }
     }
 
-    private fun storeOrUnavailable(): ObdLocalStore? = storeProvider()
+    // takeIf { isOpen }: these reads run synchronously on the WebView JS-bridge thread, so a
+    // teardown race (store closed while a read is in flight) must degrade to the
+    // storage_unavailable payload instead of throwing into the bridge.
+    private fun storeOrUnavailable(): ObdLocalStore? = storeProvider()?.takeIf { it.isOpen }
 
     private fun storageUnavailable(): String =
         MainActivityUtils

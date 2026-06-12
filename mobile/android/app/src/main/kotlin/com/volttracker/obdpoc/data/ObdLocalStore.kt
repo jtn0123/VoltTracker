@@ -32,6 +32,9 @@ open class ObdLocalStore(
     private val vehicles: ObdStoreVehicles
     private val materialize: ObdStoreMaterialize
 
+    @Volatile
+    private var closed = false
+
     init {
         val appContext = context.applicationContext
         helper = VoltTrackerDb(appContext)
@@ -349,7 +352,25 @@ open class ObdLocalStore(
 
     open override fun pruneRawDataOlderThan(keepDays: Int): Int = maintenance.pruneRawDataOlderThan(keepDays)
 
+    /** Runs `PRAGMA quick_check`; never throws. See [ObdStoreMaintenance.quickCheck]. */
+    open fun quickCheck(): ObdStoreMaintenance.IntegrityResult = maintenance.quickCheck()
+
+    /**
+     * Startup maintenance: prunes raw rows older than [keepDays], then VACUUMs when enough
+     * freed pages have accumulated. Returns the pruned row count.
+     */
+    open fun runStartupMaintenance(keepDays: Int): Int = maintenance.runStartupMaintenance(keepDays)
+
+    /**
+     * False once [close] has been called. Synchronous readers on other threads (the WebView
+     * JS-bridge thread) check this before touching SQLite so a teardown race degrades to a
+     * "storage unavailable" payload instead of throwing into the bridge.
+     */
+    open val isOpen: Boolean
+        get() = !closed
+
     open override fun close() {
+        closed = true
         writer.close()
         helper.close()
     }

@@ -1,0 +1,21 @@
+# Hand-authored baseline profile for the cold-start path (no Macrobenchmark rig yet —
+# regenerate with one if/when on-device profiling lands; see androidx baseline profiles docs).
+# AGP compiles these rules into the APK's ART profile; androidx.profileinstaller installs
+# them on devices without Play-delivered compilation. Rules are HSP (hot/startup/post-startup)
+# and deliberately scoped to what runs before the dashboard handshake:
+#   process bootstrap -> Activity onCreate -> WebView bootstrap/bridge -> store open.
+HSPLcom/volttracker/obdpoc/VoltTrackerApp;->**(**)**
+HSPLcom/volttracker/obdpoc/MainActivity;->**(**)**
+HSPLcom/volttracker/obdpoc/WebViewBootstrap;->**(**)**
+HSPLcom/volttracker/obdpoc/VoltBridge;->**(**)**
+HSPLcom/volttracker/obdpoc/DashboardPublisher;->**(**)**
+HSPLcom/volttracker/obdpoc/JsonSnapshot;->**(**)**
+HSPLcom/volttracker/obdpoc/PermissionGate;->**(**)**
+HSPLcom/volttracker/obdpoc/DeviceCatalog;->**(**)**
+HSPLcom/volttracker/obdpoc/data/ObdLocalStore;->**(**)**
+HSPLcom/volttracker/obdpoc/data/VoltTrackerDb;->**(**)**
+HSPLcom/volttracker/obdpoc/data/VoltTrackerSchema;->**(**)**
+HSPLcom/volttracker/obdpoc/data/DashboardStorageReader;->**(**)**
+# Class-load-only rules for everything else in the app package: cheap, and keeps the
+# verifier off the critical path for classes touched soon after startup.
+Lcom/volttracker/obdpoc/**;

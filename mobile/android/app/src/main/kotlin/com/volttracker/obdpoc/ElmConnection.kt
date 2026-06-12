@@ -75,7 +75,11 @@ open class ElmConnection
          * Opens an RFCOMM socket to [device]. `BluetoothSocket.connect()` has no timeout and can
          * block indefinitely on a dead adapter, so a daemon watchdog closes the socket after
          * [connectTimeoutMs].
+         *
+         * The backticked name reads naturally at call sites (connection.open(...)) despite
+         * colliding with Kotlin's soft keyword; not worth renaming a stable seam over.
          */
+        @Suppress("FunctionNaming")
         @Throws(IOException::class)
         open fun `open`(
             device: BluetoothDevice,

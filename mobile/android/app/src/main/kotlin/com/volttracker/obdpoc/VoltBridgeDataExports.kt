@@ -77,7 +77,9 @@ internal class VoltBridgeDataExports(
 
     fun exportDetailedSignalLog(id: String?): String {
         val rowId = VoltBridge.parsePositiveId(id)
-        val store = activity.localStore
+        // isOpen guard: same teardown-race contract as DashboardStorageReader — a store
+        // closed by onDestroy must degrade to an error payload, not throw into the bridge.
+        val store = activity.localStore?.takeIf { it.isOpen }
         if (rowId <= 0L || store == null) {
             return errorPayload("invalid_id", "Choose a saved detailed signal log.")
         }
@@ -85,7 +87,7 @@ internal class VoltBridgeDataExports(
     }
 
     fun exportDetailedSignalLogs(): String {
-        val store = activity.localStore
+        val store = activity.localStore?.takeIf { it.isOpen }
         if (store == null) {
             return errorPayload("storage_unavailable", "Local storage is not ready.")
         }

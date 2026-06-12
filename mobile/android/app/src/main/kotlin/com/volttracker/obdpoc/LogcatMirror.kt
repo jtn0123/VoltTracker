@@ -12,7 +12,8 @@ class LogcatMirror(
         tag: String,
         msg: String,
     ) {
-        Log.d(tag, msg)
+        // Debug-level logcat is dev-only noise; the rolling log is the release surface.
+        if (BuildConfig.DEBUG) Log.d(tag, msg)
         rollingLog.write("D", tag, msg)
     }
 

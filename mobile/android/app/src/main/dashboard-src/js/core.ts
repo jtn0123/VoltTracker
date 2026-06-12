@@ -122,16 +122,46 @@ import { asDataTone, setDataTone } from "./dataset-state";
   let mapModulePromise: Promise<VoltDashboard> | null = null;
   let troubleshooterModulePromise: Promise<VoltDashboard> | null = null;
 
+  // Error-banner dedupe: an error storm (e.g. a reconnect loop, or a render
+  // error repeating once per telemetry tick) calls reportClientError with the
+  // SAME message many times in a row. Re-rendering each time churns the DOM
+  // and re-shows a banner the user just dismissed. Identical messages inside
+  // this window only bump a repeat counter (reflected as an "(xN)" suffix
+  // while the banner is visible); a different message, or the same one after
+  // the window has passed, renders normally. Every call still flows to
+  // bridge.logClientError so adb logcat keeps the full stream.
+  const ERROR_BANNER_DEDUPE_MS = 2500;
+  let lastErrorBannerText = "";
+  let lastErrorBannerAt = 0;
+  let errorBannerRepeatCount = 0;
+
   function reportClientError(label: unknown, detail?: unknown) {
     const message = String(detail || label || "Unknown error");
     // The banner gets a single readable line; the full detail (stack traces
     // included) still flows to logClientError below.
     const display = message.split("\n")[0].slice(0, 140);
+    const now = Date.now();
+    const duplicate =
+      display === lastErrorBannerText && now - lastErrorBannerAt < ERROR_BANNER_DEDUPE_MS;
     try {
-      const detailNode = el("errorBannerDetail");
-      if (detailNode) detailNode.textContent = display;
-      const node = el("errorBanner");
-      if (node) node.hidden = false;
+      if (duplicate) {
+        errorBannerRepeatCount += 1;
+        // Keep a visible banner's counter fresh, but never re-show one the
+        // user dismissed for a message they have already seen.
+        const node = el("errorBanner");
+        const detailNode = el("errorBannerDetail");
+        if (node && !node.hidden && detailNode) {
+          detailNode.textContent = display + " (x" + errorBannerRepeatCount + ")";
+        }
+      } else {
+        lastErrorBannerText = display;
+        lastErrorBannerAt = now;
+        errorBannerRepeatCount = 1;
+        const detailNode = el("errorBannerDetail");
+        if (detailNode) detailNode.textContent = display;
+        const node = el("errorBanner");
+        if (node) node.hidden = false;
+      }
     } catch (ignored) {}
     try {
       if (bridge && typeof bridge.logClientError === "function") {
@@ -556,6 +586,23 @@ import { asDataTone, setDataTone } from "./dataset-state";
         });
     }
     return mapModulePromise;
+  }
+
+  /**
+   * Harness seam: settles once every in-flight lazy-chunk load (DTC data, map,
+   * troubleshooter) has run its success/failure handlers — including the async
+   * console.warn + status-toast work in the catch paths. Test teardown awaits
+   * this so a late chunk rejection can never race the worker shutdown.
+   * Never rejects.
+   */
+  function pendingLazyLoads(): Promise<unknown[]> {
+    const pending: Array<Promise<unknown>> = [];
+    if (dtcDataPromise) pending.push(dtcDataPromise.catch(() => undefined));
+    if (mapModulePromise) pending.push(mapModulePromise.catch(() => undefined));
+    if (troubleshooterModulePromise) {
+      pending.push(troubleshooterModulePromise.catch(() => undefined));
+    }
+    return Promise.all(pending);
   }
 
   function renderMapIfLoaded() {
@@ -1041,6 +1088,7 @@ import { asDataTone, setDataTone } from "./dataset-state";
     ensureDtcData,
     dtcDataLoaded,
     ensureMapModule,
+    pendingLazyLoads,
     requestMapRender,
     renderMapIfLoaded,
     ensureTroubleshooterModule,

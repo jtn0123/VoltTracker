@@ -19,9 +19,9 @@
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 40%),
-    rgba(20, 21, 29, 0.97);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    linear-gradient(180deg, var(--sheen-soft), transparent 40%),
+    var(--surface-float);
+  box-shadow: 0 12px 32px var(--shadow);
   color: var(--text);
   font-size: 13px;
   line-height: 1.4;
@@ -45,9 +45,9 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 40%),
-    rgba(20, 21, 29, 0.97);
-  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.55);
+    linear-gradient(180deg, var(--sheen-soft), transparent 40%),
+    var(--surface-float);
+  box-shadow: 0 22px 56px var(--shadow);
 }
 
 .status-popover__head {
@@ -140,7 +140,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--line-marker);
 }
 
 .connection-status__line[data-state="success"] .connection-status__line-dot {
@@ -186,8 +186,8 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--fill);
+  border: 1px solid var(--line-soft);
   font-size: 12px;
   color: inherit;
 }
@@ -196,32 +196,32 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #6a6a72;
+  background: var(--soft);
   flex-shrink: 0;
 }
 
 .connection-status__pill[data-tone="good"] {
   border-color: rgba(126, 224, 106, 0.4);
-  color: #b8e63b;
+  color: var(--ev);
 }
 .connection-status__pill[data-tone="good"] .connection-status__pill-dot {
-  background: #7ee06a;
+  background: var(--ok);
 }
 
 .connection-status__pill[data-tone="warn"] {
   border-color: rgba(255, 184, 74, 0.45);
-  color: #ffb84a;
+  color: var(--warn);
 }
 .connection-status__pill[data-tone="warn"] .connection-status__pill-dot {
-  background: #ffb84a;
+  background: var(--warn);
 }
 
 .connection-status__pill[data-tone="bad"] {
   border-color: rgba(255, 107, 95, 0.45);
-  color: #ff8a85;
+  color: var(--bad-text);
 }
 .connection-status__pill[data-tone="bad"] .connection-status__pill-dot {
-  background: #ff6b5f;
+  background: var(--bad);
 }
 
 /* ---- Settings-tab proactive tools panel ---- */
@@ -248,7 +248,7 @@
   border-radius: 10px;
   border: 1px solid rgba(255, 184, 74, 0.4);
   background: rgba(255, 184, 74, 0.08);
-  color: #ffd28a;
+  color: var(--warn-soft);
   font-size: 13px;
   line-height: 1.35;
 }
@@ -256,7 +256,7 @@
 .connection-tools__hint[data-tone="bad"] {
   border-color: rgba(255, 107, 95, 0.45);
   background: rgba(255, 107, 95, 0.1);
-  color: #ff8a85;
+  color: var(--bad-text);
 }
 
 .connection-tools__actions {
@@ -282,7 +282,7 @@
 }
 
 .connection-tools__notify {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line-soft);
   border-radius: 10px;
   padding: 8px 10px;
   margin: 0;

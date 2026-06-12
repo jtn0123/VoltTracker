@@ -245,7 +245,7 @@ class ObdStoreTripsDbTest {
                 .AtomicReference<Throwable>()
         val gate = java.util.concurrent.CountDownLatch(1)
         val done = java.util.concurrent.CountDownLatch(threads)
-        for (t in 0 until threads) {
+        repeat(threads) {
             Thread {
                 try {
                     gate.await()

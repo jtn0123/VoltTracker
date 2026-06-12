@@ -105,40 +105,22 @@ open class ObdPollingEngine(
         detailProbeStage: String?,
     ) {
         if (address.isNullOrBlank()) {
-            service.broadcastStatus("error", "No adapter selected.", true)
-            service.closeSessionLog()
-            service.markSessionInactive()
+            abortBeforeConnect("No adapter selected.")
             return
         }
         if (!service.hasBluetoothConnectPermission()) {
-            service.broadcastStatus("error", "Bluetooth permission is missing.", true)
-            service.closeSessionLog()
-            service.markSessionInactive()
+            abortBeforeConnect("Bluetooth permission is missing.")
             return
         }
         if (!isBluetoothReady()) {
-            service.broadcastStatus("error", "Bluetooth is off or unavailable.", true)
-            service.closeSessionLog()
-            service.markSessionInactive()
+            abortBeforeConnect("Bluetooth is off or unavailable.")
             return
         }
 
         val retry = ConnectionRetryCoordinator()
         try {
             while (service.running.get()) {
-                if (service.cancelRetryRequested) {
-                    service.cancelRetryRequested = false
-                    service.recorder.logEvent(
-                        "retry_cancelled_by_user",
-                        "attempt",
-                        retry.attempt.toString(),
-                        "everConnected",
-                        retry.everConnected.toString(),
-                        "phase",
-                        "pre_connect",
-                    )
-                    service.broadcastStatus("idle", "Retry cancelled.", false)
-                    service.stopSelf()
+                if (consumeCancelRetry(retry.attempt, retry.everConnected, "pre_connect")) {
                     return
                 }
                 val attemptStart = System.currentTimeMillis()
@@ -148,148 +130,12 @@ open class ObdPollingEngine(
                     service.clearLastFailureClass()
                     service.cancelRetryRequested = false
                     OBDLog.event("ObdPollingEngine", "connect", mapOf("name" to service.activeName))
-                    if (clearDtcMode) {
-                        clearDtcRunner.run()
-                        return
-                    }
-                    if (scanMode) {
-                        scanRunner.run()
-                        return
-                    }
-                    if (tpmsScanMode) {
-                        tpmsDiscoveryRunner.run(address, EnhancedPidProfiles.STAGE_TIRES)
-                        return
-                    }
-                    if (!detailProbeStage.isNullOrBlank()) {
-                        tpmsDiscoveryRunner.run(address, detailProbeStage)
-                        return
-                    }
-                    retry.resetAttemptBudget()
-                    service.broadcastStatus(
-                        "connected",
-                        "Polling live OBD data from ${service.activeName}.",
-                        false,
-                    )
-                    service.updateNotification("Connected to ${service.activeName}")
-                    pollUntilStoppedOrBroken()
+                    // May throw IOException from the live-poll loop, which re-enters the
+                    // reconnect path below exactly like a failed connect attempt.
+                    runConnectedSession(address, scanMode, clearDtcMode, tpmsScanMode, detailProbeStage, retry)
                     return
                 } catch (ex: IOException) {
-                    val attemptDurationMs = maxOf(0L, System.currentTimeMillis() - attemptStart)
-                    closeSocket()
-                    if (retry.everConnected) {
-                        OBDLog.event("ObdPollingEngine", "disconnect", mapOf("reason" to ObdElmDecode.safeMessage(ex)))
-                    }
-                    if (!service.running.get()) {
-                        return
-                    }
-                    var phase = connection.lastErrorPhase
-                    if (phase.isNullOrEmpty()) {
-                        phase = "post_connect"
-                    }
-                    val watchdogFired = connection.watchdogFired
-                    val failureClass =
-                        ConnectionFailureClassifier.classify(
-                            phase,
-                            attemptDurationMs,
-                            ex,
-                            isBluetoothReady(),
-                        )
-                    service.setLastFailureClass(failureClass)
-                    val decision = retry.recordFailure(failureClass, attemptDurationMs)
-                    if (decision.exhausted) {
-                        Log.w(
-                            MainActivity.TAG,
-                            "OBD reconnect exhausted for ${service.activeName} after ${ObdProbes.MAX_RECONNECT_ATTEMPTS} attempts",
-                            ex,
-                        )
-                        service.recorder.logError("reconnect_exhausted", ex)
-                        service.recorder.logEvent(
-                            "reconnect_exhausted",
-                            "attempts",
-                            ObdProbes.MAX_RECONNECT_ATTEMPTS.toString(),
-                            "failureClass",
-                            failureClass.wireName(),
-                            "watchdogFired",
-                            watchdogFired.toString(),
-                            "exceptionClass",
-                            exceptionClassName(ex),
-                            "stackHead",
-                            stackHead(ex),
-                        )
-                        service.broadcastStatus(
-                            "error",
-                            if (decision.everConnected) {
-                                "Lost the adapter link and could not reconnect after ${ObdProbes.MAX_RECONNECT_ATTEMPTS} tries."
-                            } else {
-                                "Could not reach ${service.activeName} after ${ObdProbes.MAX_RECONNECT_ATTEMPTS} tries. Make sure the car is awake and the adapter is plugged in."
-                            },
-                            true,
-                        )
-                        service.stopSelf()
-                        return
-                    }
-
-                    if (decision.wedgedModeStarted) {
-                        service.recorder.logEvent(
-                            "wedged_suspected",
-                            "consecutiveInstantDrops",
-                            decision.consecutiveInstantDrops.toString(),
-                            "lastAttemptDurationMs",
-                            attemptDurationMs.toString(),
-                            "failureClass",
-                            failureClass.wireName(),
-                            "watchdogFired",
-                            watchdogFired.toString(),
-                        )
-                    }
-
-                    OBDLog.event("ObdPollingEngine", "reconnect_attempt", mapOf("attempt" to decision.attempt))
-                    service.recorder.logEvent(
-                        "reconnect",
-                        "attempt",
-                        decision.attempt.toString(),
-                        "backoffMs",
-                        decision.backoffMs.toString(),
-                        "reason",
-                        ObdElmDecode.safeMessage(ex),
-                        "everConnected",
-                        decision.everConnected.toString(),
-                        "failureClass",
-                        failureClass.wireName(),
-                        "watchdogFired",
-                        watchdogFired.toString(),
-                        "exceptionClass",
-                        exceptionClassName(ex),
-                        "stackHead",
-                        stackHead(ex),
-                        "attemptDurationMs",
-                        attemptDurationMs.toString(),
-                        "wedgedMode",
-                        decision.wedgedMode.toString(),
-                    )
-                    service.broadcastStatus(
-                        "connecting",
-                        if (decision.everConnected) {
-                            "Adapter link dropped - reconnecting (${decision.attempt}/${ObdProbes.MAX_RECONNECT_ATTEMPTS})..."
-                        } else {
-                            "Couldn't reach ${service.activeName} - retrying (${decision.attempt}/${ObdProbes.MAX_RECONNECT_ATTEMPTS})..."
-                        },
-                        false,
-                    )
-                    if (!sleeper.sleep(decision.backoffMs)) {
-                        return
-                    }
-                    if (service.cancelRetryRequested) {
-                        service.cancelRetryRequested = false
-                        service.recorder.logEvent(
-                            "retry_cancelled_by_user",
-                            "attempt",
-                            decision.attempt.toString(),
-                            "everConnected",
-                            decision.everConnected.toString(),
-                        )
-                        service.broadcastStatus("idle", "Retry cancelled.", false)
-                        service.stopSelf()
+                    if (!handleAttemptFailure(retry, ex, attemptStart)) {
                         return
                     }
                 }
@@ -305,6 +151,228 @@ open class ObdPollingEngine(
             service.closeSessionLog()
             service.markSessionInactive()
         }
+    }
+
+    /** Ends a session that failed one of the preflight gates, before any socket was opened. */
+    private fun abortBeforeConnect(message: String) {
+        service.broadcastStatus("error", message, true)
+        service.closeSessionLog()
+        service.markSessionInactive()
+    }
+
+    /**
+     * Consumes a pending user cancel: logs it, broadcasts idle, and stops the service.
+     * Returns true when the loop must exit. [phase] is logged only for the pre-connect check.
+     */
+    private fun consumeCancelRetry(
+        attempt: Int,
+        everConnected: Boolean,
+        phase: String?,
+    ): Boolean {
+        if (!service.cancelRetryRequested) {
+            return false
+        }
+        service.cancelRetryRequested = false
+        if (phase != null) {
+            service.recorder.logEvent(
+                "retry_cancelled_by_user",
+                "attempt",
+                attempt.toString(),
+                "everConnected",
+                everConnected.toString(),
+                "phase",
+                phase,
+            )
+        } else {
+            service.recorder.logEvent(
+                "retry_cancelled_by_user",
+                "attempt",
+                attempt.toString(),
+                "everConnected",
+                everConnected.toString(),
+            )
+        }
+        service.broadcastStatus("idle", "Retry cancelled.", false)
+        service.stopSelf()
+        return true
+    }
+
+    /**
+     * Runs whatever the connected session is for: a one-shot runner (clear-DTC / diagnostic scan /
+     * TPMS / detail probe) or the default live-poll loop. One-shot runners complete the session;
+     * the live poll returns normally on stop and throws [IOException] on a broken link.
+     */
+    @Throws(IOException::class)
+    private fun runConnectedSession(
+        address: String,
+        scanMode: Boolean,
+        clearDtcMode: Boolean,
+        tpmsScanMode: Boolean,
+        detailProbeStage: String?,
+        retry: ConnectionRetryCoordinator,
+    ) {
+        if (clearDtcMode) {
+            clearDtcRunner.run()
+            return
+        }
+        if (scanMode) {
+            scanRunner.run()
+            return
+        }
+        if (tpmsScanMode) {
+            tpmsDiscoveryRunner.run(address, EnhancedPidProfiles.STAGE_TIRES)
+            return
+        }
+        if (!detailProbeStage.isNullOrBlank()) {
+            tpmsDiscoveryRunner.run(address, detailProbeStage)
+            return
+        }
+        retry.resetAttemptBudget()
+        service.broadcastStatus(
+            "connected",
+            "Polling live OBD data from ${service.activeName}.",
+            false,
+        )
+        service.updateNotification("Connected to ${service.activeName}")
+        pollUntilStoppedOrBroken()
+    }
+
+    /**
+     * Classifies and records one failed connect/poll attempt, then either schedules the next
+     * retry (returns true) or ends the session — budget exhausted, session stopped, sleep
+     * interrupted, or user cancel (returns false).
+     */
+    private fun handleAttemptFailure(
+        retry: ConnectionRetryCoordinator,
+        ex: IOException,
+        attemptStartMs: Long,
+    ): Boolean {
+        val attemptDurationMs = maxOf(0L, System.currentTimeMillis() - attemptStartMs)
+        closeSocket()
+        if (retry.everConnected) {
+            OBDLog.event("ObdPollingEngine", "disconnect", mapOf("reason" to ObdElmDecode.safeMessage(ex)))
+        }
+        if (!service.running.get()) {
+            return false
+        }
+        var phase = connection.lastErrorPhase
+        if (phase.isNullOrEmpty()) {
+            phase = "post_connect"
+        }
+        val watchdogFired = connection.watchdogFired
+        val failureClass =
+            ConnectionFailureClassifier.classify(
+                phase,
+                attemptDurationMs,
+                ex,
+                isBluetoothReady(),
+            )
+        service.setLastFailureClass(failureClass)
+        val decision = retry.recordFailure(failureClass, attemptDurationMs)
+        if (decision.exhausted) {
+            reportReconnectExhausted(decision, failureClass, watchdogFired, ex)
+            return false
+        }
+        if (decision.wedgedModeStarted) {
+            service.recorder.logEvent(
+                "wedged_suspected",
+                "consecutiveInstantDrops",
+                decision.consecutiveInstantDrops.toString(),
+                "lastAttemptDurationMs",
+                attemptDurationMs.toString(),
+                "failureClass",
+                failureClass.wireName(),
+                "watchdogFired",
+                watchdogFired.toString(),
+            )
+        }
+        logReconnectAttempt(decision, failureClass, watchdogFired, ex, attemptDurationMs)
+        service.broadcastStatus(
+            "connecting",
+            if (decision.everConnected) {
+                "Adapter link dropped - reconnecting (${decision.attempt}/${ObdProbes.MAX_RECONNECT_ATTEMPTS})..."
+            } else {
+                "Couldn't reach ${service.activeName} - retrying (${decision.attempt}/${ObdProbes.MAX_RECONNECT_ATTEMPTS})..."
+            },
+            false,
+        )
+        if (!sleeper.sleep(decision.backoffMs)) {
+            return false
+        }
+        if (consumeCancelRetry(decision.attempt, decision.everConnected, null)) {
+            return false
+        }
+        return true
+    }
+
+    private fun reportReconnectExhausted(
+        decision: ConnectionRetryCoordinator.RetryDecision,
+        failureClass: FailureClass,
+        watchdogFired: Boolean,
+        ex: IOException,
+    ) {
+        Log.w(
+            MainActivity.TAG,
+            "OBD reconnect exhausted for ${service.activeName} after ${ObdProbes.MAX_RECONNECT_ATTEMPTS} attempts",
+            ex,
+        )
+        service.recorder.logError("reconnect_exhausted", ex)
+        service.recorder.logEvent(
+            "reconnect_exhausted",
+            "attempts",
+            ObdProbes.MAX_RECONNECT_ATTEMPTS.toString(),
+            "failureClass",
+            failureClass.wireName(),
+            "watchdogFired",
+            watchdogFired.toString(),
+            "exceptionClass",
+            exceptionClassName(ex),
+            "stackHead",
+            stackHead(ex),
+        )
+        service.broadcastStatus(
+            "error",
+            if (decision.everConnected) {
+                "Lost the adapter link and could not reconnect after ${ObdProbes.MAX_RECONNECT_ATTEMPTS} tries."
+            } else {
+                "Could not reach ${service.activeName} after ${ObdProbes.MAX_RECONNECT_ATTEMPTS} tries. Make sure the car is awake and the adapter is plugged in."
+            },
+            true,
+        )
+        service.stopSelf()
+    }
+
+    private fun logReconnectAttempt(
+        decision: ConnectionRetryCoordinator.RetryDecision,
+        failureClass: FailureClass,
+        watchdogFired: Boolean,
+        ex: IOException,
+        attemptDurationMs: Long,
+    ) {
+        OBDLog.event("ObdPollingEngine", "reconnect_attempt", mapOf("attempt" to decision.attempt))
+        service.recorder.logEvent(
+            "reconnect",
+            "attempt",
+            decision.attempt.toString(),
+            "backoffMs",
+            decision.backoffMs.toString(),
+            "reason",
+            ObdElmDecode.safeMessage(ex),
+            "everConnected",
+            decision.everConnected.toString(),
+            "failureClass",
+            failureClass.wireName(),
+            "watchdogFired",
+            watchdogFired.toString(),
+            "exceptionClass",
+            exceptionClassName(ex),
+            "stackHead",
+            stackHead(ex),
+            "attemptDurationMs",
+            attemptDurationMs.toString(),
+            "wedgedMode",
+            decision.wedgedMode.toString(),
+        )
     }
 
     fun runTpmsScanLoop(address: String?) {

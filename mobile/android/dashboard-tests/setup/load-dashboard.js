@@ -38,6 +38,7 @@ const DASHBOARD_MODULE_LOADERS = {
   'dtc-lookup.js': () => import('../../app/src/main/dashboard-src/js/dtc-lookup.ts'),
   'insights-panel.js': () => import('../../app/src/main/dashboard-src/js/insights-panel.ts'),
   'map.js': () => import('../../app/src/main/dashboard-src/js/map.ts'),
+  'payload-validators.js': () => import('../../app/src/main/dashboard-src/js/payload-validators.ts'),
   'prefs.js': () => import('../../app/src/main/dashboard-src/js/prefs.ts'),
   'scrubber.js': () => import('../../app/src/main/dashboard-src/js/scrubber.ts'),
   'signals-panel.js': () => import('../../app/src/main/dashboard-src/js/signals-panel.ts'),
@@ -50,6 +51,7 @@ const DASHBOARD_MODULE_LOADERS = {
 const DASHBOARD_EMITTED_JS_FILES = [
   'prefs.js',
   'core.js',
+  'payload-validators.js',
   'storage-status.js',
   'signals-panel.js',
   'insights-panel.js',

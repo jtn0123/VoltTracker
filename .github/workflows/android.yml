@@ -29,6 +29,10 @@ jobs:
       run:
         working-directory: mobile/android
     steps:
+      - name: Record job start time
+        # Runs before checkout, so the default working-directory does not exist yet.
+        working-directory: ${{ github.workspace }}
+        run: echo "JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
@@ -93,6 +97,9 @@ jobs:
           PY
       - name: Spotless check
         run: ./gradlew --no-daemon --configuration-cache :app:spotlessCheck
+      - name: Detekt static analysis
+        # Correctness-leaning Kotlin rules (ktlint covers formatting); config in app/detekt.yml.
+        run: ./gradlew --no-daemon --configuration-cache :app:detekt
       - name: Android Lint
         run: ./gradlew --no-daemon --configuration-cache :app:lintDebug
       - name: Assemble debug APK
@@ -133,6 +140,12 @@ jobs:
           name: unit-test-report
           path: mobile/android/app/build/reports/tests/
           if-no-files-found: ignore
+      - name: Report job wall-clock time
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          elapsed=$(( $(date +%s) - JOB_STARTED_AT ))
+          echo "Job wall-clock: $((elapsed / 60))m $((elapsed % 60))s" >> "$GITHUB_STEP_SUMMARY"
 
   dashboard-tests:
     runs-on: ubuntu-latest
@@ -228,7 +241,7 @@ jobs:
           name: dashboard-coverage
           path: mobile/android/dashboard-tests/coverage/
           if-no-files-found: ignore
-      - name: Report dashboard bundle size
+      - name: Report dashboard bundle size and budget headroom
         if: always()
         working-directory: mobile/android/app/src/main/assets/dashboard
         run: |
@@ -243,13 +256,40 @@ jobs:
                 echo "| $f | $size |"
               fi
             done
-            # Split budget (build.gradle:verifyDashboardBundleSize): core bundle vs lazy DTC data.
-            dtc=$(cat js/dtc-lookup.js js/dtc-causes.js | wc -c | tr -d ' ')
-            all=$(find js css -type f \( -name "*.js" -o -name "*.css" \) ! -path "*/lib/*" -exec cat {} + | wc -c | tr -d ' ')
-            core=$((all - dtc))
-            echo "| **core (excl lib/, excl dtc data)** | **$core** / 400000 |"
-            echo "| **dtc data (lookup + causes)** | **$dtc** / 380000 |"
           } >> "$GITHUB_STEP_SUMMARY"
+          # Split budget (build.gradle:verifyDashboardBundleSize): core bundle vs lazy DTC
+          # data. Keep these numbers in sync with dashboardCoreBudgetBytes /
+          # dashboardDtcDataBudgetBytes in mobile/android/build.gradle. The Gradle task is
+          # the hard gate (it fails the unit-tests job when a budget is exceeded); this
+          # report is advisory only — it surfaces remaining headroom and warns when a
+          # bundle is within 15 KB of its budget, without failing the build.
+          core_budget=400000
+          dtc_budget=380000
+          warn_floor=15000
+          dtc=$(cat js/dtc-lookup.js js/dtc-causes.js | wc -c | tr -d ' ')
+          all=$(find js css -type f \( -name "*.js" -o -name "*.css" \) ! -path "*/lib/*" -exec cat {} + | wc -c | tr -d ' ')
+          core=$((all - dtc))
+          core_headroom=$((core_budget - core))
+          dtc_headroom=$((dtc_budget - dtc))
+          {
+            echo ""
+            echo "### Budget headroom"
+            echo ""
+            echo "| Bundle | Bytes | Budget | Headroom |"
+            echo "|--------|------:|-------:|---------:|"
+            echo "| core (JS + CSS, excl lib/ and DTC data) | $core | $core_budget | $core_headroom |"
+            echo "| dtc data (dtc-lookup.js + dtc-causes.js) | $dtc | $dtc_budget | $dtc_headroom |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$core_headroom" -lt "$warn_floor" ]; then
+            echo "::warning title=Dashboard bundle headroom::core bundle headroom is ${core_headroom} bytes (under 15 KB of the ${core_budget}-byte budget)"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "WARNING: core bundle headroom is ${core_headroom} bytes (under 15 KB)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$dtc_headroom" -lt "$warn_floor" ]; then
+            echo "::warning title=Dashboard bundle headroom::DTC data headroom is ${dtc_headroom} bytes (under 15 KB of the ${dtc_budget}-byte budget)"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "WARNING: DTC data headroom is ${dtc_headroom} bytes (under 15 KB)." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   dashboard-e2e:
     # Playwright renders the REAL dashboard (index.html + css + js) in headless Chromium and
@@ -262,6 +302,10 @@ jobs:
       run:
         working-directory: mobile/android/dashboard-e2e
     steps:
+      - name: Record job start time
+        # Runs before checkout, so the default working-directory does not exist yet.
+        working-directory: ${{ github.workspace }}
+        run: echo "JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
@@ -278,8 +322,27 @@ jobs:
         # low/moderate noise from blocking PRs while still gating on anything
         # seriously exploitable.
         run: npm audit --audit-level=high
+      - name: Resolve pinned Playwright version
+        # Cache key input: the browser build is fixed by the @playwright/test pin in
+        # package-lock.json, so the cache rolls over exactly when the pin changes.
+        id: playwright-version
+        run: |
+          version="$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
       - name: Install Playwright Chromium + OS deps
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+      - name: Install Playwright OS deps (browser cache hit)
+        # The browser binaries came from the cache, but apt-level dependencies are
+        # not cached, so they still need installing on every runner.
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
       - name: Build dashboard bundle
         # Playwright serves the real index.html, which loads js/app.js (the built bundle).
         working-directory: mobile/android/dashboard-tests
@@ -331,6 +394,12 @@ jobs:
           name: dashboard-e2e-report
           path: mobile/android/dashboard-e2e/playwright-report/
           if-no-files-found: ignore
+      - name: Report job wall-clock time
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          elapsed=$(( $(date +%s) - JOB_STARTED_AT ))
+          echo "Job wall-clock: $((elapsed / 60))m $((elapsed % 60))s" >> "$GITHUB_STEP_SUMMARY"
 
   dashboard-visual:
     # Required pixel-screenshot regression for the reworked dashboard surfaces (Playwright
@@ -343,6 +412,10 @@ jobs:
       run:
         working-directory: mobile/android/dashboard-e2e
     steps:
+      - name: Record job start time
+        # Runs before checkout, so the default working-directory does not exist yet.
+        working-directory: ${{ github.workspace }}
+        run: echo "JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
@@ -353,8 +426,27 @@ jobs:
           cache-dependency-path: mobile/android/dashboard-e2e/package-lock.json
       - name: Install e2e deps
         run: npm ci
+      - name: Resolve pinned Playwright version
+        # Cache key input: the browser build is fixed by the @playwright/test pin in
+        # package-lock.json, so the cache rolls over exactly when the pin changes.
+        id: playwright-version
+        run: |
+          version="$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
       - name: Install Playwright Chromium + OS deps
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+      - name: Install Playwright OS deps (browser cache hit)
+        # The browser binaries came from the cache, but apt-level dependencies are
+        # not cached, so they still need installing on every runner.
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
       - name: Build dashboard bundle
         # Playwright serves the real index.html, which loads js/app.js (the built bundle).
         working-directory: mobile/android/dashboard-tests
@@ -373,6 +465,12 @@ jobs:
             mobile/android/dashboard-e2e/*-snapshots/
             mobile/android/dashboard-e2e/test-results/
           if-no-files-found: ignore
+      - name: Report job wall-clock time
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          elapsed=$(( $(date +%s) - JOB_STARTED_AT ))
+          echo "Job wall-clock: $((elapsed / 60))m $((elapsed % 60))s" >> "$GITHUB_STEP_SUMMARY"
 
   gradle-dependency-audit:
     # Required dependency-vulnerability scan for the Gradle/Java side — the
@@ -432,6 +530,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
+      - name: Record job start time
+        run: echo "JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
@@ -447,11 +547,13 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
-      - name: Build debug APK
+      - name: Build debug APK and instrumented-test APK
         working-directory: mobile/android
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon --configuration-cache :app:assembleDebug
+          # androidTest APK built here, outside the emulator session, so the
+          # connectedDebugAndroidTest step below only installs and runs.
+          ./gradlew --no-daemon --configuration-cache :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -466,7 +568,11 @@ jobs:
           arch: x86_64
           profile: pixel_6
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect
-          script: bash mobile/android/scripts/emulator-smoke.sh
+          # The shell smoke (logcat contract) plus the instrumented twin
+          # (app/src/androidTest MainActivitySmokeTest) on the same booted emulator.
+          script: |
+            bash mobile/android/scripts/emulator-smoke.sh
+            cd mobile/android && ./gradlew --no-daemon --configuration-cache :app:connectedDebugAndroidTest
       - name: Upload emulator smoke artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -476,6 +582,11 @@ jobs:
             mobile/android/build/emulator-smoke-logcat.txt
             mobile/android/build/emulator-smoke/
           if-no-files-found: ignore
+      - name: Report job wall-clock time
+        if: always()
+        run: |
+          elapsed=$(( $(date +%s) - JOB_STARTED_AT ))
+          echo "Job wall-clock: $((elapsed / 60))m $((elapsed % 60))s" >> "$GITHUB_STEP_SUMMARY"
 
   ci-success:
     # Single aggregate status so branch protection only needs to require one

@@ -70,6 +70,7 @@ copyAssetTree(LEAFLET_SRC, LEAFLET_OUT, LEAFLET_ASSETS);
 const EAGER = [
   "prefs",
   "core",
+  "payload-validators",
   "storage-status",
   "signals-panel",
   "insights-panel",

@@ -246,7 +246,7 @@ class ObdPollingEngineTest {
     @Test
     fun rawTranscriptIsCappedWithTruncationMarker() {
         val raw = StringBuilder()
-        for (i in 0 until ObdPollingEngine.RAW_TRANSCRIPT_MAX_CHARS + 50) {
+        repeat(ObdPollingEngine.RAW_TRANSCRIPT_MAX_CHARS + 50) {
             raw.append('x')
         }
 

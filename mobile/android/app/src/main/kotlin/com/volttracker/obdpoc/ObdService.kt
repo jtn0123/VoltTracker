@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.app.ServiceCompat
@@ -89,6 +90,7 @@ open class ObdService :
 
     @Volatile private var competingAppsCsv: String? = null
     private var activeForegroundServiceType = 0
+    private var sessionWakeLock: PowerManager.WakeLock? = null
 
     private class SessionStartRequest(
         val mode: String,
@@ -100,6 +102,9 @@ open class ObdService :
         val resetCancelRetry: Boolean,
         val refreshCompetingApps: Boolean,
         val startLocationTracking: Boolean,
+        // True for sessions doing real adapter IO whose recording must survive screen-off
+        // (see acquireSessionWakeLock); the demo preview deliberately opts out.
+        val holdWakeLock: Boolean = true,
         val runner: Runnable,
     )
 
@@ -344,6 +349,7 @@ open class ObdService :
                 resetCancelRetry = false,
                 refreshCompetingApps = false,
                 startLocationTracking = false,
+                holdWakeLock = false,
                 runner = engine::runDemoLoop,
             ),
         )
@@ -364,6 +370,9 @@ open class ObdService :
         if (!startForegroundSession(request.foregroundText)) {
             broadcastStatus("blocked", getString(R.string.status_foreground_blocked), true)
             return
+        }
+        if (request.holdWakeLock) {
+            acquireSessionWakeLock(request.mode)
         }
         sessionStartedAtMs = System.currentTimeMillis()
         sessionStateMachine.start(request.phase, request.phaseDetail)
@@ -437,7 +446,44 @@ open class ObdService :
         recorder.logEvent("gps_stopped")
     }
 
+    /**
+     * Holds the CPU awake while a real adapter session is recording. The foreground service
+     * keeps the process alive, but on some OEM builds Doze can still suspend the CPU with the
+     * screen off mid-drive, stalling the Bluetooth polling thread and punching gaps into the
+     * session. Callers opt in via [SessionStartRequest.holdWakeLock]; [mode] is only logged.
+     */
+    private fun acquireSessionWakeLock(mode: String) {
+        if (sessionWakeLock?.isHeld == true) {
+            return
+        }
+        try {
+            val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+            val lock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+            lock.setReferenceCounted(false)
+            // Timeout is a leak ceiling, not the session length: stopCurrentSession() releases
+            // on every session end; the ceiling only catches a missed release.
+            lock.acquire(SESSION_WAKE_LOCK_TIMEOUT_MS)
+            sessionWakeLock = lock
+            recorder.logEvent("wake_lock_acquired", "mode", mode)
+        } catch (ex: RuntimeException) {
+            Log.w(MainActivity.TAG, "session wake lock acquire failed", ex)
+        }
+    }
+
+    private fun releaseSessionWakeLock() {
+        val lock = sessionWakeLock ?: return
+        sessionWakeLock = null
+        try {
+            if (lock.isHeld) {
+                lock.release()
+            }
+        } catch (ex: RuntimeException) {
+            Log.w(MainActivity.TAG, "session wake lock release failed", ex)
+        }
+    }
+
     private fun stopCurrentSession(statusMessage: String?) {
+        releaseSessionWakeLock()
         running.set(false)
         SESSION_ACTIVE.set(false)
         sessionStateMachine.stop(statusMessage)
@@ -705,6 +751,10 @@ open class ObdService :
         const val EXTRA_NAME = "name"
         const val EXTRA_JSON = "json"
         const val EXTRA_DETAIL_STAGE = "detail_stage"
+        private const val WAKE_LOCK_TAG = "VoltTracker:ObdSession"
+
+        // Leak ceiling only (see acquireSessionWakeLock); generously above any realistic drive.
+        private const val SESSION_WAKE_LOCK_TIMEOUT_MS = 12L * 60L * 60L * 1000L
         private val SESSION_ACTIVE = AtomicBoolean(false)
 
         @JvmStatic

@@ -1,7 +1,9 @@
 package com.volttracker.obdpoc
 
+import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.ObdStoreMaintenance
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -143,6 +145,68 @@ class DataBackupTest {
     }
 
     @Test
+    fun buildBackupFileEmitsIntegrityWarningSnapshotWhenQuickCheckFails() {
+        val context = RuntimeEnvironment.getApplication()
+        val store = CorruptQuickCheckStore(context)
+        try {
+            store.clearAllData()
+            val snapshots = ArrayList<DataBackup.ProgressSnapshot>()
+            val backup = DataBackup(context).buildBackupFile(store) { snapshots.add(it) }
+            // A possibly damaged backup beats no backup: the file must still be produced.
+            assertNotNull("backup must still be created when quick_check fails", backup)
+            val warning = snapshots.firstOrNull { it.warning }
+            assertNotNull("a warning-flagged progress snapshot should reach the listener", warning)
+            assertEquals("Integrity warning", warning!!.phase)
+            assertTrue(
+                "warning detail should carry the first quick_check problem, got: ${warning.detail}",
+                warning.detail!!.contains(FAKE_INTEGRITY_PROBLEM),
+            )
+            backup!!.delete()
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
+    fun buildEncryptedBackupFileEmitsIntegrityWarningSnapshotWhenQuickCheckFails() {
+        val context = RuntimeEnvironment.getApplication()
+        val store = CorruptQuickCheckStore(context)
+        try {
+            store.clearAllData()
+            val snapshots = ArrayList<DataBackup.ProgressSnapshot>()
+            val backup =
+                DataBackup(context).buildEncryptedBackupFile(store, "hunter22") { snapshots.add(it) }
+            assertNotNull("encrypted backup must still be created when quick_check fails", backup)
+            assertTrue(
+                "a warning-flagged progress snapshot should reach the listener",
+                snapshots.any { it.warning },
+            )
+            backup!!.delete()
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
+    fun buildBackupFileEmitsNoIntegrityWarningForHealthyDatabase() {
+        val context = RuntimeEnvironment.getApplication()
+        val store = ObdLocalStore(context)
+        try {
+            store.clearAllData()
+            val snapshots = ArrayList<DataBackup.ProgressSnapshot>()
+            val backup = DataBackup(context).buildBackupFile(store) { snapshots.add(it) }
+            assertNotNull(backup)
+            assertTrue(
+                "no progress snapshot should be warning-flagged for a healthy database",
+                snapshots.none { it.warning },
+            )
+            backup!!.delete()
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
     fun constructorClearsTransientRestoreFilesFromPriorRuns() {
         val context = RuntimeEnvironment.getApplication()
         val restoreDb = File(context.cacheDir, "restore-stale.db")
@@ -261,7 +325,17 @@ class DataBackupTest {
         assertTrue(redacted.contains("[coordinate-redacted]"))
     }
 
+    /** Real store whose `PRAGMA quick_check` is stubbed to always report corruption. */
+    private class CorruptQuickCheckStore(
+        context: Context,
+    ) : ObdLocalStore(context) {
+        override fun quickCheck(): ObdStoreMaintenance.IntegrityResult =
+            ObdStoreMaintenance.IntegrityResult(false, listOf(FAKE_INTEGRITY_PROBLEM))
+    }
+
     companion object {
+        private const val FAKE_INTEGRITY_PROBLEM = "row 7 missing from index idx_samples"
+
         private fun rowCount(
             db: SQLiteDatabase,
             table: String,

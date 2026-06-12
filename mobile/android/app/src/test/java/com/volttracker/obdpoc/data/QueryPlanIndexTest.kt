@@ -11,6 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import java.util.Locale
 
 /**
  * Proves that the read-side hot-path queries used by [ObdStoreReports], [ObdStoreTrips],
@@ -317,7 +318,7 @@ class QueryPlanIndexTest {
             val sessionStart = 1_700_000_000_000L + sessionIndex * 60_000L
             val sv = ContentValues()
             sv.put("mode", "obd")
-            sv.put("adapter_address", "AA:BB:CC:DD:EE:" + String.format("%02X", sessionIndex))
+            sv.put("adapter_address", "AA:BB:CC:DD:EE:" + String.format(Locale.US, "%02X", sessionIndex))
             sv.put("adapter_name", "Adapter $sessionIndex")
             sv.put("started_at_ms", sessionStart)
             sv.put("status", "complete")
@@ -366,8 +367,8 @@ class QueryPlanIndexTest {
         // Adapter history: one row per session-adapter, plus a couple repeat keys.
         for (a in 0 until SESSION_COUNT) {
             val av = ContentValues()
-            av.put("adapter_key", "AA:BB:CC:DD:EE:" + String.format("%02X", a))
-            av.put("address", "AA:BB:CC:DD:EE:" + String.format("%02X", a))
+            av.put("adapter_key", "AA:BB:CC:DD:EE:" + String.format(Locale.US, "%02X", a))
+            av.put("address", "AA:BB:CC:DD:EE:" + String.format(Locale.US, "%02X", a))
             av.put("name", "Adapter $a")
             av.put("first_seen_ms", 1_700_000_000_000L + a * 1000L)
             av.put("last_seen_ms", 1_700_000_000_000L + a * 1000L)

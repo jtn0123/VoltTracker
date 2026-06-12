@@ -93,7 +93,7 @@ const NATIVE_CHARGE_SUMMARY = putKeys(
   methodBody(reportsSource, ['JSONObject chargeSummaryJson(SQLiteDatabase db)', 'fun chargeSummaryJson(db: SQLiteDatabase)']),
 );
 const NATIVE_CHARGE_ROW = putKeys(
-  methodBody(reportsSource, ['JSONObject chargeSessionRowJson(Cursor cursor)', 'fun chargeSessionRowJson(cursor: Cursor)']),
+  methodBody(reportsSource, ['JSONObject chargeSummaryRowJson(ChargeSummaryRow row)', 'fun chargeSummaryRowJson(row: ChargeSummaryRow)']),
 );
 const NATIVE_DTC = putKeys(methodBody(dtcSource, ['JSONObject toJson()', 'fun toJson(): JSONObject']));
 // appState.vehicle = vehicleJson()'s own keys plus the latestVehicle row it

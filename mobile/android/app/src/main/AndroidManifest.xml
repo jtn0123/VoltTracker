@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Partial wake lock while a real adapter session records, so Doze can't suspend the
+         CPU mid-drive and stall Bluetooth polling. Released on session stop. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Remote map basemap tiles only; OBD/GPS data stays in app-private local storage. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -38,6 +41,7 @@
     </queries>
 
     <application
+        android:name=".VoltTrackerApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"

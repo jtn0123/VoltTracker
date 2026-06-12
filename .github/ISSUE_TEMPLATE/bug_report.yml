@@ -1,0 +1,84 @@
+name: Bug report
+description: Report a problem with the Volt Tracker Android app
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Volt Tracker talks to a real car over a real
+        Bluetooth OBD-II adapter, so adapter and device details matter a lot —
+        please fill in as much of the environment section as you can.
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: >-
+        Shown in the dashboard footer ("Volt Tracker vX.Y.Z-<commit>") and in
+        Settings. For sideloaded builds, the APK filename also carries it.
+      placeholder: e.g. v0.11.4-76ae8f6
+    validations:
+      required: true
+  - type: input
+    id: android-version
+    attributes:
+      label: Android version
+      placeholder: e.g. Android 15
+    validations:
+      required: true
+  - type: input
+    id: device-model
+    attributes:
+      label: Device model
+      placeholder: e.g. Samsung Galaxy S24
+    validations:
+      required: true
+  - type: input
+    id: obd-adapter
+    attributes:
+      label: OBD adapter model/brand
+      description: >-
+        The ELM327-style Bluetooth adapter in use (brand, model, firmware if
+        known). Write "n/a (demo mode)" if the bug reproduces without an
+        adapter.
+      placeholder: e.g. OBDLink MX+, Veepeak Mini, generic ELM327 v1.5 clone
+    validations:
+      required: true
+  - type: textarea
+    id: repro-steps
+    attributes:
+      label: Steps to reproduce
+      description: >-
+        Include the car state where relevant (ignition on/off, EV vs engine
+        running, charging) — many readings only exist in certain states.
+      placeholder: |
+        1. Pair the adapter in Android Bluetooth settings
+        2. Open Volt Tracker and tap Connect
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: What actually happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >-
+        The in-app Diagnostics share/export is best (it redacts Bluetooth MACs,
+        VIN-like identifiers, and precise coordinates). Session JSONL excerpts
+        or logcat snippets also help. Please double-check pasted text for
+        anything personal before submitting.
+      render: text
+    validations:
+      required: false

@@ -10,7 +10,9 @@ the phone.
 
 Everything lives in [`mobile/android/`](mobile/android/). See
 [`mobile/android/README.md`](mobile/android/README.md) for full build, install,
-and PID details.
+and PID details, including an
+[architecture overview](mobile/android/README.md#architecture) with a component
+diagram and dashboard screenshots.
 
 - Connects to a paired ELM327-style OBD-II adapter over Bluetooth Classic.
 - Logs live OBD telemetry + GPS to a local SQLite database; works offline.

@@ -74,3 +74,15 @@ scripts/release-preflight.sh
 
 The manual **Release dry run** workflow predicts the semantic-release bump/tag
 for the checked-out branch without publishing artifacts.
+
+## Changelog
+
+The repo-root `CHANGELOG.md` is **generated and owned by python-semantic-release**
+(config in `/pyproject.toml`); the release workflow regenerates it on every
+version bump from the Conventional Commit subjects on `main`. Do not hand-edit,
+split, or truncate it — the tool rewrites it and manual changes will be lost or
+cause churn. Its size is expected: it is the full release history.
+
+To read recent entries, start at the top — newest release first (e.g.
+`head -n 100 CHANGELOG.md`), or use the per-tag release notes on the GitHub
+Releases page, which carry the same generated content per version.
