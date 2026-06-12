@@ -1,6 +1,98 @@
 # CHANGELOG
 
 
+## v0.11.5 (2026-06-12)
+
+### Bug Fixes
+
+- Implement top-10 polish items from the app-wide review
+  ([#196](https://github.com/jtn0123/VoltTracker/pull/196),
+  [`51894c3`](https://github.com/jtn0123/VoltTracker/commit/51894c364ba0e0a7a7205ddc5f697443fceb475d))
+
+* chore: ignore Kotlin compiler session dir (.kotlin/)
+
+The built-in Kotlin in AGP 9 writes session artifacts to mobile/android/.kotlin/ during builds;
+  ignore it like .gradle/.
+
+https://claude.ai/code/session_01PRSNFrCU4FokRGxNqNYnyi
+
+* polish(dashboard): surface silent failures, typed bridge/state contracts, motion + a11y cleanup
+
+- Surface DTC chunk load failures via status toast instead of silent .catch, and warn once per
+  session when localStorage is unavailable so users know preferences won't persist. - Replace
+  Record<string, unknown> payload recasts with optional-field interfaces
+  (VoltAdapterState/VoltSessionState/VoltGpsState/ VoltEnhancedSample) and add VD.callBridge()
+  existence guard for bridge methods that may be absent on older native versions. - Add
+  dataset-state.ts with string-literal unions for data-state/ data-tone and migrate all producers to
+  the typed setters. - Consolidate all transition durations into --motion-* CSS variables. - Make
+  speed/power/battery live regions atomic per cluster to stop stuttering screen-reader
+  announcements; let the status popover scroll instead of overflowing small viewports.
+
+Dashboard suite: 292 tests green; tsc strict + eslint clean; bundle +1.2%, within budget.
+
+* chore(dashboard): regenerate index.html from updated drive partial
+
+* polish(android): string resources, exception logging, snapshot safety, MainActivity extraction
+
+- Migrate 128 user-facing strings (notifications, dialogs, backup/ restore flow, share subject) from
+  Kotlin literals to res/values/strings.xml with placeholder formatting. - Add a log line to 15
+  silently-swallowed catch blocks across MainActivity, BackupController, ElmConnection,
+  SessionRecorder, ObdSessionLog, RollingAppLog, and LocationManagerTracker; no control-flow
+  changes. - Introduce JsonSnapshot, a volatile holder that publishes freshly parsed, never-mutated
+  JSONObject copies, replacing the bare @Volatile telemetry/status/storage fields read from the JS
+  bridge thread. - Extract ConnectPermissionFlow, DashboardPayloadJson, and
+  DashboardBackPressCallback from MainActivity (801 -> 695 lines), each with unit tests. - Start GPS
+  updates when location permission is granted mid-session: trackers park their listener and
+  ObdService resumes them on next foreground visibility. - Validate JS bridge inputs up front:
+  forceStopPackage checks against the known-OBD-package list before showing the confirm dialog;
+  getRecentSessions clamps its count argument. - Document the constraint behind each remaining
+  @Suppress(DEPRECATION).
+
+Unit tests, JaCoCo coverage verification, and spotless all green.
+
+* fix(android): resolve string resource lint errors
+
+Use the typographic ellipsis character in the seven progress strings flagged by TypographyEllipsis,
+  and suppress PluralsCandidate on the two passphrase-minimum strings, whose count is a fixed
+  minimum that can never be 1.
+
+* fix: address review findings across dashboard and Android layers
+
+Dashboard: - Fall back to the browser demo when the native bridge lacks demo() instead of claiming a
+  demo is running with no samples. - Warn once per unexpected data-state/tone value instead of every
+  render tick. - Only auto-hide the prefs storage-fallback toast if it still shows that notice, so
+  newer statuses aren't dismissed. - Label enhanced-next items from sample-backed metadata with row
+  fallback, matching the admit filter.
+
+Android: - Resume a parked connect only when the full CONNECT+SCAN permission set is granted (new
+  non-prompting PermissionGate.hasConnectPermissions). - Re-evaluate the foreground-service type
+  after GPS resumes from a mid-session permission grant. - Mark location updates active only when at
+  least one provider subscription succeeded, so resume isn't suppressed after failures. - Forward
+  the normalized package name that was allowlist-validated in forceStopPackage. - Give
+  SessionRecorder its own log TAG; reword misleading JSONException comments in DashboardPayloadJson.
+
+* test: grant location permission in tracker resume tests
+
+Robolectric denies permissions by default, so the provider-failure resume test was exercising the
+  parked-listener path instead of the all-providers-threw path, and the already-running no-op test
+  passed for the wrong reason.
+
+* test(dashboard): fix teardown leaks flagged in review
+
+- Restore window.localStorage even when it had no own descriptor: the injected throwing getter must
+  be deleted, not left behind, or later tests become order-dependent. - Re-import dataset-state per
+  test via vi.resetModules() so the module-scoped warn-once cache cannot leak warning state across
+  tests.
+
+The app-name normalization suggestion is intentionally skipped: Android string resources cannot
+  reference other strings inline, and the prose copy deliberately uses the product name "Volt
+  Tracker" while app_name remains the launcher label "Volt Tracker OBD".
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.11.4 (2026-06-12)
 
 ### Bug Fixes
