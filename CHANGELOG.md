@@ -1,6 +1,43 @@
 # CHANGELOG
 
 
+## v0.11.4 (2026-06-12)
+
+### Bug Fixes
+
+- Dashboard state consistency, DTC dialog dismiss, and quieter failure logging
+  ([#195](https://github.com/jtn0123/VoltTracker/pull/195),
+  [`76ae8f6`](https://github.com/jtn0123/VoltTracker/commit/76ae8f6c4b0b6396b101f52dc47b7a4c3a410df5))
+
+* polish: dashboard state consistency, DTC dialog dismiss, quieter failure logging
+
+Dashboard (items verified against current sources): - Charge tab: render the detection status as a
+  color-coded badge (waiting/needs-review/recorded/charging) instead of bare text, and add the
+  standard Refresh affordance to the Recent charges card header. - Insights tab: give the HV pack
+  ring an explicit waiting state (neutral track instead of a 0% arc before the first SOC reading)
+  and add the Refresh affordance to the More lifetime stats card. - Map tab: always refresh the
+  tile-error banner copy when showing it so a stale message from an earlier failure mode can't
+  resurface. - Clear-codes dialog: tapping outside the open alertdialog dismisses it, matching the
+  existing Esc path. - Speed/power meters: set aria-valuetext ("no data yet" when missing) so screen
+  readers announce something meaningful instead of indeterminate silence or dashes.
+
+Android: - ObdSessionLog: record JSON encode failures via noteFailure() instead of silently dropping
+  the log line in an empty catch. - ObdPollingEngine/SessionRecorder: stop logging the literal
+  string "null" when an exception has no message. - WebViewBootstrap: document why the deprecated
+  file-URL WebSettings are still pinned off explicitly.
+
+https://claude.ai/code/session_013Sa1AHHzskHkJC5Htsa4rq
+
+* test: update visual baselines for charge badge, pack-ring waiting state, refresh buttons
+
+The 8 changed screenshots cover exactly the surfaces intentionally restyled in the previous commit
+  (charge KPI grid, insights stats card, and the charge/insights cells of the scenario matrix).
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.11.3 (2026-06-11)
 
 ### Bug Fixes
