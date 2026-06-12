@@ -1,6 +1,100 @@
 # CHANGELOG
 
 
+## v0.12.0 (2026-06-12)
+
+### Features
+
+- Implement the 20-point polish plan across app, data, dashboard, and CI
+  ([#197](https://github.com/jtn0123/VoltTracker/pull/197),
+  [`6b700e8`](https://github.com/jtn0123/VoltTracker/commit/6b700e8bc80b4c9736c993608f2aa777d125be67))
+
+* feat: implement the 20-point polish plan across app, data, dashboard, and CI
+
+Reliability & data integrity - PRAGMA quick_check maintenance API; backups now warn on integrity
+  failures - Freelist-gated VACUUM after the startup retention prune (runStartupMaintenance); also
+  fixes wal_checkpoint(TRUNCATE) being silently swallowed via execSQL - Partial wake lock held
+  during real adapter sessions (released on stop/destroy) so Doze can't stall Bluetooth polling
+  mid-drive; demo sessions skip it - Closed-store guards on the JS-bridge storage reads (teardown
+  race returns the storage_unavailable payload instead of throwing)
+
+App & dashboard UX - One-time first-launch onboarding dialog (pairing explainer + Bluetooth settings
+  shortcut), suppressed for users with adapter history or an active session - Light theme behind
+  prefers-color-scheme for the dashboard token palette - Error banner dedupe (identical messages
+  within 2.5s bump a counter instead of re-rendering); warn-only runtime validators for
+  setStatus/setStorage/setAppState payloads against the documented bridge ABI
+
+Code health - ObdPollingEngine.runBluetoothLoop refactored into phase methods (preflight,
+  connected-session dispatch, failure handling) — behavior preserved - detekt added as a CI gate
+  (config + rationale in app/detekt.yml); fixed the genuine findings it caught (dead
+  chargeSessionRowJson, unused loop vars, ImplicitDefaultLocale call sites) - StrictMode (log-only)
+  armed in debug builds via new VoltTrackerApp - Debug-level logcat writes gated to debug builds;
+  rolling log stays the release surface
+
+Build & performance - shrinkResources for release; hand-authored startup baseline profile +
+  androidx.profileinstaller; Gradle parallel + local build cache enabled
+
+Testing & CI - Instrumented MainActivity smoke (dashboard JS handshake) wired into the
+  emulator-smoke job; new unit tests for wake lock, onboarding, StrictMode, maintenance, and
+  closed-store guards; 7 new Playwright specs (tile failure, malformed bridge payloads, offline,
+  250-session list) - CI: bundle-budget headroom report, Playwright browser cache, per-job
+  wall-clock summaries
+
+Docs & DX - Architecture diagram + screenshot links in the Android README; issue/PR templates;
+  map-tile privacy note; changelog ownership note; coverage-floor and startup-budget rationale
+  comments
+
+https://claude.ai/code/session_01KiK9A4ma7B9n4RciLoUwyJ
+
+* fix: address code-review findings on the polish PR
+
+- demo-native-contract.test.js extracted the deleted chargeSessionRowJson and failed at import;
+  point it (and the d.ts comment) at the live chargeSummaryRowJson emitter - payload-validators: an
+  {ok:false, error:""} envelope fell through the error-envelope skip and warned spuriously; gate on
+  ok === false alone - onboarding: persist the shown marker only after the dialog actually shows, so
+  an aborted first launch gets another chance - ObdService: wake-lock opt-in moved from a
+  mode-string match to an explicit SessionStartRequest.holdWakeLock flag - ObdPollingEngine: replace
+  the inverted-boolean return with an explicit cancel check in handleAttemptFailure -
+  VoltBridgeDataExports: detailed-signal exports get the same isOpen teardown-race guard as
+  DashboardStorageReader - emulator-smoke job: pre-build the androidTest APK outside the emulator
+  session so connectedDebugAndroidTest only installs and runs - vacuumIfNeeded: document why
+  freelist_count is probed before the checkpoint
+
+* feat: complete the light theme, surface integrity warnings, and ratchet detekt
+
+- Light theme finished: component CSS (cards, nav, map chrome, dialogs, troubleshooter, toasts,
+  scrubber) migrated to role tokens with light values; dark mode verified pixel-identical against
+  all 28 visual baselines; new functional light-mode e2e spec asserts computed colors and >=4.5:1
+  contrast - Backup integrity warning now reaches the user: quick_check failures emit a warning
+  ProgressSnapshot and append a warning to the final share status (plaintext and encrypted paths);
+  backup still proceeds by design - detekt complexity rules re-enabled as ratchets: production-only
+  thresholds pinned at current worst offender +1 (holders named in app/detekt.yml) so hotspots can
+  shrink but never grow - Payload-shape warnings also route through bridge.logClientError so field
+  reports carry drift without an adb session - New instrumented smoke: ACTION_DEMO must stream >=3
+  telemetry broadcasts on a real Android runtime
+
+* fix(dashboard-tests): drain lazy-chunk loads before vitest teardown
+
+CI flaked with "Closing rpc while onUserConsoleLog was pending": a lazy DTC-chunk rejection ran its
+  console.warn handler during worker shutdown. core.ts now exposes a pendingLazyLoads() harness seam
+  (settles when all in-flight DTC/map/troubleshooter chunk loads have run their handlers; never
+  rejects) and the shared afterEach awaits it, so late chunk handlers always run inside the test
+  context.
+
+* fix(ci): harden emulator-smoke nav-tap retries against flaky adb input
+
+A pull_request emulator run whose boot logged repeated "adb: device offline" dropped four
+  consecutive insights-tab taps and failed the smoke, while the standalone smoke passed the
+  identical commit. Raise the retry budget to 6, back the settle sleep off per attempt (late taps
+  screenshot mid-flight at a fixed 2s), and re-check transport health between retries. Retries stay
+  unable to mask a real geometry/selector break: a genuinely broken tap never changes the screen on
+  any attempt.
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.11.5 (2026-06-12)
 
 ### Bug Fixes
