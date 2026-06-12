@@ -443,15 +443,30 @@ class VoltBridgeDispatchTest {
     // ---- troubleshooter forwarding -----------------------------------------------------
 
     @Test
-    fun forceStopPackageForwardsNonEmptyPackageAndReturnsResult() {
+    fun forceStopPackageForwardsKnownObdPackageAndReturnsResult() {
         activity.forceStopReturn = true
 
-        val result = bridge.forceStopPackage("  com.example.obd  ")
+        val result = bridge.forceStopPackage("  io.tripovan.voltage  ")
         drain()
 
         assertTrue(result)
         assertEquals("Force-stop OBD app?", activity.lastConfirmationTitle)
-        assertEquals("com.example.obd", activity.lastForceStopPackage)
+        assertEquals("io.tripovan.voltage", activity.lastForceStopPackage)
+    }
+
+    @Test
+    fun forceStopPackageNormalizesMixedCaseBeforeConfirmAndForwarding() {
+        activity.forceStopReturn = true
+
+        val result = bridge.forceStopPackage("IO.Tripovan.VOLTAGE")
+        drain()
+
+        assertTrue(result)
+        assertTrue(
+            "confirm text must show the validated lower-case package: ${activity.lastConfirmationMessage}",
+            activity.lastConfirmationMessage!!.contains("io.tripovan.voltage"),
+        )
+        assertEquals("io.tripovan.voltage", activity.lastForceStopPackage)
     }
 
     @Test
@@ -460,6 +475,16 @@ class VoltBridgeDispatchTest {
 
         assertFalse(result)
         assertNull("empty package must not reach the troubleshooter", activity.lastForceStopPackage)
+    }
+
+    @Test
+    fun forceStopPackageRejectsNonAllowlistedPackageBeforeTheConfirmDialog() {
+        val result = bridge.forceStopPackage("com.example.obd")
+        drain()
+
+        assertFalse(result)
+        assertNull("non-OBD package must not reach the confirm dialog", activity.lastConfirmationTitle)
+        assertNull("non-OBD package must not reach the troubleshooter", activity.lastForceStopPackage)
     }
 
     @Test
@@ -486,6 +511,15 @@ class VoltBridgeDispatchTest {
 
         assertEquals(5, activity.lastRecentSessionsCount)
         assertEquals("[{\"id\":1}]", json)
+    }
+
+    @Test
+    fun getRecentSessionsClampsHostileCountsBeforeForwarding() {
+        bridge.getRecentSessions(Int.MAX_VALUE)
+        assertEquals(VoltBridgeDiagnostics.MAX_RECENT_SESSIONS, activity.lastRecentSessionsCount)
+
+        bridge.getRecentSessions(-7)
+        assertEquals(0, activity.lastRecentSessionsCount)
     }
 
     @Test

@@ -17,14 +17,12 @@ import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
-import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
-import org.json.JSONException
 import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -36,28 +34,8 @@ open class MainActivity :
     private var webView: WebView? = null
     private var dashboardPublisher: DashboardPublisher? = null
 
-    // System Back: give the dashboard SPA first crack at it (close a modal, exit fullscreen, or
-    // return to the Drive home tab) before the OS backgrounds/exits the app. evaluateJavascript is
-    // async, so we always consume the press, then re-dispatch the default Back only if the
-    // dashboard reports it had nothing to dismiss.
-    private val backCallback =
-        object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                val wv = webView
-                if (wv == null) {
-                    exitToBackground()
-                    return
-                }
-                wv.evaluateJavascript(
-                    "(window.VoltDashboard && typeof VoltDashboard.handleAndroidBack === 'function')" +
-                        " ? !!VoltDashboard.handleAndroidBack() : false",
-                ) { result ->
-                    if (result != "true") {
-                        exitToBackground()
-                    }
-                }
-            }
-        }
+    // System Back handling lives in DashboardBackPressCallback; see its KDoc.
+    private val backCallback = DashboardBackPressCallback({ webView }, { exitToBackground() })
 
     // Default Back when the dashboard has nothing to dismiss. evaluateJavascript is async so the
     // press is already consumed by the time we decide; onBackPressedDispatcher.onBackPressed()
@@ -94,29 +72,27 @@ open class MainActivity :
     private var restoreFilePicker: ActivityResultLauncher<Intent>? = null
     private var permissionRequester: ActivityResultLauncher<Array<String>>? = null
 
-    /** Connect/scan request parked while Android shows the Bluetooth permission prompt. */
-    private data class PendingObdStart(
-        val action: String?,
-        val address: String?,
-        val name: String?,
-        val detailStage: String?,
-    ) {
-        fun label(): String =
-            name?.takeIf { it.isNotBlank() } ?: address?.takeIf { it.isNotBlank() } ?: "the OBD adapter"
-    }
+    // Connect-attempt / runtime-permission handshake (parked connects, denial messaging). The
+    // lambdas dispatch through the open methods so test subclasses keep their overrides.
+    private val connectPermissionFlow =
+        ConnectPermissionFlow(
+            context = this,
+            permissionGate = { requirePermissionGate() },
+            publishStatus = { state, detail, blocked -> publishStatus(state, detail, blocked) },
+            publishDeviceList = { publishDeviceList() },
+            startObdService = { action, address, name, stage -> startObdService(action, address, name, stage) },
+            canAskForBluetoothConnectAgain = { canAskForBluetoothConnectAgain() },
+            openAppPermissionSettings = { openAppPermissionSettings() },
+        )
 
-    private var pendingConnectStart: PendingObdStart? = null
+    // Threading contract: written on the UI thread, read from the WebView JavaBridge thread
+    // (exportDebugBundle/getAppStateJson/isLoggingActive). JsonSnapshot stores an isolated,
+    // never-mutated copy on every publish, so readers can never observe a mid-mutation object.
+    private val lastTelemetry = JsonSnapshot()
 
-    // Threading contract: these payload snapshots are REPLACED wholesale on the UI thread and
-    // never mutated in place. @Volatile makes each swapped-in JSONObject safely publishable to
-    // the WebView JavaBridge thread (exportDebugBundle/getAppStateJson/isLoggingActive read them
-    // off the UI thread). Anyone adding a `.put(...)` on these after assignment must instead
-    // build a fresh object and reassign.
-    @Volatile private var lastTelemetry = JSONObject()
+    private val lastStatus = JsonSnapshot()
 
-    @Volatile private var lastStatus = JSONObject()
-
-    @Volatile private var lastStorage = JSONObject()
+    private val lastStorage = JsonSnapshot()
     private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val storageReader = DashboardStorageReader { localStore }
     private val broadcastCoordinator =
@@ -132,7 +108,7 @@ open class MainActivity :
             runOnUi = { task -> runOnUiThread(task) },
             readStorageJson = { getStorageSummaryJson() },
             publishStorageJson = { storage, parsed ->
-                lastStorage = parsed
+                lastStorage.set(parsed)
                 callDashboard("setStorage", storage)
             },
         )
@@ -157,22 +133,22 @@ open class MainActivity :
         checkNotNull(troubleshooter) { "TroubleshooterBridge is not ready" }
 
     private fun onTelemetryBroadcast(json: String) {
-        lastTelemetry = MainActivityUtils.parseJson(json)
+        lastTelemetry.setFromString(json)
         markStorageSummaryDirty()
         callDashboard("updateTelemetry", json)
         publishAppState()
     }
 
     private fun onStatusBroadcast(json: String) {
-        lastStatus = MainActivityUtils.parseJson(json)
+        lastStatus.setFromString(json)
         callDashboard("setStatus", json)
-        if ("idle" == lastStatus.optString("state", "")) {
+        if ("idle" == lastStatus.get().optString("state", "")) {
             publishStorageSummary()
         } else {
             publishStorageSummaryThrottled()
         }
         publishAppState()
-        onAdapterStatusForReadyNotify(lastStatus)
+        onAdapterStatusForReadyNotify(lastStatus.get())
     }
 
     private fun submitBackground(task: Runnable) {
@@ -196,14 +172,14 @@ open class MainActivity :
                     .setTitle(title)
                     .setMessage(message)
                     .setPositiveButton(positiveLabel) { _, _ -> onConfirmed.run() }
-                    .setNegativeButton("Cancel") { _, _ ->
-                        publishStatus("ready", "Action cancelled.", false)
+                    .setNegativeButton(R.string.dialog_cancel) { _, _ ->
+                        publishStatus("ready", getString(R.string.status_action_cancelled), false)
                     }.setOnCancelListener {
-                        publishStatus("ready", "Action cancelled.", false)
+                        publishStatus("ready", getString(R.string.status_action_cancelled), false)
                     }.show()
             } catch (ex: RuntimeException) {
                 Log.w(TAG, "bridge confirmation failed", ex)
-                publishStatus("blocked", "Could not show the Android confirmation.", true)
+                publishStatus("blocked", getString(R.string.status_confirmation_failed), true)
             }
         }
     }
@@ -274,9 +250,9 @@ open class MainActivity :
         publishStorageSummary()
         publishAppState()
         if (isLoggingActive()) {
-            callDashboard("setStatus", lastStatus.toString())
+            callDashboard("setStatus", lastStatus.get().toString())
         } else {
-            publishStatus("ready", "Viewing local data. Connect only when you want live OBD logging.", false)
+            publishStatus("ready", getString(R.string.status_viewing_local_data), false)
         }
         maybeAutoConnect(AutoConnectController.TRIGGER_DASHBOARD_READY, null)
     }
@@ -326,70 +302,11 @@ open class MainActivity :
     }
 
     /**
-     * Reacts to a runtime-permission result. The decision re-reads the live grant state through
-     * [PermissionGate] (not the result map), so it stays correct regardless of how the request was
-     * delivered. Invoked by the [ActivityResultContracts.RequestMultiplePermissions] callback.
+     * Reacts to a runtime-permission result; the decision tree lives in [ConnectPermissionFlow].
+     * Invoked by the [ActivityResultContracts.RequestMultiplePermissions] callback.
      */
     open fun onPermissionsResult() {
-        publishDeviceList()
-        val gate = requirePermissionGate()
-        val pending = pendingConnectStart
-        pendingConnectStart = null
-        if (!gate.hasBluetoothConnect()) {
-            publishBluetoothPermissionDenied(wasConnecting = pending != null)
-        } else if (pending != null) {
-            // The user already asked for this connection and the permission was the only blocker,
-            // so continue automatically instead of bouncing them back to the Connect button.
-            publishStatus(
-                "connecting",
-                "Bluetooth permission granted. Connecting to ${pending.label()}...",
-                false,
-            )
-            startObdService(pending.action, pending.address, pending.name, pending.detailStage)
-        } else if (!gate.hasLocation()) {
-            publishStatus(
-                "ready",
-                "Bluetooth permission granted. Location is still off, so trips may not show a route.",
-                false,
-            )
-        } else if (!gate.hasNotifications()) {
-            publishStatus(
-                "ready",
-                "Bluetooth permission granted. Notifications are still off, so background logging may be quieter.",
-                false,
-            )
-        } else {
-            publishStatus("ready", "Bluetooth permission granted. Pick a paired adapter.", false)
-        }
-    }
-
-    /**
-     * Explains a denied Bluetooth permission with a recovery path. Once Android suppresses the
-     * prompt (repeated denials), the only fix left is the app-settings screen — open it when the
-     * denial interrupted an active connect attempt so the user can finish in one round trip.
-     */
-    private fun publishBluetoothPermissionDenied(wasConnecting: Boolean) {
-        if (canAskForBluetoothConnectAgain()) {
-            publishStatus(
-                "blocked",
-                "Bluetooth permission was denied, so the OBD adapter can't be reached. " +
-                    "Tap Connect to try again and choose Allow.",
-                true,
-            )
-            return
-        }
-        val openedSettings = wasConnecting && openAppPermissionSettings()
-        publishStatus(
-            "blocked",
-            if (openedSettings) {
-                "Android is no longer showing the Bluetooth prompt. In the app settings screen that " +
-                    "just opened, choose Permissions > Nearby devices > Allow, then come back and tap Connect."
-            } else {
-                "Bluetooth permission is off for Volt Tracker. Open Android Settings > Apps > " +
-                    "Volt Tracker > Permissions and allow Nearby devices, then tap Connect again."
-            },
-            true,
-        )
+        connectPermissionFlow.onPermissionsResult()
     }
 
     /** True while Android would still show the Bluetooth permission prompt. Overridable in tests. */
@@ -424,19 +341,17 @@ open class MainActivity :
         blocked: Boolean,
     ) {
         val catalog = requireDeviceCatalog()
-        val payload = JSONObject()
-        try {
-            payload.put("state", state)
-            payload.put("detail", detail)
-            payload.put("blocked", blocked)
-            payload.put("bluetoothReady", isBluetoothReady())
-            payload.put("lastAddress", catalog.lastAddress())
-            payload.put("lastName", catalog.lastName())
-        } catch (ignored: JSONException) {
-            // Values are local literals.
-        }
+        val payload =
+            DashboardPayloadJson.status(
+                state,
+                detail,
+                blocked,
+                isBluetoothReady(),
+                catalog.lastAddress(),
+                catalog.lastName(),
+            )
         callDashboard("setStatus", payload.toString())
-        lastStatus = payload
+        lastStatus.set(payload)
         publishAppState()
     }
 
@@ -454,37 +369,21 @@ open class MainActivity :
         percent: Int,
         etaSeconds: Long,
     ) {
-        val payload = JSONObject()
-        try {
-            payload.put("visible", visible)
-            payload.put("busy", busy)
-            payload.put("title", title)
-            payload.put("detail", detail)
-            payload.put("tone", tone)
-            if (!phase.isNullOrBlank()) {
-                payload.put("phase", phase)
-            }
-            if (bytesDone >= 0L) {
-                payload.put("bytesDone", bytesDone)
-            }
-            if (bytesTotal >= 0L) {
-                payload.put("bytesTotal", bytesTotal)
-            }
-            if (rowsDone >= 0L) {
-                payload.put("rowsDone", rowsDone)
-            }
-            if (rowsTotal >= 0L) {
-                payload.put("rowsTotal", rowsTotal)
-            }
-            if (percent >= 0) {
-                payload.put("percent", percent.coerceIn(0, 100))
-            }
-            if (etaSeconds >= 0L) {
-                payload.put("etaSeconds", etaSeconds)
-            }
-        } catch (ignored: JSONException) {
-            // Values are local literals.
-        }
+        val payload =
+            DashboardPayloadJson.restoreProgress(
+                visible,
+                busy,
+                title,
+                detail,
+                tone,
+                phase,
+                bytesDone,
+                bytesTotal,
+                rowsDone,
+                rowsTotal,
+                percent,
+                etaSeconds,
+            )
         callDashboard("setRestoreProgress", payload.toString())
     }
 
@@ -519,29 +418,25 @@ open class MainActivity :
             if (!requirePermissionGate().ensureConnectPermissions()) {
                 // ensureConnectPermissions just launched the system prompt; park the request so
                 // onPermissionsResult can finish the connection instead of dead-ending the tap.
-                pendingConnectStart = PendingObdStart(action, address, name, detailStage)
-                publishStatus(
-                    "blocked",
-                    "Waiting for Bluetooth permission. Allow \"Nearby devices\" in the Android " +
-                        "prompt and the connection will continue.",
-                    true,
-                )
+                connectPermissionFlow.parkPendingStart(action, address, name, detailStage)
                 return
             }
             val adapter = BluetoothAdapters.get(this)
             if (adapter == null) {
-                publishStatus("blocked", "This phone does not report Bluetooth support.", true)
+                publishStatus("blocked", getString(R.string.status_no_bluetooth_support), true)
                 return
             }
             if (!adapter.isEnabled) {
-                publishStatus("blocked", "Turn on Bluetooth to connect to the OBD adapter.", true)
+                publishStatus("blocked", getString(R.string.status_turn_on_bluetooth), true)
                 try {
                     startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                } catch (ignored: Exception) {
+                } catch (ex: Exception) {
+                    Log.w(TAG, "Bluetooth enable prompt failed; falling back to Bluetooth settings", ex)
                     try {
                         startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                    } catch (settingsIgnored: Exception) {
-                        publishStatus("blocked", "Open Android Bluetooth settings, then try again.", true)
+                    } catch (settingsEx: Exception) {
+                        Log.w(TAG, "Bluetooth settings fallback failed", settingsEx)
+                        publishStatus("blocked", getString(R.string.status_open_bluetooth_settings_manually), true)
                     }
                 }
                 return
@@ -570,11 +465,7 @@ open class MainActivity :
         } catch (ex: RuntimeException) {
             Log.w(TAG, "startObdService blocked", ex)
             troubleshooter?.clearPendingTestConnectionStop()
-            publishStatus(
-                "blocked",
-                "Android blocked OBD logging startup. Check permissions and try again.",
-                true,
-            )
+            publishStatus("blocked", getString(R.string.status_obd_start_blocked), true)
         }
     }
 
@@ -604,7 +495,11 @@ open class MainActivity :
         }
         publishDeviceList()
         publishStorageSummary()
-        publishStatus("ready", "Remembered ${if (cleanName.isEmpty()) cleanAddress else cleanName}.", false)
+        publishStatus(
+            "ready",
+            getString(R.string.status_remembered_device, if (cleanName.isEmpty()) cleanAddress else cleanName),
+            false,
+        )
     }
 
     override fun stopObdService() {
@@ -612,8 +507,9 @@ open class MainActivity :
         service.action = ObdService.ACTION_DISCONNECT
         try {
             startService(service)
-        } catch (ignored: IllegalStateException) {
-            publishStatus("ready", "Stop request noted; reopen the app if logging is still active.", false)
+        } catch (ex: IllegalStateException) {
+            Log.w(TAG, "stopObdService could not reach the service", ex)
+            publishStatus("ready", getString(R.string.status_stop_noted), false)
         }
     }
 
@@ -698,7 +594,7 @@ open class MainActivity :
     }
 
     override fun isLoggingActive(): Boolean =
-        MainActivityUtils.isConnectedState(lastStatus.optString("state", "")) || ObdService.hasActiveSession()
+        MainActivityUtils.isConnectedState(lastStatus.get().optString("state", "")) || ObdService.hasActiveSession()
 
     private fun publishAppState() {
         callDashboard("setAppState", getAppStateJson())
@@ -716,9 +612,9 @@ open class MainActivity :
             gate.hasNotifications(),
             catalog.lastAddress(),
             catalog.lastName(),
-            lastTelemetry,
-            lastStatus,
-            lastStorage,
+            lastTelemetry.get(),
+            lastStatus.get(),
+            lastStorage.get(),
         )
     }
 
@@ -729,19 +625,15 @@ open class MainActivity :
     override fun setAutoConnectEnabledFromBridge(enabled: Boolean) {
         val controller = autoConnectController
         if (controller == null) {
-            publishStatus("blocked", "Auto-connect is not ready yet.", true)
+            publishStatus("blocked", getString(R.string.status_autoconnect_not_ready), true)
             return
         }
         controller.setEnabled(enabled)
         if (enabled) {
-            publishStatus(
-                "ready",
-                "Auto-connect enabled. Volt Tracker will use the last adapter when the app sees it.",
-                false,
-            )
+            publishStatus("ready", getString(R.string.status_autoconnect_enabled), false)
             maybeAutoConnect(AutoConnectController.TRIGGER_USER_ENABLED, null)
         } else {
-            publishStatus("ready", "Auto-connect disabled.", false)
+            publishStatus("ready", getString(R.string.status_autoconnect_disabled), false)
         }
         publishAppState()
     }
@@ -767,6 +659,8 @@ open class MainActivity :
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
             } else {
+                // The typed getParcelableExtra(String, Class) overload requires API 33; minSdk 23
+                // still needs the deprecated overload on this branch.
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
             }

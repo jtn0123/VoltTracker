@@ -10,8 +10,17 @@ interface LocationTracker {
         fun onLocation(location: FilteredLocation)
     }
 
-    /** Begins delivering accepted fixes to [listener]. A no-op without location permission. */
+    /**
+     * Begins delivering accepted fixes to [listener]. Without location permission the listener is
+     * parked; [resumeUpdatesIfPermitted] can begin delivery once permission is granted.
+     */
     fun start(listener: Listener)
+
+    /**
+     * Begins delivering fixes for an already-[start]ed tracker whose permission was missing at
+     * start time (granted mid-session). Returns true only when updates were started by this call.
+     */
+    fun resumeUpdatesIfPermitted(): Boolean = false
 
     /** Stops delivery and releases the underlying provider. */
     fun stop()

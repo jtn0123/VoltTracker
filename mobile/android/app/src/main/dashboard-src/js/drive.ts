@@ -15,12 +15,15 @@
  * The render entry point is renderDriveLive(), called once per scheduled render
  * frame from telemetry.js. Charts re-render on resize.
  */
+import { setDataTone } from "./dataset-state";
+import type { DataToneValue } from "./dataset-state";
+
 const VD = window.VoltDashboard;
 const state = VD.state;
 const el = VD.el;
 
 type DriveChip = {
-  tone: string;
+  tone: DataToneValue;
   label: string;
   meta: Array<string | number>;
   isLink?: boolean;
@@ -65,7 +68,7 @@ type ChartPoint = {
     return h + "h " + String(m % 60).padStart(2, "0") + "m";
   }
 
-  function deriveLiveChip() {
+  function deriveLiveChip(): DriveChip {
     const app = state.appState || {};
     const session = app.session || {};
     const status = state.status || {};
@@ -143,7 +146,7 @@ type ChartPoint = {
     } else {
       root.setAttribute("aria-hidden", "true");
     }
-    root.dataset.tone = c.tone;
+    setDataTone(root, c.tone);
 
     const labelSpan = document.createElement("span");
     labelSpan.className = "dl";
@@ -430,18 +433,18 @@ type ChartPoint = {
     const start = Number(state.sessionStartSoc);
     if (!Number.isFinite(current)) {
       tag.textContent = "%";
-      tag.dataset.tone = "idle";
+      setDataTone(tag, "idle");
       return;
     }
     if (!Number.isFinite(start)) {
       tag.textContent = current.toFixed(1) + "%";
-      tag.dataset.tone = "idle";
+      setDataTone(tag, "idle");
       return;
     }
     const delta = current - start;
     tag.textContent = current.toFixed(1) + "% · Δ " + fmtSocDelta(delta) + "%";
     // Tone: meaningful drop = warn, gain (regen / charging) = ok, drift = idle.
-    tag.dataset.tone = delta <= -0.5 ? "warn" : delta >= 0.5 ? "ok" : "idle";
+    setDataTone(tag, delta <= -0.5 ? "warn" : delta >= 0.5 ? "ok" : "idle");
   }
 
   // ----- top-level driver ---------------------------------------------------
@@ -455,7 +458,7 @@ type ChartPoint = {
     const v = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
     if (!Number.isFinite(v)) {
       tag.textContent = "kW";
-      tag.dataset.tone = "idle";
+      setDataTone(tag, "idle");
       return;
     }
     // Match the existing thresholds in telemetry.js updateLiveUi() so the
@@ -464,7 +467,7 @@ type ChartPoint = {
     const abs = Math.abs(v);
     const sign = v < -0.05 ? "−" : "+";
     tag.textContent = sign + abs.toFixed(1) + " kW";
-    tag.dataset.tone = tone;
+    setDataTone(tag, tone);
   }
 
   function renderDriveLive() {

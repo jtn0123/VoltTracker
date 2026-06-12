@@ -730,10 +730,10 @@
     line-height: 1;
     padding: 6px 2px 5px;
     transition:
-      background-color 160ms ease,
-      border-color 160ms ease,
-      color 160ms ease,
-      transform 160ms ease;
+      background-color var(--motion-fast) var(--motion-ease),
+      border-color var(--motion-fast) var(--motion-ease),
+      color var(--motion-fast) var(--motion-ease),
+      transform var(--motion-fast) var(--motion-ease);
   }
 
   .bottom-nav button i,
@@ -754,9 +754,9 @@
     background: rgba(255,255,255,0.04);
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
     transition:
-      background-color 160ms ease,
-      box-shadow 160ms ease,
-      transform 160ms ease;
+      background-color var(--motion-fast) var(--motion-ease),
+      box-shadow var(--motion-fast) var(--motion-ease),
+      transform var(--motion-fast) var(--motion-ease);
   }
 
   .bottom-nav button span {
@@ -1328,7 +1328,7 @@
     color: var(--text);
     cursor: pointer;
     scroll-snap-align: start;
-    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    transition: border-color var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
   }
 
   .map-drive-chip:hover,
@@ -1525,7 +1525,7 @@
     background: rgba(16, 18, 22, 0.85);
     color: var(--text);
     scroll-snap-align: start;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    transition: border-color var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease);
   }
 
   .drive-now-chip .dl {
@@ -1567,7 +1567,7 @@
   .drive-now-chip[data-tone="live"] .dl u {
     background: var(--volt);
     box-shadow: 0 0 10px rgba(255, 122, 69, 0.7);
-    animation: drive-chip-pulse 1.6s ease-in-out infinite;
+    animation: drive-chip-pulse var(--motion-pulse) var(--motion-ease-inout) infinite;
   }
 
   .drive-now-chip[data-tone="ok"] .dl u {
@@ -1622,7 +1622,7 @@
      arriving samples don't feel jumpy. */
   .live-trace-cursor {
     left: 100%;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--motion-fast) var(--motion-ease);
   }
 
   .live-trace-cursor::before {
@@ -1685,7 +1685,7 @@
     text-transform: uppercase;
     color: var(--muted);
     background: rgba(255, 255, 255, 0.04);
-    transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+    transition: color var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
   }
 
   .live-micro .micro-tag[data-kind="power"][data-tone="drive"] {
@@ -1723,7 +1723,7 @@
      state pill on the right. */
   .power-label strong {
     color: var(--text);
-    transition: color 0.18s ease;
+    transition: color var(--motion-fast) var(--motion-ease);
   }
   .power-block:has(.power-state[data-state="drive"]) .power-label strong {
     color: var(--volt);
@@ -1911,7 +1911,7 @@
     content: "▾";
     color: var(--soft);
     font-size: 10px;
-    transition: transform 0.2s ease;
+    transition: transform var(--motion-fast) var(--motion-ease);
   }
 
   .validation-collapse[open] > summary > div .kicker::after {

@@ -169,7 +169,7 @@
 .troubleshooter-chevron {
   font-size: 14px;
   color: #8a8f9d;
-  transition: transform 120ms ease;
+  transition: transform var(--motion-fast) var(--motion-ease);
 }
 
 .troubleshooter-step-head[aria-expanded="true"] .troubleshooter-chevron {

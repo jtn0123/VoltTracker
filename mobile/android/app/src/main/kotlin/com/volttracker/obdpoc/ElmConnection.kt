@@ -116,7 +116,8 @@ open class ElmConnection
                         watchdogFired = true
                         try {
                             pendingSocket.close()
-                        } catch (_: IOException) {
+                        } catch (ex: IOException) {
+                            OBDLog.warn("ElmConnection", "watchdog socket close failed: ${ex.message}")
                         }
                     }
                 }
@@ -246,15 +247,18 @@ open class ElmConnection
         open fun close() {
             try {
                 input?.close()
-            } catch (_: IOException) {
+            } catch (ex: IOException) {
+                OBDLog.warn("ElmConnection", "input stream close failed: ${ex.message}")
             }
             try {
                 output?.close()
-            } catch (_: IOException) {
+            } catch (ex: IOException) {
+                OBDLog.warn("ElmConnection", "output stream close failed: ${ex.message}")
             }
             try {
                 socket?.close()
-            } catch (_: IOException) {
+            } catch (ex: IOException) {
+                OBDLog.warn("ElmConnection", "socket close failed: ${ex.message}")
             }
             input = null
             output = null

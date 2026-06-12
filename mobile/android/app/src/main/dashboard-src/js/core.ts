@@ -3,6 +3,7 @@
 // locally as `VD`). `window.VoltTrackerAndroid` (the Android->WebView bridge)
 // and `window.VoltTrackerNative` (the WebView<-Android callback surface) are
 // preserved exactly as-is — those names are part of the ABI.
+import { asDataTone, setDataTone } from "./dataset-state";
 
   type DashboardData = {
     trips: unknown[];
@@ -139,6 +140,38 @@
     } catch (ignored) {}
   }
 
+  // callBridge invokes a dashboard->native bridge method ONLY if it exists on
+  // this native build. The bridge ABI grows over time (docs/bridge-abi.md), so a
+  // dashboard shipped inside a newer APK can momentarily run against an older
+  // WebView-cached page or vice versa during development; a missing method used
+  // to throw a TypeError mid-handler and abort the rest of the tap. Missing
+  // methods console.warn + report once through logClientError and return
+  // undefined so callers degrade gracefully.
+  const warnedMissingBridgeMethods = new Set<string>();
+  function callBridge<K extends keyof VoltBridge>(
+    name: K,
+    ...args: Parameters<VoltBridge[K]>
+  ): ReturnType<VoltBridge[K]> | undefined {
+    const target = VD.bridge;
+    const fn = target ? (target[name] as unknown) : null;
+    if (typeof fn !== "function") {
+      if (!warnedMissingBridgeMethods.has(String(name))) {
+        warnedMissingBridgeMethods.add(String(name));
+        const message = "bridge." + String(name) + " is not available on this native version";
+        try {
+          console.warn(message);
+        } catch (ignored) {}
+        try {
+          if (target && typeof target.logClientError === "function") {
+            target.logClientError("bridge.missing", message);
+          }
+        } catch (ignored) {}
+      }
+      return undefined;
+    }
+    return (fn as (...callArgs: unknown[]) => ReturnType<VoltBridge[K]>).apply(target, args);
+  }
+
   function clearRestoreProgressTimer() {
     if (restoreProgressHideTimer) {
       clearTimeout(restoreProgressHideTimer);
@@ -152,7 +185,7 @@
     if (node) {
       node.hidden = true;
       node.dataset.busy = "false";
-      node.dataset.tone = "idle";
+      setDataTone(node, "idle");
       node.dataset.progress = "indeterminate";
     }
     const close = el("restoreProgressClose");
@@ -262,7 +295,7 @@
     const tone = String(progress.tone || (busy ? "busy" : "idle"));
     node.hidden = false;
     node.dataset.busy = String(busy);
-    node.dataset.tone = tone;
+    setDataTone(node, asDataTone(tone));
     const percent = knownProgressPercent(progress, busy, tone);
     updateRestoreProgressMeter(node, percent);
     VD.setText("restoreProgressTitle", progress.title || (busy ? "Restoring backup" : "Restore status"));
@@ -484,7 +517,18 @@
         })
         .catch((err) => {
           dtcDataPromise = null;
+          // Surface the failure once, centrally: every ensureDtcData() caller
+          // keeps a .catch so nothing crashes, but those catches used to be
+          // silent — the user tapped "lookup"/"preview" and nothing happened.
+          // console.warn for dev/logcat, plus the status toast so the user
+          // sees it on whatever tab they are on.
+          try {
+            console.warn("DTC data chunk failed to load:", err && err.message);
+          } catch (ignored) {}
           reportClientError("dtcData.load", err && err.message);
+          if (typeof VD.setStatus === "function") {
+            VD.setStatus({ state: "blocked", detail: "Diagnostic code database failed to load." });
+          }
           throw err;
         });
     }
@@ -979,6 +1023,7 @@
 
   Object.assign(VD, {
     reportClientError,
+    callBridge,
     setRestoreProgress,
     escapeHtml,
     parsePayload,

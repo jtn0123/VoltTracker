@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import android.util.Log
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
@@ -84,8 +85,10 @@ class RollingAppLog {
                 writer.write(safe(msg))
                 writer.newLine()
             }
-        } catch (ignored: IOException) {
-            // Logging that the log failed would risk an infinite loop; just drop the line.
+        } catch (ex: IOException) {
+            // Mirroring this failure back through OBDLog would recurse into this class; a
+            // best-effort plain logcat line is the most we can safely do before dropping it.
+            Log.w(TAG, "app log append failed; line dropped", ex)
         }
     }
 
@@ -152,13 +155,17 @@ class RollingAppLog {
                 writer.write(whenMs.toString())
                 writer.newLine()
             }
-        } catch (ignored: IOException) {
+        } catch (ex: IOException) {
             // Best-effort: a missing marker on the next call just makes the age-check skip
-            // (treat as fresh). We'll try again on the next write.
+            // (treat as fresh). We'll try again on the next write. Plain logcat only — going
+            // through OBDLog's mirror would recurse into this class.
+            Log.w(TAG, "app log birth marker write failed", ex)
         }
     }
 
     companion object {
+        private const val TAG = "RollingAppLog"
+
         /** Rotate the live log file when it's at least this old. */
         const val ROTATE_AGE_MS: Long = 7L * 24L * 60L * 60L * 1000L
 

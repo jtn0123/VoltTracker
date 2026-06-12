@@ -32,7 +32,7 @@ class ObdNotifications(
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
         return builder
             .setSmallIcon(R.drawable.ic_stat_obd)
-            .setContentTitle("Volt Tracker OBD")
+            .setContentTitle(context.getString(R.string.app_name))
             .setContentText(text)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -55,8 +55,13 @@ class ObdNotifications(
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || ctx == null) {
                 return
             }
-            val channel = NotificationChannel(CHANNEL_ID, "OBD connection", NotificationManager.IMPORTANCE_LOW)
-            channel.description = "Shows while Volt Tracker is connected to an OBD adapter."
+            val channel =
+                NotificationChannel(
+                    CHANNEL_ID,
+                    ctx.getString(R.string.notification_channel_name),
+                    NotificationManager.IMPORTANCE_LOW,
+                )
+            channel.description = ctx.getString(R.string.notification_channel_description)
             val manager = ctx.getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
         }

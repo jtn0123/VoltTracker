@@ -1,19 +1,52 @@
 package com.volttracker.obdpoc.location
 
+import android.Manifest
 import android.content.Context
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
+import org.robolectric.shadows.ShadowLocationManager
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+
+/**
+ * Extends the framework [ShadowLocationManager] with a toggle that makes every
+ * `requestLocationUpdates` call throw, simulating a device where all providers fail to
+ * subscribe (the stock shadow auto-creates providers and never throws).
+ */
+@Implements(LocationManager::class)
+class FailingLocationManagerShadow : ShadowLocationManager() {
+    @Implementation
+    override fun requestLocationUpdates(
+        provider: String,
+        minTime: Long,
+        minDistance: Float,
+        listener: LocationListener,
+    ) {
+        if (failRequests) {
+            throw IllegalArgumentException("test: provider $provider unavailable")
+        }
+        super.requestLocationUpdates(provider, minTime, minDistance, listener)
+    }
+
+    companion object {
+        var failRequests: Boolean = false
+    }
+}
 
 /** Covers the platform tracker wrapper around [LocationFilter]. */
 @RunWith(RobolectricTestRunner::class)
@@ -71,6 +104,66 @@ class LocationManagerTrackerTest {
     }
 
     @Test
+    fun startWithoutPermissionParksListenerUntilResumeAfterGrant() {
+        denyLocationPermissions()
+        val tracker = LocationManagerTracker(context)
+        tracker.start { }
+
+        assertEquals(
+            "no permission yet, so no provider may be subscribed",
+            0,
+            requestedListenerCount(),
+        )
+        assertFalse("still no permission, resume must not start updates", tracker.resumeUpdatesIfPermitted())
+
+        grantLocationPermissions()
+        assertTrue("grant + resume must begin GPS updates", tracker.resumeUpdatesIfPermitted())
+        assertTrue("providers should now be subscribed", requestedListenerCount() > 0)
+    }
+
+    @Test
+    fun resumeIsANoOpWhenAlreadyRunningOrNeverStarted() {
+        val neverStarted = LocationManagerTracker(context)
+        assertFalse("no parked listener, nothing to resume", neverStarted.resumeUpdatesIfPermitted())
+
+        val running = LocationManagerTracker(context)
+        grantLocationPermissions()
+        running.start { }
+        assertFalse("updates already requested at start", running.resumeUpdatesIfPermitted())
+    }
+
+    @Test
+    @Config(sdk = [34], shadows = [FailingLocationManagerShadow::class])
+    fun resumeRetriesAfterBothProvidersFailedToSubscribe() {
+        FailingLocationManagerShadow.failRequests = true
+        try {
+            grantLocationPermissions()
+            val tracker = LocationManagerTracker(context)
+            tracker.start { }
+            assertEquals("both providers threw, so nothing is subscribed", 0, requestedListenerCount())
+
+            // The providers recover: resume must not be suppressed by a stale
+            // updates-active flag left over from the all-failed attempt.
+            FailingLocationManagerShadow.failRequests = false
+            assertTrue("resume must retry after a total subscription failure", tracker.resumeUpdatesIfPermitted())
+            assertTrue("providers should now be subscribed", requestedListenerCount() > 0)
+        } finally {
+            FailingLocationManagerShadow.failRequests = false
+        }
+    }
+
+    @Test
+    fun stopAfterDeferredStartClearsTheParkedListener() {
+        denyLocationPermissions()
+        val tracker = LocationManagerTracker(context)
+        tracker.start { }
+        tracker.stop()
+
+        grantLocationPermissions()
+        assertFalse("stop must clear the parked listener", tracker.resumeUpdatesIfPermitted())
+    }
+
+    @Test
     fun stopSuppressesFutureCallbacks() {
         val tracker = LocationManagerTracker(context)
         val seen = AtomicReference<FilteredLocation>()
@@ -81,6 +174,25 @@ class LocationManagerTrackerTest {
 
         assertNull(seen.get())
         assertNotNull(tracker.getLastLocation())
+    }
+
+    private fun denyLocationPermissions() {
+        shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        )
+    }
+
+    private fun grantLocationPermissions() {
+        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        )
+    }
+
+    private fun requestedListenerCount(): Int {
+        val manager = context.getSystemService(LocationManager::class.java)
+        return shadowOf(manager).requestLocationUpdateListeners.size
     }
 
     private companion object {

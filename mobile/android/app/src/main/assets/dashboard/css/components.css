@@ -262,7 +262,7 @@
     border-radius: 999px;
     background: linear-gradient(90deg, var(--volt), var(--volt-deep));
     box-shadow: 0 0 16px rgba(255,122,69,0.4);
-    transition: left 0.25s ease, width 0.25s ease;
+    transition: left var(--motion-medium) var(--motion-ease), width var(--motion-medium) var(--motion-ease);
   }
 
   .power-fill.is-regen {
@@ -522,7 +522,7 @@
     width: 0%;
     border-radius: inherit;
     background: var(--volt);
-    transition: width 0.25s ease;
+    transition: width var(--motion-medium) var(--motion-ease);
   }
 
   .ratio-card {
@@ -641,7 +641,7 @@
        min-width:0 on the title block below so the title yields instead. App-wide across tabs. */
     flex: 0 0 auto;
     white-space: nowrap;
-    transition: background-color 140ms ease;
+    transition: background-color var(--motion-fast) var(--motion-ease);
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -1158,9 +1158,9 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
     transition:
-      border-color 140ms ease,
-      background-color 140ms ease,
-      color 140ms ease;
+      border-color var(--motion-fast) var(--motion-ease),
+      background-color var(--motion-fast) var(--motion-ease),
+      color var(--motion-fast) var(--motion-ease);
   }
 
   .signal-stage-tabs button span {
@@ -1245,9 +1245,9 @@
     color: var(--muted);
     text-align: center;
     transition:
-      border-color 140ms ease,
-      background-color 140ms ease,
-      transform 140ms ease;
+      border-color var(--motion-fast) var(--motion-ease),
+      background-color var(--motion-fast) var(--motion-ease),
+      transform var(--motion-fast) var(--motion-ease);
   }
 
   .signal-filter-grid button:active {
@@ -1806,7 +1806,7 @@
      status badge. */
   .stale {
     opacity: 0.5;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--motion-medium) var(--motion-ease);
   }
 
   /* In-flight indicator for bridge-triggering buttons. Combined with
@@ -2022,12 +2022,12 @@
     border-radius: inherit;
     background: linear-gradient(90deg, #7cd1ff, #78e0b8);
     transform-origin: left center;
-    transition: width 180ms ease;
+    transition: width var(--motion-fast) var(--motion-ease);
   }
 
   .restore-progress[data-progress="indeterminate"][data-busy="true"] .restore-progress-meter span {
     width: 42%;
-    animation: restore-progress-sweep 1.2s ease-in-out infinite;
+    animation: restore-progress-sweep var(--motion-sweep) var(--motion-ease-inout) infinite;
   }
 
   .restore-progress[data-progress="determinate"] .restore-progress-meter span {

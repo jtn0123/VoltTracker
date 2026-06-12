@@ -174,7 +174,7 @@ open class ObdService :
     ): Int {
         when (intent?.action) {
             ACTION_DISCONNECT -> {
-                stopCurrentSession("Disconnected.")
+                stopCurrentSession(getString(R.string.status_disconnected))
                 ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
                 foregroundServiceActive = false
                 stopSelf()
@@ -192,7 +192,7 @@ open class ObdService :
             }
             ACTION_CANCEL_RETRY -> {
                 requestCancelRetry()
-                broadcastStatus("idle", "Retry cancelled.", false)
+                broadcastStatus("idle", getString(R.string.status_retry_cancelled), false)
                 if (!running.get()) stopSelf(startId)
                 return if (running.get()) START_STICKY else START_NOT_STICKY
             }
@@ -239,7 +239,7 @@ open class ObdService :
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        stopCurrentSession("Service stopped.")
+        stopCurrentSession(getString(R.string.status_service_stopped))
         bluetoothObservability?.unregister(this)
         executor.shutdownNow()
         competingAppExecutor.shutdownNow()
@@ -264,9 +264,9 @@ open class ObdService :
             SessionStartRequest(
                 if (scanMode) "scan" else "obd",
                 address,
-                (if (scanMode) "Scanning " else "Connecting to ") + activeName,
+                getString(if (scanMode) R.string.foreground_scanning else R.string.foreground_connecting, activeName),
                 if (scanMode) SessionStateMachine.Phase.SCANNING else SessionStateMachine.Phase.CONNECTING,
-                if (scanMode) "Starting diagnostic scan." else "Connecting to adapter.",
+                getString(if (scanMode) R.string.status_scan_starting else R.string.status_connecting_adapter),
                 "",
                 resetCancelRetry = true,
                 refreshCompetingApps = true,
@@ -286,9 +286,9 @@ open class ObdService :
             SessionStartRequest(
                 "tpms-scan",
                 address,
-                "Detail Probe ($normalizedStage) on $activeName",
+                getString(R.string.foreground_detail_probe, normalizedStage, activeName),
                 SessionStateMachine.Phase.SCANNING,
-                "Starting detailed signal probe.",
+                getString(R.string.status_detail_probe_starting),
                 "detail-probe:$normalizedStage",
                 resetCancelRetry = true,
                 refreshCompetingApps = true,
@@ -304,9 +304,9 @@ open class ObdService :
             SessionStartRequest(
                 "clear-dtc",
                 address,
-                "Clearing codes on $activeName",
+                getString(R.string.foreground_clearing_codes, activeName),
                 SessionStateMachine.Phase.CLEAR_DTC,
-                "Preparing to clear diagnostic codes.",
+                getString(R.string.status_clear_dtc_preparing),
                 "",
                 resetCancelRetry = true,
                 refreshCompetingApps = true,
@@ -337,9 +337,9 @@ open class ObdService :
             SessionStartRequest(
                 "demo",
                 null,
-                "Running demo telemetry",
+                getString(R.string.foreground_demo),
                 SessionStateMachine.Phase.DEMO,
-                "Demo telemetry starting.",
+                getString(R.string.status_demo_starting),
                 "demo",
                 resetCancelRetry = false,
                 refreshCompetingApps = false,
@@ -362,11 +362,7 @@ open class ObdService :
             refreshCompetingAppsAsync()
         }
         if (!startForegroundSession(request.foregroundText)) {
-            broadcastStatus(
-                "blocked",
-                "Android blocked foreground logging. Check notification and nearby-device permissions, then try again.",
-                true,
-            )
+            broadcastStatus("blocked", getString(R.string.status_foreground_blocked), true)
             return
         }
         sessionStartedAtMs = System.currentTimeMillis()
@@ -382,7 +378,7 @@ open class ObdService :
             activeTask = executor.submit { runSessionTask(token, request.runner) }
         } catch (ex: RuntimeException) {
             Log.w(MainActivity.TAG, "session task submit failed", ex)
-            broadcastStatus("error", "Could not start the OBD logging worker.", true)
+            broadcastStatus("error", getString(R.string.status_worker_start_failed), true)
             stopCurrentSession(null)
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             foregroundServiceActive = false
@@ -409,12 +405,31 @@ open class ObdService :
 
     private fun startLocationTracking() {
         val tracker = locationTracker ?: return
+        // Start the tracker even without permission: it parks the listener so a mid-session
+        // grant can be resumed via resumeLocationTrackingIfPermitted() on the next foreground.
+        tracker.start(recorder::persistLocation)
         if (!hasLocationPermission()) {
             recorder.logEvent("gps_skipped", "reason", "missing_location_permission")
             return
         }
-        tracker.start(recorder::persistLocation)
         recorder.logEvent("gps_started")
+    }
+
+    /**
+     * Begins GPS updates for a session that started without location permission once the user has
+     * granted it (the grant flow foregrounds the app, which lands here on the main thread).
+     */
+    private fun resumeLocationTrackingIfPermitted() {
+        if (!running.get()) {
+            return
+        }
+        if (locationTracker?.resumeUpdatesIfPermitted() == true) {
+            recorder.logEvent("gps_started", "reason", "permission_granted_mid_session")
+            // The session may have entered the foreground state without the location service
+            // type (no permission at start). Upgrade it now that GPS is delivering; the call
+            // self-guards on running/foreground-active/SDK like the visibility path does.
+            reevaluateForegroundServiceType()
+        }
     }
 
     private fun stopLocationTracking() {
@@ -566,7 +581,7 @@ open class ObdService :
             return
         }
         val notification: Notification =
-            notifications.build(if (appInForeground) "Logging while app is open" else "Background logging active")
+            notifications.build(foregroundNotificationText())
         try {
             startForeground(ObdNotifications.NOTIFICATION_ID, notification, desired)
             activeForegroundServiceType = desired
@@ -585,6 +600,11 @@ open class ObdService :
             Log.w(MainActivity.TAG, "reevaluateForegroundServiceType refused", ex)
         }
     }
+
+    private fun foregroundNotificationText(): String =
+        getString(
+            if (appInForeground) R.string.notification_logging_foreground else R.string.notification_logging_background,
+        )
 
     override fun updateNotification(text: String?) {
         recorder.logEvent("notification", "text", text)
@@ -605,6 +625,11 @@ open class ObdService :
     fun lastFailureClass(): FailureClass? = lastFailureClass
 
     private fun recordAppVisibility(foreground: Boolean) {
+        if (foreground) {
+            // Runs before the unchanged-visibility check: a permission grant doesn't always
+            // bounce visibility, but every grant flow ends with the app reported foreground.
+            resumeLocationTrackingIfPermitted()
+        }
         if (appInForeground == foreground) {
             return
         }
@@ -622,7 +647,7 @@ open class ObdService :
                 engine.sampleGapCount().toString(),
             )
             if (running.get()) {
-                updateNotification(if (foreground) "Logging while app is open" else "Background logging active")
+                updateNotification(foregroundNotificationText())
                 reevaluateForegroundServiceType()
             }
         }

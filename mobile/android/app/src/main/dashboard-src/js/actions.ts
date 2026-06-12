@@ -3,6 +3,8 @@ import { bindPageDragScroll } from "./actions-page-scroll";
 import { createSignalActions } from "./actions-signals";
 import { createStorageActions } from "./actions-storage";
 import type { BusyButton } from "./actions-storage";
+import { setDataState } from "./dataset-state";
+import type { DataStateValue } from "./dataset-state";
 
 /*
  * actions.ts — wiring + lifecycle.
@@ -86,7 +88,10 @@ import type { BusyButton } from "./actions-storage";
       VD.setStatus({ state: "ready", detail: "Browser preview ready. Start demo to view sample telemetry." });
       return;
     }
-    VD.setDevices(bridge.listDevices());
+    // callBridge tolerates a native build that predates a method (warns once,
+    // returns undefined) instead of throwing mid-refresh.
+    const devices = VD.callBridge("listDevices");
+    if (devices !== undefined) VD.setDevices(devices);
     if (typeof bridge.getDeviceHistory === "function") VD.setHistory(bridge.getDeviceHistory());
   }
 
@@ -169,14 +174,13 @@ import type { BusyButton } from "./actions-storage";
     }
   }
 
-  function setEnhancedProbeBadge(label: string, tone: string) {
+  function setEnhancedProbeBadge(label: string, tone: DataStateValue) {
     if (typeof VD.setEnhancedBadge === "function") {
       VD.setEnhancedBadge(label, tone);
       return;
     }
     VD.setText("enhancedBadge", label);
-    const badge = el("enhancedBadge");
-    if (badge) badge.dataset.state = tone;
+    setDataState(el("enhancedBadge"), tone);
   }
 
   function showConnectionProgress(device: VoltDevice, scan: boolean) {
@@ -202,7 +206,7 @@ import type { BusyButton } from "./actions-storage";
     // overlapping connect/scan invocations against the adapter.
     withBusy(button, () => {
       if (scan && typeof bridge.scan === "function") bridge.scan(selected.address, selected.name);
-      else bridge.connect(selected.address, selected.name);
+      else VD.callBridge("connect", selected.address, selected.name);
     });
   }
 
@@ -240,8 +244,8 @@ import type { BusyButton } from "./actions-storage";
   }
 
   function handleAction(action: string | undefined, button: BusyButton | null = null) {
-    if (action === "permissions") bridge && bridge.requestPermissions();
-    if (action === "refresh") bridge && bridge.refreshDevices();
+    if (action === "permissions") bridge && VD.callBridge("requestPermissions");
+    if (action === "refresh") bridge && VD.callBridge("refreshDevices");
     if (action === "refreshStorage") refreshStorage();
     if (action === "clearStorage") clearStorage(button);
     if (action === "exportDebug") exportDebugBundle();
@@ -567,7 +571,10 @@ import type { BusyButton } from "./actions-storage";
       }
       seedDemoScenario();
       VD.setDemoActive(true, "Demo preview is running.");
-      if (bridge) bridge.demo();
+      // Choose by method availability, not bare bridge presence: an older APK's
+      // bridge object may lack demo(), and callBridge would then no-op while the
+      // UI claims the demo is running. Fall back to the browser demo instead.
+      if (bridge && typeof bridge.demo === "function") VD.callBridge("demo");
       else runBrowserDemo();
     });
   }
@@ -646,7 +653,7 @@ import type { BusyButton } from "./actions-storage";
 
   function stopDemo() {
     window.clearInterval(window.__voltDemoTimer ?? undefined);
-    if (bridge && state.demoActive) bridge.disconnect();
+    if (bridge && state.demoActive) VD.callBridge("disconnect");
     VD.clearDemoTelemetry();
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     VD.setDemoActive(false);
@@ -658,7 +665,7 @@ import type { BusyButton } from "./actions-storage";
   function stopAll() {
     const wasDemo = state.demoActive;
     window.clearInterval(window.__voltDemoTimer ?? undefined);
-    if (bridge) bridge.disconnect();
+    if (bridge) VD.callBridge("disconnect");
     VD.clearDemoTelemetry();
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     VD.setDemoActive(false);

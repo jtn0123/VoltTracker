@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.core.net.toUri
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 internal class VoltBridgeDiagnostics(
     private val activity: DashboardHost,
@@ -47,8 +48,13 @@ internal class VoltBridgeDiagnostics(
     }
 
     fun forceStopPackage(packageName: String?): Boolean {
-        val pkg = VoltBridge.safe(packageName, VoltBridge.MAX_NAME_LEN)
-        if (pkg.isEmpty()) {
+        // Normalize once: the allowlist is lower-cased, and the confirm dialog, the
+        // force-stop call, and the status messages must all use the validated form
+        // rather than the caller's mixed-case spelling.
+        val pkg = VoltBridge.safe(packageName, VoltBridge.MAX_NAME_LEN).lowercase(Locale.US)
+        // Validate against the known-OBD-app allowlist BEFORE showing the confirmation dialog:
+        // dashboard JS must not be able to put an arbitrary package name in front of the user.
+        if (pkg.isEmpty() || !CompetingAppDetector.KNOWN_OBD_PACKAGES.contains(pkg)) {
             return false
         }
         activity.confirmBridgeAction(
@@ -66,7 +72,9 @@ internal class VoltBridgeDiagnostics(
         return true
     }
 
-    fun getRecentSessions(n: Int): String = activity.getRecentSessionsJson(n)
+    // Clamp the JS-supplied count up front so a hostile/buggy dashboard cannot request an
+    // unbounded read of the summary file.
+    fun getRecentSessions(n: Int): String = activity.getRecentSessionsJson(n.coerceIn(0, MAX_RECENT_SESSIONS))
 
     fun shareDiagnostics() {
         activity.runOnUiThread(activity::shareDiagnosticsFromBridge)
@@ -85,5 +93,10 @@ internal class VoltBridgeDiagnostics(
 
     fun cancelAdapterReadyNotify() {
         activity.runOnUiThread(activity::cancelAdapterReadyNotifyFromBridge)
+    }
+
+    companion object {
+        /** Upper bound for the JS-supplied recent-session count. */
+        internal const val MAX_RECENT_SESSIONS = 100
     }
 }

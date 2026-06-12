@@ -1,3 +1,147 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Volt Tracker OBD</string>
+
+    <!-- Shared dialog labels -->
+    <string name="dialog_cancel">Cancel</string>
+    <string name="dialog_share_anyway">Share anyway</string>
+
+    <!-- Bluetooth permission flow (ConnectPermissionFlow) -->
+    <string name="obd_adapter_fallback_label">the OBD adapter</string>
+    <string name="status_waiting_bluetooth_permission">Waiting for Bluetooth permission. Allow \"Nearby devices\" in the Android prompt and the connection will continue.</string>
+    <string name="status_bt_granted_connecting">Bluetooth permission granted. Connecting to %1$s…</string>
+    <string name="status_bt_granted_location_off">Bluetooth permission granted. Location is still off, so trips may not show a route.</string>
+    <string name="status_bt_granted_notifications_off">Bluetooth permission granted. Notifications are still off, so background logging may be quieter.</string>
+    <string name="status_bt_granted_pick_adapter">Bluetooth permission granted. Pick a paired adapter.</string>
+    <string name="status_bt_denied_retry">Bluetooth permission was denied, so the OBD adapter can\'t be reached. Tap Connect to try again and choose Allow.</string>
+    <string name="status_bt_denied_settings_opened">Android is no longer showing the Bluetooth prompt. In the app settings screen that just opened, choose Permissions &gt; Nearby devices &gt; Allow, then come back and tap Connect.</string>
+    <string name="status_bt_denied_open_settings">Bluetooth permission is off for Volt Tracker. Open Android Settings &gt; Apps &gt; Volt Tracker &gt; Permissions and allow Nearby devices, then tap Connect again.</string>
+
+    <!-- MainActivity statuses and dialogs -->
+    <string name="status_action_cancelled">Action cancelled.</string>
+    <string name="status_confirmation_failed">Could not show the Android confirmation.</string>
+    <string name="status_viewing_local_data">Viewing local data. Connect only when you want live OBD logging.</string>
+    <string name="status_no_bluetooth_support">This phone does not report Bluetooth support.</string>
+    <string name="status_turn_on_bluetooth">Turn on Bluetooth to connect to the OBD adapter.</string>
+    <string name="status_open_bluetooth_settings_manually">Open Android Bluetooth settings, then try again.</string>
+    <string name="status_obd_start_blocked">Android blocked OBD logging startup. Check permissions and try again.</string>
+    <string name="status_remembered_device">Remembered %1$s.</string>
+    <string name="status_stop_noted">Stop request noted; reopen the app if logging is still active.</string>
+    <string name="status_autoconnect_enabled">Auto-connect enabled. Volt Tracker will use the last adapter when the app sees it.</string>
+    <string name="status_autoconnect_disabled">Auto-connect disabled.</string>
+    <string name="status_autoconnect_not_ready">Auto-connect is not ready yet.</string>
+
+    <!-- Foreground-service notification (ObdNotifications / ObdService) -->
+    <string name="notification_channel_name">OBD connection</string>
+    <string name="notification_channel_description">Shows while Volt Tracker is connected to an OBD adapter.</string>
+    <string name="notification_logging_foreground">Logging while app is open</string>
+    <string name="notification_logging_background">Background logging active</string>
+    <string name="foreground_connecting">Connecting to %1$s</string>
+    <string name="foreground_scanning">Scanning %1$s</string>
+    <string name="foreground_detail_probe">Detail Probe (%1$s) on %2$s</string>
+    <string name="foreground_clearing_codes">Clearing codes on %1$s</string>
+    <string name="foreground_demo">Running demo telemetry</string>
+
+    <!-- ObdService session statuses -->
+    <string name="status_disconnected">Disconnected.</string>
+    <string name="status_retry_cancelled">Retry cancelled.</string>
+    <string name="status_foreground_blocked">Android blocked foreground logging. Check notification and nearby-device permissions, then try again.</string>
+    <string name="status_worker_start_failed">Could not start the OBD logging worker.</string>
+    <string name="status_service_stopped">Service stopped.</string>
+    <string name="status_scan_starting">Starting diagnostic scan.</string>
+    <string name="status_connecting_adapter">Connecting to adapter.</string>
+    <string name="status_detail_probe_starting">Starting detailed signal probe.</string>
+    <string name="status_clear_dtc_preparing">Preparing to clear diagnostic codes.</string>
+    <string name="status_demo_starting">Demo telemetry starting.</string>
+
+    <!-- Troubleshooter (TroubleshooterBridge) -->
+    <string name="status_bt_settings_open_failed">Could not open Bluetooth settings. Open Android Settings &gt; Bluetooth manually.</string>
+    <string name="status_no_diagnostics_yet">No diagnostics to share yet — connect once and try again.</string>
+    <string name="status_diagnostics_build_failed">Could not build the diagnostics share.</string>
+    <string name="dialog_diagnostics_title">Share Volt Tracker diagnostics</string>
+    <string name="diagnostics_disclosure_message">This diagnostics bundle may include:\n• Recent redacted JSONL session logs and app logs\n• OBD commands, adapter state, and diagnostic events\n• Telemetry, diagnostic trouble codes, and redacted GPS fields\n\nBluetooth MAC addresses, VIN-like identifiers, and precise coordinate fields are redacted before sharing.</string>
+    <string name="chooser_share_diagnostics">Share diagnostics</string>
+    <string name="status_diagnostics_cancelled">Diagnostics share cancelled.</string>
+    <string name="status_diagnostics_disclosure_failed">Could not show the diagnostics disclosure.</string>
+    <string name="status_test_connection_logging_active">Logging is already running — stop it before starting a test connection.</string>
+    <string name="status_no_remembered_adapter_yet">No remembered adapter yet — pick one and Connect once first.</string>
+    <string name="notification_adapter_ready_title">OBD adapter is responding</string>
+    <string name="notification_adapter_ready_text">Tap to open Volt Tracker and start logging.</string>
+    <string name="share_diagnostics_subject">Volt Tracker diagnostics</string>
+
+    <!-- Backup and restore (BackupController) -->
+    <string name="status_stop_logging_before_backup">Stop logging before creating a backup.</string>
+    <string name="status_backup_worker_failed">Could not start the backup worker.</string>
+    <!-- The character count is a fixed minimum (always > 1), so no plural form is needed. -->
+    <string name="status_passphrase_minimum" tools:ignore="PluralsCandidate">Enter a backup passphrase with at least %1$d characters.</string>
+    <string name="dialog_backup_disclosure_title">Share Volt Tracker backup</string>
+    <!-- The character count is a fixed minimum (always > 1), so no plural form is needed. -->
+    <string name="backup_disclosure_message" tools:ignore="PluralsCandidate">This backup is a full copy of Volt Tracker\'s on-device database and contains:\n• Raw OBD session logs and telemetry\n• Precise GPS coordinates from your trips\n• Bluetooth adapter addresses\n• Redacted VIN and vehicle records if your car shared them\n\nEncrypted backups are protected by your passphrase; plaintext backups are not.\nUse a strong, unique passphrase with at least %1$d characters. Volt Tracker cannot recover it if it is lost.\nOnly share with people you trust.</string>
+    <string name="status_backup_cancelled">Backup cancelled.</string>
+    <string name="status_backup_disclosure_failed">Could not show the backup disclosure.</string>
+    <string name="status_preparing_backup">Preparing data backup…</string>
+    <string name="status_preparing_encrypted_backup">Preparing encrypted data backup…</string>
+    <string name="progress_preparing_backup_title">Preparing backup</string>
+    <string name="progress_preparing_encrypted_backup_title">Preparing encrypted backup</string>
+    <string name="progress_preparing_backup_detail">Writing your on-phone Volt Tracker data to a shareable file.</string>
+    <string name="progress_preparing_encrypted_backup_detail">Encrypting your on-phone Volt Tracker data before sharing.</string>
+    <string name="progress_backup_failed_title">Backup failed</string>
+    <string name="status_backup_create_failed">Could not create the backup file.</string>
+    <string name="chooser_backup">Back up Volt Tracker data</string>
+    <string name="progress_backup_ready_title">Backup ready</string>
+    <string name="progress_backup_ready_detail">Backup ready. Choose where to save it.</string>
+    <string name="progress_encrypted_backup_ready_detail">Encrypted backup ready. Choose where to save it.</string>
+    <string name="progress_phase_ready_to_share">Ready to share</string>
+    <string name="status_backup_ready">Backup ready - choose where to save it.</string>
+    <string name="status_encrypted_backup_ready">Encrypted backup ready - choose where to save it.</string>
+    <string name="status_share_sheet_failed">Could not open the share sheet.</string>
+    <string name="status_restore_cancelled_no_file">Restore cancelled - no file selected.</string>
+    <string name="status_stop_logging_before_restore">Stop logging before restoring a backup.</string>
+    <string name="status_enter_passphrase_first">Enter the backup passphrase first.</string>
+    <string name="status_choose_backup_file">Choose a Volt Tracker backup file.</string>
+    <string name="status_file_picker_failed">Could not open the file picker.</string>
+    <string name="progress_reading_backup_title">Reading backup</string>
+    <string name="progress_reading_encrypted_backup_title">Reading encrypted backup</string>
+    <string name="progress_reading_backup_detail">Large backup files can take a minute. Keep Volt Tracker open while the file is checked.</string>
+    <string name="status_reading_backup">Reading selected backup…</string>
+    <string name="status_reading_encrypted_backup">Reading and decrypting selected backup…</string>
+    <string name="progress_reading_backup_worker_detail">Reading and checking the selected backup.</string>
+    <string name="progress_reading_encrypted_backup_worker_detail">Reading and decrypting the selected backup.</string>
+    <string name="status_restore_worker_failed">Could not start the restore worker.</string>
+    <string name="progress_restore_failed_title">Restore failed</string>
+    <string name="dialog_restore_title">Restore backup</string>
+    <string name="dialog_restore_message">Merge adds this backup\'s data to what\'s already on your phone. Existing sessions are matched so missing route samples can fill in.\n\nReplace erases everything on this phone first, then loads the backup.</string>
+    <string name="dialog_restore_merge">Merge</string>
+    <string name="dialog_restore_replace_all">Replace all</string>
+    <string name="status_restore_cancelled">Restore cancelled.</string>
+    <string name="progress_restoring_title">Restoring backup</string>
+    <string name="progress_restoring_detail">Replacing the on-phone database. Large backups can take a minute.</string>
+    <string name="status_restoring">Restoring backup…</string>
+    <string name="progress_replace_worker_detail">Replacing the on-phone database with the selected backup.</string>
+    <string name="progress_phase_copying_backup">Copying backup into place</string>
+    <string name="progress_restore_complete_title">Restore complete</string>
+    <string name="progress_restore_complete_detail">Backup restored. Reconnect to resume logging.</string>
+    <string name="status_backup_restored">Backup restored - reconnect to resume logging.</string>
+    <string name="progress_merging_title">Merging backup</string>
+    <string name="progress_merging_detail">Adding backup rows and matching existing sessions. Large backups can take a minute.</string>
+    <string name="status_merging">Merging backup…</string>
+    <string name="progress_merge_worker_detail">Adding backup rows and matching existing sessions.</string>
+    <string name="progress_merge_complete_title">Merge complete</string>
+    <string name="merge_default_message">Backup merged.</string>
+    <string name="merge_reconnect_suffix">%1$s Reconnect to resume logging.</string>
+    <string name="status_merge_failed_generic">Merge failed - the backup could not be merged.</string>
+    <string name="status_restore_options_failed">Could not show the restore options.</string>
+    <string name="restore_failed_logging_active">Restore failed - logging is still active. Stop logging and try again.</string>
+    <string name="restore_failed_invalid_file">Restore failed - that file is not a valid Volt Tracker backup.</string>
+    <string name="restore_failed_other">Restore failed - could not replace the on-device database.</string>
+    <string name="restore_stage_open_failed">Restore failed - Android could not read the selected file.</string>
+    <string name="restore_stage_too_large">Restore failed - that backup is larger than the %1$d MiB on-phone importer limit.</string>
+    <string name="restore_stage_missing_passphrase">Restore failed - that backup is encrypted. Enter its passphrase first.</string>
+    <string name="restore_stage_decrypt_failed">Restore failed - the passphrase did not unlock that backup.</string>
+    <string name="restore_stage_too_new">Restore failed - that backup was created by a newer Volt Tracker app.</string>
+    <string name="restore_stage_migration_failed">Restore failed - the backup could not be upgraded for this app.</string>
+    <string name="restore_stage_not_prepared">Restore failed - the selected backup could not be prepared.</string>
+    <string name="restore_verified_encrypted">Encrypted backup verified.</string>
+    <string name="restore_verified_plain">Backup verified.</string>
+    <string name="restore_verified_migrated">It was upgraded for this app.</string>
+    <string name="restore_verified_choose">Choose Merge or Replace all.</string>
 </resources>

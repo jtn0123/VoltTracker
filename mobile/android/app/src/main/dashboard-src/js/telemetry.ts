@@ -1,3 +1,4 @@
+import { asDataState, setDataState, setDataTone } from "./dataset-state";
 import { LIVE_ROUTE_ID, appendLiveRoutePoint, haversineMetersJs, liveSampleTimeMs } from "./map-route-utils";
 import type { MapRoutePoint } from "./map-route-utils";
 
@@ -97,7 +98,7 @@ import type { MapRoutePoint } from "./map-route-utils";
     state.status = status;
     const badge = el("stateBadge");
     const next = status.state || "idle";
-    if (badge) badge.dataset.state = next;
+    setDataState(badge, asDataState(next));
     if (!wasActive && isActiveStatus() && !state.demoActive) resetTelemetry();
     VD.setText("stateText", next);
     VD.setText("statusCopy", status.detail || "Ready.");
@@ -564,7 +565,7 @@ import type { MapRoutePoint } from "./map-route-utils";
     if (!chip) return;
     const samples = hasLiveSamples();
     const label = samples && isStale ? "stale" : samples ? "live" : "waiting";
-    chip.dataset.state = label;
+    setDataState(chip, label);
     chip.dataset.reconnectActive = samples && isStale && bridge ? "true" : "false";
     if (samples && isStale) {
       chip.tabIndex = bridge ? 0 : -1;
@@ -720,7 +721,7 @@ import type { MapRoutePoint } from "./map-route-utils";
     const powerDetail = el("powerDetail");
     if (powerDetail) {
       powerDetail.textContent = powerState;
-      powerDetail.dataset.state = powerState;
+      setDataState(powerDetail, powerState);
     }
     const pct = Number.isFinite(power) ? Math.min(50, Math.abs(power / 80) * 50) : 0;
     const fill = el("powerFill");
@@ -868,7 +869,7 @@ import type { MapRoutePoint } from "./map-route-utils";
   ) {
     const row = el(id);
     if (!row) return;
-    row.dataset.tone = tone;
+    setDataTone(row, tone);
     const strong = row.querySelector("strong");
     const small = row.querySelector("small");
     const tag = row.querySelector("b");

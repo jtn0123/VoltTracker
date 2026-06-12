@@ -7,6 +7,8 @@
 // the sibling panels (signals-panel.ts, insights-panel.ts) reach for —
 // isNativeError, reportNativeReadError, buildStatusCopy, toggleHidden — are
 // published on VD here so this module stays the single owner of them.
+import { setDataState } from "./dataset-state";
+
 (function () {
   "use strict";
 
@@ -554,12 +556,12 @@
       .some(isChargeInProgress);
     VD.setText("realChargeStatus", chargingNow ? "charging" : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data")));
     // Keep the status pill's color in sync with the text (see base.css badge states).
-    const chargeBadge = el("realChargeStatusBadge");
-    if (chargeBadge) {
-      chargeBadge.dataset.state = chargingNow
+    setDataState(
+      el("realChargeStatusBadge"),
+      chargingNow
         ? "charging"
-        : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs-review" : "waiting"));
-    }
+        : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs-review" : "waiting"))
+    );
     renderChargeSessions(charge);
 
     const ring = el("realPackRing");
@@ -576,7 +578,7 @@
     } else {
       if (ring) {
         ring.style.setProperty("--v", "0");
-        ring.setAttribute("data-state", "waiting");
+        setDataState(ring, "waiting");
       }
       if (ringValue) ringValue.textContent = "--";
       VD.setText("realPackTitle", "Waiting for battery readings.");

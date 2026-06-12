@@ -62,6 +62,88 @@ describe('prefs store', () => {
     expect(prefs.get('units', 'imperial')).toBe('imperial');
   });
 
+  it('warns once and surfaces a toast notice when localStorage is unavailable', async () => {
+    // Some WebView configurations throw on any localStorage access. The store
+    // must fall back to in-memory silently for FUNCTIONALITY, but loudly for
+    // VISIBILITY: one console.warn plus a once-per-session #statusToast notice
+    // (prefs loads before the telemetry toast plumbing, so it drives the node
+    // directly on the next tick).
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('localStorage disabled');
+      },
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = '<div id="statusToast" hidden></div>';
+      const prefs = await loadPrefs({ clear: false });
+
+      // In-memory fallback still round-trips values.
+      prefs.set('units', 'metric');
+      expect(prefs.get('units', 'imperial')).toBe('metric');
+
+      // Exactly one fallback warning despite repeated access.
+      prefs.set('pricePerKwh', 0.18);
+      prefs.get('pricePerKwh', 0);
+      const fallbackWarns = warn.mock.calls.filter(([msg]) =>
+        String(msg).includes('localStorage is unavailable'));
+      expect(fallbackWarns).toHaveLength(1);
+
+      // The deferred toast notice appears, then auto-hides.
+      vi.advanceTimersByTime(1);
+      const toast = document.getElementById('statusToast');
+      expect(toast.hidden).toBe(false);
+      expect(toast.textContent).toContain("Preferences can't be saved");
+      vi.advanceTimersByTime(6500);
+      expect(toast.hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      warn.mockRestore();
+      if (descriptor) Object.defineProperty(window, 'localStorage', descriptor);
+      // jsdom may expose localStorage via the prototype: with no own descriptor
+      // to restore, the injected throwing getter must be removed explicitly.
+      else delete window.localStorage;
+    }
+  });
+
+  it('does not auto-dismiss a newer status that reused the toast node', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('localStorage disabled');
+      },
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = '<div id="statusToast" hidden></div>';
+      await loadPrefs({ clear: false });
+
+      vi.advanceTimersByTime(1);
+      const toast = document.getElementById('statusToast');
+      expect(toast.hidden).toBe(false);
+      expect(toast.textContent).toContain("Preferences can't be saved");
+
+      // A newer status reuses the shared #statusToast node before the 6s hide
+      // timer fires; the prefs notice timer must leave it alone.
+      toast.textContent = 'Connected to OBD adapter.';
+      vi.advanceTimersByTime(6500);
+      expect(toast.hidden).toBe(false);
+      expect(toast.textContent).toBe('Connected to OBD adapter.');
+    } finally {
+      vi.useRealTimers();
+      warn.mockRestore();
+      if (descriptor) Object.defineProperty(window, 'localStorage', descriptor);
+      // jsdom may expose localStorage via the prototype: with no own descriptor
+      // to restore, the injected throwing getter must be removed explicitly.
+      else delete window.localStorage;
+    }
+  });
+
   it('gives each Drive tile visibility toggle a unique accessible name', async () => {
     document.body.innerHTML = '<div id="liveReadout"></div><div id="driveTilesEditor"></div>';
     await loadPrefs();

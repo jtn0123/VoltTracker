@@ -120,12 +120,14 @@ class ObdSessionLog(
             try {
                 currentWriter.flush()
                 currentWriter.close()
-            } catch (ignored: IOException) {
+            } catch (ex: IOException) {
+                OBDLog.warn("ObdSessionLog", "close_failed: ${ex.javaClass.simpleName}: ${ex.message}")
             }
         } else if (currentFos != null) {
             try {
                 currentFos.close()
-            } catch (ignored: IOException) {
+            } catch (ex: IOException) {
+                OBDLog.warn("ObdSessionLog", "close_failed: ${ex.javaClass.simpleName}: ${ex.message}")
             }
         }
         writer = null

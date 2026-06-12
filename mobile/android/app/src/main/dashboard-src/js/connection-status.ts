@@ -4,6 +4,8 @@
 // on dashboard load and on every status broadcast, then renders into the
 // topbar. The low-voltage hint also lives here (the hint element is in
 // connection-tools.html but the status payload is the same).
+import { asDataState, setDataState, setDataTone } from "./dataset-state";
+
 type RecentSession = {
   adapter?: string;
   startMs?: number;
@@ -70,7 +72,7 @@ function renderLastConnected() {
   }
   label.textContent = s.adapter || "OBD adapter";
   at.textContent = formatRelative(s.endMs || s.startMs);
-  badge.dataset.state = s.outcome || "unknown";
+  setDataState(badge, asDataState(s.outcome || "unknown"));
   badge.hidden = false;
 }
 
@@ -89,14 +91,14 @@ function renderLowVoltageHint(status: LowVoltageStatus | null | undefined) {
   // already considers the battery low. The "bad" floor at 12.2 V keeps a tighter band for
   // the more urgent copy.
   if (v < 12.2) {
-    hint.dataset.tone = "bad";
+    setDataTone(hint, "bad");
     hint.textContent =
       "Battery voltage looks low (" +
       v.toFixed(2) +
       " V). The OBD port may sleep - start the car before the next probe.";
     hint.hidden = false;
   } else if (v < 12.7) {
-    hint.dataset.tone = "warn";
+    setDataTone(hint, "warn");
     hint.textContent = "Battery voltage is borderline (" + v.toFixed(2) + " V).";
     hint.hidden = false;
   } else {
@@ -118,12 +120,12 @@ const ACTIVE_TRIP_STATES = ["connected", "connecting", "initializing", "scanning
 
 let popoverDismiss: AbortController | null = null;
 
-function dashboardState(): Record<string, unknown> {
-  return (VD.state || {}) as unknown as Record<string, unknown>;
-}
-
-function bag(value: unknown): Record<string, unknown> {
-  return (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+// The popover reads the shared state bag through its real DashboardState type
+// (and the VoltAppState sub-blocks declared in dashboard-globals.d.ts) instead
+// of recasting everything to Record<string, unknown>, so field access below is
+// compiler-checked against the bridge payload shapes.
+function dashboardState(): DashboardState {
+  return VD.state;
 }
 
 function statusPopoverEl() {
@@ -144,7 +146,7 @@ function renderRows(target: HTMLElement | null, rows: StatusRow[]) {
   target.replaceChildren(...nodes);
 }
 
-function bluetoothSummary(permissions: Record<string, unknown>, status: Record<string, unknown>) {
+function bluetoothSummary(permissions: NonNullable<VoltAppState["permissions"]>, status: VoltStatus) {
   if (permissions.bluetoothPermission === false) return "Permission needed — tap Connect to grant";
   if (permissions.bluetoothEnabled === false) return "Off — turn it on in Android settings";
   if (permissions.bluetooth === true || status.bluetoothReady === true) return "Ready";
@@ -152,13 +154,13 @@ function bluetoothSummary(permissions: Record<string, unknown>, status: Record<s
   return "";
 }
 
-function connectionRows(status: Record<string, unknown>): StatusRow[] {
+function connectionRows(status: VoltStatus): StatusRow[] {
   const state = dashboardState();
-  const app = bag(state.appState);
-  const adapter = bag(app.adapter);
-  const session = bag(app.session);
-  const gps = bag(app.gps);
-  const lastDevice = bag(state.lastDevice);
+  const app: VoltAppState = state.appState || {};
+  const adapter: VoltAdapterState = app.adapter || {};
+  const session: VoltSessionState = app.session || {};
+  const gps: VoltGpsState = app.gps || {};
+  const lastDevice: VoltDevice = state.lastDevice || {};
   const demo = Boolean(state.demoActive);
 
   const adapterName = demo
@@ -174,18 +176,18 @@ function connectionRows(status: Record<string, unknown>): StatusRow[] {
 
   return [
     ["Adapter", address ? `${adapterName} (${address})` : adapterName],
-    ["Bluetooth", bluetoothSummary(bag(app.permissions), status)],
+    ["Bluetooth", bluetoothSummary(app.permissions || {}, status)],
     ["Logging", logging],
     ["GPS", String(gps.state || "")],
     ["Last connected", last ? `${last.adapter || "OBD adapter"} · ${formatRelative(last.endMs || last.startMs)}` : ""]
   ];
 }
 
-function tripRows(status: Record<string, unknown>): StatusRow[] {
+function tripRows(status: VoltStatus): StatusRow[] {
   const state = dashboardState();
-  const app = bag(state.appState);
-  const session = bag(app.session);
-  const telemetry = bag(state.telemetry);
+  const app: VoltAppState = state.appState || {};
+  const session: VoltSessionState = app.session || {};
+  const telemetry: VoltTelemetry = state.telemetry || {};
   const stateName = String(status.state || session.state || "").toLowerCase();
   const active = Boolean(state.demoActive) || ACTIVE_TRIP_STATES.includes(stateName);
 
@@ -224,10 +226,9 @@ function tripRows(status: Record<string, unknown>): StatusRow[] {
 function renderStatusPopover() {
   const popover = statusPopoverEl();
   if (!popover || popover.hidden) return;
-  const status = bag(dashboardState().status);
+  const status: VoltStatus = dashboardState().status || {};
   const stateName = String(status.state || "idle");
-  const pill = el("statusPopoverState");
-  if (pill) pill.dataset.state = stateName;
+  setDataState(el("statusPopoverState"), asDataState(stateName));
   const pillText = el("statusPopoverStateText");
   if (pillText) pillText.textContent = stateName;
   const detail = el("statusPopoverDetail");

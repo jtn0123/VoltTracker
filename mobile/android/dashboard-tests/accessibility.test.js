@@ -9,9 +9,18 @@ import { JSDOM } from 'jsdom';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_HTML = resolve(HERE, '../app/src/main/assets/dashboard/index.html');
+const DRIVE_PARTIAL_HTML = resolve(HERE, '../app/src/main/dashboard-src/partials/drive.html');
 
 function loadDocument() {
   return new JSDOM(readFileSync(DASHBOARD_HTML, 'utf8')).window.document;
+}
+
+// The generated index.html is assembled by the Gradle generateDashboardHtml
+// task, which the Vitest suite cannot run — so structural invariants that were
+// just changed in a partial are asserted against the partial SOURCE here (the
+// generated shell test above keeps covering the assembled output).
+function loadDrivePartial() {
+  return new JSDOM(readFileSync(DRIVE_PARTIAL_HTML, 'utf8')).window.document;
 }
 
 function accessibleName(node) {
@@ -52,6 +61,34 @@ describe('generated dashboard accessibility shell', () => {
     expect(liveRegions.length).toBeGreaterThanOrEqual(2);
     expect(liveRegions.some((node) => node.querySelector('#speedValue'))).toBe(true);
     expect(liveRegions.some((node) => node.querySelector('#driveSocValue'))).toBe(true);
+  });
+
+  it('announces drive readings as atomic per-cluster live regions, not card-wide fragments', () => {
+    // Card-wide aria-live="polite" aria-atomic="false" made screen readers
+    // stutter every changed text node separately ("45" … "MPH" … "72 km/h").
+    // The live regions now sit on the small reading clusters with
+    // aria-atomic="true" so each update announces as one coherent phrase.
+    const document = loadDrivePartial();
+
+    const speedRow = document.querySelector('.speed-row');
+    expect(speedRow.getAttribute('aria-live')).toBe('polite');
+    expect(speedRow.getAttribute('aria-atomic')).toBe('true');
+    expect(speedRow.querySelector('#speedValue')).not.toBeNull();
+
+    const powerBlock = document.querySelector('.power-block');
+    expect(powerBlock.getAttribute('aria-live')).toBe('polite');
+    expect(powerBlock.getAttribute('aria-atomic')).toBe('true');
+    expect(powerBlock.querySelector('#powerValue')).not.toBeNull();
+
+    const batteryHead = document.querySelector('.battery-head');
+    expect(batteryHead.getAttribute('aria-live')).toBe('polite');
+    expect(batteryHead.getAttribute('aria-atomic')).toBe('true');
+    expect(batteryHead.querySelector('#driveSocValue')).not.toBeNull();
+
+    // The wrapping cards must NOT be live regions anymore — that was the
+    // stutter source (every tile inside re-announced independently).
+    expect(document.querySelector('.live-card').hasAttribute('aria-live')).toBe(false);
+    expect(document.querySelector('.battery-strip').hasAttribute('aria-live')).toBe(false);
   });
 
 

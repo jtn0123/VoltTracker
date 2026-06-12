@@ -266,7 +266,8 @@ class SessionRecorder {
                 }
                 payload.put("empty", response == null || ObdProtocol.summarize(response).isEmpty())
                 payload.put("observedAtMs", observedAtMs)
-            } catch (ignored: JSONException) {
+            } catch (ex: JSONException) {
+                Log.w(TAG, "command log payload encode failed", ex)
             }
             logJson("command", payload)
             persistPidObservation(command, header, observedAtMs, timeoutMs, durationMs, response)
@@ -284,7 +285,8 @@ class SessionRecorder {
                 payload.put("errorType", type)
                 payload.put("exception", ex.javaClass.name)
                 payload.put("message", ObdElmDecode.safeMessage(ex))
-            } catch (ignored: JSONException) {
+            } catch (encodeEx: JSONException) {
+                Log.w(TAG, "error log payload encode failed", encodeEx)
             }
             logJson("error", payload)
         }
@@ -303,7 +305,8 @@ class SessionRecorder {
                     payload.put(pairs[i] ?: "", pairs[i + 1])
                     i += 2
                 }
-            } catch (ignored: JSONException) {
+            } catch (ex: JSONException) {
+                Log.w(TAG, "event log payload encode failed", ex)
             }
             logJson("event", payload)
         }
@@ -519,6 +522,8 @@ class SessionRecorder {
     }
 
     companion object {
+        private const val TAG = "SessionRecorder"
+
         const val TELEMETRY_QUEUE_CAPACITY: Int = ObdPersistenceWorker.TELEMETRY_QUEUE_CAPACITY
         const val LIFECYCLE_QUEUE_CAPACITY: Int = ObdPersistenceWorker.LIFECYCLE_QUEUE_CAPACITY
         const val STATUS_RATE_MAX_PER_WINDOW: Int = 12

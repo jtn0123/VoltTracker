@@ -6,6 +6,9 @@
 // entry point (updateEnhancedCapabilityUi) is attached to the shared VD global;
 // storage-status.ts calls it after each storage refresh. The shared buildStatusCopy
 // helper is owned by storage-status.ts and read off VD here.
+import { setDataState } from "./dataset-state";
+import type { DataStateValue } from "./dataset-state";
+
 (function () {
   "use strict";
 
@@ -33,8 +36,14 @@
     }
   };
 
+  // Typed accessor for the optional captured sample on an evidence row — one
+  // place that narrows `sample?: VoltEnhancedSample | null` to a usable record.
+  function sampleOf(row: VoltEnhancedCapability): VoltEnhancedSample {
+    return row && typeof row.sample === "object" && row.sample ? row.sample : {};
+  }
+
   function enhancedCapabilityStatus(capability: VoltEnhancedCapability) {
-    const sample = capability && typeof capability.sample === "object" && capability.sample ? capability.sample : {};
+    const sample = sampleOf(capability);
     const lane = String(sample.pollLane || capability.pollLane || "").toLowerCase();
     if (lane === "passive") return "deferred";
     if (capability.supported === true) return "confirmed";
@@ -51,7 +60,7 @@
     const counts = rows.reduce((tally: Record<string, number>, row) => {
       const status = String(row._status);
       tally[status] = (tally[status] || 0) + 1;
-      const sample = (row.sample as Record<string, unknown>) || {};
+      const sample = sampleOf(row);
       const category = String(row.category || sample.category || "").toLowerCase();
       if (category === "tpms") tally.tpms = (tally.tpms || 0) + 1;
       return tally;
@@ -84,11 +93,11 @@
     list.replaceChildren(...visible.slice(0, 18).map(buildEnhancedCapabilityRow));
   }
 
-  function setEnhancedBadge(label: string, tone?: string) {
+  function setEnhancedBadge(label: string, tone?: DataStateValue) {
     const badge = el("enhancedBadge") as HTMLElement | null;
     if (!badge) return;
     badge.textContent = label;
-    if (tone) badge.dataset.state = tone;
+    if (tone) setDataState(badge, tone);
     else delete badge.dataset.state;
   }
 
@@ -129,7 +138,7 @@
   function matchesEnhancedFilter(row: VoltEnhancedCapability) {
     if (enhancedSignalFilter === "all") return true;
     if (enhancedSignalFilter === "tpms") {
-      const sample = (row.sample as Record<string, unknown>) || {};
+      const sample = sampleOf(row);
       return String(row.category || sample.category || "").toLowerCase() === "tpms";
     }
     return row._status === enhancedSignalFilter;
@@ -150,7 +159,7 @@
     const stage = state.signalProbeStage || "tires";
     const next = rows
       .filter((row) => row._status === "candidate" && !row._hasEvidence)
-      .filter((row) => String(row.scanStage || ((row.sample as Record<string, unknown>) || {}).scanStage || "tires") === stage)
+      .filter((row) => String(row.scanStage || sampleOf(row).scanStage || "tires") === stage)
       .slice(0, 3);
     // Hide the whole section (label + list) when this probe mode has no fresh
     // candidates, rather than showing a loud full-width empty message.
@@ -169,8 +178,16 @@
     item.className = "enhanced-next-item";
     const strong = document.createElement("strong");
     strong.textContent = row.name || row.command || "Detailed signal";
+    const sample = sampleOf(row);
     const small = document.createElement("small");
-    small.textContent = [row.category || "catalog", row.pollLane || "probe", row.header || "standard"].filter(Boolean).join(" · ");
+    // Same row→sample fallback as the admit filter above: a row admitted because
+    // its scanStage lives on the captured sample should label from that sample
+    // too, not degrade to the generic "catalog · probe" placeholders.
+    small.textContent = [
+      row.category || sample.category || "catalog",
+      row.pollLane || sample.pollLane || "probe",
+      row.header || "standard"
+    ].filter(Boolean).join(" · ");
     item.append(strong, small);
     return item;
   }
@@ -187,7 +204,7 @@
         button.classList.toggle("is-active", button.dataset.signalStage === stage);
       });
     }
-    const count = rows.filter((row) => String(row.scanStage || ((row.sample as Record<string, unknown>) || {}).scanStage || "") === stage).length;
+    const count = rows.filter((row) => String(row.scanStage || sampleOf(row).scanStage || "") === stage).length;
     const button = el("detailProbeBtn") as HTMLButtonElement | null;
     if (button) {
       button.textContent = count ? `Run ${meta.label} (${count})` : `Run ${meta.label}`;
@@ -210,7 +227,7 @@
     const strong = document.createElement("strong");
     strong.textContent = capability.name || capability.pid || capability.command || "Enhanced PID";
 
-    const sample = capability && typeof capability.sample === "object" && capability.sample ? capability.sample : {};
+    const sample = sampleOf(capability);
     // Classification chips — quick-scan tags. Technical evidence (header,
     // command, last-seen, raw bytes) drops to the mono line below so the row
     // reads top-to-bottom instead of as one long " - " run.

@@ -55,7 +55,7 @@ object DiagnosticsShareIntent {
         return Intent(Intent.ACTION_SEND).apply {
             type = "application/zip"
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "VoltTracker diagnostics")
+            putExtra(Intent.EXTRA_SUBJECT, ctx.getString(R.string.share_diagnostics_subject))
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
     }

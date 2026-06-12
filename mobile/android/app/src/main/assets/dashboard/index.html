@@ -458,9 +458,12 @@
   ></div>
 
   <section class="hero">
-    <!-- Speed+power cluster announces value changes politely so screen
-         readers see "stale" / unit changes without barging into other UI. -->
-    <article class="panel live-card" aria-live="polite" aria-atomic="false">
+    <!-- Speed+power cluster. aria-live sits on the small per-reading clusters
+         below (speed row / power block), each aria-atomic="true", so a screen
+         reader announces one coherent reading ("45 MPH 72 km/h") instead of a
+         stutter of fragments — the old card-wide aria-live="polite"
+         aria-atomic="false" re-announced each changed text node separately. -->
+    <article class="panel live-card">
       <div class="live-head">
         <span class="kicker">Vehicle speed</span>
         <!-- Live-rate chip reflects sample freshness: waiting (no samples yet) /
@@ -475,6 +478,8 @@
         class="speed-row"
         role="meter"
         aria-label="Vehicle speed"
+        aria-live="polite"
+        aria-atomic="true"
         aria-valuemin="0"
         aria-valuemax="120"
       >
@@ -499,7 +504,7 @@
         <div class="scrub-cursor live-trace-cursor"></div>
       </div>
 
-      <div class="power-block">
+      <div class="power-block" aria-live="polite" aria-atomic="true">
         <div class="power-head">
           <div class="power-label">
             <span class="kicker">Power</span>
@@ -526,11 +531,14 @@
       </div>
     </article>
 
-    <!-- SOC + pack temp cluster as a separate live region. The HV-pack sub-row
-         under the SOC meter surfaces the raw 300+ V traction-pack readings polled
+    <!-- SOC + pack temp cluster. The live region is the head (SOC + pack temp)
+         with aria-atomic="true" so each update announces as one coherent
+         battery reading; the optional HV-pack sub-row below stays out of the
+         live region (it updates every sample and would drown out the SOC).
+         The pack values surface the raw 300+ V traction-pack readings polled
          from mode-22 PIDs 222429 / 222414 (instead of just the powerKw aggregate). -->
-    <article class="panel battery-strip" aria-live="polite" aria-atomic="false">
-      <div class="battery-head">
+    <article class="panel battery-strip">
+      <div class="battery-head" aria-live="polite" aria-atomic="true">
         <div>
           <div class="kicker">HV Battery</div>
           <div class="battery-soc">

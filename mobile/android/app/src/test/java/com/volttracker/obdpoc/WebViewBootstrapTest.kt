@@ -30,6 +30,8 @@ class WebViewBootstrapTest {
             assertTrue(settings.domStorageEnabled)
             assertFalse(settings.allowFileAccess)
             assertFalse(settings.allowContentAccess)
+            // Deprecated settings are still honored by the WebView, so the hardened profile pins
+            // them off and this test reads them back through the only (deprecated) getters.
             @Suppress("DEPRECATION")
             assertFalse(settings.allowUniversalAccessFromFileURLs)
             @Suppress("DEPRECATION")

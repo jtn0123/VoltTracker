@@ -14,6 +14,8 @@
 // WebView, and the dtc-lookup.ts / dtc-causes.ts members exist only after the lazy
 // `ensureDtcData()` load resolves (call sites guard with `dtcDataLoaded()`).
 
+import type { DataStateValue } from "../app/src/main/dashboard-src/js/dataset-state";
+
 export {};
 
 // All dashboard ambient types live inside `declare global` so that not just the
@@ -116,6 +118,19 @@ interface VoltChargeSummary {
   recentSessions?: VoltChargeSessionRow[];
 }
 
+/** The latest captured sample attached to an enhanced-capability evidence row.
+ *  Open record (raw decoded fields ride along), but the classification fields
+ *  the signals panel reads are concrete. */
+interface VoltEnhancedSample {
+  pollLane?: string;
+  validationStatus?: string;
+  category?: string;
+  scanStage?: string;
+  risk?: string;
+  rawResponse?: string;
+  [key: string]: unknown;
+}
+
 /** A single enhanced/detailed-signal capability or catalog profile row. The
  *  catalog profiles and the captured evidence rows are merged with `{...}`, and
  *  the merge adds the `_status`/`_hasEvidence`/`_effDone` markers, so this shape
@@ -136,7 +151,7 @@ interface VoltEnhancedCapability {
   responseCount?: number;
   validationStatus?: string;
   lastSeenMs?: number;
-  sample?: Record<string, unknown> | null;
+  sample?: VoltEnhancedSample | null;
   /** Derived in panels: capability status bucket + whether real evidence exists. */
   _status?: string;
   _hasEvidence?: boolean;
@@ -248,8 +263,41 @@ interface VoltInsights {
   [key: string]: unknown;
 }
 
+/** appState.adapter block (AppStateJson.build). Open record: the native side
+ *  may add fields, but the ones the dashboard reads are concrete. */
+interface VoltAdapterState {
+  name?: string;
+  address?: string;
+  remembered?: boolean;
+  connected?: boolean;
+  [key: string]: unknown;
+}
+
+/** appState.session block (AppStateJson.build). */
+interface VoltSessionState {
+  mode?: string;
+  state?: string;
+  detail?: string;
+  sampleCount?: number;
+  sessionMs?: number;
+  runtimeMs?: number;
+  backgroundSampleCount?: number;
+  sampleGapCount?: number;
+  maxSampleGapMs?: number;
+  [key: string]: unknown;
+}
+
+/** appState.gps block (AppStateJson.build). */
+interface VoltGpsState {
+  state?: string;
+  accuracyM?: number;
+  ageMs?: number;
+  [key: string]: unknown;
+}
+
 /** appState payload (AppStatePayload.toJson) stashed on state.appState. Nested
- *  blocks are read defensively, so they remain open records. */
+ *  blocks are read defensively; the most cross-referenced ones (adapter /
+ *  session / gps) now carry concrete optional fields so reads are checked. */
 interface VoltAppState {
   app?: { version?: string; schemaVersion?: number };
   permissions?: {
@@ -259,10 +307,10 @@ interface VoltAppState {
     location?: boolean;
     notifications?: boolean;
   };
-  adapter?: Record<string, unknown>;
-  session?: Record<string, unknown>;
+  adapter?: VoltAdapterState;
+  session?: VoltSessionState;
   vehicle?: Record<string, unknown>;
-  gps?: Record<string, unknown>;
+  gps?: VoltGpsState;
   lifecycle?: Record<string, unknown>;
   latestTelemetry?: Record<string, unknown>;
   storage?: VoltStorageSummary;
@@ -289,7 +337,9 @@ interface VoltTelemetry {
   source?: string;
   raw?: string;
   sampleCount?: number;
+  sessionMs?: VoltReading;
   latitude?: VoltReading;
+  longitude?: VoltReading;
   [key: string]: unknown;
 }
 
@@ -584,6 +634,13 @@ interface VoltRestoreProgress {
     /** The currently-selected map session id (or null). */
     getSelectedMapSessionId(): string | null;
     reportClientError(label: string, detail?: string): void;
+    /** Invoke a bridge method only if this native build exposes it; returns
+     *  undefined (after a once-per-method console.warn + logClientError) when
+     *  the method is missing or the bridge is absent. */
+    callBridge<K extends keyof VoltBridge>(
+      name: K,
+      ...args: Parameters<VoltBridge[K]>
+    ): ReturnType<VoltBridge[K]> | undefined;
     setRestoreProgress(payload: VoltRestoreProgress | string): void;
     escapeHtml(value: unknown): string;
     /**
@@ -656,7 +713,7 @@ interface VoltRestoreProgress {
 
     // ----- signals-panel.ts (split from the old panels.ts) -------------------
     updateEnhancedCapabilityUi(): void;
-    setEnhancedBadge(label: string, tone?: string): void;
+    setEnhancedBadge(label: string, tone?: DataStateValue): void;
 
     // ----- insights-panel.ts (split from the old panels.ts) ------------------
     /** Data-loader only (the Trips tab was removed): populates state.trips for

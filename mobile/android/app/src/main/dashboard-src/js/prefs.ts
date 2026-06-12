@@ -16,14 +16,51 @@
   const PREFIX = "vt.pref.";
   const keyListeners: Record<string, Array<(value: unknown) => void>> = {};
 
+  // Once-per-session notice when localStorage is unusable and prefs silently
+  // degrade to in-memory storage. The silent fallback kept the dashboard alive
+  // but the user had no idea their units/tiles/$-rate would reset every launch.
+  // console.warn fires immediately; the visible notice rides the #statusToast
+  // aria-live node directly (prefs loads FIRST in the eager bundle, before
+  // telemetry.ts attaches the setStatus/toast plumbing) one tick later.
+  let storageFallbackNoted = false;
+
+  function noteStorageFallback(): void {
+    if (storageFallbackNoted) return;
+    storageFallbackNoted = true;
+    try {
+      console.warn(
+        "prefs: localStorage is unavailable; preferences will not persist across app restarts this session."
+      );
+    } catch (_err) {
+      /* console is best-effort on legacy WebViews */
+    }
+    try {
+      window.setTimeout(() => {
+        const toast = document.getElementById("statusToast");
+        if (!toast) return;
+        const notice = "Preferences can't be saved on this device — settings will reset when the app closes.";
+        toast.textContent = notice;
+        toast.hidden = false;
+        window.setTimeout(() => {
+          // Only auto-hide our own notice: a newer status may have reused the
+          // shared toast node in the meantime and must not be dismissed.
+          if (toast.textContent === notice) toast.hidden = true;
+        }, 6000);
+      }, 0);
+    } catch (_err) {
+      /* notice is best-effort; prefs still work in-memory */
+    }
+  }
+
   function store(): Storage | null {
     try {
-      return typeof window !== "undefined" && window.localStorage ? window.localStorage : null;
+      if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
     } catch (_err) {
       // Some WebView configurations throw on localStorage access (e.g. storage
       // disabled). Fall back to in-memory so callers still get their defaults.
-      return null;
     }
+    noteStorageFallback();
+    return null;
   }
 
   const memoryFallback: Record<string, string> = {};
@@ -34,6 +71,7 @@
       try {
         return s.getItem(PREFIX + key);
       } catch (_err) {
+        noteStorageFallback();
         /* fall through to memory */
       }
     }
@@ -47,6 +85,7 @@
         s.setItem(PREFIX + key, serialized);
         return;
       } catch (_err) {
+        noteStorageFallback();
         /* fall through to memory */
       }
     }

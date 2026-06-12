@@ -352,6 +352,8 @@ class BluetoothStateReporter(
     }
 
     companion object {
+        // The typed getParcelableExtra(String, Class) overload requires API 33; minSdk 23 still
+        // needs the deprecated overload on the pre-Tiramisu branch.
         @Suppress("DEPRECATION")
         private fun bluetoothDeviceExtra(intent: Intent): BluetoothDevice? =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -360,6 +362,8 @@ class BluetoothStateReporter(
                 intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
             }
 
+        // The typed getParcelableArrayExtra(String, Class) overload requires API 33; minSdk 23
+        // still needs the deprecated overload on the pre-Tiramisu branch.
         @Suppress("DEPRECATION")
         private fun uuidArrayExtra(intent: Intent): Array<out Parcelable>? =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

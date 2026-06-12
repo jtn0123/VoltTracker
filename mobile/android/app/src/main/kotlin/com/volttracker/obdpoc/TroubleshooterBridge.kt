@@ -130,7 +130,7 @@ class TroubleshooterBridge(
             Log.w(MainActivity.TAG, "openBluetoothSettings failed", ex)
             activity.publishStatus(
                 "blocked",
-                "Could not open Bluetooth settings. Open Android Settings > Bluetooth manually.",
+                activity.getString(R.string.status_bt_settings_open_failed),
                 true,
             )
         }
@@ -167,7 +167,7 @@ class TroubleshooterBridge(
             if (share == null) {
                 activity.publishStatus(
                     "blocked",
-                    "No diagnostics to share yet — connect once and try again.",
+                    activity.getString(R.string.status_no_diagnostics_yet),
                     true,
                 )
                 return
@@ -175,34 +175,30 @@ class TroubleshooterBridge(
             showDiagnosticsDisclosure(share)
         } catch (ex: RuntimeException) {
             Log.w(MainActivity.TAG, "shareDiagnostics failed", ex)
-            activity.publishStatus("blocked", "Could not build the diagnostics share.", true)
+            activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_build_failed), true)
         }
     }
 
-    fun diagnosticsDisclosureMessage(): String =
-        "This diagnostics bundle may include:\n" +
-            "• Recent redacted JSONL session logs and app logs\n" +
-            "• OBD commands, adapter state, and diagnostic events\n" +
-            "• Telemetry, diagnostic trouble codes, and redacted GPS fields\n" +
-            "\n" +
-            "Bluetooth MAC addresses, VIN-like identifiers, and precise coordinate fields are redacted before sharing."
+    fun diagnosticsDisclosureMessage(): String = activity.getString(R.string.diagnostics_disclosure_message)
 
     fun showDiagnosticsDisclosure(share: Intent) {
         try {
             AlertDialog
                 .Builder(activity)
-                .setTitle("Share Volt Tracker diagnostics")
+                .setTitle(R.string.dialog_diagnostics_title)
                 .setMessage(diagnosticsDisclosureMessage())
-                .setPositiveButton("Share anyway") { _, _ ->
-                    activity.startActivity(Intent.createChooser(share, "Share diagnostics"))
-                }.setNegativeButton("Cancel") { _, _ ->
-                    activity.publishStatus("ready", "Diagnostics share cancelled.", false)
+                .setPositiveButton(R.string.dialog_share_anyway) { _, _ ->
+                    activity.startActivity(
+                        Intent.createChooser(share, activity.getString(R.string.chooser_share_diagnostics)),
+                    )
+                }.setNegativeButton(R.string.dialog_cancel) { _, _ ->
+                    activity.publishStatus("ready", activity.getString(R.string.status_diagnostics_cancelled), false)
                 }.setOnCancelListener {
-                    activity.publishStatus("ready", "Diagnostics share cancelled.", false)
+                    activity.publishStatus("ready", activity.getString(R.string.status_diagnostics_cancelled), false)
                 }.show()
         } catch (ex: RuntimeException) {
             Log.w(MainActivity.TAG, "showDiagnosticsDisclosure failed", ex)
-            activity.publishStatus("blocked", "Could not show the diagnostics disclosure.", true)
+            activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_disclosure_failed), true)
         }
     }
 
@@ -215,7 +211,7 @@ class TroubleshooterBridge(
             // one first) and the scheduled auto-stop below would then kill it 25 s later.
             activity.publishStatus(
                 "blocked",
-                "Logging is already running — stop it before starting a test connection.",
+                activity.getString(R.string.status_test_connection_logging_active),
                 true,
             )
             return
@@ -226,7 +222,7 @@ class TroubleshooterBridge(
         if (address.isEmpty()) {
             activity.publishStatus(
                 "blocked",
-                "No remembered adapter yet — pick one and Connect once first.",
+                activity.getString(R.string.status_no_remembered_adapter_yet),
                 true,
             )
             return
@@ -320,8 +316,8 @@ class TroubleshooterBridge(
                 val notification =
                     NotificationCompat
                         .Builder(activity, ObdNotifications.CHANNEL_ID)
-                        .setContentTitle("OBD adapter is responding")
-                        .setContentText("Tap to open VoltTracker and start logging.")
+                        .setContentTitle(activity.getString(R.string.notification_adapter_ready_title))
+                        .setContentText(activity.getString(R.string.notification_adapter_ready_text))
                         .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
                         .setContentIntent(tap)
                         .setAutoCancel(true)

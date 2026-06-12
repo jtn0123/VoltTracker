@@ -33,6 +33,15 @@
     --font-h2: 22px;
     --font-h3: 17px;
     --map-height: 520px;
+    /* Motion design tokens — one vocabulary for every transition/animation.
+       fast = hover/press/tone feedback; medium = meter fills and fades.
+       The named long durations are intentional, attention-getting loops. */
+    --motion-fast: 160ms;
+    --motion-medium: 250ms;
+    --motion-ease: ease;
+    --motion-ease-inout: ease-in-out;
+    --motion-pulse: 1.6s; /* drive-chip "live" dot pulse */
+    --motion-sweep: 1.2s; /* restore-progress indeterminate sweep */
   }
 
   /* Honor reduced-motion. */
@@ -652,7 +661,7 @@
     content: "\25BE";
     flex: 0 0 auto;
     color: var(--soft);
-    transition: transform 160ms ease;
+    transition: transform var(--motion-fast) var(--motion-ease);
   }
 
   .diag-advanced[open] > summary::after {

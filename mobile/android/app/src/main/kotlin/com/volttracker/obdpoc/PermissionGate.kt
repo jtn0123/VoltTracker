@@ -79,6 +79,17 @@ class PermissionGate(
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             granted(Manifest.permission.BLUETOOTH_CONNECT)
 
+    /**
+     * Non-prompting check that the FULL set requested by [ensureConnectPermissions] is granted
+     * (CONNECT alone is not enough to start a connect/scan on Android 12+).
+     */
+    fun hasConnectPermissions(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            (
+                granted(Manifest.permission.BLUETOOTH_CONNECT) &&
+                    granted(Manifest.permission.BLUETOOTH_SCAN)
+            )
+
     fun hasLocation(): Boolean =
         granted(Manifest.permission.ACCESS_FINE_LOCATION) ||
             granted(Manifest.permission.ACCESS_COARSE_LOCATION)

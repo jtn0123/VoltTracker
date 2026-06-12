@@ -36,6 +36,11 @@
   right: 0;
   z-index: 60;
   width: min(340px, calc(100vw - 24px));
+  /* Scroll instead of overflowing the viewport on short/landscape screens —
+     the popover opens from the topbar, so leave room for it plus a margin. */
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 12px 14px 14px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
