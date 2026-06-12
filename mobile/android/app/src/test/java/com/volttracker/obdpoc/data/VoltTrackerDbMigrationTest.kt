@@ -64,7 +64,7 @@ class VoltTrackerDbMigrationTest {
         context.deleteDatabase(name)
 
         // 1. Open at v6 and let onCreate build the v6 schema.
-        oldHelper = V6Helper(context, name)
+        oldHelper = LegacyHelper(context, name, 6)
         val oldDb = oldHelper!!.writableDatabase
         val beforeIndexes = readIndexNames(oldDb)
         for (expected in V7_INDEXES) {
@@ -95,6 +95,71 @@ class VoltTrackerDbMigrationTest {
         }
 
         // Cleanup the named db file.
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
+    fun upgradeFromV4_backfillsTelemetryFlagsByParsingJson() {
+        // The v5 backfill derives charge_transition_hint / app_foreground from the stored JSON
+        // with a real parse (it used to be a fragile LIKE on the serialized text). Pins the
+        // tricky cases: a spacing variant the LIKE missed, the literal appearing only in a
+        // nested object the LIKE false-positived on, and unparseable JSON falling back to the
+        // defaults (hint 0, foreground 1).
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_v4_v5.db"
+        context.deleteDatabase(name)
+
+        oldHelper = LegacyHelper(context, name, 4)
+        val v4Db = oldHelper!!.writableDatabase
+        val jsonBySampleTime =
+            linkedMapOf(
+                1000L to """{"chargeTransitionHint":true}""",
+                2000L to """{"chargeTransitionHint": true}""",
+                3000L to """{"nested":{"chargeTransitionHint":true}}""",
+                4000L to """{"appForeground":false}""",
+                5000L to """not json at all""",
+            )
+        for ((atMs, json) in jsonBySampleTime) {
+            v4Db.execSQL(
+                "INSERT INTO ${VoltTrackerDb.TABLE_TELEMETRY} (session_id, captured_at_ms, json)" +
+                    " VALUES (1, $atMs, ?)",
+                arrayOf(json),
+            )
+        }
+        oldHelper!!.close()
+        oldHelper = null
+
+        newHelper = VoltTrackerDb(context, name)
+        val newDb = newHelper!!.writableDatabase
+        assertEquals(VoltTrackerDb.DATABASE_VERSION, newDb.version)
+        val expected =
+            mapOf(
+                // captured_at_ms to (charge_transition_hint, app_foreground)
+                1000L to Pair(1, 1),
+                2000L to Pair(1, 1),
+                3000L to Pair(0, 1),
+                4000L to Pair(0, 0),
+                5000L to Pair(0, 1),
+            )
+        newDb
+            .rawQuery(
+                "SELECT captured_at_ms, charge_transition_hint, app_foreground" +
+                    " FROM ${VoltTrackerDb.TABLE_TELEMETRY}",
+                null,
+            ).use { cursor ->
+                var rows = 0
+                while (cursor.moveToNext()) {
+                    rows++
+                    val atMs = cursor.getLong(0)
+                    val want = expected[atMs]!!
+                    assertEquals("charge_transition_hint for row at $atMs", want.first, cursor.getInt(1))
+                    assertEquals("app_foreground for row at $atMs", want.second, cursor.getInt(2))
+                }
+                assertEquals(expected.size, rows)
+            }
+
         newHelper!!.close()
         newHelper = null
         context.deleteDatabase(name)
@@ -391,14 +456,15 @@ class VoltTrackerDbMigrationTest {
     }
 
     /**
-     * Minimal v6-schema helper used to simulate a pre-v7 install. Only creates the four tables
-     * whose prune-time indexes are added in v7 — the migration only cares that those tables exist
-     * before the upgrade runs.
+     * Minimal legacy-schema helper used to simulate a pre-v7 install at a chosen version. Only
+     * creates the tables the intervening migrations touch (ALTERs and prune-time indexes) — the
+     * migrations only care that those tables exist before the upgrade runs.
      */
-    private class V6Helper(
+    private open class LegacyHelper(
         context: Context,
         name: String,
-    ) : SQLiteOpenHelper(context.applicationContext, name, null, 6) {
+        version: Int,
+    ) : SQLiteOpenHelper(context.applicationContext, name, null, version) {
         override fun onCreate(db: SQLiteDatabase) {
             db.execSQL(
                 "CREATE TABLE " +

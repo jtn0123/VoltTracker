@@ -62,4 +62,31 @@ describe('telemetry.ts — stale live data and session reset regressions', () =>
     expect(VD.state.sessionStartSoc).toBe(70);
     expect(VD.state.telemetry.sampleCount).toBe(1);
   });
+
+  it('resetTelemetry restores the exact boot-time telemetry shape', async () => {
+    // Both core.ts (state seed / clearDemoTelemetry) and telemetry.ts
+    // (resetTelemetry) build the empty sample from the shared factory in
+    // telemetry-state.ts. This pins that reset deep-equals init — the copies
+    // had drifted before (reset dropped the `source` key entirely).
+    const { initialTelemetryState } = await import(
+      '../app/src/main/dashboard-src/js/telemetry-state.ts'
+    );
+    const VD = window.VoltDashboard;
+
+    VD.updateTelemetry({
+      source: 'obd',
+      sampleCount: 7,
+      speedKph: 42,
+      soc: 68,
+      raw: '41 0D 2A',
+      updatedAt: Date.now(),
+    });
+    expect(VD.state.telemetry.speedKph).toBe(42);
+
+    VD.resetTelemetry();
+
+    expect(VD.state.telemetry).toEqual(initialTelemetryState());
+    expect(VD.state.speedHistory).toEqual([]);
+    expect(VD.state.lastSampleAt).toBe(0);
+  });
 });

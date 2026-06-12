@@ -8,6 +8,8 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 
 /**
@@ -23,6 +25,9 @@ class LocationManagerTracker(
 
     /** True once requestLocationUpdates has been issued for the current start/stop cycle. */
     private var updatesRequested = false
+
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    private val watchdog = Runnable { onWatchdogTimeout() }
 
     @Volatile
     private var lastAccepted: FilteredLocation? = null
@@ -80,6 +85,38 @@ class LocationManagerTracker(
         // otherwise resumeUpdatesIfPermitted() would be suppressed forever after a
         // total failure even though nothing is delivering fixes.
         updatesRequested = gps || network
+        if (updatesRequested) {
+            scheduleWatchdog()
+        }
+    }
+
+    private fun scheduleWatchdog() {
+        watchdogHandler.removeCallbacks(watchdog)
+        watchdogHandler.postDelayed(watchdog, WATCHDOG_TIMEOUT_MS)
+    }
+
+    /**
+     * No fix arrived within [WATCHDOG_TIMEOUT_MS] of subscribing (or of the last fix). A hung
+     * provider would otherwise stall GPS for the whole session with no signal, so tear the
+     * subscription down and re-issue it; the re-request re-arms this watchdog, so a still-dead
+     * provider keeps retrying at the timeout cadence.
+     */
+    private fun onWatchdogTimeout() {
+        if (listener == null || !updatesRequested) {
+            return
+        }
+        Log.w(TAG, "no location fix in ${WATCHDOG_TIMEOUT_MS / 1000}s; re-subscribing providers")
+        locationManager?.let { manager ->
+            try {
+                manager.removeUpdates(locationListener)
+            } catch (ex: SecurityException) {
+                Log.w(TAG, "location permission revoked before watchdog could re-subscribe", ex)
+            }
+        }
+        updatesRequested = false
+        if (hasLocationPermission()) {
+            requestUpdates()
+        }
     }
 
     /** Returns true when the provider subscription was actually issued. */
@@ -101,6 +138,7 @@ class LocationManagerTracker(
         }
 
     override fun stop() {
+        watchdogHandler.removeCallbacks(watchdog)
         val manager = locationManager
         if (manager != null) {
             try {
@@ -117,6 +155,11 @@ class LocationManagerTracker(
     override fun getLastLocation(): FilteredLocation? = lastAccepted
 
     private fun handleFix(location: Location) {
+        // Any fix — even one the filter rejects — proves the providers are alive; push the
+        // hung-provider watchdog out rather than re-subscribing under a healthy stream.
+        if (updatesRequested) {
+            scheduleWatchdog()
+        }
         val now = System.currentTimeMillis()
         val accuracy = if (location.hasAccuracy()) location.accuracy else -1f
         val fixTime = location.time
@@ -156,6 +199,9 @@ class LocationManagerTracker(
 
     companion object {
         private const val TAG = "LocationTracker"
+
+        /** How long the tracker waits for any fix before re-subscribing a hung provider. */
+        internal const val WATCHDOG_TIMEOUT_MS = 60_000L
 
         private fun round6(value: Double): Double = Math.round(value * 1_000_000.0) / 1_000_000.0
 

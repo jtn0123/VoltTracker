@@ -1,6 +1,7 @@
 import { asDataState, setDataState, setDataTone } from "./dataset-state";
 import { LIVE_ROUTE_ID, appendLiveRoutePoint, haversineMetersJs, liveSampleTimeMs } from "./map-route-utils";
 import type { MapRoutePoint } from "./map-route-utils";
+import { initialTelemetryState } from "./telemetry-state";
 
   const VD = window.VoltDashboard;
   const state = VD.state;
@@ -164,19 +165,9 @@ import type { MapRoutePoint } from "./map-route-utils";
   }
 
   function resetTelemetry() {
-    state.telemetry = {
-      speedKph: null,
-      rpm: null,
-      voltage: null,
-      coolantC: null,
-      loadPct: null,
-      throttlePct: null,
-      soc: null,
-      batteryTemp: null,
-      powerKw: null,
-      updatedAt: null,
-      raw: ""
-    };
+    // Shared factory (telemetry-state.ts) so this reset can never drift from
+    // the boot-time shape core.ts seeds.
+    state.telemetry = initialTelemetryState();
     state.speedHistory = [];
     state.powerHistory = [];
     state.socHistory = [];

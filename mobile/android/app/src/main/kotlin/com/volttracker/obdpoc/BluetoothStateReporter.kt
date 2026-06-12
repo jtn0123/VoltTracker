@@ -214,9 +214,10 @@ class BluetoothStateReporter(
                     handleSystemBroadcast(intent)
                 }
             }
-        // Bluetooth ACTION_* intents are sent by the platform itself; use RECEIVER_EXPORTED so
-        // the broadcaster (the system, not us) can deliver them on Android 14+.
-        receivers.register(context, systemReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
+        // Bluetooth ACTION_* intents are protected system broadcasts: the platform delivers them
+        // to NOT_EXPORTED receivers on API 33+ (exported is only required for app-to-app
+        // broadcasts), so keep this receiver closed to other apps.
+        receivers.register(context, systemReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
     private fun registerStatusReceiver(context: Context) {

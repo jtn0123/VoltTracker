@@ -66,6 +66,10 @@ object BackupCrypto {
     ) {
         val salt = ByteArray(ENCRYPTION_SALT_BYTES)
         val iv = ByteArray(ENCRYPTION_IV_BYTES)
+        // GCM invariant: a (key, IV) pair must NEVER repeat — reuse leaks plaintext XOR and
+        // breaks authentication. The fresh SecureRandom IV per encryption is load-bearing; do not
+        // cache, reuse, or derive it deterministically. (The salt is also fresh, so even the same
+        // passphrase yields a different key each time.)
         SecureRandom().apply {
             nextBytes(salt)
             nextBytes(iv)

@@ -5,6 +5,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
 import androidx.core.database.sqlite.transaction
+import org.json.JSONException
+import org.json.JSONObject
 
 class VoltTrackerDb : SQLiteOpenHelper {
     constructor(context: Context) : this(context, DATABASE_NAME)
@@ -70,24 +72,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
             runMigrationStep(db, oldVersion, 5, "charge-transition-and-foreground-columns-with-backfill") { target ->
                 target.execSQL("ALTER TABLE $TABLE_TELEMETRY ADD COLUMN charge_transition_hint INTEGER")
                 target.execSQL("ALTER TABLE $TABLE_TELEMETRY ADD COLUMN app_foreground INTEGER")
-                target.execSQL(
-                    "UPDATE $TABLE_TELEMETRY SET charge_transition_hint = 1" +
-                        " WHERE charge_transition_hint IS NULL" +
-                        " AND json LIKE '%\"chargeTransitionHint\":true%'",
-                )
-                target.execSQL(
-                    "UPDATE $TABLE_TELEMETRY SET charge_transition_hint = 0" +
-                        " WHERE charge_transition_hint IS NULL",
-                )
-                target.execSQL(
-                    "UPDATE $TABLE_TELEMETRY SET app_foreground = 0" +
-                        " WHERE app_foreground IS NULL" +
-                        " AND json LIKE '%\"appForeground\":false%'",
-                )
-                target.execSQL(
-                    "UPDATE $TABLE_TELEMETRY SET app_foreground = 1" +
-                        " WHERE app_foreground IS NULL",
-                )
+                backfillTelemetryJsonFlags(target)
             }
         }
         if (oldVersion < 6) {
@@ -176,6 +161,47 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 TABLE_CELL_SNAPSHOTS,
                 TABLE_EXPORTS,
             )
+
+        /**
+         * v5 backfill: derives charge_transition_hint / app_foreground from each row's stored
+         * JSON snapshot with a real parse. (The original backfill used
+         * `LIKE '%"chargeTransitionHint":true%'`, which missed re-serialized spacing variants and
+         * could false-positive on the literal appearing inside a string value.) Runs inside the
+         * migration step's transaction; unparseable JSON falls back to the same defaults the LIKE
+         * version applied (hint 0, foreground 1).
+         */
+        private fun backfillTelemetryJsonFlags(db: SQLiteDatabase) {
+            val update =
+                db.compileStatement(
+                    "UPDATE $TABLE_TELEMETRY SET charge_transition_hint = ?, app_foreground = ?" +
+                        " WHERE _id = ?",
+                )
+            update.use { statement ->
+                db
+                    .rawQuery(
+                        "SELECT _id, json FROM $TABLE_TELEMETRY" +
+                            " WHERE charge_transition_hint IS NULL OR app_foreground IS NULL",
+                        null,
+                    ).use { cursor ->
+                        while (cursor.moveToNext()) {
+                            var chargeHint = false
+                            var foreground = true
+                            try {
+                                val sample = JSONObject(cursor.getString(1) ?: "")
+                                chargeHint = sample.optBoolean("chargeTransitionHint", false)
+                                foreground = sample.optBoolean("appForeground", true)
+                            } catch (ignored: JSONException) {
+                                // Keep the defaults for rows whose snapshot is not valid JSON.
+                            }
+                            statement.clearBindings()
+                            statement.bindLong(1, if (chargeHint) 1L else 0L)
+                            statement.bindLong(2, if (foreground) 1L else 0L)
+                            statement.bindLong(3, cursor.getLong(0))
+                            statement.executeUpdateDelete()
+                        }
+                    }
+            }
+        }
 
         private fun hasColumn(
             db: SQLiteDatabase,

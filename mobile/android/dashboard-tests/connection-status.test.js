@@ -53,6 +53,32 @@ describe('connection-status.ts — last connected line', () => {
     expect(document.getElementById('lastConnectedBadge').hidden).toBe(false);
     expect(document.getElementById('lastConnectedLabel').textContent).toBe('OBDLink MX+ 54242');
   });
+
+  it('degrades to a hidden badge when the native getRecentSessions call throws', async () => {
+    // A native method can throw synchronously across the JS bridge (e.g. a
+    // wedged binder). parseSessions wraps the CALL itself, not just the
+    // JSON.parse, so the dashboard must boot cleanly and render the
+    // empty-list state instead of crashing mid-bootstrap.
+    const bridge = createVoltBridgeFixture({
+      getRecentSessions: () => {
+        throw new Error('binder transaction failed');
+      },
+    });
+    await expect(
+      loadDashboard({ bridge, extras: ['connection-status.js'] })
+    ).resolves.toBeTruthy();
+
+    expect(document.getElementById('lastConnectedBadge').hidden).toBe(true);
+  });
+
+  it('degrades to a hidden badge when the sessions payload is malformed JSON', async () => {
+    const bridge = createVoltBridgeFixture({
+      getRecentSessions: () => '{not json',
+    });
+    await loadDashboard({ bridge, extras: ['connection-status.js'] });
+
+    expect(document.getElementById('lastConnectedBadge').hidden).toBe(true);
+  });
 });
 
 describe('connection-status.ts — status popover', () => {

@@ -2,7 +2,18 @@ package com.volttracker.obdpoc.data
 
 import android.database.sqlite.SQLiteDatabase
 
-/** All VoltTracker SQLite DDL for every schema version. */
+/**
+ * All VoltTracker SQLite DDL for every schema version.
+ *
+ * Foreign-key delete policy (intentional, do not "normalize"):
+ * - ON DELETE CASCADE — pure raw/derived child data that is meaningless without its parent and
+ *   safe to drop with it: telemetry_samples, pid_observations, location_samples, cell_snapshots,
+ *   and the per-session caches (session_trip_rollups, trip_list_cache).
+ * - ON DELETE SET NULL — summary/history records that stay useful after the referenced row is
+ *   gone (the reference is provenance, not ownership): status_events, trip_segments,
+ *   charge_sessions, battery_snapshots, exports, and field_capabilities' vehicle link. They keep
+ *   their data and merely lose the back-reference.
+ */
 object VoltTrackerSchema {
     fun createBaseTables(db: SQLiteDatabase) {
         db.execSQL(

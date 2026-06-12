@@ -128,6 +128,47 @@ class ObdStoreMaintenanceDbTest {
         assertEquals("checkpoint(TRUNCATE) must empty the WAL", 0L, walFile.length())
     }
 
+    // ---- pruneRawDataOlderThan ---------------------------------------------------------
+
+    @Test
+    fun pruneDeletesAcrossMultipleBatches() {
+        // More rows than one DELETE batch: the batched loop must still remove every old row and
+        // report the full count.
+        val (maintenance, helper) = maintenanceFor("prune-batches.db")
+        val db = helper.writableDatabase
+        val sessionId = insertSession(db)
+        val oldMs = System.currentTimeMillis() - 100L * 86_400_000L
+        val rows = ObdStoreMaintenance.PRUNE_DELETE_BATCH * 2 + 7
+        insertBulkTelemetry(db, sessionId, rows, oldMs)
+
+        assertEquals(rows, maintenance.pruneRawDataOlderThan(30))
+
+        db.rawQuery("SELECT COUNT(*) FROM ${VoltTrackerDb.TABLE_TELEMETRY}", null).use { cursor ->
+            cursor.moveToFirst()
+            assertEquals(0L, cursor.getLong(0))
+        }
+    }
+
+    @Test
+    fun pruneInvalidatesTripCachesOnlyForAffectedSessions() {
+        // Rollup/trip-cache invalidation is scoped to the sessions whose raw rows were pruned;
+        // an untouched session keeps its cached rollup instead of being flushed globally.
+        val (maintenance, helper) = maintenanceFor("prune-scoped.db")
+        val db = helper.writableDatabase
+        val oldSession = insertSession(db)
+        val recentSession = insertSession(db)
+        val oldMs = System.currentTimeMillis() - 100L * 86_400_000L
+        insertBulkTelemetry(db, oldSession, 5, oldMs)
+        insertBulkTelemetry(db, recentSession, 5, System.currentTimeMillis())
+        insertRollup(db, oldSession)
+        insertRollup(db, recentSession)
+
+        assertEquals(5, maintenance.pruneRawDataOlderThan(30))
+
+        assertEquals(0L, countRollupsFor(db, oldSession))
+        assertEquals(1L, countRollupsFor(db, recentSession))
+    }
+
     // ---- vacuumIfNeeded ------------------------------------------------------------
 
     @Test
@@ -281,6 +322,33 @@ class ObdStoreMaintenanceDbTest {
         // wal_checkpoint returns a result row, so it must go through rawQuery.
         db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
     }
+
+    private fun insertRollup(
+        db: SQLiteDatabase,
+        sessionId: Long,
+    ) {
+        val values = ContentValues()
+        values.put("session_id", sessionId)
+        values.put("counted", 1)
+        values.put("distance_m", 1000.0)
+        values.put("duration_ms", 60_000L)
+        values.put("has_route", 1)
+        values.put("started_at_ms", 1L)
+        values.put("rollup_version", 1)
+        db.insertOrThrow(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, null, values)
+    }
+
+    private fun countRollupsFor(
+        db: SQLiteDatabase,
+        sessionId: Long,
+    ): Long =
+        db
+            .rawQuery(
+                "SELECT COUNT(*) FROM ${VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS} WHERE session_id = ?",
+                arrayOf(sessionId.toString()),
+            ).use { cursor ->
+                if (cursor.moveToFirst()) cursor.getLong(0) else 0L
+            }
 
     private fun insertSession(db: SQLiteDatabase): Long {
         val values = ContentValues()

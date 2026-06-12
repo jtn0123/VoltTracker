@@ -85,6 +85,32 @@ class ElmConnectionExtraTest {
     }
 
     @Test
+    fun closeClearsStaleTransactTruncation() {
+        val connection = ElmConnection(ByteArrayInputStream(ByteArray(0)), ByteArrayOutputStream())
+        connection.lastTransactTruncated = true
+
+        connection.close()
+
+        assertFalse(
+            "close() must clear per-session truncation state",
+            connection.lastTransactTruncated,
+        )
+    }
+
+    @Test
+    fun openSocketClearsStaleTransactTruncation() {
+        val connection = ElmConnection(clock = SteppingClock(0L, 0L, 0L, 0L))
+        connection.lastTransactTruncated = true
+
+        connection.openSocketForTest(FakeElmSocket(), 500L)
+
+        assertFalse(
+            "a fresh socket open must not inherit the previous session's truncation state",
+            connection.lastTransactTruncated,
+        )
+    }
+
+    @Test
     fun watchdogClosesSocketWhenConnectNeverCompletes() {
         val socket = FakeElmSocket(connectDelayMs = 35L, failIfClosedDuringConnect = true)
         val connection = ElmConnection()

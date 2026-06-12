@@ -3,6 +3,10 @@
 // half of the contract: values land on the element, unknown values warn (but
 // still apply, so CSS keyed to a genuinely-new native state keeps working),
 // and null elements are tolerated.
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('dataset-state typed setters', () => {
@@ -71,5 +75,43 @@ describe('dataset-state typed setters', () => {
   it('asDataState / asDataTone normalize nullish input to an empty string', () => {
     expect(asDataState(null)).toBe('');
     expect(asDataTone(undefined)).toBe('');
+  });
+
+  // The unions are hand-maintained against the stylesheets ("when adding a new
+  // value, add it here AND to the stylesheet"). Parse every shipped CSS file
+  // for [data-state="…"] / [data-tone="…"] selectors and assert each
+  // CSS-styled value is declared in the TS union, so a stylesheet-only
+  // addition can't silently start warning at runtime.
+  describe('CSS selector drift', () => {
+    const CSS_DIR = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '../app/src/main/assets/dashboard/css',
+    );
+
+    function cssAttrValues(attr) {
+      const values = new Set();
+      const pattern = new RegExp(`\\[${attr}="([^"]+)"\\]`, 'g');
+      for (const name of readdirSync(CSS_DIR).filter((file) => file.endsWith('.css'))) {
+        const css = readFileSync(resolve(CSS_DIR, name), 'utf8');
+        for (const match of css.matchAll(pattern)) {
+          values.add(match[1]);
+        }
+      }
+      return values;
+    }
+
+    it('every CSS-styled data-state value is in DATA_STATE_VALUES', () => {
+      const styled = cssAttrValues('data-state');
+      expect(styled.size).toBeGreaterThan(0);
+      const missing = [...styled].filter((value) => !DATA_STATE_VALUES.includes(value));
+      expect(missing).toEqual([]);
+    });
+
+    it('every CSS-styled data-tone value is in DATA_TONE_VALUES', () => {
+      const styled = cssAttrValues('data-tone');
+      expect(styled.size).toBeGreaterThan(0);
+      const missing = [...styled].filter((value) => !DATA_TONE_VALUES.includes(value));
+      expect(missing).toEqual([]);
+    });
   });
 });

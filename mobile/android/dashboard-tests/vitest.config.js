@@ -54,11 +54,19 @@ export default {
       // prefix is load-bearing, not cosmetic. Any non-metric key in
       // `thresholds` is treated as a glob by Vitest. Raise these in lockstep
       // with the modules; never lower.
+      // Ratchet audit trail (raise only; never lower):
+      //   2026-06-12: lines 76 -> 81, statements 72 -> 78, functions 75 -> 80,
+      //   branches 62 -> 66. Measured 84.6 / 81.3 / 83.7 / 69.2 after the
+      //   polish pass (parsePayload failure surfacing + tests, payload-
+      //   validator cap test, shared telemetry-state factory + reset spec,
+      //   app-dialog focus specs, CSS data-state/tone drift specs); floors set
+      //   ~3pts below measured per the convention above. Baselines in
+      //   coverage-ratchet.test.js raised in lockstep.
       thresholds: {
-        lines: 76,
-        statements: 72,
-        functions: 75,
-        branches: 62,
+        lines: 81,
+        statements: 78,
+        functions: 80,
+        branches: 66,
         '../**/dashboard-src/js/troubleshooter.ts': {
           statements: 85,
           branches: 68,

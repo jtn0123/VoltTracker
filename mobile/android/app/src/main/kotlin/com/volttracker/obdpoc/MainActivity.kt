@@ -20,6 +20,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.VisibleForTesting
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
@@ -199,7 +200,16 @@ open class MainActivity :
         dataBackup = DataBackup(this)
         backupController = BackupController(this, requireDataBackup(), backgroundExecutor)
         permissionGate = PermissionGate(this, ::launchPermissionRequest)
-        localStore = ObdLocalStore(this)
+        localStore =
+            try {
+                createLocalStore()
+            } catch (ex: RuntimeException) {
+                // A corrupt DB file or full disk must not crash startup. Every store access
+                // already tolerates null (localStore?. reads here; DashboardStorageReader
+                // answers storage_unavailable), and onDashboardReady surfaces the failure.
+                Log.e(TAG, "ObdLocalStore failed to open; continuing without local storage", ex)
+                null
+            }
         troubleshooter = TroubleshooterBridge(this)
         ObdNotifications.ensureChannel(this)
         submitBackground {
@@ -253,6 +263,10 @@ open class MainActivity :
         publishAppState()
         if (isLoggingActive()) {
             callDashboard("setStatus", lastStatus.get().toString())
+        } else if (localStore == null) {
+            // The store failed to open in onCreate; say so instead of claiming "viewing local
+            // data" with no data behind it.
+            publishStatus("blocked", getString(R.string.status_local_store_unavailable), true)
         } else {
             publishStatus("ready", getString(R.string.status_viewing_local_data), false)
         }
@@ -274,8 +288,9 @@ open class MainActivity :
                 .setTitle(R.string.onboarding_title)
                 .setMessage(R.string.onboarding_message)
                 .setPositiveButton(R.string.onboarding_dismiss, null)
-                .setNeutralButton(R.string.onboarding_bt_settings) { _, _ -> openBluetoothSettings() }
-                .show()
+                .setNeutralButton(R.string.onboarding_bt_settings) { _, _ ->
+                    requireTroubleshooter().openBluetoothSettings()
+                }.show()
             // Marked only after show() succeeds: if a dying Activity aborts the dialog, the
             // next launch gets another chance instead of suppressing onboarding forever.
             onboarding.markShown()
@@ -285,15 +300,8 @@ open class MainActivity :
         }
     }
 
-    private fun openBluetoothSettings() {
-        try {
-            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-        } catch (ex: RuntimeException) {
-            Log.w(TAG, "Bluetooth settings screen unavailable", ex)
-        }
-    }
-
-    fun isDashboardReadyForTest(): Boolean = dashboardPublisher?.isPageReady() == true
+    @VisibleForTesting
+    internal fun isDashboardReadyForTest(): Boolean = dashboardPublisher?.isPageReady() == true
 
     override fun onResume() {
         super.onResume()
@@ -321,16 +329,25 @@ open class MainActivity :
         // WebView (and the whole Activity graph + native chromium resources) leaks every time the
         // Activity is torn down, and the orphaned page's JS timers/console callbacks keep firing.
         webView?.let { wv ->
-            (wv.parent as? ViewGroup)?.removeView(wv)
-            wv.removeJavascriptInterface("VoltTrackerAndroid")
-            wv.stopLoading()
-            wv.destroy()
+            try {
+                (wv.parent as? ViewGroup)?.removeView(wv)
+                wv.removeJavascriptInterface("VoltTrackerAndroid")
+                wv.stopLoading()
+                wv.destroy()
+            } catch (ex: RuntimeException) {
+                // Chromium can throw from stopLoading()/destroy() while tearing down its native
+                // side; a leaked WebView beats crashing the whole Activity teardown.
+                Log.w(TAG, "WebView teardown failed", ex)
+            }
         }
         webView = null
         dashboardPublisher = null
         autoConnectController = null
         super.onDestroy()
     }
+
+    /** Opens the SQLite-backed local store. Overridable in tests to simulate an open failure. */
+    protected open fun createLocalStore(): ObdLocalStore = ObdLocalStore(this)
 
     /** Launches the runtime-permission request via the Activity Result API. Overridable in tests. */
     open fun launchPermissionRequest(permissions: Array<String>) {

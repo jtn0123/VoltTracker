@@ -5,6 +5,7 @@ import android.content.Context
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Looper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -20,6 +21,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 import org.robolectric.shadows.ShadowLocationManager
+import java.time.Duration
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -45,6 +47,28 @@ class FailingLocationManagerShadow : ShadowLocationManager() {
 
     companion object {
         var failRequests: Boolean = false
+    }
+}
+
+/**
+ * Counts every `requestLocationUpdates` call so watchdog-driven re-subscription is observable
+ * (the listener set alone looks identical before and after a remove + re-request cycle).
+ */
+@Implements(LocationManager::class)
+class CountingLocationManagerShadow : ShadowLocationManager() {
+    @Implementation
+    override fun requestLocationUpdates(
+        provider: String,
+        minTime: Long,
+        minDistance: Float,
+        listener: LocationListener,
+    ) {
+        requestCount++
+        super.requestLocationUpdates(provider, minTime, minDistance, listener)
+    }
+
+    companion object {
+        var requestCount: Int = 0
     }
 }
 
@@ -150,6 +174,74 @@ class LocationManagerTrackerTest {
         } finally {
             FailingLocationManagerShadow.failRequests = false
         }
+    }
+
+    @Test
+    @Config(sdk = [34], shadows = [CountingLocationManagerShadow::class])
+    fun watchdogResubscribesProvidersWhenNoFixArrives() {
+        CountingLocationManagerShadow.requestCount = 0
+        grantLocationPermissions()
+        val tracker = LocationManagerTracker(context)
+        tracker.start { }
+        val initialRequests = CountingLocationManagerShadow.requestCount
+        assertTrue("providers subscribed at start", initialRequests > 0)
+
+        // No fixes ever arrive: advancing past the watchdog deadline must re-issue the requests.
+        idlePastWatchdog()
+
+        assertTrue(
+            "the watchdog must re-subscribe providers after a silent timeout",
+            CountingLocationManagerShadow.requestCount > initialRequests,
+        )
+        assertTrue("providers remain subscribed after the retry", requestedListenerCount() > 0)
+    }
+
+    @Test
+    @Config(sdk = [34], shadows = [CountingLocationManagerShadow::class])
+    fun deliveredFixPushesTheWatchdogOut() {
+        CountingLocationManagerShadow.requestCount = 0
+        grantLocationPermissions()
+        val tracker = LocationManagerTracker(context)
+        tracker.start { }
+        val initialRequests = CountingLocationManagerShadow.requestCount
+
+        shadowOf(Looper.getMainLooper())
+            .idleFor(Duration.ofMillis(LocationManagerTracker.WATCHDOG_TIMEOUT_MS / 2))
+        invokeHandleFix(tracker, fix(32.7157, -117.1611, 4f, nowMs()))
+        // Past the original deadline but inside the rescheduled one: a live stream of fixes
+        // must not trigger a pointless re-subscribe.
+        shadowOf(Looper.getMainLooper())
+            .idleFor(Duration.ofMillis(LocationManagerTracker.WATCHDOG_TIMEOUT_MS / 2 + 1))
+
+        assertEquals(
+            "a delivered fix must defer the watchdog",
+            initialRequests,
+            CountingLocationManagerShadow.requestCount,
+        )
+    }
+
+    @Test
+    @Config(sdk = [34], shadows = [CountingLocationManagerShadow::class])
+    fun stopCancelsTheWatchdog() {
+        CountingLocationManagerShadow.requestCount = 0
+        grantLocationPermissions()
+        val tracker = LocationManagerTracker(context)
+        tracker.start { }
+        val initialRequests = CountingLocationManagerShadow.requestCount
+        tracker.stop()
+
+        idlePastWatchdog()
+
+        assertEquals(
+            "a stopped tracker must not re-subscribe providers",
+            initialRequests,
+            CountingLocationManagerShadow.requestCount,
+        )
+    }
+
+    private fun idlePastWatchdog() {
+        shadowOf(Looper.getMainLooper())
+            .idleFor(Duration.ofMillis(LocationManagerTracker.WATCHDOG_TIMEOUT_MS + 1))
     }
 
     @Test

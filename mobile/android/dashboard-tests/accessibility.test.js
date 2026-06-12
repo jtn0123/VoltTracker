@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -98,5 +98,100 @@ describe('generated dashboard accessibility shell', () => {
       .filter((button) => accessibleName(button).length === 0)
       .map((button) => button.id || button.outerHTML.slice(0, 80));
     expect(unnamed).toEqual([]);
+  });
+});
+
+// Behavioral keyboard/focus checks (the structural sweeps above can't catch a
+// broken focus trap). Exercises the real app-dialog module — the dashboard's
+// only modal with scripted focus management — in the live jsdom document:
+// initial focus placement, Tab/Shift+Tab wrapping, Escape dismissal, focus
+// restoration to the opener, and background inerting. Contrast checking is
+// deliberately out of scope for jsdom.
+describe('app-dialog keyboard navigation and focus management', () => {
+  let confirmAppDialog;
+
+  // Markup mirrors partials/app-dialog.html: every id nodes() dereferences,
+  // plus the background nodes setBackgroundInert() toggles and an opener
+  // button to restore focus to.
+  const DIALOG_DOM = `
+    <main class="app"><button id="opener" type="button">Open</button></main>
+    <nav class="bottom-nav"></nav>
+    <div id="appDialog" hidden>
+      <div data-app-dialog-cancel></div>
+      <h2 id="appDialogTitle"></h2>
+      <button id="appDialogClose" type="button"></button>
+      <p id="appDialogMessage"></p>
+      <label id="appDialogInputWrap" hidden>
+        <span id="appDialogInputLabel"></span>
+        <input id="appDialogInput" type="password" />
+      </label>
+      <button id="appDialogCancel" type="button"></button>
+      <button id="appDialogConfirm" type="button"></button>
+    </div>
+  `;
+
+  beforeEach(async () => {
+    ({ confirmAppDialog } = await import('../app/src/main/dashboard-src/js/app-dialog.ts'));
+    document.body.innerHTML = DIALOG_DOM;
+  });
+
+  function pressKey(key, options = {}) {
+    document.activeElement.dispatchEvent(
+      new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...options }),
+    );
+  }
+
+  async function flushFrame() {
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+  }
+
+  it('moves focus into the dialog and inerts the background', async () => {
+    const opener = document.getElementById('opener');
+    opener.focus();
+
+    const promise = confirmAppDialog({ title: 'T', message: 'M' });
+    await flushFrame();
+
+    expect(document.activeElement).toBe(document.getElementById('appDialogConfirm'));
+    expect(document.querySelector('.app').getAttribute('aria-hidden')).toBe('true');
+    expect(document.querySelector('.bottom-nav').getAttribute('aria-hidden')).toBe('true');
+
+    document.getElementById('appDialogConfirm').click();
+    await expect(promise).resolves.toBe(true);
+  });
+
+  it('traps Tab and Shift+Tab inside the open dialog', async () => {
+    const promise = confirmAppDialog({ title: 'T', message: 'M' });
+    await flushFrame();
+
+    // Focusable order in the dialog: close, cancel, confirm (input is hidden
+    // in confirm mode). Tab from the LAST target wraps to the first…
+    document.getElementById('appDialogConfirm').focus();
+    pressKey('Tab');
+    expect(document.activeElement).toBe(document.getElementById('appDialogClose'));
+
+    // …and Shift+Tab from the FIRST wraps back to the last.
+    pressKey('Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(document.getElementById('appDialogConfirm'));
+
+    document.getElementById('appDialogCancel').click();
+    await expect(promise).resolves.toBe(false);
+  });
+
+  it('Escape cancels the dialog and restores focus to the opener', async () => {
+    const opener = document.getElementById('opener');
+    opener.focus();
+
+    const promise = confirmAppDialog({ title: 'T', message: 'M' });
+    await flushFrame();
+    expect(document.activeElement).not.toBe(opener);
+
+    pressKey('Escape');
+
+    await expect(promise).resolves.toBe(false);
+    expect(document.getElementById('appDialog').hidden).toBe(true);
+    expect(document.activeElement).toBe(opener);
+    // Background nodes are interactive again.
+    expect(document.querySelector('.app').hasAttribute('aria-hidden')).toBe(false);
   });
 });

@@ -18,11 +18,15 @@ import vitestConfig from './vitest.config.js';
 // Committed baseline for the GLOBAL (aggregate) floors. RAISE these in lockstep
 // when you raise vitest.config.js thresholds; NEVER lower them. They are the
 // ratchet's floor of record.
+// 2026-06-12: raised lines 76 -> 81, statements 72 -> 78, functions 75 -> 80,
+// branches 62 -> 66 in lockstep with vitest.config.js (measured 84.6 / 81.3 /
+// 83.7 / 69.2 after the polish-pass test additions; see the dated audit entry
+// next to the thresholds there).
 const COVERAGE_BASELINE = Object.freeze({
-  lines: 76,
-  statements: 72,
-  functions: 75,
-  branches: 62,
+  lines: 81,
+  statements: 78,
+  functions: 80,
+  branches: 66,
 });
 
 // Committed baseline for the FOCUSED per-glob floors that guard the critical

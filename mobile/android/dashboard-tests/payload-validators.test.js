@@ -113,4 +113,36 @@ describe('payload validators', () => {
       VD.validatePayload('setStatus', [1, 2, 3]);
     }).not.toThrow();
   });
+
+  // The warn-once dedupe Set must stay bounded for the life of the WebView.
+  // The spec-driven public surface can only mint a few dozen distinct keys, so
+  // the eviction path is exercised through the test-only exports.
+  it('caps the warn-once cache and starts a fresh dedupe cycle when full', async () => {
+    const { WARNED_PAYLOAD_ISSUES_MAX, warnPayloadIssueOnce, warnedPayloadIssues } = await import(
+      '../app/src/main/dashboard-src/js/payload-validators.ts'
+    );
+    // Start from a known-empty cache so the boundary arithmetic below is
+    // deterministic regardless of what bootstrap may have minted.
+    warnedPayloadIssues.clear();
+
+    // Fill to exactly the cap: every distinct key warns once...
+    for (let i = 0; i < WARNED_PAYLOAD_ISSUES_MAX; i += 1) {
+      warnPayloadIssueOnce(`cap-test:${i}`, `cap-test message ${i}`);
+    }
+    expect(warnSpy).toHaveBeenCalledTimes(WARNED_PAYLOAD_ISSUES_MAX);
+
+    // ...and repeats are still deduped at the boundary.
+    warnPayloadIssueOnce('cap-test:0', 'cap-test message 0');
+    expect(warnSpy).toHaveBeenCalledTimes(WARNED_PAYLOAD_ISSUES_MAX);
+
+    // The next NEW key evicts (clears) the full cache and is recorded.
+    warnPayloadIssueOnce('cap-test:overflow', 'cap-test overflow message');
+    expect(warnSpy).toHaveBeenCalledTimes(WARNED_PAYLOAD_ISSUES_MAX + 1);
+
+    // Post-eviction the old keys re-warn once (acceptable worst case), and
+    // the cache keeps deduping from there.
+    warnPayloadIssueOnce('cap-test:0', 'cap-test message 0');
+    warnPayloadIssueOnce('cap-test:0', 'cap-test message 0');
+    expect(warnSpy).toHaveBeenCalledTimes(WARNED_PAYLOAD_ISSUES_MAX + 2);
+  });
 });

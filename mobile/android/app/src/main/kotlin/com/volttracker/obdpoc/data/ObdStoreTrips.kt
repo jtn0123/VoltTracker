@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.data
 
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
+import android.util.Log
 import androidx.core.database.sqlite.transaction
 import org.json.JSONArray
 import org.json.JSONException
@@ -302,6 +303,9 @@ class ObdStoreTrips(
                 durationMs = 0L
             }
         } catch (ex: JSONException) {
+            // Skip the rollup (it will be retried on the next read), but a parse failure here
+            // means a corrupted cached trip/route payload — make it visible instead of silent.
+            Log.w(TAG, "skipping trip rollup for session ${session.id}: corrupt trip JSON", ex)
             return
         }
         val values = ContentValues()
@@ -420,9 +424,12 @@ class ObdStoreTrips(
     }
 
     companion object {
+        private const val TAG = "VoltTracker"
+
         // Bump to invalidate cached rollups + the trip-list cache (forces a one-time rebuild on
         // the next read). v5 keeps stationary GPS drift and manual hides out of trip/map totals.
-        private const val ROLLUP_CACHE_VERSION = 5
+        // v6 rebuilds pointCount/distanceMeters after route-geometry simplification landed.
+        private const val ROLLUP_CACHE_VERSION = 6
         private const val ACTIVE_TRIP_CACHE_TTL_MS = 2_000L
         private const val ACTIVE_TRIP_CACHE_MAX_ENTRIES = 64
 

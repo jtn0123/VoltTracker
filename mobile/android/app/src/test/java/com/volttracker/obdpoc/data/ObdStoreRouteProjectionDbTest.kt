@@ -109,8 +109,13 @@ class ObdStoreRouteProjectionDbTest {
 
     private companion object {
         private const val DB_NAME = "route-projection-test.db"
-        private const val TOTAL = 600
-        private const val TARGET = 500
+
+        // Keeps TOTAL just above TARGET (the stride-collapse regression zone) while the kept
+        // point count stays under SIMPLIFY_MIN_POINTS: this test seeds collinear points, which
+        // the geometry simplifier would (correctly) collapse — that behavior is pinned separately
+        // in ObdStoreRouteSimplifyTest.
+        private const val TOTAL = 360
+        private const val TARGET = 300
         private const val INTERVAL_MS = 1_000L
         private const val FIRST_AT_MS = 10_000L
         private const val LAST_AT_MS = FIRST_AT_MS + (TOTAL - 1) * INTERVAL_MS

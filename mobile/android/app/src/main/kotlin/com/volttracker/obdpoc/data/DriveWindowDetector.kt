@@ -19,6 +19,16 @@ object DriveWindowDetector {
     private const val STOP_SPEED_MPS: Double = 2.5
     private const val MAX_STOP_DRIFT_METERS: Double = 300.0
 
+    /**
+     * Memory guard on the batched sample reads: a detection pass never materializes more rows
+     * than this per query. At ~1 telemetry row/850 ms that is weeks of continuous driving for a
+     * single batch; if a pathological dataset ever exceeds it, sessions past the cap fall back to
+     * coarse session-bounds windows instead of OOMing the process.
+     */
+    private const val MAX_SAMPLE_ROWS: Int = 200_000
+
+    private const val GEO_TELEMETRY_WHERE = "latitude IS NOT NULL AND longitude IS NOT NULL"
+
     @JvmStatic
     fun windowsForSession(
         db: SQLiteDatabase?,
@@ -318,29 +328,15 @@ object DriveWindowDetector {
         for (id in ids) {
             dataBySession[id] = SessionData()
         }
-        val geoTelemetryWhere = "AND latitude IS NOT NULL AND longitude IS NOT NULL"
         applyBounds(
             dataBySession,
             readBoundsBySession(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, ids, ""),
         ) { data, bounds -> data.locationBounds = bounds }
-        applyBounds(
-            dataBySession,
-            readBoundsBySession(db, VoltTrackerDb.TABLE_TELEMETRY, ids, geoTelemetryWhere),
-        ) { data, bounds -> data.geoTelemetryBounds = bounds }
-        applyBounds(
-            dataBySession,
-            readBoundsBySession(db, VoltTrackerDb.TABLE_TELEMETRY, ids, ""),
-        ) { data, bounds -> data.telemetryBounds = bounds }
-        readRouteSamplesBySession(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, ids, "").forEach { (sessionId, samples) ->
+        readTelemetryBoundsBySession(db, ids, dataBySession)
+        readLocationSamplesBySession(db, ids).forEach { (sessionId, samples) ->
             dataBySession[sessionId]?.locationSamples = samples
         }
-        readRouteSamplesBySession(db, VoltTrackerDb.TABLE_TELEMETRY, ids, geoTelemetryWhere)
-            .forEach { (sessionId, samples) ->
-                dataBySession[sessionId]?.telemetryRouteSamples = samples
-            }
-        readActivitySamplesBySession(db, ids).forEach { (sessionId, samples) ->
-            dataBySession[sessionId]?.activitySamples = samples
-        }
+        readTelemetrySamplesBySession(db, ids, dataBySession)
         return dataBySession
     }
 
@@ -377,19 +373,49 @@ object DriveWindowDetector {
         return boundsBySession
     }
 
-    private fun readRouteSamplesBySession(
+    /**
+     * One scan of telemetry per detection computing both bounds variants: all rows and rows that
+     * carry GPS. Replaces what used to be two separate aggregate queries over the same table.
+     */
+    private fun readTelemetryBoundsBySession(
         db: SQLiteDatabase,
-        table: String,
         sessionIds: List<Long>,
-        extraWhere: String,
+        dataBySession: Map<Long, SessionData>,
+    ) {
+        val selection = sessionSelection(sessionIds)
+        db
+            .rawQuery(
+                "SELECT session_id, MIN(captured_at_ms), MAX(captured_at_ms), " +
+                    "MIN(CASE WHEN $GEO_TELEMETRY_WHERE THEN captured_at_ms END), " +
+                    "MAX(CASE WHEN $GEO_TELEMETRY_WHERE THEN captured_at_ms END) " +
+                    "FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                    "WHERE session_id IN (${selection.placeholders}) GROUP BY session_id",
+                selection.args,
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val data = dataBySession[cursor.getLong(0)] ?: continue
+                    if (!cursor.isNull(1) && !cursor.isNull(2)) {
+                        data.telemetryBounds = DataBounds(cursor.getLong(1), cursor.getLong(2))
+                    }
+                    if (!cursor.isNull(3) && !cursor.isNull(4)) {
+                        data.geoTelemetryBounds = DataBounds(cursor.getLong(3), cursor.getLong(4))
+                    }
+                }
+            }
+    }
+
+    private fun readLocationSamplesBySession(
+        db: SQLiteDatabase,
+        sessionIds: List<Long>,
     ): Map<Long, List<RouteSample>> {
         val selection = sessionSelection(sessionIds)
         val samplesBySession = LinkedHashMap<Long, MutableList<RouteSample>>()
         db
             .rawQuery(
                 "SELECT session_id, captured_at_ms, latitude, longitude " +
-                    "FROM $table WHERE session_id IN (${selection.placeholders}) $extraWhere " +
-                    "ORDER BY session_id ASC, captured_at_ms ASC",
+                    "FROM ${VoltTrackerDb.TABLE_LOCATION_SAMPLES} " +
+                    "WHERE session_id IN (${selection.placeholders}) " +
+                    "ORDER BY session_id ASC, captured_at_ms ASC LIMIT $MAX_SAMPLE_ROWS",
                 selection.args,
             ).use { cursor ->
                 while (cursor.moveToNext()) {
@@ -401,25 +427,35 @@ object DriveWindowDetector {
         return samplesBySession
     }
 
-    private fun readActivitySamplesBySession(
+    /**
+     * One scan of telemetry rows building both the activity samples (every row) and the
+     * telemetry-derived route samples (rows that carry GPS). Replaces two separate full reads of
+     * the same table.
+     */
+    private fun readTelemetrySamplesBySession(
         db: SQLiteDatabase,
         sessionIds: List<Long>,
-    ): Map<Long, List<ActivitySample>> {
+        dataBySession: Map<Long, SessionData>,
+    ) {
         val selection = sessionSelection(sessionIds)
-        val samplesBySession = LinkedHashMap<Long, MutableList<ActivitySample>>()
+        val activityBySession = LinkedHashMap<Long, MutableList<ActivitySample>>()
+        val routeBySession = LinkedHashMap<Long, MutableList<RouteSample>>()
         db
             .rawQuery(
-                "SELECT session_id, captured_at_ms, speed_kph, rpm, voltage, power_kw, pack_current_a " +
+                "SELECT session_id, captured_at_ms, speed_kph, rpm, voltage, power_kw, pack_current_a, " +
+                    "latitude, longitude " +
                     "FROM ${VoltTrackerDb.TABLE_TELEMETRY} WHERE session_id IN (${selection.placeholders}) " +
-                    "ORDER BY session_id ASC, captured_at_ms ASC",
+                    "ORDER BY session_id ASC, captured_at_ms ASC LIMIT $MAX_SAMPLE_ROWS",
                 selection.args,
             ).use { cursor ->
                 while (cursor.moveToNext()) {
-                    samplesBySession
-                        .getOrPut(cursor.getLong(0)) { mutableListOf() }
+                    val sessionId = cursor.getLong(0)
+                    val atMs = cursor.getLong(1)
+                    activityBySession
+                        .getOrPut(sessionId) { mutableListOf() }
                         .add(
                             ActivitySample(
-                                cursor.getLong(1),
+                                atMs,
                                 nullableInt(cursor, "speed_kph"),
                                 nullableInt(cursor, "rpm"),
                                 nullableDouble(cursor, "voltage"),
@@ -427,9 +463,19 @@ object DriveWindowDetector {
                                 nullableDouble(cursor, "pack_current_a"),
                             ),
                         )
+                    if (!cursor.isNull(7) && !cursor.isNull(8)) {
+                        routeBySession
+                            .getOrPut(sessionId) { mutableListOf() }
+                            .add(RouteSample(atMs, cursor.getDouble(7), cursor.getDouble(8)))
+                    }
                 }
             }
-        return samplesBySession
+        activityBySession.forEach { (sessionId, samples) ->
+            dataBySession[sessionId]?.activitySamples = samples
+        }
+        routeBySession.forEach { (sessionId, samples) ->
+            dataBySession[sessionId]?.telemetryRouteSamples = samples
+        }
     }
 
     private fun sessionSelection(sessionIds: List<Long>): SessionSelection =

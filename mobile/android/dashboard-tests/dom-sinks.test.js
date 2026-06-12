@@ -7,12 +7,11 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_TS = resolve(HERE, '../app/src/main/dashboard-src/js');
 
-const ALLOWED_DOM_SINKS = [
-  {
-    file: 'core.ts',
-    source: 'select.innerHTML = "";',
-  }
-];
+// Ratcheted to ZERO 2026-06-12: the last innerHTML sink (core.ts
+// `select.innerHTML = ""`) now uses replaceChildren(). Keep this empty —
+// any new innerHTML/insertAdjacentHTML write must be redesigned around
+// textContent/replaceChildren instead of allowlisted here.
+const ALLOWED_DOM_SINKS = [];
 
 function findDomSinks(file) {
   const source = readFileSync(resolve(DASHBOARD_TS, file), 'utf8');

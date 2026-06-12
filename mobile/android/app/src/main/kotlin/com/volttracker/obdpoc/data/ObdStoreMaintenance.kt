@@ -40,17 +40,88 @@ class ObdStoreMaintenance(
         }
         val cutoffMs = System.currentTimeMillis() - keepDays * 86_400_000L
         val db = helper.writableDatabase
-        val args = arrayOf(cutoffMs.toString())
+        // Sessions whose raw rows are about to be pruned: only their trip rollups / list cache /
+        // segments become stale, so cache invalidation below is scoped to them instead of the old
+        // global flush (which forced every session's trips to recompute on the next read).
+        val affectedSessions = LinkedHashSet<Long>()
+        collectAffectedSessions(db, VoltTrackerDb.TABLE_TELEMETRY, "captured_at_ms", cutoffMs, affectedSessions)
+        collectAffectedSessions(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, "captured_at_ms", cutoffMs, affectedSessions)
+        collectAffectedSessions(db, VoltTrackerDb.TABLE_EVENTS, "occurred_at_ms", cutoffMs, affectedSessions)
+        collectAffectedSessions(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS, "observed_at_ms", cutoffMs, affectedSessions)
         var deleted = 0
-        db.transaction {
-            deleted += db.delete(VoltTrackerDb.TABLE_TELEMETRY, "captured_at_ms < ?", args)
-            deleted += db.delete(VoltTrackerDb.TABLE_LOCATION_SAMPLES, "captured_at_ms < ?", args)
-            deleted += db.delete(VoltTrackerDb.TABLE_EVENTS, "occurred_at_ms < ?", args)
-            deleted += db.delete(VoltTrackerDb.TABLE_PID_OBSERVATIONS, "observed_at_ms < ?", args)
-            db.delete(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, null, null)
-            db.delete(VoltTrackerDb.TABLE_TRIP_SEGMENTS, null, null)
-        }
+        deleted += deleteInBatches(db, VoltTrackerDb.TABLE_TELEMETRY, "captured_at_ms", cutoffMs)
+        deleted += deleteInBatches(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, "captured_at_ms", cutoffMs)
+        deleted += deleteInBatches(db, VoltTrackerDb.TABLE_EVENTS, "occurred_at_ms", cutoffMs)
+        deleted += deleteInBatches(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS, "observed_at_ms", cutoffMs)
+        invalidateTripCachesForSessions(db, affectedSessions)
         return deleted
+    }
+
+    private fun collectAffectedSessions(
+        db: SQLiteDatabase,
+        table: String,
+        timeColumn: String,
+        cutoffMs: Long,
+        into: MutableSet<Long>,
+    ) {
+        db
+            .rawQuery(
+                "SELECT DISTINCT session_id FROM $table WHERE $timeColumn < ? AND session_id IS NOT NULL",
+                arrayOf(cutoffMs.toString()),
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    into.add(cursor.getLong(0))
+                }
+            }
+    }
+
+    /**
+     * Deletes matching rows in [PRUNE_DELETE_BATCH]-sized batches (Android SQLite has no
+     * `DELETE ... LIMIT`, hence the rowid subselect). Each batch commits on its own, so a large
+     * backlog never holds the writer lock for one long delete — concurrent dashboard reads and
+     * telemetry writes interleave between batches.
+     */
+    private fun deleteInBatches(
+        db: SQLiteDatabase,
+        table: String,
+        timeColumn: String,
+        cutoffMs: Long,
+    ): Int {
+        val statement =
+            db.compileStatement(
+                "DELETE FROM $table WHERE rowid IN " +
+                    "(SELECT rowid FROM $table WHERE $timeColumn < ? LIMIT $PRUNE_DELETE_BATCH)",
+            )
+        var total = 0
+        statement.use {
+            var deleted: Int
+            do {
+                it.clearBindings()
+                it.bindLong(1, cutoffMs)
+                deleted = it.executeUpdateDelete()
+                total += deleted
+            } while (deleted >= PRUNE_DELETE_BATCH)
+        }
+        return total
+    }
+
+    private fun invalidateTripCachesForSessions(
+        db: SQLiteDatabase,
+        sessionIds: Set<Long>,
+    ) {
+        if (sessionIds.isEmpty()) {
+            return
+        }
+        // Chunked IN-lists keep the statement under SQLite's bind-argument limit.
+        for (chunk in sessionIds.chunked(500)) {
+            val placeholders = chunk.joinToString(",") { "?" }
+            val args = chunk.map { it.toString() }.toTypedArray()
+            db.transaction {
+                db.delete(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, "session_id IN ($placeholders)", args)
+                db.delete(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, "session_id IN ($placeholders)", args)
+                db.delete(VoltTrackerDb.TABLE_TRIP_SEGMENTS, "session_id IN ($placeholders)", args)
+            }
+        }
     }
 
     fun checkpoint() {
@@ -183,6 +254,9 @@ class ObdStoreMaintenance(
 
         /** Default retention for raw telemetry/location/event rows: 60 days. */
         const val DEFAULT_RAW_RETENTION_DAYS: Int = 60
+
+        /** Rows deleted per prune batch; each batch is its own short write transaction. */
+        const val PRUNE_DELETE_BATCH: Int = 500
 
         /** Free pages (~4 KiB each) that justify a full VACUUM: >256 pages is about 1 MiB. */
         const val VACUUM_FREE_PAGE_THRESHOLD: Long = 256L

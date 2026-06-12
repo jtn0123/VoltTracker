@@ -270,6 +270,44 @@ class ObdLocalStoreDbTest {
     }
 
     @Test
+    fun fieldCapabilitiesResolveEachSessionsOwnAdapterKey() {
+        // The writer caches sessionId -> adapter key so the capability upsert stops re-querying
+        // the sessions table on every observation. Observations across two sessions with
+        // different adapters must still land under their own keys, and a repeat observation in
+        // one session (served from the cache) must keep upserting the same row.
+        val first = store.startSession("scan", "00:11", "Adapter A")
+        store.recordPidObservation(
+            first,
+            pidObservation(1000L, "221154", "ATSH7E0", "1154", "engine oil temperature", "56", 56.0, "C", "62115460"),
+            1000L,
+        )
+        store.recordPidObservation(
+            first,
+            pidObservation(2000L, "221154", "ATSH7E0", "1154", "engine oil temperature", "57", 57.0, "C", "62115460"),
+            2000L,
+        )
+        val second = store.startSession("scan", "00:22", "Adapter B")
+        store.recordPidObservation(
+            second,
+            pidObservation(3000L, "221154", "ATSH7E0", "1154", "engine oil temperature", "58", 58.0, "C", "62115460"),
+            3000L,
+        )
+
+        // One capability row per adapter key — the cache must not bleed session A's key into B.
+        val capabilities = store.getEnhancedCapabilitiesJson(10)
+        assertEquals(2, capabilities.length())
+        assertTrue(store.hasRecentEnhancedCapability("00:11", "ATSH7E0", "221154", Long.MAX_VALUE / 2L))
+        assertTrue(store.hasRecentEnhancedCapability("00:22", "ATSH7E0", "221154", Long.MAX_VALUE / 2L))
+        // The two session-A observations were upserts into a single row.
+        val counts = mutableListOf<Long>()
+        for (i in 0 until capabilities.length()) {
+            counts.add(capabilities.getJSONObject(i).optLong("responseCount"))
+        }
+        counts.sort()
+        assertEquals(listOf(1L, 2L), counts)
+    }
+
+    @Test
     fun rejectedEnhancedCapabilityCanBeReadForDiscoverySkip() {
         val id = store.startSession("tpms-scan", "00:11", "Adapter")
         store.recordPidObservation(

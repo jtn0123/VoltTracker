@@ -41,7 +41,7 @@ open class ObdService :
     override val androidContext: Context
         get() = this
 
-    @JvmField val sessionStateMachine = SessionStateMachine()
+    private val sessionStateMachine = SessionStateMachine()
     private val sessionToken = AtomicLong()
     private val runnerSessionToken = ThreadLocal<Long>()
     private var activeTask: Future<*>? = null

@@ -30,9 +30,12 @@ class ObdStatementCache : Closeable {
         capturedAtMs: Long,
         sample: JSONObject,
     ): Long {
-        // Hot path: a cheap reference-identity check. Only when the caller hands us a different
-        // db instance (a recycled handle) do we close the stale statement and recompile.
-        if (telemetryInsertStmt == null || compiledAgainst !== db) {
+        // Hot path: cheap reference-identity + isOpen checks. Recompile when the caller hands us
+        // a different db instance (a recycled handle) or when the handle we compiled against has
+        // since been closed — executing a statement bound to a closed native handle throws.
+        // Contract: callers must pass an OPEN database; this cache only guarantees the prepared
+        // statement is valid for the db instance passed to THIS call.
+        if (telemetryInsertStmt == null || compiledAgainst !== db || compiledAgainst?.isOpen != true) {
             telemetryInsertStmt?.close()
             telemetryInsertStmt = db.compileStatement(SQL_INSERT_TELEMETRY)
             compiledAgainst = db

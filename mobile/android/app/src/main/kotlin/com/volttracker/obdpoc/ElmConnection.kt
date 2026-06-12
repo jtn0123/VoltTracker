@@ -106,6 +106,9 @@ open class ElmConnection
             firstReadMs = -1L
             lastErrorPhase = ""
             watchdogFired = false
+            // Per-session state: a fresh socket must not inherit the previous session's
+            // truncation verdict (readers consult it before the first transact completes).
+            lastTransactTruncated = false
 
             socket = pendingSocket
             val watchdog =
@@ -267,6 +270,7 @@ open class ElmConnection
             input = null
             output = null
             socket = null
+            lastTransactTruncated = false
         }
 
         @Throws(IOException::class)

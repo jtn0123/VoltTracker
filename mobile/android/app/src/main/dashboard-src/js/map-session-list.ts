@@ -1,4 +1,4 @@
-import { LIVE_ROUTE_ID } from "./map-route-utils";
+import { CURRENT_DRIVE_LABEL, LIVE_ROUTE_ID } from "./map-route-utils";
 import type { MapRoute, MapRouteSession } from "./map-route-utils";
 
 type MapSessionListFormatters = {
@@ -57,7 +57,7 @@ function buildMapSessionRow(
   const center = document.createElement("span");
   const strong = document.createElement("strong");
   strong.textContent = live
-    ? `${session.adapterName || "Current drive"} · current`
+    ? `${session.adapterName || CURRENT_DRIVE_LABEL} · current`
     : `${session.mode || "session"} · ${session.adapterName || "OBD adapter"}`;
 
   const small = document.createElement("small");

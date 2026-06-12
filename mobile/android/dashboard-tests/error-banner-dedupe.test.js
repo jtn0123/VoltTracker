@@ -93,4 +93,45 @@ describe('error banner dedupe', () => {
     expect(banner().hidden).toBe(false);
     expect(detail().textContent).toBe('Boom: render failed');
   });
+
+  // parsePayload used to swallow JSON.parse failures silently — a garbled
+  // native payload read as "no data" with no signal anywhere. It must now
+  // route through reportClientError (banner + bridge.logClientError, with the
+  // dedupe above) while still returning the fallback and never throwing.
+  describe('parsePayload malformed-JSON surfacing', () => {
+    it('returns the fallback and reports the failure with a payload snippet', () => {
+      const fallback = { fromFallback: true };
+
+      expect(VD.parsePayload('{not json', fallback)).toBe(fallback);
+
+      expect(banner().hidden).toBe(false);
+      expect(detail().textContent).toContain('Malformed JSON payload');
+      expect(bridge.logClientError).toHaveBeenCalledTimes(1);
+      const [label, message] = bridge.logClientError.mock.calls[0];
+      expect(label).toBe('parsePayload');
+      expect(message).toContain('{not json');
+    });
+
+    it('stays silent for valid JSON, objects, and empty payloads', () => {
+      expect(VD.parsePayload('{"ok":true}', null)).toEqual({ ok: true });
+      expect(VD.parsePayload({ already: 'parsed' }, null)).toEqual({ already: 'parsed' });
+      expect(VD.parsePayload('', 'fallback')).toBe('fallback');
+      expect(VD.parsePayload(null, 'fallback')).toBe('fallback');
+
+      expect(banner().hidden).toBe(true);
+      expect(bridge.logClientError).not.toHaveBeenCalled();
+    });
+
+    it('dedupes a storm of identical malformed payloads into one visible render', () => {
+      VD.parsePayload('{not json', null);
+      banner().hidden = true;
+      now += 1000;
+      VD.parsePayload('{not json', null);
+
+      // Banner stays dismissed for the in-window duplicate, but the native
+      // log still received both.
+      expect(banner().hidden).toBe(true);
+      expect(bridge.logClientError).toHaveBeenCalledTimes(2);
+    });
+  });
 });

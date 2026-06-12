@@ -12,6 +12,12 @@ import org.json.JSONObject
 object ObdStoreRouteProjection {
     const val MAX_TRACK_POINTS: Int = 500
 
+    /** Routes longer than this get a geometry simplification pass before serializing. */
+    const val SIMPLIFY_MIN_POINTS: Int = 300
+
+    /** Douglas-Peucker tolerance: detail finer than this is invisible at trip-map zoom levels. */
+    const val SIMPLIFY_TOLERANCE_METERS: Double = 12.0
+
     @JvmStatic
     @Throws(JSONException::class)
     fun routeForSession(
@@ -171,22 +177,120 @@ object ObdStoreRouteProjection {
                     true,
                 )
             if (locationPoints.length() >= 2 || telemetryTotal == 0L) {
-                return locationPoints
+                return simplifiedForSerialization(locationPoints)
             }
         }
         if (telemetryTotal == 0L) {
             return JSONArray()
         }
-        return downsampledRoutePoints(
-            db,
-            VoltTrackerDb.TABLE_TELEMETRY,
-            arrayOf("captured_at_ms", "latitude", "longitude", "accuracy_m", "gps_speed_mps", "bearing_deg", "soc"),
-            telemetryWhere,
-            sessionArg,
-            telemetryTotal,
-            target,
-            false,
+        return simplifiedForSerialization(
+            downsampledRoutePoints(
+                db,
+                VoltTrackerDb.TABLE_TELEMETRY,
+                arrayOf("captured_at_ms", "latitude", "longitude", "accuracy_m", "gps_speed_mps", "bearing_deg", "soc"),
+                telemetryWhere,
+                sessionArg,
+                telemetryTotal,
+                target,
+                false,
+            ),
         )
+    }
+
+    @Throws(JSONException::class)
+    private fun simplifiedForSerialization(points: JSONArray): JSONArray =
+        if (points.length() > SIMPLIFY_MIN_POINTS) {
+            simplifyRoutePoints(points, SIMPLIFY_TOLERANCE_METERS)
+        } else {
+            points
+        }
+
+    /**
+     * Douglas-Peucker simplification on serialized route points: drops points whose perpendicular
+     * deviation from the surrounding chord is under [toleranceMeters], so near-collinear runs
+     * (highway stretches) collapse while every corner sharper than the tolerance survives. The
+     * first and last points — and their timestamps, which trip/route ids are built from — are
+     * always kept, so simplification never changes a route key. Consumers read `pointCount` from
+     * the serialized array, so it reflects the simplified count by design.
+     */
+    @JvmStatic
+    @Throws(JSONException::class)
+    fun simplifyRoutePoints(
+        points: JSONArray,
+        toleranceMeters: Double,
+    ): JSONArray {
+        val count = points.length()
+        if (count <= 2) {
+            return points
+        }
+        val lat = DoubleArray(count)
+        val lng = DoubleArray(count)
+        for (i in 0 until count) {
+            val item = points.getJSONObject(i)
+            lat[i] = item.getDouble("lat")
+            lng[i] = item.getDouble("lng")
+        }
+        val keep = BooleanArray(count)
+        keep[0] = true
+        keep[count - 1] = true
+        // Iterative Douglas-Peucker (explicit stack avoids deep recursion on long routes).
+        val stack = ArrayDeque<IntArray>()
+        stack.addLast(intArrayOf(0, count - 1))
+        while (stack.isNotEmpty()) {
+            val (first, last) = stack.removeLast()
+            var maxDistance = 0.0
+            var maxIndex = -1
+            for (i in first + 1 until last) {
+                val distance =
+                    perpendicularDistanceMeters(lat[i], lng[i], lat[first], lng[first], lat[last], lng[last])
+                if (distance > maxDistance) {
+                    maxDistance = distance
+                    maxIndex = i
+                }
+            }
+            if (maxIndex >= 0 && maxDistance > toleranceMeters) {
+                keep[maxIndex] = true
+                stack.addLast(intArrayOf(first, maxIndex))
+                stack.addLast(intArrayOf(maxIndex, last))
+            }
+        }
+        val simplified = JSONArray()
+        for (i in 0 until count) {
+            if (keep[i]) {
+                simplified.put(points.getJSONObject(i))
+            }
+        }
+        return simplified
+    }
+
+    /**
+     * Perpendicular distance from a point to the segment between two anchors, in meters, using a
+     * local equirectangular projection — accurate to well under the tolerance at route scale.
+     */
+    private fun perpendicularDistanceMeters(
+        pLat: Double,
+        pLng: Double,
+        aLat: Double,
+        aLng: Double,
+        bLat: Double,
+        bLng: Double,
+    ): Double {
+        val metersPerDegLat = 111_320.0
+        val metersPerDegLng = metersPerDegLat * Math.cos(Math.toRadians((aLat + bLat) / 2.0))
+        val ax = aLng * metersPerDegLng
+        val ay = aLat * metersPerDegLat
+        val bx = bLng * metersPerDegLng
+        val by = bLat * metersPerDegLat
+        val px = pLng * metersPerDegLng
+        val py = pLat * metersPerDegLat
+        val dx = bx - ax
+        val dy = by - ay
+        val lengthSquared = dx * dx + dy * dy
+        if (lengthSquared == 0.0) {
+            return Math.hypot(px - ax, py - ay)
+        }
+        val t = (((px - ax) * dx + (py - ay) * dy) / lengthSquared).coerceIn(0.0, 1.0)
+        return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
     }
 
     private fun routePointTotals(

@@ -6,6 +6,12 @@
 // attached to the shared VD global exactly as before. The native-read-error
 // helpers (isNativeError / reportNativeReadError) and the toggleHidden helper
 // are owned by storage-status.ts and read off VD here.
+//
+// haversineMetersJs comes from map-route-utils — a small shared module that is
+// already part of the eager app.js bundle (telemetry.ts imports it), so this
+// import does not drag the lazy map chunk into the main bundle.
+import { haversineMetersJs } from "./map-route-utils";
+
 (function () {
   "use strict";
 
@@ -111,18 +117,6 @@
   // samples carry derived eff (which depends on the OBD loop having captured
   // battery current via the Volt 7E1 PIDs).
 
-  const haversineMetersJsLocal = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-    const r = 6371000;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLng = ((lng2 - lng1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLng / 2) ** 2;
-    return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  };
-
   function enrichRouteEff(route: VoltRoute) {
     if (!route || route._effDone) return;
     const pts = route.points || [];
@@ -151,7 +145,7 @@
         const a = pts[Math.max(0, i - 1)];
         const b = pts[Math.min(pts.length - 1, i + 1)];
         const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
-        mps = haversineMetersJsLocal(a.lat, a.lng, b.lat, b.lng) / dt;
+        mps = haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / dt;
       }
       return Math.max(0, mps) * 2.2369363;
     });
@@ -209,7 +203,7 @@
           const a = pts[Math.max(0, i - 1)];
           const b = pts[Math.min(pts.length - 1, i + 1)];
           const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
-          mps = haversineMetersJsLocal(a.lat, a.lng, b.lat, b.lng) / dt;
+          mps = haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / dt;
         }
         const mph = Math.max(0, mps) * 2.2369363;
         if (mph < 10) continue;
@@ -221,7 +215,7 @@
         ) {
           const horiz = Math.max(
             8,
-            haversineMetersJsLocal(
+            haversineMetersJs(
               pts[i - 1].lat,
               pts[i - 1].lng,
               pts[i].lat,

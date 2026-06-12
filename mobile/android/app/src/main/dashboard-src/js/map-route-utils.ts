@@ -1,5 +1,10 @@
 export const LIVE_ROUTE_ID = "__live_current__";
 
+/** Human label for the in-progress route. Shared by the map header/live-route
+ *  builder (map.ts) and the session-list rows (map-session-list.ts) so the
+ *  copy can never drift between the two surfaces. */
+export const CURRENT_DRIVE_LABEL = "Current drive";
+
 export type MapRoutePoint = VoltRoutePoint & {
   atMs: number;
   speedKph?: number;

@@ -63,6 +63,26 @@ capture_logcat() {
   adb logcat -d -v time >"$LOGCAT"
 }
 
+# Negative logcat scan: fail the smoke if any of these failure classes appeared.
+# One grep alternative per class:
+#   "Process: $PKG"
+#       AndroidRuntime fatal-crash header ("Process: <pkg>, PID: ..."): any uncaught
+#       native/JVM exception that killed the app process.
+#   "Unable to start activity ComponentInfo{$PKG"
+#       ActivityManager's launch-failure line: MainActivity threw during
+#       onCreate/onStart/onResume, so the app never reached a usable state.
+#   "chromium.*Uncaught"
+#       The WebView's chromium console tag relaying an uncaught JS exception —
+#       dashboard script crashed outside any try/catch.
+#   "dashboard console:.*(TypeError|ReferenceError|SyntaxError|Unhandled|Uncaught)"
+#       WebViewBootstrap.onConsoleMessage mirrors every dashboard console message to
+#       logcat with the "dashboard console:" prefix; this catches JS errors that only
+#       surface as console output (e.g. unhandled promise rejections the dashboard's
+#       error hook logs itself).
+# Known looseness, kept deliberately: the unescaped dots in $PKG match any character,
+# and "Process: $PKG" also matches non-fatal lines that happen to contain that text.
+# Both err toward a false positive (investigated via the uploaded logcat artifact)
+# rather than a missed crash — do not tighten in a way that could skip a real failure.
 check_logcat() {
   local label="$1"
   capture_logcat

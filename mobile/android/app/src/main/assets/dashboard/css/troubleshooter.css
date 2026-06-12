@@ -385,7 +385,7 @@
 }
 
 .error-copy-action.is-cancel {
-  border-color: rgba(255, 122, 69, 0.55);
+  border-color: rgba(var(--volt-rgb), 0.55);
   color: var(--volt-soft);
 }
 

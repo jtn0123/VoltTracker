@@ -52,7 +52,13 @@ object BackupMigrator {
         context: Context?,
         dbFile: File?,
     ): Result {
-        if (context == null || dbFile == null || !dbFile.exists()) {
+        if (context == null) {
+            return Result.NOT_A_BACKUP
+        }
+        // A crash mid-migration leaks the private working copy (plus -wal/-shm/-journal);
+        // sweep leftovers from earlier runs before creating a new one.
+        cleanupStaleWorkingFiles(context)
+        if (dbFile == null || !dbFile.exists()) {
             return Result.NOT_A_BACKUP
         }
         val probe =
@@ -97,6 +103,12 @@ object BackupMigrator {
             } finally {
                 helper.close()
             }
+            // Refuse to replace the caller's file with a structurally damaged database: if the
+            // migration left the working copy corrupt, fail and keep the original byte-for-byte.
+            if (!passesIntegrityCheck(working)) {
+                android.util.Log.w("VoltTracker", "migrated backup failed integrity_check; keeping original")
+                return Result.FAILED
+            }
             copyFile(working, dbFile)
             return Result.MIGRATED
         } catch (ex: IOException) {
@@ -109,6 +121,31 @@ object BackupMigrator {
             deleteDbFamily(working)
         }
     }
+
+    /** Deletes working copies (and their WAL siblings) left behind by interrupted runs. */
+    private fun cleanupStaleWorkingFiles(context: Context) {
+        val databasesDir = context.getDatabasePath(MIGRATION_DB_PREFIX + "probe.db").parentFile ?: return
+        val stale =
+            databasesDir.listFiles { file ->
+                file.isFile && file.name.startsWith(MIGRATION_DB_PREFIX)
+            } ?: return
+        for (file in stale) {
+            file.delete()
+        }
+    }
+
+    private fun passesIntegrityCheck(dbFile: File): Boolean =
+        try {
+            SQLiteDatabase
+                .openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READONLY)
+                .use { db ->
+                    db.rawQuery("PRAGMA integrity_check(1)", null).use { cursor ->
+                        cursor.moveToFirst() && "ok".equals(cursor.getString(0), ignoreCase = true)
+                    }
+                }
+        } catch (ex: RuntimeException) {
+            false
+        }
 
     private fun hasTable(
         db: SQLiteDatabase,

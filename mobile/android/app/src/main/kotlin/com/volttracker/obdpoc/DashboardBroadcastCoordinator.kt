@@ -69,7 +69,10 @@ class DashboardBroadcastCoordinator(
                 addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
                 addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
             }
-        receivers.register(context, autoConnectReceiver, autoConnectFilter, ContextCompat.RECEIVER_EXPORTED)
+        // ACL_CONNECTED / ADAPTER_STATE_CHANGED are protected system broadcasts: the platform
+        // delivers them to NOT_EXPORTED receivers on API 33+ (exported is only required for
+        // app-to-app broadcasts), so keep this receiver closed to other apps.
+        receivers.register(context, autoConnectReceiver, autoConnectFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
     fun unregisterAll(context: Context) {

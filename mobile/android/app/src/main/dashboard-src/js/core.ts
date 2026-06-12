@@ -4,6 +4,7 @@
 // and `window.VoltTrackerNative` (the WebView<-Android callback surface) are
 // preserved exactly as-is — those names are part of the ABI.
 import { asDataTone, setDataTone } from "./dataset-state";
+import { initialTelemetryState } from "./telemetry-state";
 
   type DashboardData = {
     trips: unknown[];
@@ -699,22 +700,7 @@ import { asDataTone, setDataTone } from "./dataset-state";
     // Latest telemetry render is throttled via requestAnimationFrame; this
     // is the rAF id, cleared once the scheduled render runs.
     rafPending: 0,
-    telemetry: {
-      speedKph: null,
-      rpm: null,
-      voltage: null,
-      coolantC: null,
-      loadPct: null,
-      throttlePct: null,
-      soc: null,
-      batteryTemp: null,
-      powerKw: null,
-      updatedAt: null,
-      // Mirrors the latest sample's `source` field (e.g. "demo") so
-      // clearDemoTelemetry can tell whether the staged telemetry is demo data.
-      source: "",
-      raw: ""
-    }
+    telemetry: initialTelemetryState()
   };
   VD.state = state;
 
@@ -765,7 +751,21 @@ import { asDataTone, setDataTone } from "./dataset-state";
   function parsePayload(payload: unknown, fallback: unknown = null) {
     if (!payload) return fallback;
     try { return typeof payload === "string" ? JSON.parse(payload) : payload; }
-    catch (_err) { return fallback; }
+    catch (err) {
+      // A native payload that fails JSON.parse used to vanish silently into the
+      // fallback — a renamed/garbled bridge return read as "no data" with no
+      // signal anywhere. Surface it through reportClientError (banner dedupe +
+      // bridge.logClientError) with a short payload snippet for triage, but
+      // never throw: callers rely on the fallback contract.
+      const snippet = String(payload).slice(0, 80);
+      reportClientError(
+        "parsePayload",
+        "Malformed JSON payload (" +
+          (err instanceof Error ? err.message : String(err)) +
+          "): " + snippet
+      );
+      return fallback;
+    }
   }
 
   // setText/setMeter null-guard on a missing element so a renamed/removed partial ID can't crash a
@@ -966,20 +966,7 @@ import { asDataTone, setDataTone } from "./dataset-state";
     // are read cross-module by the drive/charge renders.
     setState({
       demoSessions: null,
-      telemetry: {
-        speedKph: null,
-        rpm: null,
-        voltage: null,
-        coolantC: null,
-        loadPct: null,
-        throttlePct: null,
-        soc: null,
-        batteryTemp: null,
-        powerKw: null,
-        updatedAt: null,
-        source: "",
-        raw: ""
-      },
+      telemetry: initialTelemetryState(),
       speedHistory: [],
       powerHistory: [],
       socHistory: [],
@@ -998,7 +985,7 @@ import { asDataTone, setDataTone } from "./dataset-state";
     const select = el("deviceSelect") as HTMLSelectElement | null;
     const preferred = VD.getLastDevice();
     if (!select) return;
-    select.innerHTML = "";
+    select.replaceChildren();
     if (!devices.length) {
       const opt = document.createElement("option");
       opt.value = "";

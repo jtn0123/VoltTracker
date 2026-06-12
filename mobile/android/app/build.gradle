@@ -27,8 +27,11 @@ spotless {
     kotlin {
         // Android production code lives in src/main/kotlin. ktlint enforces the official Kotlin
         // style so the spotlessCheck CI gate covers Kotlin the same way it covers Java tests and
-        // the dashboard TypeScript.
-        target "src/main/kotlin/**/*.kt", "src/test/java/**/*.kt"
+        // the dashboard TypeScript. Tests live under src/test/java by repo convention, but the
+        // glob covers the whole src/test tree so a Kotlin test can never land unformatted just
+        // because it sits in a different source root. (detekt also analyses the test tree — see
+        // source.setFrom above; only its complexity rules exclude tests, documented in detekt.yml.)
+        target "src/main/kotlin/**/*.kt", "src/test/**/*.kt"
         ktlint("1.5.0")
         trimTrailingWhitespace()
         endWithNewline()
@@ -147,6 +150,13 @@ android {
             jacoco.excludes = ["jdk.*", "jdk.internal.*", "sun.*"]
             jvmArgs += ["--enable-native-access=ALL-UNNAMED"]
             retry {
+                // One retry absorbs pure infra flake (emulator-less CI runners hiccuping on
+                // Robolectric/SQLite I/O) so it can't fail the job. failOnPassedAfterRetry
+                // stays false ON PURPOSE, but pass-on-retry is NOT silent: each retry is a
+                // separate <testcase> in the JUnit XML, and the "Summarize unit test results"
+                // step in .github/workflows/android.yml lists every test that passed only on
+                // retry and emits a ::warning per flake. Investigate those instead of letting
+                // them accumulate.
                 maxRetries = 1
                 failOnPassedAfterRetry = false
             }

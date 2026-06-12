@@ -113,4 +113,23 @@ describe('dashboard layout css', () => {
     expect(dashboardHtml).toContain('data-action="restore"');
     expect(dashboardHtml).not.toContain('id="disconnectBtn"');
   });
+
+  it('keeps volt-orange alpha tints on the --volt-rgb token, not raw literals', () => {
+    // The rgba(255,122,69,…) tints were tokenized to rgba(var(--volt-rgb), …)
+    // (2026-06-12). The single allowed literal is the token definition itself
+    // in base.css; any new raw literal is drift back to the hardcoded color.
+    const cssFiles = ['base.css', 'components.css', 'screens.css', 'status-tools.css', 'troubleshooter.css'];
+    const literal = /rgba\(\s*255\s*,\s*122\s*,\s*69\s*,/;
+
+    for (const name of cssFiles) {
+      const css = readFileSync(resolve(DASHBOARD_ASSETS, `css/${name}`), 'utf8');
+      const withoutTokenDef = css.replace(/--volt-rgb\s*:\s*255,\s*122,\s*69\s*;/, '');
+      expect(withoutTokenDef, `${name} reintroduced a raw volt-orange rgba literal`).not.toMatch(literal);
+    }
+
+    const baseCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/base.css'), 'utf8');
+    expect(baseCss).toMatch(/--volt-rgb\s*:\s*255,\s*122,\s*69\s*;/);
+    // The triplet must stay in sync with the default --volt hex (#ff7a45).
+    expect(baseCss).toMatch(/--volt\s*:\s*#ff7a45\s*;/);
+  });
 });

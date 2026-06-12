@@ -441,7 +441,10 @@ class ObdStoreTripsDbTest {
         val lastAtMs = firstAtMs + (totalSamples - 1L)
         for (i in 0 until totalSamples) {
             val lat = 32.70 + (i * 0.00001)
-            val lng = -117.10 + (i * 0.00001)
+            // Alternating ~47 m lateral offset keeps every sample a genuine corner, so the
+            // shape-preserving simplifier (which collapses collinear runs) keeps the polyline
+            // dense — this test pins timespan coverage, not geometry simplification.
+            val lng = -117.10 + (i * 0.00001) + (i % 2) * 0.0005
             store.recordTelemetry(id, gpsSample(40, lat, lng, firstAtMs + i))
         }
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, lastAtMs + 1L, "")

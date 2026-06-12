@@ -62,6 +62,7 @@ jobs:
           import glob
           import os
           import xml.etree.ElementTree as ET
+          from collections import defaultdict
 
           summary = os.environ.get("GITHUB_STEP_SUMMARY")
           if not summary:
@@ -69,7 +70,14 @@ jobs:
           paths = glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml")
           tests = failures = skipped = 0
           slow = []
-          failed_cases = []
+          # The test-retry plugin (app/build.gradle: maxRetries=1,
+          # failOnPassedAfterRetry=false) lets a test that fails once but passes on
+          # retry pass the build. Gradle's default XML reporting (mergeReruns off)
+          # writes each execution as its own <testcase>, so such a flake shows up
+          # once with a <failure> and once clean. Group executions per test name to
+          # tell hard failures (never passed) from passed-on-retry flakes, and
+          # surface the flakes here so retries can't silently mask flaky tests.
+          executions = defaultdict(lambda: {"failed": 0, "passed": 0})
           for path in paths:
               root = ET.parse(path).getroot()
               tests += int(root.attrib.get("tests", "0"))
@@ -81,20 +89,42 @@ jobs:
                   if elapsed >= 0.5:
                       slow.append((elapsed, name))
                   if case.find("failure") is not None or case.find("error") is not None:
-                      failed_cases.append(name)
+                      executions[name]["failed"] += 1
+                  elif case.find("skipped") is None:
+                      executions[name]["passed"] += 1
+
+          failed_cases = sorted(name for name, runs in executions.items() if runs["failed"] and not runs["passed"])
+          flaky_cases = sorted(name for name, runs in executions.items() if runs["failed"] and runs["passed"])
+
+          def write_list(fh, lines, limit):
+              for line in lines[:limit]:
+                  fh.write(line)
+              if len(lines) > limit:
+                  fh.write(f"- ...and {len(lines) - limit} more\n")
 
           with open(summary, "a", encoding="utf-8") as fh:
               fh.write("\n### Android unit tests\n\n")
               fh.write(f"- Tests: {tests}\n- Failures/errors: {failures}\n- Skipped: {skipped}\n")
+              if flaky_cases:
+                  fh.write(f"- Passed only after retry (flaky): {len(flaky_cases)}\n")
               if failed_cases:
                   fh.write("\nFailed cases:\n")
-                  for name in failed_cases[:20]:
-                      fh.write(f"- `{name}`\n")
+                  write_list(fh, [f"- `{name}`\n" for name in failed_cases], 20)
+              if flaky_cases:
+                  fh.write("\nPassed only after retry (flaky — investigate, retries hide these from the build result):\n")
+                  write_list(fh, [f"- `{name}`\n" for name in flaky_cases], 20)
               if slow:
                   fh.write("\nSlowest cases over 500 ms:\n")
-                  for elapsed, name in sorted(slow, reverse=True)[:10]:
-                      fh.write(f"- `{name}` - {elapsed:.2f}s\n")
+                  slow_lines = [f"- `{name}` - {elapsed:.2f}s\n" for elapsed, name in sorted(slow, reverse=True)]
+                  write_list(fh, slow_lines, 10)
+          for name in flaky_cases:
+              print(f"::warning title=Flaky unit test::{name} failed, then passed on retry")
           PY
+      # Spotless/Detekt/Lint run serially here ON PURPOSE rather than as parallel jobs:
+      # each step is fast on the JVM/Gradle/Node caches this job has already paid for,
+      # while separate jobs would each repeat checkout + JDK + Gradle setup (the
+      # expensive part) for a sub-minute check. Revisit only if one of these steps
+      # grows to dominate the job's wall-clock summary below.
       - name: Spotless check
         run: ./gradlew --no-daemon --configuration-cache :app:spotlessCheck
       - name: Detekt static analysis
@@ -220,17 +250,19 @@ jobs:
           }
           walk(report);
           const failed = cases.filter((item) => !['passed', 'todo', 'skipped', 'pending'].includes(item.status));
-          const slow = cases.filter((item) => item.duration >= 500).sort((a, b) => b.duration - a.duration).slice(0, 10);
+          const slow = cases.filter((item) => item.duration >= 500).sort((a, b) => b.duration - a.duration);
           let out = '\n### Dashboard unit tests\n\n';
           out += `- Test cases reported: ${cases.length}\n`;
           out += `- Failed cases: ${failed.length}\n`;
           if (failed.length) {
             out += '\nFailed cases:\n';
             for (const item of failed.slice(0, 20)) out += `- \`${item.name}\` (${item.status})\n`;
+            if (failed.length > 20) out += `- ...and ${failed.length - 20} more\n`;
           }
           if (slow.length) {
             out += '\nSlowest dashboard cases over 500 ms:\n';
-            for (const item of slow) out += `- \`${item.name}\` - ${(item.duration / 1000).toFixed(2)}s\n`;
+            for (const item of slow.slice(0, 10)) out += `- \`${item.name}\` - ${(item.duration / 1000).toFixed(2)}s\n`;
+            if (slow.length > 10) out += `- ...and ${slow.length - 10} more\n`;
           }
           fs.appendFileSync(summary, out);
           NODE
@@ -258,13 +290,24 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
           # Split budget (build.gradle:verifyDashboardBundleSize): core bundle vs lazy DTC
-          # data. Keep these numbers in sync with dashboardCoreBudgetBytes /
-          # dashboardDtcDataBudgetBytes in mobile/android/build.gradle. The Gradle task is
-          # the hard gate (it fails the unit-tests job when a budget is exceeded); this
-          # report is advisory only — it surfaces remaining headroom and warns when a
-          # bundle is within 15 KB of its budget, without failing the build.
-          core_budget=400000
-          dtc_budget=380000
+          # data. The budgets are read from their single source of truth —
+          # dashboardCoreBudgetBytes / dashboardDtcDataBudgetBytes in
+          # mobile/android/build.gradle — so this report can't drift from the Gradle gate.
+          # The Gradle task is the hard gate (it fails the unit-tests job when a budget is
+          # exceeded); this report is advisory only — it surfaces remaining headroom and
+          # warns when a bundle is within 15 KB of its budget, without failing the build.
+          budget_gradle="$GITHUB_WORKSPACE/mobile/android/build.gradle"
+          read_budget() {
+            # Matches e.g. `def dashboardCoreBudgetBytes = 400_000L`; strips Groovy's
+            # underscore digit separators.
+            sed -n "s/^def $1 = \([0-9_][0-9_]*\)L.*$/\1/p" "$budget_gradle" | tr -d '_'
+          }
+          core_budget="$(read_budget dashboardCoreBudgetBytes)"
+          dtc_budget="$(read_budget dashboardDtcDataBudgetBytes)"
+          if [ -z "$core_budget" ] || [ -z "$dtc_budget" ]; then
+            echo "::error title=Dashboard bundle budget::could not extract budget constants from $budget_gradle (declaration renamed/reformatted?)"
+            exit 1
+          fi
           warn_floor=15000
           dtc=$(cat js/dtc-lookup.js js/dtc-causes.js | wc -c | tr -d ' ')
           all=$(find js css -type f \( -name "*.js" -o -name "*.css" \) ! -path "*/lib/*" -exec cat {} + | wc -c | tr -d ' ')

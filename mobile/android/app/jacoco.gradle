@@ -36,7 +36,11 @@ tasks.register("jacocoTestReport", JacocoReport) {
 // Coverage floors are RATCHETING regression baselines, not goals. Bump them up
 // when the suite improves; never lower without discussion in the PR description.
 //
-// History:
+// History: (labels like "D4" are improvement-item IDs from the grade-codebase
+// audit pass that drove each change — the convention root CONTRIBUTING.md asks
+// commits to cite. The audit reports themselves are gitignored, so the
+// plain-language description next to each entry is the durable record; see
+// docs/reports-index.md.)
 //   2026-05-22 (round 1): project LINE 0.43, data/ LINE 0.70 (set after the
 //   first 38-item grade-codebase pass; actual was ~48% project / ~76% data).
 //   2026-05-22 (round 2, D4): project LINE 0.71, data/ LINE 0.89. Set after the
@@ -47,7 +51,8 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //   Java→Kotlin test conversion plus new VoltBridge (14→80%), DeviceCatalog
 //   (23→84%), BackupController (48→73%), ElmConnection (35→63%), and
 //   TroubleshooterBridge coverage. Actual: 82.7% project / 92.2% data.
-//   2026-06-07 (D4): added FOCUSED per-package LINE floors for the high-value,
+//   2026-06-07 (round 4, D4 — per-package coverage floors): added FOCUSED
+//   per-package LINE floors for the high-value,
 //   pure-logic packages so a regression there can't hide behind the aggregate
 //   project floor (a 38%-covered framework class averaged against an 87% one).
 //   We deliberately do NOT add a blanket element="CLASS" rule: several classes

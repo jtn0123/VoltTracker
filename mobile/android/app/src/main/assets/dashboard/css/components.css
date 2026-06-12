@@ -75,8 +75,8 @@
   }
 
   body[data-active-view="drive"] .empty-hints b {
-    border-color: rgba(255,122,69,0.34);
-    background: rgba(255,122,69,0.1);
+    border-color: rgba(var(--volt-rgb), 0.34);
+    background: rgba(var(--volt-rgb), 0.1);
     color: var(--volt-soft);
   }
 
@@ -163,7 +163,7 @@
     width: 188px;
     top: -4px;
     bottom: 6px;
-    background: radial-gradient(82px 54px at 60px 54%, rgba(255,122,69,0.34), transparent);
+    background: radial-gradient(82px 54px at 60px 54%, rgba(var(--volt-rgb), 0.34), transparent);
     pointer-events: none;
   }
 
@@ -261,7 +261,7 @@
     width: 0;
     border-radius: 999px;
     background: linear-gradient(90deg, var(--volt), var(--volt-deep));
-    box-shadow: 0 0 16px rgba(255,122,69,0.4);
+    box-shadow: 0 0 16px rgba(var(--volt-rgb), 0.4);
     transition: left var(--motion-medium) var(--motion-ease), width var(--motion-medium) var(--motion-ease);
   }
 
@@ -682,7 +682,7 @@
   }
 
   .history-row.is-active {
-    background: rgba(255, 122, 69, 0.08);
+    background: rgba(var(--volt-rgb), 0.08);
   }
 
   .trip-route-spark {
@@ -743,8 +743,8 @@
   .trip-route-state {
     padding: 2px 8px;
     border-radius: 999px;
-    border: 1px solid rgba(255, 122, 69, 0.26);
-    background: rgba(255, 122, 69, 0.08);
+    border: 1px solid rgba(var(--volt-rgb), 0.26);
+    background: rgba(var(--volt-rgb), 0.08);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 10px;
     line-height: 1.45;
@@ -794,7 +794,7 @@
 
   .diagnostic-report-card {
     padding: 14px;
-    border-color: rgba(255,122,69,0.2);
+    border-color: rgba(var(--volt-rgb), 0.2);
   }
 
   .diagnostic-report-head {
@@ -831,7 +831,7 @@
     background: var(--volt);
     color: var(--on-volt);
     font-weight: 800;
-    box-shadow: 0 12px 28px rgba(255,122,69,0.18);
+    box-shadow: 0 12px 28px rgba(var(--volt-rgb), 0.18);
   }
 
   .dtc-action-row button:not(.scan):not(.danger) {
@@ -978,8 +978,8 @@
   }
 
   .dtc-status-grid div:first-child {
-    border-color: rgba(255,122,69,0.18);
-    background: rgba(255,122,69,0.08);
+    border-color: rgba(var(--volt-rgb), 0.18);
+    background: rgba(var(--volt-rgb), 0.08);
   }
 
   .dtc-status-grid span {
@@ -1697,7 +1697,7 @@
     margin-top: 4px;
     border-radius: 50%;
     background: var(--volt);
-    box-shadow: 0 0 12px rgba(255,122,69,0.45);
+    box-shadow: 0 0 12px rgba(var(--volt-rgb), 0.45);
   }
 
   .pid-frame-item strong,
@@ -1753,7 +1753,7 @@
     min-height: 32px;
     padding: 0 10px;
     border-radius: 10px;
-    background: rgba(255,122,69,0.13);
+    background: rgba(var(--volt-rgb), 0.13);
     color: var(--volt);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 16px;

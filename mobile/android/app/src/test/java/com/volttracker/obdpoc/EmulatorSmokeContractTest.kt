@@ -5,7 +5,9 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Protects the emulator-smoke log-string contract (D5).
+ * Protects the emulator-smoke log-string contract. (Introduced as item "D5" of a grade-codebase
+ * audit pass — those reports are gitignored, so this doc is the durable description; the audit-ID
+ * convention is described in the root CONTRIBUTING.md.)
  *
  * `scripts/emulator-smoke.sh` greps logcat for the literal handshake prefix as its ONLY positive
  * signal. That prefix is emitted by [MainActivity.onDashboardReady] and pinned in the source-of-

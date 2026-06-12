@@ -26,6 +26,7 @@
     <string name="status_action_cancelled">Action cancelled.</string>
     <string name="status_confirmation_failed">Could not show the Android confirmation.</string>
     <string name="status_viewing_local_data">Viewing local data. Connect only when you want live OBD logging.</string>
+    <string name="status_local_store_unavailable">Local storage failed to open, so trips and telemetry cannot be saved. Restart the app to retry.</string>
     <string name="status_no_bluetooth_support">This phone does not report Bluetooth support.</string>
     <string name="status_turn_on_bluetooth">Turn on Bluetooth to connect to the OBD adapter.</string>
     <string name="status_open_bluetooth_settings_manually">Open Android Bluetooth settings, then try again.</string>

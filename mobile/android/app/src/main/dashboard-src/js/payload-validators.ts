@@ -62,8 +62,16 @@ const PAYLOAD_SPECS: Record<string, PayloadSpec> = {
 
 const warnedPayloadIssues = new Set<string>();
 
+// Dedupe-cache cap. Distinct issue keys are normally a handful, but a
+// pathological producer (e.g. a fuzzer or a corrupted field that embeds a
+// changing value in its typeof) could mint unbounded keys and the Set would
+// grow for the life of the WebView. When full, clear and start over — worst
+// case a long-lived session re-warns once per surviving issue.
+const WARNED_PAYLOAD_ISSUES_MAX = 256;
+
 function warnPayloadIssueOnce(key: string, message: string) {
   if (warnedPayloadIssues.has(key)) return;
+  if (warnedPayloadIssues.size >= WARNED_PAYLOAD_ISSUES_MAX) warnedPayloadIssues.clear();
   warnedPayloadIssues.add(key);
   try {
     if (typeof console !== "undefined" && console && console.warn) {
@@ -130,4 +138,9 @@ function validatePayload(kind: string, payload: unknown) {
 
 VD.validatePayload = validatePayload;
 
-export {};
+// Exported for the unit suite only: the spec-driven public surface
+// (validatePayload) can mint at most a few dozen distinct keys, so the
+// eviction path cannot be reached through it (the Set is exported so the
+// test can start from a known-empty cache). Production code must keep
+// calling VD.validatePayload.
+export { WARNED_PAYLOAD_ISSUES_MAX, warnPayloadIssueOnce, warnedPayloadIssues };

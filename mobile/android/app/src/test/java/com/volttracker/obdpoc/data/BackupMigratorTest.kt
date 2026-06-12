@@ -140,6 +140,33 @@ class BackupMigratorTest {
     }
 
     @Test
+    fun migrationRunSweepsStaleWorkingFiles() {
+        // A crash mid-migration leaks restore-migrate-* working copies in the databases dir;
+        // every later migration call must sweep them (including WAL siblings), even on a path
+        // that returns early like ALREADY_CURRENT.
+        val databasesDir = context.getDatabasePath("sweep-current.db").parentFile!!
+        databasesDir.mkdirs()
+        val stale = File(databasesDir, "restore-migrate-stale.db")
+        val staleWal = File(databasesDir, "restore-migrate-stale.db-wal")
+        stale.writeText("junk")
+        staleWal.writeText("junk")
+
+        val helper = VoltTrackerDb(context, "sweep-current.db")
+        helper.writableDatabase
+        helper.close()
+        val current = context.getDatabasePath("sweep-current.db")
+
+        assertEquals(
+            BackupMigrator.Result.ALREADY_CURRENT,
+            BackupMigrator.migrateToCurrentVersion(context, current),
+        )
+
+        assertFalse("stale working copy must be swept", stale.exists())
+        assertFalse("stale WAL sibling must be swept", staleWal.exists())
+        context.deleteDatabase("sweep-current.db")
+    }
+
+    @Test
     fun refusesANewerThanAppBackup() {
         val db = SQLiteDatabase.openOrCreateDatabase(file.path, null)
         try {

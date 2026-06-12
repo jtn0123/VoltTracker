@@ -13,6 +13,12 @@
     --muted: #aaaab4;
     --soft: #8b8c99;
     --volt: #ff7a45;
+    /* RGB triplet of the DEFAULT --volt, for rgba(var(--volt-rgb), a) alpha
+       tints. Deliberately NOT overridden by the light scheme: the alpha-tint
+       rules always rendered the bright-orange literal in both schemes (light
+       re-tints the few surfaces it cares about with its own rules), so a
+       single value preserves that rendering exactly. */
+    --volt-rgb: 255, 122, 69;
     --volt-deep: #e85a1f;
     --ev: #b8e63b;
     --ok: #35e6a0;
@@ -68,7 +74,7 @@
     --sheen-faint: rgba(255,255,255,0.04);
     /* Page background gradient stops */
     --bg-top: #12131a;
-    --bg-glow: rgba(255,122,69,0.14);
+    --bg-glow: rgba(var(--volt-rgb), 0.14);
     /* Map-tab blue accent */
     --map-accent: #4cc4ff;
     --on-map-accent: #04222e;
@@ -251,7 +257,7 @@
     padding: 4px 8px 4px 0;
     border-radius: 14px;
     background:
-      radial-gradient(220px 54px at 8px 2px, rgba(255, 122, 69, 0.12), transparent 68%),
+      radial-gradient(220px 54px at 8px 2px, rgba(var(--volt-rgb), 0.12), transparent 68%),
       linear-gradient(90deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0));
   }
 
@@ -268,13 +274,13 @@
     height: 30px;
     flex: 0 0 auto;
     place-items: center;
-    border: 1px solid rgba(255, 122, 69, 0.34);
+    border: 1px solid rgba(var(--volt-rgb), 0.34);
     border-radius: 10px;
     background:
       radial-gradient(circle at 35% 20%, rgba(255, 184, 74, 0.4), transparent 38%),
-      linear-gradient(145deg, rgba(255, 122, 69, 0.25), rgba(184, 230, 59, 0.08));
+      linear-gradient(145deg, rgba(var(--volt-rgb), 0.25), rgba(184, 230, 59, 0.08));
     color: #ffd0b8;
-    box-shadow: 0 10px 24px rgba(255, 122, 69, 0.16);
+    box-shadow: 0 10px 24px rgba(var(--volt-rgb), 0.16);
   }
 
   .drive-title-mark svg {
@@ -284,7 +290,7 @@
   }
 
   body[data-active-view="trips"] .drive-title-mark {
-    border-color: rgba(255, 122, 69, 0.34);
+    border-color: rgba(var(--volt-rgb), 0.34);
     color: #ffb08f;
   }
 
@@ -301,7 +307,7 @@
     color: #d8ff75;
     background:
       radial-gradient(circle at 35% 20%, rgba(184, 230, 59, 0.28), transparent 38%),
-      linear-gradient(145deg, rgba(184, 230, 59, 0.16), rgba(255, 122, 69, 0.08));
+      linear-gradient(145deg, rgba(184, 230, 59, 0.16), rgba(var(--volt-rgb), 0.08));
   }
 
   body[data-active-view="insights"] .drive-title-mark {
@@ -317,7 +323,7 @@
     color: #ffd37f;
     background:
       radial-gradient(circle at 35% 20%, rgba(255, 184, 74, 0.32), transparent 38%),
-      linear-gradient(145deg, rgba(255, 184, 74, 0.2), rgba(255, 122, 69, 0.08));
+      linear-gradient(145deg, rgba(255, 184, 74, 0.2), rgba(var(--volt-rgb), 0.08));
   }
 
   body[data-active-view="signals"] .drive-title-mark {
@@ -325,7 +331,7 @@
     color: #a9ffd7;
     background:
       radial-gradient(circle at 35% 20%, rgba(53, 230, 160, 0.26), transparent 38%),
-      linear-gradient(145deg, rgba(53, 230, 160, 0.15), rgba(255, 122, 69, 0.1));
+      linear-gradient(145deg, rgba(53, 230, 160, 0.15), rgba(var(--volt-rgb), 0.1));
   }
 
   #screenKicker {
@@ -887,7 +893,7 @@
   }
 
   .scan {
-    border-color: rgba(255,122,69,0.32);
+    border-color: rgba(var(--volt-rgb), 0.32);
     color: var(--volt);
   }
 

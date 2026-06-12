@@ -6,6 +6,10 @@
 # import order, wrapping) is ktlint's job via Spotless. The disables below are default
 # rules that conflict with deliberate, reviewed idioms in this codebase; each says why.
 # Tighten incrementally: prefer re-enabling a rule over growing this list.
+#
+# Scope: the test tree (src/test) IS part of detekt's source set (see source.setFrom in
+# app/build.gradle) and gets the correctness rules; only the complexity thresholds below
+# exclude tests, because table-driven test classes are long and repetitive by design.
 
 complexity:
   # RATCHETING THRESHOLDS — production code only (tests are repetitive by design and

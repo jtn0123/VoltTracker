@@ -52,9 +52,25 @@ type ChartPoint = {
     return node;
   }
 
+  // Chart hosts are measured on every render frame (~1Hz telemetry), and each
+  // clientWidth / getBoundingClientRect read forces a synchronous layout.
+  // Cache the last measured width per host and invalidate on resize (the
+  // existing handler at the bottom of this file). A zero width — host hidden
+  // or not laid out yet — is never cached, so a tab that becomes visible later
+  // re-measures until it has real layout.
+  const measuredWidths = new Map<HTMLElement, number>();
+
+  function invalidateMeasuredWidths() {
+    measuredWidths.clear();
+  }
+
   function targetWidth(node: HTMLElement | null) {
     if (!node) return 0;
-    return Math.max(0, node.clientWidth || node.getBoundingClientRect().width);
+    const cached = measuredWidths.get(node);
+    if (cached) return cached;
+    const width = Math.max(0, node.clientWidth || node.getBoundingClientRect().width);
+    if (width > 0) measuredWidths.set(node, width);
+    return width;
   }
 
   // ----- session chip strip -------------------------------------------------
@@ -479,11 +495,15 @@ type ChartPoint = {
     renderSocMicroHeader();
   }
 
-  // Resize redraws — keep the rendered widths in sync with the container.
+  // Resize redraws — drop the cached host widths first so the redraw measures
+  // the new container size instead of re-painting at the stale one.
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   window.addEventListener("resize", () => {
     if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(renderDriveLive, 160);
+    resizeTimer = setTimeout(() => {
+      invalidateMeasuredWidths();
+      renderDriveLive();
+    }, 160);
   });
 
   Object.assign(VD, {

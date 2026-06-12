@@ -54,6 +54,11 @@ class BackupController(
         activity.getString(R.string.backup_disclosure_message, DataBackup.MIN_PASSPHRASE_LENGTH)
 
     private fun showShareDisclosure(onConfirmed: Runnable) {
+        if (activity.isFinishing) {
+            // A dialog shown on a finishing Activity leaks the window; drop the request.
+            Log.w(MainActivity.TAG, "share disclosure skipped; activity is finishing")
+            return
+        }
         try {
             AlertDialog
                 .Builder(activity)
@@ -66,6 +71,7 @@ class BackupController(
                     activity.publishStatus("ready", activity.getString(R.string.status_backup_cancelled), false)
                 }.show()
         } catch (ex: RuntimeException) {
+            Log.w(MainActivity.TAG, "share disclosure dialog failed to show", ex)
             activity.publishStatus("blocked", activity.getString(R.string.status_backup_disclosure_failed), true)
         }
     }
@@ -127,6 +133,11 @@ class BackupController(
                 }
             activity.runOnUiThread {
                 if (backup == null) {
+                    // DataBackup logs the throwing phase internally; tie that to this UI failure.
+                    Log.e(
+                        MainActivity.TAG,
+                        "backup build failed (encrypted=$encrypted, integrityWarning=$integrityWarning)",
+                    )
                     showRestoreProgress(
                         activity.getString(R.string.progress_backup_failed_title),
                         activity.getString(R.string.status_backup_create_failed),
@@ -174,6 +185,7 @@ class BackupController(
                         false,
                     )
                 } catch (ex: RuntimeException) {
+                    Log.e(MainActivity.TAG, "backup share sheet failed (encrypted=$encrypted)", ex)
                     showRestoreProgress(
                         activity.getString(R.string.progress_backup_failed_title),
                         activity.getString(R.string.status_share_sheet_failed),
@@ -302,6 +314,12 @@ class BackupController(
     }
 
     private fun promptRestoreMode(staged: File) {
+        if (activity.isFinishing) {
+            // No window to show the dialog in; clean up the staged file instead of leaking it.
+            Log.w(MainActivity.TAG, "restore-mode dialog skipped; activity is finishing")
+            cancelStagedRestore(staged)
+            return
+        }
         try {
             AlertDialog
                 .Builder(activity)
@@ -313,6 +331,7 @@ class BackupController(
                 .setOnCancelListener { cancelStagedRestore(staged) }
                 .show()
         } catch (ex: RuntimeException) {
+            Log.w(MainActivity.TAG, "restore-mode dialog failed to show", ex)
             cancelStagedRestore(staged)
             activity.publishStatus("blocked", activity.getString(R.string.status_restore_options_failed), true)
         }

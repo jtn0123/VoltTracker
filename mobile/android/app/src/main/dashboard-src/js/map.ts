@@ -1,4 +1,5 @@
 import {
+  CURRENT_DRIVE_LABEL,
   LIVE_ROUTE_ID,
   appendLiveRoutePoint,
   haversineMetersJs,
@@ -313,7 +314,7 @@ import {
     VD.setText(
       "mapTitle",
       hasMapContent
-        ? routeSession.adapterName || (isLiveRoute ? "Current drive" : routeSession.mode) || "Logged drive"
+        ? routeSession.adapterName || (isLiveRoute ? CURRENT_DRIVE_LABEL : routeSession.mode) || "Logged drive"
         : "No route recorded yet"
     );
     VD.setText(
@@ -522,7 +523,7 @@ import {
       : String(
         sample.adapterName ||
         (selectedDevice && selectedDevice.name) ||
-        "Current drive"
+        CURRENT_DRIVE_LABEL
       );
     const startedAtMs = liveRouteStartedAtMs || firstPoint.atMs;
     const powerTrack = points

@@ -98,7 +98,9 @@ with a real signature (not left optional).
 ## Android: Kotlin for new code
 
 The Android module is **Kotlin-first**. Production Android source is now Kotlin-complete,
-and existing Java tests remain as legacy coverage unless they are being materially reworked.
+and the test suite finished its Java→Kotlin conversion in June 2026 (see the round-3 note
+in `app/jacoco.gradle`). Any Java test that reappears is legacy by definition — see the
+inventory below.
 
 - **Write new classes in Kotlin** (`.kt`) — put them in `app/src/main/kotlin/…`. Tests stay in
   `app/src/test/java/…` per the repo test-location rule, even if a future test file is Kotlin.
@@ -113,6 +115,21 @@ and existing Java tests remain as legacy coverage unless they are being material
 - **Coverage:** JaCoCo measures Kotlin classes too (`app/jacoco.gradle` scans both the javac and
   kotlin-classes outputs), so new Kotlin is held to the same ratcheting floors as Java — write
   tests for it.
+
+### Java test inventory
+
+Count the remaining Java test files at any time with:
+
+```sh
+find app/src/test -name '*.java' | wc -l
+```
+
+Current count: **0** (as of 2026-06-12; the suite is 91 Kotlin test files). Policy: do not
+add new Java tests. If a Java test ever returns (e.g. via a revert), convert it to Kotlin
+the next time it is materially reworked — small mechanical edits don't force a conversion,
+but behavioral changes or significant additions do. Production code is already gated
+Java-free by the `verifyNoMigrationSourceStragglers` task; the test tree relies on this
+policy plus review.
 
 The wave-by-wave conversion plan (which Java files to convert in what order, the `@JvmField`/enum
 interop rules) and the dashboard TypeScript roadmap (strictNullChecks → full TS + bundler) live in

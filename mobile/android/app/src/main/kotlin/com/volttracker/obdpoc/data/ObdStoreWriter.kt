@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.data
 
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
+import android.util.Log
 import androidx.core.database.sqlite.transaction
 import com.volttracker.obdpoc.EnhancedPidProfile
 import com.volttracker.obdpoc.EnhancedPidProfiles
@@ -17,6 +18,22 @@ class ObdStoreWriter(
     private val snapshots: ObdStoreSnapshots,
 ) {
     private val statementCache = ObdStatementCache()
+
+    /**
+     * sessionId -> adapter key, so the per-PID-observation capability upsert resolves the key with
+     * one TABLE_SESSIONS query per session instead of one per observation. Safe to cache because a
+     * session's adapter_address/mode never change after startSession. Bounded LRU (a handful of
+     * sessions can be in flight at once at most); synchronized because reads can arrive from more
+     * than one caller thread.
+     */
+    private val adapterKeyCache =
+        object : LinkedHashMap<Long, String>(8, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, String>?): Boolean =
+                size > ADAPTER_KEY_CACHE_MAX
+        }
+
+    /** Consecutive passive-checkpoint failures; reset on the first success. */
+    private var walCheckpointFailureStreak = 0
 
     fun startSession(
         mode: String?,
@@ -121,8 +138,21 @@ class ObdStoreWriter(
     private fun checkpointWalPassive() {
         try {
             helper.writableDatabase.execSQL("PRAGMA wal_checkpoint(PASSIVE)")
+            walCheckpointFailureStreak = 0
         } catch (ex: RuntimeException) {
-            // Best-effort bound for very long sessions; regular maintenance still truncates.
+            // Best-effort bound for very long sessions; regular maintenance still truncates. A
+            // single failure is harmless, but a persistent streak means the WAL is growing
+            // unchecked — surface that without logging on every session end.
+            walCheckpointFailureStreak++
+            if (walCheckpointFailureStreak == 1 ||
+                walCheckpointFailureStreak % WAL_CHECKPOINT_LOG_EVERY == 0
+            ) {
+                Log.w(
+                    TAG,
+                    "wal_checkpoint(PASSIVE) failed ($walCheckpointFailureStreak consecutive)",
+                    ex,
+                )
+            }
         }
     }
 
@@ -488,11 +518,58 @@ class ObdStoreWriter(
         }
     }
 
+    /**
+     * Resolves the adapter key for a session, served from [adapterKeyCache] after the first
+     * lookup. Only a successful row read is cached; a miss (session not yet visible) falls back
+     * to the empty key without poisoning the cache.
+     */
+    private fun adapterKeyForSession(
+        db: SQLiteDatabase,
+        sessionId: Long,
+    ): String {
+        synchronized(adapterKeyCache) {
+            adapterKeyCache[sessionId]?.let { return it }
+        }
+        db
+            .query(
+                VoltTrackerDb.TABLE_SESSIONS,
+                arrayOf("adapter_address", "mode"),
+                "_id = ?",
+                arrayOf(sessionId.toString()),
+                null,
+                null,
+                null,
+                "1",
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val address = cursor.getString(cursor.getColumnIndexOrThrow("adapter_address"))
+                    val mode = cursor.getString(cursor.getColumnIndexOrThrow("mode"))
+                    val key = ObdStoreSupport.adapterKey(address, mode)
+                    synchronized(adapterKeyCache) {
+                        adapterKeyCache[sessionId] = key
+                    }
+                    return key
+                }
+            }
+        return ObdStoreSupport.adapterKey("", "")
+    }
+
     fun close() {
         statementCache.close()
+        synchronized(adapterKeyCache) {
+            adapterKeyCache.clear()
+        }
     }
 
     companion object {
+        private const val TAG = "VoltTracker"
+
+        /** Keep the adapter keys of the last few sessions; one session is active at a time. */
+        private const val ADAPTER_KEY_CACHE_MAX = 4
+
+        /** After the first failure, log again on every Nth consecutive checkpoint failure. */
+        private const val WAL_CHECKPOINT_LOG_EVERY = 10
+
         private fun capabilitySampleJson(
             profile: EnhancedPidProfile,
             observation: JSONObject,
@@ -520,30 +597,6 @@ class ObdStoreWriter(
                 // Local strings/numbers are safe.
             }
             return payload
-        }
-
-        private fun adapterKeyForSession(
-            db: SQLiteDatabase,
-            sessionId: Long,
-        ): String {
-            db
-                .query(
-                    VoltTrackerDb.TABLE_SESSIONS,
-                    arrayOf("adapter_address", "mode"),
-                    "_id = ?",
-                    arrayOf(sessionId.toString()),
-                    null,
-                    null,
-                    null,
-                    "1",
-                ).use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val address = cursor.getString(cursor.getColumnIndexOrThrow("adapter_address"))
-                        val mode = cursor.getString(cursor.getColumnIndexOrThrow("mode"))
-                        return ObdStoreSupport.adapterKey(address, mode)
-                    }
-                }
-            return ObdStoreSupport.adapterKey("", "")
         }
     }
 }
