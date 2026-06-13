@@ -20,19 +20,28 @@ diagram and dashboard screenshots.
 - All data stays on-device. **Back up data** exports the full database to a file
   via the Android share sheet, so you can keep a copy anywhere (cloud, PC).
 
-Build and install:
+## Repository structure
 
-```powershell
+| Part        | Location                                       | What                                            |
+|-------------|------------------------------------------------|-------------------------------------------------|
+| Android app | `mobile/android/`                              | Kotlin source, Gradle build, WebView, SQLite    |
+| Dashboard   | `mobile/android/app/src/main/dashboard-src/`   | TypeScript + HTML partials (built by Gradle)    |
+| Docs        | `mobile/android/docs/`                         | Architecture roadmap, ADRs, field guides        |
+| CI          | `.github/workflows/`                           | Tests, lint, coverage, CodeQL, release pipeline |
+
+Build and install (on Windows, replace `./gradlew` with `.\gradlew.bat`):
+
+```sh
 cd mobile/android
-.\gradlew.bat :app:assembleDebug
-.\gradlew.bat :app:installDebug
+./gradlew :app:assembleDebug
+./gradlew :app:installDebug
 ```
 
 Unit tests:
 
-```powershell
+```sh
 cd mobile/android
-.\gradlew.bat :app:testDebugUnitTest
+./gradlew :app:testDebugUnitTest
 ```
 
 ## License

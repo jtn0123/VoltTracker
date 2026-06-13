@@ -4,6 +4,11 @@ VoltTracker is the Android OBD-II companion app for the 2017 Chevy Volt. Source
 lives under `mobile/android/`. The former Flask/Postgres web receiver has been
 removed; this repo now ships only the Android app.
 
+For the complete contribution workflow (dashboard build pipeline, Kotlin
+guidelines, coverage policy), see
+[`mobile/android/CONTRIBUTING.md`](mobile/android/CONTRIBUTING.md) — that file
+is the authoritative guide; this one is the short version.
+
 ## Quick start
 
 ```bash
@@ -14,7 +19,9 @@ cd VoltTracker/mobile/android
 ./gradlew :app:installDebug          # install to a connected device or AVD
 ```
 
-Requires JDK 17 and Android SDK 36 (the wrapper handles Gradle).
+Requires JDK 21 (CI uses Temurin 21; the bytecode target is Java 17), Android
+SDK 36, and Node 22 for the dashboard toolchain (the wrapper handles Gradle).
+On Windows, replace `./gradlew` with `.\gradlew.bat`.
 
 ## The five gates we run in CI
 
@@ -80,11 +87,15 @@ lefthook install
 Hooks run Spotless on staged files. They're optional; CI catches the same issues
 on PR, but local hooks cut the feedback loop.
 
-## Commit messages
+## Commit messages and PR titles
 
-We don't enforce conventional commits, but a short imperative title (≤72 chars)
-plus a body explaining "why, not what" is encouraged. Include the grade-report
-item ID if you're executing one (e.g. `D1`, `B2`).
+PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)
+(e.g. `feat(dashboard): add version chip`) — CI lints them, and because this
+repo squash-merges, the PR title becomes the commit subject that
+semantic-release parses to cut versions. Individual commits within a PR are
+free-form: a short imperative title (≤72 chars) plus a body explaining "why,
+not what" is encouraged. Include the grade-report item ID if you're executing
+one (e.g. `D1`, `B2`).
 
 ## Project structure
 

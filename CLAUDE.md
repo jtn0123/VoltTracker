@@ -7,9 +7,10 @@ on that web stack unless explicitly asked.
 ## Android app
 
 - Source: `mobile/android/`
-- Build: `cd mobile/android && ./gradlew.bat :app:assembleDebug`
-- Install: `./gradlew.bat :app:installDebug` (or `adb install -r`)
-- Unit tests: `./gradlew.bat :app:testDebugUnitTest`
+- Build: `cd mobile/android && ./gradlew :app:assembleDebug`
+- Install: `./gradlew :app:installDebug` (or `adb install -r`)
+- Unit tests: `./gradlew :app:testDebugUnitTest`
+- On Windows, replace `./gradlew` with `.\gradlew.bat`.
 - Test location: `mobile/android/app/src/test/java/com/volttracker/obdpoc/`
   (pure JVM + Robolectric for the SQLite layer — no instrumented tests)
 
@@ -40,5 +41,5 @@ generated files:
   `dashboard-tests/build.mjs` (esbuild) via the Gradle `buildDashboardJs` task. Both are wired
   into `preBuild`. Never hand-edit either generated output.
 - After editing a TypeScript source file, rebuild the bundle: `npm --prefix dashboard-tests run build`
-  (or just `./gradlew.bat :app:assembleDebug`, which runs it). After editing a partial/template,
-  run `./gradlew.bat generateDashboardHtml`.
+  (or just `./gradlew :app:assembleDebug`, which runs it). After editing a partial/template,
+  run `./gradlew generateDashboardHtml`.

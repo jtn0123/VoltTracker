@@ -83,6 +83,28 @@ Solid magenta blocks are Playwright screenshot masks over nondeterministic
 regions (live charts, Leaflet map tiles) — on a phone those areas show the
 real chart/map.
 
+### Dashboard Source Map
+
+Dashboard behavior lives in `app/src/main/dashboard-src/js/*.ts` (bundled by
+esbuild into the gitignored `assets/dashboard/js/`); each screen's markup is a
+partial in `app/src/main/dashboard-src/partials/`.
+
+| Screen / concern | TypeScript | Partial(s) |
+|------------------|------------|------------|
+| Shared namespace, state, Android bridge ABI, restore progress | `core.ts`, `telemetry.ts` | `topbar.html`, `error-banner.html`, `restore-progress.html` |
+| Drive tab (live chips, speed/power/SOC charts) | `drive.ts` | `drive.html` |
+| Trips list + Insights stats/scatter | `insights-panel.ts` | `insights.html` |
+| Map tab (Leaflet, route scrubber, session list) | `map.ts`, `map-route-utils.ts`, `map-session-list.ts`, `scrubber.ts` | `map.html` |
+| Charge history + storage summary + post-session review | `storage-status.ts` | `charge.html`, `settings.html` |
+| Diagnostics: DTC lookup (lazy-loaded chunks) | `dtc-lookup.ts`, `dtc-causes.ts` | `diagnostics.html` |
+| Detailed Signals (enhanced PID discovery) | `signals-panel.ts` | (rendered into `diagnostics.html`) |
+| Connection status, tools, troubleshooter modal | `connection-status.ts`, `connection-tools.ts`, `troubleshooter.ts` | `connection-tools.html`, `troubleshooter.html` |
+| Button wiring + lifecycle | `actions.ts`, `actions-demo.ts`, `actions-page-scroll.ts`, `actions-signals.ts`, `actions-storage.ts` | — |
+| User preferences (loaded first in the bundle) | `prefs.ts` | `preferences.html` |
+| In-app dialogs, demo data | `app-dialog.ts`, `demo-data.ts` | `app-dialog.html` |
+
+Styles are plain CSS in `app/src/main/assets/dashboard/css/` (no build step).
+
 ## Setup
 
 Use the pinned toolchain before running the full verification task:
