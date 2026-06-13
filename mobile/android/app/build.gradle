@@ -68,7 +68,7 @@ def repoVersionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
 
 android {
     namespace = "com.volttracker.obdpoc"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.volttracker.obdpoc"
