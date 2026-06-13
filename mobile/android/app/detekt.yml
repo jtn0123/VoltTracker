@@ -45,7 +45,7 @@ complexity:
   TooManyFunctions:
     active: true
     thresholdInFiles: 66
-    thresholdInClasses: 61 # MainActivity (60)
+    thresholdInClasses: 64 # MainActivity (63, +getCurrentSessionRouteJson/getBatterySohHistoryJson)
     thresholdInInterfaces: 25 # ObdSessionStore (24)
     thresholdInObjects: 61 # ObdProtocol (60)
     thresholdInEnums: 12

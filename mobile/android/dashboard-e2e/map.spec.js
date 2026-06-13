@@ -43,7 +43,9 @@ test('remote map tiles are always on with no opt-out control', async ({ page }) 
   await setView(page, 'map');
 
   await expect(page.locator('#mapTilesBtn')).toHaveCount(0);
-  await expect(page.locator('.map-top-right button')).toHaveCount(1);
+  // Top-right now holds the full-screen toggle plus the live-only Follow button
+  // (hidden on this historical route); the point is there is no map-tiles opt-out.
+  await expect(page.locator('.map-top-right button')).toHaveCount(2);
   await expect(page.locator('#mapLeaflet .leaflet-tile-pane')).toBeAttached();
   expect(await page.evaluate(() => window.VoltDashboard.state.mapRemoteTilesEnabled)).toBe(true);
 });
