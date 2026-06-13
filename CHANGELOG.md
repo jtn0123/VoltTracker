@@ -1,6 +1,38 @@
 # CHANGELOG
 
 
+## v0.13.0 (2026-06-13)
+
+### Bug Fixes
+
+- **release**: Clear esbuild audit advisory + #199 CI regressions
+  ([#205](https://github.com/jtn0123/VoltTracker/pull/205),
+  [`869e251`](https://github.com/jtn0123/VoltTracker/commit/869e2518d11aa9246a03cb89c2ecdc3f1ad7404d))
+
+Bump esbuild ^0.25.0 -> ^0.28.1 to clear GHSA-gv7w-rqvm-qjhr (release audit gate), and fix three
+  #199 CI regressions not covered by the local gate: - detekt TooManyFunctions threshold for
+  MainActivity (61 -> 64) - dashboard-e2e map.spec.js button count (new Follow button) -
+  dashboard-visual charge-tab baselines regenerated (new Battery-tab cards)
+
+All checks green: Android unit tests (detekt/e2e/visual/unit), CodeQL, Release dry run.
+
+### Features
+
+- **dashboard**: Live-map follow + direction, live-signals + battery views, charge over-count fix,
+  WebView lifecycle ([#199](https://github.com/jtn0123/VoltTracker/pull/199),
+  [`44ad880`](https://github.com/jtn0123/VoltTracker/commit/44ad8809e9e5f81a8c4036e9125779bc3b5238ff))
+
+Multi-phase dashboard/app pass addressing the original issue list plus follow-ups:
+
+- Lifecycle: fix black-screen-on-resume, faster cold start, no "new run" on resume - Map:
+  auto-follow the live drive + direction-of-travel visuals - Live signals diagnostic panel (with
+  "not reporting" filter) - Charge over-counting fix (transient-break debounce + min-sample guard) -
+  Battery: cell-balance card, SOH trend chart, 96-cell voltage-map scaffold - Live-route rehydration
+  after a mid-drive WebView teardown - Self-review + CodeRabbit review fixes folded in
+
+Verified: tsc + ESLint clean, vitest 340, :app:testDebugUnitTest + spotlessCheck green.
+
+
 ## v0.12.1 (2026-06-12)
 
 ### Bug Fixes
