@@ -56,6 +56,17 @@ order:
 4. **Splitting:** windows with a continuous-plug signal longer than
    `SPLIT_GAP_MS = 30 min` are split into separate sessions. Gaps shorter than
    that are counted as `interruptionCount` inside one session.
+5. **Transient-break debounce (added 2026-06-13).** A movement/discharge sample
+   no longer splits an active charge on its own. A break only splits once it is
+   *sustained* for `BREAK_DEBOUNCE_MS = 60 s`; a shorter break that resumes
+   charging is folded back in as an `interruptionCount`. This was the main cause
+   of over-counting — a single glitchy speed/power sample mid-charge logged one
+   physical charge as several sessions. A genuinely sustained drive still splits,
+   so a drive is never stitched into a charge.
+6. **Minimum sample count (added 2026-06-13).** A finalized window needs at least
+   `MIN_SAMPLES = 3` plugged samples. Real charges stream hundreds of samples;
+   this rejects the sparse two-sample windows a transient break can leave behind
+   (which a duration-only check would otherwise accept as a tiny "charge").
 
 ## Consequences
 
@@ -69,15 +80,17 @@ order:
   surfaced a phantom 4-hour "charge session" during a highway drive where the
   speed PID had stopped responding while the alternator stayed up.
 - Threshold values (`13.5 V` aux, `< 0` pack current, `30 min` split gap,
-  `> 5 min` interruption-vs-split boundary) are pinned in
-  `ChargeSessionMaterializer.Tunables` with regression tests in
-  `ChargeSessionMaterializerTest`. Round-6 added single-sample, all-zero, and
-  all-null cases for the conservative rejection paths.
+  `> 5 min` interruption-vs-split boundary, `60 s` break debounce, `3`-sample
+  minimum) are pinned in `ChargeSessionMaterializer.Tunables` with regression
+  tests in `ChargeSessionMaterializerTest`. Round-6 added single-sample,
+  all-zero, and all-null cases for the conservative rejection paths; the
+  2026-06-13 over-counting fix added transient-break, sustained-drive-split, and
+  sparse-window cases.
 
 ## References
 
 - `app/src/main/kotlin/com/volttracker/obdpoc/materialize/ChargeSessionMaterializer.kt`
-- `app/src/test/java/com/volttracker/obdpoc/materialize/ChargeSessionMaterializerTest.java`
+- `app/src/test/java/com/volttracker/obdpoc/materialize/ChargeSessionMaterializerTest.kt`
 - `docs/volt-pid-research-2026-05-20.md` (PID `222414` decode + sign convention)
 - `docs/field-test-2026-05-19.md` (capture session that surfaced the
   aux-voltage false positive)

@@ -58,6 +58,34 @@
 
   <!-- Detailed Signals — enhanced PID discovery (tire pressure, battery
        internals, hidden PIDs). Rendered by signals-panel.js. -->
+  <article id="liveSignalsCard" class="panel list-card">
+    <header class="signal-console-head">
+      <div class="signal-console-title">
+        <span class="kicker">Live signals</span>
+        <h2 id="liveSignalsTitle">Connect to see live metrics</h2>
+        <small class="signal-console-sub">
+          Every metric the app polls, with its latest value and how fresh it is
+          — so you can tell what's reporting and what the car isn't answering.
+        </small>
+      </div>
+      <span id="liveSignalsBadge" class="signal-status-pill">0/0</span>
+    </header>
+    <div
+      id="liveSignalsFilter"
+      class="signal-stage-tabs live-signals-filter"
+      role="group"
+      aria-label="Filter live signals"
+    >
+      <button type="button" data-live-signal-filter="all" class="is-active">
+        <span>All</span>
+      </button>
+      <button type="button" data-live-signal-filter="missing">
+        <span>Not reporting</span>
+      </button>
+    </div>
+    <div id="liveSignalsList" class="live-signals-list"></div>
+  </article>
+
   <article id="enhancedCard" class="panel list-card signal-console">
     <header class="signal-console-head">
       <div class="signal-console-title">

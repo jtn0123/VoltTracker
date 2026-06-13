@@ -210,6 +210,70 @@ class ChargeSessionMaterializerTest {
     }
 
     @Test
+    fun transientBreakFoldsIntoOneSessionInsteadOfSplitting() {
+        // One physical charge with a single glitchy moving sample in the middle (a GPS speed
+        // spike / converter blip). Before the debounce this split into two sessions — the
+        // over-counting the user reported. It must now materialize as ONE session that records
+        // the blip as an interruption.
+        val data = StubData()
+        for (i in 0..10) {
+            data.telemetry.add(tel(T_BASE + i * ONE_MINUTE_MS, 14.2, 0.0))
+        }
+        // Single transient moving sample at minute 11.
+        data.telemetry.add(tel(T_BASE + 11 * ONE_MINUTE_MS, 12.2, 45.0))
+        // Charging resumes well within the debounce window and runs another 10 minutes.
+        for (i in 12..22) {
+            data.telemetry.add(tel(T_BASE + i * ONE_MINUTE_MS, 14.2, 0.0))
+        }
+
+        val sessions = ChargeSessionMaterializer.materialize(input(), data)
+
+        assertEquals(1, sessions.size)
+        assertEquals(T_BASE, sessions[0].startedAtMs)
+        assertEquals(T_BASE + 22 * ONE_MINUTE_MS, sessions[0].endedAtMs)
+        assertTrue(
+            "the transient break should be recorded as an interruption",
+            sessions[0].interruptionCount >= 1,
+        )
+    }
+
+    @Test
+    fun sustainedDriveStillSplitsChargesAndIsNotStitched() {
+        // The debounce must not stitch a genuine drive into a charge: charge, then a multi-minute
+        // drive (well past BREAK_DEBOUNCE_MS), then charge again -> two separate sessions.
+        val data = StubData()
+        for (i in 0..6) {
+            data.telemetry.add(tel(T_BASE + i * ONE_MINUTE_MS, 14.2, 0.0))
+        }
+        for (i in 7..13) {
+            data.telemetry.add(tel(T_BASE + i * ONE_MINUTE_MS, 12.2, 45.0))
+        }
+        for (i in 14..20) {
+            data.telemetry.add(tel(T_BASE + i * ONE_MINUTE_MS, 14.2, 0.0))
+        }
+
+        val sessions = ChargeSessionMaterializer.materialize(input(), data)
+
+        assertEquals(2, sessions.size)
+        assertTrue(sessions[0].endedAtMs <= sessions[1].startedAtMs)
+        // The charge before the drive ends at the last plugged sample, not mid-drive.
+        assertEquals(T_BASE + 6 * ONE_MINUTE_MS, sessions[0].endedAtMs)
+        assertEquals(T_BASE + 14 * ONE_MINUTE_MS, sessions[1].startedAtMs)
+    }
+
+    @Test
+    fun sparseTwoSampleWindowIsRejectedAsNoise() {
+        // Two plugged samples a minute apart with a breaking sample between them: enough duration
+        // to clear MIN_DURATION_MS, but too few samples to be a real charge. MIN_SAMPLES rejects it.
+        val data = StubData()
+        data.telemetry.add(telWithPackCurrent(T_BASE, 0.0, -25.0))
+        data.telemetry.add(tel(T_BASE + 30_000L, 12.2, 45.0))
+        data.telemetry.add(telWithPackCurrent(T_BASE + ONE_MINUTE_MS, 0.0, -25.0))
+
+        assertEquals(0, ChargeSessionMaterializer.materialize(input(), data).size)
+    }
+
+    @Test
     fun movingSampleBreaksPluggedCandidateInsteadOfStitchingDrive() {
         val data = StubData()
         data.telemetry.add(telWithPackCurrent(T_BASE, 0.0, -8.0))

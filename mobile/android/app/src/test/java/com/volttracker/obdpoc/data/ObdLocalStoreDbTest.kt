@@ -911,6 +911,33 @@ class ObdLocalStoreDbTest {
         assertTrue(result.summary().contains("different app version"))
     }
 
+    @Test
+    fun batterySohHistoryReturnsSnapshotsOldestFirst() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        // Capacity present + fresh → recordBatterySnapshotIfPresent writes a row.
+        store.recordTelemetry(id, batterySample(1000, soh = 95.0, capacityAh = 44.0))
+        store.recordTelemetry(id, batterySample(2000, soh = 94.5, capacityAh = 43.7))
+        // No capacity → not a battery snapshot, must not appear in the history.
+        store.recordTelemetry(id, sample(40, 1500, 32.70, -117.10, 2500))
+
+        val history = store.getBatterySohHistoryJson()
+
+        assertEquals(2, history.length())
+        // Oldest-first for charting.
+        assertEquals(1000L, history.getJSONObject(0).getLong("capturedAtMs"))
+        assertEquals(95.0, history.getJSONObject(0).getDouble("sohPct"), 0.001)
+        assertEquals(2000L, history.getJSONObject(1).getLong("capturedAtMs"))
+        assertEquals(43.7, history.getJSONObject(1).getDouble("capacityAh"), 0.001)
+    }
+
+    @Test
+    fun batterySohHistoryIsEmptyWithoutCapacityReadings() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, sample(40, 1500, 32.70, -117.10, 1000))
+
+        assertEquals(0, store.getBatterySohHistoryJson().length())
+    }
+
     companion object {
         private fun sample(
             speedKph: Int,
@@ -926,6 +953,23 @@ class ObdLocalStoreDbTest {
             sample.put("latitude", lat)
             sample.put("longitude", lng)
             sample.put("updatedAt", atMs)
+            return sample
+        }
+
+        private fun batterySample(
+            atMs: Long,
+            soh: Double,
+            capacityAh: Double,
+        ): JSONObject {
+            val sample = JSONObject()
+            sample.put("source", "obd")
+            sample.put("updatedAt", atMs)
+            sample.put("soc", 60)
+            sample.put("capacityAh", capacityAh)
+            // recordBatterySnapshotIfPresent only writes when the capacity read is fresh.
+            sample.put("capacityAhStaleMs", 0)
+            sample.put("sohPct", soh)
+            sample.put("packVoltage", 360.0)
             return sample
         }
 

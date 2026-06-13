@@ -133,8 +133,17 @@ object PidSchedule {
             PidSpec("224373", Header.HV_PACK_7E4, 24, 18), // charging mode
             PidSpec("224531", Header.HV_PACK_7E4, 24, 18), // charging level
             PidSpec("2243AF", Header.HV_PACK_7E4, 24, 22), // raw precise SOC
+            // Cell-balance trio shares phase 22 with 2243AF so they batch on the same 7E4 header
+            // switch; balance changes slowly, so every 24 cycles is plenty.
+            PidSpec("224329", Header.HV_PACK_7E4, 24, 22), // minimum cell voltage
+            PidSpec("22432B", Header.HV_PACK_7E4, 24, 22), // maximum cell voltage
+            PidSpec("22435F", Header.HV_PACK_7E4, 24, 22), // cell SOC variation (balance proxy)
             PidSpec("2241B2", Header.HV_PACK_7E4, 48, 32), // battery coolant pump
             PidSpec("2241B4", Header.HV_PACK_7E4, 48, 32), // battery coolant valve
+            // Min/max cell index identifies WHICH cell is the outlier; rarely moves, so poll it on
+            // the slower 48-cycle lane alongside the coolant PIDs (same 7E4 phase 32).
+            PidSpec("22432A", Header.HV_PACK_7E4, 48, 32), // minimum cell number
+            PidSpec("22432C", Header.HV_PACK_7E4, 48, 32), // maximum cell number
             PidSpec("2241B6", Header.HV_PACK_7E4, 48, 38), // battery heater power
             PidSpec("22801E", Header.HV_PACK_7E4, 120, 96), // outside temp raw
             PidSpec("22801F", Header.HV_PACK_7E4, 120, 102), // outside temp filtered

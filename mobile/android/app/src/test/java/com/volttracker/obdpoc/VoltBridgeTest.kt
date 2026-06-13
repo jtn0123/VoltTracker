@@ -326,6 +326,8 @@ class VoltBridgeTest {
                 "getTrips",
                 "getInsights",
                 "getTripRoute",
+                "getCurrentSessionRoute",
+                "getBatterySohHistory",
                 "clearStoredData",
                 "rememberDevice",
                 "connectLast",

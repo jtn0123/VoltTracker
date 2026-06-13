@@ -132,6 +132,22 @@ class PidScheduleTest {
         }
     }
 
+    @Test
+    fun cellBalancePidsArePolledOnTheBatteryHeader() {
+        // Min/max cell voltage + SOC-variation poll every 24 cycles; the cell index numbers move
+        // slowly so they ride the 48-cycle lane. All sit on the 7E4 battery header.
+        for (command in arrayOf("224329", "22432B", "22435F")) {
+            val spec = findByCommand(command)
+            assertEquals("$command cell-balance cadence", 24, spec.periodCycles)
+            assertEquals("$command must use the 7E4 battery header", PidSchedule.Header.HV_PACK_7E4, spec.header)
+        }
+        for (command in arrayOf("22432A", "22432C")) {
+            val spec = findByCommand(command)
+            assertEquals("$command cell-number cadence", 48, spec.periodCycles)
+            assertEquals("$command must use the 7E4 battery header", PidSchedule.Header.HV_PACK_7E4, spec.header)
+        }
+    }
+
     /**
      * Run 48 cycles and assert the exact send count per PID matches the declared cadence. This is
      * the schedule's contract — if the contract changes, this fails loudly.

@@ -303,8 +303,15 @@ open class MainActivity :
     @VisibleForTesting
     internal fun isDashboardReadyForTest(): Boolean = dashboardPublisher?.isPageReady() == true
 
+    @VisibleForTesting
+    internal fun webViewForTest(): WebView? = webView
+
     override fun onResume() {
         super.onResume()
+        // Resume the WebView's renderer and JS timers. Without this the chromium compositor surface
+        // stays suspended after a background -> foreground trip and the page repaints as a black
+        // frame (the "black screen on resume" report). Paired with onPause()'s onPause() below.
+        webView?.onResume()
         broadcastCoordinator.register(this)
         publishDeviceList()
         publishStorageSummary()
@@ -315,6 +322,10 @@ open class MainActivity :
 
     override fun onPause() {
         reportAppVisibility(false)
+        // Suspend the WebView renderer/JS timers while backgrounded so chromium releases its drawing
+        // surface cleanly; onResume() above brings it back. Called before super.onPause() to mirror
+        // the standard Activity<->WebView lifecycle pairing.
+        webView?.onPause()
         super.onPause()
         broadcastCoordinator.unregisterAll(this)
     }
@@ -635,6 +646,10 @@ open class MainActivity :
     open fun getTripRouteJson(sessionId: Long): String = getTripRouteJson(sessionId.toString())
 
     override fun getTripRouteJson(routeKey: String?): String = storageReader.tripRouteJson(routeKey)
+
+    override fun getCurrentSessionRouteJson(): String = storageReader.currentSessionRouteJson()
+
+    override fun getBatterySohHistoryJson(): String = storageReader.batterySohHistoryJson()
 
     override fun getInsightsJson(): String = storageReader.insightsJson()
 

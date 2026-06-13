@@ -54,6 +54,26 @@ class DashboardStorageReader(
         }
     }
 
+    fun currentSessionRouteJson(): String {
+        val store = storeOrUnavailable() ?: return storageUnavailable()
+        return try {
+            store.getCurrentSessionRouteJson().toString()
+        } catch (ex: RuntimeException) {
+            Log.w(TAG, "getCurrentSessionRouteJson failed", ex)
+            MainActivityUtils.errorPayload("current_route_read_failed", "Could not read the current route.").toString()
+        }
+    }
+
+    fun batterySohHistoryJson(): String {
+        val store = storeOrUnavailable() ?: return storageUnavailable()
+        return try {
+            store.getBatterySohHistoryJson().toString()
+        } catch (ex: RuntimeException) {
+            Log.w(TAG, "getBatterySohHistoryJson failed", ex)
+            MainActivityUtils.errorPayload("battery_soh_history_failed", "Could not read battery history.").toString()
+        }
+    }
+
     // takeIf { isOpen }: these reads run synchronously on the WebView JS-bridge thread, so a
     // teardown race (store closed while a read is in flight) must degrade to the
     // storage_unavailable payload instead of throwing into the bridge.

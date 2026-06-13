@@ -773,6 +773,18 @@ import type { DataStateValue } from "./dataset-state";
       state.mapFull = !state.mapFull;
       void VD.requestMapRender().catch(() => {});
     }, opts);
+    VD.bindListenerGuarded("liveSignalsFilter", "click", (event: Event) => {
+      const target = (event.target as HTMLElement | null)?.closest("[data-live-signal-filter]") as HTMLElement | null;
+      if (!target) return;
+      state.liveSignalsFilter = target.dataset.liveSignalFilter === "missing" ? "missing" : "all";
+      if (typeof VD.updateDiagnostics === "function") VD.updateDiagnostics();
+    }, opts);
+    VD.bindListenerGuarded("mapFollowBtn", "click", () => {
+      // Toggle live-follow; turning it on recenters on the current drive. The map
+      // module owns the recenter + button state (it may not be loaded yet, hence
+      // the guard — the button is only visible once a live route exists).
+      if (typeof VD.setMapFollowLive === "function") VD.setMapFollowLive();
+    }, opts);
     VD.bindListenerGuarded("errorBannerHelp", "click", () => {
       if (typeof VD.ensureTroubleshooterModule !== "function") return;
       void VD.ensureTroubleshooterModule()
@@ -940,8 +952,6 @@ import type { DataStateValue } from "./dataset-state";
   VD.updateLiveUi();
   VD.renderRealV2Ui();
   VD.renderMapIfLoaded();
-  VD.loadTrips();
-  VD.loadInsights();
   if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
   // Initial paint of the Drive-tab live polish — without this the session chip
   // strip + micro-charts stay empty until the first telemetry sample arrives.
@@ -949,6 +959,23 @@ import type { DataStateValue } from "./dataset-state";
   refreshDevices();
   refreshStorage();
   if (bridge && typeof bridge.dashboardReady === "function") bridge.dashboardReady();
+  // loadTrips()/loadInsights() each make a synchronous bridge call into SQLite to
+  // populate the Trips/Insights tabs — neither is the first visible view, yet on the
+  // old ordering they ran on the bootstrap path and added ~1-2s before first paint.
+  // Defer them off the critical path (after the dashboardReady handshake) so the live
+  // Drive/Status view renders immediately; the data fills in a frame later.
+  const loadDeferredPanels = () => {
+    // Guarded like the other VD.* cross-module calls: this runs a frame after the
+    // dashboardReady handshake, so a bootstrap context missing a loader must not
+    // throw asynchronously and destabilize startup.
+    if (typeof VD.loadTrips === "function") VD.loadTrips();
+    if (typeof VD.loadInsights === "function") VD.loadInsights();
+  };
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(loadDeferredPanels, { timeout: 1500 });
+  } else {
+    setTimeout(loadDeferredPanels, 0);
+  }
   requestAnimationFrame(() => VD.scrollAppToTop());
   setTimeout(() => VD.scrollAppToTop(), 200);
 

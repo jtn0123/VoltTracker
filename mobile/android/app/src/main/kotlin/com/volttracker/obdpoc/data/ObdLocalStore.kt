@@ -287,6 +287,20 @@ open class ObdLocalStore(
 
     open fun getTripRouteJson(routeKey: String?): JSONObject = reports.tripRouteJson(routeKey)
 
+    /**
+     * Route projection for the in-progress (status = [STATUS_ACTIVE]) session, or an empty object
+     * when nothing is recording. Lets the dashboard rehydrate the live track after the WebView is
+     * torn down and recreated mid-drive (the foreground service keeps writing location samples to
+     * the active session's row the whole time). Reuses the same projection as completed trips.
+     */
+    open fun getCurrentSessionRouteJson(): JSONObject {
+        val active = getRecentSessions(5).firstOrNull { it.status == STATUS_ACTIVE } ?: return JSONObject()
+        return reports.tripRouteJson(active.id)
+    }
+
+    /** Battery-health snapshots (oldest-first) for the dashboard's pack-health trend chart. */
+    open fun getBatterySohHistoryJson(): JSONArray = reports.batterySohHistoryJson(1000)
+
     open fun markTripNotTrip(routeKey: String?): Boolean {
         val canonical = ObdTripExclusions.canonicalRouteKey(routeKey) ?: return false
         val parsed = DriveWindowDetector.parseRouteKey(canonical) ?: return false

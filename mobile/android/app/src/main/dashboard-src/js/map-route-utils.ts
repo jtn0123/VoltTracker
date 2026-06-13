@@ -91,6 +91,46 @@ export function haversineMetersJs(lat1: number, lng1: number, lat2: number, lng2
 
 export const LIVE_ROUTE_MAX_POINTS = 600;
 
+/** Plain lat/lng bounds (Leaflet-free) so the follow decision can be unit-tested. */
+export type LatLngBoundsLike = {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+};
+
+/**
+ * Decide whether the map should recenter to keep a live drive framed. Returns true when the newest
+ * point has drifted into the outer `margin` fraction of the current viewport (or fully outside it),
+ * so a parked/zoomed map only moves once the head is about to leave view — it does not jitter on
+ * every GPS tick while the vehicle is still comfortably on screen.
+ *
+ * Pure (no Leaflet) so map.ts can pass `map.getBounds()` flattened to numbers and the behavior is
+ * directly testable. `margin` is the fraction of each axis treated as the "about to leave" gutter.
+ */
+export function liveFollowShouldRecenter(
+  view: LatLngBoundsLike | null | undefined,
+  last: { lat: number; lng: number } | null | undefined,
+  margin = 0.18
+): boolean {
+  if (!view || !last) return true;
+  const lat = Number(last.lat);
+  const lng = Number(last.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  const latSpan = view.north - view.south;
+  const lngSpan = view.east - view.west;
+  if (!(latSpan > 0) || !(lngSpan > 0)) return true;
+  const latGutter = latSpan * margin;
+  const lngGutter = lngSpan * margin;
+  return (
+    lat > view.north - latGutter ||
+    lat < view.south + latGutter ||
+    lng > view.east - lngGutter ||
+    lng < view.west + lngGutter
+  );
+}
+
+
 /**
  * Append a live GPS sample to a route buffer, deduping near-stationary samples (<1 m and <2 s
  * from the previous point) and trimming the buffer to LIVE_ROUTE_MAX_POINTS. Shared by map.ts

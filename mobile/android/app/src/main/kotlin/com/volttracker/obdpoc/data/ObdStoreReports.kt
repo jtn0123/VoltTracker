@@ -7,6 +7,14 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 
+/** Maps a nullable REAL battery_snapshots column onto [jsonKey], boxed to null when absent. Shared
+ *  by the latest-snapshot and SOH-history projections so a new column is wired in one place. */
+private fun JSONObject.putBatteryDouble(
+    cursor: Cursor,
+    jsonKey: String,
+    column: String,
+): JSONObject = put(jsonKey, ObdStoreReportJson.boxedOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, column)))
+
 /** Read-side projections for records and dashboard JSON consumed by [ObdLocalStore]. */
 class ObdStoreReports(
     private val helper: VoltTrackerDb,
@@ -339,6 +347,52 @@ class ObdStoreReports(
     fun chargeSummaryProjectionJson(): JSONObject = safeJson { chargeSummaryJson(helper.readableDatabase) }
 
     fun batterySummaryProjectionJson(): JSONObject = safeJson { batterySummaryJson(helper.readableDatabase) }
+
+    /**
+     * Battery-health snapshots oldest-first for trend charting: the State-of-Health, capacity, pack
+     * voltage, temperature, odometer, and SOC captured whenever a fresh pack-capacity read landed.
+     * Empty array until the car has answered the (rare) capacity PID at least once.
+     */
+    fun batterySohHistoryJson(limit: Int): JSONArray =
+        safeArray {
+            val rows = ArrayList<JSONObject>()
+            helper.readableDatabase
+                .query(
+                    VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS,
+                    arrayOf(
+                        "captured_at_ms",
+                        "soh_pct",
+                        "capacity_ah",
+                        "pack_voltage",
+                        "battery_temp_c",
+                        "odometer_km",
+                        "soc",
+                    ),
+                    "soh_pct IS NOT NULL OR capacity_ah IS NOT NULL",
+                    null,
+                    null,
+                    null,
+                    "captured_at_ms DESC",
+                    limit.coerceIn(1, 2000).toString(),
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        rows.add(
+                            JSONObject()
+                                .put("capturedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")))
+                                .putBatteryDouble(cursor, "sohPct", "soh_pct")
+                                .putBatteryDouble(cursor, "capacityAh", "capacity_ah")
+                                .putBatteryDouble(cursor, "packVoltage", "pack_voltage")
+                                .putBatteryDouble(cursor, "batteryTempC", "battery_temp_c")
+                                .putBatteryDouble(cursor, "odometerKm", "odometer_km")
+                                .putBatteryDouble(cursor, "soc", "soc"),
+                        )
+                    }
+                }
+            // Query is newest-first for the LIMIT; flip to oldest-first so the chart reads left→right.
+            val array = JSONArray()
+            for (i in rows.indices.reversed()) array.put(rows[i])
+            array
+        }
 
     private fun recentSessionSummaries(
         db: SQLiteDatabase,
@@ -1103,13 +1157,13 @@ class ObdStoreReports(
                     return JSONObject()
                         .put("id", cursor.getLong(cursor.getColumnIndexOrThrow("_id")))
                         .put("capturedAtMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")))
-                        .put("soc", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "soc")))
-                        .put("capacityAh", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "capacity_ah")))
-                        .put("sohPct", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "soh_pct")))
-                        .put("packVoltage", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_voltage")))
-                        .put("packCurrentA", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_current_a")))
-                        .put("packPowerKw", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "pack_power_kw")))
-                        .put("batteryTempC", reportBoxed(ObdStoreSupport.nullableDoubleBoxed(cursor, "battery_temp_c")))
+                        .putBatteryDouble(cursor, "soc", "soc")
+                        .putBatteryDouble(cursor, "capacityAh", "capacity_ah")
+                        .putBatteryDouble(cursor, "sohPct", "soh_pct")
+                        .putBatteryDouble(cursor, "packVoltage", "pack_voltage")
+                        .putBatteryDouble(cursor, "packCurrentA", "pack_current_a")
+                        .putBatteryDouble(cursor, "packPowerKw", "pack_power_kw")
+                        .putBatteryDouble(cursor, "batteryTempC", "battery_temp_c")
                 }
         }
 

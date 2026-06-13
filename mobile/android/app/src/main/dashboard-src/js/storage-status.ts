@@ -528,6 +528,134 @@ import { setDataState } from "./dataset-state";
     );
   }
 
+  type SohPoint = { at: number; soh: number; cap: number };
+
+  // SOH history changes at most once per session (the pack-capacity PID is rare),
+  // but renderRealV2Ui runs on every app-state broadcast. Throttle the SQLite-backed
+  // bridge fetch and only rebuild the chart DOM when the payload actually changed.
+  const SOH_REFETCH_MS = 30_000;
+  let sohLastFetchMs = 0;
+  let sohLastRaw: string | null = null;
+  let sohPoints: SohPoint[] = [];
+  let sohDirty = true;
+  // Battery-snapshot row count at the last fetch. When it changes (a new snapshot
+  // landed, or storage was cleared) we refetch immediately instead of waiting out
+  // the throttle, so the chart never shows stale history after a storage change.
+  let sohLastCount = -1;
+
+  function sohSpanLabel(fromMs: number, toMs: number): string {
+    const days = Math.max(0, Math.round((toMs - fromMs) / 86_400_000));
+    if (days < 1) return "today";
+    if (days < 14) return `${days} days`;
+    if (days < 60) return `${Math.round(days / 7)} weeks`;
+    return `${Math.round(days / 30)} months`;
+  }
+
+  function buildSohSvg(points: SohPoint[]): SVGElement {
+    const ns = "http://www.w3.org/2000/svg";
+    const w = 320;
+    const h = 120;
+    const padL = 30;
+    const padR = 10;
+    const padT = 12;
+    const padB = 18;
+    const plotW = w - padL - padR;
+    const plotH = h - padT - padB;
+    const ts = points.map((p) => p.at);
+    const ss = points.map((p) => p.soh);
+    const tMin = Math.min(...ts);
+    const tMax = Math.max(...ts);
+    let yMin = Math.min(...ss);
+    let yMax = Math.max(...ss);
+    if (yMax - yMin < 1) {
+      yMin -= 1;
+      yMax += 1;
+    }
+    const yPad = (yMax - yMin) * 0.12;
+    yMin -= yPad;
+    yMax += yPad;
+    const tSpan = tMax - tMin;
+    const xOf = (t: number) => padL + (tSpan === 0 ? plotW / 2 : ((t - tMin) / tSpan) * plotW);
+    const yOf = (s: number) => padT + (1 - (s - yMin) / (yMax - yMin)) * plotH;
+    const make = (tag: string, attrs: Record<string, string | number>) =>
+      VD.setSvgAttrs(document.createElementNS(ns, tag) as SVGElement, attrs);
+    const svg = make("svg", {
+      viewBox: `0 0 ${w} ${h}`,
+      class: "soh-trend-svg",
+      role: "img",
+      "aria-label": `Battery state of health trend, latest ${ss[ss.length - 1].toFixed(1)} percent`,
+    });
+    for (const val of [yMax, (yMin + yMax) / 2, yMin]) {
+      const y = yOf(val);
+      svg.appendChild(make("line", { x1: String(padL), x2: String(w - padR), y1: y.toFixed(1), y2: y.toFixed(1), class: "soh-grid" }));
+      const label = make("text", { x: "2", y: (y + 3).toFixed(1), class: "soh-axis" });
+      label.textContent = val.toFixed(0);
+      svg.appendChild(label);
+    }
+    let d = "";
+    points.forEach((p, i) => {
+      d += `${i === 0 ? "M" : "L"}${xOf(p.at).toFixed(1)} ${yOf(p.soh).toFixed(1)} `;
+    });
+    svg.appendChild(make("path", { d: d.trim(), class: "soh-line" }));
+    const last = points[points.length - 1];
+    svg.appendChild(make("circle", { cx: xOf(last.at).toFixed(1), cy: yOf(last.soh).toFixed(1), r: "3", class: "soh-dot" }));
+    return svg;
+  }
+
+  // Battery state-of-health trend on the Battery tab. SOH/capacity snapshots are
+  // logged whenever the car answers the (rare) pack-capacity PID, so this fills in
+  // slowly over weeks — empty state until at least two readings exist.
+  function renderBatterySohTrend() {
+    const card = el("sohTrendCard");
+    if (!card) return;
+    const now = Date.now();
+    const batteryCount = Number((state.storage || {}).batterySnapshotCount || 0);
+    const countChanged = batteryCount !== sohLastCount;
+    if (
+      bridge &&
+      typeof bridge.getBatterySohHistory === "function" &&
+      (sohLastRaw === null || countChanged || now - sohLastFetchMs >= SOH_REFETCH_MS)
+    ) {
+      sohLastFetchMs = now;
+      sohLastCount = batteryCount;
+      const raw = bridge.getBatterySohHistory();
+      if (raw !== sohLastRaw) {
+        sohLastRaw = raw;
+        const parsed = VD.parsePayload<Array<Record<string, unknown>>>(raw, []);
+        sohPoints = Array.isArray(parsed)
+          ? parsed
+              .map((r) => ({ at: Number(r.capturedAtMs), soh: Number(r.sohPct), cap: Number(r.capacityAh) }))
+              .filter((p) => Number.isFinite(p.at) && Number.isFinite(p.soh))
+          : [];
+        sohDirty = true;
+      }
+    }
+    // Nothing fetched/changed since the last DOM build — skip the rebuild.
+    if (!sohDirty) return;
+    sohDirty = false;
+    const points = sohPoints;
+    const has = points.length >= 2;
+    const chart = el("sohTrendChart");
+    const stats = el("sohTrendStats");
+    const empty = el("sohTrendEmpty");
+    const latestEl = el("sohTrendLatest");
+    if (chart) chart.hidden = !has;
+    if (stats) stats.hidden = !has;
+    if (empty) empty.hidden = has;
+    if (!has) {
+      VD.setText("sohTrendTitle", "No battery-health readings yet");
+      if (latestEl) latestEl.textContent = points.length === 1 ? `${points[0].soh.toFixed(1)}%` : "--";
+      return;
+    }
+    const latest = points[points.length - 1];
+    VD.setText("sohTrendTitle", "Pack state-of-health over time");
+    if (latestEl) latestEl.textContent = `${latest.soh.toFixed(1)}%`;
+    VD.setText("sohTrendCapacity", Number.isFinite(latest.cap) ? `${latest.cap.toFixed(1)} Ah` : "--");
+    VD.setText("sohTrendCount", String(points.length));
+    VD.setText("sohTrendSpan", sohSpanLabel(points[0].at, latest.at));
+    if (chart) chart.replaceChildren(buildSohSvg(points));
+  }
+
   function renderRealV2Ui() {
     const storage = state.storage || {};
     const overview: Record<string, unknown> = storage.overview || {};
@@ -564,6 +692,7 @@ import { setDataState } from "./dataset-state";
         : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs-review" : "waiting"))
     );
     renderChargeSessions(charge);
+    renderBatterySohTrend();
 
     const ring = el("realPackRing");
     const ringValue = el("realPackValue");

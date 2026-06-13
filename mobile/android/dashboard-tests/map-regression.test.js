@@ -146,6 +146,48 @@ describe('map.ts — route selection regressions', () => {
     expect(document.getElementById('mapDistance').textContent).not.toBe('--');
   });
 
+  it('arms live-follow and exposes the Follow button only for the live drive', () => {
+    const VD = window.VoltDashboard;
+    VD.state.storage = {
+      recentRoutes: [
+        {
+          session: { id: 'history-route', startedAtMs: Date.now() - 86_400_000, endedAtMs: Date.now() - 86_340_000 },
+          points: [
+            { lat: 32.7, lng: -117.1, atMs: Date.now() - 86_400_000 },
+            { lat: 32.8, lng: -117.2, atMs: Date.now() - 86_340_000 },
+          ],
+          distanceMeters: 1000,
+        },
+      ],
+    };
+
+    // A fresh live drive selects the live route and arms follow; the button shows.
+    VD.updateTelemetry({ source: 'demo', latitude: 32.7001, longitude: -117.1001, sampleCount: 1, updatedAt: Date.now() });
+    VD.updateTelemetry({ source: 'demo', latitude: 32.7012, longitude: -117.1014, sampleCount: 2, updatedAt: Date.now() + 1000 });
+    VD.renderMap();
+
+    const followBtn = document.getElementById('mapFollowBtn');
+    expect(VD.state.selectedMapSessionId).toBe('__live_current__');
+    expect(VD.state.mapFollowLive).toBe(true);
+    expect(followBtn.hidden).toBe(false);
+    expect(followBtn.getAttribute('aria-pressed')).toBe('true');
+
+    // Toggling off (e.g. the user wants to inspect) flips state + button.
+    VD.setMapFollowLive(false);
+    expect(VD.state.mapFollowLive).toBe(false);
+    expect(followBtn.getAttribute('aria-pressed')).toBe('false');
+
+    // Toggling with no argument flips it back on (the "recenter & follow" tap).
+    VD.setMapFollowLive();
+    expect(VD.state.mapFollowLive).toBe(true);
+    expect(followBtn.getAttribute('aria-pressed')).toBe('true');
+
+    // Selecting a historical route hides the live-only Follow button.
+    VD.state.selectedMapSessionId = 'history-route';
+    VD.renderMap();
+    expect(followBtn.hidden).toBe(true);
+  });
+
   it('renders "--" duration for a session missing startedAtMs instead of an epoch-scale span', () => {
     const VD = window.VoltDashboard;
     VD.state.storage = {

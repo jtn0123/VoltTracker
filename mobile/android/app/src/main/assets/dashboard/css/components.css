@@ -1099,6 +1099,254 @@
     box-shadow: 0 0 10px rgba(255,184,74,0.75);
   }
 
+  /* Live-signals diagnostic list: one row per polled metric with a status dot,
+     value, and freshness. Green = reporting, dim = the car isn't answering. */
+  .live-signals-list {
+    margin-top: 10px;
+  }
+
+  .live-signals-group {
+    margin: 14px 0 4px;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .live-signals-group:first-child {
+    margin-top: 2px;
+  }
+
+  .live-signal-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: baseline;
+    gap: 10px;
+    padding: 7px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .live-signal-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .live-signal-name::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--ok, #35e6a0);
+    box-shadow: 0 0 8px rgba(53,230,160,0.6);
+  }
+
+  .live-signal-row[data-status="missing"] .live-signal-name {
+    color: var(--muted);
+  }
+
+  .live-signal-row[data-status="missing"] .live-signal-name::before {
+    background: var(--line-strong);
+    box-shadow: none;
+  }
+
+  .live-signal-tag {
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--surface-overlay);
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  .live-signal-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .live-signal-row[data-status="missing"] .live-signal-value {
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .live-signal-age {
+    color: var(--soft);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .live-signals-filter {
+    margin: 10px 0 2px;
+  }
+
+  /* Shared layout for the three Battery-tab cards (cell balance, cell map, SOH). */
+  .cell-balance-card,
+  .cell-grid-card,
+  .soh-trend-card {
+    margin-top: 12px;
+  }
+
+  .cell-balance-head,
+  .cell-grid-head,
+  .soh-trend-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .cell-balance-stats,
+  .soh-trend-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .cell-balance-stats .kicker,
+  .soh-trend-stats .kicker {
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .cell-balance-stats strong,
+  .soh-trend-stats strong {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 14px;
+  }
+
+  /* 96-cell voltage map. */
+  .cell-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 3px;
+    margin: 14px 0 10px;
+  }
+
+  .cell-grid-box {
+    aspect-ratio: 1 / 1;
+    border-radius: 3px;
+    background: var(--surface-overlay);
+    border: 1px solid var(--line);
+  }
+
+  .cell-grid-box.is-unknown {
+    opacity: 0.35;
+  }
+
+  .cell-grid-box.is-min {
+    background: #4cc4ff;
+    border-color: #4cc4ff;
+  }
+
+  .cell-grid-box.is-max {
+    background: #ff7a45;
+    border-color: #ff7a45;
+  }
+
+  /* Battery state-of-health trend chart (SVG line over time). */
+  .soh-trend-latest {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 20px;
+  }
+
+  .soh-trend-chart {
+    margin: 12px 0 14px;
+  }
+
+  .soh-trend-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  .soh-grid {
+    stroke: var(--line);
+    stroke-width: 1;
+  }
+
+  .soh-axis {
+    fill: var(--soft);
+    font-size: 9px;
+  }
+
+  .soh-line {
+    fill: none;
+    stroke: rgba(var(--volt-rgb), 0.9);
+    stroke-width: 2.2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+
+  .soh-dot {
+    fill: var(--volt);
+    stroke: #fff;
+    stroke-width: 1.5;
+  }
+
+  /* Battery cell-balance graphic: a track showing where the lowest and highest
+     cell-group voltages sit, with the spread between them filled in. */
+  .cell-balance-card .badge[data-tone="ok"] {
+    border-color: rgba(53,230,160,0.35);
+    background: rgba(53,230,160,0.12);
+    color: var(--ok-soft);
+  }
+
+  .cell-balance-card .badge[data-tone="warn"] {
+    border-color: rgba(255,184,74,0.35);
+    background: rgba(255,184,74,0.12);
+    color: var(--warn-soft);
+  }
+
+  .cell-balance-card .badge[data-tone="bad"] {
+    border-color: rgba(255,107,95,0.4);
+    background: rgba(255,107,95,0.14);
+    color: var(--bad-soft, #ff8f86);
+  }
+
+  .cell-balance-track {
+    position: relative;
+    height: 14px;
+    margin: 16px 0 18px;
+    border-radius: 999px;
+    background: var(--surface-overlay);
+    border: 1px solid var(--line);
+  }
+
+  .cell-balance-fill {
+    position: absolute;
+    top: -1px;
+    bottom: -1px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(76,196,255,0.55), rgba(var(--volt-rgb), 0.55));
+  }
+
+  .cell-balance-marker {
+    position: absolute;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 2px solid #fff;
+  }
+
+  .cell-balance-marker.is-min {
+    background: #4cc4ff;
+  }
+
+  .cell-balance-marker.is-max {
+    background: #ff7a45;
+  }
+
   /* Quiet section dividers inside the signal console so the next-probe and
      evidence lists read as distinct groups rather than one long scroll. */
   .signal-section-label {

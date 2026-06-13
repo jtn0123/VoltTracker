@@ -393,6 +393,8 @@ interface DashboardState {
   mapLayer: string;
   mapRemoteTilesEnabled: boolean;
   mapFull: boolean;
+  liveSignalsFilter: string;
+  mapFollowLive: boolean;
   selectedMapSessionId: string | null;
   liveRouteStartedAtMs: number | null;
   liveRoutePoints: VoltRoutePoint[];
@@ -495,12 +497,22 @@ interface LeafletLayer {
   on(event: string, handler: (event: LeafletTileErrorEvent) => void): this;
 }
 
+/** Edge accessors on the bounds handle `map.getBounds()` returns — used by the
+ *  live-follow recenter check in map.ts. */
+interface LeafletLatLngBounds {
+  getNorth(): number;
+  getSouth(): number;
+  getEast(): number;
+  getWest(): number;
+}
+
 /** The Leaflet map handle map.ts stores as `mapInstance`. Superset of LeafletMap
  *  so it stays assignable wherever the trip mini-maps expect LeafletMap. */
 interface LeafletMapInstance extends LeafletMap {
   setView(center: LatLngTuple, zoom: number): this;
   on(event: string, handler: (event: { latlng?: LeafletLatLng }) => void): this;
   removeLayer(layer: LeafletLayer): this;
+  getBounds(): LeafletLatLngBounds;
 }
 
 /** A `[lat, lng]` pair as Leaflet accepts for points/markers. */
@@ -580,6 +592,7 @@ interface VoltRestoreProgress {
     bridge: VoltBridge | null;
     /** `document.getElementById` wrapper. */
     el(id: string): HTMLElement | null;
+    setSvgAttrs(node: SVGElement, attrs: Record<string, string | number>): SVGElement;
     /** Bind a listener by element id; returns false (and warns) if the id is missing. */
     bindListenerGuarded(
       id: string,
@@ -792,6 +805,8 @@ interface VoltRestoreProgress {
     getTrips(): string;
     getInsights(): string;
     getTripRoute(sessionId: string): string;
+    getCurrentSessionRoute(): string;
+    getBatterySohHistory(): string;
     getRecentSessions(n: number): string;
 
     // void methods that hand work off to MainActivity / TroubleshooterBridge.

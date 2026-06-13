@@ -26,6 +26,10 @@ import { initialTelemetryState } from "./telemetry-state";
   // How long (ms) since the last accepted sample before we mark tiles stale.
   const STALE_THRESHOLD_MS = 3000;
   let rateChipReconnectBound = false;
+  // One-shot guard so we only ask the backend to rehydrate the live track once per
+  // session activation (reset in resetTelemetry). Recovers the in-progress drive's
+  // route after the WebView is torn down and recreated mid-drive.
+  let liveRouteHydrated = false;
   // Highest telemetry `updatedAt` observed so far. Native re-delivers the LAST
   // sample on every status broadcast, so setAppState must only treat a sample
   // as fresh when its updatedAt actually advances past this marker — otherwise
@@ -102,6 +106,7 @@ import { initialTelemetryState } from "./telemetry-state";
     const next = status.state || "idle";
     setDataState(badge, asDataState(next));
     if (!wasActive && isActiveStatus() && !state.demoActive) resetTelemetry();
+    hydrateLiveRouteIfActive();
     VD.setText("stateText", next);
     VD.setText("statusCopy", status.detail || "Ready.");
     showStatusToast(status.detail);
@@ -179,6 +184,7 @@ import { initialTelemetryState } from "./telemetry-state";
     state.liveRoutePoints = [];
     state.lastSampleAt = 0;
     lastSeenSampleUpdatedAt = 0;
+    liveRouteHydrated = false;
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     applyStaleIndicator();
   }
@@ -194,6 +200,52 @@ import { initialTelemetryState } from "./telemetry-state";
     const powerKw = Number(sample.powerKw);
     if (Number.isFinite(powerKw)) point.powerKw = powerKw;
     return point;
+  }
+
+  /**
+   * After a mid-drive WebView teardown the in-memory live route is gone, but the foreground service
+   * kept writing GPS to the active session's SQLite row. When we learn a session is active and have
+   * no live points yet, pull the in-progress track from the backend and seed it as the live route so
+   * the map shows the real drive instead of a blank "new run". A genuinely fresh drive returns no
+   * points, so this is a harmless no-op then. Guarded to run once per activation.
+   */
+  function hydrateLiveRouteIfActive() {
+    if (state.demoActive || liveRouteHydrated || !isActiveStatus()) return;
+    const existing = Array.isArray(state.liveRoutePoints) ? state.liveRoutePoints : [];
+    if (existing.length) {
+      liveRouteHydrated = true;
+      return;
+    }
+    if (!bridge || typeof bridge.getCurrentSessionRoute !== "function") return;
+    let parsed: PayloadRecord;
+    try {
+      parsed = VD.parsePayload(bridge.getCurrentSessionRoute(), {});
+    } catch (_err) {
+      return;
+    }
+    liveRouteHydrated = true;
+    const rawPoints = Array.isArray(parsed.points) ? parsed.points : [];
+    const mapped: MapRoutePoint[] = [];
+    for (const raw of rawPoints) {
+      const p = raw as PayloadRecord;
+      const lat = Number(p.lat);
+      const lng = Number(p.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      const point: MapRoutePoint = { lat, lng, atMs: Number(p.atMs) || Date.now() };
+      const speedMps = Number(p.speedMps);
+      if (Number.isFinite(speedMps)) {
+        point.speedMps = speedMps;
+        point.speedKph = speedMps * 3.6;
+      }
+      const soc = Number(p.soc);
+      if (Number.isFinite(soc)) point.soc = soc;
+      mapped.push(point);
+    }
+    if (!mapped.length) return;
+    state.liveRoutePoints = mapped;
+    state.liveRouteStartedAtMs = mapped[0].atMs;
+    state.selectedMapSessionId = LIVE_ROUTE_ID;
+    if (typeof VD.renderMapIfLoaded === "function") VD.renderMapIfLoaded();
   }
 
   function recordQueuedLivePosition(lat: number, lng: number) {
@@ -735,6 +787,8 @@ import { initialTelemetryState } from "./telemetry-state";
     }
     renderOperationalState();
     updateDiagnostics();
+    renderCellBalance();
+    renderCellGrid();
     updateValidationUi();
     applyStaleIndicator();
     // Drive-tab chip strip + micro-charts. Driven from updateLiveUi so every
@@ -771,6 +825,298 @@ import { initialTelemetryState } from "./telemetry-state";
     }
     VD.setText("diagSession", t.sessionMs ? formatDuration(Number(t.sessionMs)) : "--");
     VD.setText("diagSupported", t.supportedPids ? summarizePidLine(t.supportedPids) : "unknown");
+    renderLiveSignals();
+  }
+
+  // Live-signals diagnostic catalog: every metric the polling engine surfaces in
+  // a telemetry sample, mapped to its value field, freshness field (`*StaleMs`),
+  // unit, and group. The panel renders this list against state.telemetry so the
+  // user can see exactly what the device is pulling and — crucially — what it is
+  // NOT (a scheduled PID that never returns a usable value, e.g. an odometer the
+  // car answers NO DATA on, shows "no data" instead of silently disappearing).
+  // Keep in sync with LiveSampleReader.kt's emitted keys.
+  type LiveSignalSpec = {
+    key: string;
+    label: string;
+    group: string;
+    unit?: string;
+    staleKey?: string;
+    text?: boolean;
+    enhanced?: boolean;
+  };
+  const LIVE_SIGNAL_GROUPS = ["Core", "Battery", "Motor & drive", "Charging"];
+  const LIVE_SIGNALS: LiveSignalSpec[] = [
+    { key: "speedKph", label: "Speed", group: "Core", unit: "km/h", staleKey: "speedKphStaleMs" },
+    { key: "rpm", label: "Engine RPM", group: "Core", staleKey: "rpmStaleMs" },
+    { key: "soc", label: "State of charge", group: "Core", unit: "%", staleKey: "socStaleMs" },
+    { key: "voltage", label: "Adapter 12V", group: "Core", unit: "V", staleKey: "voltageStaleMs" },
+    { key: "coolantC", label: "Coolant temp", group: "Core", unit: "°C", staleKey: "coolantCStaleMs" },
+    { key: "loadPct", label: "Engine load", group: "Core", unit: "%", staleKey: "loadPctStaleMs" },
+    { key: "throttlePct", label: "Throttle / pedal", group: "Core", unit: "%", staleKey: "throttlePctStaleMs" },
+    { key: "odometerKm", label: "Odometer", group: "Core", unit: "km", staleKey: "odometerStaleMs" },
+    { key: "fuelLevelPct", label: "Fuel level", group: "Core", unit: "%", staleKey: "fuelLevelStaleMs" },
+    { key: "engineRunTimeSec", label: "Engine run time", group: "Core", unit: "s", staleKey: "engineRunTimeStaleMs" },
+    { key: "controlModuleVoltage", label: "Module voltage", group: "Core", unit: "V", staleKey: "controlModuleVoltageStaleMs" },
+    { key: "intakeAirTempC", label: "Intake air temp", group: "Core", unit: "°C", staleKey: "intakeAirTempStaleMs" },
+    { key: "engineOilTempC", label: "Engine oil temp", group: "Core", unit: "°C", staleKey: "engineOilTempStaleMs" },
+    { key: "packVoltage", label: "HV pack voltage", group: "Battery", unit: "V", staleKey: "packVoltageStaleMs", enhanced: true },
+    { key: "packCurrentA", label: "HV pack current", group: "Battery", unit: "A", staleKey: "packCurrentAStaleMs", enhanced: true },
+    { key: "powerKw", label: "HV pack power", group: "Battery", unit: "kW", staleKey: "powerKwStaleMs", enhanced: true },
+    { key: "batteryTemp", label: "HV battery temp", group: "Battery", unit: "°C", staleKey: "batteryTempStaleMs", enhanced: true },
+    { key: "sohPct", label: "Battery health", group: "Battery", unit: "%", staleKey: "sohPctStaleMs", enhanced: true },
+    { key: "capacityAh", label: "Pack capacity", group: "Battery", unit: "Ah", staleKey: "capacityAhStaleMs", enhanced: true },
+    { key: "packEnergyKwh", label: "Pack energy", group: "Battery", unit: "kWh", staleKey: "packEnergyKwhStaleMs", enhanced: true },
+    { key: "hvBatteryRawSoc", label: "Raw SOC", group: "Battery", unit: "%", staleKey: "hvBatteryRawSocStaleMs", enhanced: true },
+    { key: "minCellVoltage", label: "Min cell voltage", group: "Battery", unit: "V", staleKey: "minCellVoltageStaleMs", enhanced: true },
+    { key: "maxCellVoltage", label: "Max cell voltage", group: "Battery", unit: "V", staleKey: "maxCellVoltageStaleMs", enhanced: true },
+    { key: "cellBalanceMv", label: "Cell spread", group: "Battery", unit: "mV", staleKey: "cellBalanceStaleMs", enhanced: true },
+    { key: "socVariationPct", label: "Cell SOC variation", group: "Battery", unit: "%", staleKey: "socVariationStaleMs", enhanced: true },
+    { key: "minCellNumber", label: "Min cell number", group: "Battery", staleKey: "minCellNumberStaleMs", enhanced: true },
+    { key: "maxCellNumber", label: "Max cell number", group: "Battery", staleKey: "maxCellNumberStaleMs", enhanced: true },
+    { key: "motorACurrentA", label: "Motor A current", group: "Motor & drive", unit: "A", staleKey: "motorAStaleMs", enhanced: true },
+    { key: "motorBCurrentA", label: "Motor B current", group: "Motor & drive", unit: "A", staleKey: "motorBStaleMs", enhanced: true },
+    { key: "motorAPowerKw", label: "Motor A power", group: "Motor & drive", unit: "kW", enhanced: true },
+    { key: "motorBPowerKw", label: "Motor B power", group: "Motor & drive", unit: "kW", enhanced: true },
+    { key: "prndlState", label: "Gear (PRNDL)", group: "Motor & drive", text: true, staleKey: "prndlStateStaleMs", enhanced: true },
+    { key: "evDistanceThisCycleKm", label: "EV distance (cycle)", group: "Motor & drive", unit: "km", staleKey: "evDistanceThisCycleStaleMs", enhanced: true },
+    { key: "engineTorqueNm", label: "Engine torque", group: "Motor & drive", unit: "Nm", staleKey: "engineTorqueStaleMs", enhanced: true },
+    { key: "transmissionTempC", label: "Transmission temp", group: "Motor & drive", unit: "°C", staleKey: "transmissionTempStaleMs", enhanced: true },
+    { key: "outsideTempC", label: "Outside temp", group: "Motor & drive", unit: "°C", staleKey: "outsideTempStaleMs", enhanced: true },
+    { key: "chargingMode", label: "Charging mode", group: "Charging", text: true, staleKey: "chargingModeStaleMs", enhanced: true },
+    { key: "chargingLevel", label: "Charging level", group: "Charging", text: true, staleKey: "chargingLevelStaleMs", enhanced: true },
+    { key: "chargerHvVoltage", label: "Charger HV voltage", group: "Charging", unit: "V", staleKey: "chargerHvVoltageStaleMs", enhanced: true },
+    { key: "chargerHvCurrent", label: "Charger HV current", group: "Charging", unit: "A", staleKey: "chargerHvCurrentStaleMs", enhanced: true },
+    { key: "chargerPowerKw", label: "Charger power", group: "Charging", unit: "kW", staleKey: "chargerPowerStaleMs", enhanced: true },
+    { key: "lastChargeEnergyWh", label: "Last charge energy", group: "Charging", unit: "Wh", staleKey: "lastChargeEnergyStaleMs", enhanced: true },
+    { key: "hvBatteryChargeCount", label: "Charge count", group: "Charging", staleKey: "hvBatteryChargeCountStaleMs", enhanced: true },
+  ];
+
+  function formatSignalAge(ms: number) {
+    if (!Number.isFinite(ms) || ms < 0) return "live";
+    if (ms < 1500) return "now";
+    if (ms < 60_000) return `${Math.round(ms / 1000)}s ago`;
+    if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`;
+    return `${Math.round(ms / 3_600_000)}h ago`;
+  }
+
+  function renderLiveSignals() {
+    const list = el("liveSignalsList");
+    if (!list) return;
+    const t = state.telemetry || {};
+    const hasLiveData = isActiveStatus() || Number(t.sampleCount || 0) > 0;
+    const missingOnly = String(state.liveSignalsFilter || "all") === "missing";
+    // Sync the filter buttons' active state with the current filter.
+    document.querySelectorAll("[data-live-signal-filter]").forEach((node) => {
+      const button = node as HTMLElement;
+      const active = (button.dataset.liveSignalFilter || "all") === (missingOnly ? "missing" : "all");
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    let reporting = 0;
+    const frag = document.createDocumentFragment();
+    for (const group of LIVE_SIGNAL_GROUPS) {
+      const groupRows: HTMLElement[] = [];
+      for (const spec of LIVE_SIGNALS) {
+        if (spec.group !== group) continue;
+        const raw = t[spec.key];
+        const has = raw !== undefined && raw !== null && raw !== "";
+        if (has) reporting += 1;
+        if (missingOnly && has) continue;
+        const row = document.createElement("div");
+        row.className = "live-signal-row";
+        row.dataset.status = has ? "live" : "missing";
+
+        const name = document.createElement("span");
+        name.className = "live-signal-name";
+        name.textContent = spec.label;
+        if (spec.enhanced) {
+          const tag = document.createElement("b");
+          tag.className = "live-signal-tag";
+          tag.textContent = "Volt";
+          name.appendChild(tag);
+        }
+
+        const value = document.createElement("strong");
+        value.className = "live-signal-value";
+        value.textContent = has
+          ? (spec.text ? String(raw) : `${String(raw)}${spec.unit ? " " + spec.unit : ""}`)
+          : "no data";
+
+        const age = document.createElement("small");
+        age.className = "live-signal-age";
+        const ageMs = spec.staleKey ? Number(t[spec.staleKey]) : Number.NaN;
+        age.textContent = has ? formatSignalAge(ageMs) : "";
+
+        row.append(name, value, age);
+        groupRows.push(row);
+      }
+      // Skip empty group headers (e.g. the "missing" filter hid every row).
+      if (!groupRows.length) continue;
+      const header = document.createElement("div");
+      header.className = "live-signals-group";
+      header.textContent = group;
+      frag.appendChild(header);
+      for (const row of groupRows) frag.appendChild(row);
+    }
+    const total = LIVE_SIGNALS.length;
+    if (missingOnly && reporting === total) {
+      const allGood = document.createElement("p");
+      allGood.className = "status-copy";
+      allGood.textContent = "Every polled metric is reporting.";
+      frag.appendChild(allGood);
+    }
+    list.replaceChildren(frag);
+    VD.setText("liveSignalsBadge", `${reporting}/${total}`);
+    VD.setText(
+      "liveSignalsTitle",
+      hasLiveData ? `${reporting} of ${total} metrics reporting` : "Connect to see live metrics",
+    );
+  }
+
+
+  // Working cell-voltage window for the balance graphic's horizontal scale. The
+  // Gen-2 Volt cell groups sit ~3.4-4.1 V in use; a slightly wider track keeps
+  // both markers comfortably inside their gutters.
+  const CELL_SCALE_MIN_V = 3.3;
+  const CELL_SCALE_MAX_V = 4.25;
+
+  function cellBalanceTone(mv: number) {
+    if (!Number.isFinite(mv)) return "none";
+    if (mv < 30) return "ok";
+    if (mv < 60) return "warn";
+    return "bad";
+  }
+
+  function renderCellBalance() {
+    const card = el("cellBalanceCard");
+    if (!card) return;
+    const t = state.telemetry || {};
+    const minV = Number(t.minCellVoltage);
+    const maxV = Number(t.maxCellVoltage);
+    const has = Number.isFinite(minV) && Number.isFinite(maxV);
+    const graphic = el("cellBalanceGraphic");
+    const empty = el("cellBalanceEmpty");
+    if (graphic) graphic.hidden = !has;
+    if (empty) empty.hidden = has;
+    const deltaEl = el("cellBalanceDelta");
+    if (!has) {
+      VD.setText("cellBalanceTitle", "No live cell data yet");
+      if (deltaEl) {
+        deltaEl.textContent = "-- mV";
+        deltaEl.dataset.tone = "none";
+      }
+      return;
+    }
+    const mv = Number.isFinite(Number(t.cellBalanceMv))
+      ? Number(t.cellBalanceMv)
+      : Math.round((maxV - minV) * 1000);
+    VD.setText("cellBalanceTitle", "Cell-group balance");
+    if (deltaEl) {
+      deltaEl.textContent = `${mv} mV spread`;
+      deltaEl.dataset.tone = cellBalanceTone(mv);
+    }
+    const span = CELL_SCALE_MAX_V - CELL_SCALE_MIN_V;
+    const pos = (v: number) => Math.max(0, Math.min(100, ((v - CELL_SCALE_MIN_V) / span) * 100));
+    const minPos = pos(minV);
+    const maxPos = pos(maxV);
+    const fill = el("cellBalanceFill");
+    if (fill) {
+      fill.style.left = minPos + "%";
+      fill.style.width = Math.max(0, maxPos - minPos) + "%";
+    }
+    const minMarker = el("cellBalanceMinMarker");
+    if (minMarker) minMarker.style.left = minPos + "%";
+    const maxMarker = el("cellBalanceMaxMarker");
+    if (maxMarker) maxMarker.style.left = maxPos + "%";
+    const minCell = Number(t.minCellNumber);
+    const maxCell = Number(t.maxCellNumber);
+    VD.setText("cellBalanceMin", `${minV.toFixed(3)} V${Number.isFinite(minCell) ? ` · #${minCell}` : ""}`);
+    VD.setText("cellBalanceMax", `${maxV.toFixed(3)} V${Number.isFinite(maxCell) ? ` · #${maxCell}` : ""}`);
+    const soc = Number(t.socVariationPct);
+    VD.setText("cellBalanceSoc", Number.isFinite(soc) ? `${soc}%` : "--");
+  }
+
+  const CELL_GRID_COUNT = 96;
+  let lastCellGridSig = "";
+
+  // Maps a cell voltage to a blue→red color across the observed pack range, so an
+  // outlier cell stands out in the grid.
+  function cellGridColor(v: number, lo: number, hi: number): string {
+    const span = hi - lo;
+    const norm = span > 0.0005 ? Math.max(0, Math.min(1, (v - lo) / span)) : 0.5;
+    const hue = 220 - norm * 220; // blue (low) → red (high)
+    return `hsl(${hue.toFixed(0)}, 70%, 52%)`;
+  }
+
+  /**
+   * 96-cell voltage map on the Battery tab. Phase E left the full per-cell read deferred until the
+   * real car confirms the cell-PID layout, so this is a scaffold: if telemetry ever carries a
+   * `cellVoltages` array (per-cell probe) it renders the full heatmap; until then it highlights the
+   * lowest/highest cell groups the car DOES report live and greys the rest, with a note explaining a
+   * probe is needed for the complete map. Memoized so we don't rebuild 96 nodes every sample.
+   */
+  function renderCellGrid() {
+    const grid = el("cellGrid");
+    if (!grid) return;
+    const t = state.telemetry || {};
+    const rawCells = Array.isArray(t.cellVoltages) ? (t.cellVoltages as unknown[]) : [];
+    const cells: number[] = rawCells
+      .map((c) => (typeof c === "object" && c !== null ? Number((c as PayloadRecord).voltage) : Number(c)))
+      .filter((v) => Number.isFinite(v));
+    const minCell = Number(t.minCellNumber);
+    const maxCell = Number(t.maxCellNumber);
+    const minV = Number(t.minCellVoltage);
+    const maxV = Number(t.maxCellVoltage);
+    const full = cells.length >= CELL_GRID_COUNT;
+    const sig = full
+      ? `full:${cells.slice(0, CELL_GRID_COUNT).map((v) => v.toFixed(3)).join(",")}`
+      : `hi:${minCell}:${maxCell}:${minV}:${maxV}`;
+    if (sig === lastCellGridSig) return;
+    lastCellGridSig = sig;
+
+    const frag = document.createDocumentFragment();
+    if (full) {
+      const lo = Math.min(...cells);
+      const hi = Math.max(...cells);
+      for (let i = 0; i < CELL_GRID_COUNT; i += 1) {
+        const v = cells[i];
+        const box = document.createElement("span");
+        box.className = "cell-grid-box";
+        box.style.backgroundColor = cellGridColor(v, lo, hi);
+        box.title = `Cell ${i + 1}: ${v.toFixed(3)} V`;
+        frag.appendChild(box);
+      }
+      VD.setText("cellGridBadge", `${CELL_GRID_COUNT} cells`);
+      VD.setText("cellGridTitle", "Per-cell voltage map");
+      VD.setText("cellGridNote", "Per-cell voltages from the latest cell probe.");
+    } else {
+      const knownMin = Number.isFinite(minCell);
+      const knownMax = Number.isFinite(maxCell);
+      for (let i = 1; i <= CELL_GRID_COUNT; i += 1) {
+        const box = document.createElement("span");
+        box.className = "cell-grid-box";
+        if (knownMin && i === minCell) {
+          box.classList.add("is-min");
+          box.title = `Cell ${i}: ${Number.isFinite(minV) ? minV.toFixed(3) + " V (lowest)" : "lowest"}`;
+        } else if (knownMax && i === maxCell) {
+          box.classList.add("is-max");
+          box.title = `Cell ${i}: ${Number.isFinite(maxV) ? maxV.toFixed(3) + " V (highest)" : "highest"}`;
+        } else {
+          box.classList.add("is-unknown");
+        }
+        frag.appendChild(box);
+      }
+      const known = (knownMin ? 1 : 0) + (knownMax ? 1 : 0);
+      VD.setText("cellGridBadge", `${known} of ${CELL_GRID_COUNT} known`);
+      VD.setText("cellGridTitle", "Per-cell voltage map");
+      VD.setText(
+        "cellGridNote",
+        known > 0
+          ? "Live data reports only the lowest and highest cell groups (highlighted). A full per-cell probe on the car fills in the rest."
+          : "Connect to the car to highlight the lowest and highest cell groups; a full per-cell probe fills in the complete map.",
+      );
+    }
+    grid.replaceChildren(frag);
   }
 
   function updateValidationUi() {
@@ -919,6 +1265,7 @@ import { initialTelemetryState } from "./telemetry-state";
     selectDevice,
     getSelectedDevice,
     updateTelemetry,
+    hydrateLiveRouteIfActive,
     scheduleRender,
     flushRender,
     applyStaleIndicator,

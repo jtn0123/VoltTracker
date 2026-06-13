@@ -6,6 +6,7 @@ import {
   appendLiveRoutePoint,
   haversineMetersJs,
   isValidRoutePoint,
+  liveFollowShouldRecenter,
   liveSampleTimeMs,
   mapEffColor,
   routeFitKey,
@@ -43,6 +44,35 @@ describe('map-route-utils.ts', () => {
     ];
     expect(routeFitKey({ id: LIVE_ROUTE_ID }, points)).toBe(`${LIVE_ROUTE_ID}:32.70000:-117.10000`);
     expect(routeFitKey({ id: 42 }, points)).toBe('42:2:32.70000:-117.10000:32.80000:-117.20000');
+  });
+
+  describe('liveFollowShouldRecenter', () => {
+    // A 0.10° x 0.10° viewport; with the default 0.18 margin the inner "safe"
+    // box is roughly lat 32.709..32.791 / lng -117.291..-117.209.
+    const view = { north: 32.8, south: 32.7, east: -117.2, west: -117.3 };
+
+    it('stays put while the newest point sits comfortably inside the viewport', () => {
+      expect(liveFollowShouldRecenter(view, { lat: 32.75, lng: -117.25 })).toBe(false);
+    });
+
+    it('recenters once the newest point nears the viewport edge', () => {
+      // Within the top 18% gutter (> 32.782) -> about to leave view.
+      expect(liveFollowShouldRecenter(view, { lat: 32.795, lng: -117.25 })).toBe(true);
+      // Past the west edge entirely.
+      expect(liveFollowShouldRecenter(view, { lat: 32.75, lng: -117.35 })).toBe(true);
+    });
+
+    it('recenters when there is no view yet, or the view is degenerate', () => {
+      expect(liveFollowShouldRecenter(null, { lat: 32.75, lng: -117.25 })).toBe(true);
+      expect(
+        liveFollowShouldRecenter({ north: 1, south: 1, east: 1, west: 1 }, { lat: 1, lng: 1 }),
+      ).toBe(true);
+    });
+
+    it('does not move for a non-finite point (bad GPS sample)', () => {
+      expect(liveFollowShouldRecenter(view, { lat: Number.NaN, lng: -117.25 })).toBe(false);
+      expect(liveFollowShouldRecenter(view, null)).toBe(true);
+    });
   });
 
   it('computes approximate haversine distance', () => {

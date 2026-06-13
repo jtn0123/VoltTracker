@@ -255,10 +255,7 @@ import { haversineMetersJs } from "./map-route-utils";
     svg.setAttribute("width", String(w));
     svg.setAttribute("height", String(h));
     svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-    const setSvgAttrs = (node: SVGElement, attrs: Record<string, string | number>) => {
-      Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
-      return node;
-    };
+    const setSvgAttrs = VD.setSvgAttrs;
     const appendLine = (attrs: Record<string, string | number>) => {
       svg.append(setSvgAttrs(document.createElementNS(svgNs, "line"), attrs));
     };

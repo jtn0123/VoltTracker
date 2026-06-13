@@ -161,6 +161,13 @@ interface SessionDataReader {
     fun getInsightsJson(): String
 
     fun getTripRouteJson(routeKey: String?): String
+
+    /** Route projection for the in-progress session, so the dashboard can rehydrate the live
+     *  track after a mid-drive WebView teardown. Empty JSON when nothing is recording. */
+    fun getCurrentSessionRouteJson(): String
+
+    /** Battery-health snapshots (oldest-first JSON array) for the pack-health trend chart. */
+    fun getBatterySohHistoryJson(): String
 }
 
 /**

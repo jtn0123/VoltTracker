@@ -99,6 +99,7 @@ class LiveSampleReader(
             val packVoltageRaw = pidPolling.lastRaw("222429")
             val packCurrentRaw = pidPolling.lastRaw("222414")
             appendBatteryFields(sample, packVoltageRaw, packCurrentRaw)
+            appendCellBalanceFields(sample)
             appendChargingFields(sample)
             appendEnhancedContextFields(sample)
 
@@ -133,6 +134,7 @@ class LiveSampleReader(
             pidPolling.putStaleMsIfTracked(sample, "packVoltageStaleMs", "222429", now)
             pidPolling.putStaleMsIfTracked(sample, "packCurrentAStaleMs", "222414", now)
             putBatteryHealthStaleMs(sample, now)
+            putCellBalanceStaleMs(sample, now)
             putPowerStaleMsIfKnown(sample, now)
             putChargingStaleMs(sample, now)
             putEnhancedContextStaleMs(sample, now)
@@ -290,6 +292,30 @@ class LiveSampleReader(
         putNumeric(sample, "lastChargeEnergyWh", "22437D", 0)
     }
 
+    /**
+     * Pack-balance snapshot from the BECM: the lowest and highest series-cell-group voltages, the
+     * spread between them (mV — the headline cell-health number), which cell groups they are, and
+     * the cell SOC-variation percentage. Surfaces the cell-health signals the car already exposes on
+     * the live schedule without the (layout-unverified) full 96-cell read.
+     */
+    @Throws(JSONException::class)
+    private fun appendCellBalanceFields(sample: JSONObject) {
+        val minCellV = ObdProtocol.parseKnownValue("224329", pidPolling.lastRaw("224329"))?.valueNumeric
+        val maxCellV = ObdProtocol.parseKnownValue("22432B", pidPolling.lastRaw("22432B"))?.valueNumeric
+        if (minCellV != null) {
+            putRoundedNumeric(sample, "minCellVoltage", minCellV, 3)
+        }
+        if (maxCellV != null) {
+            putRoundedNumeric(sample, "maxCellVoltage", maxCellV, 3)
+        }
+        if (minCellV != null && maxCellV != null) {
+            sample.put("cellBalanceMv", Math.round((maxCellV - minCellV) * 1000.0))
+        }
+        putNumeric(sample, "minCellNumber", "22432A", 0)
+        putNumeric(sample, "maxCellNumber", "22432C", 0)
+        putNumeric(sample, "socVariationPct", "22435F", 1)
+    }
+
     @Throws(JSONException::class)
     private fun appendChargingFields(sample: JSONObject) {
         putNumeric(sample, "chargerHvVoltage", "22436B", 1)
@@ -342,6 +368,20 @@ class LiveSampleReader(
         putStaleMsForPresentValue(sample, "capacityAh", "capacityAhStaleMs", "2241A3", now)
         putStaleMsForPresentValue(sample, "sohPct", "sohPctStaleMs", "2241A3", now)
         putStaleMsForPresentValue(sample, "packEnergyKwh", "packEnergyKwhStaleMs", "2241A3", now)
+    }
+
+    @Throws(JSONException::class)
+    private fun putCellBalanceStaleMs(
+        sample: JSONObject,
+        now: Long,
+    ) {
+        putStaleMsForPresentValue(sample, "minCellVoltage", "minCellVoltageStaleMs", "224329", now)
+        putStaleMsForPresentValue(sample, "maxCellVoltage", "maxCellVoltageStaleMs", "22432B", now)
+        // The spread is only as fresh as its stalest input (min OR max cell voltage).
+        putStaleMsForOldestPresentValue(sample, "cellBalanceMv", "cellBalanceStaleMs", now, "224329", "22432B")
+        putStaleMsForPresentValue(sample, "minCellNumber", "minCellNumberStaleMs", "22432A", now)
+        putStaleMsForPresentValue(sample, "maxCellNumber", "maxCellNumberStaleMs", "22432C", now)
+        putStaleMsForPresentValue(sample, "socVariationPct", "socVariationStaleMs", "22435F", now)
     }
 
     @Throws(JSONException::class)
@@ -454,6 +494,34 @@ class LiveSampleReader(
         }
         if (bestStaleMs != null) {
             sample.put(staleKey, bestStaleMs)
+        }
+    }
+
+    /**
+     * Stale-age for a value derived from several PIDs where the result is only as fresh as its
+     * OLDEST input (e.g. the cell-voltage spread depends on both the min and max cell reads). Picks
+     * the largest tracked age rather than the smallest.
+     */
+    @Throws(JSONException::class)
+    private fun putStaleMsForOldestPresentValue(
+        sample: JSONObject,
+        valueKey: String,
+        staleKey: String,
+        now: Long,
+        vararg commands: String,
+    ) {
+        if (!sample.has(valueKey)) {
+            return
+        }
+        var worstStaleMs: Long? = null
+        for (command in commands) {
+            val staleMs = pidPolling.staleMsFor(command, now)
+            if (staleMs != null && (worstStaleMs == null || staleMs > worstStaleMs)) {
+                worstStaleMs = staleMs
+            }
+        }
+        if (worstStaleMs != null) {
+            sample.put(staleKey, worstStaleMs)
         }
     }
 

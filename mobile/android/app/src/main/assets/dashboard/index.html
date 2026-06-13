@@ -886,6 +886,17 @@
         </div>
         <div class="map-top-right">
           <button
+            id="mapFollowBtn"
+            type="button"
+            class="map-full-btn map-follow-btn"
+            aria-pressed="true"
+            aria-label="Follow the live drive"
+            title="Follow live drive"
+            hidden
+          >
+            &#x25CE; Follow
+          </button>
+          <button
             id="mapFullBtn"
             type="button"
             class="map-full-btn"
@@ -1052,6 +1063,106 @@
       <small>Charge detection status</small>
     </article>
   </section>
+
+  <!-- Live battery cell balance — lowest/highest cell-group voltage, their spread
+       (the headline cell-health number), and which cells. Rendered live from
+       telemetry by telemetry.js#renderCellBalance. -->
+  <article id="cellBalanceCard" class="panel cell-balance-card">
+    <header class="cell-balance-head">
+      <div>
+        <span class="kicker">Battery cell balance</span>
+        <h3 id="cellBalanceTitle">No live cell data yet</h3>
+      </div>
+      <span id="cellBalanceDelta" class="badge" data-tone="none">-- mV</span>
+    </header>
+    <p id="cellBalanceEmpty" class="status-copy">
+      Connect the adapter while the car is awake — the lowest and highest
+      cell-group voltages, their spread, and which cells they are will graph
+      here.
+    </p>
+    <div id="cellBalanceGraphic" class="cell-balance-graphic" hidden>
+      <div class="cell-balance-track" aria-hidden="true">
+        <span id="cellBalanceFill" class="cell-balance-fill"></span>
+        <span
+          id="cellBalanceMinMarker"
+          class="cell-balance-marker is-min"
+        ></span>
+        <span
+          id="cellBalanceMaxMarker"
+          class="cell-balance-marker is-max"
+        ></span>
+      </div>
+      <div class="cell-balance-stats">
+        <div>
+          <span class="kicker">Lowest cell</span>
+          <strong id="cellBalanceMin">--</strong>
+        </div>
+        <div>
+          <span class="kicker">Highest cell</span>
+          <strong id="cellBalanceMax">--</strong>
+        </div>
+        <div>
+          <span class="kicker">SOC variation</span>
+          <strong id="cellBalanceSoc">--</strong>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- 96-cell voltage map (scaffold). Renders full per-cell data when telemetry
+       carries a cellVoltages array; otherwise highlights the live lowest/highest
+       cell groups. See telemetry.ts#renderCellGrid. -->
+  <article id="cellGridCard" class="panel cell-grid-card">
+    <header class="cell-grid-head">
+      <div>
+        <span class="kicker">Cell voltage map</span>
+        <h3 id="cellGridTitle">Per-cell voltage map</h3>
+      </div>
+      <span id="cellGridBadge" class="badge" data-tone="none">96 cells</span>
+    </header>
+    <div
+      id="cellGrid"
+      class="cell-grid"
+      role="img"
+      aria-label="Battery cell voltage map"
+    ></div>
+    <p id="cellGridNote" class="status-copy">
+      Connect to the car to highlight the lowest and highest cell groups; a full
+      per-cell probe fills in the complete map.
+    </p>
+  </article>
+
+  <!-- Battery state-of-health trend. Fed by bridge.getBatterySohHistory() from the
+       battery_snapshots table; renders via storage-status.ts#renderBatterySohTrend. -->
+  <article id="sohTrendCard" class="panel soh-trend-card">
+    <header class="soh-trend-head">
+      <div>
+        <span class="kicker">Battery health trend</span>
+        <h3 id="sohTrendTitle">No battery-health readings yet</h3>
+      </div>
+      <strong id="sohTrendLatest" class="soh-trend-latest">--</strong>
+    </header>
+    <p id="sohTrendEmpty" class="status-copy">
+      State-of-health is logged whenever the car reports pack capacity (a rare
+      PID, usually when the battery is warm or charging). The trend plots here
+      as readings accumulate over weeks.
+    </p>
+    <div id="sohTrendChart" class="soh-trend-chart" hidden></div>
+    <div id="sohTrendStats" class="soh-trend-stats" hidden>
+      <div>
+        <span class="kicker">Capacity</span>
+        <strong id="sohTrendCapacity">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Readings</span>
+        <strong id="sohTrendCount">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Span</span>
+        <strong id="sohTrendSpan">--</strong>
+      </div>
+    </div>
+  </article>
 
   <article id="chargeEnergyCard" class="panel charge-energy-card" hidden>
     <div class="charge-energy-head">
@@ -1718,6 +1829,34 @@
 
   <!-- Detailed Signals — enhanced PID discovery (tire pressure, battery
        internals, hidden PIDs). Rendered by signals-panel.js. -->
+  <article id="liveSignalsCard" class="panel list-card">
+    <header class="signal-console-head">
+      <div class="signal-console-title">
+        <span class="kicker">Live signals</span>
+        <h2 id="liveSignalsTitle">Connect to see live metrics</h2>
+        <small class="signal-console-sub">
+          Every metric the app polls, with its latest value and how fresh it is
+          — so you can tell what's reporting and what the car isn't answering.
+        </small>
+      </div>
+      <span id="liveSignalsBadge" class="signal-status-pill">0/0</span>
+    </header>
+    <div
+      id="liveSignalsFilter"
+      class="signal-stage-tabs live-signals-filter"
+      role="group"
+      aria-label="Filter live signals"
+    >
+      <button type="button" data-live-signal-filter="all" class="is-active">
+        <span>All</span>
+      </button>
+      <button type="button" data-live-signal-filter="missing">
+        <span>Not reporting</span>
+      </button>
+    </div>
+    <div id="liveSignalsList" class="live-signals-list"></div>
+  </article>
+
   <article id="enhancedCard" class="panel list-card signal-console">
     <header class="signal-console-head">
       <div class="signal-console-title">

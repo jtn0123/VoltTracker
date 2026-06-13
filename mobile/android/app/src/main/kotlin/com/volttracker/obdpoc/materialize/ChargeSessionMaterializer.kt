@@ -18,6 +18,14 @@ package com.volttracker.obdpoc.materialize
  * [ChargeSession.interruptionCount] incremented; the intent is that a brief cable jiggle or polling
  * stall during a real charge does not split the row. Only gaps that exceed [Tunables.SPLIT_GAP_MS]
  * actually split the window into two sessions.
+ *
+ * **Transient-break debounce.** A momentary movement/discharge sample (a one-off GPS speed glitch, a
+ * DC-DC converter blip, a brief power spike) no longer instantly splits an active charge — that was
+ * the main cause of one physical charge being logged as several sessions. A break only splits the
+ * window once it is *sustained* for [Tunables.BREAK_DEBOUNCE_MS]; a shorter break that resumes
+ * charging is folded back in as an [ChargeSession.interruptionCount]. A genuinely sustained drive
+ * still splits, so a drive is never stitched into a charge. A finalized window also needs at least
+ * [Tunables.MIN_SAMPLES] plugged samples, which rejects sparse two-sample noise.
  */
 object ChargeSessionMaterializer {
     /**
@@ -39,6 +47,20 @@ object ChargeSessionMaterializer {
 
         /** Below this duration the window is rejected (likely noise). */
         const val MIN_DURATION_MS = 60_000L
+
+        /**
+         * A break (movement/discharge) must persist at least this long before it splits an active
+         * charge. Shorter breaks that resume charging are treated as interruptions, not splits —
+         * this is what stops a single glitchy sample from over-counting one charge as several.
+         */
+        const val BREAK_DEBOUNCE_MS = 60_000L
+
+        /**
+         * A finalized window needs at least this many plugged samples. Real charges stream hundreds
+         * of samples; this floor rejects the sparse two-sample windows that a transient break can
+         * otherwise leave behind.
+         */
+        const val MIN_SAMPLES = 3
 
         /**
          * Pack current more negative than this (i.e. ≥ this many amps flowing INTO the pack) is
@@ -75,16 +97,22 @@ object ChargeSessionMaterializer {
         var usedPackCurrent = false
         var currentRun = ArrayList<TelemetrySample>()
         var interruptions = 0
+        // Timestamp of the first breaking sample of an as-yet-unresolved break, or null when the
+        // run is not currently interrupted. Drives the transient-break debounce below.
+        var pendingBreakStartMs: Long? = null
 
         for (sample in telemetry) {
             val plugged = isPluggedSample(sample)
             if (plugged != PluggedReason.NOT_PLUGGED) {
                 if (currentRun.isNotEmpty()) {
+                    val hadTransientBreak = pendingBreakStartMs != null
+                    pendingBreakStartMs = null
                     val gap = sample.capturedAtMs - currentRun[currentRun.size - 1].capturedAtMs
                     if (gap > Tunables.SPLIT_GAP_MS) {
-                        // Finalize the old run with the flag state as of ITS OWN samples — the
-                        // incoming sample's evidence belongs to the run that starts with it, not
-                        // to the one being closed.
+                        // This boundary is a SPLIT, not an interruption — so don't count the pending
+                        // transient break against the run being closed. Finalize with the flag state
+                        // as of ITS OWN samples; the incoming sample's evidence belongs to the run
+                        // that starts with it.
                         val finalized = finalizeRun(currentRun, interruptions, usedPackCurrent)
                         if (finalized != null) {
                             result.add(finalized)
@@ -92,7 +120,10 @@ object ChargeSessionMaterializer {
                         currentRun = ArrayList()
                         interruptions = 0
                         usedPackCurrent = false
-                    } else if (gap > Tunables.MAX_GAP_MS) {
+                    } else if (hadTransientBreak || gap > Tunables.MAX_GAP_MS) {
+                        // The run continues: a transient break (movement/discharge that resumed
+                        // before BREAK_DEBOUNCE_MS) or a moderate gap counts as exactly one
+                        // interruption, never both for the same resume.
                         interruptions += 1
                     }
                 }
@@ -101,16 +132,22 @@ object ChargeSessionMaterializer {
                 }
                 currentRun.add(sample)
             } else if (currentRun.isNotEmpty() && breaksChargeRun(sample)) {
-                val finalized = finalizeRun(currentRun, interruptions, usedPackCurrent)
-                if (finalized != null) {
-                    result.add(finalized)
+                val breakStart = pendingBreakStartMs ?: sample.capturedAtMs
+                pendingBreakStartMs = breakStart
+                if (sample.capturedAtMs - breakStart >= Tunables.BREAK_DEBOUNCE_MS) {
+                    // Sustained movement/discharge: a real drive (or an unplug-and-leave), so split.
+                    val finalized = finalizeRun(currentRun, interruptions, usedPackCurrent)
+                    if (finalized != null) {
+                        result.add(finalized)
+                    }
+                    currentRun = ArrayList()
+                    interruptions = 0
+                    usedPackCurrent = false
+                    pendingBreakStartMs = null
                 }
-                currentRun = ArrayList()
-                interruptions = 0
-                usedPackCurrent = false
             }
             // Non-plugged samples between plugged runs are ignored — only the gap timestamp matters
-            // and that is computed off the last plugged sample. Real movement/discharge is the
+            // and that is computed off the last plugged sample. Sustained movement/discharge is the
             // exception: it breaks the candidate so a drive cannot be stitched into a charge.
         }
         if (currentRun.isNotEmpty()) {
@@ -190,6 +227,10 @@ object ChargeSessionMaterializer {
         usedPackCurrent: Boolean,
     ): ChargeSession? {
         if (run.isEmpty()) {
+            return null
+        }
+        if (run.size < Tunables.MIN_SAMPLES) {
+            // Too few plugged samples to trust — a sparse two-sample window is noise, not a charge.
             return null
         }
         val startedAtMs = run[0].capturedAtMs

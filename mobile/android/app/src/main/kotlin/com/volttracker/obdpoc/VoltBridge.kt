@@ -118,6 +118,17 @@ class VoltBridge(
     @JavascriptInterface
     fun getTripRoute(sessionId: String?): String = activity.getTripRouteJson(safe(sessionId, MAX_LABEL_LEN))
 
+    /**
+     * Route geometry for the in-progress session, so the dashboard can rehydrate the live track
+     * after a mid-drive WebView teardown/recreate. Empty JSON when nothing is recording.
+     */
+    @JavascriptInterface
+    fun getCurrentSessionRoute(): String = activity.getCurrentSessionRouteJson()
+
+    /** Battery-health snapshot history (JSON array) for the dashboard's pack-health trend chart. */
+    @JavascriptInterface
+    fun getBatterySohHistory(): String = activity.getBatterySohHistoryJson()
+
     @JavascriptInterface
     fun clearStoredData() {
         dataExports.clearStoredData()

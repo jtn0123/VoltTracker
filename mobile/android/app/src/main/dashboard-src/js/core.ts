@@ -61,6 +61,14 @@ import { initialTelemetryState } from "./telemetry-state";
   VD.bridge = window.VoltTrackerAndroid || null;
   VD.el = (id: string) => document.getElementById(id);
 
+  // Shared SVG helper: batch-set attributes on a namespaced element. Used by the
+  // efficiency-scatter (insights-panel) and the battery SOH trend chart so they
+  // don't each carry their own copy.
+  VD.setSvgAttrs = function setSvgAttrs(node: SVGElement, attrs: Record<string, string | number>) {
+    Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
+    return node;
+  };
+
   // bindListenerGuarded attaches a listener but warns + skips if the element ID is
   // missing instead of throwing. The dashboard is assembled from partials at build time, so
   // a renamed/removed ID inside a partial would otherwise crash `bindListeners()` mid-way,
@@ -677,6 +685,13 @@ import { initialTelemetryState } from "./telemetry-state";
     mapLayer: "eff",
     mapRemoteTilesEnabled: true,
     mapFull: false,
+    // Live-signals panel filter: "all" or "missing" (show only PIDs the car
+    // isn't answering) — see telemetry.ts#renderLiveSignals.
+    liveSignalsFilter: "all",
+    // When viewing the in-progress drive, keep the map framed on the growing
+    // track. Auto-disabled the moment the user pans the map (so they can inspect
+    // freely), re-enabled via the Follow button — see map.ts#setMapFollowLive.
+    mapFollowLive: true,
     selectedMapSessionId: null,
     liveRouteStartedAtMs: null,
     liveRoutePoints: [],

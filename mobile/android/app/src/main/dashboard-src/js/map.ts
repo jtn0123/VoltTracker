@@ -4,6 +4,7 @@ import {
   appendLiveRoutePoint,
   haversineMetersJs,
   isValidRoutePoint,
+  liveFollowShouldRecenter,
   liveSampleTimeMs,
   mapEffColor,
   routeFitKey
@@ -37,6 +38,7 @@ import {
   type LiveRouteLayerCache = {
     outer: MutablePolylineLayer;
     inner: MutablePolylineLayer;
+    flow: MutablePolylineLayer;
     start: MutableMarkerLayer;
     end: MutableMarkerLayer;
     group: LeafletLayer;
@@ -110,6 +112,9 @@ import {
       state.liveRouteStartedAtMs = liveRouteStartedAtMs;
       state.selectedMapSessionId = LIVE_ROUTE_ID;
       mapFitKey = null;
+      // A fresh drive re-arms follow so it tracks from the first fix, even if the
+      // user had turned follow off while inspecting a previous/historical route.
+      state.mapFollowLive = true;
     }
     state.liveRoutePoints = liveRoutePoints;
     if (state.selectedMapSessionId === LIVE_ROUTE_ID && state.view === "map") {
@@ -265,7 +270,72 @@ import {
         VD.scrubAtLatLng(e.latlng.lat, e.latlng.lng);
       }
     });
+    // The moment the user drags the map, stop auto-following the live drive so
+    // they can inspect freely. `dragstart` only fires for user gestures —
+    // programmatic fitBounds/setView never drag — so this can't fight our own
+    // recenters. The Follow button re-arms it. No-op for historical routes.
+    map.on("dragstart", () => {
+      if (state.mapFollowLive && String(state.selectedMapSessionId || "") === LIVE_ROUTE_ID) {
+        state.mapFollowLive = false;
+        updateFollowButton();
+      }
+    });
     return map;
+  }
+
+  /** Reflect follow state + live-route visibility on the Follow button. */
+  function updateFollowButton() {
+    const btn = el("mapFollowBtn");
+    if (!btn) return;
+    const liveSelected = String(state.selectedMapSessionId || "") === LIVE_ROUTE_ID;
+    btn.hidden = !liveSelected;
+    const following = state.mapFollowLive !== false;
+    btn.setAttribute("aria-pressed", following ? "true" : "false");
+    btn.setAttribute("aria-label", following ? "Following the live drive" : "Follow the live drive");
+  }
+
+  /**
+   * Toggle (or set) live-follow. Turning it on recenters immediately so the
+   * button doubles as "recenter on the current drive". Called from the Follow
+   * button in actions.ts.
+   */
+  function setMapFollowLive(on?: boolean) {
+    const next = typeof on === "boolean" ? on : state.mapFollowLive === false;
+    state.mapFollowLive = next;
+    updateFollowButton();
+    if (next) {
+      // Force the next render to reframe the track (mapFitKey gate is bypassed
+      // by the follow path, but clearing it keeps non-follow callers honest too).
+      mapFitKey = null;
+      if (state.view === "map") renderMap();
+    }
+  }
+
+  /**
+   * Keep the live drive framed while following. Recenters to the whole (capped,
+   * so ~rolling-window) live track only when the newest point nears the viewport
+   * edge — avoiding per-tick jitter. Returns true when it moved the view.
+   */
+  function fitLiveFollow(map: LeafletMapInstance, latlngs: LatLngTuple[]): boolean {
+    const last = latlngs[latlngs.length - 1];
+    if (!last) return false;
+    let view = null;
+    try {
+      const bounds = map.getBounds && map.getBounds();
+      if (bounds && typeof bounds.getNorth === "function") {
+        view = {
+          north: bounds.getNorth(),
+          south: bounds.getSouth(),
+          east: bounds.getEast(),
+          west: bounds.getWest()
+        };
+      }
+    } catch (_ignored) {
+      view = null;
+    }
+    if (!liveFollowShouldRecenter(view, { lat: last[0], lng: last[1] })) return false;
+    map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40] });
+    return true;
   }
 
   function renderMap() {
@@ -361,6 +431,7 @@ import {
     else if (typeof VD.hideScrubber === "function") VD.hideScrubber();
     renderMapDriveChips(routes);
     renderMapSessionList(routes);
+    updateFollowButton();
     // Hide the Recorded Sessions card when the chip strip already covers
     // every drive. It re-appears with its empty-state message when there are
     // no logged drives yet (so the user sees the "no route" prompt).
@@ -657,17 +728,40 @@ import {
     }
     const routeColor = isLiveRoute ? "#4cc4ff" : "#ff7a45";
     const routeEndColor = isLiveRoute ? "#4cc4ff" : "#ff7141";
+    // Direction-of-travel cue: a thin overlay of round dashes whose CSS animation
+    // flows start -> end (chronological draw order = direction travelled). Subtle
+    // (no extra weight, just a moving stipple) so it reads as "which way" without
+    // shouting. The class drives the dash pattern + keyframes (screens.css).
+    const flowColor = isLiveRoute ? "#dff4ff" : "#fff0e6";
 
     const outerRoute = L.polyline(latlngs, { color: routeColor, weight: 9, opacity: 0.16 }) as MutablePolylineLayer;
     const innerRoute = L.polyline(latlngs, { color: routeColor, weight: 3.5, opacity: 1 }) as MutablePolylineLayer;
+    const flowRoute = L.polyline(latlngs, {
+      color: flowColor,
+      weight: 2.5,
+      opacity: 0.9,
+      lineCap: "round",
+      className: "route-flow",
+      interactive: false
+    }) as MutablePolylineLayer;
     const startMarker = L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: routeColor, fillOpacity: 1 }) as MutableMarkerLayer;
-    const endMarker = L.circleMarker(lastLatLng, { radius: isLiveRoute ? 8 : 7, color: "#fff", weight: 2, fillColor: routeEndColor, fillOpacity: 1 }) as MutableMarkerLayer;
-    const routeGroup = L.layerGroup([outerRoute, innerRoute, startMarker, endMarker]);
+    const endMarker = L.circleMarker(lastLatLng, {
+      radius: isLiveRoute ? 8 : 7,
+      color: "#fff",
+      weight: 2,
+      fillColor: routeEndColor,
+      fillOpacity: 1,
+      // The live "head" gently pulses to mark the current position; historical
+      // routes get a plain end cap.
+      className: isLiveRoute ? "live-head-pulse" : undefined
+    }) as MutableMarkerLayer;
+    const routeGroup = L.layerGroup([outerRoute, innerRoute, flowRoute, startMarker, endMarker]);
     mapLayerGroups.routes = routeGroup;
     if (isLiveRoute && layer === "routes") {
       liveRouteLayerCache = {
         outer: outerRoute,
         inner: innerRoute,
+        flow: flowRoute,
         start: startMarker,
         end: endMarker,
         group: routeGroup
@@ -730,6 +824,14 @@ import {
 
     addActiveLayerGroup(layer, map);
 
+    if (isLiveRoute && state.mapFollowLive !== false) {
+      // Follow mode: keep the growing drive framed (see fitLiveFollow). The
+      // fitKey gate is for one-shot historical fits and would pin the view to the
+      // first point forever on a live route, so bypass it here.
+      fitLiveFollow(map, latlngs);
+      mapFitKey = routeFitKey(routeSession, drawable);
+      return;
+    }
     const fitKey = routeFitKey(routeSession, drawable);
     if (fitKey !== mapFitKey) {
       map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
@@ -747,6 +849,7 @@ import {
     if (
       typeof cache.outer.setLatLngs !== "function" ||
       typeof cache.inner.setLatLngs !== "function" ||
+      typeof cache.flow.setLatLngs !== "function" ||
       typeof cache.start.setLatLng !== "function" ||
       typeof cache.end.setLatLng !== "function"
     ) {
@@ -758,9 +861,17 @@ import {
     if (!first || !last) return false;
     cache.outer.setLatLngs(latlngs);
     cache.inner.setLatLngs(latlngs);
+    cache.flow.setLatLngs(latlngs);
     cache.start.setLatLng(first);
     cache.end.setLatLng(last);
     addActiveLayerGroup("routes", map);
+    if (state.mapFollowLive !== false) {
+      // Follow the head as new samples stream in (see fitLiveFollow). Keep
+      // mapFitKey current so a later follow-off render doesn't snap-refit.
+      fitLiveFollow(map, latlngs);
+      mapFitKey = routeFitKey(routeSession, drawable);
+      return true;
+    }
     const fitKey = routeFitKey(routeSession, drawable);
     if (fitKey !== mapFitKey) {
       map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
@@ -1225,6 +1336,7 @@ import {
     addStop,
     updateLivePosition,
     clearLivePosition,
+    setMapFollowLive,
     loadSampleData,
     loadDemoScenario
   });

@@ -589,6 +589,20 @@ class VoltBridgeDispatchTest {
         assertEquals("{\"ok\":true}", json)
     }
 
+    @Test
+    fun getCurrentSessionRouteForwardsToActivity() {
+        activity.currentRouteJson = "{\"points\":[]}"
+
+        assertEquals("{\"points\":[]}", bridge.getCurrentSessionRoute())
+    }
+
+    @Test
+    fun getBatterySohHistoryForwardsToActivity() {
+        activity.sohHistoryJson = "[{\"sohPct\":95}]"
+
+        assertEquals("[{\"sohPct\":95}]", bridge.getBatterySohHistory())
+    }
+
     /** Seeds the device catalog with a valid remembered adapter for the `*Last` dispatch paths. */
     private fun rememberLastDevice() {
         activity.requireDeviceCatalog().remember(VALID_ADDRESS, "Saved adapter")
@@ -636,6 +650,8 @@ class VoltBridgeDispatchTest {
         var cancelAdapterReadyNotifyCalls = 0
 
         var tripRouteJson = "{}"
+        var currentRouteJson = "{}"
+        var sohHistoryJson = "[]"
         var lastTripRouteKey: String? = null
         var lastAutoConnectEnabled: Boolean? = null
 
@@ -767,6 +783,10 @@ class VoltBridgeDispatchTest {
             lastTripRouteKey = routeKey
             return tripRouteJson
         }
+
+        override fun getCurrentSessionRouteJson(): String = currentRouteJson
+
+        override fun getBatterySohHistoryJson(): String = sohHistoryJson
 
         override fun setAutoConnectEnabledFromBridge(enabled: Boolean) {
             lastAutoConnectEnabled = enabled
