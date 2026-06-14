@@ -1,6 +1,76 @@
 # CHANGELOG
 
 
+## v0.13.1 (2026-06-14)
+
+### Bug Fixes
+
+- **ui**: Remove WebView cold-start flash, show connect spinner, announce map empty state
+  ([#209](https://github.com/jtn0123/VoltTracker/pull/209),
+  [`1a0011f`](https://github.com/jtn0123/VoltTracker/commit/1a0011f5618fc60df1595aafbc48352a2c414d26))
+
+Three targeted UI/UX refinements verified against the existing (already quite polished) dashboard
+  and native shell:
+
+- WebViewBootstrap: pin the WebView background to the dark chrome color so cold start no longer
+  flashes opaque white before the dashboard's first frame paints. - components.css: the connect/scan
+  primary button sets aria-busy="true" for the full multi-second Bluetooth handshake, but nothing
+  styled it — add a small leading spinner (suppressed under prefers-reduced-motion) so the
+  "Connecting…" label no longer looks frozen. - map partial: mark the "No GPS route yet" cover
+  role="status" aria-live so screen readers announce it when it appears, plus a test to lock it in.
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+### Chores
+
+- Polish repo docs, GitHub templates, and stale config cleanup
+  ([#189](https://github.com/jtn0123/VoltTracker/pull/189),
+  [`52b9f58`](https://github.com/jtn0123/VoltTracker/commit/52b9f583d874425da699fdf245db0327599f7649))
+
+Adds PR template + CODEOWNERS, fixes docs (cross-platform ./gradlew, JDK 21, dashboard source map,
+  repo-structure table), drops the nonexistent `release` branch from the CodeQL PR trigger, and
+  removes dead config (.dockerignore, .github/actionlint.yaml, stale .gitignore receiver//e2e/
+  patterns).
+
+Rebased onto current main; issue templates already on main were kept (the duplicates from this PR
+  were dropped), and the README Architecture + Dashboard Source Map sections were merged.
+
+- **deps**: Bump androidx.core to 1.19.0 + raise compileSdk to 37
+  ([#208](https://github.com/jtn0123/VoltTracker/pull/208),
+  [`186fcdf`](https://github.com/jtn0123/VoltTracker/commit/186fcdf9b8fe25519a0069bc34e3b3a27b30115f))
+
+androidx.core:core + core-ktx 1.18.0->1.19.0 (and androidx.annotation 1.9.1->1.10.0 transitive),
+  regenerated app/gradle.lockfile, and compileSdk 36->37 (required by androidx.core 1.19's AAR
+  metadata; targetSdk stays 36). Supersedes #172.
+
+CI fully green: Android unit tests (both events), CodeQL, lint, gradle audit + lockfile sync,
+  Release dry run.
+
+- **deps-dev**: Batch low-risk dev-dependency bumps
+  ([#206](https://github.com/jtn0123/VoltTracker/pull/206),
+  [`32e6d15`](https://github.com/jtn0123/VoltTracker/commit/32e6d1590410a5faf1530ae725640cd6414351ed))
+
+eslint 10.4.1->10.5.0, typescript-eslint 8.60.1->8.61.0, vitest + coverage-istanbul 4.1.7->4.1.8
+  (dashboard-tests), axe-core 4.12.0->4.12.1 (dashboard-e2e), gradle test-retry 1.6.4->1.6.5.
+  Supersedes #173, #174, #200, #201, #202, #203.
+
+CI: pull_request run fully green (unit/detekt/lint/coverage, dashboard-tests, dashboard-visual,
+  dashboard-e2e, gradle audit, Release dry run, CodeQL). The lone red was a flaky emulator-smoke in
+  the push run — the same commit passed it on the PR run, and dev-dep bumps can't affect the app
+  launch.
+
+### Continuous Integration
+
+- Bump actions/checkout to v6.0.3 and osv-scanner-action to v2.3.8
+  ([#207](https://github.com/jtn0123/VoltTracker/pull/207),
+  [`4341d6d`](https://github.com/jtn0123/VoltTracker/commit/4341d6dac8e8384a866f4f0c6b86ac0962a9e3a2))
+
+Batches #170 + #171. checkout v6.0.2->v6.0.3 across workflows (plus one stale v4 straggler),
+  osv-scanner-action v2.0.2->v2.3.8. CI-only. PR-event CI fully green (unit/detekt/lint/coverage,
+  dashboard-tests/visual/e2e, gradle audit w/ new osv-scanner + lockfile sync, emulator-smoke,
+  Release dry run, CodeQL); the lone red was the known flaky emulator-smoke in the push run.
+
+
 ## v0.13.0 (2026-06-13)
 
 ### Bug Fixes
