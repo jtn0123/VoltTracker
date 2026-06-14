@@ -19,6 +19,8 @@ import java.util.zip.ZipOutputStream
  * - the most recent [MAX_SESSION_LOGS] per-session JSONLs from `files/obd-logs/`
  * - the rolling app log + its rolled sibling from `files/app-log/`
  * - the session summary rollup `sessions-summary.jsonl`
+ * - `diagnostics-bundle.txt`: a budget-bounded, self-selecting digest (see [DiagnosticsBundle])
+ *   sized to hand straight to an external debugging tool without overflowing its context
  *
  * The zip is written to `cacheDir/diagnostics/` and exposed via the project's `FileProvider` -- the
  * bridge call wraps the returned intent in [Intent.createChooser] and starts it.
@@ -82,6 +84,7 @@ object DiagnosticsShareIntent {
         val filesDir = ctx.filesDir
         try {
             ZipOutputStream(FileOutputStream(zipFile)).use { zipStream ->
+                addBundleDigest(zipStream, filesDir)
                 addRecentSessionLogs(zipStream, File(filesDir, SESSION_LOG_DIR))
                 addAppLogs(zipStream, File(filesDir, APP_LOG_DIR))
                 addSummary(zipStream, File(File(filesDir, SESSION_LOG_DIR), SUMMARY_NAME))
@@ -95,6 +98,23 @@ object DiagnosticsShareIntent {
             return null
         }
         return zipFile
+    }
+
+    @Throws(IOException::class)
+    private fun addBundleDigest(
+        zipStream: ZipOutputStream,
+        filesDir: File,
+    ) {
+        // The digest is the AI-facing artifact: already redacted and size-bounded by DiagnosticsBundle,
+        // so it ships as the first entry and is written verbatim (no second redaction pass needed).
+        val digest = DiagnosticsBundle.build(filesDir)
+        val entry =
+            ZipEntry(DiagnosticsBundle.BUNDLE_ENTRY_NAME).apply {
+                time = System.currentTimeMillis()
+            }
+        zipStream.putNextEntry(entry)
+        zipStream.write(digest.toByteArray(Charsets.UTF_8))
+        zipStream.closeEntry()
     }
 
     @Throws(IOException::class)

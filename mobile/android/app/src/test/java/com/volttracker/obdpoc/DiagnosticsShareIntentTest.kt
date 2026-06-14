@@ -182,6 +182,30 @@ class DiagnosticsShareIntentTest {
     }
 
     @Test
+    fun zipIncludesRedactedDiagnosticsBundleDigest() {
+        val obdLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(obdLogDir.mkdirs())
+        writeFile(
+            File(obdLogDir, "session-1000-obd.jsonl"),
+            "{\"ts\":1,\"type\":\"command\",\"adapter\":\"AA:BB:CC:DD:EE:FF\",\"command\":\"010C\"}\n",
+        )
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+        assertNotNull(zip)
+
+        val entries = listZip(zip!!)
+        assertTrue(
+            "the AI-facing digest should ship in the zip: $entries",
+            entries.contains("diagnostics-bundle.txt"),
+        )
+        val digest = readZipText(zip, "diagnostics-bundle.txt")
+        assertTrue("digest carries the manifest", digest.contains("MANIFEST"))
+        assertTrue("digest embeds the session body", digest.contains("session-1000-obd.jsonl"))
+        assertFalse("digest must be redacted", digest.contains("AA:BB:CC:DD:EE:FF"))
+        assertTrue(digest.contains("[bluetooth-address-redacted]"))
+    }
+
+    @Test
     fun buildIntentReturnsShareIntentPointingAtZip() {
         val obdLogDir = File(context.filesDir, "obd-logs")
         assertTrue(obdLogDir.mkdirs())
