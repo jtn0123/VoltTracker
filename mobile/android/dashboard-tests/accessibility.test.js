@@ -92,6 +92,17 @@ describe('generated dashboard accessibility shell', () => {
   });
 
 
+  it('announces the map empty-state cover as a polite live region', () => {
+    // #mapEmpty is toggled on by map.ts when there is no route to draw. Marking
+    // it role="status" aria-live="polite" means screen readers hear "No GPS
+    // route yet…" when it appears, instead of the cover swapping in silently.
+    const document = loadDocument();
+    const mapEmpty = document.getElementById('mapEmpty');
+    expect(mapEmpty).not.toBeNull();
+    expect(mapEmpty.getAttribute('role')).toBe('status');
+    expect(mapEmpty.getAttribute('aria-live')).toBe('polite');
+  });
+
   it('gives every button an accessible name', () => {
     const document = loadDocument();
     const unnamed = [...document.querySelectorAll('button')]

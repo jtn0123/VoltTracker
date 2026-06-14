@@ -8,6 +8,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.core.content.ContextCompat
 
 /**
  * One-shot helper that configures the dashboard [WebView]: applies the project's hardened
@@ -52,6 +53,12 @@ object WebViewBootstrap {
         settings.useWideViewPort = false
         settings.loadWithOverviewMode = false
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
+
+        // A fresh WebView paints opaque white until the dashboard's first frame
+        // renders, which flashes against the near-black UI on cold start. Pin the
+        // WebView background to the same dark chrome color as the status/nav bars
+        // so the load is seamless instead of a white blink.
+        webView.setBackgroundColor(ContextCompat.getColor(webView.context, R.color.volt_dark))
 
         webView.webChromeClient =
             object : WebChromeClient() {

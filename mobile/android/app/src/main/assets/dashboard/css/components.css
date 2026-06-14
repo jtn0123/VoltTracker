@@ -2065,6 +2065,44 @@
     pointer-events: none;
   }
 
+  /* Sustained in-flight feedback for the connect/scan primary action.
+     telemetry.ts holds aria-busy="true" for as long as the adapter handshake
+     runs (seconds on Bluetooth), where the 600ms .busy tap-cooldown above has
+     long since cleared. A small leading spinner shows the wait is live instead
+     of leaving "Connecting…" looking frozen. */
+  button[aria-busy="true"] {
+    position: relative;
+  }
+
+  button[aria-busy="true"]::before {
+    content: "";
+    display: inline-block;
+    width: 0.85em;
+    height: 0.85em;
+    margin-right: 0.5em;
+    vertical-align: -0.1em;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    opacity: 0.9;
+    animation: btn-busy-spin 0.7s linear infinite;
+  }
+
+  @keyframes btn-busy-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Reduced-motion users get no spinner — the "Connecting…"/"Scanning…" label
+     plus the disabled dim already convey the busy state without a spinner that
+     can't animate (a frozen partial ring just reads as broken). */
+  @media (prefers-reduced-motion: reduce) {
+    button[aria-busy="true"]::before {
+      content: none;
+    }
+  }
+
   .app-dialog {
     position: fixed;
     inset: 0;
