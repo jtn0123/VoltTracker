@@ -27,7 +27,7 @@ complexity:
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LargeClass:
     active: true
-    threshold: 1175 # ObdProtocol — cohesive stateless decoder (+ isBenignSentinelResponse, cell-voltage scale)
+    threshold: 1169 # ObdProtocol = 1168 by detekt's LargeClass metric (NOT wc -l ~1366); cohesive stateless decoder
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LongMethod:
     active: true

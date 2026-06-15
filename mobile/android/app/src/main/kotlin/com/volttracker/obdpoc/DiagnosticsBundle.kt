@@ -38,7 +38,12 @@ object DiagnosticsBundle {
     private const val PER_SESSION_CAP = 64 * 1024
     private const val MIN_SESSION_BYTES = 256
     private const val HEADER_RESERVE = 1024
-    private const val MANIFEST_BYTES_PER_ENTRY = 220
+
+    // Upper bound on one pretty-printed MANIFEST entry (a worst-case entry — long filename, large
+    // byte/ms numbers, longest reason — serializes to ~238 chars). Keeping this an over-estimate means
+    // planSessions reserves at least the real manifest size, so the session bodies it admits are
+    // guaranteed to fit even though they are emitted verbatim (not re-clamped) for MANIFEST/body parity.
+    private const val MANIFEST_BYTES_PER_ENTRY = 256
 
     // Bytes held back so the trailing OMITTED/END sections always fit within the advertised budget.
     private const val FOOTER_RESERVE = 256
@@ -95,10 +100,12 @@ object DiagnosticsBundle {
         out.append("note: text is redacted (bluetooth addresses, VINs, GPS coordinates).\n")
         out.append("note: the app auto-selects which session bodies fit the budget; see MANIFEST.\n\n")
 
-        // The MANIFEST is the irreducible catalog -- it always ships so no session is hidden. Every
-        // section after it is clamped to the budget actually left (see remainingBudget), so even with a
-        // tiny caller budget or an oversized summary/app log the digest can't exceed budgetBytes. This
-        // is real enforcement, not just the heuristic reservations planSessions made up front.
+        // The MANIFEST is the irreducible catalog -- it always ships so no session is hidden. It and the
+        // session bodies below are both rendered from the same `plans`, so the manifest can never claim a
+        // session is included/truncated differently from what is actually emitted. Budget safety comes
+        // from planSessions reserving an upper bound for the manifest + fixed sections (see the reserves
+        // in planSessions and MANIFEST_BYTES_PER_ENTRY), plus the runtime clamp on the summary/app-log
+        // tails below for tiny caller budgets.
         out.append("===== MANIFEST (every session log; order = inclusion priority) =====\n")
         out.append(manifestJson(plans).toString(2)).append("\n\n")
 
@@ -119,13 +126,9 @@ object DiagnosticsBundle {
             if (!plan.included) {
                 continue
             }
-            // Clamp the planned tail to what is genuinely left so the running total honors the budget
-            // even when the manifest or fixed sections ran longer than planSessions reserved for them.
-            val tail = minOf(plan.tailBytes, remainingBudget(out, budget))
-            if (tail <= 0) {
-                continue
-            }
-            val truncated = tail < plan.source.bytes
+            // Emit exactly what the MANIFEST advertised for this plan -- same tailBytes, same truncated
+            // flag -- so the catalog and the embedded bodies stay in lockstep. planSessions already
+            // sized these to fit the budget (its reserves upper-bound the manifest + fixed sections).
             val name = plan.source.file.name
             out
                 .append("===== SESSION: ")
@@ -134,9 +137,9 @@ object DiagnosticsBundle {
                 .append(plan.source.bytes)
                 .append(", errors=")
                 .append(plan.source.errorLines)
-                .append(if (truncated) ", tail-trimmed" else "")
+                .append(if (plan.truncated) ", tail-trimmed" else "")
                 .append(") =====\n")
-            out.append(DataBackup.redactDebugLogText(readTail(plan.source.file, tail)))
+            out.append(DataBackup.redactDebugLogText(readTail(plan.source.file, plan.tailBytes)))
             if (out.isNotEmpty() && out.last() != '\n') {
                 out.append('\n')
             }

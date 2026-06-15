@@ -179,6 +179,31 @@ class DiagnosticsBundleTest {
     }
 
     @Test
+    fun manifestInclusionFlagsStayInLockstepWithEmittedBodies() {
+        // Under budget pressure the MANIFEST's included flag must match exactly which session bodies are
+        // embedded: no "included":true entry may be silently dropped from the output, and vice versa.
+        for (i in 1..6) {
+            writeSession(1_000L * i, "obd", body(2_000, errorLines = if (i == 2) 1 else 0))
+        }
+
+        val digest = DiagnosticsBundle.build(filesDir, 8_000, NOW)
+        val manifest = manifestOf(digest)
+
+        var omitted = 0
+        for (idx in 0 until manifest.length()) {
+            val entry = manifest.getJSONObject(idx)
+            val name = entry.getString("name")
+            val included = entry.getBoolean("included")
+            val bodyEmitted = digest.contains("SESSION: $name")
+            assertEquals("manifest 'included' must match the emitted body for $name", included, bodyEmitted)
+            if (!included) omitted++
+        }
+        assertTrue("this budget should force at least one omission", omitted > 0)
+        assertTrue("digest reports the omitted sessions", digest.contains("===== OMITTED ====="))
+        assertTrue("digest stays within the advertised budget", digest.length <= 8_000)
+    }
+
+    @Test
     fun emptyDeviceProducesAMinimalDigestWithoutCrashing() {
         val digest = DiagnosticsBundle.build(filesDir, DiagnosticsBundle.DEFAULT_BUDGET_BYTES, NOW)
 
