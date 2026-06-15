@@ -1,6 +1,98 @@
 # CHANGELOG
 
 
+## v0.15.0 (2026-06-15)
+
+### Features
+
+- Grade-audit fixes, tests, and 10 end-user features
+  ([#211](https://github.com/jtn0123/VoltTracker/pull/211),
+  [`cdac653`](https://github.com/jtn0123/VoltTracker/commit/cdac65320f7c2e253692b31ea61eb2897db25b20))
+
+* feat: grade-audit fixes, tests, and 10 end-user features
+
+Executes the codebase grade report (.claude/grade-report.md) across Architecture (A), Backend/OBD
+  (B), Frontend (C), Testing (D), and the Missing-Features list (M). All CI-equivalent gates
+  verified green locally.
+
+Architecture (A): - A1 Kotlin↔JS bridge ABI drift guard test (fixed the real shareDiagnosticsDigest
+  mismatch) - A2 removed dead/duplicated standard-PID branches from parseKnownValueLegacy (registry
+  already handled them); ratcheted detekt LargeClass 1169→1149 and CyclomaticComplexMethod 213→179 -
+  A3 incremental ESM migration (cross-module VD.* usage −12.7%; cyclic core cluster intentionally
+  retained to avoid circular-dep init breakage) - A4 moved MainActivity broadcast/telemetry plumbing
+  into DashboardBroadcastCoordinator
+
+Backend / OBD bugs (B): - B1 @Volatile on session end-state (data race) ; B2 debounce 0xFF speed
+  sentinel before treating as plugged ; B3 bound Mode-22 fallback read ; B4 anchor segmented length
+  line ; B5 snapshot dropped-telemetry after drain ; B6 asymmetric speed-jump filter (accepts hard
+  braking) ; B7 concurrent-safe PidPollingState maps
+
+Frontend / dashboard bugs + quality (C): - C1 live-route hydration reference desync (recovered
+  drives now render) ; C3 consistent live distance/duration ; C4 reject (0,0) GPS ; C5 cache recent
+  sessions on the status popover ; C6 reset live route on demo start ; C7 clamp electricity-rate
+  input ; C9 connection-tools listeners under AbortController ; C10 finite-guard routeFitKey ; C11
+  remove dead escapeHtml + fix tone ternary ; C2 state-seam guard + policy ; C8 shared focus-trap
+  module ; C12 CSS sectioning + tokens
+
+Testing (D): - RestoreValidator, ObdPersistenceWorker, BackupCrypto, parser-registry,
+  ObdSessionClassifier, VoltBridge connection/export tests ; bridge name-contract, degraded-device,
+  state-seam, visual semantic guards
+
+Missing features (M): - M1 event notifications (charge complete / new DTC / low SOC) ; M2 per-trip
+  GPX/CSV export (wires the dormant exports table) ; M3 auto DTC scan on connect ; M4 trip labels +
+  M5 maintenance log (one non-destructive v11→v12 migration) ; M6 EV-vs-gas savings ; M7 guided
+  onboarding ; M8 live charge time-to-full ; M9 cell-grid interim gating ; M10 home-screen widget +
+  DTC severity lines
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* test(e2e): fix a11y inert assertion + refresh visual baselines
+
+- a11y.spec.js: assert the standard `inert` attribute the shared focus-trap (createFocusTrap, C8)
+  now sets on the dialog background, replacing the old custom data-dtc-dialog-inert marker. -
+  Refresh the 10 charge/insights scenario-matrix Linux baselines that legitimately shifted from the
+  new UI: M9 collapses the empty 96-cell grid (shorter charge tab), M6 savings + M8 live-charge rows
+  on insights/charge. Images are the exact ubuntu-24.04 CI renders from the dashboard-visual
+  artifact.
+
+* fix: address CodeRabbit review on PR 211
+
+Bugs / safety: - DatabaseMerger: skip maintenance-log copy when the donor table is absent (pre-v12
+  backups) so a legacy restore no longer aborts the whole merge. - TripTrackFormatter: reject
+  non-finite (NaN and ±Infinity) coordinates before coord()/toBigDecimal() so an overflowing GPS
+  literal can't crash GPX/CSV export. - ObdStoreReports: bound the maintenance-log query limit via
+  boundedLimit(). - ObdService: wrap eventCoordinator.onSessionStart() best-effort so a hook
+  exception can't abort session startup. - TripExportController: build the share intent
+  synchronously before returning success so the bridge result reflects actual viability
+  (FileProvider failure now surfaces ok=false). - VoltBridgeDataExports: validate odometerKm finite
+  (and non-negative) before persisting a maintenance entry. - WidgetUpdater: synchronize the
+  snapshot read->merge->write across the status and telemetry entrypoints to avoid lost updates;
+  refresh via a direct AppWidgetManager.updateAppWidget call instead of a self-broadcast. -
+  ObdTripLabels: sanitize the label through cleanLabel() in eventPayload(). - focus-trap.ts:
+  snapshot each background node's prior inert/aria-hidden state on activate and restore it on
+  deactivate (don't corrupt pre-existing a11y state). - ObdProtocol: revert the elmSegmentedHex
+  firstContentLine restriction back to the robust !sawSegment-guarded length detection so an adapter
+  preface line no longer makes the ISO-TP length line be missed.
+
+Hardening / hygiene: - AndroidManifest: gate the exported widget receiver behind BIND_APPWIDGET; the
+  in-app refresh now uses a direct update call so the gate doesn't block it. -
+  EventNotificationCoordinator/Decider: re-read notification prefs each evaluation so a
+  toggle/threshold change mid-session takes effect on the next sample/scan, without resetting
+  per-connection accumulation/arming state. - TripExportTest: close the VoltTrackerDb helper
+  instances (no SQLite leak). - connection-tools.test.js: assert the notify-when-ready toggle exists
+  rather than vacuously early-returning.
+
+Tests: - New EventNotifierTest (permission gate, channel creation, per-event-kind dispatch + ids,
+  no-op-when-blocked). - New focus-trap.test.js (inert/aria-hidden state preservation). -
+  TripTrackFormatterTest: non-finite coordinate rejection. - DatabaseMergerTest: merge succeeds for
+  a donor predating maintenance_log. - EventNotificationCoordinatorTest: live mid-session toggle
+  behavior.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.14.0 (2026-06-15)
 
 ### Features
