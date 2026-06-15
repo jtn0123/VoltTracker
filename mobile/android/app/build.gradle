@@ -16,6 +16,16 @@ detekt {
     source.setFrom(files("src/main/kotlin", "src/test/java"))
 }
 
+// Pin detekt's bytecode target to 21, matching the Gradle java toolchain below (and the JDK CI
+// runs on). detekt 1.23.x otherwise derives --jvm-target from the JDK that launched Gradle, and
+// its max supported value is 21 — so a contributor whose default JDK is newer than 21 hit a hard
+// "Invalid value (24) passed to --jvm-target" failure on `:app:detekt`. Pinning it (paired with
+// the toolchain + foojay resolver) makes the local detekt loop JDK-launcher-independent. JDK 21 is
+// also the highest Java release this detekt line understands, so this is the correct ceiling.
+tasks.withType(io.gitlab.arturbosch.detekt.Detekt).configureEach {
+    jvmTarget = "21"
+}
+
 spotless {
     java {
         target "src/main/java/**/*.java", "src/test/java/**/*.java"
@@ -73,7 +83,7 @@ android {
     defaultConfig {
         applicationId = "com.volttracker.obdpoc"
         minSdk = 23
-        targetSdk = 36
+        targetSdk = 37
         versionCode = repoVersionCode
         versionName = "${repoVersionName}-${repoVersionSuffix}"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -170,6 +180,22 @@ android {
         disable += ["GradleDependency"]
         htmlReport = true
         xmlReport = true
+    }
+}
+
+// Pin the build to JDK 21 so every JVM-launched task (compile, detekt, tests) runs on a fixed
+// toolchain regardless of which JDK started Gradle. Without this the build inherited the launcher
+// JDK, and detekt — whose max --jvm-target is 21 — failed hard on a machine whose default JDK was
+// newer than 21 ("Invalid value (24) passed to --jvm-target"), forcing contributors to
+// `export JAVA_HOME=…21` by hand (the gotcha CLAUDE.md/MEMORY documented). The foojay-resolver
+// plugin in settings.gradle lets Gradle discover an installed JDK 21 (or provision one when
+// downloads are allowed). The `compileOptions` block above still pins the *bytecode* level to
+// Java 17 (minSdk-compatible); this only fixes the JDK that runs the toolchain. AGP's built-in
+// Kotlin inherits this toolchain, so Kotlin compiles on the same JDK 21 — no separate
+// kotlin { jvmToolchain } block is needed.
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 

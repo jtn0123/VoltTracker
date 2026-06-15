@@ -176,6 +176,14 @@
           Run with the ignition on and engine off, parked, transmission in Park,
           all accessories off.
         </p>
+        <!-- Permanent-code caveat (M10). Hidden unless the latest scan stored
+             one or more permanent (Mode 0A) codes; actions.ts fills the count
+             and unhides it when openClearDtcWarning runs. -->
+        <p
+          id="dtcClearPermanentNote"
+          class="dtc-clear-permanent-note"
+          hidden
+        ></p>
         <label class="dtc-clear-ack">
           <input type="checkbox" id="dtcClearAckBox" />
           <span>I understand readiness monitors will reset.</span>
@@ -258,10 +266,91 @@
           class="link-btn"
           data-action="addMaintenance"
           id="addMaintenanceBtn"
+          aria-expanded="false"
+          aria-controls="maintenanceForm"
         >
           Add entry
         </button>
       </header>
+      <p
+        id="maintenanceDueHint"
+        class="maintenance-due-hint"
+        role="status"
+        hidden
+      ></p>
+      <form
+        id="maintenanceForm"
+        class="maintenance-form"
+        aria-label="Log a maintenance entry"
+        hidden
+      >
+        <label class="maint-field">
+          <span>Service</span>
+          <input
+            type="text"
+            id="maintTypeInput"
+            name="type"
+            placeholder="Oil change, Tire rotation…"
+            maxlength="80"
+            autocomplete="off"
+          />
+        </label>
+        <label class="maint-field">
+          <span id="maintOdometerLabel">Odometer (mi)</span>
+          <input
+            type="number"
+            id="maintOdometerInput"
+            name="odometer"
+            inputmode="decimal"
+            min="0"
+            step="any"
+            placeholder="optional"
+          />
+        </label>
+        <label class="maint-field">
+          <span>Note</span>
+          <input
+            type="text"
+            id="maintNoteInput"
+            name="note"
+            placeholder="optional"
+            maxlength="200"
+            autocomplete="off"
+          />
+        </label>
+        <div class="maint-field-row">
+          <label class="maint-field">
+            <span id="maintIntervalKmLabel">Every (mi)</span>
+            <input
+              type="number"
+              id="maintIntervalKmInput"
+              name="intervalKm"
+              inputmode="decimal"
+              min="0"
+              step="any"
+              placeholder="optional"
+            />
+          </label>
+          <label class="maint-field">
+            <span>Every (months)</span>
+            <input
+              type="number"
+              id="maintIntervalMonthsInput"
+              name="intervalMonths"
+              inputmode="numeric"
+              min="0"
+              step="1"
+              placeholder="optional"
+            />
+          </label>
+        </div>
+        <div class="maint-form-actions">
+          <button type="button" data-action="cancelMaintenance">Cancel</button>
+          <button type="submit" class="primary" id="maintSaveBtn">
+            Save entry
+          </button>
+        </div>
+      </form>
       <div id="maintenanceList" class="maintenance-list"></div>
     </article>
   </section>

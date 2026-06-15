@@ -58,4 +58,9 @@ class LogcatMirror(
         Log.e(tag, msg, t)
         rollingLog.write("E", tag, "$msg ${Log.getStackTraceString(t)}")
     }
+
+    /** Releases the underlying [RollingAppLog]'s held file handle; the next write reopens it lazily. */
+    fun close() {
+        rollingLog.close()
+    }
 }

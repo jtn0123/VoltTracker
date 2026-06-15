@@ -29,6 +29,12 @@ object TripTrackFormatter {
             "speed_mps,bearing_deg,altitude_m,accuracy_m,soc_pct"
 
     /**
+     * Header for the bulk all-trips CSV (M6): the single-trip [CSV_HEADER] prefixed with a
+     * trip-id/label pair, so every row is attributable to its drive. Kept in sync with [toAllTripsCsv].
+     */
+    const val ALL_TRIPS_CSV_HEADER = "trip_id,trip_label,$CSV_HEADER"
+
+    /**
      * Renders the route as a GPX 1.1 document: one `<trk>` with a single `<trkseg>` whose `<trkpt>`s
      * carry `lat`/`lon` plus `<time>` (when the sample has `atMs`), `<ele>` (altitude), and the speed
      * under a GPX extension. Returns a valid (empty-track) document when there are no points.
@@ -131,6 +137,37 @@ object TripTrackFormatter {
         ).joinToString(",")
     }
 
+    /**
+     * Renders a bulk all-trips CSV (M6) from a list of `{ tripId, label, route }` objects (the shape
+     * [com.volttracker.obdpoc.data.ObdStoreReports.allTripsForExportJson] builds). One [ALL_TRIPS_CSV_HEADER]
+     * line, then every trip's points back-to-back, each row prefixed with its trip id + label so the
+     * combined file stays attributable. The per-sample columns reuse the single-trip [csvRow]
+     * projection. Returns just the header when there are no trips/points. The trip label is CSV-quoted
+     * (it is free user text and may contain commas/quotes/newlines); the trip id is a safe route key.
+     */
+    fun toAllTripsCsv(trips: JSONArray): String {
+        val builder = StringBuilder(CSV_INITIAL_CAPACITY)
+        builder.append(ALL_TRIPS_CSV_HEADER).append('\n')
+        for (t in 0 until trips.length()) {
+            val trip = trips.optJSONObject(t) ?: continue
+            val tripId = csvField(trip.optString("tripId", ""))
+            val label = csvField(trip.optString("label", ""))
+            val route = trip.optJSONObject("route") ?: continue
+            val points = route.optJSONArray("points") ?: continue
+            for (i in 0 until points.length()) {
+                val point = points.optJSONObject(i) ?: continue
+                builder
+                    .append(tripId)
+                    .append(',')
+                    .append(label)
+                    .append(',')
+                    .append(csvRow(i, point))
+                    .append('\n')
+            }
+        }
+        return builder.toString()
+    }
+
     /** Point count actually written to a track (the projection may include null/invalid entries). */
     fun pointCount(route: JSONObject): Int {
         val points = route.optJSONArray("points") ?: return 0
@@ -195,13 +232,38 @@ object TripTrackFormatter {
 
     private fun csvNumber(value: Double?): String = value?.let { coord(it) } ?: ""
 
-    /** Locale-independent, plain (non-scientific) decimal rendering for coordinates/measurements. */
-    private fun coord(value: Double): String =
-        if (value == value.toLong().toDouble()) {
-            value.toLong().toString()
-        } else {
-            value.toBigDecimal().stripTrailingZeros().toPlainString()
+    /**
+     * RFC-4180 CSV escaping for a free-text field (the all-trips trip label/id), plus a spreadsheet
+     * formula-injection guard. Wraps the value in quotes and doubles any embedded quote when it
+     * contains a comma, quote, or newline; and, because the trip label is free user text (and can
+     * arrive from a merged backup), neutralizes a leading `= + - @` / tab / CR — characters that
+     * make Excel/Google Sheets evaluate the cell as a formula — by prefixing a single quote so the
+     * cell is treated as literal text. The trip id is a numeric route key, so this only ever rewrites
+     * a hostile label, never real data. Keeps a hostile/odd label from breaking the bulk CSV.
+     */
+    private fun csvField(raw: String): String {
+        if (raw.isEmpty()) {
+            return ""
         }
+        val guarded = if (raw[0] in CSV_FORMULA_TRIGGERS) "'" + raw else raw
+        if (guarded.contains(',') || guarded.contains('"') || guarded.contains('\n') || guarded.contains('\r')) {
+            return "\"" + guarded.replace("\"", "\"\"") + "\""
+        }
+        return guarded
+    }
+
+    /**
+     * Locale-independent, plain (non-scientific) decimal rendering for coordinates/measurements.
+     *
+     * Always keeps at least one decimal place so a whole-valued coordinate renders as `"0.0"`/`"33.0"`
+     * rather than `"0"`/`"33"` — consistent with the fractional points alongside it in the same
+     * GPX/CSV file users hand to Strava/Garmin. (Both forms parse identically, but the mixed integer/
+     * decimal output was lossy/inconsistent.)
+     */
+    private fun coord(value: Double): String {
+        val decimal = value.toBigDecimal().stripTrailingZeros()
+        return if (decimal.scale() <= 0) decimal.setScale(1).toPlainString() else decimal.toPlainString()
+    }
 
     private fun isoUtc(epochMs: Long): String = isoFormat().format(Date(epochMs))
 
@@ -227,4 +289,7 @@ object TripTrackFormatter {
     private const val GPX_INITIAL_CAPACITY = 4096
     private const val CSV_INITIAL_CAPACITY = 4096
     private const val MAX_SUFFIX_LEN = 40
+
+    // Leading characters that make a spreadsheet treat a CSV cell as a formula (CSV/DDE injection).
+    private val CSV_FORMULA_TRIGGERS = charArrayOf('=', '+', '-', '@', '\t', '\r')
 }

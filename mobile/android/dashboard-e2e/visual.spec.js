@@ -48,6 +48,33 @@ test('charge — KPI grid', async ({ page }) => {
   await expect(chargeGrid).toHaveScreenshot('charge-grid.png');
 });
 
+test('charge — live-charge ETA card is wired and renders while charging (D6)', async ({ page }) => {
+  // Drive an active charge (plausible charger power + a known SOC below target) so the new M8
+  // live-charge card renders, then assert its DOM is actually present and populated. A partials/
+  // template wiring regression (card in source, missing from the generated index.html) would make
+  // these fail loudly — the jsdom unit spec proves the function, not the assembled page. No
+  // screenshot is added here, so no *-linux.png baseline is created or altered.
+  await page.evaluate(() => {
+    window.VoltDashboard.updateTelemetry({
+      source: 'obd',
+      connected: true,
+      sampleCount: 1,
+      updatedAt: Date.now(),
+      chargerPowerKw: 3.5,
+      soc: 50,
+    });
+    window.VoltDashboard.updateLiveUi();
+  });
+  await setView(page, 'charge');
+
+  const liveCard = page.locator('#liveChargeCard');
+  await expect(liveCard).toBeVisible();
+  // 14 kWh usable * (100-50)/100 = 7.0 kWh remaining; 7.0 / 3.5 kW = 2h to 100%.
+  await expect(page.locator('#liveChargeSoc')).toHaveText('50%');
+  await expect(page.locator('#liveChargeRemaining')).toHaveText('7.0 kWh');
+  await expect(page.locator('#liveChargeEta')).toHaveText('~2h 00m to 100%');
+});
+
 test('insights — aggregate stats', async ({ page }) => {
   await page.evaluate(() => {
     window.VoltTrackerAndroid.getInsights = () =>
@@ -67,4 +94,48 @@ test('insights — aggregate stats', async ({ page }) => {
   await expect(statsCard).toBeVisible();
   await expect(statsCard).not.toBeEmpty();
   await expect(statsCard).toHaveScreenshot('insights-stats.png');
+});
+
+test('insights — savings row is wired and computes once prefs are set (D6)', async ({ page }) => {
+  // The M6 savings row stays hidden until logged distance + all three comparison prefs exist; seed
+  // both, then assert the row is visible with an honest computed figure. This catches a partials/
+  // template wiring regression on the new Insights surface (row in source, not in generated
+  // index.html) that every jsdom unit test would still pass. No screenshot, so no new baseline.
+  await page.evaluate(() => {
+    window.VoltTrackerAndroid.getInsights = () =>
+      JSON.stringify({ tripCount: 12, totalDistanceMeters: 5000 * 1609.344 });
+    window.VoltDashboard.prefs.set('mpg', 30);
+    window.VoltDashboard.prefs.set('gasPricePerGal', 4);
+    window.VoltDashboard.prefs.set('pricePerKwh', 0.14);
+  });
+  await setView(page, 'insights');
+  await page.evaluate(() => window.VoltDashboard.renderInsightStats());
+
+  const savingsRow = page.locator('#insightSavingsRow');
+  await expect(savingsRow).toBeVisible();
+  // gas (5000/30*4) - EV (5000/3.5*0.14) ≈ $466.67.
+  await expect(page.locator('#insightSavings')).toHaveText('$466.67');
+  await expect(page.locator('#insightSavingsNote')).toContainText('Estimated');
+});
+
+test('insights — maintenance log is wired and lists logged entries (D6)', async ({ page }) => {
+  // The M1/M5 maintenance log renders real entries newest-first into #maintenanceList.
+  // renderMaintenanceList reads state.maintenanceLog (populated from the bridge on load), so seed
+  // state directly, render, and assert real rows appear — guarding the assembled Insights surface
+  // against a wiring regression the jsdom unit spec can't see.
+  await setView(page, 'insights');
+  await page.evaluate(() => {
+    window.VoltDashboard.state.maintenanceLog = [
+      { id: 2, createdAtMs: 1_700_000_500_000, odometerKm: 1609.344, type: 'Oil change', note: 'Synthetic' },
+      { id: 1, createdAtMs: 1_700_000_000_000, odometerKm: null, type: 'Tire rotation', note: '' },
+    ];
+    window.VoltDashboard.renderMaintenanceList();
+  });
+
+  const list = page.locator('#maintenanceList');
+  await expect(list).toBeVisible();
+  // Entry rows (not the empty-state article, which also carries .real-insight-item).
+  const rows = list.locator('.real-insight-item:not(.maint-empty)');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first().locator('strong')).toHaveText('Oil change');
 });

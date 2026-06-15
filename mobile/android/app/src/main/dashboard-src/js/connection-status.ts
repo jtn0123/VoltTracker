@@ -5,8 +5,14 @@
 // topbar. The low-voltage hint also lives here (the hint element is in
 // connection-tools.html but the status payload is the same).
 import { asDataState, setDataState, setDataTone } from "./dataset-state";
+import { resolveDeviceLocale, t } from "./i18n";
 import { units } from "./prefs";
 import { formatDuration } from "./telemetry";
+
+// Pick up the device locale once at module load so the demo-migrated copy below
+// resolves to a registered translation when one matches navigator.language. The
+// rest of the dashboard copy is still inlined English pending the full migration.
+resolveDeviceLocale();
 
 type RecentSession = {
   adapter?: string;
@@ -197,8 +203,10 @@ function connectionRows(status: VoltStatus): StatusRow[] {
   const samples = Number(session.sampleCount || 0);
   const sessionState = String(status.state || session.state || "idle");
   const logging = ACTIVE_TRIP_STATES.includes(sessionState.toLowerCase())
-    ? (samples ? `${samples.toLocaleString()} samples` : "Waiting for data")
-    : "Not logging";
+    ? (samples
+        ? t("status.logging.samples", { count: samples.toLocaleString() })
+        : t("status.logging.waitingForData"))
+    : t("status.logging.notLogging");
   const last = parseSessions(8).find((s) => !isDemoSession(s));
 
   return [
@@ -206,7 +214,7 @@ function connectionRows(status: VoltStatus): StatusRow[] {
     ["Bluetooth", bluetoothSummary(app.permissions || {}, status)],
     ["Logging", logging],
     ["GPS", String(gps.state || "")],
-    ["Last connected", last ? `${last.adapter || "OBD adapter"} · ${formatRelative(last.endMs || last.startMs)}` : ""]
+    ["Last connected", last ? `${last.adapter || t("status.adapter.fallbackName")} · ${formatRelative(last.endMs || last.startMs)}` : ""]
   ];
 }
 
@@ -224,7 +232,7 @@ function tripRows(status: VoltStatus): StatusRow[] {
     if (last && Number.isFinite(lastMs) && lastMs > 0) {
       return [["Last trip", `${formatDuration(lastMs)} · ${formatRelative(last.endMs)}`]];
     }
-    return [["Trip", "No trip yet — connect to start logging."]];
+    return [["Trip", t("trip.empty.noTripYet")]];
   }
 
   const rows: StatusRow[] = [];
@@ -246,7 +254,7 @@ function tripRows(status: VoltStatus): StatusRow[] {
   }
   const samples = Number(session.sampleCount || telemetry.sampleCount || 0);
   if (samples > 0) rows.push(["Samples", samples.toLocaleString()]);
-  if (!rows.length) rows.push(["Trip", "Waiting for the first samples..."]);
+  if (!rows.length) rows.push(["Trip", t("trip.waitingForFirstSamples")]);
   return rows;
 }
 
@@ -259,7 +267,7 @@ function renderStatusPopover() {
   const pillText = el("statusPopoverStateText");
   if (pillText) pillText.textContent = stateName;
   const detail = el("statusPopoverDetail");
-  if (detail) detail.textContent = String(status.detail || "Ready.");
+  if (detail) detail.textContent = String(status.detail || t("status.detail.ready"));
   renderRows(el("statusPopoverConnection"), connectionRows(status));
   renderRows(el("statusPopoverTrip"), tripRows(status));
 }

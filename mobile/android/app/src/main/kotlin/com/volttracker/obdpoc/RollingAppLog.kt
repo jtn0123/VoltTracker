@@ -30,6 +30,23 @@ class RollingAppLog {
     private val bornFile: File
     private val clock: Clock
 
+    // Long-lived append writer for the live file, opened lazily on first write and reused across
+    // appends — so the hot path no longer does an open()/close() syscall per log line. Closed and
+    // nulled only on rotation (the live file is renamed away) or a write error, so the next write
+    // reopens against the fresh file. All access is under this object's monitor (every public method
+    // is @Synchronized), so the non-thread-safe writer is never touched concurrently.
+    private var writer: BufferedWriter? = null
+
+    // Set once by close() (owner teardown). Permanent: a straggler write from a still-draining
+    // thread after close() is dropped rather than reopening — and re-leaking — the file handle.
+    // Touched only under this object's monitor (write()/close() are @Synchronized).
+    private var closed = false
+
+    // Cached timestamp formatter. SimpleDateFormat is not thread-safe, but it's only used from the
+    // synchronized write() path, so a single cached instance is safe and avoids rebuilding it (and
+    // re-parsing the pattern) on every line. Locale.US keeps the format stable across device locales.
+    private val timestampFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.US)
+
     /** Source of "now" for the rotate-on-age check. Default is wall clock. */
     fun interface Clock {
         fun now(): Long
@@ -61,6 +78,10 @@ class RollingAppLog {
         tag: String?,
         msg: String?,
     ) {
+        if (closed) {
+            // The owner has torn this log down; drop the line rather than reopening the handle.
+            return
+        }
         if (!ensureDir()) {
             return
         }
@@ -71,24 +92,61 @@ class RollingAppLog {
             writeBorn(clock.now())
         }
         try {
-            BufferedWriter(FileWriter(liveFile, true)).use { writer ->
-                // ISO-8601-ish with millis. Locale.US so the formatter is stable regardless of
-                // device locale; SimpleDateFormat per-write avoids holding a non-thread-safe
-                // formatter as a field even though this whole method is synchronized.
-                val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.US)
-                writer.write(fmt.format(Date(clock.now())))
-                writer.write(' '.code)
-                writer.write(safe(level))
-                writer.write(' '.code)
-                writer.write(safe(tag))
-                writer.write(": ")
-                writer.write(safe(msg))
-                writer.newLine()
-            }
+            val out = openWriter()
+            // ISO-8601-ish with millis from the cached, lock-guarded formatter.
+            out.write(timestampFormat.format(Date(clock.now())))
+            out.write(' '.code)
+            out.write(safe(level))
+            out.write(' '.code)
+            out.write(safe(tag))
+            out.write(": ")
+            out.write(safe(msg))
+            out.newLine()
+            // Flush every line so the diagnostics zip and the immediate-read callers see the line
+            // right away (matching the old open-write-close durability), while still keeping the
+            // file handle open so we avoid the per-line open()/close() syscalls.
+            out.flush()
         } catch (ex: IOException) {
             // Mirroring this failure back through OBDLog would recurse into this class; a
             // best-effort plain logcat line is the most we can safely do before dropping it.
+            // Drop the (possibly half-broken) writer so the next write reopens cleanly.
+            closeWriter()
             Log.w(TAG, "app log append failed; line dropped", ex)
+        }
+    }
+
+    /**
+     * Flushes and releases the held live-file writer. Call when the owner is going away (e.g. the
+     * service's `onDestroy`) so the long-lived file handle isn't leaked for the rest of the process
+     * lifetime. Idempotent. Permanent: any [write] after close() is dropped rather than reopening —
+     * and re-leaking — the handle, so a straggler line from a still-draining thread is safe.
+     */
+    @Synchronized
+    fun close() {
+        closed = true
+        closeWriter()
+    }
+
+    /** Returns the live-file append writer, opening it lazily on first use after start/rotation. */
+    @Throws(IOException::class)
+    private fun openWriter(): BufferedWriter {
+        val existing = writer
+        if (existing != null) {
+            return existing
+        }
+        val opened = BufferedWriter(FileWriter(liveFile, true))
+        writer = opened
+        return opened
+    }
+
+    /** Closes and forgets the live-file writer (best-effort), so the next write reopens it. */
+    private fun closeWriter() {
+        val existing = writer ?: return
+        writer = null
+        try {
+            existing.close()
+        } catch (ex: IOException) {
+            Log.w(TAG, "app log writer close failed", ex)
         }
     }
 
@@ -115,14 +173,18 @@ class RollingAppLog {
         if (age < ROTATE_AGE_MS) {
             return
         }
-        // Roll: overwrite any previous rolled file with the current live file.
+        // Roll: overwrite any previous rolled file with the current live file. Close the held writer
+        // first so the live-file handle is released before the rename and the next write reopens
+        // against the fresh live file (on Windows an open handle would also block the rename).
         if (rolledFile.exists() && !rolledFile.delete()) {
             // If we can't make room for the rolled file, leave the live file in place and keep
             // appending -- better to keep one oversize log than to start dropping lines silently.
             return
         }
+        closeWriter()
         if (!liveFile.renameTo(rolledFile)) {
-            // Rename failed; live file stays in place.
+            // Rename failed; live file stays in place. The writer was closed above; the next write
+            // simply reopens it against the same (un-rotated) live file.
             return
         }
         // The live file is now gone; the FileWriter below will recreate it on next write.

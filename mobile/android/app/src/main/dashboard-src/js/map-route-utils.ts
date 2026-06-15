@@ -25,6 +25,8 @@ export type MapRouteSession = {
   endedAtMs?: number;
   /** User-authored trip label (M4); empty/absent when unset. */
   label?: string;
+  /** User favorite flag (M4 favorites half); absent/false when not favorited. */
+  favorite?: boolean;
   [key: string]: unknown;
 };
 

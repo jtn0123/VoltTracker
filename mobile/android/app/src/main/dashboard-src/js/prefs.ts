@@ -231,6 +231,62 @@
     });
   }
 
+  // ----- accessibility (M9): font scale + high-contrast theme ----------------
+  // Display-layer prefs persisted exactly like units: a --font-scale multiplier
+  // and a data-contrast="high" attr on :root (document.documentElement), both
+  // swapping centralized CSS tokens (base.css). Loaded at boot so the chosen
+  // size/contrast is in place before first paint.
+  const FONT_SCALE_MIN = 1;
+  const FONT_SCALE_MAX = 1.5;
+  const FONT_SCALE_CHOICES = [1, 1.25, 1.5];
+
+  function fontScale(): number {
+    const raw = Number(get<number>("fontScale", 1));
+    if (!Number.isFinite(raw)) return 1;
+    return Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, raw));
+  }
+
+  function highContrast(): boolean {
+    return get<boolean>("highContrast", false) === true;
+  }
+
+  // Snap an arbitrary stored scale to the nearest offered choice so the
+  // segmented control always has exactly one active button.
+  function nearestFontScaleChoice(value: number): number {
+    return FONT_SCALE_CHOICES.reduce((best, choice) =>
+      Math.abs(choice - value) < Math.abs(best - value) ? choice : best
+    , FONT_SCALE_CHOICES[0] as number);
+  }
+
+  function applyAccessibilityAttrs(): void {
+    try {
+      const root = document.documentElement;
+      if (!root) return;
+      root.style.setProperty("--font-scale", String(fontScale()));
+      if (highContrast()) root.setAttribute("data-contrast", "high");
+      else root.removeAttribute("data-contrast");
+    } catch (_err) {
+      /* no-op: a missing documentElement (non-DOM host) leaves defaults intact */
+    }
+  }
+
+  function syncAccessibilityControls(): void {
+    const active = nearestFontScaleChoice(fontScale());
+    document.querySelectorAll<HTMLElement>("[data-pref-font-scale]").forEach((btn) => {
+      const on = Number(btn.getAttribute("data-pref-font-scale")) === active;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-pressed", String(on));
+    });
+    const toggle = document.querySelector<HTMLElement>("[data-pref-contrast-toggle]");
+    if (toggle) {
+      const on = highContrast();
+      toggle.dataset.on = String(on);
+      toggle.setAttribute("aria-pressed", String(on));
+      toggle.setAttribute("aria-label", `High-contrast theme is ${on ? "on" : "off"}`);
+      toggle.textContent = on ? "On" : "Off";
+    }
+  }
+
 
   // ----- customizable Drive tiles ------------------------------------------
   // Lets the user show/hide and reorder the Drive live-readout tiles. Persisted
@@ -376,20 +432,43 @@
   // advertise a value the store didn't keep, and debounce the dashboard-wide
   // re-render so typing doesn't re-render four times. Shared by the electricity
   // rate, gas MPG, and gas price fields.
-  function bindNumericPref(inputId: string, prefKey: string, min: number, max: number): void {
+  //
+  // `defaultValue` is the value used for an unset pref / a cleared (blank) field —
+  // it defaults to 0, which suits the cost fields (an unset rate means "no rate").
+  // The charge-target field passes 100 so an empty field means a full charge, not 0.
+  // `onCommit` runs with the clamped value after each edit (e.g. to push it across
+  // the native bridge), in addition to the standard units re-render.
+  function bindNumericPref(
+    inputId: string,
+    prefKey: string,
+    min: number,
+    max: number,
+    options?: { defaultValue?: number; onCommit?: (value: number) => void }
+  ): void {
     const input = document.getElementById(inputId) as HTMLInputElement | null;
     if (!input) return;
-    const stored = get<number>(prefKey, 0);
-    if (stored > 0) input.value = String(stored);
+    const fallback = options && typeof options.defaultValue === "number" ? options.defaultValue : 0;
+    const stored = get<number>(prefKey, fallback);
+    // Show the stored value; for the cost fields (fallback 0) keep the old "blank
+    // when unset" behaviour, but for a non-zero default (charge target) always
+    // reflect it so the field never reads empty.
+    if (stored > 0 || fallback > 0) input.value = String(stored);
     let rerenderTimer = 0;
     input.addEventListener("input", () => {
       const parsed = parseFloat(input.value);
-      const clamped = Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : 0;
+      const clamped = Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
       set(prefKey, clamped);
       const reflect = Number.isFinite(parsed)
         ? clamped !== parsed
         : input.value.trim() !== "";
       if (reflect) input.value = String(clamped);
+      if (options && options.onCommit) {
+        try {
+          options.onCommit(clamped);
+        } catch (_err) {
+          /* a bridge hiccup must not break the input */
+        }
+      }
       window.clearTimeout(rerenderTimer);
       rerenderTimer = window.setTimeout(rerenderForUnits, 400);
     });
@@ -398,6 +477,8 @@
   function bootPrefsUi(): void {
     applyUnitsAttr();
     syncUnitButtons();
+    applyAccessibilityAttrs();
+    syncAccessibilityControls();
     applyDriveTiles();
     renderTilesEditor();
     // Electricity-rate ($/kWh) preference: hydrate the field and persist on edit.
@@ -407,6 +488,37 @@
     // fat-fingered entry can't poison the estimate.
     bindNumericPref("gasMpgInput", "mpg", 5, 150);
     bindNumericPref("gasPricePerGalInput", "gasPricePerGal", 0, 20);
+    // Charge target SOC (M2): lives on the Charge tab. Drives the live-charge ETA
+    // (telemetry.ts reads the "chargeTargetSoc" pref) and is mirrored to the native
+    // side so EventNotificationDecider can fire the "target reached" notification and
+    // tell a finished charge from an interrupted one. Default 100 = full charge.
+    bindNumericPref("liveChargeTargetInput", "chargeTargetSoc", 50, 100, {
+      defaultValue: 100,
+      onCommit: (value) => {
+        try {
+          const bridge = window.VoltTrackerAndroid;
+          if (bridge && typeof bridge.setChargeTargetSoc === "function") {
+            bridge.setChargeTargetSoc(value);
+          }
+        } catch (_err) {
+          /* bridge absent in browser preview / older host — pref still drives the ETA */
+        }
+        // Re-render the live-charge card immediately so the ETA/target reflect the edit.
+        try {
+          if (typeof VD.updateLiveUi === "function") VD.updateLiveUi();
+        } catch (_err) {
+          /* no-op */
+        }
+      },
+    });
+    // Install the delegated preferences click handler at most once per document.
+    // Production loads prefs once, but the guard keeps a stray double-load (or a
+    // re-imported test module) from stacking a second toggle listener — which
+    // would double-fire the high-contrast toggle and cancel itself out. The flag
+    // rides on document (not a module-scoped let) so it survives a re-import.
+    const doc = document as Document & { __voltPrefsClickBound?: boolean };
+    if (doc.__voltPrefsClickBound) return;
+    doc.__voltPrefsClickBound = true;
     document.addEventListener("click", (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
@@ -416,6 +528,26 @@
         applyUnitsAttr();
         syncUnitButtons();
         rerenderForUnits();
+        return;
+      }
+      // Accessibility font scale (M9): pick one of the offered multipliers.
+      const scaleBtn = target.closest("[data-pref-font-scale]");
+      if (scaleBtn) {
+        const value = Number(scaleBtn.getAttribute("data-pref-font-scale"));
+        const clamped = Number.isFinite(value)
+          ? Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, value))
+          : 1;
+        set("fontScale", clamped);
+        applyAccessibilityAttrs();
+        syncAccessibilityControls();
+        return;
+      }
+      // Accessibility high-contrast theme toggle (M9).
+      const contrastBtn = target.closest("[data-pref-contrast-toggle]");
+      if (contrastBtn) {
+        set("highContrast", !highContrast());
+        applyAccessibilityAttrs();
+        syncAccessibilityControls();
       }
     });
   }

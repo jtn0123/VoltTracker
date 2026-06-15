@@ -20,20 +20,49 @@ describe('insights estimated savings vs gas', () => {
   beforeEach(() => window.localStorage.clear());
   afterEach(() => window.localStorage.clear());
 
-  it('hides the savings row until mpg, gas price, and electricity rate are all set', async () => {
-    // 5000 miles logged, but no comparison prefs yet → row hidden.
+  it('shows a prompt state (not a number) until mpg, gas price, and electricity rate are all set (C3)', async () => {
+    // 5000 miles logged, but no comparison prefs yet → row VISIBLE in a prompt
+    // state (so the advertised savings is discoverable, not silently hidden)
+    // with no fabricated number and a tap-through to Settings.
     const getInsights = vi.fn(() =>
       JSON.stringify({ tripCount: 12, totalDistanceMeters: 5000 * 1609.344 }));
     await loadWithInsights(getInsights);
 
     const row = document.getElementById('insightSavingsRow');
-    expect(row.hidden).toBe(true);
+    expect(row.hidden).toBe(false);
+    expect(document.getElementById('insightSavings').textContent).toBe('--');
 
-    // Only two of the three prefs set → still hidden.
+    const note = document.getElementById('insightSavingsNote');
+    expect(note.textContent).toContain('Set your MPG, gas price, and rate in Settings');
+    const jump = note.querySelector('[data-nav-jump="settings"]');
+    expect(jump).not.toBeNull();
+    // Tapping the prompt jumps to the Settings view (delegated nav-jump click).
+    jump.click();
+    expect(window.VoltDashboard.state.view).toBe('settings');
+
+    // Only two of the three prefs set → still the prompt state, still no number.
     window.VoltDashboard.prefs.set('mpg', 30);
     window.VoltDashboard.prefs.set('gasPricePerGal', 4);
     window.VoltDashboard.renderInsightStats();
-    expect(document.getElementById('insightSavingsRow').hidden).toBe(true);
+    expect(document.getElementById('insightSavingsRow').hidden).toBe(false);
+    expect(document.getElementById('insightSavings').textContent).toBe('--');
+    expect(document.getElementById('insightSavingsNote').querySelector('[data-nav-jump="settings"]')).not.toBeNull();
+  });
+
+  it('replaces the prompt link with a plain assumptions line once all prefs are set', async () => {
+    const getInsights = vi.fn(() =>
+      JSON.stringify({ tripCount: 12, totalDistanceMeters: 5000 * 1609.344 }));
+    await loadWithInsights(getInsights);
+    // Prompt state first…
+    expect(document.getElementById('insightSavingsNote').querySelector('[data-nav-jump="settings"]')).not.toBeNull();
+    // …then a full estimate clears the link so no stale tap-through survives.
+    window.VoltDashboard.prefs.set('mpg', 30);
+    window.VoltDashboard.prefs.set('gasPricePerGal', 4);
+    window.VoltDashboard.prefs.set('pricePerKwh', 0.14);
+    window.VoltDashboard.renderInsightStats();
+    const note = document.getElementById('insightSavingsNote');
+    expect(note.querySelector('[data-nav-jump="settings"]')).toBeNull();
+    expect(note.textContent).toContain('Estimated');
   });
 
   it('computes lifetime savings once all prefs and distance are present', async () => {

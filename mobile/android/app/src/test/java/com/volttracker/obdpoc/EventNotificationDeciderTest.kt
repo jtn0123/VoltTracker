@@ -17,6 +17,7 @@ class EventNotificationDeciderTest {
         lowSocThreshold: Double = 20.0,
         highTemp: Boolean = false,
         highTempThreshold: Double = 45.0,
+        targetSoc: Double = 100.0,
     ) = EventNotificationDecider.Settings(
         chargeCompleteEnabled = chargeComplete,
         newDtcEnabled = newDtc,
@@ -24,6 +25,7 @@ class EventNotificationDeciderTest {
         lowSocThresholdPct = lowSocThreshold,
         highPackTempEnabled = highTemp,
         highPackTempThresholdC = highTempThreshold,
+        targetSocPct = targetSoc,
     )
 
     private fun sample(
@@ -89,6 +91,129 @@ class EventNotificationDeciderTest {
         }
         val events = decider.onSample(sample(2_500_000L, packCurrentA = 5.0, speedKph = 30.0))
         assertTrue(events.isEmpty())
+    }
+
+    // ---- charge interrupted vs complete (M3) -------------------------------------------
+
+    @Test
+    fun chargeEndingWellBelowTargetReportsInterruptedNotComplete() {
+        // Target 80%; charging stops at 47% (cable knocked loose) -> interrupted, not "complete".
+        val decider = EventNotificationDecider(settings(targetSoc = 80.0))
+        for (i in 0..3) {
+            decider.onSample(sample(i * 600_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 47.0))
+        }
+        val events = decider.onSample(sample(2_500_000L, packCurrentA = 0.0, speedKph = 0.0, socPct = 47.0))
+
+        assertEquals(1, events.size)
+        val event = events[0] as EventNotificationDecider.Event.ChargeInterrupted
+        assertEquals(47.0, event.socPct, 0.001)
+        assertEquals(80.0, event.targetPct, 0.001)
+    }
+
+    @Test
+    fun chargeEndingAtTargetReportsCompleteNotInterrupted() {
+        // Reaches the 80% target, then stops -> a normal completed charge.
+        val decider = EventNotificationDecider(settings(targetSoc = 80.0))
+        for (i in 0..3) {
+            decider.onSample(sample(i * 600_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 80.0))
+        }
+        val events = decider.onSample(sample(2_500_000L, packCurrentA = 0.0, speedKph = 0.0, socPct = 80.0))
+
+        // The target-reached ping already fired during charging; the end is a ChargeComplete.
+        val end = events.last()
+        assertTrue(
+            "a charge that reached target ends as complete",
+            end is EventNotificationDecider.Event.ChargeComplete,
+        )
+    }
+
+    @Test
+    fun chargeEndingJustBelowTargetWithinMarginStillCompletes() {
+        // Stops at 77% with an 80% target — within the 5% interrupted margin, so the usual tail-end
+        // cutoff counts as complete, not interrupted.
+        val decider = EventNotificationDecider(settings(targetSoc = 80.0))
+        for (i in 0..3) {
+            decider.onSample(sample(i * 600_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 77.0))
+        }
+        val events = decider.onSample(sample(2_500_000L, packCurrentA = 0.0, speedKph = 0.0, socPct = 77.0))
+
+        val end = events.last()
+        assertTrue("a stop within the margin is complete", end is EventNotificationDecider.Event.ChargeComplete)
+    }
+
+    @Test
+    fun chargeEndingWithNoSocReadingFallsBackToComplete() {
+        // Current seen but SOC never reported -> can't prove interrupted, so don't cry wolf.
+        val decider = EventNotificationDecider(settings(targetSoc = 80.0))
+        for (i in 0..3) {
+            decider.onSample(sample(i * 600_000L, packCurrentA = -20.0, packVoltage = 355.0))
+        }
+        val events = decider.onSample(sample(2_500_000L, packCurrentA = 0.0, speedKph = 0.0))
+
+        assertEquals(1, events.size)
+        assertTrue(events[0] is EventNotificationDecider.Event.ChargeComplete)
+    }
+
+    @Test
+    fun chargeInterruptedRidesTheChargeCompleteToggle() {
+        val decider = EventNotificationDecider(settings(chargeComplete = false, targetSoc = 80.0))
+        for (i in 0..3) {
+            decider.onSample(sample(i * 600_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 47.0))
+        }
+        val events = decider.onSample(sample(2_500_000L, packCurrentA = 0.0, speedKph = 0.0, socPct = 47.0))
+        assertTrue("disabling charge-complete also suppresses interrupted", events.isEmpty())
+    }
+
+    // ---- target SOC reached (M2) -------------------------------------------------------
+
+    @Test
+    fun targetSocReachedFiresOnceWhenChargeCrossesTheTarget() {
+        val decider = EventNotificationDecider(settings(targetSoc = 80.0))
+        // Climbs through the target while charging.
+        assertTrue(decider.onSample(sample(0L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 70.0)).isEmpty())
+        assertTrue(
+            decider.onSample(sample(60_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 79.0)).isEmpty(),
+        )
+        val crossing = decider.onSample(sample(120_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 81.0))
+        assertEquals(1, crossing.size)
+        val event = crossing[0] as EventNotificationDecider.Event.TargetSocReached
+        assertEquals(81.0, event.socPct, 0.001)
+        assertEquals(80.0, event.targetPct, 0.001)
+        // Still above target, but already fired — no repeat.
+        assertTrue(
+            decider.onSample(sample(180_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 82.0)).isEmpty(),
+        )
+    }
+
+    @Test
+    fun targetSocReachedSuppressedForAFull100PercentTarget() {
+        // A 100% target is a full charge, so the charge-complete alert covers it — no separate ping.
+        val decider = EventNotificationDecider(settings(targetSoc = 100.0))
+        val events = decider.onSample(sample(0L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 100.0))
+        assertTrue(events.none { it is EventNotificationDecider.Event.TargetSocReached })
+    }
+
+    @Test
+    fun targetSocReachedSuppressedWhenChargeCompleteToggleOff() {
+        val decider = EventNotificationDecider(settings(chargeComplete = false, targetSoc = 80.0))
+        val events = decider.onSample(sample(0L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 85.0))
+        assertTrue(events.none { it is EventNotificationDecider.Event.TargetSocReached })
+    }
+
+    @Test
+    fun targetSocReArmsForANewChargeAfterTheFirstEnds() {
+        val decider = EventNotificationDecider(settings(targetSoc = 80.0))
+        // First charge crosses the target and ends.
+        decider.onSample(sample(0L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 70.0))
+        assertEquals(
+            1,
+            decider.onSample(sample(60_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 85.0)).size,
+        )
+        decider.onSample(sample(120_000L, packCurrentA = 0.0, speedKph = 0.0, socPct = 85.0))
+        // A fresh charge re-arms the ping.
+        decider.onSample(sample(180_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 70.0))
+        val crossing = decider.onSample(sample(240_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 85.0))
+        assertTrue(crossing.any { it is EventNotificationDecider.Event.TargetSocReached })
     }
 
     // ---- low SOC threshold -------------------------------------------------------------
@@ -167,7 +292,7 @@ class EventNotificationDeciderTest {
     @Test
     fun newDtcFiresForCodesNotInPreviousSet() {
         val decider = EventNotificationDecider(settings())
-        val result = decider.onScan(listOf("P0AA6", "P1FFF"), listOf("P0AA6"))
+        val result = decider.onScan(listOf("P0AA6", "P1FFF"), listOf("P0AA6"), hasBaseline = true)
         val event = result.event!!
         assertEquals(listOf("P1FFF"), event.newCodes)
         assertEquals(listOf("P0AA6", "P1FFF"), result.allCodes)
@@ -176,7 +301,7 @@ class EventNotificationDeciderTest {
     @Test
     fun newDtcDoesNotFireWhenNoNewCodesAppear() {
         val decider = EventNotificationDecider(settings())
-        val result = decider.onScan(listOf("P0AA6"), listOf("P0AA6", "P1FFF"))
+        val result = decider.onScan(listOf("P0AA6"), listOf("P0AA6", "P1FFF"), hasBaseline = true)
         assertEquals(null, result.event)
         // The new baseline is exactly what this scan saw (a cleared code drops out).
         assertEquals(listOf("P0AA6"), result.allCodes)
@@ -185,22 +310,34 @@ class EventNotificationDeciderTest {
     @Test
     fun newDtcNormalizesCaseAndWhitespaceBeforeDiffing() {
         val decider = EventNotificationDecider(settings())
-        val result = decider.onScan(listOf("  p0aa6  ", "P1FFF"), listOf("P0AA6"))
+        val result = decider.onScan(listOf("  p0aa6  ", "P1FFF"), listOf("P0AA6"), hasBaseline = true)
         assertEquals(listOf("P1FFF"), result.event!!.newCodes)
     }
 
     @Test
     fun newDtcSuppressedWhenToggleOffButStillReturnsBaseline() {
         val decider = EventNotificationDecider(settings(newDtc = false))
-        val result = decider.onScan(listOf("P0AA6", "P1FFF"), listOf("P0AA6"))
+        val result = decider.onScan(listOf("P0AA6", "P1FFF"), listOf("P0AA6"), hasBaseline = true)
         assertEquals(null, result.event)
         assertEquals(listOf("P0AA6", "P1FFF"), result.allCodes)
     }
 
     @Test
-    fun firstEverScanWithCodesFiresAgainstEmptyBaseline() {
+    fun firstEverScanSuppressesNewDtcButStillEstablishesBaseline() {
+        // First scan ever (no baseline): pre-existing codes are NOT "new", so the event is suppressed
+        // and only the baseline is established (the full scanned set is returned to persist). (B3.)
         val decider = EventNotificationDecider(settings())
-        val result = decider.onScan(listOf("P0AA6"), emptyList())
+        val result = decider.onScan(listOf("P0AA6"), emptyList(), hasBaseline = false)
+        assertEquals("first scan must not raise a false new-DTC alert", null, result.event)
+        assertEquals("the scanned set still becomes the persisted baseline", listOf("P0AA6"), result.allCodes)
+    }
+
+    @Test
+    fun newDtcFiresOnceABaselineExistsEvenWhenThatBaselineWasEmpty() {
+        // A prior scan found zero codes (baseline exists and is empty); a newly-appearing code now IS
+        // new and must fire — distinct from the first-scan-ever case above.
+        val decider = EventNotificationDecider(settings())
+        val result = decider.onScan(listOf("P0AA6"), emptyList(), hasBaseline = true)
         assertEquals(listOf("P0AA6"), result.event!!.newCodes)
     }
 }

@@ -29,7 +29,7 @@ class TripTrackFormatterTest {
         assertTrue("first trkpt lon", gpx.contains("lon=\"-117.1\""))
         assertEquals("one <time> per point", SAMPLE_POINTS.size, countOccurrences(gpx, "<time>"))
         assertTrue("ISO-8601 UTC time", gpx.contains("<time>1970-01-01T00:00:10Z</time>"))
-        assertTrue("altitude element", gpx.contains("<ele>5</ele>"))
+        assertTrue("altitude element keeps a decimal place", gpx.contains("<ele>5.0</ele>"))
         assertTrue("speed extension", gpx.contains("<speed>12.5</speed>"))
         assertTrue("document is closed", gpx.trim().endsWith("</gpx>"))
     }
@@ -69,10 +69,10 @@ class TripTrackFormatterTest {
         assertEquals("32.7", firstCols[3])
         assertEquals("-117.1", firstCols[4])
         assertEquals("12.5", firstCols[5])
-        // Third point's soc rides along in the last column. Whole-number coordinates render
-        // without a trailing ".0" (plain decimal), which numeric CSV/GPX readers parse identically.
+        // Third point's soc rides along in the last column. Whole-number coordinates keep one decimal
+        // place ("33.0") so they read consistently alongside the fractional points in the same file.
         val thirdCols = lines[3].split(",")
-        assertEquals("33", thirdCols[3])
+        assertEquals("33.0", thirdCols[3])
         assertEquals("88.5", thirdCols[9])
     }
 
@@ -83,13 +83,41 @@ class TripTrackFormatterTest {
 
         // Kotlin's split keeps trailing empty fields by default (limit = 0).
         val cols = csv.trim().lines()[1].split(",")
-        assertEquals("1", cols[3])
-        assertEquals("2", cols[4])
+        assertEquals("1.0", cols[3])
+        assertEquals("2.0", cols[4])
         assertEquals("blank speed (no value)", "", cols[5])
         assertEquals("blank soc (no value)", "", cols[9])
         // atMs == 0 is treated as "no timestamp", so the timestamp columns stay blank.
         assertEquals("blank iso", "", cols[1])
         assertEquals("blank epoch", "", cols[2])
+    }
+
+    @Test
+    fun wholeValuedCoordinatesKeepADecimalPlaceForConsistency() {
+        // A stationary sample (0.0 speed, whole-degree lat) must render as "0.0"/"33.0", not "0"/"33",
+        // so it reads consistently next to the fractional points in the same exported file.
+        val points =
+            listOf(
+                JSONObject()
+                    .put("lat", 33.0)
+                    .put("lng", 0.0)
+                    .put("atMs", 1_000L)
+                    .put("speedMps", 0.0),
+            )
+        val csvCols =
+            TripTrackFormatter
+                .toCsv(routeWith(points))
+                .trim()
+                .lines()[1]
+                .split(",")
+        assertEquals("33.0", csvCols[3])
+        assertEquals("0.0", csvCols[4])
+        assertEquals("0.0", csvCols[5])
+
+        val gpx = TripTrackFormatter.toGpx(routeWith(points))
+        assertTrue("whole-degree lat keeps a decimal", gpx.contains("lat=\"33.0\""))
+        assertTrue("whole-degree lon keeps a decimal", gpx.contains("lon=\"0.0\""))
+        assertTrue("zero speed keeps a decimal", gpx.contains("<speed>0.0</speed>"))
     }
 
     @Test
@@ -113,7 +141,7 @@ class TripTrackFormatterTest {
         assertEquals("non-finite points are not counted", 1, TripTrackFormatter.pointCount(route))
         val gpx = TripTrackFormatter.toGpx(route)
         assertEquals("only the finite trkpt is emitted", 1, countOccurrences(gpx, "<trkpt "))
-        assertTrue("the finite point is the one written", gpx.contains("lat=\"33\""))
+        assertTrue("the finite point is the one written", gpx.contains("lat=\"33.0\""))
         assertTrue("document still closes cleanly", gpx.trim().endsWith("</gpx>"))
 
         val csv = TripTrackFormatter.toCsv(route)
@@ -145,6 +173,61 @@ class TripTrackFormatterTest {
 
         assertTrue("carries the trip date stamp: $base", base.startsWith("volt-trip-1970-01-01-0000"))
         assertTrue("carries the session id suffix: $base", base.endsWith("-42"))
+    }
+
+    // ---- M6 bulk all-trips CSV -----------------------------------------------------
+
+    @Test
+    fun allTripsCsvPrefixesEveryRowWithTripIdAndLabel() {
+        val trips = JSONArray()
+        trips.put(tripExport("1:10000:30000", "Commute home", SAMPLE_POINTS))
+        trips.put(tripExport("2:40000:50000", "", listOf(point(40_000L, 40.0, -80.0, speedMps = 9.0))))
+
+        val csv = TripTrackFormatter.toAllTripsCsv(trips)
+        val lines = csv.trim().split("\n")
+
+        // Header + 3 rows from trip 1 + 1 row from trip 2.
+        assertEquals(TripTrackFormatter.ALL_TRIPS_CSV_HEADER, lines[0])
+        assertEquals(SAMPLE_POINTS.size + 1 + 1, lines.size)
+        // Every data row starts with its trip id, then the label, then the per-sample columns.
+        assertTrue("trip 1 rows carry id+label", lines[1].startsWith("1:10000:30000,Commute home,0,"))
+        assertTrue("trip 2 row carries id and empty label", lines.last().startsWith("2:40000:50000,,0,"))
+    }
+
+    @Test
+    fun allTripsCsvQuotesALabelContainingCommasAndQuotes() {
+        val trips = JSONArray()
+        trips.put(tripExport("1:10000:30000", "Mom's, \"work\" run", listOf(point(10_000L, 32.7, -117.1))))
+
+        val csv = TripTrackFormatter.toAllTripsCsv(trips)
+
+        // The label is RFC-4180 quoted (embedded quotes doubled) so it can't break the columns.
+        assertTrue("label is quoted+escaped", csv.contains("\"Mom's, \"\"work\"\" run\""))
+    }
+
+    @Test
+    fun allTripsCsvNeutralizesFormulaInjectionInTheLabel() {
+        // Trip labels are free user text (and can arrive from a merged backup). A label that begins
+        // with =, +, -, or @ would be evaluated as a formula by Excel/Google Sheets when the exported
+        // CSV is opened (CSV injection). The export must defuse it with a leading apostrophe.
+        val trips = JSONArray()
+        trips.put(
+            tripExport("1:10000:30000", "=HYPERLINK(\"http://evil\",\"x\")", listOf(point(10_000L, 32.7, -117.1))),
+        )
+        trips.put(tripExport("2:20000:30000", "-5C morning", listOf(point(20_000L, 33.0, -117.2))))
+
+        val csv = TripTrackFormatter.toAllTripsCsv(trips)
+
+        // The =formula is apostrophe-guarded (inside the RFC-4180 quotes the embedded quotes force).
+        assertTrue("formula label is apostrophe-guarded", csv.contains("\"'=HYPERLINK("))
+        assertFalse("no cell exposes an unguarded =formula", csv.contains(",=HYPERLINK("))
+        // A leading '-' is guarded too, and (no comma/quote) stays unquoted.
+        assertTrue("leading-minus label is apostrophe-guarded", csv.contains(",'-5C morning,"))
+    }
+
+    @Test
+    fun allTripsCsvHeaderOnlyWhenNoTrips() {
+        assertEquals(TripTrackFormatter.ALL_TRIPS_CSV_HEADER + "\n", TripTrackFormatter.toAllTripsCsv(JSONArray()))
     }
 
     private companion object {
@@ -179,6 +262,17 @@ class TripTrackFormatterTest {
                     JSONObject().put("id", "1:10000:30000").put("sessionId", 1).put("adapterName", "OBDLink"),
                 ).put("points", arr)
         }
+
+        /** A `{ tripId, label, route }` element for the bulk all-trips CSV (M6). */
+        private fun tripExport(
+            tripId: String,
+            label: String,
+            points: List<JSONObject>,
+        ): JSONObject =
+            JSONObject()
+                .put("tripId", tripId)
+                .put("label", label)
+                .put("route", routeWith(points))
 
         private fun countOccurrences(
             haystack: String,

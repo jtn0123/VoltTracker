@@ -5,13 +5,21 @@ package com.volttracker.obdpoc
  * diagnostic-scan results and decides which notifications should fire, with no Android dependency so
  * the firing edge cases are fully unit-testable.
  *
- * The three event kinds:
+ * The event kinds:
  *
- * - **Charge complete** — fires once when an active charge (pack current flowing into the pack at
- *   low speed, the same high-confidence signal [ChargeSessionMaterializer] uses) transitions back to
- *   not-charging. Carries the energy integrated across the charge window (trapezoidal, same sign
- *   convention as the materializer). Only fires when at least [MIN_CHARGE_SAMPLES] charging samples
- *   were seen, so a single glitchy sample never raises a phantom "charge complete".
+ * - **Charge complete / interrupted** — fires once when an active charge (pack current flowing into
+ *   the pack at low speed, the same high-confidence signal [ChargeSessionMaterializer] uses)
+ *   transitions back to not-charging. When charging stopped with the SOC at (or near) the user's
+ *   target it's a [ChargeComplete] carrying the energy integrated across the charge window
+ *   (trapezoidal, same sign convention as the materializer); when it stopped well below the target
+ *   (e.g. the EVSE tripped or the cable was knocked loose) it's a [ChargeInterrupted] carrying the
+ *   SOC at stop. Either only fires when at least [MIN_CHARGE_SAMPLES] charging samples were seen, so
+ *   a single glitchy sample never raises a phantom alert. Both ride the charge-complete toggle.
+ *
+ * - **Target SOC reached** — fires once per charge when the SOC crosses the user's charge target
+ *   while still charging (M2), reusing the same arming pattern as the threshold alerts so it cannot
+ *   spam. Implicit under the charge-complete toggle (no separate toggle); suppressed when the target
+ *   is 100% since the charge-complete alert already covers a full charge.
  *
  * - **Low SOC / high pack temp** — fire once per *crossing* of the configured threshold, not on
  *   every sample below/above it. After firing, the alert re-arms only once the reading recovers past
@@ -46,12 +54,32 @@ class EventNotificationDecider(
         val lowSocThresholdPct: Double,
         val highPackTempEnabled: Boolean,
         val highPackTempThresholdC: Double,
+        // User charge target (M2). The live-charge ETA targets this, the target-SOC-reached ping
+        // fires when the charge crosses it, and a charge that stops well below it is reported as
+        // interrupted rather than complete (M3). Defaults to a full charge.
+        val targetSocPct: Double = DEFAULT_TARGET_SOC_PCT,
     )
 
     sealed interface Event {
-        /** A charge session just ended; [energyKwh] is the integrated charge energy (>= 0). */
+        /** A charge session just ended at (or near) target; [energyKwh] is the integrated energy (>= 0). */
         data class ChargeComplete(
             val energyKwh: Double,
+        ) : Event
+
+        /**
+         * A charge ended well below the user's target (EVSE tripped / cable unplugged); [socPct] is
+         * the SOC at stop, [targetPct] the target it fell short of. Distinct copy from ChargeComplete
+         * so the owner knows to check the plug rather than assume the car finished charging. (M3.)
+         */
+        data class ChargeInterrupted(
+            val socPct: Double,
+            val targetPct: Double,
+        ) : Event
+
+        /** SOC rose through the user's charge target while charging; fires once per charge. (M2.) */
+        data class TargetSocReached(
+            val socPct: Double,
+            val targetPct: Double,
         ) : Event
 
         /** SOC dropped through the low-SOC threshold; [socPct] is the crossing reading. */
@@ -89,6 +117,14 @@ class EventNotificationDecider(
     private var prevChargeKw: Double? = null
     private var prevChargeMs: Long? = null
 
+    // Last SOC seen while charging, so the charging->idle transition can tell a finished charge
+    // (at/near target -> ChargeComplete) from an interrupted one (well below target -> M3).
+    private var lastChargingSocPct: Double? = null
+
+    // Armed once per charge so the target-SOC-reached ping fires exactly once when the SOC first
+    // crosses the target; reset when a new charge begins (M2).
+    private var targetSocArmed = true
+
     // ---- threshold arming --------------------------------------------------------------
     // "armed" means the reading is currently on the safe side of the threshold, so the next crossing
     // should fire. Starts armed so the very first crossing in a session alerts.
@@ -98,7 +134,7 @@ class EventNotificationDecider(
     /** Feeds one live telemetry sample; returns the events (possibly several) it triggers. */
     fun onSample(sample: Sample): List<Event> {
         val events = ArrayList<Event>(2)
-        evaluateCharge(sample)?.let { events.add(it) }
+        evaluateCharge(sample, events)
         evaluateLowSoc(sample)?.let { events.add(it) }
         evaluateHighTemp(sample)?.let { events.add(it) }
         return events
@@ -108,16 +144,22 @@ class EventNotificationDecider(
      * Compares a scan's DTC set against the [previousCodes] baseline. Returns a [NewDtc] event when
      * codes appeared that were not present before (and the toggle is on), plus the full normalized
      * code set so the caller can persist it as the new baseline regardless.
+     *
+     * When [hasBaseline] is false this is the first scan ever — pre-existing codes (e.g. a months-old
+     * pending P0420) are by definition not "new", so the event is suppressed and only the baseline is
+     * established (the caller still persists [ScanResult.allCodes]). This is distinct from a prior
+     * scan that found zero codes, where [hasBaseline] is true and a newly-appearing code DOES fire.
      */
     fun onScan(
         scannedCodes: Collection<String>,
         previousCodes: Collection<String>,
+        hasBaseline: Boolean,
     ): ScanResult {
         val normalized = normalizeCodes(scannedCodes)
         val baseline = normalizeCodes(previousCodes)
         val newCodes = normalized.filter { it !in baseline }.sorted()
         val event =
-            if (settings.newDtcEnabled && newCodes.isNotEmpty()) {
+            if (hasBaseline && settings.newDtcEnabled && newCodes.isNotEmpty()) {
                 Event.NewDtc(newCodes)
             } else {
                 null
@@ -131,25 +173,61 @@ class EventNotificationDecider(
         val allCodes: List<String>,
     )
 
-    private fun evaluateCharge(sample: Sample): Event? {
+    private fun evaluateCharge(
+        sample: Sample,
+        events: MutableList<Event>,
+    ) {
         val isCharging = isChargingSample(sample)
         if (isCharging) {
             charging = true
             chargeSamples += 1
             accumulateChargeEnergy(sample)
-            return null
+            evaluateTargetReached(sample)?.let { events.add(it) }
+            return
         }
         if (!charging) {
-            return null
+            return
         }
         // Transition charging -> not-charging: a charge just ended.
         val energy = chargeEnergyKwh
         val samples = chargeSamples
+        val socAtStop = lastChargingSocPct
+        val target = settings.targetSocPct
         resetChargeAccumulator()
         if (!settings.chargeCompleteEnabled || samples < MIN_CHARGE_SAMPLES) {
+            return
+        }
+        // Interrupted = the charge stopped with a known SOC well below the target (EVSE tripped /
+        // cable unplugged). Otherwise it's a normal completed charge. A null SOC at stop (current
+        // seen but SOC never reported) falls back to the complete copy rather than a false "check
+        // the plug" alert.
+        if (socAtStop != null && socAtStop <= target - INTERRUPTED_SOC_MARGIN_PCT) {
+            events.add(Event.ChargeInterrupted(socAtStop, target))
+            return
+        }
+        events.add(Event.ChargeComplete(maxOf(0.0, energy)))
+    }
+
+    /**
+     * Fires [Event.TargetSocReached] once per charge when the charging SOC first reaches the user's
+     * target (M2). Implicit under the charge-complete toggle. Suppressed when the target is a full
+     * 100% charge, since the charge-complete alert already announces that.
+     */
+    private fun evaluateTargetReached(sample: Sample): Event? {
+        val soc = sample.socPct
+        if (soc == null || soc.isNaN()) {
             return null
         }
-        return Event.ChargeComplete(maxOf(0.0, energy))
+        lastChargingSocPct = soc
+        val target = settings.targetSocPct
+        if (!settings.chargeCompleteEnabled || target >= FULL_CHARGE_SOC_PCT) {
+            return null
+        }
+        if (targetSocArmed && soc >= target) {
+            targetSocArmed = false
+            return Event.TargetSocReached(soc, target)
+        }
+        return null
     }
 
     private fun accumulateChargeEnergy(sample: Sample) {
@@ -183,6 +261,8 @@ class EventNotificationDecider(
         chargeEnergyKwh = 0.0
         prevChargeKw = null
         prevChargeMs = null
+        lastChargingSocPct = null
+        targetSocArmed = true
     }
 
     private fun evaluateLowSoc(sample: Sample): Event? {
@@ -238,6 +318,19 @@ class EventNotificationDecider(
 
         /** Pack temp must fall this far below the threshold before the high-temp alert re-arms. */
         const val TEMP_HYSTERESIS_C = 3.0
+
+        /** Default charge target — a full charge (M2). */
+        const val DEFAULT_TARGET_SOC_PCT = 100.0
+
+        /** A target at or above this is a full charge, so target-reached defers to charge-complete. */
+        const val FULL_CHARGE_SOC_PCT = 100.0
+
+        /**
+         * A charge that stops this far (or more) below the target is reported as INTERRUPTED rather
+         * than complete — distinguishes a tripped EVSE / unplugged cable from a normal finish or the
+         * usual tail-end taper where the car cuts off a hair under the requested target.
+         */
+        const val INTERRUPTED_SOC_MARGIN_PCT = 5.0
 
         private fun isChargingSample(sample: Sample): Boolean {
             val speed = sample.speedKph

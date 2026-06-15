@@ -38,6 +38,8 @@ import type { FocusTrap } from "./focus-trap";
   // Tab/Escape containment, and focus save/restore to the opener. Created on
   // open, deactivated (and dropped) on close.
   let dtcTrap: FocusTrap | null = null;
+  // Focus trap for the per-trip detail sheet (M7), same lifecycle as dtcTrap.
+  let tripDetailTrap: FocusTrap | null = null;
 
   // Lightweight in-flight guard for bridge-triggering buttons. The Android
   // bridge calls are sync-fire-and-forget so we can't await completion; a short
@@ -270,6 +272,26 @@ import type { FocusTrap } from "./focus-trap";
     if (action === "previewDtcCodes") void previewDtcCodes();
     if (action === "clearPreviewDtcCodes") clearPreviewDtcCodes();
     if (action === "addMaintenance") VD.addMaintenanceEntry();
+    if (action === "cancelMaintenance") VD.closeMaintenanceForm();
+    if (action === "exportAllTripsCsv") exportAllTripsCsv();
+    if (action === "closeTripDetail") closeTripDetail();
+  }
+
+  // Bulk all-trips CSV export (M6): forwards to native, which serializes every logged drive into one
+  // CSV and opens the share sheet. Degrades to a status hint when the bridge is absent (web preview).
+  function exportAllTripsCsv() {
+    if (!bridge || typeof bridge.exportAllTripsCsv !== "function") {
+      VD.setStatus({ state: "idle", detail: "All-trips export is available inside the Android app." });
+      return;
+    }
+    bridge.exportAllTripsCsv();
+  }
+
+  // Submit handler for the inline maintenance form (M1/C4). Intercepts the native submit so the
+  // WebView doesn't reload, then hands the read+forward off to storage-status.
+  function onMaintenanceFormSubmit(event: Event) {
+    event.preventDefault();
+    if (typeof VD.submitMaintenanceForm === "function") VD.submitMaintenanceForm();
   }
 
   // Delegated handler for the per-row "Remove" button on a maintenance entry (M5). Reads the entry
@@ -305,11 +327,37 @@ import type { FocusTrap } from "./focus-trap";
     );
   }
 
+  // Count of stored permanent (Mode 0A) DTCs — codes the Mode 04 clear cannot erase (M10).
+  // Prefers the summary's status-count map (authoritative) and falls back to counting the
+  // rendered code rows by status.
+  function permanentDtcCount(): number {
+    const storage = state.storage || {};
+    const counts = storage.diagnosticCodeStatusCounts || {};
+    const fromCounts = Number(counts.permanent);
+    if (Number.isFinite(fromCounts) && fromCounts > 0) return fromCounts;
+    const codes = Array.isArray(storage.latestDiagnosticCodes) ? storage.latestDiagnosticCodes : [];
+    return codes.filter((code) => String(code.status || "").trim().toLowerCase() === "permanent").length;
+  }
+
   function openClearDtcWarning() {
     const panel = el("dtcClearWarning");
     const ack = el("dtcClearAckBox") as HTMLInputElement | null;
     const confirm = el("dtcClearConfirmBtn") as HTMLButtonElement | null;
     if (!panel) return;
+    // Surface the permanent-code caveat: Mode 04 won't erase them, so warn before the user
+    // commits to a clear expecting the light to stay off (M10).
+    const note = el("dtcClearPermanentNote");
+    if (note) {
+      const permanent = permanentDtcCount();
+      if (permanent > 0) {
+        note.textContent =
+          `${permanent} permanent code${permanent === 1 ? "" : "s"} cannot be cleared by this command and will remain after the reset.`;
+        note.hidden = false;
+      } else {
+        note.textContent = "";
+        note.hidden = true;
+      }
+    }
     // The shared trap remembers the trigger (current focus) so it can be
     // restored on close, and inerts the background.
     dtcTrap = createFocusTrap(panel, {
@@ -488,6 +536,125 @@ import type { FocusTrap } from "./focus-trap";
     // prompt returns null on Cancel — do nothing. An empty string clears the label.
     if (next === null) return;
     bridge.setTripLabel(routeKey, next.trim());
+  }
+
+  // Delegated handler for the per-row favorite star on a stored map route (M4 favorites half).
+  // Reads the route key + current state off data-trip-favorite(-state) and forwards the FLIPPED
+  // value to native; the bridge persists it and refreshes the list so the star re-renders. Stops
+  // the click before it bubbles to the row-select / long-press handlers on the same list.
+  function onTripFavoriteClick(event: Event) {
+    const target = event.target as Element | null;
+    const button = target && (target.closest("[data-trip-favorite]") as HTMLElement | null);
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressNextMapClick = true;
+    const routeKey = String(button.dataset.tripFavorite || "").trim();
+    if (!routeKey) return;
+    if (!bridge || typeof bridge.setTripFavorite !== "function") {
+      VD.setStatus({ state: "idle", detail: "Trip favorites are available inside the Android app." });
+      return;
+    }
+    const next = button.dataset.tripFavoriteState !== "1";
+    bridge.setTripFavorite(routeKey, next);
+  }
+
+  // ---- M7 per-trip detail sheet --------------------------------------------
+  // Background nodes the trap inerts while the detail sheet is open: every
+  // top-level / app child that isn't an ancestor/descendant of the sheet.
+  function tripDetailBackgroundNodes(panel: HTMLElement): HTMLElement[] {
+    const keep = new Set<Element>();
+    let cursor: Element | null = panel;
+    while (cursor && cursor !== document.body) {
+      keep.add(cursor);
+      cursor = cursor.parentElement;
+    }
+    const candidates = Array.from(document.querySelectorAll("body > *, main.app > *"));
+    return candidates.filter((node): node is HTMLElement =>
+      node instanceof HTMLElement && !keep.has(node) && !panel.contains(node) && !node.contains(panel)
+    );
+  }
+
+  // Delegated handler for a map-session row's "Details" button (M7). Reads the
+  // route key, asks the map module to populate + show the detail sheet, then
+  // activates a focus trap. Stops the click so it doesn't also select the row.
+  function onTripDetailClick(event: Event) {
+    const target = event.target as Element | null;
+    const button = target && (target.closest("[data-trip-detail]") as HTMLElement | null);
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressNextMapClick = true;
+    const routeKey = String(button.dataset.tripDetail || "").trim();
+    if (!routeKey) return;
+    openTripDetail(routeKey);
+  }
+
+  function openTripDetail(routeKey: string) {
+    if (typeof VD.openTripDetail !== "function") return;
+    const opened = VD.openTripDetail(routeKey);
+    if (!opened) return;
+    const panel = el("tripDetailSheet");
+    if (!panel) return;
+    tripDetailTrap = createFocusTrap(panel, {
+      backgroundNodes: () => tripDetailBackgroundNodes(panel),
+      onEscape: closeTripDetail,
+    });
+    panel.hidden = false;
+    tripDetailTrap.activate();
+    if (typeof panel.scrollIntoView === "function") panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (typeof panel.focus === "function") panel.focus();
+  }
+
+  function closeTripDetail() {
+    if (typeof VD.closeTripDetail === "function") VD.closeTripDetail();
+    const panel = el("tripDetailSheet");
+    if (panel) panel.hidden = true;
+    if (tripDetailTrap) {
+      tripDetailTrap.deactivate();
+      tripDetailTrap = null;
+    }
+  }
+
+  // ---- M4 trip-list search / sort / favorites controls ---------------------
+  // Each handler mutates only the control's own UI state (input value lives on
+  // the input; the active sort button + favorites toggle carry their state in
+  // class/data attrs) and then re-renders ONLY the list via refreshMapSessionList
+  // so the map view isn't tugged. Defensive about the bridge-less/older host: the
+  // controls are pure client-side, so they always work.
+  function refreshTripList() {
+    if (typeof VD.refreshMapSessionList === "function") VD.refreshMapSessionList();
+  }
+
+  function onMapSessionSearchInput() {
+    refreshTripList();
+  }
+
+  function onMapSortClick(event: Event) {
+    const target = event.target as Element | null;
+    const button = target && (target.closest("[data-map-sort]") as HTMLElement | null);
+    if (!button) return;
+    event.preventDefault();
+    const chosen = button.dataset.mapSort === "distance" ? "distance" : "recent";
+    document.querySelectorAll<HTMLElement>("[data-map-sort]").forEach((node) => {
+      const on = node.dataset.mapSort === chosen;
+      node.classList.toggle("is-active", on);
+      node.setAttribute("aria-pressed", String(on));
+    });
+    refreshTripList();
+  }
+
+  function onMapFavoritesOnlyClick(event: Event) {
+    const target = event.target as Element | null;
+    const button = target && (target.closest("[data-map-favorites-only]") as HTMLElement | null);
+    if (!button) return;
+    event.preventDefault();
+    const next = button.dataset.on !== "true";
+    button.dataset.on = String(next);
+    button.setAttribute("aria-pressed", String(next));
+    button.setAttribute("aria-label", next ? "Showing favorites only" : "Show favorites only");
+    button.textContent = next ? "★ Favorites" : "☆ Favorites";
+    refreshTripList();
   }
 
   function handleDtcSearch(event: Event) {
@@ -778,12 +945,19 @@ import type { FocusTrap } from "./focus-trap";
     };
     // Bound before the row-select click so the export/rename buttons' stopPropagation keeps a tap
     // from also selecting the session.
+    bindListenerGuarded("mapSessionList", "click", onTripFavoriteClick, opts);
+    bindListenerGuarded("mapSessionList", "click", onTripDetailClick, opts);
     bindListenerGuarded("mapSessionList", "click", onTripRenameClick, opts);
     bindListenerGuarded("mapSessionList", "click", onTripExportClick, opts);
     bindListenerGuarded("mapSessionList", "click", onSessionClick, opts);
     // Per-entry "Remove" on a maintenance row (M5) — the list is re-rendered dynamically, so
     // delegate off the stable container.
     bindListenerGuarded("maintenanceList", "click", onMaintenanceDeleteClick, opts);
+    bindListenerGuarded("maintenanceForm", "submit", onMaintenanceFormSubmit, opts);
+    // M4 trip-list controls: search (live filter), sort toggle, favorites-only.
+    bindListenerGuarded("mapSessionSearch", "input", onMapSessionSearchInput, opts);
+    bindListenerGuarded("mapSessionSort", "click", onMapSortClick, opts);
+    bindListenerGuarded("mapSessionFavoritesOnly", "click", onMapFavoritesOnlyClick, opts);
     bindListenerGuarded("mapSessionList", "pointerdown", onMapSessionPointerDown, opts);
     bindListenerGuarded("mapSessionList", "pointerup", onMapSessionPointerEnd, opts);
     bindListenerGuarded("mapSessionList", "pointerleave", onMapSessionPointerEnd, opts);

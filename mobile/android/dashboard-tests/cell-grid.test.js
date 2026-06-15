@@ -35,9 +35,11 @@ describe('cell voltage map', () => {
     expect(boxes[79].classList.contains('is-max')).toBe(true);
     expect(boxes[0].classList.contains('is-unknown')).toBe(true);
     expect(document.getElementById('cellGridBadge').textContent).toBe('2 of 96 known');
+    // The card article is visible when there is data to show.
+    expect(document.getElementById('cellGridCard').hidden).toBe(false);
   });
 
-  it('collapses to the explanatory note (no grey 96-box wall) when no cell data is known', () => {
+  it('hides the whole card (not just the inner grid) when no cell data is known (C5)', () => {
     const VD = window.VoltDashboard;
     // Connected but the car reports no per-cell data and no lowest/highest groups yet.
     VD.updateTelemetry({ source: 'obd', connected: true, sampleCount: 1, updatedAt: Date.now() });
@@ -46,8 +48,35 @@ describe('cell voltage map', () => {
     const grid = document.getElementById('cellGrid');
     expect(grid.querySelectorAll('.cell-grid-box')).toHaveLength(0);
     expect(grid.hidden).toBe(true);
+    // The entire scaffold (header, badge, note) is hidden too — not a perpetual
+    // empty card.
+    expect(document.getElementById('cellGridCard').hidden).toBe(true);
     expect(document.getElementById('cellGridBadge').textContent).toBe('awaiting probe');
     expect(document.getElementById('cellGridNote').textContent).toContain('full per-cell probe');
+  });
+
+  it('re-shows the card once cell data arrives after an empty sample (C5)', () => {
+    const VD = window.VoltDashboard;
+    // First: no cell data → card hidden.
+    VD.updateTelemetry({ source: 'obd', connected: true, sampleCount: 1, updatedAt: Date.now() });
+    VD.updateLiveUi();
+    expect(document.getElementById('cellGridCard').hidden).toBe(true);
+
+    // Then: the car reports a lowest/highest group → card reappears.
+    VD.updateTelemetry({
+      source: 'obd',
+      connected: true,
+      sampleCount: 2,
+      updatedAt: Date.now(),
+      minCellNumber: 5,
+      maxCellNumber: 88,
+      minCellVoltage: 3.9,
+      maxCellVoltage: 4.0,
+    });
+    VD.updateLiveUi();
+    expect(document.getElementById('cellGridCard').hidden).toBe(false);
+    expect(document.getElementById('cellGrid').hidden).toBe(false);
+    expect(document.querySelectorAll('#cellGrid .cell-grid-box')).toHaveLength(96);
   });
 
   it('renders a full heatmap when per-cell voltages are present', () => {
@@ -68,5 +97,6 @@ describe('cell voltage map', () => {
     expect(boxes[0].style.backgroundColor).not.toBe('');
     expect(document.getElementById('cellGridBadge').textContent).toBe('96 cells');
     expect(document.getElementById('cellGridNote').textContent).toContain('latest cell probe');
+    expect(document.getElementById('cellGridCard').hidden).toBe(false);
   });
 });

@@ -9,8 +9,8 @@ package com.volttracker.obdpoc
  * a reconnect/app restart within the same drive). Default OFF.
  *
  * It does not perform the scan itself — the caller passes a `startScan` action that reuses the
- * existing diagnostic-scan path. [onConnected] returns whether a scan was kicked off, so callers and
- * tests can assert the gating directly.
+ * existing diagnostic-scan path and reports whether it actually read codes. [onConnected] returns
+ * whether a scan was kicked off, so callers and tests can assert the gating directly.
  */
 class AutoScanController(
     private val prefs: EventNotificationPrefs,
@@ -32,11 +32,16 @@ class AutoScanController(
     }
 
     /**
-     * Invoked after a successful connect. Runs [startScan] (and records the scan time) when enabled,
-     * not already scanned this connect, and outside the throttle window. Returns true iff it started
-     * a scan.
+     * Invoked after a successful connect. Runs [startScan] when enabled, not already scanned this
+     * connect, and outside the throttle window. Returns true iff it started a scan.
+     *
+     * [startScan] reports whether it actually read codes (a real Mode-03 reply). The per-drive
+     * throttle timestamp is recorded ONLY when it did, so a failed/empty scan (clone adapter, a
+     * transient bus error -> empty list) does not arm the 30-min throttle and silently block the next
+     * reconnect from retrying. The per-connect latch is still set up front so a replayed connect
+     * cannot double-fire a scan within the same connect, regardless of outcome.
      */
-    fun onConnected(startScan: () -> Unit): Boolean {
+    fun onConnected(startScan: () -> Boolean): Boolean {
         if (!isEnabled() || scanStartedThisConnect) {
             return false
         }
@@ -46,8 +51,10 @@ class AutoScanController(
             return false
         }
         scanStartedThisConnect = true
-        prefs.setLastAutoScanAtMs(now)
-        startScan()
+        val readCodes = startScan()
+        if (readCodes) {
+            prefs.setLastAutoScanAtMs(now)
+        }
         return true
     }
 

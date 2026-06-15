@@ -72,6 +72,10 @@ object WidgetStateFormatter {
     /**
      * Decides the freshness phrasing and value. [nowMs] is injected so tests are deterministic.
      * A snapshot timestamp in the future (clock skew) is treated as "just now".
+     *
+     * Freshness is measured from the LAST SAMPLE arrival ([WidgetSnapshot.freshnessAtMs]), not the
+     * last display-field change — so a steady charge/parked period with flat-but-fresh samples does
+     * not falsely age out. (Report item B7.)
      */
     fun freshness(
         snapshot: WidgetSnapshot,
@@ -80,7 +84,7 @@ object WidgetStateFormatter {
         if (!snapshot.hasData()) {
             return Freshness.NONE to 0
         }
-        val ageMs = (nowMs - snapshot.updatedAtMs).coerceAtLeast(0L)
+        val ageMs = (nowMs - snapshot.freshnessAtMs()).coerceAtLeast(0L)
         return when {
             ageMs < JUST_NOW_UNDER_MS -> Freshness.JUST_NOW to 0
             ageMs < MS_PER_HOUR -> Freshness.MINUTES to (ageMs / MS_PER_MINUTE).toInt()
@@ -89,11 +93,14 @@ object WidgetStateFormatter {
         }
     }
 
-    /** True when [snapshot] carries data older than [STALE_AFTER_MS] relative to [nowMs]. */
+    /**
+     * True when [snapshot]'s last SAMPLE is older than [STALE_AFTER_MS] relative to [nowMs]. Keyed to
+     * the sample arrival, not the last display change, so a flat-but-live charge is not called stale.
+     */
     fun isStale(
         snapshot: WidgetSnapshot,
         nowMs: Long,
-    ): Boolean = snapshot.hasData() && (nowMs - snapshot.updatedAtMs) >= STALE_AFTER_MS
+    ): Boolean = snapshot.hasData() && (nowMs - snapshot.freshnessAtMs()) >= STALE_AFTER_MS
 
     /** Resolves the full display in one call. */
     fun format(

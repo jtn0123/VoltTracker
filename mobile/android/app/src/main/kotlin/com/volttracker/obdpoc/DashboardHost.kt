@@ -70,25 +70,33 @@ interface AutoConnectCommands {
 /**
  * User-controlled, native-owned event-notification + auto-scan settings (M1 + M3). The dashboard
  * reads the current toggle state and flips each toggle through the bridge, mirroring auto-connect.
+ *
+ * This cluster is exposed on [DashboardHost] as a single `eventNotifications()` accessor returning
+ * this interface (backed by [EventNotificationHostDelegate]) rather than as N flat host overrides on
+ * the Activity: the bridge calls `host.eventNotifications().setNewDtcEnabled(...)`. Folding the
+ * group behind one accessor keeps `MainActivity` from accreting a one-line forward per toggle (the
+ * growth-by-override sink the architecture audit flagged) — the delegate already holds every body.
  */
 interface EventNotificationCommands {
     fun getEventNotificationStateJson(): String
 
-    fun setChargeCompleteNotifyFromBridge(enabled: Boolean)
+    fun setChargeCompleteEnabled(enabled: Boolean)
 
-    fun setNewDtcNotifyFromBridge(enabled: Boolean)
+    fun setNewDtcEnabled(enabled: Boolean)
 
-    fun setLowSocNotifyFromBridge(
+    fun setLowSocEnabled(
         enabled: Boolean,
         thresholdPct: Double,
     )
 
-    fun setHighPackTempNotifyFromBridge(
+    fun setHighPackTempEnabled(
         enabled: Boolean,
         thresholdC: Double,
     )
 
-    fun setAutoScanOnConnectFromBridge(enabled: Boolean)
+    fun setChargeTargetSoc(targetPct: Double)
+
+    fun setAutoScanOnConnectEnabled(enabled: Boolean)
 }
 
 /**
@@ -224,7 +232,6 @@ interface DashboardHost :
     DeviceCommands,
     PermissionCommands,
     AutoConnectCommands,
-    EventNotificationCommands,
     BackupCommands,
     DiagnosticsCommands,
     DashboardStatePublisher,
@@ -232,4 +239,13 @@ interface DashboardHost :
     BridgeStateProvider {
     /** Hands an [Intent] to the platform; used for the external DTC search. */
     fun startActivity(intent: Intent?)
+
+    /**
+     * The event-notification + auto-scan settings seam (M1/M3), exposed as one accessor instead of
+     * mixing its toggles into the host's flat override surface. The bridge calls e.g.
+     * `eventNotifications().setNewDtcEnabled(...)`. `MainActivity` returns its
+     * [EventNotificationHostDelegate] here, so the seven toggle bodies live entirely on the delegate
+     * and the Activity exposes the cluster with a single member (report items A1/I3).
+     */
+    fun eventNotifications(): EventNotificationCommands
 }

@@ -97,6 +97,62 @@
   <article class="panel pref-card">
     <div class="card-head">
       <div>
+        <span class="kicker">Accessibility</span>
+        <h3>Readability</h3>
+      </div>
+    </div>
+    <!-- Font scale (M9): a --font-scale multiplier on :root, persisted by
+         prefs.ts. Larger text helps a glanceable in-car dashboard. -->
+    <fieldset class="pref-row pref-fieldset">
+      <legend class="pref-label">
+        <strong>Text size</strong>
+        <small>Scales headings and labels across the app</small>
+      </legend>
+      <div
+        class="signal-stage-tabs pref-seg"
+        role="group"
+        aria-label="Text size"
+      >
+        <button
+          type="button"
+          data-pref-font-scale="1"
+          class="is-active"
+          aria-pressed="true"
+        >
+          <span>Default</span>
+        </button>
+        <button type="button" data-pref-font-scale="1.25" aria-pressed="false">
+          <span>Large</span>
+        </button>
+        <button type="button" data-pref-font-scale="1.5" aria-pressed="false">
+          <span>Largest</span>
+        </button>
+      </div>
+    </fieldset>
+    <!-- High-contrast / colorblind-safe theme (M9): a data-contrast attr on
+         :root swapping the centralized color token set (base.css). -->
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>High contrast</strong>
+        <small>Stronger contrast &amp; colorblind-safe status colors</small>
+      </div>
+      <button
+        type="button"
+        id="prefContrastToggle"
+        class="tile-toggle pref-toggle"
+        data-pref-contrast-toggle
+        data-on="false"
+        aria-pressed="false"
+        aria-label="High-contrast theme is off"
+      >
+        Off
+      </button>
+    </div>
+  </article>
+
+  <article class="panel pref-card">
+    <div class="card-head">
+      <div>
         <span class="kicker">Drive tiles</span>
         <h3>Customize live readout</h3>
       </div>

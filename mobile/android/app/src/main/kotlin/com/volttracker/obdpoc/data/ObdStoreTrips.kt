@@ -238,9 +238,10 @@ class ObdStoreTrips(
     }
 
     /**
-     * Stamps each trip with its user label (M4) at read time, so a label change takes effect on the
-     * next read without rebuilding the trip-list cache. Labels are keyed by route key and read from
-     * the status-event store; trips with no stored label keep an empty string.
+     * Stamps each trip with its user label (M4) and favorite flag (M4 favorites half) at read time,
+     * so a label/favorite change takes effect on the next read without rebuilding the trip-list
+     * cache. Both are keyed by route key and read from the status-event store (one batched query
+     * each, not N+1); trips with no stored label keep an empty string and default to not-favorite.
      */
     @Throws(JSONException::class)
     private fun applyLabels(
@@ -252,8 +253,11 @@ class ObdStoreTrips(
         }
         val sessionIds = trips.mapNotNull { trip -> trip.optLong("sessionId", -1L).takeIf { it > 0L } }.distinct()
         val labels = ObdTripLabels.labelsByRouteKey(db, sessionIds)
+        val favorites = ObdTripFavorites.favoriteRouteKeys(db, sessionIds)
         for (trip in trips) {
-            trip.put("label", labels[trip.optString("id")] ?: "")
+            val routeKey = trip.optString("id")
+            trip.put("label", labels[routeKey] ?: "")
+            trip.put("favorite", favorites.contains(routeKey))
         }
     }
 

@@ -62,7 +62,16 @@ object RestoreValidator {
             arrayOf("battery_snapshots", "_id", "captured_at_ms", "created_at_ms"),
             arrayOf("cell_snapshots", "_id", "battery_snapshot_id", "cell_index"),
             arrayOf("exports", "_id", "created_at_ms", "export_type", "status"),
-            arrayOf("maintenance_log", "_id", "created_at_ms", "odometer_km", "type", "note"),
+            arrayOf(
+                "maintenance_log",
+                "_id",
+                "created_at_ms",
+                "odometer_km",
+                "type",
+                "note",
+                "interval_km",
+                "interval_months",
+            ),
         )
 
     @JvmStatic

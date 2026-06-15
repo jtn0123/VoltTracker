@@ -85,18 +85,19 @@ class VoltBridge(
     }
 
     @JavascriptInterface
-    fun getEventNotificationState(): String = activity.getEventNotificationStateJson()
+    fun getEventNotificationState(): String = activity.eventNotifications().getEventNotificationStateJson()
 
     @JavascriptInterface
     fun setChargeCompleteNotify(enabled: Boolean) {
         // State-mutating entry point: marshal off the WebView JavaBridge thread before touching
-        // Activity-owned settings, mirroring setAutoConnectEnabled.
-        activity.runOnUiThread { activity.setChargeCompleteNotifyFromBridge(enabled) }
+        // Activity-owned settings, mirroring setAutoConnectEnabled. The event-notification toggles
+        // route through the host's eventNotifications() seam (the delegate holds the bodies).
+        activity.runOnUiThread { activity.eventNotifications().setChargeCompleteEnabled(enabled) }
     }
 
     @JavascriptInterface
     fun setNewDtcNotify(enabled: Boolean) {
-        activity.runOnUiThread { activity.setNewDtcNotifyFromBridge(enabled) }
+        activity.runOnUiThread { activity.eventNotifications().setNewDtcEnabled(enabled) }
     }
 
     @JavascriptInterface
@@ -104,7 +105,7 @@ class VoltBridge(
         enabled: Boolean,
         thresholdPct: Double,
     ) {
-        activity.runOnUiThread { activity.setLowSocNotifyFromBridge(enabled, thresholdPct) }
+        activity.runOnUiThread { activity.eventNotifications().setLowSocEnabled(enabled, thresholdPct) }
     }
 
     @JavascriptInterface
@@ -112,12 +113,17 @@ class VoltBridge(
         enabled: Boolean,
         thresholdC: Double,
     ) {
-        activity.runOnUiThread { activity.setHighPackTempNotifyFromBridge(enabled, thresholdC) }
+        activity.runOnUiThread { activity.eventNotifications().setHighPackTempEnabled(enabled, thresholdC) }
+    }
+
+    @JavascriptInterface
+    fun setChargeTargetSoc(targetPct: Double) {
+        activity.runOnUiThread { activity.eventNotifications().setChargeTargetSoc(targetPct) }
     }
 
     @JavascriptInterface
     fun setAutoScanOnConnect(enabled: Boolean) {
-        activity.runOnUiThread { activity.setAutoScanOnConnectFromBridge(enabled) }
+        activity.runOnUiThread { activity.eventNotifications().setAutoScanOnConnectEnabled(enabled) }
     }
 
     @JavascriptInterface
@@ -220,6 +226,10 @@ class VoltBridge(
     @JavascriptInterface
     fun exportTripCsv(routeKeyOrSessionId: String?): String = dataExports.exportTripCsv(routeKeyOrSessionId)
 
+    /** Exports every logged trip as one combined CSV (M6) and opens the share sheet. */
+    @JavascriptInterface
+    fun exportAllTripsCsv(): String = dataExports.exportAllTripsCsv()
+
     @JavascriptInterface
     fun deleteDetailedSignalLog(id: String?) {
         dataExports.deleteDetailedSignalLog(id)
@@ -237,6 +247,15 @@ class VoltBridge(
         label: String?,
     ) {
         dataExports.setTripLabel(routeKey, label)
+    }
+
+    /** Sets or clears the user "favorite" flag for a stored trip (M4 favorites half). */
+    @JavascriptInterface
+    fun setTripFavorite(
+        routeKey: String?,
+        favorite: Boolean,
+    ) {
+        dataExports.setTripFavorite(routeKey, favorite)
     }
 
     /** Records a maintenance-log entry from the Insights add-entry form (M5). */
@@ -360,6 +379,10 @@ class VoltBridge(
         private const val TAG = "VoltTracker"
         internal const val MAX_ADDRESS_LEN = 64
         internal const val MAX_NAME_LEN = 256
+
+        // General-purpose cap for short identifier-ish bridge inputs (route keys, session ids, client
+        // error labels). The TRIP-LABEL path does NOT use this — it references the data layer's
+        // ObdTripLabels.MAX_LABEL_LEN so the user-visible label cap is defined once. (Report item A2.)
         internal const val MAX_LABEL_LEN = 128
         internal const val MAX_STAGE_LEN = 32
         internal const val MAX_DETAIL_LEN = 4096

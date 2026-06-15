@@ -6,6 +6,17 @@ pluginManagement {
     }
 }
 
+// Lets Gradle locate (and, where a download is permitted, auto-provision) the JDK 21 the
+// `java { toolchain }` block in app/build.gradle pins the build to — regardless of which JDK
+// launched Gradle. Without it, a contributor whose default JDK is newer than 21 hits a hard
+// `:app:detekt` failure ("Invalid value (24) passed to --jvm-target", since detekt's max
+// --jvm-target is 21) and had to `export JAVA_HOME=…21` by hand. The resolver first DISCOVERS
+// already-installed JDKs (e.g. /Library/Java/JavaVirtualMachines/jdk-21.jdk) before attempting a
+// download, so the pin works in offline/sandboxed environments too. See CONTRIBUTING.md.
+plugins {
+    id "org.gradle.toolchains.foojay-resolver-convention" version "1.0.0"
+}
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {

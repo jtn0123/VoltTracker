@@ -22,11 +22,11 @@ class EventNotificationHostDelegate(
                 .errorPayload("event_notifications_unavailable", "Notification settings are not ready.")
                 .toString()
 
-    override fun setChargeCompleteNotifyFromBridge(enabled: Boolean) = update { it.setChargeCompleteEnabled(enabled) }
+    override fun setChargeCompleteEnabled(enabled: Boolean) = update { it.setChargeCompleteEnabled(enabled) }
 
-    override fun setNewDtcNotifyFromBridge(enabled: Boolean) = update { it.setNewDtcEnabled(enabled) }
+    override fun setNewDtcEnabled(enabled: Boolean) = update { it.setNewDtcEnabled(enabled) }
 
-    override fun setLowSocNotifyFromBridge(
+    override fun setLowSocEnabled(
         enabled: Boolean,
         thresholdPct: Double,
     ) = update {
@@ -34,7 +34,7 @@ class EventNotificationHostDelegate(
         it.setLowSocThresholdPct(thresholdPct)
     }
 
-    override fun setHighPackTempNotifyFromBridge(
+    override fun setHighPackTempEnabled(
         enabled: Boolean,
         thresholdC: Double,
     ) = update {
@@ -42,7 +42,9 @@ class EventNotificationHostDelegate(
         it.setHighPackTempThresholdC(thresholdC)
     }
 
-    override fun setAutoScanOnConnectFromBridge(enabled: Boolean) = update { it.setAutoScanOnConnectEnabled(enabled) }
+    override fun setChargeTargetSoc(targetPct: Double) = update { it.setTargetSocPct(targetPct) }
+
+    override fun setAutoScanOnConnectEnabled(enabled: Boolean) = update { it.setAutoScanOnConnectEnabled(enabled) }
 
     private inline fun update(mutate: (EventNotificationPrefs) -> Unit) {
         val current = prefs()

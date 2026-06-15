@@ -19,12 +19,14 @@ class WidgetStateFormatterTest {
         connected: Boolean = true,
         vehicleState: String = "",
         ageMs: Long = 0L,
+        sampleAgeMs: Long = ageMs,
     ) = WidgetSnapshot(
         socPct = soc,
         charging = charging,
         connected = connected,
         vehicleState = vehicleState,
         updatedAtMs = nowMs - ageMs,
+        lastSampleAtMs = nowMs - sampleAgeMs,
     )
 
     @Test
@@ -126,6 +128,25 @@ class WidgetStateFormatterTest {
         assertFalse(WidgetStateFormatter.isStale(snapshot(ageMs = 14L * 60_000L), nowMs))
         assertTrue(WidgetStateFormatter.isStale(snapshot(ageMs = 16L * 60_000L), nowMs))
         assertFalse("empty is never stale", WidgetStateFormatter.isStale(WidgetSnapshot.EMPTY, nowMs))
+    }
+
+    @Test
+    fun steadyChargeIsNotStaleWhenSamplesKeepArrivingDespiteFlatDisplay() {
+        // B7: the display last CHANGED 20 min ago (flat SOC during a steady charge), but fresh
+        // identical samples keep arriving (last sample 30 s ago). Freshness/stale must key off the
+        // SAMPLE time, so the widget is NOT wrongly flagged stale and reads "just now".
+        val flatButLive = snapshot(charging = true, ageMs = 20L * 60_000L, sampleAgeMs = 30_000L)
+        assertFalse("a flat-but-live charge is not stale", WidgetStateFormatter.isStale(flatButLive, nowMs))
+        val (freshness, _) = WidgetStateFormatter.freshness(flatButLive, nowMs)
+        assertEquals(WidgetStateFormatter.Freshness.JUST_NOW, freshness)
+    }
+
+    @Test
+    fun goesStaleWhenSamplesActuallyStopArriving() {
+        // The complement: when NO fresh sample has arrived (sample time itself is old), the widget
+        // correctly goes stale even if the display change time happens to be recent.
+        val sampleStopped = snapshot(ageMs = 1L * 60_000L, sampleAgeMs = 16L * 60_000L)
+        assertTrue("no fresh samples -> stale", WidgetStateFormatter.isStale(sampleStopped, nowMs))
     }
 
     @Test

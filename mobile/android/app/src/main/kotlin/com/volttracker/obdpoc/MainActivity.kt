@@ -368,6 +368,7 @@ open class MainActivity :
     override fun onDestroy() {
         backgroundExecutor.shutdownNow()
         troubleshooter?.shutdown()
+        backupController?.dispose()
         localStore?.close()
         localStore = null
         // Tear the WebView down explicitly. It holds the VoltBridge JS interface, which keeps a
@@ -759,25 +760,11 @@ open class MainActivity :
         publishAppState()
     }
 
-    override fun getEventNotificationStateJson(): String = eventNotificationHost.getEventNotificationStateJson()
-
-    override fun setChargeCompleteNotifyFromBridge(enabled: Boolean) =
-        eventNotificationHost.setChargeCompleteNotifyFromBridge(enabled)
-
-    override fun setNewDtcNotifyFromBridge(enabled: Boolean) = eventNotificationHost.setNewDtcNotifyFromBridge(enabled)
-
-    override fun setLowSocNotifyFromBridge(
-        enabled: Boolean,
-        thresholdPct: Double,
-    ) = eventNotificationHost.setLowSocNotifyFromBridge(enabled, thresholdPct)
-
-    override fun setHighPackTempNotifyFromBridge(
-        enabled: Boolean,
-        thresholdC: Double,
-    ) = eventNotificationHost.setHighPackTempNotifyFromBridge(enabled, thresholdC)
-
-    override fun setAutoScanOnConnectFromBridge(enabled: Boolean) =
-        eventNotificationHost.setAutoScanOnConnectFromBridge(enabled)
+    // The event-notification + auto-scan toggle cluster (M1/M3) is exposed as one accessor rather
+    // than seven flat host overrides: the bridge calls eventNotifications().setNewDtcEnabled(...)
+    // and the delegate holds every body. This is the A1/I3 fix for MainActivity's growth-by-override
+    // — the file gains the cluster with a single member instead of one forward per toggle.
+    override fun eventNotifications(): EventNotificationCommands = eventNotificationHost
 
     private fun maybeAutoConnect(
         trigger: String,
@@ -821,7 +808,8 @@ open class MainActivity :
         }
 
     companion object {
-        const val TAG = "VoltTracker"
+        /** Shared logcat tag. Canonical home is [AppPrefs.LOG_TAG]; kept here as a compatibility alias. */
+        const val TAG = AppPrefs.LOG_TAG
 
         /**
          * Prefix of the JS->native handshake log line emitted by [onDashboardReady]. This is the
@@ -832,7 +820,11 @@ open class MainActivity :
          */
         const val DASHBOARD_READY_LOG = "dashboard handshake received"
 
-        /** SharedPreferences file shared by the Activity and [ObdService] (native-owned settings). */
-        const val PREFS = "volt_obd_prefs"
+        /**
+         * SharedPreferences file shared by the Activity, [ObdService], the widget package, and
+         * [EventNotificationPrefs]. Canonical home is [AppPrefs.FILE]; kept here as a compatibility
+         * alias for the existing `MainActivity.PREFS` call sites (report item A3).
+         */
+        const val PREFS = AppPrefs.FILE
     }
 }

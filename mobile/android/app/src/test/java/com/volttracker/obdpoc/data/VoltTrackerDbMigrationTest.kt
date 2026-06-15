@@ -463,6 +463,91 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun upgradeFromV12_addsMaintenanceIntervalColumns() {
+        // The v12→v13 migration adds nullable interval_km / interval_months columns to
+        // maintenance_log (M1/C4). The step is non-destructive: an existing maintenance_log row and
+        // its data must survive, gaining only the two new NULL interval columns.
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_v12_v13.db"
+        context.deleteDatabase(name)
+
+        val v12Helper =
+            object : SQLiteOpenHelper(context.applicationContext, name, null, 12) {
+                override fun onCreate(db: SQLiteDatabase) {
+                    // The v12 maintenance_log shape (no interval columns yet).
+                    db.execSQL(
+                        "CREATE TABLE " +
+                            VoltTrackerDb.TABLE_MAINTENANCE_LOG +
+                            " (_id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                            " created_at_ms INTEGER NOT NULL," +
+                            " odometer_km REAL, type TEXT, note TEXT)",
+                    )
+                    db.execSQL(
+                        "INSERT INTO " +
+                            VoltTrackerDb.TABLE_MAINTENANCE_LOG +
+                            " (created_at_ms, odometer_km, type, note)" +
+                            " VALUES (5000, 12345.6, 'Oil change', 'Synthetic')",
+                    )
+                }
+
+                override fun onUpgrade(
+                    db: SQLiteDatabase,
+                    oldVersion: Int,
+                    newVersion: Int,
+                ) {
+                    // unused
+                }
+            }
+        val v12Db = v12Helper.writableDatabase
+        val beforeColumns = readColumnNames(v12Db, VoltTrackerDb.TABLE_MAINTENANCE_LOG)
+        assertFalse(
+            "v12 schema must not pre-contain maintenance_log.interval_km",
+            beforeColumns.contains("interval_km"),
+        )
+        assertFalse(
+            "v12 schema must not pre-contain maintenance_log.interval_months",
+            beforeColumns.contains("interval_months"),
+        )
+        v12Helper.close()
+
+        newHelper = VoltTrackerDb(context, name)
+        val newDb = newHelper!!.writableDatabase
+        assertEquals(
+            "Reopened DB should be at the current schema version after onUpgrade.",
+            VoltTrackerDb.DATABASE_VERSION,
+            newDb.version,
+        )
+        val afterColumns = readColumnNames(newDb, VoltTrackerDb.TABLE_MAINTENANCE_LOG)
+        assertTrue(
+            "After v12->v13 upgrade, maintenance_log.interval_km must exist. Got: $afterColumns",
+            afterColumns.contains("interval_km"),
+        )
+        assertTrue(
+            "After v12->v13 upgrade, maintenance_log.interval_months must exist. Got: $afterColumns",
+            afterColumns.contains("interval_months"),
+        )
+
+        // The pre-existing maintenance_log row survives with its data intact and NULL intervals.
+        newDb
+            .rawQuery(
+                "SELECT odometer_km, type, note, interval_km, interval_months" +
+                    " FROM ${VoltTrackerDb.TABLE_MAINTENANCE_LOG} WHERE created_at_ms = 5000",
+                null,
+            ).use { cursor ->
+                assertTrue("pre-existing maintenance_log row must survive", cursor.moveToFirst())
+                assertEquals(12345.6, cursor.getDouble(0), 0.001)
+                assertEquals("Oil change", cursor.getString(1))
+                assertEquals("Synthetic", cursor.getString(2))
+                assertTrue("new interval_km column must default to NULL", cursor.isNull(3))
+                assertTrue("new interval_months column must default to NULL", cursor.isNull(4))
+            }
+
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun databaseVersionBumpRequiresMigrationCoverageUpdate() {
         assertEquals(
             "DATABASE_VERSION changed. Add a focused migration test for the new version, " +
@@ -607,7 +692,7 @@ class VoltTrackerDbMigrationTest {
     }
 
     companion object {
-        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 12
+        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 13
 
         private val V7_INDEXES =
             arrayOf(

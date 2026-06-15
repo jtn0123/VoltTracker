@@ -53,7 +53,7 @@ export function voltDashboardDemoData(): DemoDashboardData {
         { kind: "good", icon: "+", title: "Best month yet for EV ratio", body: "April hit 78% electric, up from 64% in March. Projected annual savings rises about $45." },
         { kind: "good", icon: "OK", title: "Battery degrading below average", body: "8.7% capacity loss across 38k miles vs about 12% expected for 2017 Volts." },
         { kind: "warn", icon: "!", title: "Cell 47 trending low", body: "Cell 47 has drifted 18 mV below the pack mean over the past two weeks." },
-        { kind: "info", icon: "i", title: "Cheaper to charge after 21:00", body: "Shifting two L2 sessions per week saves roughly $8 per month." },
+        { kind: "info", icon: "i", title: "Charging cost trends month to month", body: "Set your electricity rate in Preferences to see a per-month charging-cost trend on the Charge tab." },
         { kind: "good", icon: "EV", title: "Tahoe trip MPG within 4% of route avg", body: "Apr 28's 184 mile roundtrip hit 41.7 MPG for that elevation profile." }
       ]
     };

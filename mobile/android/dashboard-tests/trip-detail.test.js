@@ -1,0 +1,145 @@
+// M7 — per-trip detail sheet. A map-session row's "Details" button opens a
+// modal sheet populated from the route projection + trip rollup: distance,
+// duration, avg/max speed, efficiency, start/end, plus an efficiency-vs-speed
+// scatter scoped to that one drive. Rendering stays XSS-safe (createElement /
+// setSvgAttrs / textContent only).
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { loadDashboard } from './setup/load-dashboard.js';
+
+const BASE = 1_700_000_000_000;
+const MPH_TO_MPS = 1 / 2.2369363;
+
+// A stored drive with pre-enriched points (eff + speedMps + altM) so the scatter
+// renders deterministically without depending on powerTrack interpolation.
+function driveStorage({ id = 'd1', label = '', distanceMeters = 18000 } = {}) {
+  const mphs = [22, 35, 48, 55, 62, 68, 70, 64];
+  const startedAtMs = BASE;
+  const endedAtMs = BASE + 8 * 30_000; // ~4 min
+  const points = mphs.map((mph, i) => ({
+    lat: 32.7 + i * 0.003,
+    lng: -117.1 - i * 0.002,
+    atMs: startedAtMs + i * 30_000,
+    speedMps: mph * MPH_TO_MPS,
+    altM: 100 - i * 4,
+    eff: 3.0 + (i % 4) * 0.4,
+  }));
+  return {
+    trips: [{ id, sessionId: id, startedAtMs, endedAtMs, pointCount: points.length, hasRoute: true, distanceMeters, adapterName: 'Adapter', label }],
+    storage: {
+      recentRoutes: [{
+        _effDone: true,
+        session: { id, sessionId: id, mode: 'drive', adapterName: 'Adapter', startedAtMs, endedAtMs, label },
+        points,
+        pointCount: points.length,
+        distanceMeters,
+      }],
+    },
+  };
+}
+
+describe('per-trip detail sheet (M7)', () => {
+  let VD;
+  beforeEach(async () => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    window.localStorage.clear();
+    if (typeof Element.prototype.scrollIntoView !== 'function') {
+      Element.prototype.scrollIntoView = () => {};
+    }
+    await loadDashboard();
+    await window.VoltDashboard.ensureMapModule();
+    VD = window.VoltDashboard;
+  });
+
+  function seed(opts) {
+    const data = driveStorage(opts);
+    VD.state.trips = data.trips;
+    VD.state.storage = data.storage;
+    VD.renderMap();
+    return data.trips[0].id;
+  }
+
+  it('renders a Details button per stored drive carrying its route key', () => {
+    const id = seed();
+    const detail = document.querySelector('#mapSessionList [data-trip-detail]');
+    expect(detail).not.toBeNull();
+    expect(detail.dataset.tripDetail).toBe(id);
+    expect(detail.textContent).toBe('Details');
+  });
+
+  it('opens the sheet with headline stats from the route + rollup', () => {
+    const id = seed({ label: 'Commute home', distanceMeters: 18000 });
+    expect(VD.openTripDetail(id)).toBe(true);
+    expect(document.getElementById('tripDetailSheet').hidden).toBe(false);
+    expect(document.getElementById('tripDetailTitle').textContent).toBe('Commute home');
+    // Distance ~ 18 km → "11 mi" imperial; just assert a non-empty figure.
+    expect(document.getElementById('tripDetailDistance').textContent).not.toBe('--');
+    expect(document.getElementById('tripDetailDuration').textContent).not.toBe('--');
+    expect(document.getElementById('tripDetailAvgSpeed').textContent).not.toBe('--');
+    // Max speed is the fastest point (70 mph).
+    expect(document.getElementById('tripDetailMaxSpeed').textContent).not.toBe('--');
+    // Efficiency averages the per-point eff values.
+    expect(document.getElementById('tripDetailEfficiency').textContent).not.toBe('--');
+    expect(document.getElementById('tripDetailPoints').textContent).toBe('8');
+    expect(document.getElementById('tripDetailStart').textContent).not.toBe('--');
+    expect(document.getElementById('tripDetailEnd').textContent).not.toBe('--');
+  });
+
+  it('plots an efficiency-vs-speed scatter scoped to that drive', () => {
+    const id = seed();
+    VD.openTripDetail(id);
+    const svg = document.querySelector('#tripDetailScatter svg');
+    expect(svg).not.toBeNull();
+    expect(svg.getAttribute('role')).toBe('img');
+    // One circle per point above the 10 mph floor (all 8 qualify).
+    const circles = svg.querySelectorAll('circle');
+    expect(circles.length).toBeGreaterThanOrEqual(6);
+    expect(document.getElementById('tripDetailScatterEmpty').hidden).toBe(true);
+  });
+
+  it('shows the scatter empty hint when too few efficiency samples exist', () => {
+    const startedAtMs = BASE;
+    VD.state.trips = [{ id: 'd2', sessionId: 'd2', startedAtMs, endedAtMs: startedAtMs + 60_000, pointCount: 2, hasRoute: true, distanceMeters: 1000, adapterName: 'Adapter' }];
+    VD.state.storage = {
+      recentRoutes: [{
+        _effDone: true,
+        session: { id: 'd2', sessionId: 'd2', mode: 'drive', adapterName: 'Adapter', startedAtMs, endedAtMs: startedAtMs + 60_000 },
+        // No eff on the points → no scatter samples.
+        points: [{ lat: 32.7, lng: -117.1, atMs: startedAtMs, speedMps: 20 }, { lat: 32.8, lng: -117.2, atMs: startedAtMs + 30_000, speedMps: 22 }],
+        pointCount: 2,
+        distanceMeters: 1000,
+      }],
+    };
+    VD.renderMap();
+    expect(VD.openTripDetail('d2')).toBe(true);
+    expect(document.querySelector('#tripDetailScatter svg')).toBeNull();
+    expect(document.getElementById('tripDetailScatterEmpty').hidden).toBe(false);
+  });
+
+  it('opens via the Details button click and closes via the close action', () => {
+    seed();
+    document.querySelector('#mapSessionList [data-trip-detail]').click();
+    expect(document.getElementById('tripDetailSheet').hidden).toBe(false);
+
+    VD.handleAction('closeTripDetail');
+    expect(document.getElementById('tripDetailSheet').hidden).toBe(true);
+  });
+
+  it('returns false (and does not open) for an unknown route key', () => {
+    seed();
+    expect(VD.openTripDetail('nope')).toBe(false);
+    expect(document.getElementById('tripDetailSheet').hidden).toBe(true);
+  });
+
+  it('renders the title with textContent only (no markup injection)', () => {
+    const id = seed({ label: '<img src=x onerror=alert(1)>' });
+    VD.openTripDetail(id);
+    const title = document.getElementById('tripDetailTitle');
+    // The hostile label is rendered as text, not parsed into an element.
+    expect(title.querySelector('img')).toBeNull();
+    expect(title.textContent).toBe('<img src=x onerror=alert(1)>');
+  });
+});

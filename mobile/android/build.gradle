@@ -206,6 +206,23 @@ tasks.register("verifyActiveApp") {
             "verifyGeneratedDashboardClean")
 }
 
+// Fast inner-loop tier (I5): the subset of verifyActiveApp that catches the mistakes you make
+// while editing — formatting, static analysis, broken Kotlin/dashboard logic — WITHOUT the two
+// slow steps: the Playwright e2e run (dashboardE2e, which boots a browser) and the full
+// :app:assembleDebug (R8/resource packaging). Run this on every change; run the heavier
+// verifyActiveApp before pushing for full CI parity. Deliberately omits assemble, lint, jacoco
+// verification, e2e, and the bundle-size/straggler gates — those belong to the pre-push tier.
+tasks.register("verifyFast") {
+    description = "Fast inner-loop checks: spotless + detekt + unit tests + dashboard lint/typecheck/test (no e2e/assemble)."
+    dependsOn(
+            ":app:spotlessCheck",
+            ":app:detekt",
+            ":app:testDebugUnitTest",
+            "dashboardLint",
+            "dashboardTypecheck",
+            "dashboardTest")
+}
+
 subprojects {
     plugins.withId("com.android.application") {
         tasks.named("check") {

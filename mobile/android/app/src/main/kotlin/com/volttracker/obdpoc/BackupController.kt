@@ -23,6 +23,15 @@ class BackupController(
     private var pendingRestorePassphrase: String? = null
     private val restoreLog = LogcatMirror(RollingAppLog(File(activity.filesDir, "app-log")))
 
+    /**
+     * Releases this controller's app-log file handle. Called from [MainActivity.onDestroy] so the
+     * long-lived buffered writer (G1) backing [restoreLog] isn't leaked for the rest of the process
+     * lifetime; a later backup/restore that logs again simply reopens it lazily.
+     */
+    fun dispose() {
+        restoreLog.close()
+    }
+
     private enum class RestoreResult {
         OK,
         INVALID_FILE,

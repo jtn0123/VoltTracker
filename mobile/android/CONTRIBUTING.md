@@ -5,10 +5,17 @@ Short, opinionated, and meant to bootstrap you into the inner loop quickly.
 ## Day-in-the-life dev loop
 
 ```sh
-# 1) Full active-app verification (macOS / Linux)
+# 0) One-time: install the dashboard test deps
 npm --prefix dashboard-tests ci
-./gradlew verifyActiveApp
-# Repeated local loop:
+
+# 1a) INNER LOOP — fast checks to run on every change. spotless + detekt + unit tests +
+#     dashboard lint/typecheck/test. Skips the slow Playwright e2e run and the full
+#     :app:assembleDebug (R8/packaging), so it's the right gate to run repeatedly while editing.
+./gradlew verifyFast --configuration-cache
+
+# 1b) PRE-PUSH — full active-app verification, matching CI (adds assemble, lint, jacoco
+#     verification, the Playwright e2e suite, and the bundle-size/straggler gates). Run before
+#     opening or updating a PR.
 ./gradlew verifyActiveApp --configuration-cache
 
 # 2) Local lint with HTML report
@@ -30,6 +37,17 @@ npm --prefix dashboard-tests run lint
 ```
 
 Windows users: substitute `.\gradlew.bat` for `./gradlew` and use PowerShell.
+
+## Build JDK
+
+The build pins itself to **JDK 21** via a Gradle Java toolchain (`java { toolchain { … } }`
+in `app/build.gradle`), and `settings.gradle` applies the **foojay-resolver** plugin so Gradle
+can discover an installed JDK 21 (or download one when allowed) regardless of which JDK launched
+Gradle. detekt's bytecode target is pinned to 21 to match. This means you do **not** need to
+`export JAVA_HOME` at a JDK 21 by hand: you can run Gradle under a newer default JDK and
+`:app:detekt` no longer fails with `Invalid value (24) passed to --jvm-target`. Install any JDK 21
+(e.g. Temurin 21, which CI uses) and the toolchain finds it. Production bytecode is still Java 17
+(`compileOptions`), matching minSdk.
 
 ## Editing the dashboard
 

@@ -112,9 +112,11 @@ class DatabaseMergerTest {
             "INSERT INTO ${VoltTrackerDb.TABLE_MAINTENANCE_LOG} (created_at_ms, odometer_km, type, note)" +
                 " VALUES (1000, 100.0, 'Oil change', 'Synthetic')",
         )
+        // New row carries the M1/C4 service interval, which must copy through the merge verbatim.
         donor.execSQL(
-            "INSERT INTO ${VoltTrackerDb.TABLE_MAINTENANCE_LOG} (created_at_ms, odometer_km, type, note)" +
-                " VALUES (2000, NULL, 'Tire rotation', '')",
+            "INSERT INTO ${VoltTrackerDb.TABLE_MAINTENANCE_LOG}" +
+                " (created_at_ms, odometer_km, type, note, interval_km, interval_months)" +
+                " VALUES (2000, NULL, 'Tire rotation', '', 12000.0, 6)",
         )
 
         assertTrue(DatabaseMerger.merge(live, donor).ok)
@@ -123,6 +125,17 @@ class DatabaseMergerTest {
             2,
             count(live, VoltTrackerDb.TABLE_MAINTENANCE_LOG),
         )
+        // The new row's interval columns survive the merge (column list stays in sync with schema).
+        live
+            .rawQuery(
+                "SELECT interval_km, interval_months FROM ${VoltTrackerDb.TABLE_MAINTENANCE_LOG}" +
+                    " WHERE created_at_ms = 2000",
+                null,
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(12000.0, cursor.getDouble(0), 0.001)
+                assertEquals(6, cursor.getInt(1))
+            }
         // Re-merging the same donor must not duplicate either row.
         assertTrue(DatabaseMerger.merge(live, donor).ok)
         assertEquals(

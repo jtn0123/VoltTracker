@@ -203,6 +203,79 @@ class ObdStoreTripsDbTest {
         assertEquals(false, store.setTripLabel("not-a-route-key", "x"))
     }
 
+    // ---- M4 trip favorites ---------------------------------------------------------
+
+    @Test
+    fun setTripFavoritePersistsAndAppearsInTripJson() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
+
+        val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
+        // Trips default to not-favorite, never a missing key.
+        assertEquals(false, store.getTripsJson(40).getJSONObject(0).optBoolean("favorite", true))
+
+        assertTrue(store.setTripFavorite(routeKey, true))
+
+        val trip = store.getTripsJson(40).getJSONObject(0)
+        assertEquals(routeKey, trip.getString("id"))
+        assertTrue("favorite must be stamped onto the trip JSON", trip.optBoolean("favorite", false))
+    }
+
+    @Test
+    fun setTripFavoriteClearsWithFalse() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
+
+        val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
+        assertTrue(store.setTripFavorite(routeKey, true))
+        assertTrue(store.getTripsJson(40).getJSONObject(0).optBoolean("favorite", false))
+
+        // The later (un-favorite) event wins over the earlier favorite.
+        assertTrue(store.setTripFavorite(routeKey, false))
+        assertEquals(false, store.getTripsJson(40).getJSONObject(0).optBoolean("favorite", true))
+
+        // Re-favoriting after a clear works (latest event wins).
+        assertTrue(store.setTripFavorite(routeKey, true))
+        assertTrue(store.getTripsJson(40).getJSONObject(0).optBoolean("favorite", false))
+    }
+
+    @Test
+    fun setTripFavoriteRejectsUnparseableRouteKey() {
+        assertEquals(false, store.setTripFavorite(null, true))
+        assertEquals(false, store.setTripFavorite("", true))
+        assertEquals(false, store.setTripFavorite("not-a-route-key", true))
+    }
+
+    // ---- M6 bulk all-trips export bundle --------------------------------------------
+
+    @Test
+    fun allTripsForExportBundlesEachTripWithIdLabelAndRoute() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
+
+        val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
+        assertTrue(store.setTripLabel(routeKey, "Commute home"))
+
+        val bundle = store.getAllTripsForExportJson(40, 500)
+        assertEquals("one trip in the bundle", 1, bundle.length())
+        val item = bundle.getJSONObject(0)
+        assertEquals(routeKey, item.getString("tripId"))
+        assertEquals("Commute home", item.getString("label"))
+        // The route carries the GPS points the CSV serializer reads.
+        assertTrue("bundled route has points", item.getJSONObject("route").getJSONArray("points").length() >= 2)
+    }
+
+    @Test
+    fun allTripsForExportIsEmptyWhenNoTrips() {
+        assertEquals(0, store.getAllTripsForExportJson(40, 500).length())
+    }
+
     @Test
     fun hidingAPostSplitTripByItsListIdAlsoHidesItFromTheMapProjection() {
         // Post-split windows start at "last inactive sample + 1ms", where no telemetry row exists,

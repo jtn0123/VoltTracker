@@ -2,7 +2,7 @@ package com.volttracker.obdpoc.widget
 
 import android.content.Context
 import android.util.Log
-import com.volttracker.obdpoc.MainActivity
+import com.volttracker.obdpoc.AppPrefs
 import com.volttracker.obdpoc.MainActivityUtils
 import org.json.JSONObject
 
@@ -35,22 +35,32 @@ class WidgetUpdater(
         try {
             synchronized(snapshotLock) {
                 val previous = store.read()
-                val soc = if (payload.has("soc") && !payload.isNull("soc")) payload.optInt("soc") else previous.socPct
+                val soc =
+                    if (payload.has("soc") && !payload.isNull("soc")) {
+                        roundSoc(payload.optDouble("soc", Double.NaN), previous.socPct)
+                    } else {
+                        previous.socPct
+                    }
                 val vehicleState = payload.optString("vehicleState", previous.vehicleState)
                 val connected =
                     if (payload.has("connected")) payload.optBoolean("connected") else previous.connected
+                val now = System.currentTimeMillis()
                 val merged =
                     WidgetSnapshot(
                         socPct = soc,
                         charging = vehicleState == VEHICLE_STATE_CHARGING,
                         connected = connected,
                         vehicleState = vehicleState,
-                        updatedAtMs = System.currentTimeMillis(),
+                        // updatedAtMs proposes "now" as the new change time; the store keeps it only
+                        // when a display field actually changed. lastSampleAtMs always advances so the
+                        // freshness line keeps ticking even on an identical (flat-but-live) sample.
+                        updatedAtMs = now,
+                        lastSampleAtMs = now,
                     )
                 persistAndMaybeRefresh(merged)
             }
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "widget telemetry update failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "widget telemetry update failed", ex)
         }
     }
 
@@ -60,15 +70,17 @@ class WidgetUpdater(
             synchronized(snapshotLock) {
                 val previous = store.read()
                 val connected = MainActivityUtils.isConnectedState(state)
+                val now = System.currentTimeMillis()
                 val merged =
                     previous.copy(
                         connected = connected,
-                        updatedAtMs = System.currentTimeMillis(),
+                        updatedAtMs = now,
+                        lastSampleAtMs = now,
                     )
                 persistAndMaybeRefresh(merged)
             }
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "widget status update failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "widget status update failed", ex)
         }
     }
 
@@ -80,6 +92,16 @@ class WidgetUpdater(
 
     companion object {
         private const val VEHICLE_STATE_CHARGING = "charging"
+
+        /**
+         * Rounds the Double SOC telemetry value to the nearest whole percent, matching the dashboard's
+         * SOC rounding, rather than truncating it (82.9 -> 83, not 82). A non-finite reading keeps the
+         * previously stored value so a single garbage sample never blanks the widget.
+         */
+        private fun roundSoc(
+            soc: Double,
+            previousSocPct: Int,
+        ): Int = if (soc.isFinite()) Math.round(soc).toInt() else previousSocPct
 
         /**
          * Redraws every placed instance of [VoltWidgetProvider] via a direct in-process
@@ -96,7 +118,7 @@ class WidgetUpdater(
             try {
                 VoltWidgetProvider.refreshAll(context)
             } catch (ex: RuntimeException) {
-                Log.w(MainActivity.TAG, "widget refresh failed", ex)
+                Log.w(AppPrefs.LOG_TAG, "widget refresh failed", ex)
             }
         }
     }

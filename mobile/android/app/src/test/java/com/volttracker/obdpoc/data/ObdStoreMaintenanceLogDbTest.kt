@@ -61,6 +61,43 @@ class ObdStoreMaintenanceLogDbTest {
     }
 
     @Test
+    fun serviceIntervalPersistsAndIsReturned() {
+        // M1/C4: the optional service interval round-trips through storage and the read JSON.
+        val id =
+            store.addMaintenanceEntry(
+                5_000L,
+                16_000.0,
+                "Oil change",
+                "Synthetic",
+                intervalKm = 8_000.0,
+                intervalMonths = 12,
+            )
+        assertTrue(id > 0L)
+        val entry = store.getMaintenanceLogJson(50).getJSONObject(0)
+        assertEquals(8_000.0, entry.optDouble("intervalKm"), 0.001)
+        assertEquals(12, entry.optInt("intervalMonths"))
+    }
+
+    @Test
+    fun absentIntervalsComeBackAsJsonNull() {
+        // A plain history entry (no interval) leaves both interval fields JSON-null, so the
+        // dashboard renders no due/overdue line for it.
+        store.addMaintenanceEntry(1_000L, null, "Tire rotation", "")
+        val entry = store.getMaintenanceLogJson(50).getJSONObject(0)
+        assertTrue("absent interval_km must come back as JSON null", entry.isNull("intervalKm"))
+        assertTrue("absent interval_months must come back as JSON null", entry.isNull("intervalMonths"))
+    }
+
+    @Test
+    fun nonPositiveIntervalsAreRejected() {
+        // A zero/negative interval can never come "due", so it is treated as absent.
+        store.addMaintenanceEntry(1_000L, null, "Brake fluid", "", intervalKm = 0.0, intervalMonths = -3)
+        val entry = store.getMaintenanceLogJson(50).getJSONObject(0)
+        assertTrue(entry.isNull("intervalKm"))
+        assertTrue(entry.isNull("intervalMonths"))
+    }
+
+    @Test
     fun getMaintenanceLogReturnsEntriesNewestFirst() {
         store.addMaintenanceEntry(1_000L, null, "First", "")
         store.addMaintenanceEntry(3_000L, null, "Third", "")

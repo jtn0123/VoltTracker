@@ -18,6 +18,11 @@ class EventNotificationCoordinator(
     private val autoScan: AutoScanController,
     private val nowMs: () -> Long = { System.currentTimeMillis() },
 ) {
+    // Reassigned by onSessionStart() on the MAIN thread (service startSession) while a draining task
+    // from the previous session may still read it via onTelemetry/applyScanCodes on the executor
+    // thread — so the reference must be @Volatile. The decider's internal accumulation/arming fields
+    // stay executor-thread-only, so volatile on the reference is sufficient. (Report item B1.)
+    @Volatile
     private var decider: EventNotificationDecider = newDecider()
 
     /** Resets per-session state. Call when a new logging session starts. */
@@ -59,6 +64,10 @@ class EventNotificationCoordinator(
         autoScan.onConnected {
             val codes = AutoDtcScanRunner(engine).readGenericDtcCodes()
             applyScanCodes(codes)
+            // Report whether the scan actually read codes so the controller only arms its per-drive
+            // throttle on a real Mode-03 reply: an empty result (adapter didn't answer / clean car)
+            // leaves the throttle disarmed so the next reconnect can retry instead of being blocked.
+            codes.isNotEmpty()
         }
     }
 
@@ -83,7 +92,9 @@ class EventNotificationCoordinator(
         // Auto-scan reaches the decider off the telemetry path (the connect thread), so refresh the
         // live newDtcEnabled toggle here too.
         decider.updateSettings(currentSettings())
-        val result = decider.onScan(codes, prefs.lastScanDtcCodes())
+        // Read the baseline flag BEFORE persisting (setLastScanDtcCodes establishes it): the first
+        // scan ever silently establishes the baseline without a "new DTC" false alert.
+        val result = decider.onScan(codes, prefs.lastScanDtcCodes(), prefs.hasDtcBaseline())
         prefs.setLastScanDtcCodes(result.allCodes)
         val event = result.event
         if (event != null) {
@@ -110,16 +121,40 @@ class EventNotificationCoordinator(
 
     private fun newDecider(): EventNotificationDecider = EventNotificationDecider(currentSettings())
 
-    /** Snapshots the live notification toggles/thresholds from prefs. Re-read on each evaluation. */
-    private fun currentSettings(): EventNotificationDecider.Settings =
-        EventNotificationDecider.Settings(
-            chargeCompleteEnabled = prefs.chargeCompleteEnabled(),
-            newDtcEnabled = prefs.newDtcEnabled(),
-            lowSocEnabled = prefs.lowSocEnabled(),
-            lowSocThresholdPct = prefs.lowSocThresholdPct(),
-            highPackTempEnabled = prefs.highPackTempEnabled(),
-            highPackTempThresholdC = prefs.highPackTempThresholdC(),
-        )
+    // Cached settings snapshot + the prefs version it was built from. Rebuilt only when the version
+    // moves (a user toggle), so the steady-state hot path is one cheap volatile/getLong compare per
+    // sample instead of 6 prefs getters + a Settings allocation at ~1 Hz. A mid-session toggle bumps
+    // the version, so it still takes effect on the next sample. (Report item G2.)
+    @Volatile
+    private var cachedSettings: EventNotificationDecider.Settings? = null
+
+    @Volatile
+    private var cachedSettingsVersion: Long = Long.MIN_VALUE
+
+    /**
+     * Returns the live notification toggles/thresholds, rebuilding the snapshot from prefs only when
+     * the settings version changed since the last call (cheap version read+compare otherwise).
+     */
+    private fun currentSettings(): EventNotificationDecider.Settings {
+        val version = prefs.settingsVersion()
+        val cached = cachedSettings
+        if (cached != null && version == cachedSettingsVersion) {
+            return cached
+        }
+        val rebuilt =
+            EventNotificationDecider.Settings(
+                chargeCompleteEnabled = prefs.chargeCompleteEnabled(),
+                newDtcEnabled = prefs.newDtcEnabled(),
+                lowSocEnabled = prefs.lowSocEnabled(),
+                lowSocThresholdPct = prefs.lowSocThresholdPct(),
+                highPackTempEnabled = prefs.highPackTempEnabled(),
+                highPackTempThresholdC = prefs.highPackTempThresholdC(),
+                targetSocPct = prefs.targetSocPct(),
+            )
+        cachedSettings = rebuilt
+        cachedSettingsVersion = version
+        return rebuilt
+    }
 
     private companion object {
         fun optDoubleOrNull(

@@ -90,9 +90,24 @@
       </div>
       <div>
         <span class="kicker">Target</span>
-        <strong id="liveChargeTarget">100%</strong>
+        <label class="live-charge-target-field">
+          <input
+            id="liveChargeTargetInput"
+            type="number"
+            inputmode="numeric"
+            min="50"
+            max="100"
+            step="1"
+            placeholder="100"
+            aria-label="Charge target state of charge, percent"
+          />
+          <span aria-hidden="true">%</span>
+        </label>
       </div>
     </div>
+    <p id="liveChargeTargetHint" class="status-copy live-charge-target-hint">
+      You'll get a notification when the battery reaches this target.
+    </p>
     <p class="status-copy">
       Estimated — actual time varies as charging tapers.
     </p>
@@ -145,8 +160,10 @@
 
   <!-- 96-cell voltage map (scaffold). Renders full per-cell data when telemetry
        carries a cellVoltages array; otherwise highlights the live lowest/highest
-       cell groups. See telemetry.ts#renderCellGrid. -->
-  <article id="cellGridCard" class="panel cell-grid-card">
+       cell groups. Hidden until there's cell data to show (renderCellGrid toggles
+       the whole card, not just the inner grid, so it isn't a perpetual empty
+       scaffold — C5). See telemetry.ts#renderCellGrid. -->
+  <article id="cellGridCard" class="panel cell-grid-card" hidden>
     <header class="cell-grid-head">
       <div>
         <span class="kicker">Cell voltage map</span>
@@ -216,6 +233,41 @@
       Set your electricity rate in Settings → Preferences to estimate charging
       cost.
     </p>
+  </article>
+
+  <!-- Charging cost-over-time (M5). Buckets logged charge sessions by month and
+       plots monthly energy (or cost when an electricity rate is set), reusing
+       the SOH-trend SVG pattern. Hidden until at least two months of data
+       exist; storage-status.ts#renderChargeCostTrend toggles + fills it. -->
+  <article id="chargeCostTrendCard" class="panel charge-cost-trend-card" hidden>
+    <header class="charge-cost-trend-head">
+      <div>
+        <span class="kicker">Charging over time</span>
+        <h3 id="chargeCostTrendTitle">Monthly charging</h3>
+      </div>
+      <strong id="chargeCostTrendLatest" class="charge-cost-trend-latest"
+        >--</strong
+      >
+    </header>
+    <p id="chargeCostTrendEmpty" class="status-copy" hidden>
+      A month-by-month trend appears here once you've logged charges across two
+      or more months.
+    </p>
+    <div id="chargeCostTrendChart" class="charge-cost-trend-chart"></div>
+    <div id="chargeCostTrendStats" class="charge-cost-trend-stats">
+      <div>
+        <span class="kicker" id="chargeCostTrendSpanLabel">Per month</span>
+        <strong id="chargeCostTrendAvg">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Months</span>
+        <strong id="chargeCostTrendMonths">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Total</span>
+        <strong id="chargeCostTrendTotal">--</strong>
+      </div>
+    </div>
   </article>
 
   <article

@@ -98,6 +98,28 @@ open class EventNotifier(
                     context.getString(R.string.notification_charge_complete_title),
                     chargeCompleteText(event.energyKwh),
                 )
+            is EventNotificationDecider.Event.ChargeInterrupted ->
+                NotificationSpec(
+                    // Shares the charge notification id so it replaces (not stacks with) a prior
+                    // charge alert of either kind.
+                    NOTIFICATION_ID_CHARGE,
+                    context.getString(R.string.notification_charge_interrupted_title),
+                    context.getString(
+                        R.string.notification_charge_interrupted_text,
+                        format0(event.socPct),
+                        format0(event.targetPct),
+                    ),
+                )
+            is EventNotificationDecider.Event.TargetSocReached ->
+                NotificationSpec(
+                    NOTIFICATION_ID_TARGET_SOC,
+                    context.getString(R.string.notification_target_soc_title),
+                    context.getString(
+                        R.string.notification_target_soc_text,
+                        format0(event.socPct),
+                        format0(event.targetPct),
+                    ),
+                )
             is EventNotificationDecider.Event.NewDtc -> describeNewDtc(event)
             is EventNotificationDecider.Event.LowSoc ->
                 NotificationSpec(
@@ -153,6 +175,7 @@ open class EventNotifier(
         const val NOTIFICATION_ID_NEW_DTC = 4302
         const val NOTIFICATION_ID_LOW_SOC = 4303
         const val NOTIFICATION_ID_HIGH_TEMP = 4304
+        const val NOTIFICATION_ID_TARGET_SOC = 4305
 
         @JvmStatic
         fun ensureChannel(ctx: Context?) {
@@ -170,8 +193,11 @@ open class EventNotifier(
             manager?.createNotificationChannel(channel)
         }
 
-        private fun format0(value: Double): String = String.format(Locale.US, "%.0f", value)
+        // These numbers are shown to the user inside notification copy, so they use the device
+        // locale (e.g. "3,2 kWh" in de-DE) rather than a fixed US format. Protocol/hex/SQL
+        // formatting elsewhere deliberately stays Locale.US — it must not vary by device locale.
+        private fun format0(value: Double): String = String.format(Locale.getDefault(), "%.0f", value)
 
-        private fun format1(value: Double): String = String.format(Locale.US, "%.1f", value)
+        private fun format1(value: Double): String = String.format(Locale.getDefault(), "%.1f", value)
     }
 }

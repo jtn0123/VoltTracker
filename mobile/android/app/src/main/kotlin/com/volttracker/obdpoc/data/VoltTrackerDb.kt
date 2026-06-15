@@ -131,6 +131,24 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 VoltTrackerSchema.createMaintenanceLog(target)
             }
         }
+        if (oldVersion < 13) {
+            runMigrationStep(db, oldVersion, 13, "maintenance-interval-columns") { target ->
+                // M1/C4: optional service-interval columns on maintenance_log (non-destructive ADD
+                // COLUMN). Existing rows survive with the new columns NULL. The table has existed
+                // since v12, but guard the ALTERs so a partial schema missing the table doesn't
+                // abort the step — recreate it (idempotently) if absent, then both columns ship.
+                if (!hasTable(target, TABLE_MAINTENANCE_LOG)) {
+                    VoltTrackerSchema.createMaintenanceLog(target)
+                } else {
+                    if (!hasColumn(target, TABLE_MAINTENANCE_LOG, "interval_km")) {
+                        target.execSQL("ALTER TABLE $TABLE_MAINTENANCE_LOG ADD COLUMN interval_km REAL")
+                    }
+                    if (!hasColumn(target, TABLE_MAINTENANCE_LOG, "interval_months")) {
+                        target.execSQL("ALTER TABLE $TABLE_MAINTENANCE_LOG ADD COLUMN interval_months INTEGER")
+                    }
+                }
+            }
+        }
     }
 
     fun interface MigrationStep {
@@ -139,7 +157,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
 
     companion object {
         const val DATABASE_NAME = "volttracker_obd_poc.db"
-        const val DATABASE_VERSION = 12
+        const val DATABASE_VERSION = 13
 
         const val TABLE_SESSIONS = "obd_sessions"
         const val TABLE_TELEMETRY = "telemetry_samples"

@@ -251,6 +251,8 @@ interface VoltTrip {
   adapterName?: string;
   /** User-authored trip label (M4); empty string when unset. */
   label?: string;
+  /** User favorite flag (M4 favorites half); absent/false when not favorited. */
+  favorite?: boolean;
   [key: string]: unknown;
 }
 
@@ -261,6 +263,9 @@ interface VoltMaintenanceEntry {
   odometerKm?: number | null;
   type?: string;
   note?: string;
+  /** Optional service interval (M1/C4): JSON null when unset. Drives the "next due" line. */
+  intervalKm?: number | null;
+  intervalMonths?: number | null;
   [key: string]: unknown;
 }
 
@@ -741,10 +746,13 @@ interface VoltRestoreProgress {
     updateReviewUi(): void;
     renderRealV2Ui(): void;
     renderVehicleUi(): void;
-    /** M5 maintenance log: load from native into state, render the list, prompt+save a new entry. */
+    /** M5 maintenance log: load from native into state, render the list with M1/C4 next-due lines,
+     *  toggle the inline add-entry form, submit/cancel it. */
     loadMaintenanceLog(): void;
     renderMaintenanceList(): void;
     addMaintenanceEntry(): void;
+    submitMaintenanceForm(): void;
+    closeMaintenanceForm(): void;
     buildRealInsights(review: VoltSessionReview): Array<{ title: string; detail: string }>;
     stateCountSummary(counts: Record<string, number>): string;
     /** True when a parsed native payload is a failed read (`ok === false`). */
@@ -772,6 +780,14 @@ interface VoltRestoreProgress {
     // ----- map.ts ------------------------------------------------------------
     renderMapLoaded?: boolean;
     renderMap(): void;
+    /** Re-render only the trip list from current storage (M4 search/sort/favorites
+     *  controls call this so a keystroke/toggle re-filters without refitting the map). */
+    refreshMapSessionList?(): void;
+    /** Populate + show the per-trip detail sheet for a route key (M7). Returns true
+     *  when the route was found (so the caller activates the focus trap). */
+    openTripDetail?(routeKey: string): boolean;
+    /** Hide the per-trip detail sheet (M7). */
+    closeTripDetail?(): void;
     setMapTileError(show: boolean, detail?: string): void;
     retryMapTiles(): void;
     loadSampleData(): void;
@@ -846,9 +862,11 @@ interface VoltRestoreProgress {
     exportDetailedSignalLogs(): string;
     exportTripGpx(routeKeyOrSessionId: string): string;
     exportTripCsv(routeKeyOrSessionId: string): string;
+    exportAllTripsCsv(): string;
     deleteDetailedSignalLog(id: string): void;
     markTripNotTrip(routeKey: string): void;
     setTripLabel(routeKey: string, label: string): void;
+    setTripFavorite(routeKey: string, favorite: boolean): void;
     addMaintenanceEntry(json: string): void;
     getMaintenanceLog(): string;
     deleteMaintenanceEntry(id: string): void;
@@ -863,6 +881,7 @@ interface VoltRestoreProgress {
     setNewDtcNotify(enabled: boolean): void;
     setLowSocNotify(enabled: boolean, thresholdPct: number): void;
     setHighPackTempNotify(enabled: boolean, thresholdC: number): void;
+    setChargeTargetSoc(targetPct: number): void;
     setAutoScanOnConnect(enabled: boolean): void;
     connectLast(): void;
     scanLast(): void;

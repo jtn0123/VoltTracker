@@ -15,6 +15,7 @@ import {
   routeIsLive,
   sessionForRoute
 } from "./map-session-list";
+import type { MapSessionFilter } from "./map-session-list";
 
   const VD = window.VoltDashboard;
   const state = VD.state;
@@ -470,7 +471,9 @@ import {
     const today = now.toDateString();
     const drive = d.toDateString();
     const yesterday = new Date(now.getTime() - 86400000).toDateString();
-    const time = d.toLocaleTimeString("en-US", {
+    // `undefined` locale follows the device's runtime locale; explicit options
+    // keep the compact "2:51 AM" / "Sat" / "Oct 15" shape across locales.
+    const time = d.toLocaleTimeString(undefined, {
       hour: "numeric",
       minute: "2-digit"
     });
@@ -479,10 +482,10 @@ import {
     const daysAgo = (now.getTime() - ms) / 86400000;
     if (daysAgo < 7) {
       return (
-        d.toLocaleDateString("en-US", { weekday: "short" }) + " " + time
+        d.toLocaleDateString(undefined, { weekday: "short" }) + " " + time
       );
     }
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
 
   function mapRoutes(storage: VoltStorageSummary): MapRoute[] {
@@ -506,28 +509,37 @@ import {
     return Number.isFinite(value) ? value : 0;
   }
 
-  // Stamps each stored route's session with its user trip label (M4) from state.trips, so the
-  // map session list shows the label regardless of whether the route came from the detailed
-  // recentRoutes window or an older trip stub. Labels are keyed by routeKey (trip.id); detailed
-  // routes whose id differs from the trip's clipped id are matched via routeCoversTrip.
+  // Stamps each stored route's session with its user trip label (M4) and favorite flag (M4
+  // favorites half) from state.trips, so the map session list shows both regardless of whether the
+  // route came from the detailed recentRoutes window or an older trip stub. Both are keyed by
+  // routeKey (trip.id); detailed routes whose id differs from the trip's clipped id are matched via
+  // routeCoversTrip.
   function stampTripLabels(routes: MapRoute[]) {
     const trips = Array.isArray(state.trips) ? state.trips : [];
-    const byId = new Map<string, string>();
+    const labelById = new Map<string, string>();
+    const favoriteById = new Map<string, boolean>();
     for (const trip of trips) {
       const id = trip && trip.id != null ? String(trip.id) : "";
+      if (!id) continue;
       const label = trip && typeof trip.label === "string" ? trip.label : "";
-      if (id && label) byId.set(id, label);
+      if (label) labelById.set(id, label);
+      if (trip && trip.favorite === true) favoriteById.set(id, true);
     }
-    if (!byId.size) return;
+    if (!labelById.size && !favoriteById.size) return;
     for (const route of routes) {
       const session = route.session || (route.session = {});
       const id = session.id == null ? "" : String(session.id);
-      let label = byId.get(id) || "";
-      if (!label) {
+      let label = labelById.get(id) || "";
+      let favorite = favoriteById.get(id) === true;
+      if (!label || !favorite) {
         const match = trips.find((trip) => routeCoversTrip(route, trip));
-        if (match && typeof match.label === "string") label = match.label;
+        if (match) {
+          if (!label && typeof match.label === "string") label = match.label;
+          if (!favorite && match.favorite === true) favorite = true;
+        }
       }
       (session as MapRouteSession).label = label;
+      (session as MapRouteSession).favorite = favorite;
     }
   }
 
@@ -939,6 +951,20 @@ import {
     return true;
   }
 
+  // Read the M4 search / sort / favorites controls off the DOM. The controls are
+  // the single source of truth (no extra state slot): the input value, the active
+  // sort button, and the favorites toggle's data-on attribute.
+  function readMapSessionFilter(): MapSessionFilter {
+    const search = el("mapSessionSearch") as HTMLInputElement | null;
+    const activeSort = document.querySelector("[data-map-sort].is-active") as HTMLElement | null;
+    const favToggle = el("mapSessionFavoritesOnly");
+    return {
+      query: search ? String(search.value || "") : "",
+      sort: activeSort && activeSort.dataset.mapSort === "distance" ? "distance" : "recent",
+      favoritesOnly: Boolean(favToggle && favToggle.dataset.on === "true"),
+    };
+  }
+
   function renderMapSessionList(routes: MapRoute[]) {
     const list = el("mapSessionList");
     if (!list) return;
@@ -947,7 +973,242 @@ import {
       formatChipDate: (value) => fmtChipDate(value),
       formatDistance: (value) => VD.formatDistance(value),
       formatWhen: (value) => VD.formatWhen(value),
+      filter: readMapSessionFilter(),
     });
+  }
+
+  // Re-render ONLY the trip list from current storage (M4). The search/sort/
+  // favorites controls call this so a keystroke or toggle re-filters the list
+  // without a full renderMap() — which would refit the Leaflet bounds and tug
+  // the map view away from whatever route the user is inspecting.
+  function refreshMapSessionList() {
+    const list = el("mapSessionList");
+    if (!list) return;
+    renderMapSessionList(mapRoutes(state.storage || {}));
+  }
+
+  // ---- Per-trip detail sheet (M7) -----------------------------------------
+  // Opened from a map-session row's "Details" button. Resolves the one drive's
+  // full geometry (reusing the on-demand ensureRoutePoints fetch + cache),
+  // computes its headline stats from the route projection + trip rollup, and
+  // renders an efficiency-vs-speed scatter scoped to JUST that drive — the
+  // per-drive companion to the all-drives Insights scatter. XSS-safe throughout.
+
+  // Find the route for a given route key from the current map routes, resolving
+  // full geometry for an older trip stub on demand.
+  function routeForKey(routeKey: string): MapRoute | null {
+    const clean = String(routeKey || "").trim();
+    if (!clean) return null;
+    const routes = mapRoutes(state.storage || {});
+    const match = routes.find((route) => String((route.session || {}).id || "") === clean);
+    if (!match) return null;
+    return ensureRoutePoints(match);
+  }
+
+  type TripDriveStats = {
+    distanceMeters: number;
+    durationMs: number;
+    avgKph: number;
+    maxKph: number;
+    miPerKwh: number | null;
+    pointCount: number;
+    startedAtMs: number;
+    endedAtMs: number;
+  };
+
+  // Derive a single drive's headline stats from its resolved route + session.
+  // Max speed prefers per-point speedMps, falling back to GPS-segment speed.
+  // Efficiency averages the per-point eff (mi/kWh) enrichRouteEff annotates.
+  function tripDriveStats(route: MapRoute): TripDriveStats {
+    const session = route.session || {};
+    const points = Array.isArray(route.points) ? route.points : [];
+    const distanceMeters = Number(route.distanceMeters || 0);
+    const startedAtMs = Number(session.startedAtMs);
+    const endedAtMsRaw = Number(session.endedAtMs);
+    const endedAtMs = Number.isFinite(endedAtMsRaw) && endedAtMsRaw > 0 ? endedAtMsRaw : NaN;
+    const durationMs =
+      Number.isFinite(startedAtMs) && startedAtMs > 0 && Number.isFinite(endedAtMs) && endedAtMs > startedAtMs
+        ? endedAtMs - startedAtMs
+        : 0;
+    const avgKph = durationMs > 0 ? (distanceMeters / (durationMs / 1000)) * 3.6 : 0;
+    let maxMps = 0;
+    for (let i = 0; i < points.length; i += 1) {
+      const point = points[i];
+      if (!point) continue;
+      let mps = Number(point.speedMps);
+      if ((!Number.isFinite(mps) || mps < 0) && i > 0) {
+        const previous = points[i - 1];
+        if (previous) mps = segmentSpeedMps(previous, point);
+      }
+      if (Number.isFinite(mps) && mps > maxMps) maxMps = mps;
+    }
+    if (typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
+    let effSum = 0;
+    let effCount = 0;
+    for (const point of points) {
+      const eff = Number(point.eff);
+      if (Number.isFinite(eff)) {
+        effSum += eff;
+        effCount += 1;
+      }
+    }
+    return {
+      distanceMeters,
+      durationMs,
+      avgKph,
+      maxKph: maxMps * 3.6,
+      miPerKwh: effCount ? effSum / effCount : null,
+      pointCount: Number(route.pointCount || points.length || 0),
+      startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : NaN,
+      endedAtMs: Number.isFinite(endedAtMs) ? endedAtMs : NaN,
+    };
+  }
+
+  // Pool per-point { mph, eff, grade } for ONE drive (the per-drive analogue of
+  // insights-panel.ts#renderInsightScatter). Returns the samples and the SVG, or
+  // null when too few samples carry derived efficiency.
+  function buildTripScatter(route: MapRoute): SVGElement | null {
+    if (typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
+    const points = Array.isArray(route.points) ? route.points : [];
+    const pool: Array<{ mph: number; eff: number; grade: number }> = [];
+    for (let i = 0; i < points.length; i += 1) {
+      const point = points[i];
+      if (!point) continue;
+      const eff = Number(point.eff);
+      if (!Number.isFinite(eff)) continue;
+      let mps = Number(point.speedMps);
+      if (!Number.isFinite(mps) || mps < 0) {
+        const a = points[Math.max(0, i - 1)];
+        const b = points[Math.min(points.length - 1, i + 1)];
+        if (a && b) {
+          const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
+          mps = haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / dt;
+        } else {
+          mps = 0;
+        }
+      }
+      const mph = Math.max(0, mps) * 2.2369363;
+      if (mph < 10) continue;
+      let grade = 0;
+      const prev = points[i - 1];
+      if (i > 0 && prev && Number.isFinite(Number(prev.altM)) && Number.isFinite(Number(point.altM))) {
+        const horiz = Math.max(8, haversineMetersJs(prev.lat, prev.lng, point.lat, point.lng));
+        grade = Math.max(-0.13, Math.min(0.13, (Number(point.altM) - Number(prev.altM)) / horiz));
+      }
+      pool.push({ mph, eff, grade });
+    }
+    if (pool.length < 4) return null;
+    return drawTripScatterSvg(pool);
+  }
+
+  function drawTripScatterSvg(pool: Array<{ mph: number; eff: number; grade: number }>): SVGElement {
+    // Theme-aware colors (CSS vars don't cascade into SVG fill/stroke).
+    const tokens = getComputedStyle(document.documentElement);
+    const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
+    const lineColor = token("--line", "rgba(255,255,255,0.1)");
+    const axisColor = token("--muted", "#aaaab4");
+    const evColor = token("--ev", "#b8e63b");
+    const downColor = token("--map-accent", "#4cc4ff");
+    const upColor = token("--bad", "#ff6b5f");
+    const w = 320;
+    const h = 220;
+    const padL = 34;
+    const padR = 10;
+    const padT = 12;
+    const padB = 26;
+    const fastest = pool.reduce((m, p) => Math.max(m, p.mph), 0);
+    const axisMaxMph = Math.max(75, Math.ceil(fastest / 5) * 5);
+    const xOf = (mph: number) => padL + (mph / axisMaxMph) * (w - padL - padR);
+    const yS = (e: number) => padT + (1 - e / 7) * (h - padT - padB);
+    const gColor = (g: number) => (g <= -0.006 ? downColor : g >= 0.006 ? upColor : evColor);
+    const ns = "http://www.w3.org/2000/svg";
+    const setSvgAttrs = VD.setSvgAttrs;
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    svg.setAttribute("width", String(w));
+    svg.setAttribute("height", String(h));
+    svg.setAttribute("class", "trip-detail-scatter-svg");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Efficiency versus speed for this drive");
+    const appendLine = (attrs: Record<string, string | number>) =>
+      svg.append(setSvgAttrs(document.createElementNS(ns, "line"), attrs));
+    const appendText = (text: string, attrs: Record<string, string | number>) => {
+      const node = setSvgAttrs(document.createElementNS(ns, "text"), attrs);
+      node.textContent = text;
+      svg.append(node);
+    };
+    for (let gx = 0; gx <= axisMaxMph; gx += 15) {
+      appendLine({ x1: xOf(gx), y1: padT, x2: xOf(gx), y2: h - padB, stroke: lineColor });
+      appendText(String(gx), { x: xOf(gx), y: h - padB + 14, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle" });
+    }
+    for (let gy = 0; gy <= 7; gy += 1) {
+      appendLine({ x1: padL, y1: yS(gy), x2: w - padR, y2: yS(gy), stroke: lineColor });
+      appendText(String(gy), { x: padL - 6, y: yS(gy) + 3, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end" });
+    }
+    pool.forEach((p) => {
+      svg.append(setSvgAttrs(document.createElementNS(ns, "circle"), {
+        cx: xOf(p.mph).toFixed(1),
+        cy: yS(p.eff).toFixed(1),
+        r: 3.2,
+        fill: gColor(p.grade),
+        "fill-opacity": 0.55,
+      }));
+    });
+    appendText("speed (mph) ->", { x: w - padR, y: h - 4, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end" });
+    return svg;
+  }
+
+  function renderTripDetailScatter(route: MapRoute) {
+    const chart = el("tripDetailScatter");
+    const empty = el("tripDetailScatterEmpty");
+    const head = el("tripDetailScatterHead");
+    if (!chart) return;
+    const svg = buildTripScatter(route);
+    if (!svg) {
+      chart.replaceChildren();
+      if (empty) empty.hidden = false;
+      if (head) head.textContent = "Efficiency by speed for this drive.";
+      return;
+    }
+    if (empty) empty.hidden = true;
+    chart.replaceChildren(svg);
+    if (head) head.textContent = "Grade-coded efficiency at each speed on this drive.";
+  }
+
+  // Open the trip-detail sheet for a route key, filling stats + the per-drive
+  // scatter. Returns true when a route was found (so actions.ts can decide
+  // whether to activate the focus trap).
+  function openTripDetail(routeKey: string): boolean {
+    const sheet = el("tripDetailSheet");
+    if (!sheet) return false;
+    const route = routeForKey(routeKey);
+    if (!route) return false;
+    const session = sessionForRoute(route);
+    const stats = tripDriveStats(route);
+    const label = typeof session.label === "string" ? session.label.trim() : "";
+    const fallback = `${session.mode || "Drive"} · ${session.adapterName || "OBD adapter"}`;
+    VD.setText("tripDetailTitle", label || fallback);
+    VD.setText("tripDetailSub", label ? fallback : "");
+    VD.setText("tripDetailDistance", stats.distanceMeters > 0 ? VD.formatDistance(stats.distanceMeters) : "--");
+    VD.setText("tripDetailDuration", stats.durationMs > 0 ? VD.formatDuration(stats.durationMs) : "--");
+    const avg = VD.units.speed(stats.avgKph);
+    VD.setText("tripDetailAvgLabel", `Avg ${avg.unit}`);
+    VD.setText("tripDetailAvgSpeed", stats.avgKph > 0 ? `${avg.value} ${avg.unit}` : "--");
+    VD.setText("tripDetailMaxSpeed", stats.maxKph > 0 ? VD.units.speedText(stats.maxKph) : "--");
+    VD.setText("tripDetailEfficiency", stats.miPerKwh != null && stats.miPerKwh > 0 ? VD.units.efficiencyText(stats.miPerKwh) : "--");
+    VD.setText("tripDetailPoints", stats.pointCount > 0 ? String(stats.pointCount) : "--");
+    VD.setText("tripDetailStart", Number.isFinite(stats.startedAtMs) ? VD.formatWhen(stats.startedAtMs) : "--");
+    VD.setText("tripDetailEnd", Number.isFinite(stats.endedAtMs) ? VD.formatWhen(stats.endedAtMs) : "--");
+    renderTripDetailScatter(route);
+    // Reveal the sheet here so the function is self-contained; actions.ts then
+    // layers the focus trap on top (it re-sets hidden=false too, harmlessly).
+    sheet.hidden = false;
+    return true;
+  }
+
+  function closeTripDetail() {
+    const sheet = el("tripDetailSheet");
+    if (sheet) sheet.hidden = true;
   }
 
   function selectedMapRoute(storage: VoltStorageSummary, availableRoutes?: MapRoute[]): MapRoute {
@@ -1386,6 +1647,9 @@ import {
     setMapTileError,
     retryMapTiles,
     renderMapSessionList,
+    refreshMapSessionList,
+    openTripDetail,
+    closeTripDetail,
     selectedMapRoute,
     sessionForRoute,
     haversineMetersJs,

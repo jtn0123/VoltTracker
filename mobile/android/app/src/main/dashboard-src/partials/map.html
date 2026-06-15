@@ -134,6 +134,87 @@
     </div>
   </div>
 
+  <!-- Per-trip detail sheet (M7). Opened from a map-session row's "Details"
+       button; populated by map.ts#openTripDetail from the route projection +
+       trip rollup. Modal dialog with a focus trap (actions.ts), so it overlays
+       the map view and traps focus until closed. -->
+  <div
+    id="tripDetailSheet"
+    class="trip-detail-sheet panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="tripDetailTitle"
+    tabindex="-1"
+    hidden
+  >
+    <header class="trip-detail-head">
+      <div>
+        <span class="kicker">Drive detail</span>
+        <h3 id="tripDetailTitle">Drive</h3>
+        <p id="tripDetailSub" class="status-copy"></p>
+      </div>
+      <button
+        type="button"
+        id="tripDetailClose"
+        class="link-btn trip-detail-close"
+        data-action="closeTripDetail"
+        aria-label="Close drive detail"
+      >
+        Close
+      </button>
+    </header>
+    <div
+      class="trip-detail-stats"
+      id="tripDetailStats"
+      aria-label="Drive stats"
+    >
+      <div>
+        <span class="kicker">Distance</span
+        ><strong id="tripDetailDistance">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Duration</span
+        ><strong id="tripDetailDuration">--</strong>
+      </div>
+      <div>
+        <span class="kicker" id="tripDetailAvgLabel">Avg speed</span
+        ><strong id="tripDetailAvgSpeed">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Max speed</span
+        ><strong id="tripDetailMaxSpeed">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Efficiency</span
+        ><strong id="tripDetailEfficiency">--</strong>
+      </div>
+      <div>
+        <span class="kicker">GPS points</span
+        ><strong id="tripDetailPoints">--</strong>
+      </div>
+    </div>
+    <div class="trip-detail-times">
+      <div>
+        <span class="kicker">Started</span
+        ><strong id="tripDetailStart">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Ended</span><strong id="tripDetailEnd">--</strong>
+      </div>
+    </div>
+    <article class="trip-detail-scatter-card">
+      <header>
+        <span class="kicker">Efficiency vs speed — this drive</span>
+        <h4 id="tripDetailScatterHead">Efficiency by speed for this drive.</h4>
+      </header>
+      <div class="eff-scatter" id="tripDetailScatter"></div>
+      <p id="tripDetailScatterEmpty" class="status-copy" hidden>
+        Not enough power/efficiency samples on this drive to plot efficiency vs
+        speed. It fills in when the OBD loop captured battery current.
+      </p>
+    </article>
+  </div>
+
   <div id="scrubber" class="scrubber panel" hidden>
     <div class="scrub-chart" id="scrubChart">
       <div class="scrub-cursor" id="scrubCursor"></div>
@@ -165,13 +246,69 @@
     <article class="panel list-card">
       <header>
         <span class="kicker">Recorded sessions</span>
-        <button type="button" class="link-btn" data-action="refreshStorage">
-          Refresh
-        </button>
+        <div class="map-sheet-actions">
+          <button
+            type="button"
+            class="link-btn"
+            data-action="exportAllTripsCsv"
+            id="exportAllTripsBtn"
+          >
+            Export all (CSV)
+          </button>
+          <button type="button" class="link-btn" data-action="refreshStorage">
+            Refresh
+          </button>
+        </div>
       </header>
       <p class="status-copy">
         Long-press a drive to mark it as &ldquo;not a trip&rdquo;.
       </p>
+      <!-- Trip list search / sort / favorites filter (M4). Client-side over the
+           already-loaded routes; map.ts reads these and re-renders the list. -->
+      <div class="map-list-controls" role="group" aria-label="Filter drives">
+        <label class="map-list-search">
+          <span class="visually-hidden">Search drives by name or date</span>
+          <input
+            id="mapSessionSearch"
+            type="search"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="Search by name or date…"
+            aria-label="Search drives by name or date"
+          />
+        </label>
+        <div class="map-list-control-row">
+          <div
+            id="mapSessionSort"
+            class="signal-stage-tabs map-list-sort"
+            role="group"
+            aria-label="Sort drives"
+          >
+            <button
+              type="button"
+              data-map-sort="recent"
+              class="is-active"
+              aria-pressed="true"
+            >
+              <span>Recent</span>
+            </button>
+            <button type="button" data-map-sort="distance" aria-pressed="false">
+              <span>Longest</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            id="mapSessionFavoritesOnly"
+            class="tile-toggle map-list-fav-toggle"
+            data-map-favorites-only
+            data-on="false"
+            aria-pressed="false"
+            aria-label="Show favorites only"
+          >
+            ☆ Favorites
+          </button>
+        </div>
+      </div>
       <div id="mapSessionList" class="map-list"></div>
     </article>
   </section>

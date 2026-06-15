@@ -66,7 +66,12 @@ describe('restore progress overlay', () => {
     expect(overlay.dataset.progress).toBe('determinate');
     expect(document.getElementById('restoreProgressPhase').textContent).toBe('Merging map samples');
     expect(document.getElementById('restoreProgressPercent').textContent).toBe('20%');
-    expect(document.getElementById('restoreProgressStats').textContent).toBe('1,000 of 5,000 rows');
+    // Counts are formatted with the runtime locale's grouping separator (no hardcoded
+    // en-US), so derive the expectation the same way to stay locale-robust on any host.
+    const fmt = (n) => n.toLocaleString(undefined);
+    expect(document.getElementById('restoreProgressStats').textContent).toBe(
+      `${fmt(1000)} of ${fmt(5000)} rows`,
+    );
     expect(document.getElementById('restoreProgressEta').textContent).toBe('ETA 12s');
   });
 

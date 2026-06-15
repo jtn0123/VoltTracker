@@ -16,7 +16,7 @@ describe('M4 — trip labels in the map session list', () => {
     await window.VoltDashboard.ensureMapModule();
   });
 
-  function seedRouteWithTrips(VD, label) {
+  function seedRouteWithTrips(VD, label, favorite = false) {
     const startedAtMs = 1_700_000_000_000;
     const endedAtMs = startedAtMs + 60_000;
     const id = `7:${startedAtMs}:${endedAtMs}`;
@@ -31,6 +31,7 @@ describe('M4 — trip labels in the map session list', () => {
         distanceMeters: 1000,
         adapterName: 'Adapter X',
         label,
+        favorite,
       },
     ];
     VD.state.storage = {
@@ -136,6 +137,63 @@ describe('M4 — trip labels in the map session list', () => {
     }
     expect(setTripLabel).not.toHaveBeenCalled();
   });
+
+  it('renders an outline star carrying the route key for an unfavorited drive', () => {
+    const VD = window.VoltDashboard;
+    const id = seedRouteWithTrips(VD, '', false);
+    VD.renderMap();
+
+    const fav = document.querySelector('#mapSessionList [data-trip-favorite]');
+    expect(fav).toBeTruthy();
+    expect(fav.dataset.tripFavorite).toBe(id);
+    expect(fav.dataset.tripFavoriteState).toBe('0');
+    expect(fav.getAttribute('aria-pressed')).toBe('false');
+    expect(fav.textContent).toBe('☆'); // ☆
+  });
+
+  it('renders a filled star marked pressed for a favorited drive', () => {
+    const VD = window.VoltDashboard;
+    seedRouteWithTrips(VD, '', true);
+    VD.renderMap();
+
+    const fav = document.querySelector('#mapSessionList [data-trip-favorite]');
+    expect(fav.dataset.tripFavoriteState).toBe('1');
+    expect(fav.getAttribute('aria-pressed')).toBe('true');
+    expect(fav.classList.contains('is-favorite')).toBe(true);
+    expect(fav.textContent).toBe('★'); // ★
+  });
+
+  it('toggling forwards the FLIPPED state to bridge.setTripFavorite', async () => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    const setTripFavorite = vi.fn();
+    await loadDashboard({ bridge: createVoltBridgeFixture({ setTripFavorite }) });
+    await window.VoltDashboard.ensureMapModule();
+    const VD = window.VoltDashboard;
+    const id = seedRouteWithTrips(VD, '', false);
+    VD.renderMap();
+
+    document.querySelector('#mapSessionList [data-trip-favorite]').click();
+    expect(setTripFavorite).toHaveBeenCalledWith(id, true);
+  });
+
+  it('un-favoriting an already-favorited drive forwards false', async () => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    const setTripFavorite = vi.fn();
+    await loadDashboard({ bridge: createVoltBridgeFixture({ setTripFavorite }) });
+    await window.VoltDashboard.ensureMapModule();
+    const VD = window.VoltDashboard;
+    const id = seedRouteWithTrips(VD, '', true);
+    VD.renderMap();
+
+    document.querySelector('#mapSessionList [data-trip-favorite]').click();
+    expect(setTripFavorite).toHaveBeenCalledWith(id, false);
+  });
 });
 
 describe('M5 — maintenance log', () => {
@@ -192,55 +250,83 @@ describe('M5 — maintenance log', () => {
     expect(list.textContent).toContain('<img src=x onerror=alert(1)>');
   });
 
-  it('Add entry prompts and forwards a JSON payload to bridge.addMaintenanceEntry', async () => {
+  // M1/C4: the add flow is now an inline form (no more window.prompt chain). Helper fills the
+  // form's inputs and submits it.
+  function fillMaintenanceForm({ type, note, odometer, intervalKm, intervalMonths } = {}) {
+    document.getElementById('addMaintenanceBtn').click(); // open the form
+    const set = (id, value) => {
+      const input = document.getElementById(id);
+      if (input && value != null) input.value = String(value);
+    };
+    set('maintTypeInput', type);
+    set('maintNoteInput', note);
+    set('maintOdometerInput', odometer);
+    set('maintIntervalKmInput', intervalKm);
+    set('maintIntervalMonthsInput', intervalMonths);
+    document.getElementById('maintenanceForm').dispatchEvent(new Event('submit', { cancelable: true }));
+  }
+
+  it('the add form is hidden until Add entry is clicked', async () => {
+    await loadWithMaintenance(() => '[]');
+    window.VoltDashboard.setStorage({});
+    const form = document.getElementById('maintenanceForm');
+    expect(form.hidden).toBe(true);
+    document.getElementById('addMaintenanceBtn').click();
+    expect(form.hidden).toBe(false);
+    expect(document.getElementById('addMaintenanceBtn').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('Add entry submits a JSON payload (incl. interval) to bridge.addMaintenanceEntry', async () => {
     const addMaintenanceEntry = vi.fn();
     await loadWithMaintenance(() => '[]', { addMaintenanceEntry });
     window.VoltDashboard.setStorage({});
 
-    const prompts = ['Oil change', '1000', 'Synthetic 5W-30'];
-    const promptSpy = vi.spyOn(window, 'prompt').mockImplementation(() => prompts.shift());
-    try {
-      document.getElementById('addMaintenanceBtn').click();
-    } finally {
-      promptSpy.mockRestore();
-    }
+    fillMaintenanceForm({ type: 'Oil change', note: 'Synthetic 5W-30', odometer: '1000', intervalKm: '5000', intervalMonths: '12' });
+
     expect(addMaintenanceEntry).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(addMaintenanceEntry.mock.calls[0][0]);
     expect(payload.type).toBe('Oil change');
     expect(payload.note).toBe('Synthetic 5W-30');
     // 1000 mi (imperial default) is converted to km for storage.
     expect(payload.odometerKm).toBeCloseTo(1609.344, 1);
+    expect(payload.intervalKm).toBeCloseTo(5000 * 1.609344, 1);
+    expect(payload.intervalMonths).toBe(12);
     expect(payload.date).toBeGreaterThan(0);
+    // The form collapses after a successful save.
+    expect(document.getElementById('maintenanceForm').hidden).toBe(true);
   });
 
-  it('Add entry omits the odometer when the reading is blank', async () => {
+  it('Add entry omits the odometer and interval when blank', async () => {
     const addMaintenanceEntry = vi.fn();
     await loadWithMaintenance(() => '[]', { addMaintenanceEntry });
     window.VoltDashboard.setStorage({});
 
-    const prompts = ['Coolant flush', '', ''];
-    const promptSpy = vi.spyOn(window, 'prompt').mockImplementation(() => prompts.shift());
-    try {
-      document.getElementById('addMaintenanceBtn').click();
-    } finally {
-      promptSpy.mockRestore();
-    }
+    fillMaintenanceForm({ type: 'Coolant flush' });
     const payload = JSON.parse(addMaintenanceEntry.mock.calls[0][0]);
     expect(payload).not.toHaveProperty('odometerKm');
+    expect(payload).not.toHaveProperty('intervalKm');
+    expect(payload).not.toHaveProperty('intervalMonths');
     expect(payload.type).toBe('Coolant flush');
   });
 
-  it('Add entry aborts without a bridge call when the type is blank', async () => {
+  it('Add entry aborts without a bridge call when type and note are blank', async () => {
     const addMaintenanceEntry = vi.fn();
     await loadWithMaintenance(() => '[]', { addMaintenanceEntry });
     window.VoltDashboard.setStorage({});
 
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('   ');
-    try {
-      document.getElementById('addMaintenanceBtn').click();
-    } finally {
-      promptSpy.mockRestore();
-    }
+    fillMaintenanceForm({ type: '   ' });
+    expect(addMaintenanceEntry).not.toHaveBeenCalled();
+  });
+
+  it('Cancel collapses the form without a bridge call', async () => {
+    const addMaintenanceEntry = vi.fn();
+    await loadWithMaintenance(() => '[]', { addMaintenanceEntry });
+    window.VoltDashboard.setStorage({});
+
+    document.getElementById('addMaintenanceBtn').click();
+    expect(document.getElementById('maintenanceForm').hidden).toBe(false);
+    document.querySelector('[data-action="cancelMaintenance"]').click();
+    expect(document.getElementById('maintenanceForm').hidden).toBe(true);
     expect(addMaintenanceEntry).not.toHaveBeenCalled();
   });
 
@@ -254,5 +340,106 @@ describe('M5 — maintenance log', () => {
 
     document.querySelector('#maintenanceList [data-maint-delete]').click();
     expect(deleteMaintenanceEntry).toHaveBeenCalledWith('9');
+  });
+});
+
+describe('M1/C4 — maintenance next-due / overdue', () => {
+  async function loadWithMaintenance(getMaintenanceLog) {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    await loadDashboard({ bridge: createVoltBridgeFixture({ getMaintenanceLog }) });
+  }
+
+  // Latest odometer is exposed via the battery snapshot the storage summary carries.
+  function storageWithOdometer(odometerKm) {
+    return { batterySummary: { latestBatterySnapshot: { odometerKm } } };
+  }
+
+  const NOW = Date.now();
+
+  it('shows a distance "until due" line for an entry well ahead of the interval', async () => {
+    // Logged at 10,000 km with a 8,000 km interval → due at 18,000 km. Current odo 12,000 km →
+    // 6,000 km remaining (well over the ~1,609 km "due soon" floor), so it reads as ahead.
+    await loadWithMaintenance(() =>
+      JSON.stringify([
+        { id: 1, createdAtMs: NOW, type: 'Oil change', note: '', odometerKm: 10000, intervalKm: 8000 },
+      ]),
+    );
+    window.VoltDashboard.setStorage(storageWithOdometer(12000));
+    const due = document.querySelector('#maintenanceList .maint-due');
+    expect(due).toBeTruthy();
+    expect(due.dataset.due).toBe('ok');
+    expect(due.textContent).toContain('until due');
+  });
+
+  it('flags overdue when the odometer has passed the due distance', async () => {
+    await loadWithMaintenance(() =>
+      JSON.stringify([
+        { id: 1, createdAtMs: NOW, type: 'Oil change', note: '', odometerKm: 10000, intervalKm: 8000 },
+      ]),
+    );
+    // Current odometer 20,000 km > due-at 18,000 km → overdue by 2,000 km.
+    window.VoltDashboard.setStorage(storageWithOdometer(20000));
+    const due = document.querySelector('#maintenanceList .maint-due');
+    expect(due.dataset.due).toBe('overdue');
+    expect(due.textContent.toLowerCase()).toContain('overdue');
+    // Aggregate banner surfaces the overdue count.
+    const hint = document.getElementById('maintenanceDueHint');
+    expect(hint.hidden).toBe(false);
+    expect(hint.dataset.due).toBe('overdue');
+    expect(hint.textContent.toLowerCase()).toContain('overdue');
+  });
+
+  it('marks an entry due-soon when remaining distance is within the threshold', async () => {
+    // Due at 18,000 km; current 17,000 km → 1,000 km remaining (< ~1,609 km floor) → due soon.
+    await loadWithMaintenance(() =>
+      JSON.stringify([
+        { id: 1, createdAtMs: NOW, type: 'Oil change', note: '', odometerKm: 10000, intervalKm: 8000 },
+      ]),
+    );
+    window.VoltDashboard.setStorage(storageWithOdometer(17000));
+    const due = document.querySelector('#maintenanceList .maint-due');
+    expect(due.dataset.due).toBe('due-soon');
+    const hint = document.getElementById('maintenanceDueHint');
+    expect(hint.dataset.due).toBe('due-soon');
+  });
+
+  it('computes a months-based overdue line independent of odometer', async () => {
+    // Logged 8 months ago with a 6-month interval → overdue on time, no odometer needed.
+    const eightMonthsAgo = NOW - Math.round(8 * 30.4375 * 86400000);
+    await loadWithMaintenance(() =>
+      JSON.stringify([
+        { id: 1, createdAtMs: eightMonthsAgo, type: 'Brake fluid', note: '', intervalMonths: 6 },
+      ]),
+    );
+    window.VoltDashboard.setStorage({});
+    const due = document.querySelector('#maintenanceList .maint-due');
+    expect(due.dataset.due).toBe('overdue');
+    expect(due.textContent.toLowerCase()).toContain('overdue');
+  });
+
+  it('shows no due line and no banner for an entry without an interval', async () => {
+    await loadWithMaintenance(() =>
+      JSON.stringify([{ id: 1, createdAtMs: NOW, type: 'Tire rotation', note: '', odometerKm: 10000 }]),
+    );
+    window.VoltDashboard.setStorage(storageWithOdometer(20000));
+    expect(document.querySelector('#maintenanceList .maint-due')).toBeNull();
+    expect(document.getElementById('maintenanceDueHint').hidden).toBe(true);
+  });
+
+  it('falls back to the vehicle odometer (miles) when no battery snapshot is present', async () => {
+    await loadWithMaintenance(() =>
+      JSON.stringify([
+        { id: 1, createdAtMs: NOW, type: 'Oil change', note: '', odometerKm: 10000, intervalKm: 8000 },
+      ]),
+    );
+    // No battery snapshot; vehicle reports 13,000 mi ≈ 20,921 km > due-at 18,000 km → overdue.
+    window.VoltDashboard.setStorage({});
+    window.VoltDashboard.state.appState = { vehicle: { odometerMiles: 13000 } };
+    window.VoltDashboard.renderMaintenanceList();
+    const due = document.querySelector('#maintenanceList .maint-due');
+    expect(due.dataset.due).toBe('overdue');
   });
 });

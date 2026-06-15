@@ -3,7 +3,7 @@ import { asDataState, setDataState, setDataTone } from "./dataset-state";
 import { LIVE_ROUTE_ID, appendLiveRoutePoint, haversineMetersJs, liveSampleTimeMs } from "./map-route-utils";
 import type { MapRoutePoint } from "./map-route-utils";
 import { validatePayload } from "./payload-validators";
-import { units } from "./prefs";
+import { prefs, units } from "./prefs";
 import { initialTelemetryState } from "./telemetry-state";
 
   const VD = window.VoltDashboard;
@@ -1044,9 +1044,32 @@ import { initialTelemetryState } from "./telemetry-state";
   // car reports SOC against that usable window, so charge-energy math uses it.
   // Used only as a fallback when the live SOH-derived capacity isn't available.
   const VOLT_USABLE_KWH = 14;
-  // Default charge target. The Volt charges to 100% of usable SOC by default; a
-  // target < 100 would simply shrink the remaining-energy estimate.
-  const LIVE_CHARGE_TARGET_SOC = 100;
+  // Charge target (M2). Defaults to a full 100% charge; the user can set a daily
+  // target (e.g. 80%) on the Charge tab, which both shrinks the remaining-energy
+  // estimate here and drives the native "target reached" notification. Stored as
+  // the "chargeTargetSoc" preference and clamped to [50, 100] to match the input.
+  const LIVE_CHARGE_TARGET_SOC_DEFAULT = 100;
+  const LIVE_CHARGE_TARGET_SOC_MIN = 50;
+  const LIVE_CHARGE_TARGET_SOC_MAX = 100;
+
+  function chargeTargetSoc(): number {
+    const raw = Number(prefs.get<number>("chargeTargetSoc", LIVE_CHARGE_TARGET_SOC_DEFAULT));
+    if (!Number.isFinite(raw)) return LIVE_CHARGE_TARGET_SOC_DEFAULT;
+    return Math.min(LIVE_CHARGE_TARGET_SOC_MAX, Math.max(LIVE_CHARGE_TARGET_SOC_MIN, Math.round(raw)));
+  }
+  // Minimum plausible charger power (kW) to treat the car as actively charging.
+  // A noisy/balancing reading (e.g. 0.2 kW) divided into the remaining energy
+  // produces an absurd multi-hour ETA on the most prominent live card, so the
+  // gate requires a real Level-1-or-better draw before showing an estimate.
+  const MIN_LIVE_CHARGE_POWER_KW = 0.5;
+  // ETA ceiling (ms). Above this the estimate is too uncertain to commit to a
+  // number, so the card shows "Estimating…" instead of e.g. "~70h to 100%".
+  const MAX_LIVE_CHARGE_ETA_MS = 24 * 3600 * 1000;
+  // Treat the pack as "topping off" when the remaining energy or the SOC gap to
+  // the target rounds to roughly nothing — avoids a flickering "~0m to 100%"
+  // while the charger is still drawing a trickle to balance the final cells.
+  const LIVE_CHARGE_NEARLY_FULL_KWH = 0.05;
+  const LIVE_CHARGE_NEARLY_FULL_SOC_GAP = 1;
 
   // Estimated usable pack capacity (kWh). When the car reports state-of-health,
   // scale the nominal usable energy by it (a degraded pack holds less); else
@@ -1058,34 +1081,49 @@ import { initialTelemetryState } from "./telemetry-state";
     return VOLT_USABLE_KWH;
   }
 
-  // Live time-to-full while charging (Charge tab). Active charge = live charger
-  // power > 0 AND a known SOC below the target. Shows the estimated time to the
-  // target SOC and the energy still needed; hides entirely otherwise so a parked
-  // or discharging car never shows a stale ETA.
+  // Live time-to-full while charging (Charge tab). Active charge = a plausible
+  // live charger power (>= MIN_LIVE_CHARGE_POWER_KW, so a balancing trickle
+  // doesn't pass the gate) AND a known SOC below the target. Shows the estimated
+  // time to the target SOC and the energy still needed; hides entirely otherwise
+  // so a parked or discharging car never shows a stale ETA. The ETA is clamped:
+  // a near-full pack shows "Topping off / nearly full" and an implausibly long
+  // estimate shows "Estimating…" rather than an absurd "~70h to 100%".
   //   remaining_kWh = usable_kWh * (target - soc) / 100
   //   time_to_full  = remaining_kWh / charger_power_kW
   function renderLiveCharge() {
     const card = el("liveChargeCard");
     if (!card) return;
     const t = state.telemetry || {};
+    const targetSoc = chargeTargetSoc();
     const powerKw = Number(t.chargerPowerKw);
     const soc = Number(t.soc);
     const charging =
-      Number.isFinite(powerKw) && powerKw > 0 &&
-      Number.isFinite(soc) && soc >= 0 && soc < LIVE_CHARGE_TARGET_SOC;
+      Number.isFinite(powerKw) && powerKw >= MIN_LIVE_CHARGE_POWER_KW &&
+      Number.isFinite(soc) && soc >= 0 && soc < targetSoc;
     if (!charging) {
       card.hidden = true;
       return;
     }
     card.hidden = false;
     const usableKwh = estimateUsablePackKwh(Number(t.sohPct));
-    const remainingKwh = Math.max(0, usableKwh * (LIVE_CHARGE_TARGET_SOC - soc) / 100);
-    const hoursToFull = remainingKwh / powerKw;
-    const etaMs = hoursToFull * 3600 * 1000;
-    VD.setText("liveChargeEta", `~${formatChargeEta(etaMs)} to ${LIVE_CHARGE_TARGET_SOC}%`);
+    const remainingKwh = Math.max(0, usableKwh * (targetSoc - soc) / 100);
+    const socGap = targetSoc - soc;
+    const nearlyFull =
+      remainingKwh < LIVE_CHARGE_NEARLY_FULL_KWH || socGap <= LIVE_CHARGE_NEARLY_FULL_SOC_GAP;
+    const etaMs = (remainingKwh / powerKw) * 3600 * 1000;
+    let etaText: string;
+    if (nearlyFull) {
+      // SOC is essentially at target but the charger is still drawing a trickle.
+      etaText = "Topping off — nearly full";
+    } else if (etaMs > MAX_LIVE_CHARGE_ETA_MS) {
+      // Implausibly long (low power into a large gap); commit to no number.
+      etaText = "Estimating…";
+    } else {
+      etaText = `~${formatChargeEta(etaMs)} to ${targetSoc}%`;
+    }
+    VD.setText("liveChargeEta", etaText);
     VD.setText("liveChargeSoc", `${Math.round(soc)}%`);
     VD.setText("liveChargeRemaining", `${remainingKwh.toFixed(1)} kWh`);
-    VD.setText("liveChargeTarget", `${LIVE_CHARGE_TARGET_SOC}%`);
     const powerBadge = el("liveChargePower");
     if (powerBadge) {
       const label = powerBadge.querySelector("span:last-child");
@@ -1126,6 +1164,9 @@ import { initialTelemetryState } from "./telemetry-state";
   function renderCellGrid() {
     const grid = el("cellGrid");
     if (!grid) return;
+    // The whole card article (header, badge, note) — hidden alongside the inner
+    // grid when there's nothing to show, so it isn't a perpetual empty scaffold.
+    const card = el("cellGridCard");
     const t = state.telemetry || {};
     const rawCells = Array.isArray(t.cellVoltages) ? (t.cellVoltages as unknown[]) : [];
     const cells: number[] = rawCells
@@ -1144,6 +1185,7 @@ import { initialTelemetryState } from "./telemetry-state";
 
     const frag = document.createDocumentFragment();
     if (full) {
+      if (card) card.hidden = false;
       const lo = Math.min(...cells);
       const hi = Math.max(...cells);
       for (let i = 0; i < CELL_GRID_COUNT; i += 1) {
@@ -1162,10 +1204,12 @@ import { initialTelemetryState } from "./telemetry-state";
       const knownMax = Number.isFinite(maxCell);
       const known = (knownMin ? 1 : 0) + (knownMax ? 1 : 0);
       if (known === 0) {
-        // M9 (interim): with no per-cell probe data AND no live lowest/highest groups yet, render NO
-        // boxes rather than a wall of 96 grey "unknown" cells that reads as a broken/empty grid. The
-        // card collapses to its explanatory note until the car reports cell data. (Full per-cell
-        // probe is deferred pending on-car PID validation — see sensor-expansion-plan.)
+        // M9 → C5: with no per-cell probe data AND no live lowest/highest groups yet, hide the WHOLE
+        // card (header, badge, note, grid) rather than leaving a permanently-visible empty scaffold
+        // that can only ever show "min/max or nothing". The card reappears the moment the car reports
+        // any cell data. (Full per-cell probe is deferred pending on-car PID validation — see
+        // sensor-expansion-plan.)
+        if (card) card.hidden = true;
         grid.hidden = true;
         grid.replaceChildren();
         VD.setText("cellGridBadge", "awaiting probe");
@@ -1176,6 +1220,7 @@ import { initialTelemetryState } from "./telemetry-state";
         );
         return;
       }
+      if (card) card.hidden = false;
       grid.hidden = false;
       for (let i = 1; i <= CELL_GRID_COUNT; i += 1) {
         const box = document.createElement("span");

@@ -59,12 +59,21 @@ open class ObdService :
         )
     private lateinit var engine: ObdPollingEngine
     private lateinit var notifications: ObdNotifications
+
+    // Created in onCreate, hooks called from both the main thread (onSessionStart) and the poll/IO
+    // thread (broadcastTelemetry → onTelemetry), so the reference is @Volatile. (Report item B1.)
+    @Volatile
     private var eventCoordinator: EventNotificationCoordinator? = null
 
     // Persists a compact widget snapshot and nudges the home-screen widget when state changes.
     // Nullable + guarded: created in onCreate so test subclasses that drive broadcast* directly
     // without onCreate (or before it) simply skip the widget hook instead of crashing.
     private var widgetUpdater: WidgetUpdater? = null
+
+    // The process-wide app-log mirror installed in onCreate. Held so onDestroy can detach it from
+    // OBDLog and release the long-lived buffered-writer file handle (G1) instead of leaking it for
+    // the rest of the process lifetime.
+    private var rollingAppLog: RollingAppLog? = null
 
     override var locationTracker: LocationTracker? = null
 
@@ -156,7 +165,7 @@ open class ObdService :
         notifications.createChannel()
         eventCoordinator = createEventCoordinator()
         widgetUpdater = createWidgetUpdater()
-        val rollingAppLog = RollingAppLog(File(filesDir, "app-log"))
+        rollingAppLog = RollingAppLog(File(filesDir, "app-log"))
         OBDLog.mirror(rollingAppLog)
         val summaryStore = SessionSummaryStore.getInstance(filesDir)
         recorder =
@@ -196,7 +205,7 @@ open class ObdService :
      * `open` so a test subclass can substitute a fake.
      */
     open fun createEventCoordinator(): EventNotificationCoordinator {
-        val sharedPrefs = getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
+        val sharedPrefs = getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
         val eventPrefs = EventNotificationPrefs(sharedPrefs)
         val notifier = EventNotifier(this)
         notifier.createChannel()
@@ -289,6 +298,11 @@ open class ObdService :
         recorder.shutdown()
         localStore?.close()
         localStore = null
+        // Detach the app-log mirror before releasing its handle so any late OBDLog call becomes a
+        // no-op rather than lazily reopening the writer we're about to close.
+        OBDLog.mirror(null)
+        rollingAppLog?.close()
+        rollingAppLog = null
         super.onDestroy()
     }
 

@@ -10,6 +10,37 @@ It does three things:
 
 The app also includes a demo telemetry mode so the UI can be tested without a scanner.
 
+## Features
+
+Beyond live OBD streaming, the app (v0.15.0) ships these user-facing features:
+
+- **Home-screen widget** — an at-a-glance vehicle snapshot (SOC, charging/connection
+  state, and an "updated Xm ago" freshness line). Place it like any Android widget:
+  long-press an empty area of the home screen → **Widgets** → find **Volt Tracker** →
+  drag it out. Tapping the widget opens the app. The widget runs out-of-process and
+  reads a compact persisted snapshot, so it shows the last known state even when the
+  app is closed (see [`docs/adr/0007-event-notifications-and-widget-snapshot.md`](docs/adr/0007-event-notifications-and-widget-snapshot.md)).
+- **Event notifications** — optional one-shot alerts for **charge complete**, a
+  **new diagnostic code** appearing on a scan, **low SOC**, and **high pack
+  temperature** (the last two are threshold alerts you configure in Settings). These
+  post to a dedicated "alerts" notification channel. On **Android 13+ they require the
+  `POST_NOTIFICATIONS` runtime permission** — grant it when prompted (or in Android
+  app settings); without it the alerts are silently skipped, never crash. Toggle each
+  alert and its threshold from the dashboard Settings screen.
+- **Per-trip GPX / CSV export** — export any logged drive as a GPX 1.1 track or a CSV
+  sample log from the Trips/Map view and hand it to any app via the Android share
+  sheet (e.g. Strava, Garmin, a spreadsheet). These files contain **full-precision
+  GPS coordinates and timestamps in plaintext** — see
+  [`docs/privacy-data-handling.md`](docs/privacy-data-handling.md).
+- **Maintenance log** — record service entries (type, free-text note, optional
+  odometer and date) from the Insights screen. The log is independent of OBD
+  sessions and is preserved when you clear stored OBD data.
+- **Trip labels** — rename any logged drive; the label is keyed to the drive and
+  survives trip re-detection. Clear it by saving an empty name.
+- **Guided onboarding** — a first-run setup walkthrough (pair adapter → grant
+  Bluetooth → grant location → connect or demo) that skips steps already satisfied.
+  Re-open it any time from the **Setup guide** affordance.
+
 ## Codebase Map
 
 Production source layout under `app/src/main/kotlin/com/volttracker/obdpoc/`:

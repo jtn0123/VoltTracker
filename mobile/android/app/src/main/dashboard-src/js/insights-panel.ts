@@ -80,10 +80,42 @@ import { prefs, units } from "./prefs";
   const ASSUMED_VOLT_MI_PER_KWH = 3.5;
   const METERS_PER_MILE = 1609.344;
 
-  // Estimated lifetime savings vs an equivalent gas car. Shown only when the
-  // user has set their comparison MPG, gas price, and electricity rate (all > 0)
-  // AND there is logged distance to compare; otherwise the row hides so the card
-  // never advertises a fabricated number.
+  // Renders the savings-row note as plain text (the normal "estimated vs …"
+  // assumptions line). Replaces any prompt-state children with a single text
+  // node so a later real estimate can't leave a stale "Open Settings" link.
+  function setSavingsNoteText(text: string) {
+    const note = el("insightSavingsNote");
+    if (!note) return;
+    note.replaceChildren(document.createTextNode(text));
+  }
+
+  // Renders the savings-row note in its "prompt" state: a short call-to-action
+  // plus a tap-through that jumps to Settings → Preferences (delegated by the
+  // document-level [data-nav-jump] handler in actions.ts, so a dynamically
+  // injected button works without re-binding). Mirrors the chargeEnergyHint
+  // pattern in storage-status.ts but is tappable. Built with createElement /
+  // textContent only (XSS-safe).
+  function setSavingsNotePrompt() {
+    const note = el("insightSavingsNote");
+    if (!note) return;
+    const text = document.createTextNode(
+      "Set your MPG, gas price, and rate in Settings to estimate savings. "
+    );
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "link-btn";
+    link.dataset.navJump = "settings";
+    link.textContent = "Open Settings";
+    note.replaceChildren(text, link);
+  }
+
+  // Estimated lifetime savings vs an equivalent gas car. Three states:
+  //   • no logged distance        → row hidden (nothing to compare yet)
+  //   • distance but prefs unset   → row shown in a "prompt" state with a
+  //                                  tap-through to Settings, so the savings the
+  //                                  empty state advertises is discoverable
+  //                                  rather than silently invisible (C3)
+  //   • distance + all prefs set   → the estimated savings figure
   //   gas cost = (miles / mpg) * gasPrice
   //   EV cost  = energy_kWh * pricePerKwh, with energy estimated from distance
   //              using ASSUMED_VOLT_MI_PER_KWH (EV energy isn't in the payload).
@@ -95,11 +127,23 @@ import { prefs, units } from "./prefs";
     const mpg = prefs.get<number>("mpg", 0);
     const gasPrice = prefs.get<number>("gasPricePerGal", 0);
     const pricePerKwh = prefs.get<number>("pricePerKwh", 0);
-    const ready = mpg > 0 && gasPrice > 0 && pricePerKwh > 0 && meters > 0;
-    if (!ready) {
+    const hasDistance = meters > 0;
+    const prefsReady = mpg > 0 && gasPrice > 0 && pricePerKwh > 0;
+    if (!hasDistance) {
+      // Nothing logged yet — keep the row hidden so the card never prompts for
+      // prefs the user can't act on (there's no distance to estimate against).
       row.hidden = true;
       VD.setText("insightSavings", "--");
-      VD.setText("insightSavingsNote", "");
+      setSavingsNoteText("");
+      return;
+    }
+    if (!prefsReady) {
+      // Distance exists but the comparison prefs are missing — surface a prompt
+      // with a path to set them instead of leaving the advertised savings
+      // permanently hidden.
+      row.hidden = false;
+      VD.setText("insightSavings", "--");
+      setSavingsNotePrompt();
       return;
     }
     const miles = meters / METERS_PER_MILE;
@@ -111,8 +155,7 @@ import { prefs, units } from "./prefs";
     // Show the magnitude; a leading "-" would read as "you spent more" only when
     // EV electricity is pricier than the gas it replaced (rare but possible).
     VD.setText("insightSavings", (savings < 0 ? "-$" : "$") + Math.abs(savings).toFixed(2));
-    VD.setText(
-      "insightSavingsNote",
+    setSavingsNoteText(
       `Estimated vs a ${Math.round(mpg)} mpg car at $${gasPrice.toFixed(2)}/gal · assumes ${ASSUMED_VOLT_MI_PER_KWH} mi/kWh`
     );
   }
@@ -282,6 +325,21 @@ import { prefs, units } from "./prefs";
       return;
     }
     card.hidden = false;
+    // Theme-aware colors for the inline SVG. CSS variables don't cascade into
+    // SVG presentation attributes (fill/stroke) here the way they do for CSS
+    // properties, so read the resolved token values once and inject the
+    // literals — this keeps the scatter (gridlines, axis labels, grade-coded
+    // dots, trend line) legible in BOTH the dark and light themes instead of
+    // hardcoding dark-only colors. Fallbacks mirror the dark token defaults.
+    const tokens = getComputedStyle(document.documentElement);
+    const token = (name: string, fallback: string) =>
+      (tokens.getPropertyValue(name) || "").trim() || fallback;
+    const lineColor = token("--line", "rgba(255,255,255,0.1)"); // gridlines
+    const axisColor = token("--muted", "#aaaab4"); // axis tick labels
+    const trendColor = token("--volt", "#ff7a45"); // best-fit trend path
+    const evColor = token("--ev", "#b8e63b"); // flat-grade dots + headline
+    const downColor = token("--map-accent", "#4cc4ff"); // downhill (negative grade)
+    const upColor = token("--bad", "#ff6b5f"); // uphill (positive grade)
     const w = Math.max(300, chart.clientWidth || 360);
     const h = 280;
     const padL = 38;
@@ -296,7 +354,7 @@ import { prefs, units } from "./prefs";
     const xOf = (mph: number) => padL + (mph / axisMaxMph) * (w - padL - padR);
     const yS = (e: number) => padT + (1 - e / 7) * (h - padT - padB);
     const gColor = (g: number) =>
-      g <= -0.006 ? "#5cc8ff" : g >= 0.006 ? "#ff6b5f" : "#b8e63b";
+      g <= -0.006 ? downColor : g >= 0.006 ? upColor : evColor;
     const svgNs = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNs, "svg");
     svg.setAttribute("width", String(w));
@@ -316,12 +374,12 @@ import { prefs, units } from "./prefs";
         y1: padT,
         x2: xOf(gx),
         y2: h - padB,
-        stroke: "rgba(255,255,255,0.06)"
+        stroke: lineColor
       });
       appendText(String(gx), {
         x: xOf(gx),
         y: h - padB + 15,
-        fill: "#8b8c99",
+        fill: axisColor,
         "font-size": 9,
         "font-family": "ui-monospace,monospace",
         "text-anchor": "middle"
@@ -333,12 +391,12 @@ import { prefs, units } from "./prefs";
         y1: yS(gy),
         x2: w - padR,
         y2: yS(gy),
-        stroke: "rgba(255,255,255,0.06)"
+        stroke: lineColor
       });
       appendText(String(gy), {
         x: padL - 6,
         y: yS(gy) + 3,
-        fill: "#8b8c99",
+        fill: axisColor,
         "font-size": 9,
         "font-family": "ui-monospace,monospace",
         "text-anchor": "end"
@@ -373,7 +431,7 @@ import { prefs, units } from "./prefs";
       setSvgAttrs(document.createElementNS(svgNs, "path"), {
         d: trend,
         fill: "none",
-        stroke: "#ff7a45",
+        stroke: trendColor,
         "stroke-width": 2.5,
         "stroke-linejoin": "round"
       })
@@ -381,7 +439,7 @@ import { prefs, units } from "./prefs";
     appendText("speed (mph) ->", {
       x: w - padR,
       y: h - 4,
-      fill: "#8b8c99",
+      fill: axisColor,
       "font-size": 9,
       "font-family": "ui-monospace,monospace",
       "text-anchor": "end"
@@ -392,7 +450,7 @@ import { prefs, units } from "./prefs";
       if (best.e > 0) {
         const speed = document.createElement("b");
         speed.textContent = units.speedText(best.mph / 0.621371);
-        speed.style.color = "#b8e63b";
+        speed.style.color = evColor;
         head.append(
           "Most efficient around ",
           speed,

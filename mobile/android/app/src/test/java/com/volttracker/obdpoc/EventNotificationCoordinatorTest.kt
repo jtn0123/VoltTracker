@@ -175,7 +175,9 @@ class EventNotificationCoordinatorTest {
     }
 
     @Test
-    fun autoScanRunsGenericMode03AndFeedsNewDtcOnConnect() {
+    fun autoScanRunsGenericMode03AndSilentlyBaselinesOnFirstConnect() {
+        // First auto-scan ever (no baseline): the pre-existing P0420 is NOT "new", so it silently
+        // establishes the baseline rather than posting a false new-DTC alert. (Report item B3.)
         eventPrefs.setAutoScanOnConnectEnabled(true)
         val coord = coordinator()
         val engine = FakeDtcEngine()
@@ -183,10 +185,110 @@ class EventNotificationCoordinatorTest {
         coord.maybeRunAutoDtcScan(engine)
 
         assertTrue("auto-scan sent generic Mode 03", engine.commands.contains("03"))
+        assertTrue("first scan must not raise a new-DTC alert", notifier.posted.isEmpty())
+        assertTrue("but the baseline is established", eventPrefs.lastScanDtcCodes().contains("P0420"))
+        assertTrue(eventPrefs.hasDtcBaseline())
+    }
+
+    @Test
+    fun autoScanFeedsNewDtcOnceABaselineExists() {
+        // A baseline already exists (e.g. a prior scan), so an auto-scan that surfaces a code not in
+        // it DOES fire the new-DTC notification.
+        eventPrefs.setAutoScanOnConnectEnabled(true)
+        eventPrefs.setLastScanDtcCodes(listOf("P0AA6"))
+        val coord = coordinator()
+        val engine = FakeDtcEngine()
+
+        coord.maybeRunAutoDtcScan(engine)
+
         assertEquals(1, notifier.posted.size)
         val event = notifier.posted[0] as EventNotificationDecider.Event.NewDtc
         assertTrue(event.newCodes.contains("P0420"))
         assertTrue(eventPrefs.lastScanDtcCodes().contains("P0420"))
+    }
+
+    // ---- reconnect / null-payload / clock-fallback (D5) --------------------------------
+
+    @Test
+    fun withinSessionReconnectDoesNotReplayACompletedCharge() {
+        // A charge completes once. A mid-session disconnect (connected:false) and reconnect must NOT
+        // re-fire the completed charge — the coordinator only resets per-session state on an explicit
+        // onSessionStart (a real new logging session), not on a within-session drop+resume, which is
+        // the field's most common event.
+        val coord = coordinator()
+        for (i in 0..3) {
+            coord.onTelemetry(obdSample(i * 600_000L, packCurrentA = -20.0, packVoltage = 355.0))
+        }
+        val completed = coord.onTelemetry(obdSample(2_500_000L, packCurrentA = 5.0, speedKph = 30.0))
+        assertEquals(1, completed.size)
+        assertEquals(1, notifier.posted.size)
+
+        // Adapter drops mid-session: a connected:false status-shaped payload (no OBD charging signal).
+        val disconnect = JSONObject()
+        disconnect.put("source", "obd")
+        disconnect.put("connected", false)
+        disconnect.put("updatedAt", 2_600_000L)
+        assertTrue("a disconnect sample must not post anything", coord.onTelemetry(disconnect).isEmpty())
+
+        // Reconnect and resume non-charging samples within the SAME session (no onSessionStart).
+        assertTrue(coord.onTelemetry(obdSample(2_700_000L, packCurrentA = 4.0, speedKph = 25.0)).isEmpty())
+        assertTrue(coord.onTelemetry(obdSample(2_800_000L, packCurrentA = 4.0, speedKph = 25.0)).isEmpty())
+
+        assertEquals("the completed charge must not be replayed on reconnect", 1, notifier.posted.size)
+    }
+
+    @Test
+    fun nonObdSourcePayloadIsIgnored() {
+        // A GPS-sourced (or any non-obd, non-scan) payload must not drive the live-sample path.
+        val coord = coordinator()
+        val gps = JSONObject()
+        gps.put("source", "gps")
+        gps.put("latitude", 37.0)
+        gps.put("longitude", -122.0)
+        gps.put("soc", 5.0) // even a low SOC here must be ignored — it's not an OBD reading.
+        eventPrefs.setLowSocEnabled(true)
+
+        val events = coord.onTelemetry(gps)
+
+        assertTrue("a non-obd payload must be ignored", events.isEmpty())
+        assertTrue(notifier.posted.isEmpty())
+    }
+
+    @Test
+    fun updatedAtZeroSampleUsesInjectedClockForChargeEnergyIntegration() {
+        // When a sample carries updatedAt<=0 the coordinator falls back to its injected clock for the
+        // capture time, so charge-energy integration still measures real elapsed time. Advance the
+        // clock an hour between two steady 7.1 kW samples and confirm the completed charge reports
+        // ~7.1 kWh rather than the zero it would get if the missing timestamp collapsed the interval.
+        val coord = coordinator()
+        // updatedAt omitted entirely -> optLong default 0 -> nowMs() fallback. Need >= MIN_CHARGE_SAMPLES.
+        now = 0L
+        coord.onTelemetry(chargingSampleNoTimestamp())
+        now = 1_800_000L
+        coord.onTelemetry(chargingSampleNoTimestamp())
+        now = 3_600_000L
+        coord.onTelemetry(chargingSampleNoTimestamp())
+        // Charge ends.
+        now = 3_660_000L
+        val ended = JSONObject()
+        ended.put("source", "obd")
+        ended.put("packCurrentA", 5.0)
+        ended.put("speedKph", 30.0)
+        val events = coord.onTelemetry(ended)
+
+        assertEquals(1, events.size)
+        val event = events[0] as EventNotificationDecider.Event.ChargeComplete
+        assertEquals("integration must use the injected clock, not a zero interval", 7.1, event.energyKwh, 0.1)
+    }
+
+    /** A steady ~7.1 kW charging OBD sample with NO updatedAt field, forcing the nowMs() fallback. */
+    private fun chargingSampleNoTimestamp(): JSONObject {
+        val payload = JSONObject()
+        payload.put("source", "obd")
+        payload.put("packCurrentA", -20.0)
+        payload.put("packVoltage", 355.0)
+        payload.put("speedKph", 0.0)
+        return payload
     }
 
     @Test
@@ -196,6 +298,53 @@ class EventNotificationCoordinatorTest {
         coord.maybeRunAutoDtcScan(engine)
         assertTrue("disabled auto-scan must not send commands", engine.commands.isEmpty())
         assertTrue(notifier.posted.isEmpty())
+    }
+
+    @Test
+    fun settingsAreCachedAcrossSamplesAndRebuiltOnlyOnAToggle() {
+        // G2: the coordinator must not re-read the toggle getters on every 1 Hz sample. Count the
+        // settings getter reads via a counting prefs; many samples should read the toggle getters
+        // once (the cached snapshot), and a mid-session toggle should rebuild exactly once more.
+        val counting = CountingPrefs(prefs)
+        val countingEventPrefs = EventNotificationPrefs(counting)
+        val coord =
+            EventNotificationCoordinator(
+                countingEventPrefs,
+                notifier,
+                AutoScanController(countingEventPrefs, nowMs = { now }),
+                nowMs = { now },
+            )
+        coord.onSessionStart()
+
+        val readsAfterStart = counting.chargeCompleteReads
+        repeat(20) { i -> coord.onTelemetry(obdSample(i.toLong(), soc = 50.0)) }
+        assertEquals(
+            "20 identical-version samples must not re-read the toggles",
+            readsAfterStart,
+            counting.chargeCompleteReads,
+        )
+
+        // A mid-session toggle bumps the version, so the very next sample rebuilds the snapshot once.
+        countingEventPrefs.setChargeCompleteEnabled(false)
+        coord.onTelemetry(obdSample(21L, soc = 50.0))
+        assertTrue("a toggle forces exactly one rebuild", counting.chargeCompleteReads > readsAfterStart)
+    }
+
+    /** Delegates to a real prefs but counts reads of the charge-complete toggle, to prove caching. */
+    private class CountingPrefs(
+        private val delegate: SharedPreferences,
+    ) : SharedPreferences by delegate {
+        var chargeCompleteReads = 0
+
+        override fun getBoolean(
+            key: String?,
+            defValue: Boolean,
+        ): Boolean {
+            if (key == EventNotificationPrefs.PREF_CHARGE_COMPLETE_ENABLED) {
+                chargeCompleteReads += 1
+            }
+            return delegate.getBoolean(key, defValue)
+        }
     }
 
     private class RecordingNotifier(

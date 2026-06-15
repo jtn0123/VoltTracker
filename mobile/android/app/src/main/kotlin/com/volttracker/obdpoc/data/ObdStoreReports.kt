@@ -330,6 +330,67 @@ class ObdStoreReports(
         pointLimit: Int,
     ): JSONArray = safeArray { ObdStoreRouteProjection.recentRoutes(helper.readableDatabase, limit, pointLimit) }
 
+    /**
+     * Trips bundled for the bulk all-trips CSV export (M6). Reuses [ObdStoreTrips.tripsJson] for the
+     * trip list (so it shares drive-window detection, hiding, and labels) and the per-trip route
+     * projection for the GPS samples. Each element is `{ tripId, label, route }`, where `route` is
+     * the same `{ points, … }` payload a single-trip export uses. Bounded by [tripLimit] trips and
+     * [pointLimit] samples/trip so a huge history can't blow up memory or the share file.
+     *
+     * `TripTrackFormatter.toAllTripsCsv` turns this into one CSV with a leading trip-id/label column.
+     */
+    fun allTripsForExportJson(
+        tripLimit: Int,
+        pointLimit: Int,
+    ): JSONArray =
+        safeArray {
+            val out = JSONArray()
+            val trips = trips.tripsJson(tripLimit)
+            for (i in 0 until trips.length()) {
+                val trip = trips.optJSONObject(i) ?: continue
+                val routeKey = trip.optString("id", "")
+                if (routeKey.isEmpty()) {
+                    continue
+                }
+                val route = boundedTripRouteJson(routeKey, pointLimit)
+                val points = route.optJSONArray("points")
+                if (points == null || points.length() == 0) {
+                    continue
+                }
+                out.put(
+                    JSONObject()
+                        .put("tripId", routeKey)
+                        .put("label", trip.optString("label", ""))
+                        .put("route", route),
+                )
+            }
+            out
+        }
+
+    private fun boundedTripRouteJson(
+        routeKey: String,
+        pointLimit: Int,
+    ): JSONObject {
+        val parsed = DriveWindowDetector.parseRouteKey(routeKey) ?: return JSONObject()
+        val session = getSession(parsed.sessionId) ?: return JSONObject()
+        val db = helper.readableDatabase
+        if (ObdTripExclusions.isHidden(db, routeKey)) {
+            return JSONObject()
+        }
+        return try {
+            ObdStoreRouteProjection.routeForSession(
+                db,
+                session,
+                pointLimit.coerceIn(1, ObdStoreRouteProjection.MAX_TRACK_POINTS),
+                parsed.startedAtMs,
+                parsed.endedAtMs,
+                routeKey,
+            )
+        } catch (ex: JSONException) {
+            JSONObject()
+        }
+    }
+
     fun diagnosticsSummaryJson(limit: Int): JSONObject {
         val db = helper.readableDatabase
         val latest = JSONArray()
@@ -529,8 +590,10 @@ class ObdStoreReports(
 
     /**
      * The user-authored maintenance log (M5), newest first. Each row carries `id`, `createdAtMs`,
-     * `odometerKm` (JSON null when unknown), `type`, and `note`. The dashboard renders these as the
-     * real maintenance entries, replacing the old hardcoded placeholder rows.
+     * `odometerKm` (JSON null when unknown), `type`, `note`, and the optional service interval
+     * (`intervalKm` / `intervalMonths`, JSON null when unset) the dashboard uses to compute a
+     * "next due / overdue" line (M1/C4). The dashboard renders these as the real maintenance
+     * entries, replacing the old hardcoded placeholder rows.
      */
     fun maintenanceLogJson(limit: Int): JSONArray {
         val payload = JSONArray()
@@ -538,7 +601,7 @@ class ObdStoreReports(
         db
             .query(
                 VoltTrackerDb.TABLE_MAINTENANCE_LOG,
-                arrayOf("_id", "created_at_ms", "odometer_km", "type", "note"),
+                arrayOf("_id", "created_at_ms", "odometer_km", "type", "note", "interval_km", "interval_months"),
                 null,
                 null,
                 null,
@@ -547,6 +610,8 @@ class ObdStoreReports(
                 ObdStoreSupport.boundedLimit(limit),
             ).use { cursor ->
                 val odoIndex = cursor.getColumnIndexOrThrow("odometer_km")
+                val intervalKmIndex = cursor.getColumnIndexOrThrow("interval_km")
+                val intervalMonthsIndex = cursor.getColumnIndexOrThrow("interval_months")
                 while (cursor.moveToNext()) {
                     val item = JSONObject()
                     try {
@@ -558,6 +623,18 @@ class ObdStoreReports(
                         )
                         item.put("type", cursor.getString(3) ?: "")
                         item.put("note", cursor.getString(4) ?: "")
+                        item.put(
+                            "intervalKm",
+                            if (cursor.isNull(intervalKmIndex)) JSONObject.NULL else cursor.getDouble(intervalKmIndex),
+                        )
+                        item.put(
+                            "intervalMonths",
+                            if (cursor.isNull(intervalMonthsIndex)) {
+                                JSONObject.NULL
+                            } else {
+                                cursor.getInt(intervalMonthsIndex)
+                            },
+                        )
                     } catch (ignored: JSONException) {
                         // Local fields are safe.
                     }

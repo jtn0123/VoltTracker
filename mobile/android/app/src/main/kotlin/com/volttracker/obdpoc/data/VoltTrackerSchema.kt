@@ -168,6 +168,10 @@ object VoltTrackerSchema {
      * session/vehicle (the user may log service performed off-app), so it has no foreign keys and
      * survives a full data clear that drops sessions. [odometerKm] is optional (user may not know
      * it); [type] is a free-text/category label and [note] is free-text detail.
+     *
+     * [interval_km] / [interval_months] are the optional service interval (M1/C4): when set, the
+     * dashboard computes a "next due / overdue" line against the latest logged odometer and/or
+     * elapsed months. Both are nullable — a plain history entry leaves them NULL.
      */
     fun createMaintenanceLog(db: SQLiteDatabase) {
         db.execSQL(
@@ -177,7 +181,9 @@ object VoltTrackerSchema {
                 created_at_ms INTEGER NOT NULL,
                 odometer_km REAL,
                 type TEXT,
-                note TEXT
+                note TEXT,
+                interval_km REAL,
+                interval_months INTEGER
             )
             """.trimIndent(),
         )

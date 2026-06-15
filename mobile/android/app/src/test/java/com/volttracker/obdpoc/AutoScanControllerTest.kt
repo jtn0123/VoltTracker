@@ -48,9 +48,19 @@ class AutoScanControllerTest {
         controller.resetForConnect()
         var runs = 0
 
-        assertTrue(controller.onConnected { runs += 1 })
+        assertTrue(
+            controller.onConnected {
+                runs += 1
+                true
+            },
+        )
         // A second onConnected within the same connect must not scan again.
-        assertFalse(controller.onConnected { runs += 1 })
+        assertFalse(
+            controller.onConnected {
+                runs += 1
+                true
+            },
+        )
 
         assertEquals(1, runs)
     }
@@ -62,7 +72,7 @@ class AutoScanControllerTest {
         val controller = AutoScanController(eventPrefs, throttleMs = throttle, nowMs = { now })
 
         controller.resetForConnect()
-        assertTrue(controller.onConnected { })
+        assertTrue(controller.onConnected { true })
 
         // A fresh connect 10 minutes later is still inside the throttle window.
         now += 10L * 60L * 1000L
@@ -72,7 +82,29 @@ class AutoScanControllerTest {
         // Past the throttle window it runs again.
         now += 25L * 60L * 1000L
         controller.resetForConnect()
-        assertTrue(controller.onConnected { })
+        assertTrue(controller.onConnected { true })
+    }
+
+    @Test
+    fun emptyScanDoesNotArmThrottleSoNextReconnectRetries() {
+        // A failed/empty Mode-03 read (clone adapter / transient bus error) must NOT arm the per-drive
+        // throttle — otherwise the next reconnect within the window silently never retries, and the
+        // user never gets the codes that drive the new-DTC notification. (Report item B2.)
+        eventPrefs.setAutoScanOnConnectEnabled(true)
+        val throttle = 30L * 60L * 1000L
+        val controller = AutoScanController(eventPrefs, throttleMs = throttle, nowMs = { now })
+
+        controller.resetForConnect()
+        // The scan ran but read no codes -> reports false -> throttle stays disarmed.
+        assertTrue(controller.onConnected { false })
+        assertEquals("no timestamp persisted after an empty scan", 0L, eventPrefs.lastAutoScanAtMs())
+
+        // A reconnect five minutes later — still inside the throttle window — retries because the
+        // empty scan never stamped the throttle.
+        now += 5L * 60L * 1000L
+        controller.resetForConnect()
+        assertTrue("empty scan must not block the next reconnect", controller.onConnected { true })
+        assertEquals("a successful scan now stamps the throttle", now, eventPrefs.lastAutoScanAtMs())
     }
 
     @Test
@@ -80,7 +112,7 @@ class AutoScanControllerTest {
         eventPrefs.setAutoScanOnConnectEnabled(true)
         val controller = AutoScanController(eventPrefs, nowMs = { now })
         controller.resetForConnect()
-        assertTrue(controller.onConnected { })
+        assertTrue(controller.onConnected { true })
 
         eventPrefs.setAutoScanOnConnectEnabled(false)
         now += 60L * 60L * 1000L
@@ -93,7 +125,7 @@ class AutoScanControllerTest {
         eventPrefs.setAutoScanOnConnectEnabled(true)
         val first = AutoScanController(eventPrefs, nowMs = { now })
         first.resetForConnect()
-        assertTrue(first.onConnected { })
+        assertTrue(first.onConnected { true })
 
         // A new controller (e.g. fresh service) reads the persisted timestamp and stays throttled.
         now += 5L * 60L * 1000L

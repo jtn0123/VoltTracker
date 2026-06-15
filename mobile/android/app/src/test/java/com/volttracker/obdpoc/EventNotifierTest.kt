@@ -74,6 +74,34 @@ class EventNotifierTest {
     }
 
     @Test
+    fun chargeInterruptedAndTargetReachedPostUnderTheirOwnIds() {
+        grantPostNotifications()
+        val notifier = EventNotifier(context)
+
+        // Target-reached (M2) is its own id; charge-interrupted (M3) shares the charge id so it
+        // replaces (not stacks with) a charge-complete of the same drive.
+        notifier.notify(EventNotificationDecider.Event.TargetSocReached(80.0, 80.0))
+        notifier.notify(EventNotificationDecider.Event.ChargeInterrupted(47.0, 80.0))
+
+        assertEquals(2, shadowOf(manager).size())
+        assertNotNull(shadowOf(manager).getNotification(EventNotifier.NOTIFICATION_ID_TARGET_SOC))
+        assertNotNull(shadowOf(manager).getNotification(EventNotifier.NOTIFICATION_ID_CHARGE))
+    }
+
+    @Test
+    fun chargeInterruptedReplacesAChargeCompleteOfTheSameDrive() {
+        grantPostNotifications()
+        val notifier = EventNotifier(context)
+
+        notifier.notify(EventNotificationDecider.Event.ChargeComplete(5.0))
+        notifier.notify(EventNotificationDecider.Event.ChargeInterrupted(40.0, 80.0))
+
+        // Both ride NOTIFICATION_ID_CHARGE, so only the latest charge alert remains.
+        assertEquals(1, shadowOf(manager).size())
+        assertNotNull(shadowOf(manager).getNotification(EventNotifier.NOTIFICATION_ID_CHARGE))
+    }
+
+    @Test
     fun aSecondAlertOfTheSameKindReplacesTheFirst() {
         grantPostNotifications()
         val notifier = EventNotifier(context)

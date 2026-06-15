@@ -959,6 +959,87 @@
     </div>
   </div>
 
+  <!-- Per-trip detail sheet (M7). Opened from a map-session row's "Details"
+       button; populated by map.ts#openTripDetail from the route projection +
+       trip rollup. Modal dialog with a focus trap (actions.ts), so it overlays
+       the map view and traps focus until closed. -->
+  <div
+    id="tripDetailSheet"
+    class="trip-detail-sheet panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="tripDetailTitle"
+    tabindex="-1"
+    hidden
+  >
+    <header class="trip-detail-head">
+      <div>
+        <span class="kicker">Drive detail</span>
+        <h3 id="tripDetailTitle">Drive</h3>
+        <p id="tripDetailSub" class="status-copy"></p>
+      </div>
+      <button
+        type="button"
+        id="tripDetailClose"
+        class="link-btn trip-detail-close"
+        data-action="closeTripDetail"
+        aria-label="Close drive detail"
+      >
+        Close
+      </button>
+    </header>
+    <div
+      class="trip-detail-stats"
+      id="tripDetailStats"
+      aria-label="Drive stats"
+    >
+      <div>
+        <span class="kicker">Distance</span
+        ><strong id="tripDetailDistance">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Duration</span
+        ><strong id="tripDetailDuration">--</strong>
+      </div>
+      <div>
+        <span class="kicker" id="tripDetailAvgLabel">Avg speed</span
+        ><strong id="tripDetailAvgSpeed">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Max speed</span
+        ><strong id="tripDetailMaxSpeed">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Efficiency</span
+        ><strong id="tripDetailEfficiency">--</strong>
+      </div>
+      <div>
+        <span class="kicker">GPS points</span
+        ><strong id="tripDetailPoints">--</strong>
+      </div>
+    </div>
+    <div class="trip-detail-times">
+      <div>
+        <span class="kicker">Started</span
+        ><strong id="tripDetailStart">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Ended</span><strong id="tripDetailEnd">--</strong>
+      </div>
+    </div>
+    <article class="trip-detail-scatter-card">
+      <header>
+        <span class="kicker">Efficiency vs speed — this drive</span>
+        <h4 id="tripDetailScatterHead">Efficiency by speed for this drive.</h4>
+      </header>
+      <div class="eff-scatter" id="tripDetailScatter"></div>
+      <p id="tripDetailScatterEmpty" class="status-copy" hidden>
+        Not enough power/efficiency samples on this drive to plot efficiency vs
+        speed. It fills in when the OBD loop captured battery current.
+      </p>
+    </article>
+  </div>
+
   <div id="scrubber" class="scrubber panel" hidden>
     <div class="scrub-chart" id="scrubChart">
       <div class="scrub-cursor" id="scrubCursor"></div>
@@ -990,13 +1071,69 @@
     <article class="panel list-card">
       <header>
         <span class="kicker">Recorded sessions</span>
-        <button type="button" class="link-btn" data-action="refreshStorage">
-          Refresh
-        </button>
+        <div class="map-sheet-actions">
+          <button
+            type="button"
+            class="link-btn"
+            data-action="exportAllTripsCsv"
+            id="exportAllTripsBtn"
+          >
+            Export all (CSV)
+          </button>
+          <button type="button" class="link-btn" data-action="refreshStorage">
+            Refresh
+          </button>
+        </div>
       </header>
       <p class="status-copy">
         Long-press a drive to mark it as &ldquo;not a trip&rdquo;.
       </p>
+      <!-- Trip list search / sort / favorites filter (M4). Client-side over the
+           already-loaded routes; map.ts reads these and re-renders the list. -->
+      <div class="map-list-controls" role="group" aria-label="Filter drives">
+        <label class="map-list-search">
+          <span class="visually-hidden">Search drives by name or date</span>
+          <input
+            id="mapSessionSearch"
+            type="search"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="Search by name or date…"
+            aria-label="Search drives by name or date"
+          />
+        </label>
+        <div class="map-list-control-row">
+          <div
+            id="mapSessionSort"
+            class="signal-stage-tabs map-list-sort"
+            role="group"
+            aria-label="Sort drives"
+          >
+            <button
+              type="button"
+              data-map-sort="recent"
+              class="is-active"
+              aria-pressed="true"
+            >
+              <span>Recent</span>
+            </button>
+            <button type="button" data-map-sort="distance" aria-pressed="false">
+              <span>Longest</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            id="mapSessionFavoritesOnly"
+            class="tile-toggle map-list-fav-toggle"
+            data-map-favorites-only
+            data-on="false"
+            aria-pressed="false"
+            aria-label="Show favorites only"
+          >
+            ☆ Favorites
+          </button>
+        </div>
+      </div>
       <div id="mapSessionList" class="map-list"></div>
     </article>
   </section>
@@ -1093,9 +1230,24 @@
       </div>
       <div>
         <span class="kicker">Target</span>
-        <strong id="liveChargeTarget">100%</strong>
+        <label class="live-charge-target-field">
+          <input
+            id="liveChargeTargetInput"
+            type="number"
+            inputmode="numeric"
+            min="50"
+            max="100"
+            step="1"
+            placeholder="100"
+            aria-label="Charge target state of charge, percent"
+          />
+          <span aria-hidden="true">%</span>
+        </label>
       </div>
     </div>
+    <p id="liveChargeTargetHint" class="status-copy live-charge-target-hint">
+      You'll get a notification when the battery reaches this target.
+    </p>
     <p class="status-copy">
       Estimated — actual time varies as charging tapers.
     </p>
@@ -1148,8 +1300,10 @@
 
   <!-- 96-cell voltage map (scaffold). Renders full per-cell data when telemetry
        carries a cellVoltages array; otherwise highlights the live lowest/highest
-       cell groups. See telemetry.ts#renderCellGrid. -->
-  <article id="cellGridCard" class="panel cell-grid-card">
+       cell groups. Hidden until there's cell data to show (renderCellGrid toggles
+       the whole card, not just the inner grid, so it isn't a perpetual empty
+       scaffold — C5). See telemetry.ts#renderCellGrid. -->
+  <article id="cellGridCard" class="panel cell-grid-card" hidden>
     <header class="cell-grid-head">
       <div>
         <span class="kicker">Cell voltage map</span>
@@ -1219,6 +1373,41 @@
       Set your electricity rate in Settings → Preferences to estimate charging
       cost.
     </p>
+  </article>
+
+  <!-- Charging cost-over-time (M5). Buckets logged charge sessions by month and
+       plots monthly energy (or cost when an electricity rate is set), reusing
+       the SOH-trend SVG pattern. Hidden until at least two months of data
+       exist; storage-status.ts#renderChargeCostTrend toggles + fills it. -->
+  <article id="chargeCostTrendCard" class="panel charge-cost-trend-card" hidden>
+    <header class="charge-cost-trend-head">
+      <div>
+        <span class="kicker">Charging over time</span>
+        <h3 id="chargeCostTrendTitle">Monthly charging</h3>
+      </div>
+      <strong id="chargeCostTrendLatest" class="charge-cost-trend-latest"
+        >--</strong
+      >
+    </header>
+    <p id="chargeCostTrendEmpty" class="status-copy" hidden>
+      A month-by-month trend appears here once you've logged charges across two
+      or more months.
+    </p>
+    <div id="chargeCostTrendChart" class="charge-cost-trend-chart"></div>
+    <div id="chargeCostTrendStats" class="charge-cost-trend-stats">
+      <div>
+        <span class="kicker" id="chargeCostTrendSpanLabel">Per month</span>
+        <strong id="chargeCostTrendAvg">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Months</span>
+        <strong id="chargeCostTrendMonths">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Total</span>
+        <strong id="chargeCostTrendTotal">--</strong>
+      </div>
+    </div>
   </article>
 
   <article
@@ -1420,6 +1609,14 @@
           Run with the ignition on and engine off, parked, transmission in Park,
           all accessories off.
         </p>
+        <!-- Permanent-code caveat (M10). Hidden unless the latest scan stored
+             one or more permanent (Mode 0A) codes; actions.ts fills the count
+             and unhides it when openClearDtcWarning runs. -->
+        <p
+          id="dtcClearPermanentNote"
+          class="dtc-clear-permanent-note"
+          hidden
+        ></p>
         <label class="dtc-clear-ack">
           <input type="checkbox" id="dtcClearAckBox" />
           <span>I understand readiness monitors will reset.</span>
@@ -1502,10 +1699,91 @@
           class="link-btn"
           data-action="addMaintenance"
           id="addMaintenanceBtn"
+          aria-expanded="false"
+          aria-controls="maintenanceForm"
         >
           Add entry
         </button>
       </header>
+      <p
+        id="maintenanceDueHint"
+        class="maintenance-due-hint"
+        role="status"
+        hidden
+      ></p>
+      <form
+        id="maintenanceForm"
+        class="maintenance-form"
+        aria-label="Log a maintenance entry"
+        hidden
+      >
+        <label class="maint-field">
+          <span>Service</span>
+          <input
+            type="text"
+            id="maintTypeInput"
+            name="type"
+            placeholder="Oil change, Tire rotation…"
+            maxlength="80"
+            autocomplete="off"
+          />
+        </label>
+        <label class="maint-field">
+          <span id="maintOdometerLabel">Odometer (mi)</span>
+          <input
+            type="number"
+            id="maintOdometerInput"
+            name="odometer"
+            inputmode="decimal"
+            min="0"
+            step="any"
+            placeholder="optional"
+          />
+        </label>
+        <label class="maint-field">
+          <span>Note</span>
+          <input
+            type="text"
+            id="maintNoteInput"
+            name="note"
+            placeholder="optional"
+            maxlength="200"
+            autocomplete="off"
+          />
+        </label>
+        <div class="maint-field-row">
+          <label class="maint-field">
+            <span id="maintIntervalKmLabel">Every (mi)</span>
+            <input
+              type="number"
+              id="maintIntervalKmInput"
+              name="intervalKm"
+              inputmode="decimal"
+              min="0"
+              step="any"
+              placeholder="optional"
+            />
+          </label>
+          <label class="maint-field">
+            <span>Every (months)</span>
+            <input
+              type="number"
+              id="maintIntervalMonthsInput"
+              name="intervalMonths"
+              inputmode="numeric"
+              min="0"
+              step="1"
+              placeholder="optional"
+            />
+          </label>
+        </div>
+        <div class="maint-form-actions">
+          <button type="button" data-action="cancelMaintenance">Cancel</button>
+          <button type="submit" class="primary" id="maintSaveBtn">
+            Save entry
+          </button>
+        </div>
+      </form>
       <div id="maintenanceList" class="maintenance-list"></div>
     </article>
   </section>
@@ -1934,6 +2212,62 @@
         />
         <span>/gal</span>
       </label>
+    </div>
+  </article>
+
+  <article class="panel pref-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Accessibility</span>
+        <h3>Readability</h3>
+      </div>
+    </div>
+    <!-- Font scale (M9): a --font-scale multiplier on :root, persisted by
+         prefs.ts. Larger text helps a glanceable in-car dashboard. -->
+    <fieldset class="pref-row pref-fieldset">
+      <legend class="pref-label">
+        <strong>Text size</strong>
+        <small>Scales headings and labels across the app</small>
+      </legend>
+      <div
+        class="signal-stage-tabs pref-seg"
+        role="group"
+        aria-label="Text size"
+      >
+        <button
+          type="button"
+          data-pref-font-scale="1"
+          class="is-active"
+          aria-pressed="true"
+        >
+          <span>Default</span>
+        </button>
+        <button type="button" data-pref-font-scale="1.25" aria-pressed="false">
+          <span>Large</span>
+        </button>
+        <button type="button" data-pref-font-scale="1.5" aria-pressed="false">
+          <span>Largest</span>
+        </button>
+      </div>
+    </fieldset>
+    <!-- High-contrast / colorblind-safe theme (M9): a data-contrast attr on
+         :root swapping the centralized color token set (base.css). -->
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>High contrast</strong>
+        <small>Stronger contrast &amp; colorblind-safe status colors</small>
+      </div>
+      <button
+        type="button"
+        id="prefContrastToggle"
+        class="tile-toggle pref-toggle"
+        data-pref-contrast-toggle
+        data-on="false"
+        aria-pressed="false"
+        aria-label="High-contrast theme is off"
+      >
+        Off
+      </button>
     </div>
   </article>
 

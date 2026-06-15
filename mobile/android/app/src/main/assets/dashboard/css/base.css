@@ -83,6 +83,7 @@
     --bg-glow: rgba(var(--volt-rgb), 0.14);
     /* Map-tab blue accent */
     --map-accent: #4cc4ff;
+    --map-accent-rgb: 76, 196, 255; /* RGB of --map-accent, for rgba(var(--map-accent-rgb), a) tints */
     --on-map-accent: #04222e;
     --accent-soft: #c7edff;
     /* Per-tone "soft" text: readable on that tone's alpha-tinted fills */
@@ -109,9 +110,15 @@
     --radius-xl: 20px;
     --card-pad: 14px;
     --card-pad-tight: 12px;
-    --font-h1: 30px;
-    --font-h2: 22px;
-    --font-h3: 17px;
+    /* Accessibility text-scale multiplier (M9). Default 1; the Preferences
+       "Accessibility" font-scale control (prefs.ts) overrides it on :root in the
+       1.0–1.5 range and persists it. The heading tokens below multiply through
+       it, and the root font-size scales with it so the whole readout grows for
+       a glanceable in-car dashboard. */
+    --font-scale: 1;
+    --font-h1: calc(30px * var(--font-scale));
+    --font-h2: calc(22px * var(--font-scale));
+    --font-h3: calc(17px * var(--font-scale));
     --map-height: 520px;
     /* Motion design tokens — one vocabulary for every transition/animation.
        fast = hover/press/tone feedback; medium = meter fills and fades.
@@ -122,6 +129,34 @@
     --motion-ease-inout: ease-in-out;
     --motion-pulse: 1.6s; /* drive-chip "live" dot pulse */
     --motion-sweep: 1.2s; /* restore-progress indeterminate sweep */
+  }
+
+  /* High-contrast / colorblind-safe theme (M9). Set as data-contrast="high" on
+     :root by prefs.ts and persisted. Because every component references the
+     centralized color tokens, this block is purely a token swap: it lifts
+     text/line/fill contrast and shifts the status + severity palette to an
+     Okabe-Ito-inspired, colorblind-safe set (blue / vermillion / orange /
+     bluish-green / yellow) that stays distinguishable without relying on a
+     red-vs-green distinction. Layered after :root so it overrides the defaults
+     in both schemes; it deliberately does NOT touch surface/layout tokens. */
+  :root[data-contrast="high"] {
+    --text: #ffffff;
+    --muted: #e6e6ee;
+    --soft: #cfd0db;
+    --line: rgba(255,255,255,0.34);
+    --line-strong: rgba(255,255,255,0.5);
+    --line-soft: rgba(255,255,255,0.26);
+    /* Status / severity hues — Okabe-Ito colorblind-safe palette. */
+    --volt: #ff9d3c;        /* orange */
+    --volt-deep: #f07f1a;
+    --ev: #f5e94b;          /* yellow (was lime green) */
+    --ok: #4dd6a8;          /* bluish-green */
+    --warn: #ffb000;        /* amber */
+    --bad: #ff5a4d;         /* vermillion */
+    --mixed: #c79bff;
+    --map-accent: #6ec6ff;  /* sky blue */
+    --map-accent-rgb: 110, 198, 255;
+    --accent: #6ec6ff;
   }
 
   /* Honor reduced-motion. */
@@ -178,6 +213,12 @@
     color: var(--text);
     font-family: Inter, Roboto, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+  }
+
+  /* Accessibility font-scale (M9): grow the root so headings + any relative-unit
+     text scale with the user's chosen multiplier. */
+  html {
+    font-size: calc(100% * var(--font-scale));
   }
 
   body {
@@ -813,6 +854,41 @@
     margin: 0;
   }
 
+  /* Accessibility section (M9): a <fieldset>/<legend> groups the font-scale
+     control for SRs. Strip the native fieldset chrome so it lays out like the
+     other .pref-rows; the legend uses the .pref-label type already. */
+  .pref-fieldset {
+    border: 0;
+    border-top: 1px solid var(--line);
+    padding: 14px 0 0;
+    min-width: 0;
+  }
+
+  .pref-card .card-head + .pref-fieldset {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
+  }
+
+  .pref-fieldset > legend.pref-label {
+    float: left;
+    padding: 0;
+  }
+
+  /* The legend floats so the segmented control sits beside it (legends can't be
+     flex children); a clearer after the control keeps the row self-contained. */
+  .pref-fieldset::after {
+    content: "";
+    display: block;
+    clear: both;
+  }
+
+  .pref-toggle[data-on="true"] {
+    border-color: var(--map-accent, #4cc4ff);
+    color: var(--map-accent, #4cc4ff);
+    background: rgba(var(--map-accent-rgb, 76, 196, 255), 0.12);
+  }
+
   .pref-price {
     display: inline-flex;
     align-items: center;
@@ -1049,6 +1125,7 @@
       --bg-top: #fbfaf7;
       --bg-glow: rgba(232,90,31,0.1);
       --map-accent: #0b6dc2;
+      --map-accent-rgb: 11, 109, 194;
       --on-map-accent: #ffffff;
       --accent-soft: #0a5e86;
       --volt-soft: #9c3a10;

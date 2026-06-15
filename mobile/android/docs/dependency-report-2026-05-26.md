@@ -15,6 +15,26 @@ Android app:
 - `cd mobile/android && ./gradlew --no-daemon dependencyUpdates --warning-mode all`: passed and isolated the Gradle 10 warning to the `dependencyUpdates` task path: `Invocation of Task.project at execution time has been deprecated.` Treat this as Gradle Versions plugin/tooling debt, not active app build logic.
 - PR CI lint follow-up: Spotless was bumped from `8.5.1` to `8.6.0` after Android lint's online `NewerVersionAvailable` detector reported the newer release on 2026-05-27. `dependencyUpdates` passes after the bump, though its milestone comparison still lists Spotless under "exceeds" against `8.5.1`.
 
+## v0.15.0 Feature-Wave Note - 2026-06-14
+
+The v0.15.0 feature wave (home-screen widget, event notifications, per-trip
+GPX/CSV export, maintenance log, trip labels, guided onboarding) added **zero new
+dependencies** — all of it is built on AndroidX Core + the platform SDK already on
+the dependency surface below (widgets via `AppWidgetProvider`/`RemoteViews`,
+notifications via `NotificationCompat`, exports via `FileProvider` + the share
+sheet, persistence via the existing SQLite store and SharedPreferences). The
+carryover dev-only currency items below are unchanged and remain for the next
+sweep:
+
+- **google-java-format `1.28.0`** — held below latest (`1.35.0`); `1.29.0+`
+  requires running the formatter on JDK 21+, while Android CI runs JDK 17.
+- **jsdom `29.x`** — current within its line for the dashboard Vitest suite; revisit
+  when bumping the test toolchain.
+- **`com.github.ben-manes.versions` Gradle-10 deprecation** — the
+  `Task.project at execution time` warning is isolated to the `dependencyUpdates`
+  task path; treat as update-tooling debt and watch for the plugin's next
+  Gradle-10-compatible release.
+
 ## Upgrade Update
 
 Applied and validated after the initial report:

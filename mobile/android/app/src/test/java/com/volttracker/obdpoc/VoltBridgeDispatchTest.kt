@@ -659,6 +659,13 @@ class VoltBridgeDispatchTest {
     }
 
     @Test
+    fun setChargeTargetSocForwardsViaUiThread() {
+        bridge.setChargeTargetSoc(80.0)
+        drain()
+        assertEquals(80.0, activity.lastChargeTargetSoc, 0.001)
+    }
+
+    @Test
     fun setAutoScanOnConnectForwardsViaUiThread() {
         bridge.setAutoScanOnConnect(true)
         drain()
@@ -753,6 +760,7 @@ class VoltBridgeDispatchTest {
         var lastLowSocThreshold = Double.MIN_VALUE
         var lastHighTempEnabled: Boolean? = null
         var lastHighTempThreshold = Double.MIN_VALUE
+        var lastChargeTargetSoc = Double.MIN_VALUE
         var lastAutoScanEnabled: Boolean? = null
 
         var lastStartedActivity: Intent? = null
@@ -901,35 +909,47 @@ class VoltBridgeDispatchTest {
             lastAutoConnectEnabled = enabled
         }
 
-        override fun getEventNotificationStateJson(): String = eventNotificationStateJsonValue
+        // The event-notification cluster is now a single host accessor (A1/I3): override
+        // eventNotifications() to return a recorder that captures into the fields the assertions
+        // read, instead of overriding seven per-toggle host methods that no longer exist.
+        private val eventNotificationRecorder =
+            object : EventNotificationCommands {
+                override fun getEventNotificationStateJson(): String = eventNotificationStateJsonValue
 
-        override fun setChargeCompleteNotifyFromBridge(enabled: Boolean) {
-            lastChargeCompleteEnabled = enabled
-        }
+                override fun setChargeCompleteEnabled(enabled: Boolean) {
+                    lastChargeCompleteEnabled = enabled
+                }
 
-        override fun setNewDtcNotifyFromBridge(enabled: Boolean) {
-            lastNewDtcEnabled = enabled
-        }
+                override fun setNewDtcEnabled(enabled: Boolean) {
+                    lastNewDtcEnabled = enabled
+                }
 
-        override fun setLowSocNotifyFromBridge(
-            enabled: Boolean,
-            thresholdPct: Double,
-        ) {
-            lastLowSocEnabled = enabled
-            lastLowSocThreshold = thresholdPct
-        }
+                override fun setLowSocEnabled(
+                    enabled: Boolean,
+                    thresholdPct: Double,
+                ) {
+                    lastLowSocEnabled = enabled
+                    lastLowSocThreshold = thresholdPct
+                }
 
-        override fun setHighPackTempNotifyFromBridge(
-            enabled: Boolean,
-            thresholdC: Double,
-        ) {
-            lastHighTempEnabled = enabled
-            lastHighTempThreshold = thresholdC
-        }
+                override fun setHighPackTempEnabled(
+                    enabled: Boolean,
+                    thresholdC: Double,
+                ) {
+                    lastHighTempEnabled = enabled
+                    lastHighTempThreshold = thresholdC
+                }
 
-        override fun setAutoScanOnConnectFromBridge(enabled: Boolean) {
-            lastAutoScanEnabled = enabled
-        }
+                override fun setChargeTargetSoc(targetPct: Double) {
+                    lastChargeTargetSoc = targetPct
+                }
+
+                override fun setAutoScanOnConnectEnabled(enabled: Boolean) {
+                    lastAutoScanEnabled = enabled
+                }
+            }
+
+        override fun eventNotifications(): EventNotificationCommands = eventNotificationRecorder
 
         // openExternalSearch's only observable effect is the browser Intent it fires; capture it
         // here instead of leaning on the shadow so the assertion does not depend on the skipped

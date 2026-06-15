@@ -585,6 +585,42 @@
     margin-top: 4px;
   }
 
+  /* Trip-list search / sort / favorites controls (M4). */
+  .map-list-controls {
+    display: grid;
+    gap: 8px;
+    margin: 4px 0 10px;
+  }
+
+  .map-list-search {
+    display: block;
+  }
+
+  .map-list-search input {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--fill-soft);
+    color: var(--text);
+    font-size: 14px;
+  }
+
+  .map-list-control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .map-list-fav-toggle[data-on="true"] {
+    border-color: rgba(var(--volt-rgb), 0.4);
+    color: var(--volt);
+    background: rgba(var(--volt-rgb), 0.1);
+  }
+
   .map-list {
     display: grid;
     gap: 8px;
@@ -717,6 +753,86 @@
   /* Empty-state guidance row (M5): no logged entry yet, so it reads as a prompt, not history. */
   .maintenance-list .maint-empty {
     color: var(--muted);
+  }
+
+  /* Per-entry "next due / overdue" line (M1/C4). Muted by default; warns when due soon, reddens
+     when overdue — using the same theme tokens as the rest of the dashboard so both themes work. */
+  .maint-due {
+    display: block;
+    margin-top: 2px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+
+  .maint-due[data-due="due-soon"] {
+    color: var(--warn-soft);
+  }
+
+  .maint-due[data-due="overdue"] {
+    color: var(--bad-soft, #ff6b5f);
+  }
+
+  /* Aggregate "service due soon / overdue" banner above the list (M1/C4). */
+  .maintenance-due-hint {
+    margin: 10px 0 0;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--fill);
+    color: var(--warn-soft);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .maintenance-due-hint[data-due="due-soon"] {
+    border-color: rgba(255,184,74,0.3);
+    background: rgba(255,184,74,0.1);
+    color: var(--warn-soft);
+  }
+
+  .maintenance-due-hint[data-due="overdue"] {
+    border-color: rgba(255,107,95,0.4);
+    background: rgba(255,107,95,0.12);
+    color: var(--bad-soft, #ff6b5f);
+  }
+
+  /* Inline "Add entry" form (M1/C4), replacing the old window.prompt() chain. */
+  .maintenance-form {
+    display: grid;
+    gap: 10px;
+    margin: 12px 0 0;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--fill);
+  }
+
+  .maint-field {
+    display: grid;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .maint-field input {
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg, rgba(0,0,0,0.2));
+    color: var(--text);
+    font-size: 14px;
+  }
+
+  .maint-field-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .maint-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
   }
 
   /* ===== 7. Settings controls ===== */
@@ -1146,6 +1262,82 @@
   .eff-scatter-stats div + div { border-left: 1px solid var(--line); }
   .eff-scatter-stats strong {
     display: block; margin-top: 3px; font-size: 15px; font-variant-numeric: tabular-nums;
+  }
+
+  /* Per-trip detail sheet (M7). A modal panel overlaid on the Map view; the
+     focus trap (actions.ts) inerts the background while it's open. */
+  .trip-detail-sheet {
+    position: fixed;
+    left: 50%;
+    bottom: calc(112px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    width: min(680px, calc(100vw - 24px));
+    max-height: 78vh;
+    overflow-y: auto;
+    z-index: 40;
+    padding: 16px;
+    box-shadow: 0 16px 48px var(--shadow);
+  }
+
+  .trip-detail-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .trip-detail-head h3 {
+    margin: 4px 0 0;
+  }
+
+  .trip-detail-close {
+    flex: 0 0 auto;
+  }
+
+  .trip-detail-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 14px 0;
+  }
+
+  .trip-detail-times {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+
+  .trip-detail-stats .kicker,
+  .trip-detail-times .kicker {
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .trip-detail-stats strong,
+  .trip-detail-times strong {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .trip-detail-scatter-card {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+
+  .trip-detail-scatter-card header h4 {
+    margin: 4px 0 0;
+    font-size: 14px;
+  }
+
+  .trip-detail-scatter-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin-top: 8px;
   }
 
   #realTripsCard {

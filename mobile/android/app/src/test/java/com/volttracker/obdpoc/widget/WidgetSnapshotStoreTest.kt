@@ -38,7 +38,14 @@ class WidgetSnapshotStoreTest {
     @Test
     fun writeThenReadRoundTrips() {
         val written =
-            WidgetSnapshot(72, charging = true, connected = true, vehicleState = "charging", updatedAtMs = 123L)
+            WidgetSnapshot(
+                72,
+                charging = true,
+                connected = true,
+                vehicleState = "charging",
+                updatedAtMs = 123L,
+                lastSampleAtMs = 456L,
+            )
         assertTrue(store.writeIfChanged(written))
 
         val reloaded = WidgetSnapshotStore(prefs).read()
@@ -47,21 +54,52 @@ class WidgetSnapshotStoreTest {
         assertTrue(reloaded.connected)
         assertEquals("charging", reloaded.vehicleState)
         assertEquals(123L, reloaded.updatedAtMs)
+        assertEquals(456L, reloaded.lastSampleAtMs)
         assertTrue(reloaded.hasData())
     }
 
     @Test
     fun writeIfChangedDebouncesIdenticalDisplayFields() {
         val first =
-            WidgetSnapshot(50, charging = false, connected = true, vehicleState = "driving_ev", updatedAtMs = 1_000L)
+            WidgetSnapshot(
+                50,
+                charging = false,
+                connected = true,
+                vehicleState = "driving_ev",
+                updatedAtMs = 1_000L,
+                lastSampleAtMs = 1_000L,
+            )
         assertTrue("first write happens", store.writeIfChanged(first))
 
-        // Same display fields, only the timestamp moved — must NOT write again.
-        val sameButLater = first.copy(updatedAtMs = 2_000L)
-        assertFalse("timestamp-only change is debounced", store.writeIfChanged(sameButLater))
+        // Same display fields, a fresh sample arrives later — must NOT request a redraw.
+        val sameButLater = first.copy(updatedAtMs = 2_000L, lastSampleAtMs = 2_000L)
+        assertFalse("identical display fields are debounced (no redraw)", store.writeIfChanged(sameButLater))
 
-        // The stored timestamp stays at the first value because the second write was skipped.
+        // The display CHANGE time stays at the first value (no display change happened) ...
         assertEquals(1_000L, store.read().updatedAtMs)
+    }
+
+    @Test
+    fun identicalSampleStillBumpsFreshnessWithoutRedraw() {
+        // B7: a steady (flat-but-live) sample must keep the freshness ticking even though the display
+        // is unchanged and no redraw is requested, so the widget is not wrongly flagged stale.
+        val first =
+            WidgetSnapshot(
+                50,
+                charging = true,
+                connected = true,
+                vehicleState = "charging",
+                updatedAtMs = 1_000L,
+                lastSampleAtMs = 1_000L,
+            )
+        assertTrue(store.writeIfChanged(first))
+
+        val laterIdenticalSample = first.copy(updatedAtMs = 2_000L, lastSampleAtMs = 900_000L)
+        assertFalse("identical display = no redraw", store.writeIfChanged(laterIdenticalSample))
+
+        val reloaded = store.read()
+        assertEquals("change time stays put (no display change)", 1_000L, reloaded.updatedAtMs)
+        assertEquals("freshness advances to the latest sample", 900_000L, reloaded.lastSampleAtMs)
     }
 
     @Test

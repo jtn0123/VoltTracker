@@ -66,6 +66,32 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //   as the suites grow, never lower without discussion. (Percentages read from
 //   the local jacocoTestReport.xml; adjust by a point or two if a verified run
 //   differs.)
+//   2026-06-15 (round 5, I2 — focused per-CLASS floors for the new pure-logic
+//   feature classes): the v0.15.0 wave landed four pure, WebView-free decision
+//   cores in the ROOT package (com.volttracker.obdpoc) and one in the widget
+//   subpackage, so they sat under only the 0.80 aggregate project floor — a
+//   regression in one would average against ~80 root-package classes and hide.
+//   These are exactly the "pure, testable domain logic" the focused floors exist
+//   to protect, and they are well covered today, so we pin a per-CLASS LINE floor
+//   (~actual-4, churn room) like the materialize/classify package floors. A
+//   bare dotted class name matches only that top-level class (its nested data
+//   classes / sealed Event subclasses are covered ~100% and ride the project
+//   floor):
+//     EventNotificationDecider   LINE 95.1% (97/102) -> floor 0.90
+//     widget.WidgetStateFormatter LINE 100% (23/23)  -> floor 0.95
+//     OnboardingFlow             LINE 100% (26/26)   -> floor 0.95
+//     AutoScanController         LINE 82.6% (19/23)  -> floor 0.78
+//   2026-06-15 (round 6, D1/D3 — widget per-PACKAGE floor): the D1 tests
+//   (WidgetUpdaterTest + VoltWidgetProviderTest) closed the last untested
+//   Android-glue gap in the widget package — the merge-under-lock orchestration
+//   and the RemoteViews binding. With those landed the whole
+//   com.volttracker.obdpoc.widget package is now well covered, so we promote the
+//   single WidgetStateFormatter per-CLASS floor to a per-PACKAGE LINE floor that
+//   guards the updater + provider + snapshot store too, like the materialize /
+//   classify packages. The class-level WidgetStateFormatter rule is kept as-is
+//   (a tighter 0.95 on the pure formatter is still useful). Actual at this round:
+//     widget  LINE 93.0% (186/200) -> floor 0.89 (~actual-4, churn room)
+//   No existing floor is lowered.
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
     dependsOn "jacocoTestReport"
     sourceDirectories.setFrom(coverageSourceDirs())
@@ -89,6 +115,38 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
             element = "PACKAGE"
             includes = ["com.volttracker.obdpoc.classify"]
             limit { counter = "LINE"; minimum = 0.95 }
+        }
+        // Widget package floor (round 6, D3 — see history note above). The D1 tests covered the
+        // updater's merge-under-lock orchestration and the provider's RemoteViews binding, so the
+        // whole widget package is guarded here like materialize / classify rather than relying on
+        // the aggregate project floor. Measured LINE 93.0% (186/200) -> floor 0.89.
+        rule {
+            element = "PACKAGE"
+            includes = ["com.volttracker.obdpoc.widget"]
+            limit { counter = "LINE"; minimum = 0.89 }
+        }
+        // Focused per-CLASS floors for the new pure-logic feature classes (round 5, I2 — see
+        // history note above). Each is keyed to the well-tested decision core so a regression
+        // can't hide behind the aggregate project floor.
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.EventNotificationDecider"]
+            limit { counter = "LINE"; minimum = 0.90 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.widget.WidgetStateFormatter"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.OnboardingFlow"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.AutoScanController"]
+            limit { counter = "LINE"; minimum = 0.78 }
         }
         rule {
             limit { counter = "LINE"; minimum = 0.80 }

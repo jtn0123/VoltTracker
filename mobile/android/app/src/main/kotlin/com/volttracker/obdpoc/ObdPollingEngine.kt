@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.util.Log
+import com.volttracker.obdpoc.classify.VehicleState
 import com.volttracker.obdpoc.location.FilteredLocation
 import org.json.JSONException
 import org.json.JSONObject
@@ -497,7 +498,10 @@ open class ObdPollingEngine(
                 continue
             }
             service.broadcastTelemetry(sample)
-            if (!sleeper.sleep(850)) {
+            // Adapt the cadence to the vehicle state: a parked/charging car changes slowly, so we
+            // poll less often to save adapter round-trips and battery; a moving car keeps the
+            // responsive ~850 ms cadence. Derived from the sample the engine just read/broadcast.
+            if (!sleeper.sleep(pollIntervalMs(sample))) {
                 return
             }
         }
@@ -714,6 +718,43 @@ open class ObdPollingEngine(
         private const val STACK_HEAD_MAX_CHARS = 1000
         private const val STACK_HEAD_FRAMES = 5
         const val RAW_TRANSCRIPT_MAX_CHARS = 4000
+
+        /** Responsive cadence while driving — the value the loop used unconditionally before G3. */
+        const val DRIVE_POLL_INTERVAL_MS = 850L
+
+        /**
+         * Relaxed cadence for slow-changing states (parked / charging / plugged). A parked or
+         * charging pack's SOC, temperature, and power move slowly, so a multi-second cadence keeps
+         * the data fresh enough while cutting adapter round-trips and battery use. Kept conservative.
+         */
+        const val IDLE_POLL_INTERVAL_MS = 2500L
+
+        /** Speed (km/h) above which we treat the car as moving even if the state string is absent. */
+        private const val MOVING_SPEED_KPH = 5.0
+
+        /**
+         * Pure cadence decision (extracted for testability): pick the poll interval for the next
+         * loop iteration from the just-read [sample]. Returns [DRIVE_POLL_INTERVAL_MS] when the car
+         * is driving (or moving by speed, or the state is unknown — stay responsive by default) and
+         * the relaxed [IDLE_POLL_INTERVAL_MS] for the slow-changing parked/charging/plugged states.
+         */
+        @JvmStatic
+        fun pollIntervalMs(sample: JSONObject): Long {
+            // A measurable road speed always means "stay responsive", regardless of the state label.
+            val speed = sample.optDouble("speedKph", Double.NaN)
+            if (!speed.isNaN() && speed > MOVING_SPEED_KPH) {
+                return DRIVE_POLL_INTERVAL_MS
+            }
+            return when (sample.optString("vehicleState", "")) {
+                VehicleState.PARKED.asPayloadKey(),
+                VehicleState.CHARGING.asPayloadKey(),
+                VehicleState.PLUGGED.asPayloadKey(),
+                -> IDLE_POLL_INTERVAL_MS
+                // READY (engine on, stationary — e.g. stopped at a light) stays responsive because
+                // the car is about to move; driving_ev / driving_gas / unknown / absent likewise.
+                else -> DRIVE_POLL_INTERVAL_MS
+            }
+        }
 
         @JvmStatic
         fun boundedRawTranscript(rawThisCycle: StringBuilder?): String =

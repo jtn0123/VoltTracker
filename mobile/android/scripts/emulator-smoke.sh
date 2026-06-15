@@ -148,30 +148,48 @@ tap_bottom_nav() {
   # idempotent — you stay on that view — so retries can NOT mask a real problem:
   # a genuine geometry/selector break never changes the screen and still fails
   # after every attempt.
-  local attempts=6
-  local attempt=1
-  while :; do
+  # Detect the view switch by POLLING for the screen to change, rather than sleeping a fixed
+  # interval and capturing exactly once. On a slow/loaded CI emulator the WebView re-render lags
+  # the tap by many seconds, so a single post-sleep capture often photographs the OLD frame and
+  # reports a false "no view change" — the dominant flake this smoke hit on the later tabs, where
+  # the emulator is slowest (the required retries grew tab over tab until the budget ran out).
+  # Polling breaks within ~2s of the repaint when fast, yet waits patiently when slow. The tap is
+  # re-issued a few times because a lone `adb input tap` is occasionally dropped on a flaky boot.
+  # Re-tapping is idempotent (you stay on the target view), and the loop only ACCEPTS a real pixel
+  # change, so neither the retries nor the generous budget can mask a genuine geometry/selector
+  # break: a view that never actually switches changes nothing on screen and still fails.
+  local max_taps=3
+  local poll_secs=30
+  local changed=0
+  local tap=1
+  while [ "$tap" -le "$max_taps" ]; do
     adb shell input tap "$x" "$y"
-    # Settle longer on later retries: a flaky adb daemon both drops taps and
-    # delivers them late, so a fixed 2s can screenshot before a slow tap lands.
-    sleep $((1 + attempt))
-    screenshot "nav-$index-$label"
-    if [ "$expect_change" != "1" ] || [ -z "$PREVIOUS_NAV_SCREENSHOT" ] \
-      || ! cmp -s "$PREVIOUS_NAV_SCREENSHOT" "$shot"; then
+    local waited=0
+    while [ "$waited" -lt "$poll_secs" ]; do
+      sleep 2
+      waited=$((waited + 2))
+      screenshot "nav-$index-$label"
+      if [ "$expect_change" != "1" ] || [ -z "$PREVIOUS_NAV_SCREENSHOT" ] \
+        || ! cmp -s "$PREVIOUS_NAV_SCREENSHOT" "$shot"; then
+        changed=1
+        break
+      fi
+    done
+    if [ "$changed" -eq 1 ]; then
       break
     fi
-    if [ "$attempt" -ge "$attempts" ]; then
-      echo "Dashboard screenshot did not change after tapping bottom-nav $label (after $attempts attempts)."
-      echo "This usually means the tap target missed the WebView nav or the view did not switch."
-      exit 1
-    fi
-    echo "  No view change after tapping $label; retrying ($attempt/$attempts)."
-    # Observed flake mode: the adb daemon that logged "device offline" during
-    # boot keeps dropping input events afterward. Give it a health re-check so
-    # the next tap goes to a connected transport instead of the void.
+    echo "  No view change after tapping $label (tap $tap/$max_taps, polled ${poll_secs}s); re-tapping."
+    # Observed flake mode: the adb daemon that logged "device offline" during boot keeps dropping
+    # input events afterward. Give it a health re-check so the next tap goes to a connected
+    # transport instead of the void.
     adb wait-for-device >/dev/null 2>&1 || true
-    attempt=$((attempt + 1))
+    tap=$((tap + 1))
   done
+  if [ "$changed" -ne 1 ]; then
+    echo "Dashboard screenshot did not change after tapping bottom-nav $label (after $max_taps taps, ${poll_secs}s polled each)."
+    echo "This usually means the tap target missed the WebView nav or the view did not switch."
+    exit 1
+  fi
   PREVIOUS_NAV_SCREENSHOT="$shot"
   check_logcat "bottom-nav $label"
 }

@@ -105,4 +105,35 @@ describe('DTC severity badge + drivability line', () => {
     expect(drive.children).toHaveLength(0);
     expect(drive.querySelector('*')).toBeNull();
   });
+
+  // C6 — pin the family heuristic (severity with and without DB metadata) so the
+  // doc-comment claim ("P default is warning, not critical; DB metadata always
+  // wins") can't silently drift from the implementation again.
+  describe('family heuristic, severity-with-and-without-DB-metadata (C6)', () => {
+    function severityOf(dtc) {
+      VD.setStorage({
+        diagnosticCodeCount: 1,
+        latestDiagnosticCodes: [{ dtc, status: 'stored', firstSeenMs: Date.now(), lastSeenMs: Date.now() }],
+      });
+      return dtcItems()[0].dataset.severity;
+    }
+
+    it('uses the family default when a code carries NO DB metadata', () => {
+      // None of these fabricated codes exist in the dtc-causes database, so the
+      // family heuristic decides:
+      expect(severityOf('C9999')).toBe('critical'); // C (chassis) → critical
+      expect(severityOf('P3FFF')).toBe('warning'); // P (powertrain) → warning (NOT critical)
+      expect(severityOf('B9999')).toBe('warning'); // B (body) → warning
+      expect(severityOf('U9999')).toBe('warning'); // U (network) → warning
+    });
+
+    it('lets DB metadata WIN over the family default in both directions', () => {
+      // P0AA6 is a P-family code the family heuristic would call "warning", but
+      // it's tagged "critical" in the DB (HV isolation fault) → critical.
+      expect(severityOf('P0AA6')).toBe('critical');
+      // C07B0 is a C-family code the heuristic would call "critical", but it's
+      // tagged "info" (TPMS) in the DB → info. Metadata wins either way.
+      expect(severityOf('C07B0')).toBe('info');
+    });
+  });
 });

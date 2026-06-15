@@ -72,6 +72,10 @@
     <string name="notification_charge_complete_title">Charge complete</string>
     <string name="notification_charge_complete_text">Added %1$s kWh this charge. Tap to view charge details.</string>
     <string name="notification_charge_complete_text_no_energy">Charging finished. Tap to view charge details.</string>
+    <string name="notification_charge_interrupted_title">Charging stopped</string>
+    <string name="notification_charge_interrupted_text">Charging stopped at %1$s%% (target %2$s%%). Check the plug and charger.</string>
+    <string name="notification_target_soc_title">Charge target reached</string>
+    <string name="notification_target_soc_text">Battery reached your %2$s%% target (now %1$s%%). You can unplug.</string>
     <string name="notification_new_dtc_title">New diagnostic code</string>
     <plurals name="notification_new_dtc_text">
         <item quantity="one">New code %2$s found. Tap to review.</item>
@@ -117,6 +121,9 @@
     <string name="chooser_share_trip_export">Share drive export</string>
     <string name="status_trip_export_ready">Drive export ready — choose where to share it.</string>
     <string name="status_trip_export_share_failed">Could not share the drive export.</string>
+    <!-- Bulk all-trips CSV export (M6) -->
+    <string name="status_all_trips_export_ready">All-trips CSV ready — choose where to share it.</string>
+    <string name="status_all_trips_export_empty">No logged drives with GPS samples to export yet.</string>
 
     <!-- Backup and restore (BackupController) -->
     <string name="status_stop_logging_before_backup">Stop logging before creating a backup.</string>

@@ -243,6 +243,64 @@ class ObdPollingEngineTest {
         )
     }
 
+    // ---- adaptive poll cadence (G3) -------------------------------------------------
+
+    @Test
+    fun pollCadenceRelaxesWhenParkedOrChargingAndStaysFastWhenDriving() {
+        // Parked / charging / plugged are slow-changing -> the relaxed cadence.
+        for (state in listOf("parked", "charging", "plugged")) {
+            val sample = org.json.JSONObject().put("vehicleState", state)
+            assertEquals(
+                "$state must use the relaxed cadence",
+                ObdPollingEngine.IDLE_POLL_INTERVAL_MS,
+                ObdPollingEngine.pollIntervalMs(sample),
+            )
+        }
+        // Driving (EV or gas) keeps the responsive cadence.
+        for (state in listOf("driving_ev", "driving_gas")) {
+            val sample = org.json.JSONObject().put("vehicleState", state)
+            assertEquals(
+                "$state must keep the fast cadence",
+                ObdPollingEngine.DRIVE_POLL_INTERVAL_MS,
+                ObdPollingEngine.pollIntervalMs(sample),
+            )
+        }
+    }
+
+    @Test
+    fun pollCadenceStaysFastForReadyUnknownOrAbsentState() {
+        // READY (engine on but stationary — about to move), unknown, and a missing state all stay
+        // responsive: we only relax for clearly slow-changing states.
+        assertEquals(
+            ObdPollingEngine.DRIVE_POLL_INTERVAL_MS,
+            ObdPollingEngine.pollIntervalMs(org.json.JSONObject().put("vehicleState", "ready")),
+        )
+        assertEquals(
+            ObdPollingEngine.DRIVE_POLL_INTERVAL_MS,
+            ObdPollingEngine.pollIntervalMs(org.json.JSONObject().put("vehicleState", "unknown")),
+        )
+        assertEquals(
+            "a sample with no vehicleState defaults to the responsive cadence",
+            ObdPollingEngine.DRIVE_POLL_INTERVAL_MS,
+            ObdPollingEngine.pollIntervalMs(org.json.JSONObject()),
+        )
+    }
+
+    @Test
+    fun pollCadenceStaysFastWhenMovingEvenIfStateLabelSaysParked() {
+        // A measurable road speed overrides a stale/disagreeing state label, so a car that's moving
+        // is always polled responsively.
+        val sample =
+            org.json
+                .JSONObject()
+                .put("vehicleState", "parked")
+                .put("speedKph", 40.0)
+        assertEquals(
+            ObdPollingEngine.DRIVE_POLL_INTERVAL_MS,
+            ObdPollingEngine.pollIntervalMs(sample),
+        )
+    }
+
     @Test
     fun rawTranscriptIsCappedWithTruncationMarker() {
         val raw = StringBuilder()

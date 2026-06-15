@@ -265,7 +265,8 @@ import { initialTelemetryState } from "./telemetry-state";
 
   function formatProgressCount(value: number) {
     if (!Number.isFinite(value) || value < 0) return "0";
-    return Math.round(value).toLocaleString("en-US");
+    // `undefined` locale follows the device's runtime locale for grouping separators.
+    return Math.round(value).toLocaleString(undefined);
   }
 
   function restoreProgressStats(progress: RestoreProgressPayload) {

@@ -664,6 +664,26 @@
     margin-bottom: 10px;
   }
 
+  /* Map sheet header actions (M6 "Export all" + "Refresh"): keep both link-buttons together on the
+     trailing edge without wrapping. */
+  .map-sheet-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+  }
+
+  /* .link-btn carries margin-inline-end: -9px for single-button headers; inside this grouped
+     container that negative margin would eat the 4px gap and overlap adjacent tap targets, so zero
+     it — but keep it on the trailing button so the whole group still sits flush with the card edge. */
+  .map-sheet-actions .link-btn {
+    margin-inline-end: 0;
+  }
+
+  .map-sheet-actions .link-btn:last-child {
+    margin-inline-end: -9px;
+  }
+
   .link-btn {
     /* Padded so the tap target clears ~34px (was a 15px text-only hit area).
        margin-inline-end offsets the right padding so the label stays flush with
@@ -742,10 +762,13 @@
     display: flex;
     gap: 8px;
     padding: 0 10px 10px;
+    /* Wraps so the favorite + Details + Rename + GPX + CSV actions stay tappable
+       on narrow WebView widths instead of squeezing below the touch target. */
+    flex-wrap: wrap;
   }
 
   .history-export-btn {
-    flex: 1 1 0;
+    flex: 1 1 30%;
     min-height: 36px;
     padding: 6px 10px;
     border: 1px solid var(--line-soft);
@@ -758,6 +781,23 @@
 
   .history-export-btn:active {
     background: rgba(var(--volt-rgb), 0.12);
+  }
+
+  /* Per-row favorite star (M4 favorites half). Compact (it's an icon, not a labelled action) and
+     gold when active so a favorited drive reads at a glance. */
+  .history-favorite-btn {
+    flex: 0 0 auto;
+    min-width: 36px;
+    padding-inline: 10px;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .history-favorite-btn.is-favorite {
+    border-color: rgba(255,184,74,0.4);
+    background: rgba(255,184,74,0.12);
+    color: var(--warn, #ffb84a);
   }
 
   .trip-route-spark {
@@ -1282,6 +1322,7 @@
   .cell-balance-head,
   .cell-grid-head,
   .soh-trend-head,
+  .charge-cost-trend-head,
   .live-charge-head {
     display: flex;
     align-items: flex-start;
@@ -1291,6 +1332,7 @@
 
   .cell-balance-stats,
   .soh-trend-stats,
+  .charge-cost-trend-stats,
   .live-charge-stats {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -1303,6 +1345,7 @@
 
   .cell-balance-stats .kicker,
   .soh-trend-stats .kicker,
+  .charge-cost-trend-stats .kicker,
   .live-charge-stats .kicker {
     display: block;
     margin-bottom: 2px;
@@ -1310,6 +1353,7 @@
 
   .cell-balance-stats strong,
   .soh-trend-stats strong,
+  .charge-cost-trend-stats strong,
   .live-charge-stats strong {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 14px;
@@ -1317,6 +1361,31 @@
 
   .live-charge-card .live-charge-head h3 {
     color: var(--ok, var(--soft));
+  }
+
+  /* Editable charge-target field in the live-charge stats grid (M2). Styled to
+     read like the adjacent monospace stat values, with a compact inline input. */
+  .live-charge-target-field {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 14px;
+  }
+
+  .live-charge-target-field input {
+    width: 3.2em;
+    padding: 2px 4px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface-overlay);
+    color: inherit;
+    font: inherit;
+    text-align: right;
+  }
+
+  .live-charge-target-hint {
+    margin-top: 8px;
   }
 
   /* 96-cell voltage map. */
@@ -1380,6 +1449,25 @@
     stroke-width: 2.2;
     stroke-linejoin: round;
     stroke-linecap: round;
+  }
+
+  /* Monthly charging cost/energy trend chart (M5). SVG bar chart; bar fill and
+     axis tones are resolved from tokens in JS so the chart stays legible in both
+     themes (the SVG fill attr can't read a CSS var directly). */
+  .charge-cost-trend-latest {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 20px;
+    color: var(--volt);
+  }
+
+  .charge-cost-trend-chart {
+    margin: 12px 0 14px;
+  }
+
+  .charge-cost-trend-svg {
+    width: 100%;
+    height: auto;
+    display: block;
   }
 
   .soh-dot {
@@ -1978,6 +2066,26 @@
     color: var(--map-accent, var(--soft));
   }
 
+  /* Per-code clearability tag (M10): whether the Mode 04 clear can erase this
+     code. Permanent codes are flagged so the report makes clear which codes the
+     "Clear codes" button can actually turn off. */
+  .dtc-clearable {
+    display: inline-block;
+    margin-top: 3px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: var(--fill-bold);
+    color: var(--muted);
+  }
+
+  .dtc-clearable[data-clearable="no"] {
+    background: rgba(255,184,74,0.16);
+    color: var(--warn-soft);
+  }
+
   .dtc-drivability {
     display: block;
     margin-top: 3px;
@@ -2026,6 +2134,17 @@
     border-radius: 10px;
     background: rgba(255,184,74,0.06);
     color: var(--warn-soft) !important;
+  }
+
+  /* Permanent-code caveat in the clear dialog (M10): mirrors the prereq callout
+     styling but in the warning tone, since it tempers the clear's outcome. */
+  .dtc-clear-permanent-note {
+    padding: 8px 10px;
+    border: 1px solid rgba(255,184,74,0.34);
+    border-radius: 10px;
+    background: rgba(255,184,74,0.08);
+    color: var(--warn-soft) !important;
+    font-weight: 600;
   }
 
   .dtc-clear-ack {

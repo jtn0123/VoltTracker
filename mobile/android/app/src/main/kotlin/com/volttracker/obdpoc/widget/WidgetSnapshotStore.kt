@@ -3,26 +3,28 @@ package com.volttracker.obdpoc.widget
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import com.volttracker.obdpoc.MainActivity
+import com.volttracker.obdpoc.AppPrefs
 
 /**
  * Persists the compact [WidgetSnapshot] to the app's shared-prefs file so the out-of-process
  * widget can read the latest vehicle state without binding to the service.
  *
- * The write is intentionally cheap (five primitive prefs keys, `apply()` — never `commit()`) and
- * crash-safe: every public method swallows storage failures so a snapshot write can never break a
- * live OBD session. [writeIfChanged] debounces — it only persists when the meaningful fields
- * (SOC / charging / connected / vehicle state) actually changed, so the 1 Hz telemetry stream does
- * not thrash prefs or trigger a widget redraw on every identical sample.
+ * The write is intentionally cheap (a handful of primitive prefs keys, `apply()` — never `commit()`)
+ * and crash-safe: every public method swallows storage failures so a snapshot write can never break a
+ * live OBD session. [writeIfChanged] debounces the *redraw* — it only persists the display fields and
+ * returns true (asking the caller to redraw) when the meaningful fields (SOC / charging / connected /
+ * vehicle state) actually changed, so the 1 Hz telemetry stream does not thrash prefs or trigger a
+ * widget redraw on every identical sample. The freshness timestamp ([WidgetSnapshot.lastSampleAtMs]),
+ * however, is bumped on *every* sample so a steady (flat-but-live) charge does not age out as stale.
  *
- * It reuses [MainActivity.PREFS] (`volt_obd_prefs`) under a dedicated key namespace so it shares the
- * existing event-notification settings file rather than opening a second prefs file.
+ * It reuses [AppPrefs.FILE] (`volt_obd_prefs`) under a dedicated `widget_snapshot_*` key namespace so
+ * it shares the existing event-notification settings file rather than opening a second prefs file.
  */
 class WidgetSnapshotStore(
     private val prefs: SharedPreferences,
 ) {
     constructor(context: Context) : this(
-        context.applicationContext.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE),
+        context.applicationContext.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE),
     )
 
     /** Reads the last persisted snapshot, or [WidgetSnapshot.EMPTY] when none / on read failure. */
@@ -31,12 +33,15 @@ class WidgetSnapshotStore(
             if (!prefs.contains(KEY_UPDATED_AT)) {
                 WidgetSnapshot.EMPTY
             } else {
+                val changedAt = prefs.getLong(KEY_UPDATED_AT, 0L)
                 WidgetSnapshot(
                     socPct = prefs.getInt(KEY_SOC, WidgetSnapshot.UNKNOWN_SOC),
                     charging = prefs.getBoolean(KEY_CHARGING, false),
                     connected = prefs.getBoolean(KEY_CONNECTED, false),
                     vehicleState = prefs.getString(KEY_VEHICLE_STATE, "") ?: "",
-                    updatedAtMs = prefs.getLong(KEY_UPDATED_AT, 0L),
+                    updatedAtMs = changedAt,
+                    // Older snapshots written before this key existed fall back to the change time.
+                    lastSampleAtMs = prefs.getLong(KEY_LAST_SAMPLE_AT, changedAt),
                 )
             }
         } catch (ex: RuntimeException) {
@@ -46,14 +51,27 @@ class WidgetSnapshotStore(
         }
 
     /**
-     * Persists [snapshot] only when its meaningful fields differ from what is already stored.
-     * Returns true when a write actually happened (so the caller can decide whether to nudge the
-     * widget). The timestamp alone never forces a write — only SOC/charging/connected/vehicleState.
+     * Persists [snapshot] and reports whether the *display* changed (so the caller can decide whether
+     * to nudge the widget to redraw).
+     *
+     * The freshness timestamp ([WidgetSnapshot.lastSampleAtMs], falling back to [updatedAtMs]) is
+     * bumped on EVERY call — even an identical sample — so the "updated Xm ago" line keeps advancing
+     * during a steady charge/parked period and the widget is not wrongly flagged stale.
+     *
+     * The display fields (SOC/charging/connected/vehicleState) and the change time ([updatedAtMs]) are
+     * written, and the method returns true, ONLY when a display field actually changed — so the 1 Hz
+     * stream neither thrashes the display prefs nor forces a redraw on every identical sample.
      */
     fun writeIfChanged(snapshot: WidgetSnapshot): Boolean {
         return try {
             val current = read()
+            val sampleAt = snapshot.freshnessAtMs()
             if (sameDisplayFields(current, snapshot)) {
+                // No display change: bump only the freshness timestamp (cheap single-key write) so the
+                // widget stays "fresh" without a redraw.
+                if (sampleAt > current.lastSampleAtMs) {
+                    prefs.edit { putLong(KEY_LAST_SAMPLE_AT, sampleAt) }
+                }
                 return false
             }
             prefs.edit {
@@ -62,6 +80,7 @@ class WidgetSnapshotStore(
                 putBoolean(KEY_CONNECTED, snapshot.connected)
                 putString(KEY_VEHICLE_STATE, snapshot.vehicleState)
                 putLong(KEY_UPDATED_AT, snapshot.updatedAtMs)
+                putLong(KEY_LAST_SAMPLE_AT, sampleAt)
             }
             true
         } catch (ex: RuntimeException) {
@@ -84,6 +103,11 @@ class WidgetSnapshotStore(
         private const val KEY_CHARGING = "widget_snapshot_charging"
         private const val KEY_CONNECTED = "widget_snapshot_connected"
         private const val KEY_VEHICLE_STATE = "widget_snapshot_vehicle_state"
+
+        /** Last display-CHANGE time; drives the debounced redraw + doubles as the "any data" sentinel. */
         private const val KEY_UPDATED_AT = "widget_snapshot_updated_at"
+
+        /** Last SAMPLE arrival time (bumped every sample); drives the freshness/stale signal. */
+        private const val KEY_LAST_SAMPLE_AT = "widget_snapshot_last_sample_at"
     }
 }

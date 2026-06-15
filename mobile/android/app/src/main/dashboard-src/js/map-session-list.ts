@@ -1,12 +1,69 @@
 import { CURRENT_DRIVE_LABEL, LIVE_ROUTE_ID } from "./map-route-utils";
 import type { MapRoute, MapRouteSession } from "./map-route-utils";
 
+// The client-side search/sort/favorites filter state (M4). Driven by the
+// controls above #mapSessionList; map.ts reads the control DOM and passes this.
+export type MapSessionSort = "recent" | "distance";
+export type MapSessionFilter = {
+  query: string;
+  sort: MapSessionSort;
+  favoritesOnly: boolean;
+};
+
 type MapSessionListFormatters = {
   selectedSessionId?: unknown;
   formatChipDate: (value: unknown) => string;
   formatDistance: (meters: number) => string;
   formatWhen: (value: unknown) => string;
+  filter?: MapSessionFilter;
 };
+
+// The searchable text for a stored route: its user label, the mode/adapter
+// fallback title, and the formatted date — so a search matches by name OR by
+// when the drive happened. `formatWhen` (when provided) supplies the same
+// human date string the row shows, so searching "today" / "may" works. The
+// standalone (formatter-less) path still matches label + mode/adapter.
+function searchableText(route: MapRoute, formatWhen?: (value: unknown) => string): string {
+  const session = sessionForRoute(route);
+  const label = labelOf(session);
+  const fallback = `${session.mode || "session"} ${session.adapterName || "OBD adapter"}`;
+  const date = formatWhen ? formatWhen(session.startedAtMs) : "";
+  return `${label} ${fallback} ${date}`.toLowerCase();
+}
+
+// Apply the M4 search / favorites / sort over the routes. The live (current)
+// drive is always kept and pinned first — it represents "now", carries no label
+// or favorite flag, and shouldn't vanish behind a stale filter. Stored routes
+// arrive newest-first already, so "recent" preserves order; "distance" re-sorts
+// by logged distance descending. `formatWhen` is optional so this stays pure and
+// unit-testable; render passes the real unit-aware formatter so date search
+// matches the on-screen text.
+export function filterAndSortRoutes(
+  routes: MapRoute[],
+  filter?: MapSessionFilter,
+  formatWhen?: (value: unknown) => string,
+): MapRoute[] {
+  if (!filter) return routes;
+  const query = String(filter.query || "").trim().toLowerCase();
+  const live: MapRoute[] = [];
+  let stored: MapRoute[] = [];
+  for (const route of routes) {
+    if (routeIsLive(route)) live.push(route);
+    else stored.push(route);
+  }
+  if (filter.favoritesOnly) {
+    stored = stored.filter((route) => favoriteOf(sessionForRoute(route)));
+  }
+  if (query) {
+    stored = stored.filter((route) => searchableText(route, formatWhen).includes(query));
+  }
+  if (filter.sort === "distance") {
+    stored = stored
+      .slice()
+      .sort((a, b) => Number(b.distanceMeters || 0) - Number(a.distanceMeters || 0));
+  }
+  return [...live, ...stored];
+}
 
 export function renderMapSessionListInto(
   list: HTMLElement,
@@ -21,7 +78,19 @@ export function renderMapSessionListInto(
     list.replaceChildren(p);
     return;
   }
-  list.replaceChildren(...routes.map((route) => buildMapSessionEntry(route, formatters)));
+  const visible = filterAndSortRoutes(routes, formatters.filter, formatters.formatWhen);
+  if (!visible.length) {
+    // Routes exist but the filter hid them all — distinguish from "no drives yet".
+    const filter = formatters.filter;
+    const p = document.createElement("p");
+    p.className = "status-copy";
+    p.textContent = filter && filter.favoritesOnly && !String(filter.query || "").trim()
+      ? "No favorite drives yet. Tap a drive's star to add it here."
+      : "No drives match your search.";
+    list.replaceChildren(p);
+    return;
+  }
+  list.replaceChildren(...visible.map((route) => buildMapSessionEntry(route, formatters)));
 }
 
 export function sessionForRoute(route: MapRoute): MapRouteSession {
@@ -48,10 +117,10 @@ function buildMapSessionEntry(
   const entry = document.createElement("div");
   entry.className = "history-entry";
   entry.append(buildMapSessionRow(route, session, live, formatters));
-  // Live drives have no finalized route key yet, so only stored trips get the GPX/CSV
+  // Live drives have no finalized route key yet, so only stored trips get the favorite + GPX/CSV
   // export + rename affordances.
   if (!live) {
-    const exportRow = buildExportActions(String(session.id || ""), labelOf(session));
+    const exportRow = buildExportActions(String(session.id || ""), labelOf(session), favoriteOf(session));
     if (exportRow) {
       entry.append(exportRow);
     }
@@ -63,6 +132,11 @@ function buildMapSessionEntry(
 function labelOf(session: MapRouteSession): string {
   const label = session && session.label;
   return typeof label === "string" ? label.trim() : "";
+}
+
+// The trip's favorite flag (M4 favorites half), defensively coerced (the native field is open).
+function favoriteOf(session: MapRouteSession): boolean {
+  return Boolean(session && session.favorite === true);
 }
 
 function buildMapSessionRow(
@@ -112,21 +186,52 @@ function buildMapSessionRow(
   return button;
 }
 
-// The "Rename / Export GPX / Export CSV" buttons under a stored route row. Each carries the route
-// key in a data attribute; actions.ts delegates the click to bridge.setTripLabel / exportTrip*.
-// Built with createElement/textContent only — never innerHTML — so a hostile adapter name, route
-// key, or label can't inject markup (DOM XSS-safe per the project's dom-sinks contract).
-function buildExportActions(routeKey: string, currentLabel = "") {
+// The "Favorite / Rename / Export GPX / Export CSV" buttons under a stored route row. Each carries
+// the route key in a data attribute; actions.ts delegates the click to bridge.setTripFavorite /
+// setTripLabel / exportTrip*. Built with createElement/textContent only — never innerHTML — so a
+// hostile adapter name, route key, or label can't inject markup (DOM XSS-safe per the project's
+// dom-sinks contract).
+function buildExportActions(routeKey: string, currentLabel = "", favorite = false) {
   const clean = String(routeKey || "").trim();
   if (!clean) return null;
   const row = document.createElement("div");
   row.className = "history-export";
   row.append(
+    buildFavoriteButton(clean, favorite),
+    buildDetailButton(clean),
     buildRenameButton(clean, currentLabel),
     buildExportButton(clean, "gpx", "Export GPX"),
     buildExportButton(clean, "csv", "Export CSV"),
   );
   return row;
+}
+
+// The per-row "Details" affordance (M7). A distinct action from select / rename /
+// export / favorite: it carries the route key on data-trip-detail so actions.ts
+// can open the trip-detail sheet for that one drive. textContent only (XSS-safe).
+function buildDetailButton(routeKey: string) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "history-export-btn history-detail-btn";
+  button.dataset.tripDetail = routeKey;
+  button.title = "See this drive's stats and efficiency.";
+  button.textContent = "Details";
+  return button;
+}
+
+// The per-row favorite toggle (M4 favorites half). A filled star ("★") when favorited, an outline
+// ("☆") otherwise; the current state rides on data-trip-favorite so actions.ts can flip it.
+function buildFavoriteButton(routeKey: string, favorite: boolean) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "history-export-btn history-favorite-btn" + (favorite ? " is-favorite" : "");
+  button.dataset.tripFavorite = routeKey;
+  button.dataset.tripFavoriteState = favorite ? "1" : "0";
+  button.setAttribute("aria-pressed", favorite ? "true" : "false");
+  button.title = favorite ? "Remove this drive from favorites." : "Add this drive to favorites.";
+  button.setAttribute("aria-label", favorite ? "Unfavorite this drive" : "Favorite this drive");
+  button.textContent = favorite ? "★" : "☆";
+  return button;
 }
 
 function buildRenameButton(routeKey: string, currentLabel: string) {

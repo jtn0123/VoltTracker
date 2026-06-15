@@ -560,13 +560,17 @@ class ObdStoreWriter(
     /**
      * Inserts a user-authored maintenance-log row (M5). [odometerKm] may be null (the user may not
      * know the reading); [type] and [note] are free text. [createdAtMs] dates the entry (the user
-     * can backdate service performed earlier). Returns the new row id, or -1 on failure.
+     * can backdate service performed earlier). [intervalKm] / [intervalMonths] are the optional
+     * service interval (M1/C4) that drives the dashboard's "next due / overdue" line; null leaves a
+     * plain history entry. Returns the new row id, or -1 on failure.
      */
     fun addMaintenanceEntry(
         createdAtMs: Long,
         odometerKm: Double?,
         type: String?,
         note: String?,
+        intervalKm: Double? = null,
+        intervalMonths: Int? = null,
     ): Long {
         val values = ContentValues()
         values.put("created_at_ms", createdAtMs)
@@ -575,6 +579,12 @@ class ObdStoreWriter(
         }
         values.put("type", ObdStoreSupport.clean(type))
         values.put("note", ObdStoreSupport.clean(note))
+        if (intervalKm != null && !intervalKm.isNaN() && !intervalKm.isInfinite() && intervalKm > 0.0) {
+            values.put("interval_km", intervalKm)
+        }
+        if (intervalMonths != null && intervalMonths > 0) {
+            values.put("interval_months", intervalMonths)
+        }
         return try {
             helper.writableDatabase.insertOrThrow(VoltTrackerDb.TABLE_MAINTENANCE_LOG, null, values)
         } catch (ex: SQLException) {

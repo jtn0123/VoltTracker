@@ -220,14 +220,20 @@ import { prefs, units } from "./prefs";
   }
 
   // Normalize a DTC severity to one of three buckets. The dtc-causes database
-  // tags codes "info" / "warning" / "critical"; when a code isn't in the
-  // database (severity null), fall back to a heuristic on the code family:
-  //   U (network), B (body), P0 powertrain → warning by default
-  //   C (chassis: ABS/brakes), P safety/driveability families → critical
+  // tags codes "info" / "warning" / "critical" and ALWAYS wins when present, so
+  // a genuinely safety-critical powertrain code carried in the DB (e.g. P0AA6,
+  // an HV-interlock fault) still resolves to "critical" via its metadata. The
+  // family heuristic below only applies when a code is NOT in the database
+  // (severity null):
+  //   C (chassis: ABS / brakes / steering) → critical  (affects vehicle control)
+  //   P (powertrain), B (body), U (network) → warning   (service soon)
   //   anything else → info
-  // The heuristic is deliberately conservative: a chassis/brake code maps to
-  // "critical" (stop safely) because those affect vehicle control, while a
-  // generic powertrain or body code maps to "warning" (service soon).
+  // The P-family default is deliberately "warning", NOT "critical": without DB
+  // metadata we can't tell a safety-critical powertrain fault from a routine
+  // emissions code, and over-calling every unknown P-code "Stop safely" would
+  // cry wolf on the most common scan result. Erring toward "warning" (service
+  // soon — generally safe to drive) is the conservative, honest call for an
+  // unknown powertrain code; the DB promotes the truly critical ones above.
   function dtcSeverity(rawCode: unknown, metaSeverity: string | null): "critical" | "warning" | "info" {
     const meta = String(metaSeverity || "").toLowerCase();
     if (meta === "critical" || meta === "warning" || meta === "info") return meta;
@@ -235,7 +241,7 @@ import { prefs, units } from "./prefs";
     const family = code.charAt(0);
     if (family === "C") return "critical"; // chassis: ABS / brakes / steering
     if (family === "B" || family === "U") return "warning"; // body / network
-    if (family === "P") return "warning"; // powertrain default
+    if (family === "P") return "warning"; // powertrain default (see note above)
     return "info";
   }
 
@@ -250,6 +256,15 @@ import { prefs, units } from "./prefs";
     if (severity === "critical") return "Stop safely — have it checked before driving on";
     if (severity === "warning") return "Service soon — generally safe to drive in the meantime";
     return "Safe to drive — monitor at your next service";
+  }
+
+  // Whether a stored DTC can be erased by the OBD-II Mode 04 clear command. Permanent
+  // (Mode 0A) codes are intentionally NON-clearable — the ECU re-asserts them until the
+  // underlying fault clears its own readiness monitors — so the clear flow must not promise
+  // they'll disappear (M10). Every other status (current/stored/pending/freeze-frame)
+  // is erased by Mode 04.
+  function isPermanentDtc(status: unknown): boolean {
+    return String(status || "").trim().toLowerCase() === "permanent";
   }
 
   function buildDtcItem(code: VoltDtcRow, isExample: boolean) {
@@ -273,9 +288,17 @@ import { prefs, units } from "./prefs";
     sevBadge.className = "dtc-sev";
     sevBadge.dataset.severity = severity;
     sevBadge.textContent = severityLabel(severity);
+    // Clearability tag (M10): permanent codes survive a Mode 04 clear, every other status is
+    // erased by it. Surfaced per-code so a user reading the report knows which codes the
+    // "Clear codes" button can actually turn off. textContent only (XSS-safe).
+    const permanent = isPermanentDtc(code.status);
+    const clearTag = document.createElement("span");
+    clearTag.className = "dtc-clearable";
+    clearTag.dataset.clearable = permanent ? "no" : "yes";
+    clearTag.textContent = permanent ? "permanent — won't clear" : "clearable";
     const codeSmall = document.createElement("small");
     codeSmall.textContent = code.statusLabel || code.status || "stored";
-    codeBlock.append(codeB, sevBadge, codeSmall);
+    codeBlock.append(codeB, sevBadge, clearTag, codeSmall);
 
     const moduleBlock = document.createElement("span");
     moduleBlock.className = "dtc-module-block";
@@ -769,18 +792,112 @@ import { prefs, units } from "./prefs";
     renderVehicleUi();
   }
 
+  // The latest odometer reading the app has seen, in km, or null when unknown. Sourced from the
+  // latest battery snapshot's odometer (written whenever the car answers the odometer PID) and,
+  // failing that, the vehicle identity card's odometer. Drives the maintenance "next due / overdue"
+  // distance math (M1/C4).
+  function latestOdometerKm(): number | null {
+    const storage = state.storage || {};
+    const latest = latestInsightReading(storage);
+    const snapshotOdo = Number(latest.odometerKm);
+    if (Number.isFinite(snapshotOdo) && snapshotOdo > 0) return snapshotOdo;
+    const vehicle = ((state.appState || {}).vehicle || {}) as Record<string, unknown>;
+    const vehicleKm = Number(vehicle.odometerKm);
+    if (Number.isFinite(vehicleKm) && vehicleKm > 0) return vehicleKm;
+    const vehicleMiles = Number(vehicle.odometerMiles);
+    if (Number.isFinite(vehicleMiles) && vehicleMiles > 0) return vehicleMiles * 1.609344;
+    return null;
+  }
+
+  const MAINTENANCE_DUE_SOON_KM = 1609.344; // ~1,000 mi of remaining distance counts as "due soon".
+  const MAINTENANCE_DUE_SOON_DAYS = 30;
+  const MS_PER_DAY = 86_400_000;
+  const AVG_DAYS_PER_MONTH = 30.4375;
+
+  // Per-entry due status against the latest logged odometer and/or elapsed months. Returns null when
+  // the entry has no interval set (a plain history row shows no due line). `state` is the worst of
+  // the distance/time checks: "overdue" > "due-soon" > "ok".
+  type MaintenanceDue = { state: "overdue" | "due-soon" | "ok"; text: string };
+  function maintenanceDue(entry: VoltMaintenanceEntry, nowMs: number, odometerKm: number | null): MaintenanceDue | null {
+    const parts: string[] = [];
+    let worst: MaintenanceDue["state"] = "ok";
+    const escalate = (next: MaintenanceDue["state"]) => {
+      if (next === "overdue") worst = "overdue";
+      else if (next === "due-soon" && worst !== "overdue") worst = "due-soon";
+    };
+
+    const intervalKm = Number(entry.intervalKm);
+    const loggedOdo = Number(entry.odometerKm);
+    if (Number.isFinite(intervalKm) && intervalKm > 0 && Number.isFinite(loggedOdo) && loggedOdo > 0 && odometerKm != null) {
+      const dueAtKm = loggedOdo + intervalKm;
+      const remainingKm = dueAtKm - odometerKm;
+      if (remainingKm <= 0) {
+        escalate("overdue");
+        parts.push(`overdue by ${units.distanceText(Math.abs(remainingKm))}`);
+      } else {
+        if (remainingKm <= MAINTENANCE_DUE_SOON_KM) escalate("due-soon");
+        parts.push(`${units.distanceText(remainingKm)} until due`);
+      }
+    }
+
+    const intervalMonths = Number(entry.intervalMonths);
+    const createdAt = Number(entry.createdAtMs);
+    if (Number.isFinite(intervalMonths) && intervalMonths > 0 && Number.isFinite(createdAt) && createdAt > 0) {
+      const dueAtMs = createdAt + intervalMonths * AVG_DAYS_PER_MONTH * MS_PER_DAY;
+      const remainingDays = Math.round((dueAtMs - nowMs) / MS_PER_DAY);
+      if (remainingDays <= 0) {
+        escalate("overdue");
+        parts.push(`overdue by ${Math.abs(remainingDays)}d`);
+      } else {
+        if (remainingDays <= MAINTENANCE_DUE_SOON_DAYS) escalate("due-soon");
+        parts.push(`${remainingDays}d until due`);
+      }
+    }
+
+    if (!parts.length) return null;
+    return { state: worst, text: parts.join(" · ") };
+  }
+
   // Renders the user's real maintenance log (M5) into #maintenanceList, replacing the old
   // hardcoded placeholder rows. When empty, shows next-due GUIDANCE only (never a fake logged
-  // entry) so the card reads as a prompt to start logging, not as fabricated history.
+  // entry) so the card reads as a prompt to start logging, not as fabricated history. Entries with
+  // a service interval gain a per-row "next due / overdue" line, and an aggregate "service due
+  // soon" hint surfaces when any tracked item is due-soon/overdue (M1/C4).
   function renderMaintenanceList() {
     const maintenance = el("maintenanceList");
     if (!maintenance) return;
     const entries = Array.isArray(state.maintenanceLog) ? state.maintenanceLog : [];
     if (!entries.length) {
       maintenance.replaceChildren(buildMaintenanceEmptyState());
+      renderMaintenanceDueHint([]);
       return;
     }
-    maintenance.replaceChildren(...entries.map(buildMaintenanceEntryRow));
+    const nowMs = Date.now();
+    const odometerKm = latestOdometerKm();
+    const dueByEntry = entries.map((entry) => maintenanceDue(entry, nowMs, odometerKm));
+    maintenance.replaceChildren(...entries.map((entry, i) => buildMaintenanceEntryRow(entry, dueByEntry[i])));
+    renderMaintenanceDueHint(dueByEntry);
+  }
+
+  // Aggregate "service due soon / overdue" banner above the list. Counts the tracked items that are
+  // overdue or due-soon; stays hidden when nothing is tracked or everything is comfortably ahead.
+  function renderMaintenanceDueHint(dueByEntry: Array<MaintenanceDue | null>) {
+    const hint = el("maintenanceDueHint");
+    if (!hint) return;
+    const overdue = dueByEntry.filter((d) => d && d.state === "overdue").length;
+    const dueSoon = dueByEntry.filter((d) => d && d.state === "due-soon").length;
+    if (!overdue && !dueSoon) {
+      hint.hidden = true;
+      hint.textContent = "";
+      hint.removeAttribute("data-due");
+      return;
+    }
+    const segs: string[] = [];
+    if (overdue) segs.push(`${overdue} overdue`);
+    if (dueSoon) segs.push(`${dueSoon} due soon`);
+    hint.textContent = `Service ${segs.join(" · ")}`;
+    hint.dataset.due = overdue ? "overdue" : "due-soon";
+    hint.hidden = false;
   }
 
   // Empty-state guidance: a short "what to track" hint, NOT a logged row. Pure DOM (no innerHTML).
@@ -799,9 +916,11 @@ import { prefs, units } from "./prefs";
   }
 
   // One real maintenance entry. Title is the type; the detail line carries the date, odometer (when
-  // known) and note. A delete button carries the entry id for actions.ts. createElement/textContent
-  // only — never innerHTML — so a hostile type/note can't inject markup (DOM XSS-safe).
-  function buildMaintenanceEntryRow(entry: VoltMaintenanceEntry) {
+  // known) and note. When the entry has a service interval, a second "next due / overdue" line is
+  // appended, color-coded via data-due (M1/C4). A delete button carries the entry id for actions.ts.
+  // createElement/textContent only — never innerHTML — so a hostile type/note can't inject markup
+  // (DOM XSS-safe).
+  function buildMaintenanceEntryRow(entry: VoltMaintenanceEntry, due: MaintenanceDue | null = null) {
     const article = document.createElement("article");
     article.className = "real-insight-item";
     const center = document.createElement("span");
@@ -811,6 +930,13 @@ import { prefs, units } from "./prefs";
     const small = document.createElement("small");
     small.textContent = maintenanceDetailLine(entry);
     center.append(strong, small);
+    if (due) {
+      const dueLine = document.createElement("small");
+      dueLine.className = "maint-due";
+      dueLine.dataset.due = due.state;
+      dueLine.textContent = due.state === "overdue" ? `Overdue · ${due.text}` : `Next due · ${due.text}`;
+      center.append(dueLine);
+    }
 
     const right = document.createElement("button");
     right.type = "button";
@@ -845,35 +971,81 @@ import { prefs, units } from "./prefs";
     renderMaintenanceList();
   }
 
-  // Prompts for a maintenance entry and forwards it to native (M5). Uses sequential prompts (the
-  // WebView has no inline form here) — type is required; odometer/note are optional; cancel aborts.
-  function addMaintenanceEntry() {
+  // The maintenance "Add entry" inline form (M1/C4) — type + odometer + note + optional interval,
+  // replacing the old sequential window.prompt() chain. Opening reveals the static <form>; Save
+  // reads the inputs, builds the JSON payload (odometer/interval distances converted to km), and
+  // forwards to native; Cancel/Save both collapse and reset the form. Distance-unit labels follow
+  // the user's preference.
+  function openMaintenanceForm() {
     if (!bridge || typeof bridge.addMaintenanceEntry !== "function") {
       VD.setStatus({ state: "idle", detail: "Maintenance logging is available inside the Android app." });
       return;
     }
-    const type = window.prompt("What service? (e.g. Oil change, Tire rotation)", "");
-    if (type === null) return;
-    if (!type.trim()) {
-      VD.setStatus({ state: "blocked", detail: "Add a service type before saving." });
-      return;
-    }
-    const odoRaw = window.prompt("Odometer reading (optional, in your distance unit):", "");
-    if (odoRaw === null) return;
-    const note = window.prompt("Note (optional):", "");
-    if (note === null) return;
-    const payload: { type: string; note: string; date: number; odometerKm?: number } = {
-      type: type.trim(),
-      note: note.trim(),
-      date: Date.now()
-    };
-    const odoKm = parseOdometerKm(odoRaw);
-    if (odoKm != null) payload.odometerKm = odoKm;
-    bridge.addMaintenanceEntry(JSON.stringify(payload));
+    const form = el("maintenanceForm");
+    const btn = el("addMaintenanceBtn");
+    if (!form) return;
+    const unitLabel = units.distanceUnit() === "mi" ? "mi" : "km";
+    VD.setText("maintOdometerLabel", `Odometer (${unitLabel})`);
+    VD.setText("maintIntervalKmLabel", `Every (${unitLabel})`);
+    form.hidden = false;
+    if (btn) btn.setAttribute("aria-expanded", "true");
+    const typeInput = el("maintTypeInput") as HTMLInputElement | null;
+    if (typeInput) typeInput.focus();
   }
 
-  // Converts a user-entered odometer reading (in their display distance unit) to km for storage.
-  // Returns null for blank/invalid input so the entry simply omits the odometer.
+  function closeMaintenanceForm() {
+    const form = el("maintenanceForm") as HTMLFormElement | null;
+    const btn = el("addMaintenanceBtn");
+    if (form) {
+      form.reset();
+      form.hidden = true;
+    }
+    if (btn) btn.setAttribute("aria-expanded", "false");
+  }
+
+  // Toggle entry point used by the "Add entry" button (data-action=addMaintenance).
+  function addMaintenanceEntry() {
+    const form = el("maintenanceForm");
+    if (form && !form.hidden) {
+      closeMaintenanceForm();
+      return;
+    }
+    openMaintenanceForm();
+  }
+
+  // Reads the inline form and forwards a JSON payload to native. Type is required; odometer, note,
+  // and the two interval fields are optional. Distances are converted from the display unit to km.
+  function submitMaintenanceForm() {
+    if (!bridge || typeof bridge.addMaintenanceEntry !== "function") {
+      VD.setStatus({ state: "idle", detail: "Maintenance logging is available inside the Android app." });
+      return;
+    }
+    const type = String((el("maintTypeInput") as HTMLInputElement | null)?.value || "").trim();
+    const note = String((el("maintNoteInput") as HTMLInputElement | null)?.value || "").trim();
+    if (!type && !note) {
+      VD.setStatus({ state: "blocked", detail: "Add a service type or note before saving." });
+      return;
+    }
+    const payload: {
+      type: string;
+      note: string;
+      date: number;
+      odometerKm?: number;
+      intervalKm?: number;
+      intervalMonths?: number;
+    } = { type, note, date: Date.now() };
+    const odoKm = parseOdometerKm((el("maintOdometerInput") as HTMLInputElement | null)?.value || "");
+    if (odoKm != null) payload.odometerKm = odoKm;
+    const intervalKm = parseOdometerKm((el("maintIntervalKmInput") as HTMLInputElement | null)?.value || "");
+    if (intervalKm != null) payload.intervalKm = intervalKm;
+    const months = Math.round(Number(String((el("maintIntervalMonthsInput") as HTMLInputElement | null)?.value || "").trim()));
+    if (Number.isFinite(months) && months > 0) payload.intervalMonths = months;
+    bridge.addMaintenanceEntry(JSON.stringify(payload));
+    closeMaintenanceForm();
+  }
+
+  // Converts a user-entered odometer/interval reading (in their display distance unit) to km for
+  // storage. Returns null for blank/invalid input so the entry simply omits the value.
   function parseOdometerKm(raw: string): number | null {
     const value = Number(String(raw || "").trim());
     if (!Number.isFinite(value) || value <= 0) return null;
@@ -932,6 +1104,9 @@ import { prefs, units } from "./prefs";
       // kWh / cost figures from a cleared database.
       VD.setText("chargeEnergyTotal", "-- kWh");
       VD.setText("chargeEnergyCost", "--");
+      // No positive energy → the monthly trend has nothing to plot either; hide
+      // it so a cleared database can't leave a stale chart behind.
+      renderChargeCostTrend(sessions);
       return;
     }
     card.hidden = false;
@@ -946,6 +1121,133 @@ import { prefs, units } from "./prefs";
       VD.setText("chargeEnergyCost", "--");
       if (hint) hint.hidden = false;
     }
+    renderChargeCostTrend(sessions);
+  }
+
+  // ---- Charging cost / energy trend over time (M5) -------------------------
+  // Buckets logged charge sessions into calendar months and plots monthly
+  // energy (kWh) — or estimated cost (kWh × electricity rate) when the rate is
+  // set — as an SVG bar chart, reusing the SOH-trend rendering pattern (pure
+  // createElement/setSvgAttrs, theme-aware tokens, XSS-safe). The single flat
+  // lifetime cost figure on the Energy card answers "how much total"; this
+  // answers "is it trending up or down, month to month".
+  type MonthBucket = { key: string; label: string; ms: number; energyKwh: number };
+
+  // Calendar-month key + short label ("May ’26") for a charge timestamp.
+  function monthBucketKey(ms: number): { key: string; label: string; firstMs: number } {
+    const d = new Date(ms);
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    // `undefined` locale follows the device's runtime locale; the month-short
+    // option keeps the compact "May ’26" shape across locales.
+    const label = d.toLocaleDateString(undefined, { month: "short" }) + " ’" + String(year).slice(-2);
+    return { key: `${year}-${String(month).padStart(2, "0")}`, label, firstMs: new Date(year, month, 1).getTime() };
+  }
+
+  // Group sessions by month, summing positive energy. Months with no energy are
+  // dropped (a charge stub with no kWh contributes nothing). Ascending by month.
+  function bucketChargesByMonth(sessions: VoltChargeSessionRow[]): MonthBucket[] {
+    const byKey = new Map<string, MonthBucket>();
+    for (const session of sessions) {
+      const ms = Number(session.startedAtMs);
+      const energy = chargeNum(session.energyKwh);
+      if (!Number.isFinite(ms) || ms <= 0 || !Number.isFinite(energy) || energy <= 0) continue;
+      const { key, label, firstMs } = monthBucketKey(ms);
+      const existing = byKey.get(key);
+      if (existing) existing.energyKwh += energy;
+      else byKey.set(key, { key, label, ms: firstMs, energyKwh: energy });
+    }
+    return Array.from(byKey.values()).sort((a, b) => a.ms - b.ms);
+  }
+
+  function buildChargeTrendSvg(buckets: MonthBucket[], values: number[], unitSuffix: string): SVGElement {
+    const ns = "http://www.w3.org/2000/svg";
+    const w = 320;
+    const h = 132;
+    const padL = 30;
+    const padR = 10;
+    const padT = 12;
+    const padB = 28;
+    const plotW = w - padL - padR;
+    const plotH = h - padT - padB;
+    const maxV = Math.max(...values, 0) || 1;
+    // Theme-aware colors: CSS variables don't cascade into SVG fill/stroke, so
+    // resolve the tokens once (mirrors the insights scatter approach).
+    const tokens = getComputedStyle(document.documentElement);
+    const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
+    const barColor = token("--volt", "#ff7a45");
+    const axisColor = token("--muted", "#aaaab4");
+    const lineColor = token("--line", "rgba(255,255,255,0.1)");
+    const make = (tag: string, attrs: Record<string, string | number>) =>
+      setSvgAttrs(document.createElementNS(ns, tag) as SVGElement, attrs);
+    const svg = make("svg", {
+      viewBox: `0 0 ${w} ${h}`,
+      class: "charge-cost-trend-svg",
+      role: "img",
+      "aria-label": `Monthly charging ${unitSuffix === "$" ? "cost" : "energy"} trend, latest ${
+        unitSuffix === "$" ? "$" + values[values.length - 1].toFixed(2) : values[values.length - 1].toFixed(1) + " kWh"
+      }`,
+    });
+    // Baseline.
+    svg.appendChild(make("line", {
+      x1: String(padL), x2: String(w - padR), y1: String(padT + plotH), y2: String(padT + plotH), stroke: lineColor,
+    }));
+    const n = values.length;
+    const slot = plotW / n;
+    const barW = Math.max(4, Math.min(34, slot * 0.6));
+    values.forEach((v, i) => {
+      const cx = padL + slot * (i + 0.5);
+      const barH = (v / maxV) * plotH;
+      svg.appendChild(make("rect", {
+        x: (cx - barW / 2).toFixed(1),
+        y: (padT + plotH - barH).toFixed(1),
+        width: barW.toFixed(1),
+        height: Math.max(0, barH).toFixed(1),
+        rx: 3,
+        fill: barColor,
+        "fill-opacity": 0.85,
+      }));
+      const label = make("text", {
+        x: cx.toFixed(1), y: (h - padB + 16).toFixed(1), fill: axisColor,
+        "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle",
+      });
+      // Show every label when few buckets; thin to every other when crowded.
+      label.textContent = n <= 6 || i % 2 === 0 ? buckets[i].label : "";
+      svg.appendChild(label);
+    });
+    return svg;
+  }
+
+  function renderChargeCostTrend(sessions: VoltChargeSessionRow[]) {
+    const card = el("chargeCostTrendCard");
+    if (!card) return;
+    const buckets = bucketChargesByMonth(sessions);
+    const chart = el("chargeCostTrendChart");
+    const empty = el("chargeCostTrendEmpty");
+    const stats = el("chargeCostTrendStats");
+    // Need at least two months for a meaningful "trend". One month (or none)
+    // hides the whole card — the flat Energy card already covers single-month.
+    if (buckets.length < 2) {
+      card.hidden = true;
+      if (chart) chart.replaceChildren();
+      return;
+    }
+    card.hidden = false;
+    if (empty) empty.hidden = true;
+    if (stats) stats.hidden = false;
+    const price = prefs.get<number>("pricePerKwh", 0);
+    const showCost = price > 0;
+    const values = buckets.map((b) => (showCost ? b.energyKwh * price : b.energyKwh));
+    const total = values.reduce((acc, v) => acc + v, 0);
+    const avg = total / values.length;
+    const fmt = (v: number) => (showCost ? formatMoney(v) : `${v.toFixed(1)} kWh`);
+    VD.setText("chargeCostTrendTitle", showCost ? "Monthly charging cost" : "Monthly charging energy");
+    VD.setText("chargeCostTrendLatest", fmt(values[values.length - 1] as number));
+    VD.setText("chargeCostTrendSpanLabel", showCost ? "Avg / month" : "Avg / month");
+    VD.setText("chargeCostTrendAvg", fmt(avg));
+    VD.setText("chargeCostTrendMonths", String(buckets.length));
+    VD.setText("chargeCostTrendTotal", fmt(total));
+    if (chart) chart.replaceChildren(buildChargeTrendSvg(buckets, values, showCost ? "$" : "kWh"));
   }
 
   function chargeNum(value: unknown) {
@@ -1113,6 +1415,8 @@ import { prefs, units } from "./prefs";
     loadMaintenanceLog,
     renderMaintenanceList,
     addMaintenanceEntry,
+    submitMaintenanceForm,
+    closeMaintenanceForm,
     toggleHidden
   });
 })();

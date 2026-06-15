@@ -157,6 +157,53 @@ class RollingAppLogTest {
     }
 
     @Test
+    fun heldWriterIsReusedAcrossManyAppendsAndReopenedAfterRotation() {
+        // The append path now holds a long-lived buffered writer instead of reopening per line (G1).
+        // Prove that many appends through the held writer all land, that each is flushed so an
+        // immediate read sees it, and that a rotation in the middle closes+reopens the writer
+        // without losing the lines on either side of the roll.
+        for (i in 0 until 50) {
+            log.write("D", "tag", "pre-$i")
+            // Each line must be visible immediately (flush-per-write), not buffered until close.
+            assertTrue("line pre-$i must be flushed right away", readAll(log.liveFile()).contains("pre-$i"))
+        }
+
+        clock.addAndGet(RollingAppLog.ROTATE_AGE_MS + 1L)
+        log.write("D", "tag", "after-roll") // triggers rotation: writer closed, live file renamed
+
+        // The pre-roll lines went to the rolled file; the post-roll line is in a fresh live file
+        // written through the reopened writer.
+        val rolled = readAll(log.rolledFile())
+        assertTrue("rolled file holds the last pre-roll line", rolled.contains("pre-49"))
+        assertFalse("live file must not still hold pre-roll lines", readAll(log.liveFile()).contains("pre-49"))
+
+        for (i in 0 until 10) {
+            log.write("D", "tag", "post-$i")
+        }
+        val live = readAll(log.liveFile())
+        assertTrue("first post-roll line lands in the reopened live file", live.contains("after-roll"))
+        assertTrue("subsequent post-roll lines append through the reused writer", live.contains("post-9"))
+    }
+
+    @Test
+    fun closeReleasesTheWriterAndDropsFurtherWritesInsteadOfReopening() {
+        // close() releases the held file handle (called from the service's onDestroy so the
+        // long-lived writer isn't leaked for the process lifetime) without losing already-flushed
+        // lines. It is permanent: a straggler write from a still-draining thread is dropped rather
+        // than reopening — and re-leaking — the handle.
+        log.write("D", "tag", "before-close")
+        log.close()
+        assertTrue("flushed line survives close", readAll(log.liveFile()).contains("before-close"))
+
+        // close() is idempotent, and a post-close write is a no-op (no reopen, no new line).
+        log.close()
+        log.write("D", "tag", "after-close")
+        val contents = readAll(log.liveFile())
+        assertTrue("pre-close line is still present", contents.contains("before-close"))
+        assertFalse("post-close write is dropped, not reopened", contents.contains("after-close"))
+    }
+
+    @Test
     fun rotationIsTriggeredOncePerRollAge() {
         log.write("D", "tag", "v1")
         clock.addAndGet(RollingAppLog.ROTATE_AGE_MS + 1L)

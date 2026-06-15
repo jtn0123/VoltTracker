@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -32,9 +33,10 @@ class BackupCryptoTest {
 
     private val passphrase = "correct horse battery staple"
 
-    // The v2 magic that encryptFile writes: bytes "VTBKEN2\n". 8-byte header, then 16-byte salt,
-    // then 12-byte IV, then GCM ciphertext (incl. the 16-byte auth tag).
-    private val magicV2 =
+    // The v3 magic that encryptFile now writes: bytes "VTBKEN3\n". 8-byte magic, then 16-byte salt,
+    // then 12-byte IV, then the 4-byte big-endian KDF iteration count, then GCM ciphertext (incl. the
+    // 16-byte auth tag). v2 (no iter field) and v1 (no AAD) remain readable on decrypt.
+    private fun magicWithVersion(version: Char): ByteArray =
         byteArrayOf(
             'V'.code.toByte(),
             'T'.code.toByte(),
@@ -42,10 +44,14 @@ class BackupCryptoTest {
             'K'.code.toByte(),
             'E'.code.toByte(),
             'N'.code.toByte(),
-            '2'.code.toByte(),
+            version.code.toByte(),
             '\n'.code.toByte(),
         )
-    private val headerBytes = magicV2.size + 16 + 12 // magic + salt + IV
+
+    private val magicV3 = magicWithVersion('3')
+
+    // magic + salt + IV + 4-byte iteration field for the v3 container encryptFile writes.
+    private val headerBytes = magicV3.size + 16 + 12 + 4
 
     private fun randomBytes(n: Int): ByteArray {
         val b = ByteArray(n)
@@ -232,7 +238,7 @@ class BackupCryptoTest {
         val garbage = writeFile("garbage.bin", garbageBytes)
         assertFalse("random non-magic bytes must not be detected as a backup", BackupCrypto.isEncryptedBackup(garbage))
 
-        val tooShort = writeFile("short.bin", byteArrayOf(magicV2[0], magicV2[1], magicV2[2]))
+        val tooShort = writeFile("short.bin", byteArrayOf(magicV3[0], magicV3[1], magicV3[2]))
         assertFalse(
             "a file shorter than the magic header must not be detected",
             BackupCrypto.isEncryptedBackup(tooShort),
@@ -242,26 +248,196 @@ class BackupCryptoTest {
     }
 
     /**
-     * Guard the encrypt header layout this suite reasons about (magic + salt + IV). If the on-disk
-     * format ever changes, the tamper/truncate offset math above would silently weaken, so anchor it.
+     * Guard the encrypt header layout this suite reasons about (magic + salt + IV + iter field). If
+     * the on-disk format ever changes, the tamper/truncate offset math above would silently weaken,
+     * so anchor it. encryptFile writes the v3 container now (raised KDF cost, recorded count).
      */
     @Test
-    fun encryptedContainerStartsWithV2MagicAndExpectedHeaderSize() {
+    fun encryptedContainerStartsWithV3MagicAndExpectedHeaderSize() {
         val source = writeFile("plain.bin", randomBytes(64))
         val encrypted = tmp.newFile("encrypted.vtdb")
         BackupCrypto.encryptFile(source, encrypted, passphrase)
 
         val bytes = encrypted.readBytes()
-        if (bytes.size < magicV2.size) {
+        if (bytes.size < magicV3.size) {
             fail("encrypted container is smaller than the magic header")
         }
         assertArrayEquals(
-            "encryptFile must write the v2 magic header",
-            magicV2,
-            bytes.copyOf(magicV2.size),
+            "encryptFile must write the v3 magic header",
+            magicV3,
+            bytes.copyOf(magicV3.size),
         )
+        // The recorded iteration count (4 big-endian bytes after magic+salt+IV) is the new 600k cost.
+        val iterOffset = magicV3.size + 16 + 12
+        val recorded =
+            ((bytes[iterOffset].toInt() and 0xFF) shl 24) or
+                ((bytes[iterOffset + 1].toInt() and 0xFF) shl 16) or
+                ((bytes[iterOffset + 2].toInt() and 0xFF) shl 8) or
+                (bytes[iterOffset + 3].toInt() and 0xFF)
+        assertEquals("v3 records the 600k OWASP-current iteration count", 600_000, recorded)
         assertNotNull(encrypted)
         // 64-byte payload + GCM tag means the container must comfortably exceed the header.
-        assertTrue("container must be larger than magic+salt+IV header", bytes.size > headerBytes)
+        assertTrue("container must be larger than magic+salt+IV+iter header", bytes.size > headerBytes)
+    }
+
+    /**
+     * v3 round-trip at the raised 600k cost: a payload encrypted by the current code (which writes
+     * v3 with the recorded count) decrypts back byte-for-byte. The container is recognized and is not
+     * a copy of the plaintext.
+     */
+    @Test
+    fun v3ContainerRoundTripsAtRaisedIterationCount() {
+        val payload = randomBytes(12_000)
+        val source = writeFile("plain.bin", payload)
+        val encrypted = tmp.newFile("encrypted.vtdb")
+        val decrypted = tmp.newFile("decrypted.bin")
+
+        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        assertTrue(BackupCrypto.isEncryptedBackup(encrypted))
+        // Confirm it really is the v3 magic, i.e. the raised-cost path.
+        assertArrayEquals(magicV3, encrypted.readBytes().copyOf(magicV3.size))
+
+        BackupCrypto.decryptFile(encrypted, decrypted, passphrase, Long.MAX_VALUE)
+        assertArrayEquals("v3 backup must round-trip byte-for-byte", payload, decrypted.readBytes())
+    }
+
+    /**
+     * Backward compatibility: a backup written in the OLD v2 format (no iteration field, 150k count)
+     * must still decrypt. We synthesize a genuine v2 container the same way the prior version did —
+     * magic V2 + salt + IV, AES/GCM with the key derived at the legacy 150k count, AAD =
+     * magic+salt+IV (no iter field) — then assert BackupCrypto reads it back at 150k.
+     */
+    @Test
+    fun legacyV2ContainerStillDecryptsAtLegacyIterationCount() {
+        val payload = randomBytes(5_000)
+        val encrypted = writeLegacyV2Container(payload, passphrase)
+        val decrypted = tmp.newFile("decrypted.bin")
+
+        assertTrue("v2 container is still recognized as a backup", BackupCrypto.isEncryptedBackup(encrypted))
+        BackupCrypto.decryptFile(encrypted, decrypted, passphrase, Long.MAX_VALUE)
+        assertArrayEquals("an old v2 backup must still decrypt", payload, decrypted.readBytes())
+    }
+
+    /**
+     * Backward compatibility for the OLDEST format: a v1 backup wrote NO GCM AAD and used the legacy
+     * 150k count. The decrypt path must skip AAD for the v1 magic, so a genuine v1 container still
+     * round-trips. This is the only test exercising the no-AAD branch — a regression there would
+     * silently brick the earliest users' backups.
+     */
+    @Test
+    fun legacyV1ContainerStillDecryptsWithoutAad() {
+        val payload = randomBytes(3_000)
+        val encrypted = writeLegacyV1Container(payload, passphrase)
+        val decrypted = tmp.newFile("decrypted.bin")
+
+        assertTrue("v1 container is still recognized as a backup", BackupCrypto.isEncryptedBackup(encrypted))
+        BackupCrypto.decryptFile(encrypted, decrypted, passphrase, Long.MAX_VALUE)
+        assertArrayEquals("an old v1 backup must still decrypt", payload, decrypted.readBytes())
+    }
+
+    /**
+     * A corrupt/hostile v3 header that requests an absurd iteration count (here 0x7FFFFFFF, far above
+     * MAX_PBKDF2_ITERATIONS) must be rejected outright before any key derivation — otherwise opening a
+     * malicious backup could pin the CPU for minutes (a KDF-cost DoS). Pins the decodeIterations bound.
+     */
+    @Test
+    fun v3HeaderWithOutOfRangeIterationCountIsRejected() {
+        val payload = randomBytes(512)
+        val source = writeFile("plain.bin", payload)
+        val encrypted = tmp.newFile("encrypted.vtdb")
+        BackupCrypto.encryptFile(source, encrypted, passphrase)
+
+        // Overwrite the 4-byte big-endian iteration field (after magic+salt+IV) with a count just
+        // ABOVE the 5,000,000 cap. Deliberately NOT a huge value like 0x7FFFFFFF: if the upper-bound
+        // check ever regressed past key derivation, deriving at ~5M iterations is bounded (a second
+        // or two) whereas ~2.1B would hang CI. Either way it must be rejected before any derivation.
+        val tooManyIterations = 5_000_001
+        val iterBytes =
+            byteArrayOf(
+                (tooManyIterations ushr 24).toByte(),
+                (tooManyIterations ushr 16).toByte(),
+                (tooManyIterations ushr 8).toByte(),
+                tooManyIterations.toByte(),
+            )
+        val iterOffset = (magicV3.size + 16 + 12).toLong()
+        RandomAccessFile(encrypted, "rw").use { raf ->
+            raf.seek(iterOffset)
+            raf.write(iterBytes)
+        }
+
+        val decrypted = tmp.newFile("decrypted.bin")
+        try {
+            BackupCrypto.decryptFile(encrypted, decrypted, passphrase, Long.MAX_VALUE)
+            fail("an out-of-range iteration count must be rejected")
+        } catch (ex: java.io.IOException) {
+            assertTrue(
+                "rejection should name the out-of-range iteration count",
+                ex.message?.contains("iteration count") == true,
+            )
+        }
+    }
+
+    /** Builds a real v2 container (legacy 150k KDF, magic+salt+IV AAD) the way the prior code did. */
+    private fun writeLegacyV2Container(
+        payload: ByteArray,
+        pass: String,
+    ): File {
+        val magicV2 = magicWithVersion('2')
+        val salt = randomBytes(16)
+        val iv = randomBytes(12)
+        val keyBytes =
+            javax.crypto.SecretKeyFactory
+                .getInstance("PBKDF2WithHmacSHA256")
+                .generateSecret(javax.crypto.spec.PBEKeySpec(pass.toCharArray(), salt, 150_000, 256))
+                .encoded
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(
+            javax.crypto.Cipher.ENCRYPT_MODE,
+            javax.crypto.spec.SecretKeySpec(keyBytes, "AES"),
+            javax.crypto.spec.GCMParameterSpec(128, iv),
+        )
+        cipher.updateAAD(magicV2)
+        cipher.updateAAD(salt)
+        cipher.updateAAD(iv)
+        val ct = cipher.doFinal(payload)
+        val f = tmp.newFile("legacy-v2.vtdb")
+        f.outputStream().use { out ->
+            out.write(magicV2)
+            out.write(salt)
+            out.write(iv)
+            out.write(ct)
+        }
+        return f
+    }
+
+    /** Builds a real v1 container (legacy 150k KDF, NO AAD) the way the oldest code did. */
+    private fun writeLegacyV1Container(
+        payload: ByteArray,
+        pass: String,
+    ): File {
+        val magicV1 = magicWithVersion('1')
+        val salt = randomBytes(16)
+        val iv = randomBytes(12)
+        val keyBytes =
+            javax.crypto.SecretKeyFactory
+                .getInstance("PBKDF2WithHmacSHA256")
+                .generateSecret(javax.crypto.spec.PBEKeySpec(pass.toCharArray(), salt, 150_000, 256))
+                .encoded
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(
+            javax.crypto.Cipher.ENCRYPT_MODE,
+            javax.crypto.spec.SecretKeySpec(keyBytes, "AES"),
+            javax.crypto.spec.GCMParameterSpec(128, iv),
+        )
+        // v1 wrote no AAD — that is exactly the legacy decrypt branch under test.
+        val ct = cipher.doFinal(payload)
+        val f = tmp.newFile("legacy-v1.vtdb")
+        f.outputStream().use { out ->
+            out.write(magicV1)
+            out.write(salt)
+            out.write(iv)
+            out.write(ct)
+        }
+        return f
     }
 }

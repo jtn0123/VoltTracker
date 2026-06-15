@@ -1096,6 +1096,8 @@ object DatabaseMerger {
             "odometer_km",
             "type",
             "note",
+            "interval_km",
+            "interval_months",
         )
 
     private val MERGE_PROGRESS_TABLES =

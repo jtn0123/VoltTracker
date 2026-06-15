@@ -7,6 +7,12 @@ in
 in `VoltTrackerDb`. If this doc and the DDL disagree, the DDL wins — update this
 doc to match.
 
+Current `VoltTrackerDb.DATABASE_VERSION` is **13**. Migrations are append-only and
+non-destructive; v11 → v12 added the `maintenance_log` table and the
+`trip_segments.label` column, and v12 → v13 added the nullable
+`maintenance_log.interval_km` (`REAL`) and `interval_months` (`INTEGER`) service-interval
+columns (M1/C4) via guarded `ALTER TABLE ADD COLUMN` (existing rows keep them `NULL`).
+
 ## Table overview
 
 Tables fall into two buckets:
@@ -32,7 +38,9 @@ Tables fall into two buckets:
 | `battery_snapshots` | derived/cache | Point-in-time battery state (SOC, SOH, pack V/A/kW, temp, odometer). |
 | `cell_snapshots` | derived/cache | Per-cell detail attached to a battery snapshot. |
 | `session_trip_rollups` | **derived/cache** | Per-session scalar trip rollup (distance/duration/max speed/route flag). |
+| `trip_list_cache` | **derived/cache** | One row per finalized trip caching the exact trip JSON the Trips list renders. |
 | `exports` | raw | Export job records (type, status, file, range, manifest). |
+| `maintenance_log` | raw | User-authored service-log entries (M5) + optional service interval (M1/C4); FK-free, survives a data clear. |
 
 ## Raw base tables (schema v1)
 
@@ -71,7 +79,8 @@ Tables fall into two buckets:
   FK `vehicle_id → vehicles(_id) ON DELETE SET NULL`.
 - **`trip_segments`** (derived) — PK `_id`. Detected trips with `distance_m`,
   `max_speed_kph`, `avg_speed_kph`, `energy_kwh`, `classification`, `confidence`,
-  `summary_json`. FKs:
+  `label` (nullable; added v12 — see the trip-label note below), `summary_json`.
+  FKs:
   `session_id → sessions(_id) ON DELETE SET NULL`,
   `vehicle_id → vehicles(_id) ON DELETE SET NULL`,
   `start_sample_id`/`end_sample_id → telemetry(_id) ON DELETE SET NULL`.
@@ -103,6 +112,47 @@ Tables fall into two buckets:
   active session is always computed live.
   FK `session_id → sessions(_id) ON DELETE CASCADE`.
 
+## Maintenance log + trip labels + favorites (schema v12–v13)
+
+- **`maintenance_log`** (raw) — PK `_id`. User-authored service entries (M5):
+  `created_at_ms` `NOT NULL`, `odometer_km` (nullable — the user may not know it),
+  `type` (free-text category label), and `note` (free-text detail). v13 adds the
+  optional service interval (M1/C4): `interval_km` (`REAL`, nullable) and
+  `interval_months` (`INTEGER`, nullable) — both `NULL` for a plain history entry,
+  and the dashboard computes a per-entry "next due / overdue" line from them against
+  the latest logged odometer and/or elapsed months. Carries the index
+  `idx_maintenance_log_created` on `created_at_ms DESC` for the newest-first read the
+  dashboard renders.
+  **No foreign keys.** This is deliberate (per the `VoltTrackerSchema.createMaintenanceLog`
+  KDoc): an entry is independent of any session or vehicle — the user may log
+  service performed entirely off-app — so it has nothing to cascade from and
+  **survives a full data clear** (`clearStoredData`) that drops sessions and their
+  raw children. Read via the bridge as `getMaintenanceLog()`; rows are
+  `{id, createdAtMs, odometerKm, type, note, intervalKm, intervalMonths}`.
+
+- **Trip labels** are **not** stored only in the `trip_segments.label` column.
+  The user-facing labels the dashboard renders are persisted as `status_events`
+  rows of `kind = "trip_label"`, keyed by the canonical route key
+  (`sessionId:startedAt:endedAt`), by `ObdTripLabels`. The design note from its
+  KDoc: the dashboard's trips come from drive-window detection and are keyed by
+  route key — **not 1:1 with materialized `trip_segments` rows** — so a
+  route-key-keyed event store (the same mechanism as trip exclusions in
+  `ObdTripExclusions`) is what the trip JSON joins against. The latest event per
+  route key wins; an empty-label event clears it. A label survives trip
+  re-materialization and is dropped with its session's raw rows when that
+  session's `status_events` are removed (the event's `session_id` FK
+  set-nulls/cascades like every other status event). The on-disk
+  `trip_segments.label` column exists for materialized-trip provenance, but is not
+  the store the rendered labels read from.
+
+- **Trip favorites** (M4 favorites half) are stored the same way as labels —
+  **no schema change**: `status_events` rows of `kind = "trip_favorite"`, keyed by
+  the canonical route key, by `ObdTripFavorites`. The payload carries a `favorite`
+  boolean; the latest event per route key wins, so un-favoriting writes a
+  `favorite=false` event that supersedes an earlier favorite. The resolved flag is
+  stamped onto each trip's JSON (`trip.favorite`) at read time in
+  `ObdStoreTrips.applyLabels`, alongside the label.
+
 ## Foreign-key delete behavior at a glance
 
 - **CASCADE** (child removed with parent): `telemetry`, `pid_observations`,
@@ -112,6 +162,10 @@ Tables fall into two buckets:
   `field_capabilities` → `vehicles`; and on `trip_segments`, `charge_sessions`,
   `battery_snapshots`, `exports`, every FK (session / vehicle / telemetry sample)
   is `ON DELETE SET NULL`.
+- **No FK** (lives on regardless): `adapter_history` and `diagnostic_codes` carry
+  only loose `last_session_id` references, and `maintenance_log` has no
+  session/vehicle link at all — so a full data clear that drops sessions leaves
+  the maintenance log intact.
 
 ## Indexes
 
@@ -123,7 +177,8 @@ lookup indexes for the deduped tables (`idx_diagnostic_codes_lookup`,
 `idx_events_occurred_at`, `idx_pid_observations_observed_at`) so the daily raw-
 data prune in `ObdStoreMaintenance.pruneRawDataOlderThan` doesn't full-scan —
 the composite `(session_id, …)` indexes can't help a query that doesn't
-constrain `session_id`.
+constrain `session_id`. Schema v12 added `idx_maintenance_log_created` on
+`maintenance_log(created_at_ms DESC)` for the newest-first maintenance read.
 
 ## Test contract: dashboard handshake log string
 

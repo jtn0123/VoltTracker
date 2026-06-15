@@ -309,6 +309,8 @@ class VoltBridgeDataExportsTest {
                 .put("note", "Front to back")
                 .put("odometerKm", 12_345.6)
                 .put("date", 5_000L)
+                .put("intervalKm", 8_000.0)
+                .put("intervalMonths", 12)
                 .toString(),
         )
         drain()
@@ -317,6 +319,9 @@ class VoltBridgeDataExportsTest {
         assertEquals("Front to back", activity.store.lastMaintenanceNote)
         assertEquals(12_345.6, activity.store.lastMaintenanceOdometerKm!!, 0.001)
         assertEquals(5_000L, activity.store.lastMaintenanceCreatedAtMs)
+        // M1/C4: the optional service interval forwards to the store.
+        assertEquals(8_000.0, activity.store.lastMaintenanceIntervalKm!!, 0.001)
+        assertEquals(12, activity.store.lastMaintenanceIntervalMonths)
         assertEquals("ready", activity.lastStatusState)
         assertTrue(activity.storageSummaryCalls > 0)
     }
@@ -330,6 +335,9 @@ class VoltBridgeDataExportsTest {
 
         assertNull("missing odometer must reach the store as null", activity.store.lastMaintenanceOdometerKm)
         assertTrue("missing date defaults to a real timestamp", activity.store.lastMaintenanceCreatedAtMs > 0L)
+        // Absent interval fields reach the store as null (no due tracking for this entry).
+        assertNull("missing interval_km must reach the store as null", activity.store.lastMaintenanceIntervalKm)
+        assertNull("missing interval_months must reach the store as null", activity.store.lastMaintenanceIntervalMonths)
         assertEquals("ready", activity.lastStatusState)
     }
 
@@ -483,6 +491,8 @@ class VoltBridgeDataExportsTest {
         var lastMaintenanceOdometerKm: Double? = Double.NaN
         var lastMaintenanceType: String? = null
         var lastMaintenanceNote: String? = null
+        var lastMaintenanceIntervalKm: Double? = Double.NaN
+        var lastMaintenanceIntervalMonths: Int? = Int.MIN_VALUE
 
         var maintenanceLog = org.json.JSONArray()
         var lastMaintenanceLogLimit = Int.MIN_VALUE
@@ -531,11 +541,15 @@ class VoltBridgeDataExportsTest {
             odometerKm: Double?,
             type: String?,
             note: String?,
+            intervalKm: Double?,
+            intervalMonths: Int?,
         ): Long {
             lastMaintenanceCreatedAtMs = createdAtMs
             lastMaintenanceOdometerKm = odometerKm
             lastMaintenanceType = type
             lastMaintenanceNote = note
+            lastMaintenanceIntervalKm = intervalKm
+            lastMaintenanceIntervalMonths = intervalMonths
             return addMaintenanceReturn
         }
 

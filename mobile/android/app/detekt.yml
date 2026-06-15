@@ -49,13 +49,15 @@ complexity:
   TooManyFunctions:
     active: true
     thresholdInFiles: 66
-    thresholdInClasses: 70 # MainActivity (69): 62 + the 6 EventNotificationCommands host overrides
-    # (M1/M3 settings seam — getEventNotificationStateJson + 5 setters) + the M2 per-trip export seam
-    # override (exportTripFromBridge). Each forwards one line to a delegate/controller that holds the
-    # actual body (EventNotificationHostDelegate / TripExportController); the SessionDataReader/
-    # DashboardHost interface contract forces the override onto the host (Android Activities can't use
-    # constructor-param interface delegation).
-    # LOWER this back toward 63 if more of MainActivity's surface is extracted to coordinators.
+    thresholdInClasses: 67 # ObdLocalStore (66) is now the worst — RATCHETED DOWN from 70 (A1/I3).
+    # Grouping MainActivity's seven EventNotificationCommands host overrides
+    # (getEventNotificationStateJson + 5 notify setters + the M2 setChargeTargetSoc target seam)
+    # behind one `eventNotifications()` accessor returning EventNotificationHostDelegate dropped
+    # MainActivity from 70 -> 64 (the bridge now calls host.eventNotifications().setNewDtcEnabled(...)
+    # and the Activity exposes the cluster with a single member). MainActivity is no longer the
+    # ceiling: the worst class is now ObdLocalStore (66), with VoltBridge (65) next, so worst+1 = 67.
+    # This restores the down-only convention every other complexity threshold follows. LOWER further
+    # as the next-worst class (ObdLocalStore / VoltBridge) is decomposed.
     thresholdInInterfaces: 25 # ObdSessionStore (24)
     thresholdInObjects: 61 # ObdProtocol (60)
     thresholdInEnums: 12

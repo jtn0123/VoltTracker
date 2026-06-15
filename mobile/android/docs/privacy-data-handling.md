@@ -39,6 +39,23 @@ adapter or phone issue. Before writing a debug summary or diagnostics share zip,
 Volt Tracker redacts Bluetooth MAC addresses, VIN-like identifiers, and precise
 coordinate fields from the included log tails.
 
+### Per-trip GPX / CSV exports contain full-precision location
+
+The per-trip **GPX** and **CSV** exports (the "export this drive" action on a
+logged trip) are **unredacted by design**: they contain **full-precision GPS
+coordinates and timestamps in plaintext**, written by `TripTrackFormatter`. This
+is deliberate — the whole point of a GPX/CSV is to hand a faithful route to a
+mapping tool (Strava, Garmin, a spreadsheet), so coordinates are emitted at full
+decimal precision and per-point UTC times are included. This is **unlike the
+in-app VIN** (shown only redacted) and **unlike the diagnostics share zip**
+(where coordinates are scrubbed from the log tails).
+
+These exports are only produced when **you initiate the export** for a specific
+drive, and they leave the device only through the **Android share sheet** (the OS
+chooser), to whatever app or destination you pick. Share a trip export only with
+people, apps, or storage providers you trust, the same way you would treat a
+plaintext backup.
+
 ## Network Use
 
 Normal OBD logging, local history, and dashboard rendering work from on-device

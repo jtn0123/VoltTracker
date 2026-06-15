@@ -6,9 +6,14 @@ import android.net.Uri
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.volttracker.obdpoc.data.TripTrackFormatter
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Writes a single-trip GPX/CSV export to `cacheDir/trip-exports/` and builds the
@@ -79,6 +84,44 @@ object TripExportShareIntent {
             }
             null
         }
+    }
+
+    /**
+     * Serializes [trips] (the `{ tripId, label, route }` bundle the store builds) as one combined
+     * all-trips CSV (M6) and writes it to the trip-export cache dir. [pointCount] is the total sample
+     * count across all trips, recorded into the `exports` table. Returns null when there are no points
+     * to export or the file couldn't be written. Shares the cache-dir + FileProvider path with the
+     * single-trip export, so [buildShareIntent] handles both.
+     */
+    fun writeAllTripsCsv(
+        ctx: Context,
+        trips: JSONArray,
+        pointCount: Int,
+    ): TripExportFile? {
+        if (pointCount <= 0) {
+            return null
+        }
+        val outDir = prepareOutDir(ctx) ?: return null
+        val content = TripTrackFormatter.toAllTripsCsv(trips)
+        val file = File(outDir, allTripsFileName())
+        return try {
+            file.writeText(content, Charsets.UTF_8)
+            TripExportFile(file, Format.CSV, pointCount)
+        } catch (ex: IOException) {
+            Log.e(TAG, "all-trips export write failed", ex)
+            if (file.exists() && !file.delete()) {
+                Log.w(TAG, "could not delete partial all-trips export: $file")
+            }
+            null
+        }
+    }
+
+    private fun allTripsFileName(): String {
+        val stamp =
+            SimpleDateFormat("yyyy-MM-dd-HHmm", Locale.US)
+                .apply { timeZone = TimeZone.getTimeZone("UTC") }
+                .format(Date())
+        return "volt-all-trips-$stamp.csv"
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.util.Log
+import com.volttracker.obdpoc.data.ObdTripLabels
 import org.json.JSONObject
 
 internal class VoltBridgeDataExports(
@@ -107,6 +108,14 @@ internal class VoltBridgeDataExports(
     fun exportTripCsv(routeKeyOrSessionId: String?): String =
         activity.exportTripFromBridge(VoltBridge.safe(routeKeyOrSessionId, VoltBridge.MAX_LABEL_LEN), "csv")
 
+    /**
+     * Bulk all-trips CSV export (M6): every logged trip's GPS samples in one combined CSV with a
+     * leading trip-id/label column. Rides the existing trip-export host seam with the `csv_all`
+     * sentinel format (so it needs no new host override; the controller dispatches it to the
+     * all-trips path). Returns the host's JSON result verbatim.
+     */
+    fun exportAllTripsCsv(): String = activity.exportTripFromBridge(null, "csv_all")
+
     fun deleteDetailedSignalLog(id: String?) {
         val rowId = VoltBridge.parsePositiveId(id)
         if (rowId <= 0L) {
@@ -137,6 +146,21 @@ internal class VoltBridgeDataExports(
             }
         }
     }
+
+    /**
+     * Reads [key] from [parsed] as a finite, non-negative Double, or null when absent/JSON-null.
+     * `optDouble` can yield NaN/Infinity for malformed input, so non-finite (and negative) values
+     * are treated as absent and never reach storage.
+     */
+    private fun optPositiveFiniteDouble(
+        parsed: JSONObject,
+        key: String,
+    ): Double? =
+        if (parsed.has(key) && !parsed.isNull(key)) {
+            parsed.optDouble(key).takeIf { it.isFinite() && it >= 0.0 }
+        } else {
+            null
+        }
 
     private fun errorPayload(
         error: String,
@@ -182,7 +206,10 @@ internal class VoltBridgeDataExports(
             }
             return
         }
-        val cleanLabel = VoltBridge.safe(label, VoltBridge.MAX_LABEL_LEN)
+        // The label cap is owned by the data layer (ObdTripLabels re-truncates to the same length on
+        // store), so reference that single constant rather than a second, larger bridge cap that the
+        // storage would silently clip — keeping one cap for the trip-label path. (Report item A2.)
+        val cleanLabel = VoltBridge.safe(label, ObdTripLabels.MAX_LABEL_LEN)
         activity.runOnBackground {
             val changed =
                 try {
@@ -207,9 +234,50 @@ internal class VoltBridgeDataExports(
     }
 
     /**
+     * Sets or clears the user "favorite" flag for the trip identified by [routeKey] (M4 favorites
+     * half). Marshals to the background, persists as a route-key-keyed status event (no schema
+     * change), then refreshes the dashboard so the star state shows immediately. Mirrors
+     * [setTripLabel]'s threading without a confirm dialog — favoriting is reversible and low-stakes.
+     */
+    fun setTripFavorite(
+        routeKey: String?,
+        favorite: Boolean,
+    ) {
+        val cleanRouteKey = VoltBridge.safe(routeKey, VoltBridge.MAX_LABEL_LEN)
+        if (cleanRouteKey.isEmpty()) {
+            activity.runOnUiThread {
+                activity.publishStatus("blocked", "Choose a stored trip to favorite.", true)
+            }
+            return
+        }
+        activity.runOnBackground {
+            val changed =
+                try {
+                    activity.localStore?.setTripFavorite(cleanRouteKey, favorite) == true
+                } catch (ex: RuntimeException) {
+                    Log.w(MainActivity.TAG, "setTripFavorite failed", ex)
+                    false
+                }
+            activity.runOnUiThread {
+                activity.publishStorageSummary()
+                activity.publishStatus(
+                    if (changed) "ready" else "blocked",
+                    when {
+                        !changed -> "That trip could not be updated."
+                        favorite -> "Trip added to favorites."
+                        else -> "Trip removed from favorites."
+                    },
+                    !changed,
+                )
+            }
+        }
+    }
+
+    /**
      * Records a maintenance-log entry (M5) from the dashboard's add-entry form. [json] carries
-     * `type`, `note`, optional `odometerKm`, and optional `date` (ms epoch; defaults to now).
-     * Refreshes the dashboard on success so the new row renders.
+     * `type`, `note`, optional `odometerKm`, optional `date` (ms epoch; defaults to now), and the
+     * optional service interval `intervalKm` / `intervalMonths` (M1/C4) that drives the dashboard's
+     * "next due" line. Refreshes the dashboard on success so the new row renders.
      */
     fun addMaintenanceEntry(json: String?) {
         val parsed =
@@ -227,11 +295,12 @@ internal class VoltBridgeDataExports(
             }
             return
         }
-        val odometerKm =
-            if (parsed.has("odometerKm") && !parsed.isNull("odometerKm")) {
-                // optDouble can yield NaN/Infinity for malformed input; treat non-finite (and
-                // negative) values as absent so they never reach storage.
-                parsed.optDouble("odometerKm").takeIf { it.isFinite() && it >= 0.0 }
+        val odometerKm = optPositiveFiniteDouble(parsed, "odometerKm")
+        // Interval > 0 only (a non-positive interval can never come "due"); non-finite is rejected.
+        val intervalKm = optPositiveFiniteDouble(parsed, "intervalKm")?.takeIf { it > 0.0 }
+        val intervalMonths =
+            if (parsed.has("intervalMonths") && !parsed.isNull("intervalMonths")) {
+                parsed.optInt("intervalMonths", 0).takeIf { it > 0 }
             } else {
                 null
             }
@@ -239,7 +308,14 @@ internal class VoltBridgeDataExports(
         activity.runOnBackground {
             val id =
                 try {
-                    activity.localStore?.addMaintenanceEntry(createdAtMs, odometerKm, type, note) ?: -1L
+                    activity.localStore?.addMaintenanceEntry(
+                        createdAtMs,
+                        odometerKm,
+                        type,
+                        note,
+                        intervalKm,
+                        intervalMonths,
+                    ) ?: -1L
                 } catch (ex: RuntimeException) {
                     Log.w(MainActivity.TAG, "addMaintenanceEntry failed", ex)
                     -1L

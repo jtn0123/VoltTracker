@@ -288,6 +288,16 @@ open class ObdLocalStore(
     open fun getTripRouteJson(routeKey: String?): JSONObject = reports.tripRouteJson(routeKey)
 
     /**
+     * Trips bundled for the bulk all-trips CSV export (M6): each element `{ tripId, label, route }`.
+     * Bounded by [tripLimit] trips and [pointLimit] samples/trip. See
+     * [ObdStoreReports.allTripsForExportJson].
+     */
+    open fun getAllTripsForExportJson(
+        tripLimit: Int,
+        pointLimit: Int,
+    ): JSONArray = reports.allTripsForExportJson(tripLimit, pointLimit)
+
+    /**
      * Records a completed per-trip GPX/CSV export into the `exports` table (one row per share).
      * Best-effort: returns the new row id, or -1 if the insert failed (recording must never break
      * the share). See [ObdStoreWriter.recordExport].
@@ -310,6 +320,18 @@ open class ObdLocalStore(
             parsed?.endedAtMs ?: -1L,
         )
     }
+
+    /**
+     * Records a completed bulk all-trips CSV export (M6) into the `exports` table. The export spans
+     * every trip rather than one session, so it has no single session id / time range. Best-effort:
+     * returns the new row id, or -1 if the insert failed (recording must never break the share).
+     */
+    open fun recordAllTripsExport(
+        exportType: String,
+        fileName: String,
+        mimeType: String,
+        bytes: Long,
+    ): Long = writer.recordExport(-1L, exportType, fileName, mimeType, bytes, -1L, -1L)
 
     /**
      * Route projection for the in-progress (status = [STATUS_ACTIVE]) session, or an empty object
@@ -353,6 +375,30 @@ open class ObdLocalStore(
         return true
     }
 
+    /**
+     * Sets or clears the user "favorite" flag for the trip identified by [routeKey] (M4). Persists
+     * the flag as a route-key-keyed status event so it survives trip re-materialization (no schema
+     * change — mirrors [setTripLabel]). The latest event for a route key wins, so un-favoriting
+     * writes a `favorite=false` event that supersedes an earlier favorite. Returns false when the
+     * route key is unparseable.
+     */
+    open fun setTripFavorite(
+        routeKey: String?,
+        favorite: Boolean,
+    ): Boolean {
+        val canonical = ObdTripExclusions.canonicalRouteKey(routeKey) ?: return false
+        val parsed = DriveWindowDetector.parseRouteKey(canonical) ?: return false
+        writer.recordEvent(
+            parsed.sessionId,
+            ObdTripFavorites.EVENT_KIND,
+            if (favorite) "favorited" else "unfavorited",
+            canonical,
+            false,
+            ObdTripFavorites.eventPayload(canonical, favorite),
+        )
+        return true
+    }
+
     open fun markTripNotTrip(routeKey: String?): Boolean {
         val canonical = ObdTripExclusions.canonicalRouteKey(routeKey) ?: return false
         val parsed = DriveWindowDetector.parseRouteKey(canonical) ?: return false
@@ -370,14 +416,18 @@ open class ObdLocalStore(
 
     /**
      * Inserts a user-authored maintenance-log entry (M5). [odometerKm] may be null. [createdAtMs]
-     * dates the entry (defaults to now). Returns the new row id, or -1 on failure.
+     * dates the entry (defaults to now). [intervalKm] / [intervalMonths] are the optional service
+     * interval (M1/C4) for the dashboard's "next due" line; null leaves a plain history entry.
+     * Returns the new row id, or -1 on failure.
      */
     open fun addMaintenanceEntry(
         createdAtMs: Long,
         odometerKm: Double?,
         type: String?,
         note: String?,
-    ): Long = writer.addMaintenanceEntry(createdAtMs, odometerKm, type, note)
+        intervalKm: Double? = null,
+        intervalMonths: Int? = null,
+    ): Long = writer.addMaintenanceEntry(createdAtMs, odometerKm, type, note, intervalKm, intervalMonths)
 
     /** Newest-first user maintenance log (M5). See [ObdStoreReports.maintenanceLogJson]. */
     open fun getMaintenanceLogJson(limit: Int): JSONArray = reports.maintenanceLogJson(limit)
