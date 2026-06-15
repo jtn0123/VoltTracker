@@ -80,6 +80,10 @@ internal class VoltBridgeDiagnostics(
         activity.runOnUiThread(activity::shareDiagnosticsFromBridge)
     }
 
+    fun shareDiagnosticsDigest() {
+        activity.runOnUiThread(activity::shareDiagnosticsDigestFromBridge)
+    }
+
     fun startTestConnection() {
         activity.runOnUiThread(activity::startTestConnectionFromBridge)
     }

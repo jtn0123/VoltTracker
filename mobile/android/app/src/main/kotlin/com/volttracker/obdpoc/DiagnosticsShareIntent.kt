@@ -63,23 +63,76 @@ object DiagnosticsShareIntent {
     }
 
     /**
-     * Builds the zip file (exposed package-private so tests can verify its contents without driving
-     * the FileProvider). Returns `null` on IO failure.
+     * Builds an [Intent.ACTION_SEND] intent for the standalone AI digest -- a single redacted,
+     * budget-bounded `text/plain` file (see [DiagnosticsBundle]) that can be shared straight into a
+     * debugging session without unzipping. Returns `null` if the digest couldn't be written.
      */
     @JvmStatic
-    fun buildZip(ctx: Context): File? {
+    fun buildDigestIntent(ctx: Context?): Intent? {
+        if (ctx == null) {
+            return null
+        }
+        val digest = buildDigestFile(ctx) ?: return null
+        val uri: Uri =
+            try {
+                FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", digest)
+            } catch (ex: IllegalArgumentException) {
+                Log.e(TAG, "FileProvider rejected diagnostics digest: $digest", ex)
+                return null
+            }
+        return Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, ctx.getString(R.string.share_diagnostics_subject))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    }
+
+    /**
+     * Writes the standalone digest text file (exposed package-private so tests can read it back
+     * without driving the FileProvider). Returns `null` on IO failure.
+     */
+    @JvmStatic
+    fun buildDigestFile(ctx: Context): File? {
+        val outDir = prepareOutDir(ctx) ?: return null
+        val digestFile = File(outDir, "diagnostics-digest-${System.currentTimeMillis()}.txt")
+        return try {
+            digestFile.writeText(DiagnosticsBundle.build(ctx.filesDir), Charsets.UTF_8)
+            digestFile
+        } catch (ex: IOException) {
+            Log.e(TAG, "diagnostics digest write failed", ex)
+            if (digestFile.exists() && !digestFile.delete()) {
+                Log.w(TAG, "could not delete partial digest: $digestFile")
+            }
+            null
+        }
+    }
+
+    /**
+     * Creates the shared `cacheDir/diagnostics/` output dir and clears stale artifacts so the cache
+     * keeps only the one we're about to build. Returns `null` if the dir can't be created.
+     */
+    private fun prepareOutDir(ctx: Context): File? {
         val outDir = File(ctx.cacheDir, SUBDIR)
         if (!outDir.exists() && !outDir.mkdirs()) {
             Log.e(TAG, "could not create diagnostics dir: $outDir")
             return null
         }
-        // Clear stale zips so the cache doesn't accumulate one per share over the device's
-        // lifetime. We keep only the one we're about to build.
         outDir.listFiles()?.forEach { stale ->
             if (stale.isFile && !stale.delete()) {
                 Log.w(TAG, "could not delete stale diagnostics file: $stale")
             }
         }
+        return outDir
+    }
+
+    /**
+     * Builds the zip file (exposed package-private so tests can verify its contents without driving
+     * the FileProvider). Returns `null` on IO failure.
+     */
+    @JvmStatic
+    fun buildZip(ctx: Context): File? {
+        val outDir = prepareOutDir(ctx) ?: return null
         val zipFile = File(outDir, "diagnostics-${System.currentTimeMillis()}.zip")
         val filesDir = ctx.filesDir
         try {

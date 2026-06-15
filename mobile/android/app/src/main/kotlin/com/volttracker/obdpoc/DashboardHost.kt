@@ -105,6 +105,8 @@ interface DiagnosticsCommands {
 
     fun shareDiagnosticsFromBridge()
 
+    fun shareDiagnosticsDigestFromBridge()
+
     fun startTestConnectionFromBridge()
 
     fun scheduleAdapterReadyNotifyFromBridge(mins: Int)

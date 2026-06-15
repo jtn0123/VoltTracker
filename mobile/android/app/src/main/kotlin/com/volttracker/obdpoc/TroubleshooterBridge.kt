@@ -179,6 +179,28 @@ class TroubleshooterBridge(
         }
     }
 
+    /**
+     * Build the standalone AI digest (single redacted, budget-bounded text file) and launch the
+     * system share sheet behind the same disclosure dialog as the full diagnostics zip.
+     */
+    fun shareDiagnosticsDigest() {
+        try {
+            val share = DiagnosticsShareIntent.buildDigestIntent(activity)
+            if (share == null) {
+                activity.publishStatus(
+                    "blocked",
+                    activity.getString(R.string.status_no_diagnostics_yet),
+                    true,
+                )
+                return
+            }
+            showDiagnosticsDisclosure(share)
+        } catch (ex: RuntimeException) {
+            Log.w(MainActivity.TAG, "shareDiagnosticsDigest failed", ex)
+            activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_build_failed), true)
+        }
+    }
+
     fun diagnosticsDisclosureMessage(): String = activity.getString(R.string.diagnostics_disclosure_message)
 
     fun showDiagnosticsDisclosure(share: Intent) {
