@@ -1,6 +1,133 @@
 # CHANGELOG
 
 
+## v0.16.0 (2026-06-15)
+
+### Features
+
+- Grade follow-ups — bug fixes, features, tests, docs, devex
+  ([#212](https://github.com/jtn0123/VoltTracker/pull/212),
+  [`e280356`](https://github.com/jtn0123/VoltTracker/commit/e2803566fd6c4eccc423748c3206102331b4fe43))
+
+* feat: grade follow-ups — bug fixes, features, tests, docs, devex
+
+Executes the v0.15.0 re-audit (.claude/grade-report.md) across all nine categories: the new feature
+  surface's non-obvious bugs, the half-built feature completions, test coverage for the Android-glue
+  layers, doc drift, and devex. All CI-equivalent gates verified green locally.
+
+Bug fixes (B/C): - B1 @Volatile on the notification decider/eventCoordinator (reintroduced B1-class
+  cross-thread race) ; B2 auto-scan throttle stamps only on a real read ; B3 suppress
+  first-ever-scan new-DTC false alert (baseline-establish) ; B5 widget SOC rounds not truncates ; B6
+  GPX coord keeps the decimal ; B7 widget freshness tracks last sample not last change - C1/C7
+  live-charge ETA power floor + ceiling + "topping off" ; C2 Insights scatter follows the theme ; C3
+  savings prompt-to-enable state ; C5 cell-grid card hides when empty ; C6 DTC severity comment/code
+  reconciled
+
+Features completed (M): - M1 maintenance next-due + intervals (schema v12→v13) ; M2 charge
+  target-SOC + notify-at-target ; M3 charge-interrupted notification ; M4 trip favorites +
+  search/filter/sort ; M5 cost/savings trend chart ; M6 bulk all-trips CSV export ; M7 per-trip
+  detail view ; M9 accessibility settings (font scale + high contrast) ; M10 permanent-DTC
+  clearability guidance ; M8 locale-aware formatting + i18n module
+
+Architecture / DevEx (A/I): - A1 group event-notif host overrides behind one DashboardHost accessor
+  (MainActivity 70→64 fns) + I3 detekt TooManyFunctions ratcheted DOWN 71→67 ; I1 Gradle JDK-21
+  toolchain pin + foojay (fixes the JDK>21 detekt break) ; I2 focused jacoco floors for the new
+  pure-logic classes ; I5 verifyFast tier ; A2 single MAX_LABEL_LEN ; A3 neutral AppPrefs holder ;
+  A4 prefs-key disjoint test
+
+Testing (D): WidgetUpdater/VoltWidgetProvider, TripExportController, buildShareIntent,
+  SetupGuideController, coordinator reconnect/null paths, widget jacoco floor, e2e semantic guards
+  on the new screens.
+
+Security / Perf / Docs (E/G/H/F): E1 PBKDF2 600k via a backward-compatible v3 backup header ; E3
+  targetSdk 37 ; G1 RollingAppLog buffered writer ; G3 adaptive poll cadence ; H1 bridge-abi.md, H2
+  data-model.md v12/v13, H3 features doc + ADR 0007, E2 export-precision privacy note, F1 dependency
+  note.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* test(visual): refresh charge/insights/map baselines for new UI
+
+Charge (M2 target-SOC input, M5 cost-trend chart), insights (M5/M9/M10), and the map session-list
+  search controls (M4) shifted these 10 scenario-matrix screenshots. Images are the exact
+  ubuntu-24.04 CI renders from the dashboard-visual artifact.
+
+* test(visual): fix D6 maintenance guard to seed state, not the bridge
+
+renderMaintenanceList() reads state.maintenanceLog (populated from the bridge on load), not
+  bridge.getMaintenanceLog() directly, so the guard's bridge override left the list empty → it
+  rendered the empty-state article (also .real-insight-item) and the count==2 assertion saw 1. Seed
+  state.maintenanceLog after the view switch and exclude the .maint-empty article from the row
+  count. (e2e-only; runs in CI.)
+
+* fix(export): guard bulk CSV against spreadsheet formula injection + close test gaps
+
+Re-audit hardening for the grade-followups work:
+
+- TripTrackFormatter.csvField now neutralizes a trip label that begins with =, +, -, @, tab, or CR
+  by prefixing a single quote, so a label like =HYPERLINK(...) (which can also arrive via a merged
+  backup) is treated as literal text instead of being evaluated as a formula when the bulk all-trips
+  CSV is opened in Excel/Sheets. Only the free-text label is affected; the numeric route-key trip id
+  and per-sample columns are untouched. - BackupCryptoTest: add the previously-missing legacy v1
+  (no-AAD) decrypt round-trip and the out-of-range iteration-count rejection — the only tests
+  exercising those two security-relevant branches. - PrefsKeyOwnershipTest: include PREF_TARGET_SOC
+  so the "every real key" owner check actually covers the M2 target-SOC key. - detekt.yml: correct
+  the ratchet comment (down from 70, not 71).
+
+* fix(service): close the app-log file handle on teardown + make settings-version bump atomic
+
+Closes the two remaining re-audit items on the grade-followups work:
+
+- G1 follow-up (FD leak): the long-lived buffered RollingAppLog writer was never closed.
+  RollingAppLog gains a permanent close() (post-close writes are dropped, not reopened, so a
+  straggler from a still-draining poll thread can't re-leak the handle). ObdService now holds its
+  instance and, in onDestroy, detaches the OBDLog mirror then closes it. The second instance behind
+  BackupController.restoreLog is released via LogcatMirror.close() / BackupController.dispose(),
+  called from MainActivity.onDestroy. - G2 follow-up (counter atomicity): the settings-version
+  read-modify-write is now serialized on a process-wide lock inside mutateSettings{}, so the
+  Activity (toggles) and the service (coordinator) — which hold separate EventNotificationPrefs over
+  the same process-singleton SharedPreferences — can't lose an increment. Strictly monotonic;
+  single-threaded behaviour unchanged. Bookkeeping setters stay off the version path.
+
+New RollingAppLogTest.closeReleasesTheWriterAndDropsFurtherWritesInsteadOfReopening. Verified green
+  on JDK 21: unit tests, detekt, spotless, jacoco, lint, assemble.
+
+* fix(ui,test): address CodeRabbit — theme-aware toggle tint, grouped map-action spacing, bounded
+  DoS-guard test
+
+- base.css: the `.pref-toggle[data-on="true"]` background was a hardcoded rgba(108,198,255,.12) that
+  matched no theme's --map-accent. Add a --map-accent-rgb triplet beside --map-accent in every theme
+  block (default 76,196,255 · high-contrast 110,198,255 · light 11,109,194) and use
+  rgba(var(--map-accent-rgb, 76,196,255), .12) so the tint tracks the accent. Verified in preview:
+  default → rgba(76,196,255,.12), high-contrast → rgba(110,198,255,.12). - components.css: .link-btn
+  carries margin-inline-end:-9px for single-button headers; inside the grouped .map-sheet-actions
+  that ate the gap and overlapped tap targets. Zero it for grouped buttons but keep -9px on
+  :last-child so the group stays flush with the card edge. Verified: 4px gap, no overlap. -
+  BackupCryptoTest: the iteration-count DoS-guard test wrote 0x7FFFFFFF; if the bound check ever
+  regressed past key derivation that would try ~2.1B PBKDF2 rounds and hang CI. Use 5,000,001 (just
+  above the 5M cap) — bounded either way.
+
+* fix(ci): de-flake emulator-smoke nav check by polling for the repaint
+
+The bottom-nav assertion detected a view switch by sleeping a fixed interval after each tap and
+  capturing exactly one screenshot, then byte-comparing it to the previous tab. On a slow/loaded CI
+  emulator the WebView re-render lags the tap by several seconds, so that single capture routinely
+  photographed the OLD frame and reported a false "no view change" — the dominant flake, and why it
+  struck the later tabs first (the emulator is slowest by then: the required retries grew tab over
+  tab until the fixed budget ran out on "signals").
+
+Now each tap polls — capture every 2s until the screen actually changes — with a generous per-tap
+  budget and a few idempotent re-taps for the occasional dropped adb tap. It breaks within ~2s of
+  the repaint when fast and waits patiently when slow. Crucially the loop still only ACCEPTS a real
+  pixel change, so it cannot mask a genuine geometry/selector break (a view that never switches
+  changes nothing on screen and still fails). The handshake positive-signal and the negative logcat
+  scan are unchanged; EmulatorSmokeContractTest stays green.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.15.0 (2026-06-15)
 
 ### Features
