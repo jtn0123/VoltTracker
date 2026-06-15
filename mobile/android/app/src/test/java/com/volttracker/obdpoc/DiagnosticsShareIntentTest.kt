@@ -232,6 +232,9 @@ class DiagnosticsShareIntentTest {
         assertTrue(digestFile!!.name.endsWith(".txt"))
         val text = digestFile.readText()
         assertTrue("digest carries the manifest", text.contains("MANIFEST"))
+        // Assert on embedded body content, not just the manifest: "010C" only appears if the redacted
+        // session body was actually embedded (the filename alone would also be in the MANIFEST).
+        assertTrue("digest embeds the redacted session body", text.contains("\"command\":\"010C\""))
         assertFalse("digest must be redacted", text.contains("AA:BB:CC:DD:EE:FF"))
         assertTrue(text.contains("[bluetooth-address-redacted]"))
     }

@@ -10,6 +10,7 @@ import org.junit.Test
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.util.Locale
 
 /**
  * Tests the self-selecting, budget-bounded diagnostics digest. The whole point of the digest is that
@@ -89,7 +90,7 @@ class DiagnosticsBundleTest {
     fun oversizeSessionBodyKeepsTheTailAndIsMarkedTruncated() {
         val sb = StringBuilder()
         for (i in 1..300) {
-            sb.append("LINE-").append(String.format("%04d", i)).append("-padding-padding\n")
+            sb.append("LINE-").append(String.format(Locale.US, "%04d", i)).append("-padding-padding\n")
         }
         writeSession(5_000L, "obd", sb.toString())
         val originalBytes = File(sessionDir, "session-5000-obd.jsonl").length()
