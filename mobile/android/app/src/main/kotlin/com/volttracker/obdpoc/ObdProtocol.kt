@@ -62,6 +62,29 @@ object ObdProtocol {
         return bytes != null && bytes[0] == 0xFF
     }
 
+    /**
+     * True when [response] is a positive frame for [command] whose payload is a recognized
+     * "no reading / inactive" sentinel rather than malformed data: an all-zero Mode 22 payload (the
+     * ECU answered, but the signal is zero/idle) or the 0xFF speed sentinel on 010D (handled as a
+     * charge-transition hint elsewhere). Used to keep the `pid_parse_failed` diagnostic honest -- a
+     * sentinel that legitimately yields no value is expected, not a decode bug worth surfacing.
+     */
+    @JvmStatic
+    fun isBenignSentinelResponse(
+        command: String?,
+        response: String?,
+    ): Boolean {
+        val cleanCommand = command?.trim()?.uppercase(Locale.US)?.replace(Regex("[^0-9A-F]"), "") ?: return false
+        if (cleanCommand == "010D") {
+            return hasMaxSpeedSentinel(response)
+        }
+        if (!cleanCommand.startsWith("22")) {
+            return false
+        }
+        val payload = mode22Payload(response, cleanCommand) ?: return false
+        return payload.isNotEmpty() && payload.all { it == 0 }
+    }
+
     @JvmStatic
     fun parseRpm(response: String?): Float? {
         val bytes = mode01Bytes(response, "0C", 2) ?: return null
@@ -364,8 +387,8 @@ object ObdProtocol {
                 ?.let {
                     value("HV battery capacity fallback", it, "Ah", 2)
                 }
-            "224329" -> return cellVoltageValue(response, cleanCommand, "minimum cell voltage")
-            "22432B" -> return cellVoltageValue(response, cleanCommand, "maximum cell voltage")
+            "224329" -> return cellVoltageValue(response, cleanCommand, "minimum cell voltage", VOLT_CELL_VOLTAGE_SCALE)
+            "22432B" -> return cellVoltageValue(response, cleanCommand, "maximum cell voltage", VOLT_CELL_VOLTAGE_SCALE)
             "22432A" -> return voltByteValue(response, cleanCommand, 1.0, 0.0)
                 ?.let { bounded(it, CELL_NUMBER_RANGE) }
                 ?.let {
@@ -1091,12 +1114,27 @@ object ObdProtocol {
         return word * 100.0 / 65535.0
     }
 
+    // Gen2 Volt BECM cell-voltage scale for the aggregate min/max DIDs (224329 / 22432B). The old
+    // 5/65535 value was a Bolt placeholder that put every real Volt read at ~0.44 V, so min/max cell
+    // voltage (and the derived cell-balance view) decoded to null on every sample. A 0-5 V cell over
+    // the full 16-bit range would answer ~0xBD6F for 3.7 V, but this BECM answers ~0x1700 -- under 10%
+    // of the range. Field-calibrated to 1/1600 V/count against a pack-voltage/96 anchor (N=118 paired
+    // field samples; 95-97% of reads land in 3.0-4.2 V). Cell imbalance (max-min) is near-invariant to
+    // small scale error, and CELL_VOLTAGE_RANGE still drops decode garbage. See pid-validation-2026-06-03.md.
+    private const val VOLT_CELL_VOLTAGE_SCALE = 1.0 / 1600.0
+
+    // Legacy scale still used by the unvalidated average (22C218) and individual cell-voltage probes,
+    // for which we have no field anchor yet (and the probe DIDs answer at a different magnitude). Kept
+    // separate so the validated min/max fix doesn't ship an unvalidated change to those paths.
+    private const val LEGACY_CELL_VOLTAGE_SCALE = 5.0 / 65535.0
+
     private fun cellVoltageValue(
         response: String?,
         command: String?,
         name: String,
+        scale: Double = LEGACY_CELL_VOLTAGE_SCALE,
     ): ParsedPidValue? =
-        voltWordLinearValue(response, command, 5.0 / 65535.0, 0.0, false)
+        voltWordLinearValue(response, command, scale, 0.0, false)
             ?.let { bounded(it, CELL_VOLTAGE_RANGE) }
             ?.let {
                 value(name, it, "V", 3)

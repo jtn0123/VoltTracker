@@ -151,9 +151,11 @@ class ObdProbeConfigTest {
                 when (probe) {
                     "2241A3" -> "0205" // 51.7 Ah
                     "2245F9" -> "1432" // 51.70 Ah
-                    "224329", "22432B", "224181", "224182", "22419F", "2241E0", "224200", "224201",
-                    "224240", "22C218",
-                    -> "BD6F" // ~3.7 V
+                    // Aggregate min/max cell voltage use the Volt-calibrated 1/1600 scale: 0x1720 = 3.7 V.
+                    "224329", "22432B" -> "1720"
+                    // Average + individual cell probes remain on the legacy 5/65535 scale: 0xBD6F = 3.7 V.
+                    "224181", "224182", "22419F", "2241E0", "224200", "224201", "224240", "22C218",
+                    -> "BD6F"
                     "22432A", "22432C", "22434B", "22434C" -> "20"
                     "22435F", "22433F" -> "80"
                     "2240E9" -> "0014"

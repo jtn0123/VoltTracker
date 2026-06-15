@@ -185,6 +185,13 @@ class LiveSampleReader(
             if (ObdProtocol.parseKnownValue(command, raw) != null) {
                 continue
             }
+            // A recognized no-reading sentinel (all-zero Mode 22 payload, or the 0xFF speed sentinel)
+            // is the ECU answering with "idle / nothing to report", not a malformed frame. Surfacing
+            // it as pid_parse_failed cries wolf (e.g. engine torque 62203F00 with the engine off, or a
+            // cell-number PID before the BECM has picked a min/max cell), so skip it here.
+            if (ObdProtocol.isBenignSentinelResponse(command, raw)) {
+                continue
+            }
             parseFailureReported.add(command)
             service.recorder.logEvent(
                 "pid_parse_failed",

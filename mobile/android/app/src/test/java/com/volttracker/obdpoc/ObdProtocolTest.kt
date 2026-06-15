@@ -291,7 +291,9 @@ class ObdProtocolTest {
         assertNotNull(fallback)
         assertEquals(51.7, fallback!!.valueNumeric!!, 0.01)
 
-        val minCell = ObdProtocol.parseKnownValue("224329", "624329BD6F")
+        // Gen2 Volt BECM encodes cell voltage at 1/1600 V/count, so 3.7 V = 0x1720 (5920). The old
+        // Bolt-derived 5/65535 scale read this same physical cell as ~0.44 V and dropped every sample.
+        val minCell = ObdProtocol.parseKnownValue("224329", "6243291720")
         assertNotNull(minCell)
         assertEquals("minimum cell voltage", minCell!!.name)
         assertEquals(3.7, minCell.valueNumeric!!, 0.001)
@@ -300,7 +302,7 @@ class ObdProtocolTest {
         assertNotNull(minCellNumber)
         assertEquals(32.0, minCellNumber!!.valueNumeric!!, 0.01)
 
-        val maxCell = ObdProtocol.parseKnownValue("22432B", "62432BBD6F")
+        val maxCell = ObdProtocol.parseKnownValue("22432B", "62432B1720")
         assertNotNull(maxCell)
         assertEquals(3.7, maxCell!!.valueNumeric!!, 0.001)
 
@@ -332,9 +334,39 @@ class ObdProtocolTest {
         assertNotNull("a heavily degraded pack capacity must not be dropped", wornPack)
         assertEquals(25.0, wornPack!!.valueNumeric!!, 0.01)
 
-        val faultCell = ObdProtocol.parseKnownValue("224329", "6243297FFF") // ~2.5 V
+        val faultCell = ObdProtocol.parseKnownValue("224329", "6243290FA0") // 4000 / 1600 = 2.5 V
         assertNotNull("a deeply discharged cell voltage must not be dropped", faultCell)
         assertEquals(2.5, faultCell!!.valueNumeric!!, 0.01)
+    }
+
+    @Test
+    fun realVoltCellVoltageFramesDecodeIntoBand() {
+        // Actual frames captured from the car (2026-06-13 field logs). Under the old Bolt scale these
+        // all read ~0.44 V and were dropped; the cell-balance view stayed empty. They must now decode
+        // into the plausible 3.0-4.2 V band, and max - min must be a sane imbalance (tens of mV).
+        val minCell = ObdProtocol.parseKnownValue("224329", "6243291687") // 5767 / 1600
+        val maxCell = ObdProtocol.parseKnownValue("22432B", "62432B16A8") // 5800 / 1600
+        assertNotNull("real min-cell frame must decode", minCell)
+        assertNotNull("real max-cell frame must decode", maxCell)
+        assertEquals(3.604, minCell!!.valueNumeric!!, 0.001)
+        assertEquals(3.625, maxCell!!.valueNumeric!!, 0.001)
+        val imbalanceMv = (maxCell.valueNumeric!! - minCell.valueNumeric!!) * 1000.0
+        assertTrue("cell imbalance should be a sane tens-of-mV figure: $imbalanceMv", imbalanceMv in 0.0..150.0)
+    }
+
+    @Test
+    fun benignSentinelResponsesAreNotTreatedAsParseFailures() {
+        // All-zero Mode 22 payloads (engine torque with the engine off, a cell-number PID before the
+        // BECM picks a min/max cell) and the 0xFF speed sentinel are valid "no reading" answers, not
+        // malformed frames -- so they must not be flagged as pid_parse_failed.
+        assertTrue(ObdProtocol.isBenignSentinelResponse("22203F", "62203F00"))
+        assertTrue(ObdProtocol.isBenignSentinelResponse("22432A", "62432A00"))
+        assertTrue(ObdProtocol.isBenignSentinelResponse("22432C", "62432C0000"))
+        assertTrue(ObdProtocol.isBenignSentinelResponse("010D", "410DFF"))
+        // A genuinely unmodeled non-zero frame is NOT benign: it stays a real parse failure.
+        assertFalse(ObdProtocol.isBenignSentinelResponse("22203F", "62203F17"))
+        assertFalse(ObdProtocol.isBenignSentinelResponse("010D", "410D3C"))
+        assertFalse("NO DATA is not a positive sentinel", ObdProtocol.isBenignSentinelResponse("22432A", "NO DATA"))
     }
 
     @Test
