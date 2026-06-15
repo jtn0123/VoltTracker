@@ -475,6 +475,7 @@ describe('connection-tools.ts — proactive adapter checks', () => {
     bridge = createVoltBridgeFixture({
       startTestConnection: vi.fn(),
       shareDiagnostics: vi.fn(),
+      shareDiagnosticsDigest: vi.fn(),
       getAutoConnectState: vi.fn(() => '{"enabled":true,"available":true,"lastName":"Volt OBD","lastAddress":"AA:BB:CC:DD:EE:FF"}'),
       setAutoConnectEnabled: vi.fn(),
       scheduleAdapterReadyNotify: vi.fn(),
@@ -521,6 +522,22 @@ describe('connection-tools.ts — proactive adapter checks', () => {
       mirror.click();
       expect(bridge.shareDiagnostics).toHaveBeenCalledTimes(2);
     }
+  });
+
+  it('Send AI digest funnels to shareDiagnosticsDigest and re-enables after the cooldown', () => {
+    const btn = document.getElementById('sendAiDigestBtn');
+    const original = btn.textContent;
+    btn.click();
+    btn.click(); // second click while busy must be ignored
+    expect(bridge.shareDiagnosticsDigest).toHaveBeenCalledTimes(1);
+    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.textContent).toBe('Preparing...');
+
+    vi.advanceTimersByTime(1500);
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
+    expect(btn.textContent).toBe(original);
   });
 
   it('Auto-connect reflects native state and toggles the bridge preference', () => {

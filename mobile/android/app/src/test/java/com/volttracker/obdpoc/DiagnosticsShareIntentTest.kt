@@ -38,6 +38,11 @@ class DiagnosticsShareIntentTest {
         wipe(File(context.filesDir, "obd-logs"))
         wipe(File(context.filesDir, "app-log"))
         wipe(File(context.cacheDir, "diagnostics"))
+        // FileProvider caches a per-authority PathStrategy keyed to the cacheDir it first saw. Each
+        // Robolectric test gets a fresh temp cacheDir, so a strategy cached by an earlier test points
+        // at a stale root and makes getUriForFile throw here. Clear it so every test rebuilds against
+        // its own cacheDir.
+        resetFileProviderCache()
     }
 
     @After
@@ -182,6 +187,78 @@ class DiagnosticsShareIntentTest {
     }
 
     @Test
+    fun zipIncludesRedactedDiagnosticsBundleDigest() {
+        val obdLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(obdLogDir.mkdirs())
+        writeFile(
+            File(obdLogDir, "session-1000-obd.jsonl"),
+            "{\"ts\":1,\"type\":\"command\",\"adapter\":\"AA:BB:CC:DD:EE:FF\",\"command\":\"010C\"}\n",
+        )
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+        assertNotNull(zip)
+
+        val entries = listZipInOrder(zip!!)
+        assertTrue(
+            "the AI-facing digest should ship in the zip: $entries",
+            entries.contains("diagnostics-bundle.txt"),
+        )
+        assertEquals(
+            "the digest must be the first zip entry so it's the obvious file to hand to a debugger",
+            "diagnostics-bundle.txt",
+            entries.firstOrNull(),
+        )
+        val digest = readZipText(zip, "diagnostics-bundle.txt")
+        assertTrue("digest carries the manifest", digest.contains("MANIFEST"))
+        // Assert on the embedded body content, not just the filename: the filename also appears in the
+        // MANIFEST, so a digest that catalogued the session but failed to embed its body would still
+        // pass a filename check. The redacted "010C" command only exists if the body was embedded.
+        assertTrue("digest embeds the redacted session body", digest.contains("\"command\":\"010C\""))
+        assertFalse("digest must be redacted", digest.contains("AA:BB:CC:DD:EE:FF"))
+        assertTrue(digest.contains("[bluetooth-address-redacted]"))
+    }
+
+    @Test
+    fun buildDigestFileWritesRedactedDigestText() {
+        val obdLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(obdLogDir.mkdirs())
+        writeFile(
+            File(obdLogDir, "session-1000-obd.jsonl"),
+            "{\"ts\":1,\"type\":\"command\",\"adapter\":\"AA:BB:CC:DD:EE:FF\",\"command\":\"010C\"}\n",
+        )
+
+        val digestFile = DiagnosticsShareIntent.buildDigestFile(context)
+        assertNotNull("buildDigestFile should succeed when logs are present", digestFile)
+        assertTrue(digestFile!!.name.endsWith(".txt"))
+        val text = digestFile.readText()
+        assertTrue("digest carries the manifest", text.contains("MANIFEST"))
+        // Assert on embedded body content, not just the manifest: "010C" only appears if the redacted
+        // session body was actually embedded (the filename alone would also be in the MANIFEST).
+        assertTrue("digest embeds the redacted session body", text.contains("\"command\":\"010C\""))
+        assertFalse("digest must be redacted", text.contains("AA:BB:CC:DD:EE:FF"))
+        assertTrue(text.contains("[bluetooth-address-redacted]"))
+    }
+
+    @Test
+    fun buildDigestIntentReturnsTextShare() {
+        val obdLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(obdLogDir.mkdirs())
+        writeFile(File(obdLogDir, "session-1000-obd.jsonl"), "{\"ts\":1,\"type\":\"command\"}\n")
+
+        val intent = DiagnosticsShareIntent.buildDigestIntent(context)
+        assertNotNull(intent)
+        assertEquals(Intent.ACTION_SEND, intent!!.action)
+        assertEquals("text/plain", intent.type)
+        assertNotNull(intent.getParcelableExtra<Parcelable>(Intent.EXTRA_STREAM))
+        assertTrue((intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0)
+    }
+
+    @Test
+    fun buildDigestIntentReturnsNullWhenContextIsNull() {
+        assertNull(DiagnosticsShareIntent.buildDigestIntent(null))
+    }
+
+    @Test
     fun buildIntentReturnsShareIntentPointingAtZip() {
         val obdLogDir = File(context.filesDir, "obd-logs")
         assertTrue(obdLogDir.mkdirs())
@@ -242,6 +319,20 @@ class DiagnosticsShareIntentTest {
         }
 
         @Throws(IOException::class)
+        private fun listZipInOrder(zip: File): List<String> {
+            val entries = ArrayList<String>()
+            ZipInputStream(FileInputStream(zip)).use { zis ->
+                var e = zis.nextEntry
+                while (e != null) {
+                    entries.add(e.name)
+                    zis.closeEntry()
+                    e = zis.nextEntry
+                }
+            }
+            return entries
+        }
+
+        @Throws(IOException::class)
         private fun readZipText(
             zip: File,
             entryName: String,
@@ -268,6 +359,17 @@ class DiagnosticsShareIntentTest {
             parent?.mkdirs()
             FileWriter(f, false).use { w ->
                 w.write(contents)
+            }
+        }
+
+        private fun resetFileProviderCache() {
+            try {
+                val field = androidx.core.content.FileProvider::class.java.getDeclaredField("sCache")
+                field.isAccessible = true
+                (field.get(null) as? MutableMap<*, *>)?.clear()
+            } catch (_: ReflectiveOperationException) {
+                // Field renamed in a future androidx version: tests that build a share intent may
+                // become order-sensitive again, but we don't want to mask that with a crash here.
             }
         }
 

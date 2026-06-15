@@ -594,6 +594,10 @@ open class MainActivity :
         requireTroubleshooter().shareDiagnostics()
     }
 
+    override fun shareDiagnosticsDigestFromBridge() {
+        requireTroubleshooter().shareDiagnosticsDigest()
+    }
+
     override fun startTestConnectionFromBridge() {
         requireTroubleshooter().startTestConnection()
     }

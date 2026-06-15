@@ -841,6 +841,7 @@ interface VoltRestoreProgress {
     tryReconnectNow(): void;
     openBluetoothSettings(): void;
     shareDiagnostics(): void;
+    shareDiagnosticsDigest(): void;
     startTestConnection(): void;
     scheduleAdapterReadyNotify(mins: number): void;
     cancelAdapterReadyNotify(): void;

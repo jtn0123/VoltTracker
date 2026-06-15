@@ -262,6 +262,11 @@ class VoltBridge(
     }
 
     @JavascriptInterface
+    fun shareDiagnosticsDigest() {
+        diagnostics.shareDiagnosticsDigest()
+    }
+
+    @JavascriptInterface
     fun startTestConnection() {
         diagnostics.startTestConnection()
     }

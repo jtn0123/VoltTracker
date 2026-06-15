@@ -139,6 +139,23 @@ function bindSendDiagnostics() {
   });
 }
 
+// Send-AI-digest button. Funnels into shareDiagnosticsDigest(), which shares a single
+// redacted, budget-bounded text file sized to hand straight to an AI debugging session
+// (no unzipping). Mirrors the send-diagnostics busy-state handling.
+function bindSendAiDigest() {
+  const btn = el("sendAiDigestBtn") as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    if (isBusy(btn)) return;
+    const original = btn.textContent;
+    setButtonBusy(btn, true, "Preparing...");
+    safeCall("shareDiagnosticsDigest");
+    setTimeout(() => {
+      setButtonBusy(btn, false, original);
+    }, 1500);
+  });
+}
+
 // Notify-when-ready toggle. Enabling sends the clamped duration; disabling explicitly
 // cancels the schedule on the Android side so probes stop immediately rather than running on
 // until the (up to 30 min) deadline.
@@ -192,6 +209,7 @@ function bindNotifyWhenReady() {
 
 bindTestConnection();
 bindSendDiagnostics();
+bindSendAiDigest();
 bindAutoConnect();
 bindNotifyWhenReady();
 void VD;

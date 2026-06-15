@@ -27,7 +27,7 @@ complexity:
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LargeClass:
     active: true
-    threshold: 1150 # ObdProtocol (1149) — cohesive stateless decoder
+    threshold: 1169 # ObdProtocol = 1168 by detekt's LargeClass metric (NOT wc -l ~1366); cohesive stateless decoder
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LongMethod:
     active: true
@@ -45,7 +45,7 @@ complexity:
   TooManyFunctions:
     active: true
     thresholdInFiles: 66
-    thresholdInClasses: 64 # MainActivity (63, +getCurrentSessionRouteJson/getBatterySohHistoryJson)
+    thresholdInClasses: 65 # MainActivity (64, +shareDiagnosticsDigestFromBridge)
     thresholdInInterfaces: 25 # ObdSessionStore (24)
     thresholdInObjects: 61 # ObdProtocol (60)
     thresholdInEnums: 12

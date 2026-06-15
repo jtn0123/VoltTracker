@@ -19,6 +19,8 @@ import java.util.zip.ZipOutputStream
  * - the most recent [MAX_SESSION_LOGS] per-session JSONLs from `files/obd-logs/`
  * - the rolling app log + its rolled sibling from `files/app-log/`
  * - the session summary rollup `sessions-summary.jsonl`
+ * - `diagnostics-bundle.txt`: a budget-bounded, self-selecting digest (see [DiagnosticsBundle])
+ *   sized to hand straight to an external debugging tool without overflowing its context
  *
  * The zip is written to `cacheDir/diagnostics/` and exposed via the project's `FileProvider` -- the
  * bridge call wraps the returned intent in [Intent.createChooser] and starts it.
@@ -61,27 +63,81 @@ object DiagnosticsShareIntent {
     }
 
     /**
-     * Builds the zip file (exposed package-private so tests can verify its contents without driving
-     * the FileProvider). Returns `null` on IO failure.
+     * Builds an [Intent.ACTION_SEND] intent for the standalone AI digest -- a single redacted,
+     * budget-bounded `text/plain` file (see [DiagnosticsBundle]) that can be shared straight into a
+     * debugging session without unzipping. Returns `null` if the digest couldn't be written.
      */
     @JvmStatic
-    fun buildZip(ctx: Context): File? {
+    fun buildDigestIntent(ctx: Context?): Intent? {
+        if (ctx == null) {
+            return null
+        }
+        val digest = buildDigestFile(ctx) ?: return null
+        val uri: Uri =
+            try {
+                FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", digest)
+            } catch (ex: IllegalArgumentException) {
+                Log.e(TAG, "FileProvider rejected diagnostics digest: $digest", ex)
+                return null
+            }
+        return Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, ctx.getString(R.string.share_diagnostics_subject))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    }
+
+    /**
+     * Writes the standalone digest text file (exposed package-private so tests can read it back
+     * without driving the FileProvider). Returns `null` on IO failure.
+     */
+    @JvmStatic
+    fun buildDigestFile(ctx: Context): File? {
+        val outDir = prepareOutDir(ctx) ?: return null
+        val digestFile = File(outDir, "diagnostics-digest-${System.currentTimeMillis()}.txt")
+        return try {
+            digestFile.writeText(DiagnosticsBundle.build(ctx.filesDir), Charsets.UTF_8)
+            digestFile
+        } catch (ex: IOException) {
+            Log.e(TAG, "diagnostics digest write failed", ex)
+            if (digestFile.exists() && !digestFile.delete()) {
+                Log.w(TAG, "could not delete partial digest: $digestFile")
+            }
+            null
+        }
+    }
+
+    /**
+     * Creates the shared `cacheDir/diagnostics/` output dir and clears stale artifacts so the cache
+     * keeps only the one we're about to build. Returns `null` if the dir can't be created.
+     */
+    private fun prepareOutDir(ctx: Context): File? {
         val outDir = File(ctx.cacheDir, SUBDIR)
         if (!outDir.exists() && !outDir.mkdirs()) {
             Log.e(TAG, "could not create diagnostics dir: $outDir")
             return null
         }
-        // Clear stale zips so the cache doesn't accumulate one per share over the device's
-        // lifetime. We keep only the one we're about to build.
         outDir.listFiles()?.forEach { stale ->
             if (stale.isFile && !stale.delete()) {
                 Log.w(TAG, "could not delete stale diagnostics file: $stale")
             }
         }
+        return outDir
+    }
+
+    /**
+     * Builds the zip file (exposed package-private so tests can verify its contents without driving
+     * the FileProvider). Returns `null` on IO failure.
+     */
+    @JvmStatic
+    fun buildZip(ctx: Context): File? {
+        val outDir = prepareOutDir(ctx) ?: return null
         val zipFile = File(outDir, "diagnostics-${System.currentTimeMillis()}.zip")
         val filesDir = ctx.filesDir
         try {
             ZipOutputStream(FileOutputStream(zipFile)).use { zipStream ->
+                addBundleDigest(zipStream, filesDir)
                 addRecentSessionLogs(zipStream, File(filesDir, SESSION_LOG_DIR))
                 addAppLogs(zipStream, File(filesDir, APP_LOG_DIR))
                 addSummary(zipStream, File(File(filesDir, SESSION_LOG_DIR), SUMMARY_NAME))
@@ -95,6 +151,23 @@ object DiagnosticsShareIntent {
             return null
         }
         return zipFile
+    }
+
+    @Throws(IOException::class)
+    private fun addBundleDigest(
+        zipStream: ZipOutputStream,
+        filesDir: File,
+    ) {
+        // The digest is the AI-facing artifact: already redacted and size-bounded by DiagnosticsBundle,
+        // so it ships as the first entry and is written verbatim (no second redaction pass needed).
+        val digest = DiagnosticsBundle.build(filesDir)
+        val entry =
+            ZipEntry(DiagnosticsBundle.BUNDLE_ENTRY_NAME).apply {
+                time = System.currentTimeMillis()
+            }
+        zipStream.putNextEntry(entry)
+        zipStream.write(digest.toByteArray(Charsets.UTF_8))
+        zipStream.closeEntry()
     }
 
     @Throws(IOException::class)
