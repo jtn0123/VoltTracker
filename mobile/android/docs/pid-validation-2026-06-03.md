@@ -115,3 +115,10 @@ covering 2026-06-13 drives and scans. Analysis of the raw `command`/`telemetry` 
   community sheet documents as `((256*A)+B)/4`. `engineTorqueNm` therefore never decodes. The 1-byte
   scale is unknown and unvalidatable from logs alone (engine is off in EV mode for almost all reads).
   Capture a session with the ICE running to validate a scale, or drop `22203F` from the live poll set.
+- **Cell-number PIDs (`22432A` min / `22432C` max)** decode fine as 1-byte indices (1-96), but their
+  *labels* are suspect: in 39 of 81 paired field rows the decoded "min cell #" was **greater than** the
+  "max cell #" (a ~50/50 split, impossible for true min/max-voltage cell indices). They are likely a
+  different quantity (module/section index, balancing target, …). Needs a capture during charge or
+  heavy load - where one cell clearly leads - to re-derive the meaning before trusting them.
+
+See `obd-field-capture-handoff.md` for the exact capture + validation steps for both open items.
