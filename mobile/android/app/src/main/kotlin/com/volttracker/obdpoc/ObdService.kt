@@ -16,6 +16,7 @@ import androidx.core.app.ServiceCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.location.LocationManagerTracker
 import com.volttracker.obdpoc.location.LocationTracker
+import com.volttracker.obdpoc.widget.WidgetUpdater
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.ExecutorService
@@ -58,6 +59,12 @@ open class ObdService :
         )
     private lateinit var engine: ObdPollingEngine
     private lateinit var notifications: ObdNotifications
+    private var eventCoordinator: EventNotificationCoordinator? = null
+
+    // Persists a compact widget snapshot and nudges the home-screen widget when state changes.
+    // Nullable + guarded: created in onCreate so test subclasses that drive broadcast* directly
+    // without onCreate (or before it) simply skip the widget hook instead of crashing.
+    private var widgetUpdater: WidgetUpdater? = null
 
     override var locationTracker: LocationTracker? = null
 
@@ -72,7 +79,15 @@ open class ObdService :
     override var activeName = "OBD adapter"
 
     override var sessionStartedAtMs = 0L
+
+    // Written by broadcastStatus on the poll/IO thread (NOT under ioLock) and read under ioLock in
+    // closeSessionLog to finalize the session row, so they must be @Volatile — otherwise a session
+    // that errored at the very end could be persisted with a stale state/detail. (The sibling
+    // cross-thread flags appInForeground / lastFailureClass are already @Volatile.)
+    @Volatile
     private var lastSessionState = ""
+
+    @Volatile
     private var lastSessionDetail = ""
 
     @Volatile
@@ -139,6 +154,8 @@ open class ObdService :
         locationTracker = LocationManagerTracker(this)
         notifications = ObdNotifications(this)
         notifications.createChannel()
+        eventCoordinator = createEventCoordinator()
+        widgetUpdater = createWidgetUpdater()
         val rollingAppLog = RollingAppLog(File(filesDir, "app-log"))
         OBDLog.mirror(rollingAppLog)
         val summaryStore = SessionSummaryStore.getInstance(filesDir)
@@ -171,6 +188,27 @@ open class ObdService :
      * cannot run under Robolectric), letting the action-dispatch orchestration be driven directly.
      */
     open fun createPollingEngine(): ObdPollingEngine = ObdPollingEngine(this)
+
+    /**
+     * Factory for the event-notification coordinator (M1 + M3). Reads the native-owned settings from
+     * the shared prefs file the dashboard writes via the bridge, posts alerts through [EventNotifier]
+     * on its own "alerts" channel, and gates the on-connect auto-scan via [AutoScanController].
+     * `open` so a test subclass can substitute a fake.
+     */
+    open fun createEventCoordinator(): EventNotificationCoordinator {
+        val sharedPrefs = getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
+        val eventPrefs = EventNotificationPrefs(sharedPrefs)
+        val notifier = EventNotifier(this)
+        notifier.createChannel()
+        return EventNotificationCoordinator(eventPrefs, notifier, AutoScanController(eventPrefs))
+    }
+
+    /**
+     * Factory for the home-screen-widget updater (M10a). It persists a compact snapshot to the
+     * shared-prefs file and nudges [com.volttracker.obdpoc.widget.VoltWidgetProvider] when the
+     * displayed state changes. `open` so a test subclass can substitute a fake or a no-op.
+     */
+    open fun createWidgetUpdater(): WidgetUpdater = WidgetUpdater(this)
 
     override fun onStartCommand(
         intent: Intent?,
@@ -259,6 +297,23 @@ open class ObdService :
             return
         }
         voltageProbe?.run(engineRef::transactOneShot)
+    }
+
+    override fun maybeRunAutoDtcScan(engineRef: ObdPollingEngine?) {
+        try {
+            eventCoordinator?.maybeRunAutoDtcScan(engineRef)
+        } catch (ex: RuntimeException) {
+            // A notification/auto-scan failure must never break the live session.
+            Log.w(MainActivity.TAG, "auto DTC scan failed", ex)
+        }
+    }
+
+    private fun maybePostEventNotifications(payload: JSONObject) {
+        try {
+            eventCoordinator?.onTelemetry(payload)
+        } catch (ex: RuntimeException) {
+            Log.w(MainActivity.TAG, "event notification dispatch failed", ex)
+        }
     }
 
     private fun startObdSession(
@@ -377,6 +432,12 @@ open class ObdService :
         sessionStartedAtMs = System.currentTimeMillis()
         sessionStateMachine.start(request.phase, request.phaseDetail)
         engine.beginSession(request.engineMode)
+        try {
+            eventCoordinator?.onSessionStart()
+        } catch (ex: RuntimeException) {
+            // A notification session-start hook failure must never abort session startup.
+            Log.w(MainActivity.TAG, "event notification session-start hook failed", ex)
+        }
         openSessionLog(request.mode, request.address)
         if (request.startLocationTracking) {
             startLocationTracking()
@@ -522,7 +583,26 @@ open class ObdService :
         val payload = telemetry.toJson()
         recorder.logJson("telemetry", payload)
         recorder.persistTelemetry(payload)
+        maybePostEventNotifications(payload)
+        maybeUpdateWidgetTelemetry(payload)
         broadcast(BROADCAST_TELEMETRY, payload)
+    }
+
+    private fun maybeUpdateWidgetTelemetry(payload: JSONObject) {
+        try {
+            widgetUpdater?.onTelemetry(payload)
+        } catch (ex: RuntimeException) {
+            // The widget snapshot is best-effort and must never break the live telemetry path.
+            Log.w(MainActivity.TAG, "widget telemetry hook failed", ex)
+        }
+    }
+
+    private fun maybeUpdateWidgetStatus(state: String?) {
+        try {
+            widgetUpdater?.onStatus(state)
+        } catch (ex: RuntimeException) {
+            Log.w(MainActivity.TAG, "widget status hook failed", ex)
+        }
     }
 
     override fun broadcastStatus(
@@ -558,6 +638,7 @@ open class ObdService :
         sessionStateMachine.observeStatus(state, detail, blocked)
         recorder.logJson("status", payload)
         recorder.persistStatus(state, detail, blocked, payload)
+        maybeUpdateWidgetStatus(state)
         broadcast(BROADCAST_STATUS, payload)
     }
 

@@ -69,7 +69,24 @@ open class MainActivity :
 
     @JvmField var troubleshooter: TroubleshooterBridge? = null
 
+    // Per-trip GPX/CSV export orchestration (read route -> write cache file -> record export ->
+    // share). Lazily built so it survives the test seam that skips super.onCreate(); holds the body
+    // off this class surface, mirroring EventNotificationHostDelegate.
+    private val tripExportController by lazy { TripExportController(applicationContext, this) }
+
     private var autoConnectController: AutoConnectController? = null
+    private var eventNotificationPrefs: EventNotificationPrefs? = null
+
+    // Backs the EventNotificationCommands seam (M1/M3 settings). Kept off the Activity body so the
+    // six toggle handlers don't swell MainActivity's surface; reads the prefs lazily because they
+    // only exist after onCreate.
+    private val eventNotificationHost =
+        EventNotificationHostDelegate(
+            prefs = { eventNotificationPrefs },
+            publishStatus = { state, detail, blocked -> publishStatus(state, detail, blocked) },
+            publishAppState = { publishAppState() },
+            notReadyMessage = { getString(R.string.status_event_prefs_not_ready) },
+        )
     private var restoreFilePicker: ActivityResultLauncher<Intent>? = null
     private var permissionRequester: ActivityResultLauncher<Array<String>>? = null
 
@@ -96,12 +113,48 @@ open class MainActivity :
     private val lastStorage = JsonSnapshot()
     private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val storageReader = DashboardStorageReader { localStore }
+
+    // The OBD telemetry/status broadcast receiving + dashboard-forwarding plumbing lives in the
+    // coordinator; the Activity supplies the seam callbacks that touch its snapshot state and the
+    // overridable hooks (so test subclasses' overrides stay on the path). See the coordinator KDoc.
     private val broadcastCoordinator =
         DashboardBroadcastCoordinator(
-            onTelemetryJson = { json -> onTelemetryBroadcast(json) },
-            onStatusJson = { json -> onStatusBroadcast(json) },
-            onAutoConnectTrigger = { trigger, address -> maybeAutoConnect(trigger, address) },
-            bluetoothDeviceAddress = { intent -> bluetoothDeviceAddress(intent) },
+            object : DashboardBroadcastCoordinator.Seam {
+                override fun storeTelemetry(json: String) = lastTelemetry.setFromString(json)
+
+                override fun storeStatus(json: String): String {
+                    lastStatus.setFromString(json)
+                    return lastStatus.get().optString("state", "")
+                }
+
+                override fun callDashboard(
+                    functionName: String,
+                    jsonPayload: String?,
+                ) = this@MainActivity.callDashboard(functionName, jsonPayload)
+
+                override fun markStorageSummaryDirty() = this@MainActivity.markStorageSummaryDirty()
+
+                override fun publishStorageSummary() = this@MainActivity.publishStorageSummary()
+
+                override fun publishStorageSummaryThrottled() = this@MainActivity.publishStorageSummaryThrottled()
+
+                override fun publishAppState() = this@MainActivity.publishAppState()
+
+                override fun onAdapterStatusForReadyNotify(status: JSONObject) =
+                    this@MainActivity.onAdapterStatusForReadyNotify(status)
+
+                override fun lastStatus(): JSONObject = lastStatus.get()
+
+                override fun maybeAutoConnect(
+                    trigger: String,
+                    observedAddress: String?,
+                ) {
+                    this@MainActivity.maybeAutoConnect(trigger, observedAddress)
+                }
+
+                override fun bluetoothDeviceAddress(intent: Intent): String =
+                    this@MainActivity.bluetoothDeviceAddress(intent)
+            },
         )
     private val storageSummaryPublisher =
         StorageSummaryPublisher(
@@ -132,25 +185,6 @@ open class MainActivity :
 
     fun requireTroubleshooter(): TroubleshooterBridge =
         checkNotNull(troubleshooter) { "TroubleshooterBridge is not ready" }
-
-    private fun onTelemetryBroadcast(json: String) {
-        lastTelemetry.setFromString(json)
-        markStorageSummaryDirty()
-        callDashboard("updateTelemetry", json)
-        publishAppState()
-    }
-
-    private fun onStatusBroadcast(json: String) {
-        lastStatus.setFromString(json)
-        callDashboard("setStatus", json)
-        if ("idle" == lastStatus.get().optString("state", "")) {
-            publishStorageSummary()
-        } else {
-            publishStorageSummaryThrottled()
-        }
-        publishAppState()
-        onAdapterStatusForReadyNotify(lastStatus.get())
-    }
 
     private fun submitBackground(task: Runnable) {
         try {
@@ -197,6 +231,7 @@ open class MainActivity :
         val activityPrefs = checkNotNull(prefs)
         deviceCatalog = DeviceCatalog(this, activityPrefs)
         autoConnectController = AutoConnectController(activityPrefs, requireDeviceCatalog())
+        eventNotificationPrefs = EventNotificationPrefs(activityPrefs)
         dataBackup = DataBackup(this)
         backupController = BackupController(this, requireDataBackup(), backgroundExecutor)
         permissionGate = PermissionGate(this, ::launchPermissionRequest)
@@ -271,33 +306,33 @@ open class MainActivity :
             publishStatus("ready", getString(R.string.status_viewing_local_data), false)
         }
         maybeAutoConnect(AutoConnectController.TRIGGER_DASHBOARD_READY, null)
-        maybeShowFirstLaunchOnboarding()
+        // Auto-show the guided setup walkthrough once for a genuinely fresh install (decision in
+        // OnboardingFlow; completion is persisted there, so it shows at most once).
+        setupGuideController.maybeAutoShow()
     }
 
-    /** One-time explainer for a fresh install: how to pair an adapter, and that demo exists. */
-    private fun maybeShowFirstLaunchOnboarding() {
-        val activityPrefs = prefs ?: return
-        val onboarding = FirstLaunchOnboarding(activityPrefs)
-        val hasAdapterHistory = deviceCatalog?.lastAddress()?.isNotEmpty() == true
-        if (!onboarding.shouldShow(hasAdapterHistory, isLoggingActive())) {
-            return
-        }
-        try {
-            AlertDialog
-                .Builder(this)
-                .setTitle(R.string.onboarding_title)
-                .setMessage(R.string.onboarding_message)
-                .setPositiveButton(R.string.onboarding_dismiss, null)
-                .setNeutralButton(R.string.onboarding_bt_settings) { _, _ ->
-                    requireTroubleshooter().openBluetoothSettings()
-                }.show()
-            // Marked only after show() succeeds: if a dying Activity aborts the dialog, the
-            // next launch gets another chance instead of suppressing onboarding forever.
-            onboarding.markShown()
-        } catch (ex: RuntimeException) {
-            // Same contract as confirmBridgeAction: a dying Activity must not crash over a dialog.
-            Log.w(TAG, "onboarding dialog failed to show", ex)
-        }
+    // Guided first-run setup walkthrough (M7). The staged-dialog body and step cursor live in the
+    // controller (mirroring tripExportController); this Activity only supplies the live-state read
+    // and the native side effects. Lazy so it survives the test seam that skips super.onCreate(),
+    // and because it reads permissionGate/deviceCatalog that only exist after onCreate.
+    private val setupGuideController by lazy {
+        SetupGuideController(
+            context = this,
+            flow = { prefs?.let { OnboardingFlow(it) } },
+            hasPairedAdapter = { deviceCatalog?.lastAddress()?.isNotEmpty() == true },
+            hasBluetoothPermission = { requirePermissionGate().hasConnectPermissions() },
+            hasLocationPermission = { requirePermissionGate().hasLocation() },
+            loggingActive = { isLoggingActive() },
+            openBluetoothSettings = { requireTroubleshooter().openBluetoothSettings() },
+            ensureBluetoothPermission = { requirePermissionGate().ensureConnectPermissions() },
+            ensureLocationPermission = { requirePermissionGate().ensureGranted() },
+            startDemo = { startObdService(ObdService.ACTION_DEMO, null, null) },
+        )
+    }
+
+    /** Re-opens the guided setup walkthrough on demand (bridge "Setup guide" affordance). */
+    override fun openSetupGuideFromBridge() {
+        setupGuideController.open()
     }
 
     @VisibleForTesting
@@ -354,6 +389,7 @@ open class MainActivity :
         webView = null
         dashboardPublisher = null
         autoConnectController = null
+        eventNotificationPrefs = null
         super.onDestroy()
     }
 
@@ -366,10 +402,18 @@ open class MainActivity :
     }
 
     /**
-     * Reacts to a runtime-permission result; the decision tree lives in [ConnectPermissionFlow].
-     * Invoked by the [ActivityResultContracts.RequestMultiplePermissions] callback.
+     * Reacts to a runtime-permission result. While the guided walkthrough is mid-flight the result
+     * advances it (re-rendering the next pending step); otherwise the decision tree lives in
+     * [ConnectPermissionFlow]. Invoked by the [ActivityResultContracts.RequestMultiplePermissions]
+     * callback.
      */
     open fun onPermissionsResult() {
+        if (setupGuideController.isActive()) {
+            publishDeviceList()
+            publishAppState()
+            setupGuideController.resumeAfterPermissionResult()
+            return
+        }
         connectPermissionFlow.onPermissionsResult()
     }
 
@@ -651,6 +695,11 @@ open class MainActivity :
 
     override fun getTripRouteJson(routeKey: String?): String = storageReader.tripRouteJson(routeKey)
 
+    override fun exportTripFromBridge(
+        routeKey: String?,
+        format: String?,
+    ): String = tripExportController.exportAndShare(routeKey, format)
+
     override fun getCurrentSessionRouteJson(): String = storageReader.currentSessionRouteJson()
 
     override fun getBatterySohHistoryJson(): String = storageReader.batterySohHistoryJson()
@@ -710,6 +759,26 @@ open class MainActivity :
         publishAppState()
     }
 
+    override fun getEventNotificationStateJson(): String = eventNotificationHost.getEventNotificationStateJson()
+
+    override fun setChargeCompleteNotifyFromBridge(enabled: Boolean) =
+        eventNotificationHost.setChargeCompleteNotifyFromBridge(enabled)
+
+    override fun setNewDtcNotifyFromBridge(enabled: Boolean) = eventNotificationHost.setNewDtcNotifyFromBridge(enabled)
+
+    override fun setLowSocNotifyFromBridge(
+        enabled: Boolean,
+        thresholdPct: Double,
+    ) = eventNotificationHost.setLowSocNotifyFromBridge(enabled, thresholdPct)
+
+    override fun setHighPackTempNotifyFromBridge(
+        enabled: Boolean,
+        thresholdC: Double,
+    ) = eventNotificationHost.setHighPackTempNotifyFromBridge(enabled, thresholdC)
+
+    override fun setAutoScanOnConnectFromBridge(enabled: Boolean) =
+        eventNotificationHost.setAutoScanOnConnectFromBridge(enabled)
+
     private fun maybeAutoConnect(
         trigger: String,
         observedAddress: String?,
@@ -762,6 +831,8 @@ open class MainActivity :
          * constant. Keep the emitted line's prefix unchanged so the live smoke still matches.
          */
         const val DASHBOARD_READY_LOG = "dashboard handshake received"
-        private const val PREFS = "volt_obd_prefs"
+
+        /** SharedPreferences file shared by the Activity and [ObdService] (native-owned settings). */
+        const val PREFS = "volt_obd_prefs"
     }
 }

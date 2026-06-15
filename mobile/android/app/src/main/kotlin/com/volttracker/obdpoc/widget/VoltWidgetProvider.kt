@@ -1,0 +1,115 @@
+package com.volttracker.obdpoc.widget
+
+import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.widget.RemoteViews
+import com.volttracker.obdpoc.MainActivity
+import com.volttracker.obdpoc.R
+
+/**
+ * Home-screen widget showing an at-a-glance vehicle snapshot: SOC (big), a charging/connection
+ * line, and an "updated Xm ago" freshness line — or an "open the app" prompt when no data exists.
+ *
+ * Widgets run out-of-process on their own schedule, so this reads a persisted [WidgetSnapshot]
+ * (written by the service via [WidgetUpdater]) rather than binding to the live session. The
+ * "what to show" decision is delegated to the pure [WidgetStateFormatter]; this class only resolves
+ * the result to string resources and binds the [RemoteViews]. Tapping anywhere opens [MainActivity].
+ */
+class VoltWidgetProvider : AppWidgetProvider() {
+    override fun onUpdate(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetIds: IntArray,
+    ) {
+        val snapshot = WidgetSnapshotStore(context).read()
+        val views = buildViews(context, snapshot)
+        for (id in appWidgetIds) {
+            appWidgetManager.updateAppWidget(id, views)
+        }
+    }
+
+    companion object {
+        /** Distinct request code so the widget's PendingIntent doesn't collide with the notification's. */
+        private const val TAP_REQUEST_CODE = 4208
+
+        /** Renders the [snapshot] into a bound [RemoteViews] for the widget layout. */
+        @JvmStatic
+        fun buildViews(
+            context: Context,
+            snapshot: WidgetSnapshot,
+        ): RemoteViews {
+            val views = RemoteViews(context.packageName, R.layout.widget_volt)
+            val display = WidgetStateFormatter.format(snapshot, System.currentTimeMillis())
+
+            views.setTextViewText(R.id.widget_soc, display.socText)
+            views.setTextViewText(R.id.widget_status, statusText(context, display.status))
+            views.setTextViewText(R.id.widget_updated, freshnessText(context, display))
+            views.setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
+            return views
+        }
+
+        private fun statusText(
+            context: Context,
+            status: WidgetStateFormatter.Status,
+        ): String =
+            context.getString(
+                when (status) {
+                    WidgetStateFormatter.Status.NO_DATA -> R.string.widget_status_no_data
+                    WidgetStateFormatter.Status.CHARGING -> R.string.widget_status_charging
+                    WidgetStateFormatter.Status.CONNECTED -> R.string.widget_status_connected
+                    WidgetStateFormatter.Status.DISCONNECTED -> R.string.widget_status_disconnected
+                },
+            )
+
+        private fun freshnessText(
+            context: Context,
+            display: WidgetStateFormatter.WidgetDisplay,
+        ): String {
+            val base =
+                when (display.freshness) {
+                    WidgetStateFormatter.Freshness.NONE -> return ""
+                    WidgetStateFormatter.Freshness.JUST_NOW -> context.getString(R.string.widget_updated_just_now)
+                    WidgetStateFormatter.Freshness.MINUTES ->
+                        context.getString(R.string.widget_updated_minutes, display.freshnessValue)
+                    WidgetStateFormatter.Freshness.HOURS ->
+                        context.getString(R.string.widget_updated_hours, display.freshnessValue)
+                    WidgetStateFormatter.Freshness.DAYS ->
+                        context.getString(R.string.widget_updated_days, display.freshnessValue)
+                }
+            return if (display.stale) context.getString(R.string.widget_updated_stale, base) else base
+        }
+
+        private fun openAppIntent(context: Context): PendingIntent {
+            val open =
+                Intent()
+                    .setClass(context, MainActivity::class.java)
+                    .setPackage(context.packageName)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            return PendingIntent.getActivity(
+                context,
+                TAP_REQUEST_CODE,
+                open,
+                PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
+
+        /** Pushes a fresh redraw to every placed instance (used by tests and direct callers). */
+        @JvmStatic
+        fun refreshAll(context: Context) {
+            val app = context.applicationContext
+            val manager = AppWidgetManager.getInstance(app) ?: return
+            val ids = manager.getAppWidgetIds(ComponentName(app, VoltWidgetProvider::class.java)) ?: return
+            if (ids.isEmpty()) {
+                return
+            }
+            val views = buildViews(app, WidgetSnapshotStore(app).read())
+            for (id in ids) {
+                manager.updateAppWidget(id, views)
+            }
+        }
+    }
+}

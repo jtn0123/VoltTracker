@@ -78,7 +78,10 @@ test.describe('a11y — destructive DTC dialog keyboard behavior', () => {
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAttribute('role', 'alertdialog');
     await expect(dialog).toHaveAttribute('aria-modal', 'true');
-    await expect(page.locator('[data-dtc-dialog-inert="true"]')).not.toHaveCount(0);
+    // The shared focus-trap (createFocusTrap) marks the background non-interactive with the
+    // standard `inert` attribute (+ aria-hidden), replacing the old custom data-dtc-dialog-inert
+    // marker. Assert the real mechanism: background nodes become inert while the dialog is open.
+    await expect(page.locator('[inert]')).not.toHaveCount(0);
     await expect(page.locator('#dtcClearWarning')).toBeFocused();
 
     await page.keyboard.press('Tab');
@@ -90,6 +93,6 @@ test.describe('a11y — destructive DTC dialog keyboard behavior', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(page.locator('#dtcClearOpenBtn')).toBeFocused();
-    await expect(page.locator('[data-dtc-dialog-inert="true"]')).toHaveCount(0);
+    await expect(page.locator('[inert]')).toHaveCount(0);
   });
 });

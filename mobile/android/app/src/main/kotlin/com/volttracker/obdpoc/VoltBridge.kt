@@ -85,6 +85,42 @@ class VoltBridge(
     }
 
     @JavascriptInterface
+    fun getEventNotificationState(): String = activity.getEventNotificationStateJson()
+
+    @JavascriptInterface
+    fun setChargeCompleteNotify(enabled: Boolean) {
+        // State-mutating entry point: marshal off the WebView JavaBridge thread before touching
+        // Activity-owned settings, mirroring setAutoConnectEnabled.
+        activity.runOnUiThread { activity.setChargeCompleteNotifyFromBridge(enabled) }
+    }
+
+    @JavascriptInterface
+    fun setNewDtcNotify(enabled: Boolean) {
+        activity.runOnUiThread { activity.setNewDtcNotifyFromBridge(enabled) }
+    }
+
+    @JavascriptInterface
+    fun setLowSocNotify(
+        enabled: Boolean,
+        thresholdPct: Double,
+    ) {
+        activity.runOnUiThread { activity.setLowSocNotifyFromBridge(enabled, thresholdPct) }
+    }
+
+    @JavascriptInterface
+    fun setHighPackTempNotify(
+        enabled: Boolean,
+        thresholdC: Double,
+    ) {
+        activity.runOnUiThread { activity.setHighPackTempNotifyFromBridge(enabled, thresholdC) }
+    }
+
+    @JavascriptInterface
+    fun setAutoScanOnConnect(enabled: Boolean) {
+        activity.runOnUiThread { activity.setAutoScanOnConnectFromBridge(enabled) }
+    }
+
+    @JavascriptInterface
     fun getStorageSummary(): String = activity.getStorageSummaryJson()
 
     @JavascriptInterface
@@ -176,6 +212,14 @@ class VoltBridge(
     @JavascriptInterface
     fun exportDetailedSignalLogs(): String = dataExports.exportDetailedSignalLogs()
 
+    /** Exports a single logged trip as a GPX track and opens the share sheet. */
+    @JavascriptInterface
+    fun exportTripGpx(routeKeyOrSessionId: String?): String = dataExports.exportTripGpx(routeKeyOrSessionId)
+
+    /** Exports a single logged trip as a CSV sample log and opens the share sheet. */
+    @JavascriptInterface
+    fun exportTripCsv(routeKeyOrSessionId: String?): String = dataExports.exportTripCsv(routeKeyOrSessionId)
+
     @JavascriptInterface
     fun deleteDetailedSignalLog(id: String?) {
         dataExports.deleteDetailedSignalLog(id)
@@ -184,6 +228,31 @@ class VoltBridge(
     @JavascriptInterface
     fun markTripNotTrip(routeKey: String?) {
         dataExports.markTripNotTrip(routeKey)
+    }
+
+    /** Sets or clears (empty/null label) the user label for a stored trip (M4). */
+    @JavascriptInterface
+    fun setTripLabel(
+        routeKey: String?,
+        label: String?,
+    ) {
+        dataExports.setTripLabel(routeKey, label)
+    }
+
+    /** Records a maintenance-log entry from the Insights add-entry form (M5). */
+    @JavascriptInterface
+    fun addMaintenanceEntry(json: String?) {
+        dataExports.addMaintenanceEntry(json)
+    }
+
+    /** Newest-first maintenance log as a JSON array (M5). */
+    @JavascriptInterface
+    fun getMaintenanceLog(): String = dataExports.getMaintenanceLog()
+
+    /** Deletes one maintenance-log entry by id (M5). */
+    @JavascriptInterface
+    fun deleteMaintenanceEntry(id: String?) {
+        dataExports.deleteMaintenanceEntry(id)
     }
 
     @JavascriptInterface
@@ -251,6 +320,12 @@ class VoltBridge(
     @JavascriptInterface
     fun openBluetoothSettings() {
         connections.openBluetoothSettings()
+    }
+
+    /** Re-opens the guided first-run setup walkthrough on demand (M7 "Setup guide" affordance). */
+    @JavascriptInterface
+    fun openSetupGuide() {
+        diagnostics.openSetupGuide()
     }
 
     @JavascriptInterface

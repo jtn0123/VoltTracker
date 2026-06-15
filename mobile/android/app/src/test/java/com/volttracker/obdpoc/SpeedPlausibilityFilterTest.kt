@@ -36,6 +36,23 @@ class SpeedPlausibilityFilterTest {
     }
 
     @Test
+    fun hardBrakingIsAccepted() {
+        val f = SpeedPlausibilityFilter()
+        f.accept(100, T0)
+        // ~40 km/h shed in one second is real regen + friction braking, not a glitch — the old
+        // symmetric 45 km/h ceiling rejected drops like this at the ~0.85 s poll cadence.
+        assertTrue(f.accept(60, T0 + 1_000L))
+    }
+
+    @Test
+    fun extremeDecelerationGlitchIsRejected() {
+        val f = SpeedPlausibilityFilter()
+        f.accept(80, T0)
+        // A 75 km/h drop in one second exceeds even the deceleration ceiling: a sensor glitch.
+        assertFalse(f.accept(5, T0 + 1_000L))
+    }
+
+    @Test
     fun rejectedReadingDoesNotMoveTheBaseline() {
         val f = SpeedPlausibilityFilter()
         f.accept(50, T0)

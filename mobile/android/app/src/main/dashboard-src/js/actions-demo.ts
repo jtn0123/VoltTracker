@@ -45,6 +45,10 @@ export function runBrowserDemoStream(
 ) {
   let t = 0;
   VD.setStatus({ state: "connected", detail: "Browser-only demo is running." });
+  // Begin from an empty live route so a re-started browser demo doesn't append onto the
+  // previous run's track (stopDemo/stopAll clear it, but a bare start would not).
+  if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
+  else { state.liveRoutePoints = []; state.liveRouteStartedAtMs = null; }
   window.clearInterval(window.__voltDemoTimer ?? undefined);
   const emitSample = () => {
     t += 1;

@@ -99,6 +99,10 @@ internal class VoltBridgeDiagnostics(
         activity.runOnUiThread(activity::cancelAdapterReadyNotifyFromBridge)
     }
 
+    fun openSetupGuide() {
+        activity.runOnUiThread(activity::openSetupGuideFromBridge)
+    }
+
     companion object {
         /** Upper bound for the JS-supplied recent-session count. */
         internal const val MAX_RECENT_SESSIONS = 100

@@ -138,9 +138,13 @@ function validatePayload(kind: string, payload: unknown) {
 
 VD.validatePayload = validatePayload;
 
-// Exported for the unit suite only: the spec-driven public surface
+// validatePayload is also exported for in-bundle ESM consumers (A3): the setter
+// owners (storage-status / telemetry) import it directly instead of reading
+// window.VoltDashboard.validatePayload at runtime. VD.validatePayload stays
+// assigned for the unit suite, which exercises it off the global.
+// WARNED_PAYLOAD_ISSUES_MAX / warnPayloadIssueOnce / warnedPayloadIssues are
+// exported for the unit suite only: the spec-driven public surface
 // (validatePayload) can mint at most a few dozen distinct keys, so the
 // eviction path cannot be reached through it (the Set is exported so the
-// test can start from a known-empty cache). Production code must keep
-// calling VD.validatePayload.
-export { WARNED_PAYLOAD_ISSUES_MAX, warnPayloadIssueOnce, warnedPayloadIssues };
+// test can start from a known-empty cache).
+export { WARNED_PAYLOAD_ISSUES_MAX, validatePayload, warnPayloadIssueOnce, warnedPayloadIssues };

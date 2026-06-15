@@ -23,6 +23,8 @@ export type MapRouteSession = {
   status?: string;
   startedAtMs?: number;
   endedAtMs?: number;
+  /** User-authored trip label (M4); empty/absent when unset. */
+  label?: string;
   [key: string]: unknown;
 };
 
@@ -55,7 +57,19 @@ export function isValidRoutePoint(point: unknown): point is MapRoutePoint {
   const candidate = point as MapRoutePoint | null;
   const lat = Number(candidate && candidate.lat);
   const lng = Number(candidate && candidate.lng);
+  // Reject the exact (0,0) "null island" sentinel some GPS/telemetry layers emit before a
+  // fix: a single (0,0) between real fixes would draw a ~13,000 km leg off the African coast
+  // and blow out fitBounds / route distance. A genuine drive never passes through it.
+  if (lat === 0 && lng === 0) return false;
   return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+}
+
+// Format a coordinate to 5dp for the fit-key, collapsing non-finite values to "" rather than
+// the string "NaN" — two distinct malformed routes would otherwise share a "...:NaN:NaN" key
+// and suppress a legitimate refit, leaving the map framed on the wrong drive.
+function fitKeyCoord(value: unknown): string {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(5) : "";
 }
 
 export function routeFitKey(routeSession: MapRouteSession, points: MapRoutePoint[]) {
@@ -63,19 +77,21 @@ export function routeFitKey(routeSession: MapRouteSession, points: MapRoutePoint
   const last = points[points.length - 1];
   if (!first || !last) return [(routeSession || {}).id || "", points.length, "", "", "", ""].join(":");
   if (String((routeSession || {}).id || "") === LIVE_ROUTE_ID) {
+    // Deliberately excludes points.length so the key stays stable as the live track grows
+    // (follow mode reframes via fitLiveFollow); only a changed first fix forces a one-shot refit.
     return [
       LIVE_ROUTE_ID,
-      Number(first.lat).toFixed(5),
-      Number(first.lng).toFixed(5)
+      fitKeyCoord(first.lat),
+      fitKeyCoord(first.lng)
     ].join(":");
   }
   return [
     (routeSession || {}).id || "",
     points.length,
-    Number(first.lat).toFixed(5),
-    Number(first.lng).toFixed(5),
-    Number(last.lat).toFixed(5),
-    Number(last.lng).toFixed(5)
+    fitKeyCoord(first.lat),
+    fitKeyCoord(first.lng),
+    fitKeyCoord(last.lat),
+    fitKeyCoord(last.lng)
   ].join(":");
 }
 

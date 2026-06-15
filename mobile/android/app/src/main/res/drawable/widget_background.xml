@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rounded card behind the widget. The fill is theme-aware (see values/ vs values-night/
+     colors.xml) so it stays readable on light and dark home screens. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="16dp" />
+    <solid android:color="@color/widget_background_fill" />
+</shape>

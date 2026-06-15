@@ -5,6 +5,7 @@ import com.volttracker.obdpoc.PidSchedule.PidSpec
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 /** Owns live-poll PID scheduling, batching, carry-forward raw values, and stale timers. */
 class PidPollingState(
@@ -13,9 +14,14 @@ class PidPollingState(
 ) {
     private var cycleNum = 0
     private var mode01BatchSupported = false
-    private val lastRawByCommand = HashMap<String, String>()
-    private val lastPolledAtMsByCommand = HashMap<String, Long>()
-    private val lastRawSetAtMsByCommand = HashMap<String, Long>()
+
+    // These carry-forward maps are read-and-mutated (including remove-on-age-out in lastRaw) on the
+    // single poll thread today. They are ConcurrentHashMaps so a future "current value" query from
+    // the broadcast/main thread can't structurally corrupt them under concurrent modification —
+    // cheap insurance for an invariant that is otherwise only enforced by call-site discipline.
+    private val lastRawByCommand = ConcurrentHashMap<String, String>()
+    private val lastPolledAtMsByCommand = ConcurrentHashMap<String, Long>()
+    private val lastRawSetAtMsByCommand = ConcurrentHashMap<String, Long>()
     private var clock = Clock { System.currentTimeMillis() }
 
     /** Time source, overridable in tests. */

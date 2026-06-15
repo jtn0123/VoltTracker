@@ -48,6 +48,7 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
+        android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <activity
@@ -64,6 +65,26 @@
             android:name=".ObdService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|location" />
+
+        <!-- Home-screen widget (M10a). exported="true" is required: the system AppWidget host is a
+             separate process and delivers APPWIDGET_UPDATE to this receiver. The widget only reads a
+             persisted snapshot and launches MainActivity, so it exposes no sensitive surface.
+             android:permission="BIND_APPWIDGET" gates APPWIDGET_UPDATE to the system widget host so
+             other apps cannot spam update broadcasts; our own in-app refresh uses a direct
+             AppWidgetManager.updateAppWidget call (see WidgetUpdater.requestRefresh), not a
+             broadcast, so the permission gate does not block it. -->
+        <receiver
+            android:name=".widget.VoltWidgetProvider"
+            android:exported="true"
+            android:permission="android.permission.BIND_APPWIDGET"
+            android:label="@string/widget_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/volt_widget_info" />
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -98,6 +98,12 @@ internal object ObdKnownValueParserRegistry {
                         ?.let { ObdProtocol.boundedInt(it, ObdProtocol.TEMP_C_RANGE) }
                         ?.let { ObdProtocol.knownValue("engine oil temperature", it.toDouble(), "deg C", 0) }
                 },
+            "0132" to
+                Parser { response ->
+                    ObdProtocol.parseSignedMode01Word(response, "32")?.let { it / 4.0 }?.let {
+                        ObdProtocol.knownValue("EVAP vapor pressure", it, "Pa", 0)
+                    }
+                },
         )
 
     fun parse(

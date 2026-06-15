@@ -85,7 +85,7 @@ function applyAutoConnectStatus(state: Record<string, unknown>, toggle: HTMLInpu
   }
 }
 
-function bindAutoConnect() {
+function bindAutoConnect(opts?: AddEventListenerOptions) {
   const toggle = el("autoConnectToggle") as HTMLInputElement | null;
   if (!toggle) return;
   const state = parseBridgeJson(safeCall("getAutoConnectState"));
@@ -98,14 +98,14 @@ function bindAutoConnect() {
     // new toggle value (the bridge may not re-report it synchronously).
     const fresh = parseBridgeJson(safeCall("getAutoConnectState"));
     applyAutoConnectStatus({ ...fresh, enabled: toggle.checked }, toggle);
-  });
+  }, opts);
 }
 
 // Test-connection button. The Android side starts ObdService for the
 // last device and stops it after ~8s, so we just nudge the button to a
 // "running" state for a short window and let the status broadcasts paint
 // the rest of the UI.
-function bindTestConnection() {
+function bindTestConnection(opts?: AddEventListenerOptions) {
   const btn = el("testConnectionBtn") as HTMLButtonElement | null;
   if (!btn) return;
   btn.addEventListener("click", () => {
@@ -118,12 +118,12 @@ function bindTestConnection() {
     setTimeout(() => {
       setButtonBusy(btn, false, original);
     }, 25_500);
-  });
+  }, opts);
 }
 
 // Send-diagnostics button. Two bindings - primary in connection-tools
 // and a mirror in the settings panel - funnel into the same bridge call.
-function bindSendDiagnostics() {
+function bindSendDiagnostics(opts?: AddEventListenerOptions) {
   ["sendDiagnosticsBtn", "sendDiagnosticsSettingsBtn"].forEach((id) => {
     const btn = el(id) as HTMLButtonElement | null;
     if (!btn) return;
@@ -135,14 +135,14 @@ function bindSendDiagnostics() {
       setTimeout(() => {
         setButtonBusy(btn, false, original);
       }, 1500);
-    });
+    }, opts);
   });
 }
 
 // Send-AI-digest button. Funnels into shareDiagnosticsDigest(), which shares a single
 // redacted, budget-bounded text file sized to hand straight to an AI debugging session
 // (no unzipping). Mirrors the send-diagnostics busy-state handling.
-function bindSendAiDigest() {
+function bindSendAiDigest(opts?: AddEventListenerOptions) {
   const btn = el("sendAiDigestBtn") as HTMLButtonElement | null;
   if (!btn) return;
   btn.addEventListener("click", () => {
@@ -153,13 +153,13 @@ function bindSendAiDigest() {
     setTimeout(() => {
       setButtonBusy(btn, false, original);
     }, 1500);
-  });
+  }, opts);
 }
 
 // Notify-when-ready toggle. Enabling sends the clamped duration; disabling explicitly
 // cancels the schedule on the Android side so probes stop immediately rather than running on
 // until the (up to 30 min) deadline.
-function bindNotifyWhenReady() {
+function bindNotifyWhenReady(opts?: AddEventListenerOptions) {
   const toggle = el("notifyWhenReadyToggle") as HTMLInputElement | null;
   const mins = el("notifyWhenReadyMinutes") as HTMLInputElement | null;
   const status = el("notifyWhenReadyStatus");
@@ -200,18 +200,100 @@ function bindNotifyWhenReady() {
     }
     setTimeout(() => setNotifyBusy(false), 600);
   }
-  toggleInput.addEventListener("change", applyToggleState);
+  toggleInput.addEventListener("change", applyToggleState, opts);
   minsInput.addEventListener("change", () => {
     // Re-arm with the new duration when the user picks a different value while toggled on.
     if (toggleInput.checked) applyToggleState();
-  });
+  }, opts);
 }
 
-bindTestConnection();
-bindSendDiagnostics();
-bindSendAiDigest();
-bindAutoConnect();
-bindNotifyWhenReady();
-void VD;
+// Event-notification + auto-scan toggles (M1/M3). Each toggle reflects the native-owned setting
+// read once from getEventNotificationState, and writes back through its own bridge setter. Threshold
+// <select>s ride along with the low-SOC / high-temp toggles; the Android side clamps the values.
+function bindEventNotifications(opts?: AddEventListenerOptions) {
+  const state = parseBridgeJson(safeCall("getEventNotificationState"));
+  bindBoolToggle("notifyChargeCompleteToggle", state.chargeComplete !== false, (checked) => {
+    safeCall("setChargeCompleteNotify", checked);
+  }, opts);
+  bindBoolToggle("notifyNewDtcToggle", state.newDtc !== false, (checked) => {
+    safeCall("setNewDtcNotify", checked);
+  }, opts);
+  bindThresholdToggle(
+    "notifyLowSocToggle",
+    "notifyLowSocThreshold",
+    state.lowSoc === true,
+    Number(state.lowSocThresholdPct) || 20,
+    (checked, value) => safeCall("setLowSocNotify", checked, value),
+    opts,
+  );
+  bindThresholdToggle(
+    "notifyHighTempToggle",
+    "notifyHighTempThreshold",
+    state.highPackTemp === true,
+    Number(state.highPackTempThresholdC) || 45,
+    (checked, value) => safeCall("setHighPackTempNotify", checked, value),
+    opts,
+  );
+  bindBoolToggle("autoScanOnConnectToggle", state.autoScanOnConnect === true, (checked) => {
+    safeCall("setAutoScanOnConnect", checked);
+  }, opts);
+}
+
+function bindBoolToggle(
+  id: string,
+  initial: boolean,
+  onChange: (checked: boolean) => void,
+  opts?: AddEventListenerOptions,
+) {
+  const toggle = el(id) as HTMLInputElement | null;
+  if (!toggle) return;
+  toggle.checked = initial;
+  toggle.addEventListener("change", () => onChange(toggle.checked), opts);
+}
+
+function bindThresholdToggle(
+  toggleId: string,
+  selectId: string,
+  initialEnabled: boolean,
+  initialValue: number,
+  onChange: (checked: boolean, value: number) => void,
+  opts?: AddEventListenerOptions,
+) {
+  const toggle = el(toggleId) as HTMLInputElement | null;
+  const select = el(selectId) as HTMLSelectElement | null;
+  if (!toggle) return;
+  toggle.checked = initialEnabled;
+  if (select && initialValue > 0) select.value = String(initialValue);
+  const currentValue = () => (select ? Number(select.value) || initialValue : initialValue);
+  toggle.addEventListener("change", () => onChange(toggle.checked, currentValue()), opts);
+  // Re-send when the threshold changes while the toggle is on, so the new value takes effect.
+  if (select) {
+    select.addEventListener("change", () => {
+      if (toggle.checked) onChange(true, currentValue());
+    }, opts);
+  }
+}
+
+// All connection-tools listeners are bound under a module-owned AbortController so they can be
+// torn down and re-armed together. Previously they were bound once at module load and were NOT
+// reset by actions.resetListeners() (which only aborts its own controller), so an in-place
+// re-bootstrap (hot reload / test-fixture swap) left them double-bound or dead. resetListeners
+// now calls VD.bindConnectionTools() to re-arm them alongside the rest of the UI.
+let connectionToolsController = new AbortController();
+
+function bindConnectionTools() {
+  connectionToolsController.abort();
+  connectionToolsController = new AbortController();
+  const opts: AddEventListenerOptions = { signal: connectionToolsController.signal };
+  bindTestConnection(opts);
+  bindSendDiagnostics(opts);
+  bindSendAiDigest(opts);
+  bindAutoConnect(opts);
+  bindNotifyWhenReady(opts);
+  bindEventNotifications(opts);
+}
+
+bindConnectionTools();
+VD.bindConnectionTools = bindConnectionTools;
 
 export {};

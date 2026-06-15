@@ -68,6 +68,30 @@ interface AutoConnectCommands {
 }
 
 /**
+ * User-controlled, native-owned event-notification + auto-scan settings (M1 + M3). The dashboard
+ * reads the current toggle state and flips each toggle through the bridge, mirroring auto-connect.
+ */
+interface EventNotificationCommands {
+    fun getEventNotificationStateJson(): String
+
+    fun setChargeCompleteNotifyFromBridge(enabled: Boolean)
+
+    fun setNewDtcNotifyFromBridge(enabled: Boolean)
+
+    fun setLowSocNotifyFromBridge(
+        enabled: Boolean,
+        thresholdPct: Double,
+    )
+
+    fun setHighPackTempNotifyFromBridge(
+        enabled: Boolean,
+        thresholdC: Double,
+    )
+
+    fun setAutoScanOnConnectFromBridge(enabled: Boolean)
+}
+
+/**
  * Backup/restore commands. The bridge drives the export builder directly and forwards share/restore
  * launches to the backup controller.
  */
@@ -112,6 +136,9 @@ interface DiagnosticsCommands {
     fun scheduleAdapterReadyNotifyFromBridge(mins: Int)
 
     fun cancelAdapterReadyNotifyFromBridge()
+
+    /** Re-opens the guided first-run setup walkthrough (M7 "Setup guide" affordance). */
+    fun openSetupGuideFromBridge()
 }
 
 /**
@@ -164,6 +191,17 @@ interface SessionDataReader {
 
     fun getTripRouteJson(routeKey: String?): String
 
+    /**
+     * Exports the trip identified by [routeKey] as `format` (`gpx`/`csv`): reads the route, writes a
+     * cache file, records the export into the `exports` table, and launches the share sheet. Returns
+     * the JSON result the bridge hands back to the dashboard (matches the other export methods'
+     * `{ ok, … }` shape). The share itself is posted to the UI thread.
+     */
+    fun exportTripFromBridge(
+        routeKey: String?,
+        format: String?,
+    ): String
+
     /** Route projection for the in-progress session, so the dashboard can rehydrate the live
      *  track after a mid-drive WebView teardown. Empty JSON when nothing is recording. */
     fun getCurrentSessionRouteJson(): String
@@ -186,6 +224,7 @@ interface DashboardHost :
     DeviceCommands,
     PermissionCommands,
     AutoConnectCommands,
+    EventNotificationCommands,
     BackupCommands,
     DiagnosticsCommands,
     DashboardStatePublisher,

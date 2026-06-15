@@ -234,6 +234,7 @@ open class ObdPollingEngine(
             false,
         )
         service.updateNotification("Connected to ${service.activeName}")
+        service.maybeRunAutoDtcScan(this)
         pollUntilStoppedOrBroken()
     }
 

@@ -4,4 +4,6 @@
     <cache-path name="backups" path="backups/" />
     <!-- DiagnosticsShareIntent zips session logs + rolling app log here. -->
     <cache-path name="diagnostics" path="diagnostics/" />
+    <!-- TripExportShareIntent writes per-trip GPX/CSV exports here before the share sheet. -->
+    <cache-path name="trip-exports" path="trip-exports/" />
 </paths>

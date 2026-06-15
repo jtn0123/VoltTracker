@@ -1,0 +1,7 @@
+<resources>
+    <!-- Home-screen widget palette for dark home screens (mirrors values/colors.xml). -->
+    <color name="widget_background_fill">#1C1F2A</color>
+    <color name="widget_primary">#F4F6FB</color>
+    <color name="widget_secondary">#C2C8D6</color>
+    <color name="widget_label">#8A90A0</color>
+</resources>

@@ -188,6 +188,7 @@ object DatabaseMerger {
                     )
                 rows += copyAdapterHistory(target, donor, sessionMap, progress)
                 rows += copyDiagnosticCodes(target, donor, sessionMap, progress)
+                rows += copyMaintenanceLog(target, donor, progress)
                 progress.publish("Refreshing trip projections")
                 invalidateTripProjectionCaches(target, sessionMap.values)
             }
@@ -500,6 +501,37 @@ object DatabaseMerger {
         return touched
     }
 
+    /**
+     * Copies the donor's user maintenance log (M5). The table has no foreign keys (entries are
+     * independent of any session/vehicle), so rows copy verbatim with no key remapping. Dedupes on
+     * (created_at_ms, type, note, odometer_km) so re-merging the same backup never double-inserts an
+     * entry the user only logged once.
+     */
+    private fun copyMaintenanceLog(
+        target: SQLiteDatabase,
+        donor: SQLiteDatabase,
+        progress: MergeProgress,
+    ): Long {
+        // Pre-v12 backups predate the maintenance log; querying the missing donor table would throw
+        // and abort the whole merge, so skip the copy when the donor lacks the table entirely.
+        if (!tableExists(donor, VoltTrackerDb.TABLE_MAINTENANCE_LOG)) {
+            return 0L
+        }
+        var touched = 0L
+        donorRows(donor, VoltTrackerDb.TABLE_MAINTENANCE_LOG).use { c ->
+            while (c.moveToNext()) {
+                progress.step("Merging maintenance log")
+                val cv = readRow(c)
+                cv.remove("_id")
+                if (matchingExistingRowId(target, VoltTrackerDb.TABLE_MAINTENANCE_LOG, cv) == null) {
+                    target.insertOrThrow(VoltTrackerDb.TABLE_MAINTENANCE_LOG, null, cv)
+                    touched++
+                }
+            }
+        }
+        return touched
+    }
+
     private class MergeProgress(
         private val listener: ProgressListener?,
         private val rowsTotal: Long,
@@ -544,6 +576,16 @@ object DatabaseMerger {
         } catch (ex: RuntimeException) {
             0L
         }
+
+    private fun tableExists(
+        db: SQLiteDatabase,
+        table: String,
+    ): Boolean =
+        db
+            .rawQuery(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+                arrayOf(table),
+            ).use { it.moveToFirst() }
 
     private fun tableLabel(table: String): String =
         when (table) {
@@ -690,6 +732,7 @@ object DatabaseMerger {
             VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS -> arrayOf("session_id", "captured_at_ms", "json")
             VoltTrackerDb.TABLE_CELL_SNAPSHOTS -> arrayOf("battery_snapshot_id", "cell_index")
             VoltTrackerDb.TABLE_EXPORTS -> arrayOf("session_id", "created_at_ms", "export_type", "file_name")
+            VoltTrackerDb.TABLE_MAINTENANCE_LOG -> arrayOf("created_at_ms", "type", "note", "odometer_km")
             else -> emptyArray()
         }
 
@@ -792,6 +835,7 @@ object DatabaseMerger {
             VoltTrackerDb.TABLE_EXPORTS -> EXPORT_COLUMNS
             VoltTrackerDb.TABLE_ADAPTER_HISTORY -> ADAPTER_HISTORY_COLUMNS
             VoltTrackerDb.TABLE_DIAGNOSTIC_CODES -> DIAGNOSTIC_CODE_COLUMNS
+            VoltTrackerDb.TABLE_MAINTENANCE_LOG -> MAINTENANCE_LOG_COLUMNS
             else -> throw IllegalArgumentException("Unknown merge table: $table")
         }
 
@@ -924,6 +968,7 @@ object DatabaseMerger {
             "energy_kwh",
             "classification",
             "confidence",
+            "label",
             "created_at_ms",
             "summary_json",
         )
@@ -1044,6 +1089,14 @@ object DatabaseMerger {
             "raw_response",
             "json",
         )
+    private val MAINTENANCE_LOG_COLUMNS =
+        arrayOf(
+            "_id",
+            "created_at_ms",
+            "odometer_km",
+            "type",
+            "note",
+        )
 
     private val MERGE_PROGRESS_TABLES =
         arrayOf(
@@ -1061,5 +1114,6 @@ object DatabaseMerger {
             VoltTrackerDb.TABLE_EXPORTS,
             VoltTrackerDb.TABLE_ADAPTER_HISTORY,
             VoltTrackerDb.TABLE_DIAGNOSTIC_CODES,
+            VoltTrackerDb.TABLE_MAINTENANCE_LOG,
         )
 }

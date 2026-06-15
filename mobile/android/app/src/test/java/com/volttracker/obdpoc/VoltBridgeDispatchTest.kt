@@ -403,6 +403,45 @@ class VoltBridgeDispatchTest {
         assertTrue(payload.optBoolean("ok"))
     }
 
+    // ---- per-trip GPX/CSV export ------------------------------------------------------
+
+    @Test
+    fun exportTripGpxForwardsCleanedRouteKeyAndGpxFormat() {
+        activity.tripExportResult = JSONObject().put("ok", true).put("format", "gpx").toString()
+
+        val payload = JSONObject(bridge.exportTripGpx("  12:1000:2000  "))
+
+        assertEquals("12:1000:2000", activity.lastTripExportRouteKey)
+        assertEquals("gpx", activity.lastTripExportFormat)
+        assertTrue(payload.optBoolean("ok"))
+        assertEquals("gpx", payload.optString("format"))
+    }
+
+    @Test
+    fun exportTripCsvForwardsCleanedRouteKeyAndCsvFormat() {
+        activity.tripExportResult = JSONObject().put("ok", true).put("format", "csv").toString()
+
+        val payload = JSONObject(bridge.exportTripCsv("7"))
+
+        assertEquals("7", activity.lastTripExportRouteKey)
+        assertEquals("csv", activity.lastTripExportFormat)
+        assertEquals("csv", payload.optString("format"))
+    }
+
+    @Test
+    fun exportTripGpxForwardsBlankRouteKeyForTheHostToReject() {
+        // The bridge cleans the id but does not itself reject blanks — the host returns the
+        // invalid_id payload (covered by TripExportController), so the bridge just forwards "".
+        activity.tripExportResult = JSONObject().put("ok", false).put("error", "invalid_id").toString()
+
+        val payload = JSONObject(bridge.exportTripGpx("   "))
+
+        assertEquals("", activity.lastTripExportRouteKey)
+        assertEquals("gpx", activity.lastTripExportFormat)
+        assertFalse(payload.optBoolean("ok", true))
+        assertEquals("invalid_id", payload.optString("error"))
+    }
+
     @Test
     fun exportDetailedSignalLogsReturnsValidJsonWhenStorageUnavailable() {
         activity.localStore = null
@@ -577,6 +616,55 @@ class VoltBridgeDispatchTest {
         assertEquals(false, activity.lastAutoConnectEnabled)
     }
 
+    // ---- event-notification + auto-scan settings (M1 / M3) -----------------------------
+
+    @Test
+    fun getEventNotificationStateForwardsToActivity() {
+        activity.eventNotificationStateJsonValue = "{\"chargeComplete\":true}"
+        assertEquals("{\"chargeComplete\":true}", bridge.getEventNotificationState())
+    }
+
+    @Test
+    fun setChargeCompleteNotifyForwardsViaUiThread() {
+        bridge.setChargeCompleteNotify(true)
+        drain()
+        assertEquals(true, activity.lastChargeCompleteEnabled)
+
+        bridge.setChargeCompleteNotify(false)
+        drain()
+        assertEquals(false, activity.lastChargeCompleteEnabled)
+    }
+
+    @Test
+    fun setNewDtcNotifyForwardsViaUiThread() {
+        bridge.setNewDtcNotify(false)
+        drain()
+        assertEquals(false, activity.lastNewDtcEnabled)
+    }
+
+    @Test
+    fun setLowSocNotifyForwardsEnabledFlagAndThreshold() {
+        bridge.setLowSocNotify(true, 15.0)
+        drain()
+        assertEquals(true, activity.lastLowSocEnabled)
+        assertEquals(15.0, activity.lastLowSocThreshold, 0.001)
+    }
+
+    @Test
+    fun setHighPackTempNotifyForwardsEnabledFlagAndThreshold() {
+        bridge.setHighPackTempNotify(true, 50.0)
+        drain()
+        assertEquals(true, activity.lastHighTempEnabled)
+        assertEquals(50.0, activity.lastHighTempThreshold, 0.001)
+    }
+
+    @Test
+    fun setAutoScanOnConnectForwardsViaUiThread() {
+        bridge.setAutoScanOnConnect(true)
+        drain()
+        assertEquals(true, activity.lastAutoScanEnabled)
+    }
+
     // ---- read-through getter -----------------------------------------------------------
 
     @Test
@@ -653,7 +741,19 @@ class VoltBridgeDispatchTest {
         var currentRouteJson = "{}"
         var sohHistoryJson = "[]"
         var lastTripRouteKey: String? = null
+        var tripExportResult = "{}"
+        var lastTripExportRouteKey: String? = null
+        var lastTripExportFormat: String? = null
         var lastAutoConnectEnabled: Boolean? = null
+
+        var eventNotificationStateJsonValue = "{}"
+        var lastChargeCompleteEnabled: Boolean? = null
+        var lastNewDtcEnabled: Boolean? = null
+        var lastLowSocEnabled: Boolean? = null
+        var lastLowSocThreshold = Double.MIN_VALUE
+        var lastHighTempEnabled: Boolean? = null
+        var lastHighTempThreshold = Double.MIN_VALUE
+        var lastAutoScanEnabled: Boolean? = null
 
         var lastStartedActivity: Intent? = null
 
@@ -784,12 +884,51 @@ class VoltBridgeDispatchTest {
             return tripRouteJson
         }
 
+        override fun exportTripFromBridge(
+            routeKey: String?,
+            format: String?,
+        ): String {
+            lastTripExportRouteKey = routeKey
+            lastTripExportFormat = format
+            return tripExportResult
+        }
+
         override fun getCurrentSessionRouteJson(): String = currentRouteJson
 
         override fun getBatterySohHistoryJson(): String = sohHistoryJson
 
         override fun setAutoConnectEnabledFromBridge(enabled: Boolean) {
             lastAutoConnectEnabled = enabled
+        }
+
+        override fun getEventNotificationStateJson(): String = eventNotificationStateJsonValue
+
+        override fun setChargeCompleteNotifyFromBridge(enabled: Boolean) {
+            lastChargeCompleteEnabled = enabled
+        }
+
+        override fun setNewDtcNotifyFromBridge(enabled: Boolean) {
+            lastNewDtcEnabled = enabled
+        }
+
+        override fun setLowSocNotifyFromBridge(
+            enabled: Boolean,
+            thresholdPct: Double,
+        ) {
+            lastLowSocEnabled = enabled
+            lastLowSocThreshold = thresholdPct
+        }
+
+        override fun setHighPackTempNotifyFromBridge(
+            enabled: Boolean,
+            thresholdC: Double,
+        ) {
+            lastHighTempEnabled = enabled
+            lastHighTempThreshold = thresholdC
+        }
+
+        override fun setAutoScanOnConnectFromBridge(enabled: Boolean) {
+            lastAutoScanEnabled = enabled
         }
 
         // openExternalSearch's only observable effect is the browser Intent it fires; capture it

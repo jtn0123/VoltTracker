@@ -15,12 +15,13 @@
  * The render entry point is renderDriveLive(), called once per scheduled render
  * frame from telemetry.js. Charts re-render on resize.
  */
+import { el } from "./core";
 import { setDataTone } from "./dataset-state";
 import type { DataToneValue } from "./dataset-state";
+import { units } from "./prefs";
 
 const VD = window.VoltDashboard;
 const state = VD.state;
-const el = VD.el;
 
 type DriveChip = {
   tone: DataToneValue;
@@ -129,7 +130,7 @@ type ChartPoint = {
       const meta: string[] = [];
       if (samples) meta.push(samples.toLocaleString() + " samples");
       if (runtimeMs) meta.push(fmtDuration(runtimeMs));
-      if (distance) meta.push(VD.units.distanceText(distance / 1000));
+      if (distance) meta.push(units.distanceText(distance / 1000));
       return { tone: "live", label: "Recording", meta: meta };
     }
     if (adapter.remembered || (state.lastDevice || {}).address) {
@@ -216,14 +217,14 @@ type ChartPoint = {
     canvas.height = Math.max(1, Math.round(h * dpr));
     canvas.style.height = h + "px";
     const ctx = canvas.getContext && canvas.getContext("2d");
-    const metric = VD.units.system() === "metric";
+    const metric = units.system() === "metric";
     const samples = (state.speedHistory || []).map((kph: unknown) =>
       metric ? Number(kph) : Number(kph) * 0.621371,
     );
     host.dataset.traceState = samples.length >= 2 ? "ready" : "empty";
     const latestSample = samples[samples.length - 1];
     host.dataset.traceLabel = samples.length >= 2
-      ? `${Math.round(latestSample || 0)} ${VD.units.speedUnit()}`
+      ? `${Math.round(latestSample || 0)} ${units.speedUnit()}`
       : "waiting for samples";
     if (!ctx) return;
 

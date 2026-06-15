@@ -5,11 +5,29 @@
     <string name="dialog_cancel">Cancel</string>
     <string name="dialog_share_anyway">Share anyway</string>
 
-    <!-- One-time first-launch explainer (FirstLaunchOnboarding) -->
-    <string name="onboarding_title">Welcome to Volt Tracker</string>
-    <string name="onboarding_message">To record real drives, pair your Bluetooth OBD-II adapter in Android’s Bluetooth settings first — it will then show up here under Connect.\n\nNo adapter handy? Tap Demo to explore the dashboard with sample data.</string>
-    <string name="onboarding_dismiss">Got it</string>
-    <string name="onboarding_bt_settings">Open Bluetooth settings</string>
+    <!-- Guided setup walkthrough (OnboardingFlow / MainActivity staged dialogs, M7) -->
+    <string name="setup_step_progress">Step %1$d of %2$d</string>
+    <string name="setup_skip">Skip for now</string>
+    <string name="setup_done">Done</string>
+
+    <string name="setup_pair_title">1. Pair your OBD adapter</string>
+    <string name="setup_pair_message">Plug your Bluetooth OBD-II adapter into the car’s OBD port, turn the ignition on, then pair it in Android’s Bluetooth settings. Once it’s paired it will appear here under Connect.</string>
+    <string name="setup_pair_action">Open Bluetooth settings</string>
+
+    <string name="setup_bluetooth_title">2. Allow Bluetooth</string>
+    <string name="setup_bluetooth_message">Volt Tracker needs the “Nearby devices” permission to talk to your OBD adapter over Bluetooth. Tap Allow on the next prompt.</string>
+    <string name="setup_bluetooth_action">Grant Bluetooth</string>
+
+    <string name="setup_location_title">3. Allow location (optional)</string>
+    <string name="setup_location_message">Location lets Volt Tracker record the GPS route of each drive so your trips show a map. It’s optional — skip it and you’ll still log telemetry, just without a route.</string>
+    <string name="setup_location_action">Allow location</string>
+
+    <string name="setup_connect_title">4. Connect or try the demo</string>
+    <string name="setup_connect_message">You’re ready. Pick your paired adapter under Connect to start logging a real drive — or try the demo first to explore the dashboard with sample data.</string>
+    <string name="setup_connect_action">Try the demo</string>
+
+    <string name="setup_complete_title">You’re all set</string>
+    <string name="setup_complete_message">Setup is complete. Connect your adapter whenever you want to log a drive, or reopen this guide any time from the dashboard.</string>
 
     <!-- Bluetooth permission flow (ConnectPermissionFlow) -->
     <string name="obd_adapter_fallback_label">the OBD adapter</string>
@@ -48,6 +66,25 @@
     <string name="foreground_clearing_codes">Clearing codes on %1$s</string>
     <string name="foreground_demo">Running demo telemetry</string>
 
+    <!-- Event notifications (EventNotifier / EventNotificationDecider — M1) -->
+    <string name="notification_events_channel_name">Volt Tracker alerts</string>
+    <string name="notification_events_channel_description">Charge-complete, new diagnostic codes, and battery threshold alerts.</string>
+    <string name="notification_charge_complete_title">Charge complete</string>
+    <string name="notification_charge_complete_text">Added %1$s kWh this charge. Tap to view charge details.</string>
+    <string name="notification_charge_complete_text_no_energy">Charging finished. Tap to view charge details.</string>
+    <string name="notification_new_dtc_title">New diagnostic code</string>
+    <plurals name="notification_new_dtc_text">
+        <item quantity="one">New code %2$s found. Tap to review.</item>
+        <item quantity="other">%1$d new codes found (%2$s). Tap to review.</item>
+    </plurals>
+    <string name="notification_low_soc_title">Battery low</string>
+    <string name="notification_low_soc_text">State of charge dropped to %1$s%% (alert at %2$s%%).</string>
+    <string name="notification_high_temp_title">Battery temperature high</string>
+    <string name="notification_high_temp_text">Pack temperature reached %1$s°C (alert at %2$s°C).</string>
+
+    <!-- Event-notification + auto-scan settings status copy -->
+    <string name="status_event_prefs_not_ready">Notification settings are not ready yet.</string>
+
     <!-- ObdService session statuses -->
     <string name="status_disconnected">Disconnected.</string>
     <string name="status_retry_cancelled">Retry cancelled.</string>
@@ -74,6 +111,12 @@
     <string name="notification_adapter_ready_title">OBD adapter is responding</string>
     <string name="notification_adapter_ready_text">Tap to open Volt Tracker and start logging.</string>
     <string name="share_diagnostics_subject">Volt Tracker diagnostics</string>
+
+    <!-- Per-trip GPX/CSV export (TripExportShareIntent / VoltBridgeDataExports) -->
+    <string name="share_trip_export_subject">Volt Tracker drive export</string>
+    <string name="chooser_share_trip_export">Share drive export</string>
+    <string name="status_trip_export_ready">Drive export ready — choose where to share it.</string>
+    <string name="status_trip_export_share_failed">Could not share the drive export.</string>
 
     <!-- Backup and restore (BackupController) -->
     <string name="status_stop_logging_before_backup">Stop logging before creating a backup.</string>
@@ -152,4 +195,18 @@
     <string name="restore_verified_plain">Backup verified.</string>
     <string name="restore_verified_migrated">It was upgraded for this app.</string>
     <string name="restore_verified_choose">Choose Merge or Replace all.</string>
+
+    <!-- Home-screen widget (VoltWidgetProvider, M10a) -->
+    <string name="widget_title">Volt Tracker</string>
+    <string name="widget_soc_placeholder">—</string>
+    <string name="widget_description">At-a-glance battery, charging, and connection status from your last OBD session.</string>
+    <string name="widget_status_no_data">Open the app to connect</string>
+    <string name="widget_status_charging">Charging</string>
+    <string name="widget_status_connected">Connected</string>
+    <string name="widget_status_disconnected">Disconnected</string>
+    <string name="widget_updated_just_now">Updated just now</string>
+    <string name="widget_updated_minutes">Updated %1$dm ago</string>
+    <string name="widget_updated_hours">Updated %1$dh ago</string>
+    <string name="widget_updated_days">Updated %1$dd ago</string>
+    <string name="widget_updated_stale">%1$s (stale)</string>
 </resources>

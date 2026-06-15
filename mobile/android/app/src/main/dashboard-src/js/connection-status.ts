@@ -5,6 +5,8 @@
 // topbar. The low-voltage hint also lives here (the hint element is in
 // connection-tools.html but the status payload is the same).
 import { asDataState, setDataState, setDataTone } from "./dataset-state";
+import { units } from "./prefs";
+import { formatDuration } from "./telemetry";
 
 type RecentSession = {
   adapter?: string;
@@ -27,15 +29,40 @@ function isRecentSession(value: unknown): value is RecentSession {
   return value != null && typeof value === "object";
 }
 
+// Recent-session summaries change only when a session ends — i.e. on a status broadcast. But the
+// status popover re-renders on every telemetry sample while open (installTelemetryObserver), and
+// connectionRows/tripRows each call parseSessions(8) → a synchronous SQLite read + JSON.parse. That
+// was up to two blocking bridge round-trips per ~1 Hz sample purely to repaint a "Last connected"
+// line. Cache the parsed result and refetch only after a status broadcast (invalidateSessionsCache,
+// called from noteStatus) or a short TTL backstop.
+let cachedSessions: RecentSession[] | null = null;
+let cachedSessionsN = 0;
+let cachedSessionsAtMs = 0;
+const SESSIONS_CACHE_TTL_MS = 4000;
+
+function invalidateSessionsCache() {
+  cachedSessions = null;
+}
+
 function parseSessions(n: number): RecentSession[] {
-  if (!bridge || typeof bridge.getRecentSessions !== "function") return [];
-  try {
-    const raw = bridge.getRecentSessions(n);
-    const arr: unknown = JSON.parse(raw || "[]");
-    return Array.isArray(arr) ? arr.filter(isRecentSession) : [];
-  } catch (ignored) {
-    return [];
+  const now = Date.now();
+  if (cachedSessions && cachedSessionsN === n && now - cachedSessionsAtMs < SESSIONS_CACHE_TTL_MS) {
+    return cachedSessions;
   }
+  let result: RecentSession[] = [];
+  if (bridge && typeof bridge.getRecentSessions === "function") {
+    try {
+      const raw = bridge.getRecentSessions(n);
+      const arr: unknown = JSON.parse(raw || "[]");
+      result = Array.isArray(arr) ? arr.filter(isRecentSession) : [];
+    } catch (ignored) {
+      result = [];
+    }
+  }
+  cachedSessions = result;
+  cachedSessionsN = n;
+  cachedSessionsAtMs = now;
+  return result;
 }
 
 function formatRelative(ms: number | undefined) {
@@ -194,18 +221,18 @@ function tripRows(status: VoltStatus): StatusRow[] {
   if (!active) {
     const last = parseSessions(8).find((s) => !isDemoSession(s));
     const lastMs = Number(last && last.endMs) - Number(last && last.startMs);
-    if (last && Number.isFinite(lastMs) && lastMs > 0 && typeof VD.formatDuration === "function") {
-      return [["Last trip", `${VD.formatDuration(lastMs)} · ${formatRelative(last.endMs)}`]];
+    if (last && Number.isFinite(lastMs) && lastMs > 0) {
+      return [["Last trip", `${formatDuration(lastMs)} · ${formatRelative(last.endMs)}`]];
     }
     return [["Trip", "No trip yet — connect to start logging."]];
   }
 
   const rows: StatusRow[] = [];
   const distanceM = Number(state.sessionDistanceM || 0);
-  if (distanceM > 0) rows.push(["Distance", VD.units.distanceText(distanceM / 1000)]);
+  if (distanceM > 0) rows.push(["Distance", units.distanceText(distanceM / 1000)]);
   const durationMs = Number(telemetry.sessionMs || session.sessionMs || 0);
-  if (durationMs > 0 && typeof VD.formatDuration === "function") {
-    rows.push(["Duration", VD.formatDuration(durationMs)]);
+  if (durationMs > 0) {
+    rows.push(["Duration", formatDuration(durationMs)]);
   }
   const startSoc = Number(state.sessionStartSoc);
   const soc = Number(telemetry.soc);
@@ -301,6 +328,9 @@ function bindStatusPopover() {
 // Re-render on every status broadcast - session summaries can change when
 // a session ends, and lastVoltage updates inline.
 function noteStatus(payload: LowVoltageStatus | null | undefined) {
+  // A status broadcast is the moment a session can have changed (e.g. one just ended), so drop the
+  // cached recent-sessions snapshot before re-rendering the badge/popover from fresh data.
+  invalidateSessionsCache();
   renderLastConnected();
   renderLowVoltageHint(payload || {});
   renderStatusPopover();

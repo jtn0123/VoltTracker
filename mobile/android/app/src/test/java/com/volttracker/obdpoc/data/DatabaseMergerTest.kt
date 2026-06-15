@@ -99,6 +99,67 @@ class DatabaseMergerTest {
     }
 
     @Test
+    fun mergeCopiesDonorMaintenanceLogAndDedupesOnReMerge() {
+        // M5: the maintenance log has no foreign keys, so donor rows copy verbatim. A row the live
+        // store already has (same created_at_ms/type/note/odometer_km) must not duplicate, and a
+        // second merge of the same donor must be a no-op.
+        live.execSQL(
+            "INSERT INTO ${VoltTrackerDb.TABLE_MAINTENANCE_LOG} (created_at_ms, odometer_km, type, note)" +
+                " VALUES (1000, 100.0, 'Oil change', 'Synthetic')",
+        )
+        // Donor: one identical row (should dedupe) + one new row (should copy).
+        donor.execSQL(
+            "INSERT INTO ${VoltTrackerDb.TABLE_MAINTENANCE_LOG} (created_at_ms, odometer_km, type, note)" +
+                " VALUES (1000, 100.0, 'Oil change', 'Synthetic')",
+        )
+        donor.execSQL(
+            "INSERT INTO ${VoltTrackerDb.TABLE_MAINTENANCE_LOG} (created_at_ms, odometer_km, type, note)" +
+                " VALUES (2000, NULL, 'Tire rotation', '')",
+        )
+
+        assertTrue(DatabaseMerger.merge(live, donor).ok)
+        assertEquals(
+            "donor's new maintenance entry copies; the duplicate dedupes",
+            2,
+            count(live, VoltTrackerDb.TABLE_MAINTENANCE_LOG),
+        )
+        // Re-merging the same donor must not duplicate either row.
+        assertTrue(DatabaseMerger.merge(live, donor).ok)
+        assertEquals(
+            "re-merging must not duplicate maintenance rows",
+            2,
+            count(live, VoltTrackerDb.TABLE_MAINTENANCE_LOG),
+        )
+        assertForeignKeysIntact(live)
+    }
+
+    @Test
+    fun mergeSucceedsWhenDonorPredatesTheMaintenanceLogTable() {
+        // Pre-v12 backups have no maintenance_log table. Querying it would throw and abort the WHOLE
+        // merge, so the copy must be skipped when the donor lacks the table. Simulate the legacy
+        // donor by dropping the table, then confirm the rest of the merge still lands.
+        donor.execSQL("DROP TABLE ${VoltTrackerDb.TABLE_MAINTENANCE_LOG}")
+        live.execSQL(
+            "INSERT INTO ${VoltTrackerDb.TABLE_MAINTENANCE_LOG} (created_at_ms, odometer_km, type, note)" +
+                " VALUES (1000, 100.0, 'Oil change', 'Synthetic')",
+        )
+        val donorSession = insertSession(donor, 2000L)
+        insertTelemetry(donor, donorSession, 2000L)
+
+        val result = DatabaseMerger.merge(live, donor)
+
+        assertTrue("a legacy donor without maintenance_log must not fail the merge", result.ok)
+        assertEquals("the donor session still imports", 1, result.sessionsAdded)
+        assertEquals(1, count(live, VoltTrackerDb.TABLE_TELEMETRY))
+        assertEquals(
+            "the live maintenance log is untouched (nothing to copy from the legacy donor)",
+            1,
+            count(live, VoltTrackerDb.TABLE_MAINTENANCE_LOG),
+        )
+        assertForeignKeysIntact(live)
+    }
+
+    @Test
     fun duplicateSessionImportsMissingRouteRowsForMap() {
         val liveSession = insertSession(live, 1000L)
 
@@ -555,6 +616,7 @@ class DatabaseMergerTest {
                 VoltTrackerDb.TABLE_EXPORTS,
                 VoltTrackerDb.TABLE_ADAPTER_HISTORY,
                 VoltTrackerDb.TABLE_DIAGNOSTIC_CODES,
+                VoltTrackerDb.TABLE_MAINTENANCE_LOG,
             )
         for (table in mergeTables) {
             val schemaColumns = HashSet<String>()

@@ -378,6 +378,91 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun upgradeFromV11_addsTripLabelColumnAndMaintenanceLog() {
+        // The v11→v12 migration adds a nullable label column to trip_segments (M4) and creates the
+        // maintenance_log table (M5). Both steps are non-destructive: an existing trip_segments row
+        // and its data must survive, gaining only the new NULL label.
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_v11_v12.db"
+        context.deleteDatabase(name)
+
+        val v11Helper =
+            object : SQLiteOpenHelper(context.applicationContext, name, null, 11) {
+                override fun onCreate(db: SQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE " +
+                            VoltTrackerDb.TABLE_TRIP_SEGMENTS +
+                            " (_id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                            " session_id INTEGER," +
+                            " started_at_ms INTEGER NOT NULL," +
+                            " ended_at_ms INTEGER," +
+                            " distance_m REAL," +
+                            " created_at_ms INTEGER NOT NULL)",
+                    )
+                    db.execSQL(
+                        "INSERT INTO " +
+                            VoltTrackerDb.TABLE_TRIP_SEGMENTS +
+                            " (session_id, started_at_ms, ended_at_ms, distance_m, created_at_ms)" +
+                            " VALUES (7, 1000, 2000, 4200.5, 9000)",
+                    )
+                }
+
+                override fun onUpgrade(
+                    db: SQLiteDatabase,
+                    oldVersion: Int,
+                    newVersion: Int,
+                ) {
+                    // unused
+                }
+            }
+        val v11Db = v11Helper.writableDatabase
+        assertFalse(
+            "v11 schema must not pre-contain trip_segments.label",
+            readColumnNames(v11Db, VoltTrackerDb.TABLE_TRIP_SEGMENTS).contains("label"),
+        )
+        assertFalse(
+            "v11 schema must not pre-contain the maintenance_log table",
+            readTableNames(v11Db).contains(VoltTrackerDb.TABLE_MAINTENANCE_LOG),
+        )
+        v11Helper.close()
+
+        newHelper = VoltTrackerDb(context, name)
+        val newDb = newHelper!!.writableDatabase
+        assertEquals(
+            "Reopened DB should be at the current schema version after onUpgrade.",
+            VoltTrackerDb.DATABASE_VERSION,
+            newDb.version,
+        )
+        assertTrue(
+            "After v11->v12 upgrade, trip_segments.label must exist.",
+            readColumnNames(newDb, VoltTrackerDb.TABLE_TRIP_SEGMENTS).contains("label"),
+        )
+        assertTrue(
+            "After v11->v12 upgrade, the maintenance_log table must exist.",
+            readTableNames(newDb).contains(VoltTrackerDb.TABLE_MAINTENANCE_LOG),
+        )
+        assertTrue(
+            "After v11->v12 upgrade, the maintenance_log created index must exist.",
+            readIndexNames(newDb).contains("idx_maintenance_log_created"),
+        )
+
+        // The pre-existing trip_segments row survives with its data intact and a NULL label.
+        newDb
+            .rawQuery(
+                "SELECT distance_m, label FROM ${VoltTrackerDb.TABLE_TRIP_SEGMENTS} WHERE session_id = 7",
+                null,
+            ).use { cursor ->
+                assertTrue("pre-existing trip_segments row must survive", cursor.moveToFirst())
+                assertEquals(4200.5, cursor.getDouble(0), 0.001)
+                assertTrue("new label column must default to NULL", cursor.isNull(1))
+            }
+
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun databaseVersionBumpRequiresMigrationCoverageUpdate() {
         assertEquals(
             "DATABASE_VERSION changed. Add a focused migration test for the new version, " +
@@ -522,7 +607,7 @@ class VoltTrackerDbMigrationTest {
     }
 
     companion object {
-        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 11
+        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 12
 
         private val V7_INDEXES =
             arrayOf(

@@ -163,6 +163,29 @@ object VoltTrackerSchema {
         )
     }
 
+    /**
+     * User-authored maintenance log (M5). One row per logged service entry — independent of any
+     * session/vehicle (the user may log service performed off-app), so it has no foreign keys and
+     * survives a full data clear that drops sessions. [odometerKm] is optional (user may not know
+     * it); [type] is a free-text/category label and [note] is free-text detail.
+     */
+    fun createMaintenanceLog(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS ${VoltTrackerDb.TABLE_MAINTENANCE_LOG} (
+                _id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at_ms INTEGER NOT NULL,
+                odometer_km REAL,
+                type TEXT,
+                note TEXT
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_maintenance_log_created ON ${VoltTrackerDb.TABLE_MAINTENANCE_LOG}(created_at_ms DESC)",
+        )
+    }
+
     fun createObservationTables(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -326,6 +349,7 @@ object VoltTrackerSchema {
                 energy_kwh REAL,
                 classification TEXT,
                 confidence REAL,
+                label TEXT,
                 created_at_ms INTEGER NOT NULL,
                 summary_json TEXT,
                 FOREIGN KEY(session_id) REFERENCES ${VoltTrackerDb.TABLE_SESSIONS}(_id) ON DELETE SET NULL,

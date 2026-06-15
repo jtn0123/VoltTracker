@@ -23,11 +23,15 @@ complexity:
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   CyclomaticComplexMethod:
     active: true
-    threshold: 213 # ObdProtocol.parseKnownValueLegacy (212) — the PID decoder when-table
+    threshold: 179 # ObdProtocol.parseKnownValueLegacy (178) — the Mode-22 PID decoder when-table.
+    # Standard Mode-01 PIDs moved to ObdKnownValueParserRegistry.standardParsers (report item A2),
+    # dropping this from 212. LOWER further if more PID families move to the registry.
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LargeClass:
     active: true
-    threshold: 1169 # ObdProtocol = 1168 by detekt's LargeClass metric (NOT wc -l ~1366); cohesive stateless decoder
+    threshold: 1149 # ObdProtocol = 1148 by detekt's LargeClass metric (NOT wc -l); shrank from 1168
+    # after removing the dead/duplicated standard-PID branches from parseKnownValueLegacy (report
+    # item A2 — the registry already handled them). LOWER further as more decoders move out.
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LongMethod:
     active: true
@@ -45,7 +49,13 @@ complexity:
   TooManyFunctions:
     active: true
     thresholdInFiles: 66
-    thresholdInClasses: 65 # MainActivity (64, +shareDiagnosticsDigestFromBridge)
+    thresholdInClasses: 70 # MainActivity (69): 62 + the 6 EventNotificationCommands host overrides
+    # (M1/M3 settings seam — getEventNotificationStateJson + 5 setters) + the M2 per-trip export seam
+    # override (exportTripFromBridge). Each forwards one line to a delegate/controller that holds the
+    # actual body (EventNotificationHostDelegate / TripExportController); the SessionDataReader/
+    # DashboardHost interface contract forces the override onto the host (Android Activities can't use
+    # constructor-param interface delegation).
+    # LOWER this back toward 63 if more of MainActivity's surface is extracted to coordinators.
     thresholdInInterfaces: 25 # ObdSessionStore (24)
     thresholdInObjects: 61 # ObdProtocol (60)
     thresholdInEnums: 12

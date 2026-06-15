@@ -1,3 +1,36 @@
+  /* ===========================================================================
+     components.css — reusable UI pieces (cards, chips, lists, meters, dialogs).
+     Rendered in the Android WebView; colors come from the base.css token palette.
+
+     SECTION TABLE OF CONTENTS (file order — annotations only, rules are NOT
+     reordered, so the cascade/specificity is unchanged):
+       1.  Error banner & empty states
+       2.  Live-rate chip & telemetry readouts
+       3.  Charge / SOC hero KPIs
+       4.  Charge history list
+       5.  SOC ring states
+       6.  Status meta & card headers
+       7.  Interactive list rows
+       8.  In-app DTC lookup (intro card)
+       9.  Charge energy & cost card
+       10. Live-signals diagnostic list
+       11. Battery-tab cards (cell balance / cell map / SOH)
+       12. Signal console & probe-mode picker
+       13. Scoreboard & status filter
+       14. Signal evidence, capability & DTC-detail lists
+       15. Live-tile stale & in-flight spinners
+       16. App dialogs
+       17. Restore-progress overlay
+       18. Responsive breakpoints
+
+     BREAKPOINTS in use (kept here for discoverability — NOT consolidated, as
+     that needs visual testing): (hover: hover) and (pointer: fine),
+     (prefers-reduced-motion: reduce), (max-width: 420px), (min-width: 640px),
+     (max-width: 620px).
+     =========================================================================== */
+
+  /* ===== 1. Error banner & empty states ===== */
+
   .error-banner .error-detail {
     display: block;
     margin-top: 3px;
@@ -128,6 +161,8 @@
     background: var(--ok);
     box-shadow: 0 0 8px var(--ok);
   }
+
+  /* ===== 2. Live-rate chip & telemetry readouts ===== */
 
   /* Live-rate chip states: default (live) keeps the green .rate-dot above.
      waiting dims the dot; stale recolors chip + dot to the warning tone. */
@@ -328,6 +363,8 @@
     background: var(--ev);
   }
 
+  /* ===== 3. Charge / SOC hero KPIs ===== */
+
   /* Three-up live readout under the SOC meter for the HV traction pack
      (pack voltage / current / power). Reuses the .scrub-readout grid look so
      it visually clusters with the other live-data tiles, but stays scoped to
@@ -424,6 +461,8 @@
     font-size: 16px;
     font-variant-numeric: tabular-nums;
   }
+
+  /* ===== 4. Charge history list ===== */
 
   /* Per-session charge history. Green to match the Charge tab accent. */
   .charge-session-list {
@@ -543,6 +582,8 @@
     box-shadow: inset 0 0 0 14px var(--inset-deep);
   }
 
+  /* ===== 5. SOC ring states ===== */
+
   /* Before the first SOC reading the ring shows a neutral full track instead
      of a 0% arc that reads as an empty battery. */
   .ring[data-state="waiting"] {
@@ -576,6 +617,8 @@
     justify-content: space-between;
     gap: 12px;
   }
+
+  /* ===== 6. Status meta & card headers ===== */
 
   .status-meta {
     display: grid;
@@ -659,6 +702,8 @@
     min-width: 0;
   }
 
+  /* ===== 7. Interactive list rows ===== */
+
   /* Accessibility wrapper: gives interactive rows a role="listitem" parent
      inside role="list" containers without adding a layout box, so the visual
      grid/flex of the list is exactly as if the row were a direct child. */
@@ -683,6 +728,36 @@
 
   .history-row.is-active {
     background: rgba(var(--volt-rgb), 0.08);
+  }
+
+  .history-entry {
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .history-entry .history-row {
+    border-top: 0;
+  }
+
+  .history-export {
+    display: flex;
+    gap: 8px;
+    padding: 0 10px 10px;
+  }
+
+  .history-export-btn {
+    flex: 1 1 0;
+    min-height: 36px;
+    padding: 6px 10px;
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    background: var(--fill-soft);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .history-export-btn:active {
+    background: rgba(var(--volt-rgb), 0.12);
   }
 
   .trip-route-spark {
@@ -838,6 +913,8 @@
     color: var(--muted);
   }
 
+  /* ===== 8. In-app DTC lookup (intro card) ===== */
+
   /* In-app DTC lookup (Insights → Check engine). */
   .dtc-lookup {
     margin-bottom: 12px;
@@ -931,6 +1008,8 @@
   .dtc-lookup-web {
     margin-top: 10px;
   }
+
+  /* ===== 9. Charge energy & cost card ===== */
 
   /* Charge energy + estimated-cost card (Charge tab). */
   .charge-energy-card {
@@ -1099,6 +1178,8 @@
     box-shadow: 0 0 10px rgba(255,184,74,0.75);
   }
 
+  /* ===== 10. Live-signals diagnostic list ===== */
+
   /* Live-signals diagnostic list: one row per polled metric with a status dot,
      value, and freshness. Green = reporting, dim = the car isn't answering. */
   .live-signals-list {
@@ -1188,16 +1269,20 @@
     margin: 10px 0 2px;
   }
 
+  /* ===== 11. Battery-tab cards (cell balance / cell map / SOH) ===== */
+
   /* Shared layout for the three Battery-tab cards (cell balance, cell map, SOH). */
   .cell-balance-card,
   .cell-grid-card,
-  .soh-trend-card {
+  .soh-trend-card,
+  .live-charge-card {
     margin-top: 12px;
   }
 
   .cell-balance-head,
   .cell-grid-head,
-  .soh-trend-head {
+  .soh-trend-head,
+  .live-charge-head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -1205,22 +1290,33 @@
   }
 
   .cell-balance-stats,
-  .soh-trend-stats {
+  .soh-trend-stats,
+  .live-charge-stats {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 10px;
   }
 
+  .live-charge-stats {
+    margin-top: 12px;
+  }
+
   .cell-balance-stats .kicker,
-  .soh-trend-stats .kicker {
+  .soh-trend-stats .kicker,
+  .live-charge-stats .kicker {
     display: block;
     margin-bottom: 2px;
   }
 
   .cell-balance-stats strong,
-  .soh-trend-stats strong {
+  .soh-trend-stats strong,
+  .live-charge-stats strong {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 14px;
+  }
+
+  .live-charge-card .live-charge-head h3 {
+    color: var(--ok, var(--soft));
   }
 
   /* 96-cell voltage map. */
@@ -1243,13 +1339,13 @@
   }
 
   .cell-grid-box.is-min {
-    background: #4cc4ff;
-    border-color: #4cc4ff;
+    background: var(--map-accent);
+    border-color: var(--map-accent);
   }
 
   .cell-grid-box.is-max {
-    background: #ff7a45;
-    border-color: #ff7a45;
+    background: var(--volt);
+    border-color: var(--volt);
   }
 
   /* Battery state-of-health trend chart (SVG line over time). */
@@ -1288,7 +1384,7 @@
 
   .soh-dot {
     fill: var(--volt);
-    stroke: #fff;
+    stroke: var(--on-control);
     stroke-width: 1.5;
   }
 
@@ -1336,16 +1432,18 @@
     height: 12px;
     transform: translate(-50%, -50%);
     border-radius: 50%;
-    border: 2px solid #fff;
+    border: 2px solid var(--on-control);
   }
 
   .cell-balance-marker.is-min {
-    background: #4cc4ff;
+    background: var(--map-accent);
   }
 
   .cell-balance-marker.is-max {
-    background: #ff7a45;
+    background: var(--volt);
   }
+
+  /* ===== 12. Signal console & probe-mode picker ===== */
 
   /* Quiet section dividers inside the signal console so the next-probe and
      evidence lists read as distinct groups rather than one long scroll. */
@@ -1472,6 +1570,8 @@
     }
   }
 
+  /* ===== 13. Scoreboard & status filter ===== */
+
   /* Scoreboard + status filter in one control: each tile shows a live count and
      filters the evidence list when tapped. Replaces the old duplicated KPI strip
      and separate filter row. */
@@ -1572,6 +1672,8 @@
     padding: 12px;
     border-radius: 12px;
   }
+
+  /* ===== 14. Signal evidence, capability & DTC-detail lists ===== */
 
   /* Classification tags on each evidence row: category / stage / risk. */
   .signal-chips {
@@ -1848,6 +1950,50 @@
     background: rgba(92,200,255,0.04);
   }
 
+  /* Per-code severity pill (next to the status label) + drivability line. */
+  .dtc-sev {
+    display: inline-block;
+    margin-top: 3px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: var(--fill-bold);
+    color: var(--muted);
+  }
+
+  .dtc-sev[data-severity="critical"] {
+    background: rgba(255,107,95,0.16);
+    color: var(--bad-text);
+  }
+
+  .dtc-sev[data-severity="warning"] {
+    background: rgba(255,184,74,0.16);
+    color: var(--warn-soft);
+  }
+
+  .dtc-sev[data-severity="info"] {
+    background: rgba(92,200,255,0.14);
+    color: var(--map-accent, var(--soft));
+  }
+
+  .dtc-drivability {
+    display: block;
+    margin-top: 3px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--soft);
+  }
+
+  .dtc-drivability[data-severity="critical"] {
+    color: var(--bad-text);
+  }
+
+  .dtc-drivability[data-severity="warning"] {
+    color: var(--warn-soft);
+  }
+
   .dtc-search:active {
     background: rgba(92,200,255,0.18);
   }
@@ -2048,6 +2194,8 @@
     font-size: 11px;
   }
 
+  /* ===== 15. Live-tile stale & in-flight spinners ===== */
+
   /* Live-tile stale indicator. Applied by telemetry.js when no fresh OBD
      sample has arrived in the last ~3 s — fades the readout to half opacity so
      the user can tell the BT/adapter link has gone quiet without reading the
@@ -2102,6 +2250,8 @@
       content: none;
     }
   }
+
+  /* ===== 16. App dialogs ===== */
 
   .app-dialog {
     position: fixed;
@@ -2209,7 +2359,7 @@
   .app-dialog-primary {
     border: 1px solid rgba(117, 190, 255, 0.55);
     background: #2f7fbc;
-    color: #fff;
+    color: var(--on-control);
   }
 
   .app-dialog-primary:disabled {
@@ -2222,6 +2372,8 @@
     background: var(--fill-bold);
     color: var(--muted);
   }
+
+  /* ===== 17. Restore-progress overlay ===== */
 
   .restore-progress {
     position: fixed;
@@ -2395,6 +2547,11 @@
       transform: translateX(260%);
     }
   }
+
+  /* ===== 18. Responsive breakpoints =====
+     (Component-local media queries; see the hover/reduced-motion queries inline
+     above. Not consolidated with screens.css breakpoints — that needs visual
+     testing.) */
 
   @media (max-width: 420px) {
     .restore-progress-card {

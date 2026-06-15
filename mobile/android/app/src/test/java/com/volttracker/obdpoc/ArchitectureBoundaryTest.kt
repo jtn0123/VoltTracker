@@ -92,6 +92,39 @@ class ArchitectureBoundaryTest {
     }
 
     @Test
+    fun widgetLayerDoesNotImportWebViewOrBridgeApis() {
+        val violations = ArrayList<String>()
+        for (sourceRoot in sourceRoots()) {
+            val widgetDir =
+                sourceRoot
+                    .resolve("com")
+                    .resolve("volttracker")
+                    .resolve("obdpoc")
+                    .resolve("widget")
+            if (!Files.isDirectory(widgetDir)) {
+                continue
+            }
+            Files.walk(widgetDir).use { paths ->
+                paths
+                    .filter { isSourceFile(it) }
+                    .forEach { path ->
+                        val source = String(Files.readAllBytes(path), StandardCharsets.UTF_8)
+                        for (forbidden in FORBIDDEN_WIDGET_REFERENCES) {
+                            if (source.contains(forbidden)) {
+                                violations.add(displayPath(path) + " references " + forbidden)
+                            }
+                        }
+                    }
+            }
+        }
+        assertTrue(
+            "Widget must stay a thin UI surface (no WebView/bridge/engine deps):\n" +
+                violations.joinToString("\n"),
+            violations.isEmpty(),
+        )
+    }
+
+    @Test
     fun dashboardBridgeDependsOnHostSeamNotConcreteActivity() {
         val violations =
             scanFilesForForbiddenReferences(
@@ -110,6 +143,16 @@ class ArchitectureBoundaryTest {
         val FORBIDDEN_BRIDGE_ACTIVITY_REFERENCES =
             listOf(
                 "MainActivity",
+            )
+
+        val FORBIDDEN_WIDGET_REFERENCES =
+            listOf(
+                "import android.webkit.",
+                "import com.volttracker.obdpoc.VoltBridge",
+                "import com.volttracker.obdpoc.WebViewBootstrap",
+                "import com.volttracker.obdpoc.ObdPollingEngine",
+                "import com.volttracker.obdpoc.ElmConnection",
+                "evaluateJavascript",
             )
 
         val FORBIDDEN_DATA_LAYER_IMPORTS =

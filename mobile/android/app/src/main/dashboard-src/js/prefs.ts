@@ -141,7 +141,12 @@
     };
   }
 
-  VD.prefs = { get, set, subscribe };
+  // Exported for in-bundle ESM consumers (A3): cross-module callers import
+  // { prefs } from "./prefs" instead of reading window.VoltDashboard.prefs at
+  // runtime. The VD.prefs assignment is retained because the unit suite and any
+  // future late-binding consumers still read it off the global.
+  export const prefs = { get, set, subscribe };
+  VD.prefs = prefs;
 
   // ----- units --------------------------------------------------------------
   // Central unit formatting. Data crosses the bridge in SI-ish units (speed in
@@ -176,7 +181,10 @@
     return metric ? `${(miPerKwh / KM_TO_MI).toFixed(1)} km/kWh` : `${miPerKwh.toFixed(1)} mi/kWh`;
   }
 
-  VD.units = {
+  // Exported for in-bundle ESM consumers (A3): cross-module renderers import
+  // { units } from "./prefs" rather than reading window.VoltDashboard.units.
+  // VD.units stays assigned for the unit suite / any late-binding consumers.
+  export const units = {
     system: unitSystem,
     speed,
     speedText: (kph: number) => {
@@ -200,6 +208,7 @@
     efficiencyText,
     efficiencyUnit: () => (unitSystem() === "metric" ? "km/kWh" : "mi/kWh"),
   };
+  VD.units = units;
 
   // ----- preferences UI bootstrap -------------------------------------------
   // Self-contained wiring for the Preferences surface: the Settings|Diagnostics
@@ -361,26 +370,43 @@
     window.scrollTo({ top: scrollY, behavior: "auto" });
   }
 
+  // Wires a clamped numeric preference input: hydrate from the store, persist on
+  // every keystroke (clamped to [min, max]), reflect the clamped value back only
+  // when it actually differs (so typing a valid "0.14" isn't disrupted) and never
+  // advertise a value the store didn't keep, and debounce the dashboard-wide
+  // re-render so typing doesn't re-render four times. Shared by the electricity
+  // rate, gas MPG, and gas price fields.
+  function bindNumericPref(inputId: string, prefKey: string, min: number, max: number): void {
+    const input = document.getElementById(inputId) as HTMLInputElement | null;
+    if (!input) return;
+    const stored = get<number>(prefKey, 0);
+    if (stored > 0) input.value = String(stored);
+    let rerenderTimer = 0;
+    input.addEventListener("input", () => {
+      const parsed = parseFloat(input.value);
+      const clamped = Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : 0;
+      set(prefKey, clamped);
+      const reflect = Number.isFinite(parsed)
+        ? clamped !== parsed
+        : input.value.trim() !== "";
+      if (reflect) input.value = String(clamped);
+      window.clearTimeout(rerenderTimer);
+      rerenderTimer = window.setTimeout(rerenderForUnits, 400);
+    });
+  }
+
   function bootPrefsUi(): void {
     applyUnitsAttr();
     syncUnitButtons();
     applyDriveTiles();
     renderTilesEditor();
     // Electricity-rate ($/kWh) preference: hydrate the field and persist on edit.
-    const priceInput = document.getElementById("pricePerKwhInput") as HTMLInputElement | null;
-    if (priceInput) {
-      const stored = get<number>("pricePerKwh", 0);
-      if (stored > 0) priceInput.value = String(stored);
-      // Persist immediately, but debounce the dashboard-wide re-render so
-      // typing "0.14" doesn't re-render the whole UI four times.
-      let rateRerenderTimer = 0;
-      priceInput.addEventListener("input", () => {
-        const value = parseFloat(priceInput.value);
-        set("pricePerKwh", Number.isFinite(value) && value >= 0 ? value : 0);
-        window.clearTimeout(rateRerenderTimer);
-        rateRerenderTimer = window.setTimeout(rerenderForUnits, 400);
-      });
-    }
+    bindNumericPref("pricePerKwhInput", "pricePerKwh", 0, 100);
+    // Comparison gas vehicle: MPG + gas price drive the "Estimated savings vs gas"
+    // stat on Insights (insights-panel.ts). Clamped to plausible ranges so a
+    // fat-fingered entry can't poison the estimate.
+    bindNumericPref("gasMpgInput", "mpg", 5, 150);
+    bindNumericPref("gasPricePerGalInput", "gasPricePerGal", 0, 20);
     document.addEventListener("click", (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;

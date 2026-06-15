@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.data
 
 import android.content.ContentValues
+import android.database.SQLException
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import androidx.core.database.sqlite.transaction
@@ -478,6 +479,117 @@ class ObdStoreWriter(
         }
         return id
     }
+
+    /**
+     * Records a completed per-trip export (GPX/CSV) into [VoltTrackerDb.TABLE_EXPORTS]. Until this
+     * landed the table was scaffolded-but-unwired — created by the schema and carried by the backup
+     * merger, but never inserted into. One row per share: the source session id, the kind, when it
+     * ran, the on-disk byte size, and the file name. Returns the new row id (or -1 on failure;
+     * recording is best-effort and must never break the share itself).
+     */
+    fun recordExport(
+        sessionId: Long,
+        exportType: String,
+        fileName: String,
+        mimeType: String,
+        bytes: Long,
+        rangeStartMs: Long,
+        rangeEndMs: Long,
+    ): Long {
+        val now = System.currentTimeMillis()
+        val values = ContentValues()
+        if (sessionId > 0L) {
+            values.put("session_id", sessionId)
+        }
+        values.put("created_at_ms", now)
+        values.put("exported_at_ms", now)
+        if (rangeStartMs > 0L) {
+            values.put("range_start_ms", rangeStartMs)
+        }
+        if (rangeEndMs > 0L) {
+            values.put("range_end_ms", rangeEndMs)
+        }
+        values.put("export_type", ObdStoreSupport.clean(exportType))
+        values.put("status", "completed")
+        values.put("file_name", ObdStoreSupport.clean(fileName))
+        values.put("mime_type", ObdStoreSupport.clean(mimeType))
+        values.put("bytes", bytes)
+        values.put("destination", "share")
+        // GPX/CSV track exports always carry precise lat/lng; flag it so a future audit/export-history
+        // view can warn before re-sharing, matching the schema's privacy-intent columns.
+        values.put("include_precise_location", 1)
+        values.put("include_raw_logs", 0)
+        return try {
+            helper.writableDatabase.insertOrThrow(VoltTrackerDb.TABLE_EXPORTS, null, values)
+        } catch (ex: SQLException) {
+            Log.w(TAG, "recordExport failed", ex)
+            -1L
+        }
+    }
+
+    /**
+     * Best-effort stamp of the user [label] onto any materialized `trip_segments` rows whose drive
+     * window overlaps [startedAtMs]..[endedAtMs] for [sessionId]. Materialized segments are not 1:1
+     * with the route-key drive windows the dashboard renders, so this is provenance only — the
+     * authoritative label store is the route-key-keyed status event. A blank label clears the column.
+     */
+    fun setTripSegmentLabel(
+        sessionId: Long,
+        startedAtMs: Long,
+        endedAtMs: Long,
+        label: String,
+    ) {
+        val values = ContentValues()
+        if (label.isEmpty()) {
+            values.putNull("label")
+        } else {
+            values.put("label", label)
+        }
+        try {
+            helper.writableDatabase.update(
+                VoltTrackerDb.TABLE_TRIP_SEGMENTS,
+                values,
+                "session_id = ? AND started_at_ms <= ? AND (ended_at_ms IS NULL OR ended_at_ms >= ?)",
+                arrayOf(sessionId.toString(), endedAtMs.toString(), startedAtMs.toString()),
+            )
+        } catch (ex: SQLException) {
+            Log.w(TAG, "setTripSegmentLabel failed", ex)
+        }
+    }
+
+    /**
+     * Inserts a user-authored maintenance-log row (M5). [odometerKm] may be null (the user may not
+     * know the reading); [type] and [note] are free text. [createdAtMs] dates the entry (the user
+     * can backdate service performed earlier). Returns the new row id, or -1 on failure.
+     */
+    fun addMaintenanceEntry(
+        createdAtMs: Long,
+        odometerKm: Double?,
+        type: String?,
+        note: String?,
+    ): Long {
+        val values = ContentValues()
+        values.put("created_at_ms", createdAtMs)
+        if (odometerKm != null && !odometerKm.isNaN() && !odometerKm.isInfinite() && odometerKm >= 0.0) {
+            values.put("odometer_km", odometerKm)
+        }
+        values.put("type", ObdStoreSupport.clean(type))
+        values.put("note", ObdStoreSupport.clean(note))
+        return try {
+            helper.writableDatabase.insertOrThrow(VoltTrackerDb.TABLE_MAINTENANCE_LOG, null, values)
+        } catch (ex: SQLException) {
+            Log.w(TAG, "addMaintenanceEntry failed", ex)
+            -1L
+        }
+    }
+
+    fun deleteMaintenanceEntry(id: Long): Int =
+        try {
+            helper.writableDatabase.delete(VoltTrackerDb.TABLE_MAINTENANCE_LOG, "_id = ?", arrayOf(id.toString()))
+        } catch (ex: SQLException) {
+            Log.w(TAG, "deleteMaintenanceEntry failed", ex)
+            0
+        }
 
     fun recordAdapterSummary(
         address: String?,

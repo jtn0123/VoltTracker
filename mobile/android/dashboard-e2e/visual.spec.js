@@ -25,6 +25,10 @@ test('header — title, status pill, slim last-connected line', async ({ page })
     window.VoltDashboard.setStatus({ state: 'ready', detail: 'ready' });
   }, FIXED_MS - 2 * DAY);
 
+  // Semantic guard: a screenshot alone passes even if the baseline captured a broken state, so
+  // assert the intended DOM is actually present before pinning pixels.
+  await expect(page.locator('.topbar')).toBeVisible();
+  await expect(page.locator('#lastConnectedLabel')).toHaveText('OBDLink MX+ 54242');
   await expect(page.locator('.topbar')).toHaveScreenshot('header.png');
 });
 
@@ -37,7 +41,11 @@ test('charge — KPI grid', async ({ page }) => {
   );
   await setView(page, 'charge');
 
-  await expect(page.locator('.charge-grid').first()).toHaveScreenshot('charge-grid.png');
+  // Semantic guard: the grid must be visible and actually populated with KPI cells.
+  const chargeGrid = page.locator('.charge-grid').first();
+  await expect(chargeGrid).toBeVisible();
+  expect(await chargeGrid.locator('> *').count()).toBeGreaterThan(0);
+  await expect(chargeGrid).toHaveScreenshot('charge-grid.png');
 });
 
 test('insights — aggregate stats', async ({ page }) => {
@@ -54,5 +62,9 @@ test('insights — aggregate stats', async ({ page }) => {
   });
   await setView(page, 'insights');
 
-  await expect(page.locator('#insightStatsCard')).toHaveScreenshot('insights-stats.png');
+  // Semantic guard: the stats card must be visible and carry rendered content, not an empty shell.
+  const statsCard = page.locator('#insightStatsCard');
+  await expect(statsCard).toBeVisible();
+  await expect(statsCard).not.toBeEmpty();
+  await expect(statsCard).toHaveScreenshot('insights-stats.png');
 });

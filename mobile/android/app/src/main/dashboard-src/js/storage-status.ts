@@ -7,7 +7,10 @@
 // the sibling panels (signals-panel.ts, insights-panel.ts) reach for —
 // isNativeError, reportNativeReadError, buildStatusCopy, toggleHidden — are
 // published on VD here so this module stays the single owner of them.
+import { el, setSvgAttrs } from "./core";
 import { setDataState } from "./dataset-state";
+import { validatePayload } from "./payload-validators";
+import { prefs, units } from "./prefs";
 
 (function () {
   "use strict";
@@ -15,7 +18,6 @@ import { setDataState } from "./dataset-state";
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
-  const el = VD.el;
 
   // Plain boolean (not a type predicate): the parsed payloads it screens —
   // VoltStorageSummary, VoltTrip[], VoltInsights — structurally overlap
@@ -43,7 +45,7 @@ import { setDataState } from "./dataset-state";
 
   function setStorage(payload: unknown) {
     const parsed = VD.parsePayload<VoltStorageSummary>(payload, {});
-    if (typeof VD.validatePayload === "function") VD.validatePayload("setStorage", parsed);
+    validatePayload("setStorage", parsed);
     if (isNativeError(parsed)) {
       const err = parsed as VoltNativeError;
       reportNativeReadError(parsed, "Could not read local storage summary.");
@@ -76,6 +78,7 @@ import { setDataState } from "./dataset-state";
     VD.updateValidationUi();
     VD.loadTrips();
     VD.loadInsights();
+    loadMaintenanceLog();
   }
 
   function updateStorageUi() {
@@ -216,26 +219,66 @@ import { setDataState } from "./dataset-state";
     return wrap;
   }
 
+  // Normalize a DTC severity to one of three buckets. The dtc-causes database
+  // tags codes "info" / "warning" / "critical"; when a code isn't in the
+  // database (severity null), fall back to a heuristic on the code family:
+  //   U (network), B (body), P0 powertrain → warning by default
+  //   C (chassis: ABS/brakes), P safety/driveability families → critical
+  //   anything else → info
+  // The heuristic is deliberately conservative: a chassis/brake code maps to
+  // "critical" (stop safely) because those affect vehicle control, while a
+  // generic powertrain or body code maps to "warning" (service soon).
+  function dtcSeverity(rawCode: unknown, metaSeverity: string | null): "critical" | "warning" | "info" {
+    const meta = String(metaSeverity || "").toLowerCase();
+    if (meta === "critical" || meta === "warning" || meta === "info") return meta;
+    const code = String(rawCode || "").trim().toUpperCase();
+    const family = code.charAt(0);
+    if (family === "C") return "critical"; // chassis: ABS / brakes / steering
+    if (family === "B" || family === "U") return "warning"; // body / network
+    if (family === "P") return "warning"; // powertrain default
+    return "info";
+  }
+
+  function severityLabel(severity: "critical" | "warning" | "info"): string {
+    if (severity === "critical") return "Critical";
+    if (severity === "warning") return "Warning";
+    return "Info";
+  }
+
+  // Plain-language "is it safe to drive?" line per severity bucket.
+  function drivabilityLine(severity: "critical" | "warning" | "info"): string {
+    if (severity === "critical") return "Stop safely — have it checked before driving on";
+    if (severity === "warning") return "Service soon — generally safe to drive in the meantime";
+    return "Safe to drive — monitor at your next service";
+  }
+
   function buildDtcItem(code: VoltDtcRow, isExample: boolean) {
     const article = document.createElement("article");
     article.className = "dtc-item";
     article.dataset.status = String(code.status || "stored");
     if (isExample) article.dataset.example = "true";
-    const _info = typeof VD.dtcInfo === "function" ? VD.dtcInfo(String(code.dtc || "")) : null;
-    if (_info && _info.severity) article.dataset.severity = _info.severity;
+    const info = typeof VD.dtcInfo === "function" ? VD.dtcInfo(String(code.dtc || "")) : null;
+    const severity = dtcSeverity(code.dtc, info ? info.severity : null);
+    article.dataset.severity = severity;
 
     const codeBlock = document.createElement("span");
     codeBlock.className = "dtc-code-block";
     const codeB = document.createElement("b");
     codeB.className = "dtc-code";
     codeB.textContent = code.dtc || "--";
+    // Severity pill + plain-language drivability line. Both are derived from the
+    // dtc-causes metadata when present, otherwise from the code family (see
+    // dtcSeverity), so every scanned code carries a "safe to drive" read.
+    const sevBadge = document.createElement("span");
+    sevBadge.className = "dtc-sev";
+    sevBadge.dataset.severity = severity;
+    sevBadge.textContent = severityLabel(severity);
     const codeSmall = document.createElement("small");
     codeSmall.textContent = code.statusLabel || code.status || "stored";
-    codeBlock.append(codeB, codeSmall);
+    codeBlock.append(codeB, sevBadge, codeSmall);
 
     const moduleBlock = document.createElement("span");
     moduleBlock.className = "dtc-module-block";
-    const info = typeof VD.dtcInfo === "function" ? VD.dtcInfo(String(code.dtc || "")) : null;
     const headline = document.createElement("strong");
     if (info && info.description) {
       headline.textContent = info.description;
@@ -245,6 +288,12 @@ import { setDataState } from "./dataset-state";
       headline.textContent = code.moduleName || "Unknown code - tap to look up";
     }
     moduleBlock.append(headline);
+
+    const drive = document.createElement("span");
+    drive.className = "dtc-drivability";
+    drive.dataset.severity = severity;
+    drive.textContent = drivabilityLine(severity);
+    moduleBlock.append(drive);
 
     if (info && info.description) {
       const small = document.createElement("small");
@@ -326,7 +375,7 @@ import { setDataState } from "./dataset-state";
     VD.setText("reviewTitle", hasSession
       ? `${session.mode || "session"} · ${session.adapterName || "OBD adapter"}`
       : "No real session yet");
-    VD.setText("reviewMaxSpeed", maxSpeed ? VD.units.speedText(maxSpeed) : "--");
+    VD.setText("reviewMaxSpeed", maxSpeed ? units.speedText(maxSpeed) : "--");
     VD.setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
     VD.setText("reviewPidParse", (parsed || unknown) ? `${parsed}/${parsed + unknown}` : "--");
     VD.setText("reviewInterval", interval ? VD.formatShortDuration(interval) : "--");
@@ -447,7 +496,7 @@ import { setDataState } from "./dataset-state";
     const hasDriving = Object.keys(stateCounts).some((key) => key.includes("driving"));
     return [
       {
-        title: maxSpeed ? `Max speed ${VD.units.speedText(maxSpeed)}` : "No speed peak yet",
+        title: maxSpeed ? `Max speed ${units.speedText(maxSpeed)}` : "No speed peak yet",
         detail: maxSpeed ? "Computed from accepted OBD speed samples for the latest session." : "Speed stays blank until accepted OBD speed samples are stored."
       },
       {
@@ -578,7 +627,7 @@ import { setDataState } from "./dataset-state";
     const xOf = (t: number) => padL + (tSpan === 0 ? plotW / 2 : ((t - tMin) / tSpan) * plotW);
     const yOf = (s: number) => padT + (1 - (s - yMin) / (yMax - yMin)) * plotH;
     const make = (tag: string, attrs: Record<string, string | number>) =>
-      VD.setSvgAttrs(document.createElementNS(ns, tag) as SVGElement, attrs);
+      setSvgAttrs(document.createElementNS(ns, tag) as SVGElement, attrs);
     const svg = make("svg", {
       viewBox: `0 0 ${w} ${h}`,
       class: "soh-trend-svg",
@@ -671,7 +720,7 @@ import { setDataState } from "./dataset-state";
     const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
     VD.setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
     VD.setText("overviewDistanceSub", route.pointCount ? `${route.pointCount} GPS samples in latest route` : "waiting for route samples");
-    VD.setText("overviewMaxSpeed", overview.maxSpeedKph ? VD.units.speedText(Number(overview.maxSpeedKph)) : "--");
+    VD.setText("overviewMaxSpeed", overview.maxSpeedKph ? units.speedText(Number(overview.maxSpeedKph)) : "--");
     const soc = Number(latest.soc);
     const power = Number(latest.powerKw ?? latest.packPowerKw);
     VD.setText("overviewBattery", Number.isFinite(soc) && soc > 0 ? `${Math.round(soc)}%` : (Number.isFinite(power) && power ? `${power.toFixed(1)} kW` : "--"));
@@ -716,34 +765,119 @@ import { setDataState } from "./dataset-state";
     }
     renderPackStats(latest);
 
-    const maintenance = el("maintenanceList");
-    if (maintenance) {
-      const rows: Array<[string, string, string]> = [
-        ["Tire rotation", "Log rotations against your odometer reading above", "manual"],
-        ["Battery coolant", "No service-interval data yet — track manually for now", "watch"],
-        ["Engine oil", "Log oil changes manually — live oil-life tracking is planned", "pending"]
-      ];
-      maintenance.replaceChildren(...rows.map(([name, detail, tag]) => buildMaintenanceRow(name, detail, tag)));
-    }
-
+    renderMaintenanceList();
     renderVehicleUi();
   }
 
-  function buildMaintenanceRow(name: string, detail: string, tag: string) {
+  // Renders the user's real maintenance log (M5) into #maintenanceList, replacing the old
+  // hardcoded placeholder rows. When empty, shows next-due GUIDANCE only (never a fake logged
+  // entry) so the card reads as a prompt to start logging, not as fabricated history.
+  function renderMaintenanceList() {
+    const maintenance = el("maintenanceList");
+    if (!maintenance) return;
+    const entries = Array.isArray(state.maintenanceLog) ? state.maintenanceLog : [];
+    if (!entries.length) {
+      maintenance.replaceChildren(buildMaintenanceEmptyState());
+      return;
+    }
+    maintenance.replaceChildren(...entries.map(buildMaintenanceEntryRow));
+  }
+
+  // Empty-state guidance: a short "what to track" hint, NOT a logged row. Pure DOM (no innerHTML).
+  function buildMaintenanceEmptyState() {
+    const article = document.createElement("article");
+    article.className = "real-insight-item maint-empty";
+    const center = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = "No maintenance logged yet";
+    const small = document.createElement("small");
+    small.textContent =
+      "Log oil changes, tire rotations, and coolant service against your odometer to start a history.";
+    center.append(strong, small);
+    article.append(center);
+    return article;
+  }
+
+  // One real maintenance entry. Title is the type; the detail line carries the date, odometer (when
+  // known) and note. A delete button carries the entry id for actions.ts. createElement/textContent
+  // only — never innerHTML — so a hostile type/note can't inject markup (DOM XSS-safe).
+  function buildMaintenanceEntryRow(entry: VoltMaintenanceEntry) {
     const article = document.createElement("article");
     article.className = "real-insight-item";
     const center = document.createElement("span");
     const strong = document.createElement("strong");
-    strong.textContent = name;
+    const type = String(entry.type || "").trim();
+    strong.textContent = type || "Service";
     const small = document.createElement("small");
-    small.textContent = detail;
+    small.textContent = maintenanceDetailLine(entry);
     center.append(strong, small);
-    const right = document.createElement("b");
-    right.className = "maint-tag";
-    right.dataset.tag = String(tag || "").toLowerCase();
-    right.textContent = tag;
+
+    const right = document.createElement("button");
+    right.type = "button";
+    right.className = "maint-del";
+    right.dataset.maintDelete = entry.id == null ? "" : String(entry.id);
+    right.title = "Remove this maintenance entry.";
+    right.textContent = "Remove";
     article.append(center, right);
     return article;
+  }
+
+  function maintenanceDetailLine(entry: VoltMaintenanceEntry) {
+    const parts: string[] = [];
+    const at = Number(entry.createdAtMs);
+    if (Number.isFinite(at) && at > 0) parts.push(VD.formatWhen(at));
+    const odo = Number(entry.odometerKm);
+    if (Number.isFinite(odo) && odo > 0) {
+      // Reuse the unit-aware distance formatter so the odometer respects imperial/metric.
+      parts.push(units.distanceText(odo));
+    }
+    const note = String(entry.note || "").trim();
+    if (note) parts.push(note);
+    return parts.length ? parts.join(" · ") : "Logged";
+  }
+
+  // Loads the maintenance log from native into state, then re-renders the list. Guards the bridge
+  // (absent outside the WebView) and tolerates a malformed payload by falling back to an empty log.
+  function loadMaintenanceLog() {
+    if (!bridge || typeof bridge.getMaintenanceLog !== "function") return;
+    const parsed = VD.parsePayload<VoltMaintenanceEntry[]>(bridge.getMaintenanceLog(), []);
+    state.maintenanceLog = Array.isArray(parsed) ? parsed : [];
+    renderMaintenanceList();
+  }
+
+  // Prompts for a maintenance entry and forwards it to native (M5). Uses sequential prompts (the
+  // WebView has no inline form here) — type is required; odometer/note are optional; cancel aborts.
+  function addMaintenanceEntry() {
+    if (!bridge || typeof bridge.addMaintenanceEntry !== "function") {
+      VD.setStatus({ state: "idle", detail: "Maintenance logging is available inside the Android app." });
+      return;
+    }
+    const type = window.prompt("What service? (e.g. Oil change, Tire rotation)", "");
+    if (type === null) return;
+    if (!type.trim()) {
+      VD.setStatus({ state: "blocked", detail: "Add a service type before saving." });
+      return;
+    }
+    const odoRaw = window.prompt("Odometer reading (optional, in your distance unit):", "");
+    if (odoRaw === null) return;
+    const note = window.prompt("Note (optional):", "");
+    if (note === null) return;
+    const payload: { type: string; note: string; date: number; odometerKm?: number } = {
+      type: type.trim(),
+      note: note.trim(),
+      date: Date.now()
+    };
+    const odoKm = parseOdometerKm(odoRaw);
+    if (odoKm != null) payload.odometerKm = odoKm;
+    bridge.addMaintenanceEntry(JSON.stringify(payload));
+  }
+
+  // Converts a user-entered odometer reading (in their display distance unit) to km for storage.
+  // Returns null for blank/invalid input so the entry simply omits the odometer.
+  function parseOdometerKm(raw: string): number | null {
+    const value = Number(String(raw || "").trim());
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return units.distanceUnit() === "mi" ? value * 1.609344 : value;
   }
 
   // A charge row counts as "in progress" only when it has no end time AND a
@@ -803,7 +937,7 @@ import { setDataState } from "./dataset-state";
     card.hidden = false;
     VD.setText("chargeEnergyTotal", `${total.toFixed(1)} kWh`);
     VD.setText("chargeEnergySub", `across ${sessions.length} logged charge${sessions.length === 1 ? "" : "s"}`);
-    const price = VD.prefs.get<number>("pricePerKwh", 0);
+    const price = prefs.get<number>("pricePerKwh", 0);
     const hint = el("chargeEnergyHint");
     if (price > 0) {
       VD.setText("chargeEnergyCost", formatMoney(total * price));
@@ -859,7 +993,7 @@ import { setDataState } from "./dataset-state";
     const right = document.createElement("b");
     const energy = chargeNum(session.energyKwh);
     const socGain = Number.isFinite(startSoc) && Number.isFinite(endSoc) ? endSoc - startSoc : NaN;
-    const price = VD.prefs.get<number>("pricePerKwh", 0);
+    const price = prefs.get<number>("pricePerKwh", 0);
     if (Number.isFinite(energy) && energy > 0) {
       right.textContent =
         price > 0 ? `${energy.toFixed(1)} kWh · ${formatMoney(energy * price)}` : `${energy.toFixed(1)} kWh`;
@@ -894,7 +1028,7 @@ import { setDataState } from "./dataset-state";
     const packPower = firstNum([latest.packPowerKw, latest.powerKw]);
     const stats: Array<[string, string | null]> = [
       ["Pack", Number.isFinite(voltage) ? `${Math.round(voltage)} V` : null],
-      ["Temp", Number.isFinite(temp) ? VD.units.tempText(temp) : null],
+      ["Temp", Number.isFinite(temp) ? units.tempText(temp) : null],
       ["Health", Number.isFinite(soh) && soh > 0 ? `${Math.round(soh)}%` : null],
       ["Power", Number.isFinite(packPower) && packPower !== 0 ? `${packPower.toFixed(1)} kW` : null]
     ].filter((pair) => pair[1] != null) as Array<[string, string]>;
@@ -943,7 +1077,7 @@ import { setDataState } from "./dataset-state";
     const odoKm = Number(vehicle.odometerKm);
     // Odometer keeps thousands separators (large numbers), so it formats locally
     // rather than via units.distance which targets short trip/route figures.
-    const odoMetric = VD.units.system() === "metric";
+    const odoMetric = units.system() === "metric";
     let odometer = "--";
     if (Number.isFinite(odoMiles) && odoMiles > 0) {
       const v = odoMetric ? odoMiles / 0.621371 : odoMiles;
@@ -976,6 +1110,9 @@ import { setDataState } from "./dataset-state";
     stateCountSummary,
     renderRealV2Ui,
     renderVehicleUi,
+    loadMaintenanceLog,
+    renderMaintenanceList,
+    addMaintenanceEntry,
     toggleHidden
   });
 })();

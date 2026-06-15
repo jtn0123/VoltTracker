@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
@@ -18,8 +19,14 @@ class DiagnosticScanRunner(
     private val service: EngineHost,
     private val engine: ObdPollingEngine,
 ) {
+    // Generic Mode 03 codes seen during the sweep, deduped + upper-cased. Surfaced in the scan
+    // telemetry as `dtcCodes` so the event-notification path (M1) can diff them against the previous
+    // scan's set and alert on genuinely-new codes; the per-command DTC persistence is unchanged.
+    private val dtcCodes = LinkedHashSet<String>()
+
     @Throws(IOException::class)
     fun run() {
+        dtcCodes.clear()
         service.broadcastStatus(
             "scanning",
             "Running protocol, DTC, freeze-frame, VIN, and live-data probes...",
@@ -56,9 +63,9 @@ class DiagnosticScanRunner(
         probeCommand("0100", 9000, raw)
 
         ObdElmDecode.appendProbeLine(raw, "standard-diagnostics", "generic DTC and freeze-frame probes")
-        probeCommand("03", 3500, raw)
-        probeCommand("07", 3500, raw)
-        probeCommand("0A", 3500, raw)
+        collectDtcCodes("03", probeCommand("03", 3500, raw))
+        collectDtcCodes("07", probeCommand("07", 3500, raw))
+        collectDtcCodes("0A", probeCommand("0A", 3500, raw))
         probeCommand("0200", 3500, raw)
         probeCommand("0202", 3500, raw)
         probeCommand("0204", 3200, raw)
@@ -137,6 +144,7 @@ class DiagnosticScanRunner(
             sample.put("adapter", service.activeName)
             sample.put("updatedAt", System.currentTimeMillis())
             engine.appendLocation(sample)
+            sample.put("dtcCodes", JSONArray(dtcCodes.toList()))
             sample.put("raw", ObdElmDecode.tail(raw.toString(), 7200))
         } catch (_: JSONException) {
             // Local values are safe.
@@ -159,5 +167,19 @@ class DiagnosticScanRunner(
         val response = engine.sendRecoverableCommand(command, timeoutMs)
         ObdElmDecode.appendProbeLine(raw, command, ObdElmDecode.summarizeForStorage(command, response))
         return response
+    }
+
+    /** Parses generic DTCs from a Mode 03/07/0A response and folds them into [dtcCodes]. */
+    private fun collectDtcCodes(
+        command: String,
+        response: String,
+    ) {
+        val parsed = ObdProtocol.parseDiagnosticTroubleCodes(command, response, "7DF")
+        for (dtc in parsed) {
+            val code = dtc.code.trim().uppercase()
+            if (code.isNotEmpty()) {
+                dtcCodes.add(code)
+            }
+        }
     }
 }

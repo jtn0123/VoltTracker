@@ -1,3 +1,6 @@
+import { createFocusTrap } from "./focus-trap";
+import type { FocusTrap } from "./focus-trap";
+
 type AppDialogOptions = {
   title: string;
   message: string;
@@ -21,10 +24,11 @@ type AppDialogNodes = {
   close: HTMLButtonElement;
 };
 
-type InertElement = HTMLElement & { inert?: boolean };
-
 let dialogController: AbortController | null = null;
-let dialogOpener: Element | null = null;
+// Focus trap for the open dialog: owns background inerting, Tab/Escape
+// containment, and focus save/restore to the opener. closeDialog() deactivates
+// it. Recreated per open() so onEscape points at that dialog's cancel value.
+let dialogTrap: FocusTrap | null = null;
 // Resolver for the currently-open dialog's promise. closeDialog() settles it
 // directly — relying on the (abortable) listeners to resolve would leave the
 // promise pending forever when a second dialog aborts the first one's
@@ -51,25 +55,9 @@ function nodes(): AppDialogNodes | null {
   return { root, title, message, inputWrap, inputLabel, input, confirm, cancel, close };
 }
 
-function backgroundNodes(): InertElement[] {
+function backgroundNodes(): HTMLElement[] {
   return [document.querySelector(".app"), document.querySelector(".bottom-nav")]
-    .filter((item): item is InertElement => item instanceof HTMLElement);
-}
-
-function setBackgroundInert(inert: boolean) {
-  for (const item of backgroundNodes()) {
-    item.inert = inert;
-    if (inert) item.setAttribute("aria-hidden", "true");
-    else item.removeAttribute("aria-hidden");
-  }
-}
-
-function focusableNodes(root: HTMLElement): HTMLElement[] {
-  return Array
-    .from(root.querySelectorAll<HTMLElement>(
-      "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])"
-    ))
-    .filter((item) => !item.hidden && !item.closest("[hidden]"));
+    .filter((item): item is HTMLElement => item instanceof HTMLElement);
 }
 
 function closeDialog(result: boolean | string | null): boolean | string | null {
@@ -86,11 +74,11 @@ function closeDialog(result: boolean | string | null): boolean | string | null {
     n.root.hidden = true;
     n.input.value = "";
   }
-  setBackgroundInert(false);
-  const opener = dialogOpener;
-  dialogOpener = null;
-  if (opener instanceof HTMLElement && document.contains(opener)) {
-    opener.focus();
+  // Restore the inert background and return focus to the opener. Runs after the
+  // dialog is hidden so focus lands cleanly back on the trigger.
+  if (dialogTrap) {
+    dialogTrap.deactivate();
+    dialogTrap = null;
   }
   if (settlePending) settlePending(result);
   return result;
@@ -104,7 +92,6 @@ function openDialog(options: AppPromptOptions & { mode: "confirm" | "prompt" }):
   if (dialogController) closeDialog(null);
   dialogController = new AbortController();
   const signal = dialogController.signal;
-  dialogOpener = document.activeElement;
 
   n.title.textContent = options.title;
   n.message.textContent = options.message;
@@ -114,8 +101,6 @@ function openDialog(options: AppPromptOptions & { mode: "confirm" | "prompt" }):
   n.inputLabel.textContent = options.inputLabel || "Passphrase";
   n.input.value = "";
   n.confirm.disabled = options.mode === "prompt";
-  n.root.hidden = false;
-  setBackgroundInert(true);
 
   return new Promise((resolve) => {
     // closeDialog() resolves via dialogSettle, so the promise settles exactly
@@ -139,30 +124,12 @@ function openDialog(options: AppPromptOptions & { mode: "confirm" | "prompt" }):
     n.cancel.addEventListener("click", cancelValue, { signal });
     n.close.addEventListener("click", cancelValue, { signal });
     n.root.querySelector("[data-app-dialog-cancel]")?.addEventListener("click", cancelValue, { signal });
-    document.addEventListener("keydown", (event) => {
-      if (n.root.hidden) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        cancelValue();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusable = focusableNodes(n.root);
-      if (!focusable.length) {
-        event.preventDefault();
-        n.root.focus();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }, { signal });
+    // The shared trap owns background inerting, Tab/Escape containment, and
+    // focus save/restore. Activate it while the opener still holds focus (it
+    // snapshots document.activeElement), then move focus into the dialog.
+    dialogTrap = createFocusTrap(n.root, { backgroundNodes, onEscape: cancelValue });
+    n.root.hidden = false;
+    dialogTrap.activate();
     window.requestAnimationFrame(() => {
       if (options.mode === "prompt") n.input.focus();
       else n.confirm.focus();

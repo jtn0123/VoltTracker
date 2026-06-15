@@ -6,6 +6,7 @@
 // entry point (updateEnhancedCapabilityUi) is attached to the shared VD global;
 // storage-status.ts calls it after each storage refresh. The shared buildStatusCopy
 // helper is owned by storage-status.ts and read off VD here.
+import { el } from "./core";
 import { setDataState } from "./dataset-state";
 import type { DataStateValue } from "./dataset-state";
 
@@ -14,7 +15,6 @@ import type { DataStateValue } from "./dataset-state";
 
   const VD = window.VoltDashboard;
   const state = VD.state;
-  const el = VD.el;
   let enhancedSignalFilter = "all";
   type SignalStageMeta = { label: string; hint: string };
   const signalStageMeta: Record<string, SignalStageMeta> = {

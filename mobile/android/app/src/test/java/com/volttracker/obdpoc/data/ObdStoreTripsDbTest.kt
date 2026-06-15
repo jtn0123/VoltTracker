@@ -156,6 +156,53 @@ class ObdStoreTripsDbTest {
         assertEquals(0, StorageSummaryJson.build(store.getStorageSummaryRecord()).getJSONArray("recentRoutes").length())
     }
 
+    // ---- M4 trip labels ------------------------------------------------------------
+
+    @Test
+    fun setTripLabelPersistsAndAppearsInTripJson() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
+
+        val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
+        // Trips with no label carry an empty-string label, never a missing key.
+        assertEquals("", store.getTripsJson(40).getJSONObject(0).optString("label", "MISSING"))
+
+        assertTrue(store.setTripLabel(routeKey, "Commute home"))
+
+        val trip = store.getTripsJson(40).getJSONObject(0)
+        assertEquals(routeKey, trip.getString("id"))
+        assertEquals("Commute home", trip.optString("label"))
+    }
+
+    @Test
+    fun setTripLabelClearsWithEmptyLabel() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
+
+        val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
+        assertTrue(store.setTripLabel(routeKey, "Road trip"))
+        assertEquals("Road trip", store.getTripsJson(40).getJSONObject(0).optString("label"))
+
+        // An empty label clears the entry — the later (clearing) event wins over the earlier one.
+        assertTrue(store.setTripLabel(routeKey, ""))
+        assertEquals("", store.getTripsJson(40).getJSONObject(0).optString("label", "MISSING"))
+
+        // Re-labeling after a clear works (latest event wins).
+        assertTrue(store.setTripLabel(routeKey, "Weekend"))
+        assertEquals("Weekend", store.getTripsJson(40).getJSONObject(0).optString("label"))
+    }
+
+    @Test
+    fun setTripLabelRejectsUnparseableRouteKey() {
+        assertEquals(false, store.setTripLabel(null, "x"))
+        assertEquals(false, store.setTripLabel("", "x"))
+        assertEquals(false, store.setTripLabel("not-a-route-key", "x"))
+    }
+
     @Test
     fun hidingAPostSplitTripByItsListIdAlsoHidesItFromTheMapProjection() {
         // Post-split windows start at "last inactive sample + 1ms", where no telemetry row exists,

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 31+ variant of the Volt Tracker widget metadata: adds the modern grid-cell sizing hints
+     (targetCellWidth/Height) and a rich previewLayout. The base res/xml/volt_widget_info.xml is
+     used on API 23–30, where these attributes don't exist. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="40dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="1800000"
+    android:initialLayout="@layout/widget_volt"
+    android:previewLayout="@layout/widget_volt"
+    android:description="@string/widget_description"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />

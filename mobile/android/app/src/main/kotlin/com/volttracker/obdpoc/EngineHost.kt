@@ -76,4 +76,12 @@ interface EngineHost {
     fun clearLastFailureClass()
 
     fun maybeRunVoltageProbe(engineRef: ObdPollingEngine?)
+
+    /**
+     * Hook for the opt-in auto-DTC-scan (M3): called once on the live-poll path right after a
+     * successful connect. The host decides (via [AutoScanController]) whether to run a generic
+     * Mode 03 read through [engineRef] and feed any newly-seen codes to the event-notification path.
+     * A no-op when the feature is disabled or throttled.
+     */
+    fun maybeRunAutoDtcScan(engineRef: ObdPollingEngine?)
 }

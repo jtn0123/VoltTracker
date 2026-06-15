@@ -59,15 +59,21 @@ import { initialTelemetryState } from "./telemetry-state";
 
   const VD = (window.VoltDashboard = window.VoltDashboard || ({} as VoltDashboard));
   VD.bridge = window.VoltTrackerAndroid || null;
-  VD.el = (id: string) => document.getElementById(id);
+  // Exported for in-bundle ESM consumers (A3): renderers import { el } from
+  // "./core" instead of aliasing window.VoltDashboard.el. VD.el stays assigned
+  // for any late-binding consumers / the global ABI.
+  export const el = (id: string) => document.getElementById(id);
+  VD.el = el;
 
   // Shared SVG helper: batch-set attributes on a namespaced element. Used by the
   // efficiency-scatter (insights-panel) and the battery SOH trend chart so they
-  // don't each carry their own copy.
-  VD.setSvgAttrs = function setSvgAttrs(node: SVGElement, attrs: Record<string, string | number>) {
+  // don't each carry their own copy. Exported for in-bundle ESM consumers (A3);
+  // VD.setSvgAttrs stays assigned for any late-binding consumers / the global ABI.
+  export function setSvgAttrs(node: SVGElement, attrs: Record<string, string | number>) {
     Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
     return node;
-  };
+  }
+  VD.setSvgAttrs = setSvgAttrs;
 
   // bindListenerGuarded attaches a listener but warns + skips if the element ID is
   // missing instead of throwing. The dashboard is assembled from partials at build time, so
@@ -75,7 +81,9 @@ import { initialTelemetryState } from "./telemetry-state";
   // leaving every binding AFTER the missing one unwired with no surface signal. The warn is
   // piped through logClientError (window.error handler picks it up) so the regression is
   // visible in dev/test rather than silently swallowed.
-  VD.bindListenerGuarded = function bindListenerGuarded(
+  // Exported for in-bundle ESM consumers (A3): actions.ts imports it directly.
+  // VD.bindListenerGuarded stays assigned for any late-binding consumers.
+  export function bindListenerGuarded(
     id: string,
     event: string,
     handler: EventListenerOrEventListenerObject,
@@ -102,27 +110,18 @@ import { initialTelemetryState } from "./telemetry-state";
     }
     node.addEventListener(event, handler, opts);
     return true;
-  };
+  }
+  VD.bindListenerGuarded = bindListenerGuarded;
   // Top-level abort controller for window-level error/rejection listeners, so the
   // reset hook can tear them down with the rest of the actions.js listeners.
   VD.errorController = new AbortController();
 
   const bridge = VD.bridge;
-  const el = VD.el;
 
   // Typed querySelectorAll over elements (every dashboard selector targets HTMLElements), so
   // callers get .dataset/.hidden without a per-site cast.
   const queryAll = (selector: string) =>
     document.querySelectorAll(selector) as NodeListOf<HTMLElement>;
-
-  function escapeHtml(value: unknown) {
-    return String(value == null ? "" : value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
 
   // Per-render AbortController so the listeners attached inside setHistory()
   // don't accumulate across re-renders. Each render aborts the previous batch
@@ -675,6 +674,8 @@ import { initialTelemetryState } from "./telemetry-state";
     storage: {},
     trips: [],
     insights: {},
+    // User-authored maintenance log (M5); populated from bridge.getMaintenanceLog().
+    maintenanceLog: [],
     tripsReadError: null,
     insightsReadError: null,
     // Demo-only staged charge sessions (actions.js stages rows here so they
@@ -720,12 +721,17 @@ import { initialTelemetryState } from "./telemetry-state";
   VD.state = state;
 
   // ----- shared-state accessor (C3) ----------------------------------------
-  // The state bag is mutated from every module. For the fields that carry a
-  // CROSS-MODULE invariant — the demo lifecycle (demoActive + the real/preview
-  // shadow copies) and the map/trip selections — writes go through setState so
-  // there is one typed, greppable seam instead of scattered `state.x = …`. It is
-  // a plain patch-merge (Object.assign), so behaviour is identical to a direct
-  // assignment; the value is letting future invariants hang off one place.
+  // The state bag is mutated from every module. The seam policy (enforced by
+  // dashboard-tests/state-seam.test.js) is deliberately scoped, not all-or-nothing:
+  //   - demoActive (demo isolation) is written ONLY here, via setState()/setDemoActive() — the
+  //     guard test fails on any direct `state.demoActive =` elsewhere.
+  //   - The live-route buffer (liveRoutePoints / liveRouteStartedAtMs) is OWNED by map.ts, which
+  //     keeps a module-local reference to it; cross-module seeding goes through VD.setLiveRoutePoints
+  //     (report item C1) so map.ts's reference can't desync from `state`. Writes are confined to
+  //     map.ts + the demo/teardown reset fallbacks.
+  //   - selectedMapSessionId is a free scalar, read/written directly (not a cross-module invariant).
+  // setState is a plain patch-merge (Object.assign), so behaviour is identical to a direct
+  // assignment; the value is one typed, greppable seam for the invariants that matter.
   function setState(patch: Partial<DashboardState>) {
     Object.assign(state, patch);
     return state;
@@ -1074,7 +1080,6 @@ import { initialTelemetryState } from "./telemetry-state";
     reportClientError,
     callBridge,
     setRestoreProgress,
-    escapeHtml,
     parsePayload,
     setText,
     setMeter,

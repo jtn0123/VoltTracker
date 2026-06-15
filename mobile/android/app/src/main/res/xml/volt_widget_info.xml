@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Metadata for the Volt Tracker home-screen widget (VoltWidgetProvider).
+     Base (API 23+) variant: sized via minWidth/minHeight. The API 31+ niceties
+     (targetCellWidth/Height + previewLayout) live in res/xml-v31/volt_widget_info.xml. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="40dp"
+    android:updatePeriodMillis="1800000"
+    android:initialLayout="@layout/widget_volt"
+    android:description="@string/widget_description"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />

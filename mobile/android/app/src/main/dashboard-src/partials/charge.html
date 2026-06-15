@@ -61,6 +61,43 @@
     </article>
   </section>
 
+  <!-- Live time-to-full while charging. Hidden unless the car is actively
+       charging (live charger power > 0 and a known SOC); telemetry.ts#renderLiveCharge
+       computes the estimate and toggles this card. -->
+  <article
+    id="liveChargeCard"
+    class="panel live-charge-card"
+    aria-live="polite"
+    hidden
+  >
+    <header class="live-charge-head">
+      <div>
+        <span class="kicker">Charging now</span>
+        <h3 id="liveChargeEta">Estimating time to full…</h3>
+      </div>
+      <span id="liveChargePower" class="badge" data-state="charging"
+        ><span class="dot"></span><span>-- kW</span></span
+      >
+    </header>
+    <div class="live-charge-stats">
+      <div>
+        <span class="kicker">State of charge</span>
+        <strong id="liveChargeSoc">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Energy remaining</span>
+        <strong id="liveChargeRemaining">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Target</span>
+        <strong id="liveChargeTarget">100%</strong>
+      </div>
+    </div>
+    <p class="status-copy">
+      Estimated — actual time varies as charging tapers.
+    </p>
+  </article>
+
   <!-- Live battery cell balance — lowest/highest cell-group voltage, their spread
        (the headline cell-health number), and which cells. Rendered live from
        telemetry by telemetry.js#renderCellBalance. -->

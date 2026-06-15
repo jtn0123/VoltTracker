@@ -45,11 +45,51 @@
           type="number"
           inputmode="decimal"
           min="0"
+          max="100"
           step="0.01"
           placeholder="0.00"
           aria-label="Electricity rate in dollars per kilowatt-hour"
         />
         <span>/kWh</span>
+      </label>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Gas vehicle MPG</strong>
+        <small>The car you'd otherwise drive — for savings estimates</small>
+      </div>
+      <label class="pref-price">
+        <input
+          id="gasMpgInput"
+          type="number"
+          inputmode="decimal"
+          min="5"
+          max="150"
+          step="1"
+          placeholder="30"
+          aria-label="Comparison gas vehicle fuel economy in miles per gallon"
+        />
+        <span>mpg</span>
+      </label>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Gas price</strong>
+        <small>Estimates savings vs gas on Insights</small>
+      </div>
+      <label class="pref-price">
+        <span>$</span>
+        <input
+          id="gasPricePerGalInput"
+          type="number"
+          inputmode="decimal"
+          min="0"
+          max="20"
+          step="0.01"
+          placeholder="0.00"
+          aria-label="Gas price in dollars per gallon"
+        />
+        <span>/gal</span>
       </label>
     </div>
   </article>

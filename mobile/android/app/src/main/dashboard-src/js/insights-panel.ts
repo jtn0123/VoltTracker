@@ -10,7 +10,9 @@
 // haversineMetersJs comes from map-route-utils — a small shared module that is
 // already part of the eager app.js bundle (telemetry.ts imports it), so this
 // import does not drag the lazy map chunk into the main bundle.
+import { el, setSvgAttrs } from "./core";
 import { haversineMetersJs } from "./map-route-utils";
+import { prefs, units } from "./prefs";
 
 (function () {
   "use strict";
@@ -18,7 +20,6 @@ import { haversineMetersJs } from "./map-route-utils";
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
-  const el = VD.el;
 
   function loadTrips() {
     if (bridge && typeof bridge.getTrips === "function") {
@@ -65,9 +66,55 @@ import { haversineMetersJs } from "./map-route-utils";
     VD.setText("insightTripCount", trips || "--");
     VD.setText("insightTotalDistance", trips ? VD.formatDistance(Number(insights.totalDistanceMeters || 0)) : "--");
     VD.setText("insightDriveTime", Number(insights.totalDriveMs) > 0 ? VD.formatDuration(Number(insights.totalDriveMs)) : "--");
-    VD.setText("insightTopSpeed", insights.maxSpeedKph ? VD.units.speedText(Number(insights.maxSpeedKph)) : "--");
+    VD.setText("insightTopSpeed", insights.maxSpeedKph ? units.speedText(Number(insights.maxSpeedKph)) : "--");
     VD.setText("insightLongest", Number(insights.longestTripMeters) > 0 ? VD.formatDistance(Number(insights.longestTripMeters)) : "--");
     VD.setText("insightGpsTrips", trips ? `${Number(insights.gpsTripCount || 0)}/${trips}` : "--");
+    renderSavingsVsGas();
+  }
+
+  // Assumed Volt drive efficiency, used ONLY when the insights payload doesn't
+  // carry the EV energy actually used while driving (it currently doesn't —
+  // VoltInsights has distance/time/speed, not kWh). A real-world Gen-2 Volt
+  // averages roughly 3.5 mi/kWh of usable energy; the resulting figure is an
+  // estimate and is labelled as such in the UI.
+  const ASSUMED_VOLT_MI_PER_KWH = 3.5;
+  const METERS_PER_MILE = 1609.344;
+
+  // Estimated lifetime savings vs an equivalent gas car. Shown only when the
+  // user has set their comparison MPG, gas price, and electricity rate (all > 0)
+  // AND there is logged distance to compare; otherwise the row hides so the card
+  // never advertises a fabricated number.
+  //   gas cost = (miles / mpg) * gasPrice
+  //   EV cost  = energy_kWh * pricePerKwh, with energy estimated from distance
+  //              using ASSUMED_VOLT_MI_PER_KWH (EV energy isn't in the payload).
+  function renderSavingsVsGas() {
+    const row = el("insightSavingsRow");
+    if (!row) return;
+    const insights = state.insights || {};
+    const meters = Number(insights.totalDistanceMeters || 0);
+    const mpg = prefs.get<number>("mpg", 0);
+    const gasPrice = prefs.get<number>("gasPricePerGal", 0);
+    const pricePerKwh = prefs.get<number>("pricePerKwh", 0);
+    const ready = mpg > 0 && gasPrice > 0 && pricePerKwh > 0 && meters > 0;
+    if (!ready) {
+      row.hidden = true;
+      VD.setText("insightSavings", "--");
+      VD.setText("insightSavingsNote", "");
+      return;
+    }
+    const miles = meters / METERS_PER_MILE;
+    const gasCost = (miles / mpg) * gasPrice;
+    const evEnergyKwh = miles / ASSUMED_VOLT_MI_PER_KWH;
+    const evCost = evEnergyKwh * pricePerKwh;
+    const savings = gasCost - evCost;
+    row.hidden = false;
+    // Show the magnitude; a leading "-" would read as "you spent more" only when
+    // EV electricity is pricier than the gas it replaced (rare but possible).
+    VD.setText("insightSavings", (savings < 0 ? "-$" : "$") + Math.abs(savings).toFixed(2));
+    VD.setText(
+      "insightSavingsNote",
+      `Estimated vs a ${Math.round(mpg)} mpg car at $${gasPrice.toFixed(2)}/gal · assumes ${ASSUMED_VOLT_MI_PER_KWH} mi/kWh`
+    );
   }
 
   function renderInsightsEmptyState() {
@@ -90,7 +137,7 @@ import { haversineMetersJs } from "./map-route-utils";
       if (title) title.textContent = "Not enough data yet.";
       if (copy) {
         copy.textContent =
-          "Pack health, savings, and monthly insights appear here once you've logged a few drives with the adapter connected.";
+          "Pack health, lifetime totals, and estimated savings vs gas appear here once you've logged a few drives with the adapter connected.";
       }
       if (hints) hints.hidden = false;
       existingRetry?.remove();
@@ -255,7 +302,6 @@ import { haversineMetersJs } from "./map-route-utils";
     svg.setAttribute("width", String(w));
     svg.setAttribute("height", String(h));
     svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-    const setSvgAttrs = VD.setSvgAttrs;
     const appendLine = (attrs: Record<string, string | number>) => {
       svg.append(setSvgAttrs(document.createElementNS(svgNs, "line"), attrs));
     };
@@ -345,12 +391,12 @@ import { haversineMetersJs } from "./map-route-utils";
       head.replaceChildren();
       if (best.e > 0) {
         const speed = document.createElement("b");
-        speed.textContent = VD.units.speedText(best.mph / 0.621371);
+        speed.textContent = units.speedText(best.mph / 0.621371);
         speed.style.color = "#b8e63b";
         head.append(
           "Most efficient around ",
           speed,
-          " - about " + VD.units.efficiencyText(best.e) + "."
+          " - about " + units.efficiencyText(best.e) + "."
         );
       } else {
         head.textContent = "Pooling samples across every logged drive.";
@@ -362,7 +408,7 @@ import { haversineMetersJs } from "./map-route-utils";
       // Pool eff is always mi/kWh (see enrichRouteEff); efficiencyText does the
       // single metric conversion, matching the headline above.
       const avgText = (a: number[]) =>
-        a.length ? VD.units.efficiencyText(a.reduce((s, x) => s + x, 0) / a.length) : "--";
+        a.length ? units.efficiencyText(a.reduce((s, x) => s + x, 0) / a.length) : "--";
       statsEl.replaceChildren(
         insightStat("Samples", String(pool.length)),
         insightStat("Highway avg", avgText(hwy)),

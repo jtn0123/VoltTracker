@@ -288,6 +288,30 @@ open class ObdLocalStore(
     open fun getTripRouteJson(routeKey: String?): JSONObject = reports.tripRouteJson(routeKey)
 
     /**
+     * Records a completed per-trip GPX/CSV export into the `exports` table (one row per share).
+     * Best-effort: returns the new row id, or -1 if the insert failed (recording must never break
+     * the share). See [ObdStoreWriter.recordExport].
+     */
+    open fun recordExport(
+        routeKey: String?,
+        exportType: String,
+        fileName: String,
+        mimeType: String,
+        bytes: Long,
+    ): Long {
+        val parsed = DriveWindowDetector.parseRouteKey(routeKey)
+        return writer.recordExport(
+            parsed?.sessionId ?: -1L,
+            exportType,
+            fileName,
+            mimeType,
+            bytes,
+            parsed?.startedAtMs ?: -1L,
+            parsed?.endedAtMs ?: -1L,
+        )
+    }
+
+    /**
      * Route projection for the in-progress (status = [STATUS_ACTIVE]) session, or an empty object
      * when nothing is recording. Lets the dashboard rehydrate the live track after the WebView is
      * torn down and recreated mid-drive (the foreground service keeps writing location samples to
@@ -300,6 +324,34 @@ open class ObdLocalStore(
 
     /** Battery-health snapshots (oldest-first) for the dashboard's pack-health trend chart. */
     open fun getBatterySohHistoryJson(): JSONArray = reports.batterySohHistoryJson(1000)
+
+    /**
+     * Sets (or clears, when [label] is blank) the user label for the trip identified by [routeKey].
+     * Persists the label as a route-key-keyed status event so it survives trip re-materialization,
+     * and best-effort stamps the matching materialized `trip_segments` row's `label` column. Returns
+     * false when the route key is unparseable.
+     */
+    open fun setTripLabel(
+        routeKey: String?,
+        label: String?,
+    ): Boolean {
+        val canonical = ObdTripExclusions.canonicalRouteKey(routeKey) ?: return false
+        val parsed = DriveWindowDetector.parseRouteKey(canonical) ?: return false
+        // canonicalRouteKey guarantees a 3-part key, so both timestamps are present here.
+        val startedAtMs = parsed.startedAtMs ?: return false
+        val endedAtMs = parsed.endedAtMs ?: return false
+        val cleanLabel = ObdTripLabels.cleanLabel(label)
+        writer.recordEvent(
+            parsed.sessionId,
+            ObdTripLabels.EVENT_KIND,
+            if (cleanLabel.isEmpty()) "cleared" else "labeled",
+            canonical,
+            false,
+            ObdTripLabels.eventPayload(canonical, cleanLabel),
+        )
+        writer.setTripSegmentLabel(parsed.sessionId, startedAtMs, endedAtMs, cleanLabel)
+        return true
+    }
 
     open fun markTripNotTrip(routeKey: String?): Boolean {
         val canonical = ObdTripExclusions.canonicalRouteKey(routeKey) ?: return false
@@ -315,6 +367,23 @@ open class ObdLocalStore(
         trips.invalidateSessionTripCache(parsed.sessionId)
         return true
     }
+
+    /**
+     * Inserts a user-authored maintenance-log entry (M5). [odometerKm] may be null. [createdAtMs]
+     * dates the entry (defaults to now). Returns the new row id, or -1 on failure.
+     */
+    open fun addMaintenanceEntry(
+        createdAtMs: Long,
+        odometerKm: Double?,
+        type: String?,
+        note: String?,
+    ): Long = writer.addMaintenanceEntry(createdAtMs, odometerKm, type, note)
+
+    /** Newest-first user maintenance log (M5). See [ObdStoreReports.maintenanceLogJson]. */
+    open fun getMaintenanceLogJson(limit: Int): JSONArray = reports.maintenanceLogJson(limit)
+
+    /** Removes one maintenance-log entry by id; returns the number of rows deleted (0 or 1). */
+    open fun deleteMaintenanceEntry(id: Long): Int = writer.deleteMaintenanceEntry(id)
 
     open override fun readLocationSamples(sessionId: Long): List<LocationSample> =
         materialize.readLocationSamples(sessionId)

@@ -1,12 +1,14 @@
+import { el } from "./core";
 import { asDataState, setDataState, setDataTone } from "./dataset-state";
 import { LIVE_ROUTE_ID, appendLiveRoutePoint, haversineMetersJs, liveSampleTimeMs } from "./map-route-utils";
 import type { MapRoutePoint } from "./map-route-utils";
+import { validatePayload } from "./payload-validators";
+import { units } from "./prefs";
 import { initialTelemetryState } from "./telemetry-state";
 
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
-  const el = VD.el;
 
   type PayloadRecord = Record<string, unknown>;
   type LiveCellGroup = HTMLElement | Element | null;
@@ -46,20 +48,11 @@ import { initialTelemetryState } from "./telemetry-state";
     if (overflow > 0) values.splice(0, overflow);
   }
 
-  function formatDistance(meters: unknown) {
+  export function formatDistance(meters: unknown) {
     const m = Number(meters || 0);
     if (!Number.isFinite(m) || m <= 0) return "--";
-    const d = VD.units.distanceMeters(m);
+    const d = units.distanceMeters(m);
     return `${d.value} ${d.unit}`;
-  }
-
-  function escapeHtml(value: unknown) {
-    return String(value == null ? "" : value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
   }
 
   // Status detail lands in #statusCopy, which lives on the Settings tab — taps
@@ -100,7 +93,7 @@ import { initialTelemetryState } from "./telemetry-state";
   function setStatus(payload: unknown) {
     const wasActive = isActiveStatus();
     const status = VD.parsePayload<VoltStatus>(payload, {});
-    if (typeof VD.validatePayload === "function") VD.validatePayload("setStatus", status);
+    validatePayload("setStatus", status);
     state.status = status;
     const badge = el("stateBadge");
     const next = status.state || "idle";
@@ -118,7 +111,7 @@ import { initialTelemetryState } from "./telemetry-state";
 
   function setAppState(payload: unknown) {
     const parsed = VD.parsePayload<VoltAppState>(payload, {});
-    if (typeof VD.validatePayload === "function") VD.validatePayload("setAppState", parsed);
+    validatePayload("setAppState", parsed);
     if (state.demoActive && state.demoPreviewAppState) {
       // Park the real app-state behind the demo preview (cross-module demo invariant).
       VD.setState({ realAppState: parsed });
@@ -242,9 +235,18 @@ import { initialTelemetryState } from "./telemetry-state";
       mapped.push(point);
     }
     if (!mapped.length) return;
-    state.liveRoutePoints = mapped;
     state.liveRouteStartedAtMs = mapped[0].atMs;
     state.selectedMapSessionId = LIVE_ROUTE_ID;
+    // If the map module is already loaded, route through its setter so its module-local
+    // liveRoutePoints reference is updated too — a bare `state.liveRoutePoints = mapped`
+    // reassignment would leave map.ts pointing at the old (empty) array, so the recovered
+    // mid-drive route would never draw. When the map module isn't loaded yet, set state
+    // directly; map.ts seeds its local from state.liveRoutePoints on load.
+    if (typeof VD.setLiveRoutePoints === "function") {
+      VD.setLiveRoutePoints(mapped, mapped[0].atMs);
+    } else {
+      state.liveRoutePoints = mapped;
+    }
     if (typeof VD.renderMapIfLoaded === "function") VD.renderMapIfLoaded();
   }
 
@@ -388,13 +390,13 @@ import { initialTelemetryState } from "./telemetry-state";
     return `${Math.round(hours / 24)}d ago`;
   }
 
-  function formatWhen(value: unknown) {
+  export function formatWhen(value: unknown) {
     const ts = Number(value);
     if (!Number.isFinite(ts) || ts <= 0) return "not yet";
     return relativeTime(ts);
   }
 
-  function formatBytes(value: unknown) {
+  export function formatBytes(value: unknown) {
     const bytes = Number(value);
     if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
     if (bytes < 1024) return `${Math.round(bytes)} B`;
@@ -663,8 +665,8 @@ import { initialTelemetryState } from "./telemetry-state";
     const hasSpeed = Number.isFinite(kph);
     // Primary = the user's chosen unit; secondary readout = the other system so
     // both are always visible. Driven by the units preference (prefs.ts).
-    const metric = VD.units.system() === "metric";
-    const primary = hasSpeed ? VD.units.speed(kph) : null;
+    const metric = units.system() === "metric";
+    const primary = hasSpeed ? units.speed(kph) : null;
     const altValue = hasSpeed ? Math.round(metric ? kph * 0.621371 : kph) : null;
     const altUnit = metric ? "mph" : "km/h";
     VD.setText("speedValue", primary ? primary.value : null);
@@ -693,7 +695,7 @@ import { initialTelemetryState } from "./telemetry-state";
       "voltageValue",
       t.voltage == null || t.voltage === "" ? "--" : `${Number(t.voltage).toFixed(1)} V`
     );
-    setOptionalLiveText("coolantValue", t.coolantC != null ? VD.units.tempText(Number(t.coolantC)) : "--");
+    setOptionalLiveText("coolantValue", t.coolantC != null ? units.tempText(Number(t.coolantC)) : "--");
     setOptionalLiveText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
     setOptionalLiveText("throttleValue", t.throttlePct != null ? `${t.throttlePct}%` : "--");
     const lat = Number(t.latitude);
@@ -723,11 +725,11 @@ import { initialTelemetryState } from "./telemetry-state";
     const gear = t.prndlState == null || t.prndlState === "" ? null : String(t.prndlState);
     setOptionalLiveText("moreGear", gear || "--");
     const evKm = finiteNum(t.evDistanceThisCycleKm);
-    setOptionalLiveText("moreEvRange", evKm != null ? VD.units.distanceText(evKm) : "--");
+    setOptionalLiveText("moreEvRange", evKm != null ? units.distanceText(evKm) : "--");
     const transC = finiteNum(t.transmissionTempC);
-    setOptionalLiveText("moreTransTemp", transC != null ? VD.units.tempText(transC) : "--");
+    setOptionalLiveText("moreTransTemp", transC != null ? units.tempText(transC) : "--");
     const ambientC = finiteNum(t.outsideTempC);
-    setOptionalLiveText("moreAmbient", ambientC != null ? VD.units.tempText(ambientC) : "--");
+    setOptionalLiveText("moreAmbient", ambientC != null ? units.tempText(ambientC) : "--");
     const oilLife = finiteNum(t.engineOilLifePct);
     setOptionalLiveText("moreOilLife", oilLife != null ? `${Math.round(oilLife)}%` : "--");
     const torque = finiteNum(t.engineTorqueNm);
@@ -740,7 +742,7 @@ import { initialTelemetryState } from "./telemetry-state";
     // Pass the raw (possibly NaN) value through; setMeter clears the meter to an
     // indeterminate state for a missing reading rather than announcing a false 0%.
     VD.setMeter("driveSocMeter", soc);
-    VD.setText("drivePackTempValue", Number.isFinite(batteryTemp) ? VD.units.tempText(batteryTemp) : "--");
+    VD.setText("drivePackTempValue", Number.isFinite(batteryTemp) ? units.tempText(batteryTemp) : "--");
     const power = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
     VD.setText("powerValue", Number.isFinite(power) ? `${power.toFixed(1)} kW` : "--");
     // HV traction-pack live readings (mode-22 PIDs 222429 / 222414). When the
@@ -787,6 +789,7 @@ import { initialTelemetryState } from "./telemetry-state";
     }
     renderOperationalState();
     updateDiagnostics();
+    renderLiveCharge();
     renderCellBalance();
     renderCellGrid();
     updateValidationUi();
@@ -1036,6 +1039,71 @@ import { initialTelemetryState } from "./telemetry-state";
     VD.setText("cellBalanceSoc", Number.isFinite(soc) ? `${soc}%` : "--");
   }
 
+  // Usable HV-pack energy for a Gen-2 Chevy Volt. The pack is ~18.4 kWh
+  // nameplate but only ~14 kWh is usable between the buffered SOC limits; the
+  // car reports SOC against that usable window, so charge-energy math uses it.
+  // Used only as a fallback when the live SOH-derived capacity isn't available.
+  const VOLT_USABLE_KWH = 14;
+  // Default charge target. The Volt charges to 100% of usable SOC by default; a
+  // target < 100 would simply shrink the remaining-energy estimate.
+  const LIVE_CHARGE_TARGET_SOC = 100;
+
+  // Estimated usable pack capacity (kWh). When the car reports state-of-health,
+  // scale the nominal usable energy by it (a degraded pack holds less); else
+  // fall back to the Volt nominal. SOH is a percentage (0–100).
+  function estimateUsablePackKwh(sohPct: number): number {
+    if (Number.isFinite(sohPct) && sohPct > 0 && sohPct <= 100) {
+      return VOLT_USABLE_KWH * (sohPct / 100);
+    }
+    return VOLT_USABLE_KWH;
+  }
+
+  // Live time-to-full while charging (Charge tab). Active charge = live charger
+  // power > 0 AND a known SOC below the target. Shows the estimated time to the
+  // target SOC and the energy still needed; hides entirely otherwise so a parked
+  // or discharging car never shows a stale ETA.
+  //   remaining_kWh = usable_kWh * (target - soc) / 100
+  //   time_to_full  = remaining_kWh / charger_power_kW
+  function renderLiveCharge() {
+    const card = el("liveChargeCard");
+    if (!card) return;
+    const t = state.telemetry || {};
+    const powerKw = Number(t.chargerPowerKw);
+    const soc = Number(t.soc);
+    const charging =
+      Number.isFinite(powerKw) && powerKw > 0 &&
+      Number.isFinite(soc) && soc >= 0 && soc < LIVE_CHARGE_TARGET_SOC;
+    if (!charging) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    const usableKwh = estimateUsablePackKwh(Number(t.sohPct));
+    const remainingKwh = Math.max(0, usableKwh * (LIVE_CHARGE_TARGET_SOC - soc) / 100);
+    const hoursToFull = remainingKwh / powerKw;
+    const etaMs = hoursToFull * 3600 * 1000;
+    VD.setText("liveChargeEta", `~${formatChargeEta(etaMs)} to ${LIVE_CHARGE_TARGET_SOC}%`);
+    VD.setText("liveChargeSoc", `${Math.round(soc)}%`);
+    VD.setText("liveChargeRemaining", `${remainingKwh.toFixed(1)} kWh`);
+    VD.setText("liveChargeTarget", `${LIVE_CHARGE_TARGET_SOC}%`);
+    const powerBadge = el("liveChargePower");
+    if (powerBadge) {
+      const label = powerBadge.querySelector("span:last-child");
+      if (label) label.textContent = `${powerKw.toFixed(1)} kW`;
+    }
+  }
+
+  // "Xh Ym" / "Ym" for the charge ETA. formatDuration() rolls minutes into
+  // "Xh YYm" but also emits seconds for short spans; a charge ETA is always at
+  // least minutes, so round to whole minutes for a calmer readout.
+  function formatChargeEta(ms: number): string {
+    const totalMinutes = Math.max(0, Math.round(Number(ms) / 60000));
+    if (totalMinutes < 60) return `${totalMinutes}m`;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  }
+
   const CELL_GRID_COUNT = 96;
   let lastCellGridSig = "";
 
@@ -1092,6 +1160,23 @@ import { initialTelemetryState } from "./telemetry-state";
     } else {
       const knownMin = Number.isFinite(minCell);
       const knownMax = Number.isFinite(maxCell);
+      const known = (knownMin ? 1 : 0) + (knownMax ? 1 : 0);
+      if (known === 0) {
+        // M9 (interim): with no per-cell probe data AND no live lowest/highest groups yet, render NO
+        // boxes rather than a wall of 96 grey "unknown" cells that reads as a broken/empty grid. The
+        // card collapses to its explanatory note until the car reports cell data. (Full per-cell
+        // probe is deferred pending on-car PID validation — see sensor-expansion-plan.)
+        grid.hidden = true;
+        grid.replaceChildren();
+        VD.setText("cellGridBadge", "awaiting probe");
+        VD.setText("cellGridTitle", "Per-cell voltage map");
+        VD.setText(
+          "cellGridNote",
+          "Connect to the car to highlight the lowest and highest cell groups; a full per-cell probe fills in the complete map.",
+        );
+        return;
+      }
+      grid.hidden = false;
       for (let i = 1; i <= CELL_GRID_COUNT; i += 1) {
         const box = document.createElement("span");
         box.className = "cell-grid-box";
@@ -1106,14 +1191,12 @@ import { initialTelemetryState } from "./telemetry-state";
         }
         frag.appendChild(box);
       }
-      const known = (knownMin ? 1 : 0) + (knownMax ? 1 : 0);
+      // known is guaranteed > 0 here (the known === 0 case returned early above).
       VD.setText("cellGridBadge", `${known} of ${CELL_GRID_COUNT} known`);
       VD.setText("cellGridTitle", "Per-cell voltage map");
       VD.setText(
         "cellGridNote",
-        known > 0
-          ? "Live data reports only the lowest and highest cell groups (highlighted). A full per-cell probe on the car fills in the rest."
-          : "Connect to the car to highlight the lowest and highest cell groups; a full per-cell probe fills in the complete map.",
+        "Live data reports only the lowest and highest cell groups (highlighted). A full per-cell probe on the car fills in the rest.",
       );
     }
     grid.replaceChildren(frag);
@@ -1150,7 +1233,9 @@ import { initialTelemetryState } from "./telemetry-state";
 
     setValidationRow(
       "validateObd",
-      hasFreshSample ? "ok" : (hasAnySample ? "warn" : "warn"),
+      // Fresh sample → ok; samples stored but stale → warn; nothing at all → bad (no OBD data
+      // is a worse state than a stale stream, and the detail copy already distinguishes them).
+      hasFreshSample ? "ok" : (hasAnySample ? "warn" : "bad"),
       "OBD stream",
       hasFreshSample ? `Fresh sample ${formatAge(ageMs)} ago` : (hasAnySample ? "Samples stored, waiting for a fresh update" : "Waiting for adapter samples"),
       samples ? `${samples}x` : "idle"
@@ -1230,7 +1315,7 @@ import { initialTelemetryState } from "./telemetry-state";
     return match ? "01-00 ok" : (clean ? "adapter ok" : "unknown");
   }
 
-  function formatDuration(ms: number) {
+  export function formatDuration(ms: number) {
     const seconds = Math.max(0, Math.round(Number(ms) / 1000));
     if (seconds < 60) return `${seconds}s`;
     const minutes = Math.floor(seconds / 60);
@@ -1249,7 +1334,6 @@ import { initialTelemetryState } from "./telemetry-state";
   Object.assign(VD, {
     average,
     formatDistance,
-    escapeHtml,
     setStatus,
     setAppState,
     shouldAcceptTelemetry,
@@ -1271,6 +1355,7 @@ import { initialTelemetryState } from "./telemetry-state";
     applyStaleIndicator,
     updateLiveUi,
     updateDiagnostics,
+    renderLiveCharge,
     updateValidationUi,
     setValidationRow,
     formatAge,

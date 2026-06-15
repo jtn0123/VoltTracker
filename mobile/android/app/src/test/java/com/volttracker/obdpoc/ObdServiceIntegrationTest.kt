@@ -424,5 +424,7 @@ class ObdServiceIntegrationTest {
         override fun clearLastFailureClass() = Unit
 
         override fun maybeRunVoltageProbe(engineRef: ObdPollingEngine?) = Unit
+
+        override fun maybeRunAutoDtcScan(engineRef: ObdPollingEngine?) = Unit
     }
 }

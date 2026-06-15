@@ -27,6 +27,7 @@ object RestoreValidator {
             "battery_snapshots",
             "cell_snapshots",
             "exports",
+            "maintenance_log",
         )
     private val REQUIRED_RESTORE_COLUMNS =
         arrayOf(
@@ -47,7 +48,7 @@ object RestoreValidator {
             arrayOf("location_samples", "_id", "session_id", "captured_at_ms", "latitude", "longitude"),
             arrayOf("vehicles", "_id", "vin_hash", "vin_redacted", "last_seen_ms"),
             arrayOf("field_capabilities", "_id", "command", "first_seen_ms", "last_seen_ms"),
-            arrayOf("trip_segments", "_id", "started_at_ms", "created_at_ms"),
+            arrayOf("trip_segments", "_id", "started_at_ms", "created_at_ms", "label"),
             arrayOf(
                 "session_trip_rollups",
                 "session_id",
@@ -61,6 +62,7 @@ object RestoreValidator {
             arrayOf("battery_snapshots", "_id", "captured_at_ms", "created_at_ms"),
             arrayOf("cell_snapshots", "_id", "battery_snapshot_id", "cell_index"),
             arrayOf("exports", "_id", "created_at_ms", "export_type", "status"),
+            arrayOf("maintenance_log", "_id", "created_at_ms", "odometer_km", "type", "note"),
         )
 
     @JvmStatic

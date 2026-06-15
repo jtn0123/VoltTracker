@@ -216,35 +216,9 @@ object ObdProtocol {
         cleanCommand: String,
         response: String?,
     ): ParsedPidValue? {
+        // Standard adapter/Mode-01 PIDs are handled in ObdKnownValueParserRegistry.standardParsers,
+        // which runs BEFORE this fallback — so only manufacturer-specific Mode-22 PIDs reach here.
         when (cleanCommand) {
-            "ATRV" -> return parseVoltage(response)?.let { value("adapter voltage", it.toDouble(), "V", 1) }
-            "010D" -> return parseSpeedKph(response)?.let { value("vehicle speed", it.toDouble(), "km/h", 0) }
-            "010C" -> return parseRpm(response)?.let { value("engine rpm", it.toDouble(), "rpm", 0) }
-            "0142" -> return parseControlModuleVoltage(response)?.let { bounded(it, AUX_VOLTAGE_RANGE) }?.let {
-                value("control module voltage", it, "V", 3)
-            }
-            "011F" -> return parseUnsignedMode01Word(
-                response,
-                "1F",
-            )?.let { value("engine run time", it.toDouble(), "s", 0) }
-            "01A6" -> return parseOdometerKm(response)?.let { value("odometer", it, "km", 1) }
-            "0105" -> return parseCoolantC(response)?.let { value("coolant temperature", it.toDouble(), "deg C", 0) }
-            "010F" -> return parseOffsetMode01Byte(response, "0F", -40)?.let { boundedInt(it, TEMP_C_RANGE) }?.let {
-                value("intake air temperature", it.toDouble(), "deg C", 0)
-            }
-            "012F" -> return parsePercentMode01Byte(response, "2F")?.let { value("fuel level", it.toDouble(), "%", 0) }
-            "0104" -> return parseEngineLoadPct(response)?.let { value("engine load", it.toDouble(), "%", 0) }
-            "0111" -> return parseThrottlePct(response)?.let { value("throttle position", it.toDouble(), "%", 0) }
-            "0149" -> return parseAccelPedalPct(response)?.let {
-                value("accelerator pedal position", it.toDouble(), "%", 0)
-            }
-            "015B" -> return parseStateOfChargePct(response)?.let { value("state of charge", it.toDouble(), "%", 0) }
-            "015C" -> return parseOffsetMode01Byte(response, "5C", -40)?.let { boundedInt(it, TEMP_C_RANGE) }?.let {
-                value("engine oil temperature", it.toDouble(), "deg C", 0)
-            }
-            "0132" -> return parseSignedMode01Word(response, "32")?.let { it / 4.0 }?.let {
-                value("EVAP vapor pressure", it, "Pa", 0)
-            }
             // ---- GM/Volt mode-22 (manufacturer-specific) PIDs --------------------------------
             // NOT OBD-II standard: the PID list and the scale/offset constants below are
             // reverse-engineered from community sources and are NOT validated against this car's
@@ -763,7 +737,7 @@ object ObdProtocol {
         pid: String,
     ): Int? = mode01Bytes(response, pid, 2)?.let { it[0] * 256 + it[1] }
 
-    private fun parseSignedMode01Word(
+    internal fun parseSignedMode01Word(
         response: String?,
         pid: String,
     ): Int? =
@@ -916,6 +890,10 @@ object ObdProtocol {
                 data.append(segment.groupValues[2].replace(NON_HEX, ""))
                 continue
             }
+            // The ISO-TP total-length header (e.g. "014") precedes the segment lines. Detect it only
+            // before any segment is seen: a preface line such as "SEARCHING..." is not a 3-hex token
+            // so ELM_LENGTH_LINE skips it, while a stray 3-hex data line appearing AFTER segments
+            // started can't be misread as the length (sawSegment is already true).
             if (!sawSegment && ELM_LENGTH_LINE.matches(line)) {
                 totalBytes = line.toInt(16)
             }
@@ -1273,22 +1251,33 @@ object ObdProtocol {
             return null
         }
         val body = cleanCommand.substring(2)
-        var marker = "62$body"
         val hex = response.uppercase(Locale.US).replace(Regex("[^0-9A-F]"), "")
-        var index = hex.indexOf(marker)
-        if (index < 0 && body.length > 4) {
-            marker = "62${body.substring(0, 4)}"
-            index = hex.indexOf(marker)
-        }
-        if (index < 0) {
+        // Preferred: the full echoed DID, reading all following bytes (the all-zeros sentinel check
+        // in isBenignSentinelResponse needs the whole payload, so this path stays unbounded). The
+        // >2-byte fallback below is BOUNDED: some ECUs echo only the leading 2-byte DID (dropping the
+        // request selector byte), so we match the shorter marker — but a short match must not pull a
+        // large cross-frame / stale-buffer tail in as data (the old unbounded read could then decode
+        // a plausible-but-wrong value).
+        val fullIndex = hex.indexOf("62$body")
+        val dataStart: Int
+        val maxBytes: Int
+        if (fullIndex >= 0) {
+            dataStart = fullIndex + 2 + body.length
+            maxBytes = Int.MAX_VALUE
+        } else if (body.length > 4) {
+            val shortMarker = "62${body.substring(0, 4)}"
+            val shortIndex = hex.indexOf(shortMarker)
+            if (shortIndex < 0) return null
+            dataStart = shortIndex + shortMarker.length
+            maxBytes = MODE22_FALLBACK_MAX_BYTES
+        } else {
             return null
         }
-        val dataStart = index + marker.length
         val availableChars = hex.length - dataStart
         if (availableChars < 2) {
             return IntArray(0)
         }
-        val count = availableChars / 2
+        val count = (availableChars / 2).coerceAtMost(maxBytes)
         return IntArray(count) { i ->
             val offset = dataStart + i * 2
             hex.substring(offset, offset + 2).toInt(16)
@@ -1335,6 +1324,9 @@ object ObdProtocol {
     ): String = String.format(Locale.US, "%.${decimals}f", value)
 
     private val NON_HEX = Regex("[^0-9A-F]")
+
+    /** Upper bound on bytes read via the mode-22 short-marker fallback (see mode22Payload). */
+    private const val MODE22_FALLBACK_MAX_BYTES = 8
 
     // ELM segmented multi-frame output (ATH0 + CAF1): "N:" data lines + 3-digit length line.
     private val ELM_SEGMENT_LINE = Regex("([0-9A-F]{1,3}):\\s*(.*)")

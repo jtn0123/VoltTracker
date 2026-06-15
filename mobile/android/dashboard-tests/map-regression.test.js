@@ -450,6 +450,46 @@ describe('map.ts — route selection regressions', () => {
     }
   });
 
+  it('exports a stored route as GPX/CSV via the bridge without selecting the row', async () => {
+    const exportTripGpx = vi.fn();
+    const exportTripCsv = vi.fn();
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    await loadDashboard({ bridge: createVoltBridgeFixture({ exportTripGpx, exportTripCsv }) });
+    const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
+    VD.state.storage = {
+      recentRoutes: [
+        {
+          session: { id: '42:1000:2000', startedAtMs: 1000, endedAtMs: 2000 },
+          points: [
+            { lat: 32.7, lng: -117.1, atMs: 1000 },
+            { lat: 32.8, lng: -117.2, atMs: 2000 },
+          ],
+          distanceMeters: 1000,
+        },
+      ],
+    };
+    VD.renderMap();
+
+    const gpxBtn = document.querySelector('[data-trip-export="gpx"][data-trip-export-key="42:1000:2000"]');
+    const csvBtn = document.querySelector('[data-trip-export="csv"][data-trip-export-key="42:1000:2000"]');
+    expect(gpxBtn).not.toBeNull();
+    expect(csvBtn).not.toBeNull();
+    // The export buttons must not themselves be selection targets, so a tap on them can never
+    // be read by the row-select handler ([data-map-session] delegation).
+    expect(gpxBtn.closest('[data-map-session]')).toBeNull();
+
+    gpxBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    expect(exportTripGpx).toHaveBeenCalledWith('42:1000:2000');
+    expect(exportTripCsv).not.toHaveBeenCalled();
+
+    csvBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    expect(exportTripCsv).toHaveBeenCalledWith('42:1000:2000');
+  });
+
   it('clears the basemap warning after tiles recover', async () => {
     const tileHandlers = {};
     const fakeMap = {

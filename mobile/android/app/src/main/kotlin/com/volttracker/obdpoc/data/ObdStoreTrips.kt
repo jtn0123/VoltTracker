@@ -48,6 +48,7 @@ class ObdStoreTrips(
             Collections.sort(allTrips) { left, right ->
                 java.lang.Long.compare(right.optLong("endedAtMs", 0L), left.optLong("endedAtMs", 0L))
             }
+            applyLabels(db, allTrips)
             var i = 0
             while (i < allTrips.size && payload.length() < limit) {
                 payload.put(allTrips[i])
@@ -234,6 +235,26 @@ class ObdStoreTrips(
             }
         }
         return total
+    }
+
+    /**
+     * Stamps each trip with its user label (M4) at read time, so a label change takes effect on the
+     * next read without rebuilding the trip-list cache. Labels are keyed by route key and read from
+     * the status-event store; trips with no stored label keep an empty string.
+     */
+    @Throws(JSONException::class)
+    private fun applyLabels(
+        db: SQLiteDatabase,
+        trips: List<JSONObject>,
+    ) {
+        if (trips.isEmpty()) {
+            return
+        }
+        val sessionIds = trips.mapNotNull { trip -> trip.optLong("sessionId", -1L).takeIf { it > 0L } }.distinct()
+        val labels = ObdTripLabels.labelsByRouteKey(db, sessionIds)
+        for (trip in trips) {
+            trip.put("label", labels[trip.optString("id")] ?: "")
+        }
     }
 
     fun invalidateSessionTripCache(sessionId: Long) {

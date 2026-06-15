@@ -105,5 +105,95 @@
         responds.
       </small>
     </fieldset>
+
+    <!-- Event notifications (M1) + auto-scan on connect (M3). Native-owned settings
+         reached via the bridge; thresholds are clamped on the Android side. -->
+    <fieldset
+      class="connection-tools__notify"
+      aria-labelledby="eventNotifyTitle"
+    >
+      <legend id="eventNotifyTitle" class="kicker">Alerts</legend>
+      <div class="connection-tools__notify-row">
+        <label class="connection-tools__notify-toggle">
+          <input
+            id="notifyChargeCompleteToggle"
+            type="checkbox"
+            data-action="notify-charge-complete"
+          />
+          <span>Notify when charging completes</span>
+        </label>
+      </div>
+      <div class="connection-tools__notify-row">
+        <label class="connection-tools__notify-toggle">
+          <input
+            id="notifyNewDtcToggle"
+            type="checkbox"
+            data-action="notify-new-dtc"
+          />
+          <span>Notify on a new diagnostic code</span>
+        </label>
+      </div>
+      <div class="connection-tools__notify-row">
+        <label class="connection-tools__notify-toggle">
+          <input
+            id="notifyLowSocToggle"
+            type="checkbox"
+            data-action="notify-low-soc"
+          />
+          <span>Notify on low battery</span>
+        </label>
+        <label class="connection-tools__notify-mins">
+          <span class="kicker">Below</span>
+          <select id="notifyLowSocThreshold">
+            <option value="10">10%</option>
+            <option value="15">15%</option>
+            <option value="20" selected>20%</option>
+            <option value="30">30%</option>
+          </select>
+        </label>
+      </div>
+      <div class="connection-tools__notify-row">
+        <label class="connection-tools__notify-toggle">
+          <input
+            id="notifyHighTempToggle"
+            type="checkbox"
+            data-action="notify-high-temp"
+          />
+          <span>Notify on high pack temperature</span>
+        </label>
+        <label class="connection-tools__notify-mins">
+          <span class="kicker">Above</span>
+          <select id="notifyHighTempThreshold">
+            <option value="40">40&deg;C</option>
+            <option value="45" selected>45&deg;C</option>
+            <option value="50">50&deg;C</option>
+            <option value="55">55&deg;C</option>
+          </select>
+        </label>
+      </div>
+      <small class="status-copy">
+        Battery alerts need notification permission and fire once each time a
+        reading crosses the threshold.
+      </small>
+    </fieldset>
+
+    <!-- Auto-scan for diagnostic codes shortly after a successful connect (M3). -->
+    <fieldset class="connection-tools__notify" aria-labelledby="autoScanTitle">
+      <legend id="autoScanTitle" class="kicker">Auto-scan for codes</legend>
+      <div class="connection-tools__notify-row">
+        <label class="connection-tools__notify-toggle">
+          <input
+            id="autoScanOnConnectToggle"
+            type="checkbox"
+            data-action="auto-scan-on-connect"
+          />
+          <span>Scan for codes on connect</span>
+        </label>
+      </div>
+      <small class="status-copy">
+        Runs one background Mode 03 scan shortly after connecting (at most once
+        per drive). New codes feed the diagnostic-code notification above.
+      </small>
+    </fieldset>
   </article>
 </section>

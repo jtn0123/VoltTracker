@@ -19,6 +19,9 @@
  * CSS namespace: every selector this file mutates is prefixed `.troubleshooter`
  * (see css/troubleshooter.css) so connection-tool styling cannot collide.
  */
+import { createFocusTrap } from "./focus-trap";
+import type { FocusTrap } from "./focus-trap";
+
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
@@ -44,11 +47,6 @@
   };
 
   type PayloadHandler = (payload: unknown) => unknown;
-  type InertSnapshot = {
-    node: HTMLElement;
-    ariaHidden: string | null;
-    inert: boolean;
-  };
 
   // Trigger thresholds: keep low so users see help fast in real-world
   // flaky-adapter scenarios.
@@ -122,17 +120,23 @@
   // accumulate duplicate handlers across reloads.
   const listenerController = new AbortController();
   const LISTEN_OPTS = { signal: listenerController.signal };
-  const FOCUSABLE_SELECTOR = [
-    "a[href]",
-    "button:not([disabled])",
-    "input:not([disabled])",
-    "select:not([disabled])",
-    "textarea:not([disabled])",
-    "[tabindex]:not([tabindex='-1'])"
-  ].join(",");
-  let inertTargets: InertSnapshot[] = [];
+  // Shared focus trap for the modal: owns background inerting, Tab/Escape
+  // containment, and focus save/restore to the opener. Created on open,
+  // deactivated (and dropped) on close.
+  let modalTrap: FocusTrap | null = null;
 
   function modal(): HTMLElement | null { return el("troubleshooterModal"); }
+
+  // Background nodes the trap inerts while the modal is open: every top-level
+  // body child that is neither an ancestor nor a descendant of the modal.
+  function modalBackgroundNodes(node: HTMLElement): HTMLElement[] {
+    return Array.from(document.body.children).filter((child): child is HTMLElement =>
+      child instanceof HTMLElement &&
+      child !== node &&
+      !node.contains(child) &&
+      !child.contains(node)
+    );
+  }
 
   function isOpen() {
     const node = modal();
@@ -142,10 +146,15 @@
   function open(reason: unknown) {
     const node = modal();
     if (!node) return;
-    // Remember the focused element so it can be restored when the modal closes.
-    ts.priorFocus = document.activeElement as HTMLElement | null;
+    // The shared trap remembers the focused element (so it can be restored on
+    // close) and inerts the background. Activate while the opener still holds
+    // focus, then move focus into the modal.
+    modalTrap = createFocusTrap(node, {
+      backgroundNodes: () => modalBackgroundNodes(node),
+      onEscape: close
+    });
     node.hidden = false;
-    applyModalInert(node);
+    modalTrap.activate();
     if (typeof node.focus === "function") node.focus();
     renderForRetry();
     renderCompeting((state.status || {}).competingApps);
@@ -164,101 +173,16 @@
     const node = modal();
     if (!node) return;
     node.hidden = true;
-    restoreModalInert();
+    // Restore the inert background and return focus to whatever opened the modal.
+    if (modalTrap) {
+      modalTrap.deactivate();
+      modalTrap = null;
+    }
     ts.autoOpened = false;
     // Every close of this modal originates from a user action on it (dismiss
     // buttons, Escape, or the primary action), so treat it as a dismissal:
     // don't auto-reopen again until the current burst resets.
     ts.dismissedThisBurst = true;
-    // Restore focus to whatever opened the modal so keyboard users aren't stranded.
-    const prior = ts.priorFocus;
-    if (prior && typeof prior.focus === "function" && document.contains(prior)) {
-      prior.focus();
-    }
-    ts.priorFocus = null;
-  }
-
-  function applyModalInert(node: HTMLElement) {
-    restoreModalInert();
-    inertTargets = Array.from(document.body.children)
-      .filter((child): child is HTMLElement =>
-        child instanceof HTMLElement &&
-        child !== node &&
-        !node.contains(child) &&
-        !child.contains(node)
-      )
-      .map((target) => {
-        const anyTarget = target as HTMLElement & { inert?: boolean };
-        const staleModalInert = target.dataset.troubleshooterInert === "true";
-        const snapshot = {
-          node: target,
-          ariaHidden: staleModalInert ? null : target.getAttribute("aria-hidden"),
-          inert: staleModalInert ? false : Boolean(anyTarget.inert)
-        };
-        target.setAttribute("aria-hidden", "true");
-        target.dataset.troubleshooterInert = "true";
-        anyTarget.inert = true;
-        return snapshot;
-      });
-  }
-
-  function restoreModalInert() {
-    inertTargets.forEach((snapshot) => {
-      const anyTarget = snapshot.node as HTMLElement & { inert?: boolean };
-      anyTarget.inert = snapshot.inert;
-      if (snapshot.ariaHidden == null) {
-        snapshot.node.removeAttribute("aria-hidden");
-      } else {
-        snapshot.node.setAttribute("aria-hidden", snapshot.ariaHidden);
-      }
-      delete snapshot.node.dataset.troubleshooterInert;
-    });
-    document.querySelectorAll("[data-troubleshooter-inert='true']").forEach((node) => {
-      if (!(node instanceof HTMLElement)) return;
-      const anyNode = node as HTMLElement & { inert?: boolean };
-      anyNode.inert = false;
-      node.removeAttribute("aria-hidden");
-      delete node.dataset.troubleshooterInert;
-    });
-    inertTargets = [];
-  }
-
-  function focusableNodes() {
-    const root = modal();
-    if (!root) return [];
-    return Array.from(root.querySelectorAll(FOCUSABLE_SELECTOR))
-      .filter((node): node is HTMLElement =>
-        node instanceof HTMLElement &&
-        !node.hidden &&
-        !node.closest("[hidden]") &&
-        node.getAttribute("aria-hidden") !== "true"
-      );
-  }
-
-  function handleDialogKeydown(event: KeyboardEvent) {
-    if (!isOpen()) return;
-    if (event.key === "Escape") {
-      event.preventDefault();
-      close();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusable = focusableNodes();
-    if (!focusable.length) {
-      event.preventDefault();
-      modal()?.focus();
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    const active = document.activeElement;
-    if (event.shiftKey && active === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && active === last) {
-      event.preventDefault();
-      first.focus();
-    }
   }
 
   // Collapsible step head. Toggles aria-expanded + body[hidden].
@@ -672,7 +596,6 @@
   bindDismiss();
   bindPrimary();
   bindHelpAffordance();
-  document.addEventListener("keydown", handleDialogKeydown, LISTEN_OPTS);
   installStatusObserver();
   installTelemetryObserver();
 

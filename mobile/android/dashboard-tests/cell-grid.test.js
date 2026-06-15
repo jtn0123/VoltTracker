@@ -37,6 +37,19 @@ describe('cell voltage map', () => {
     expect(document.getElementById('cellGridBadge').textContent).toBe('2 of 96 known');
   });
 
+  it('collapses to the explanatory note (no grey 96-box wall) when no cell data is known', () => {
+    const VD = window.VoltDashboard;
+    // Connected but the car reports no per-cell data and no lowest/highest groups yet.
+    VD.updateTelemetry({ source: 'obd', connected: true, sampleCount: 1, updatedAt: Date.now() });
+    VD.updateLiveUi();
+
+    const grid = document.getElementById('cellGrid');
+    expect(grid.querySelectorAll('.cell-grid-box')).toHaveLength(0);
+    expect(grid.hidden).toBe(true);
+    expect(document.getElementById('cellGridBadge').textContent).toBe('awaiting probe');
+    expect(document.getElementById('cellGridNote').textContent).toContain('full per-cell probe');
+  });
+
   it('renders a full heatmap when per-cell voltages are present', () => {
     const VD = window.VoltDashboard;
     const cellVoltages = Array.from({ length: 96 }, (_v, i) => 3.9 + (i % 8) * 0.01);

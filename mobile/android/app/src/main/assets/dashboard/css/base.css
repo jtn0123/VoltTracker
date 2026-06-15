@@ -27,6 +27,12 @@
     --mixed: #a48cff;
     --gas: #ff7141;
     --on-volt: #190a04;
+    /* White ink/ring on saturated control surfaces (chart dots, balance
+       markers, route endpoints, primary-dialog text). Stays white in both
+       schemes — the underlying fills are saturated tones in light mode too,
+       so white keeps the contrast ring/legibility. Centralized so the literal
+       lives in exactly one place rather than scattered across components. */
+    --on-control: #fff;
     /* NOTE: --accent is intentionally NOT defined in the dark scheme — the
        `var(--accent, #4cc4ff)` fallback (focus ring) and the inherit behavior
        of `.kicker[data-tone="accent"]` predate the token migration and must
@@ -1002,6 +1008,9 @@
       --mixed: #6539c0;
       --gas: #b8410d;
       --on-volt: #ffffff;
+      /* Stays white: the saturated marker/dot/endpoint fills it sits on remain
+         dark-enough tones in light mode, so white keeps its contrast ring. */
+      --on-control: #ffffff;
       /* The default #4cc4ff focus ring is below the 3:1 non-text minimum on a
          light page; --accent exists only in this scheme (see the dark note). */
       --accent: #0b6dc2;

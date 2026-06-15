@@ -3,8 +3,8 @@
     <span class="kicker">Insights</span>
     <h2>Not enough data yet.</h2>
     <p>
-      Pack health, savings, and monthly insights appear here once you've logged
-      a few drives with the adapter connected.
+      Pack health, lifetime totals, and estimated savings vs gas appear here
+      once you've logged a few drives with the adapter connected.
     </p>
     <ol class="empty-hints" aria-label="How insights build up">
       <li>
@@ -75,6 +75,16 @@
         <span class="kicker">Top speed</span
         ><strong id="insightTopSpeed">--</strong>
       </div>
+    </div>
+    <!-- EV-vs-gas savings. Hidden until the user has set their gas MPG, gas
+         price, and electricity rate in Settings → Preferences; the value is an
+         estimate (EV energy is derived from distance when not logged). -->
+    <div id="insightSavingsRow" class="map-sheet-savings" hidden>
+      <div>
+        <span class="kicker">Estimated savings vs gas</span
+        ><strong id="insightSavings">--</strong>
+      </div>
+      <small id="insightSavingsNote" class="status-copy"></small>
     </div>
   </div>
 
@@ -243,6 +253,14 @@
     <article class="panel list-card">
       <header>
         <span class="kicker">Maintenance</span>
+        <button
+          type="button"
+          class="link-btn"
+          data-action="addMaintenance"
+          id="addMaintenanceBtn"
+        >
+          Add entry
+        </button>
       </header>
       <div id="maintenanceList" class="maintenance-list"></div>
     </article>

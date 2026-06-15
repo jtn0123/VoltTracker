@@ -134,6 +134,26 @@ import {
     if (state.view === "map") renderMap();
   }
 
+  /**
+   * Replace the live-route buffer from an external seed — telemetry.ts calls this when it
+   * recovers an in-progress GPS track after a mid-drive WebView teardown (hydrateLiveRouteIfActive).
+   * Updates BOTH the module-local `liveRoutePoints` (which buildLiveRoute reads) and `state` so a
+   * reassigned `state.liveRoutePoints` can't desync from this module's reference, which would leave
+   * the recovered drive invisible on an already-loaded map.
+   */
+  function setLiveRoutePoints(points: unknown, startedAtMs?: unknown) {
+    liveRoutePoints = Array.isArray(points) ? (points as MapRoutePoint[]) : [];
+    state.liveRoutePoints = liveRoutePoints;
+    const started = Number(startedAtMs);
+    liveRouteStartedAtMs = Number.isFinite(started)
+      ? started
+      : (liveRoutePoints[0] ? Number(liveRoutePoints[0].atMs) : null);
+    state.liveRouteStartedAtMs = liveRouteStartedAtMs;
+    if (liveRoutePoints.length) state.selectedMapSessionId = LIVE_ROUTE_ID;
+    mapFitKey = null;
+    if (state.view === "map") renderMap();
+  }
+
   function liveRoutePoint(lat: number, lng: number): MapRoutePoint {
     const sample = state.telemetry || {};
     const updatedAt = liveSampleTimeMs(sample);
@@ -470,6 +490,7 @@ import {
     const stored = history
       .concat(olderTripStubRoutes(history))
       .sort((a, b) => sessionStartMs(b) - sessionStartMs(a));
+    stampTripLabels(stored);
     const live = buildLiveRoute();
     if (!live) return stored;
     return [
@@ -483,6 +504,31 @@ import {
   function sessionStartMs(route: MapRoute) {
     const value = Number((route.session || {}).startedAtMs);
     return Number.isFinite(value) ? value : 0;
+  }
+
+  // Stamps each stored route's session with its user trip label (M4) from state.trips, so the
+  // map session list shows the label regardless of whether the route came from the detailed
+  // recentRoutes window or an older trip stub. Labels are keyed by routeKey (trip.id); detailed
+  // routes whose id differs from the trip's clipped id are matched via routeCoversTrip.
+  function stampTripLabels(routes: MapRoute[]) {
+    const trips = Array.isArray(state.trips) ? state.trips : [];
+    const byId = new Map<string, string>();
+    for (const trip of trips) {
+      const id = trip && trip.id != null ? String(trip.id) : "";
+      const label = trip && typeof trip.label === "string" ? trip.label : "";
+      if (id && label) byId.set(id, label);
+    }
+    if (!byId.size) return;
+    for (const route of routes) {
+      const session = route.session || (route.session = {});
+      const id = session.id == null ? "" : String(session.id);
+      let label = byId.get(id) || "";
+      if (!label) {
+        const match = trips.find((trip) => routeCoversTrip(route, trip));
+        if (match && typeof match.label === "string") label = match.label;
+      }
+      (session as MapRouteSession).label = label;
+    }
   }
 
   // The storage summary ships full point geometry for only the most recent few
@@ -534,7 +580,8 @@ import {
         startedAtMs: trip.startedAtMs,
         endedAtMs: trip.endedAtMs,
         status: trip.status,
-        sampleCount: trip.sampleCount
+        sampleCount: trip.sampleCount,
+        label: typeof trip.label === "string" ? trip.label : ""
       },
       points: [],
       pointCount: Number(trip.pointCount) || 0,
@@ -596,7 +643,19 @@ import {
         (selectedDevice && selectedDevice.name) ||
         CURRENT_DRIVE_LABEL
       );
-    const startedAtMs = liveRouteStartedAtMs || firstPoint.atMs;
+    // Keep the displayed distance and the duration (renderMap derives both from the values
+    // below) on the SAME basis, or avg speed = distance/duration drifts once the rolling
+    // 600-point GPS buffer trims its head on a long drive. When the full-session distance is
+    // available (and larger than the buffered window), pair it with the original drive start;
+    // otherwise use the buffered window's own span — anchored on its current first point, not a
+    // first fix that has already rolled out of the buffer.
+    const windowedDistanceMeters = routeDistanceMeters(points);
+    const sessionDistanceMeters = Number(state.sessionDistanceM) || 0;
+    const useSessionDistance = sessionDistanceMeters > windowedDistanceMeters;
+    const distanceMeters = useSessionDistance ? sessionDistanceMeters : windowedDistanceMeters;
+    const startedAtMs = useSessionDistance
+      ? (liveRouteStartedAtMs || firstPoint.atMs)
+      : firstPoint.atMs;
     const powerTrack = points
       .filter((point) => Number.isFinite(Number(point.powerKw)))
       .map((point) => ({ atMs: point.atMs, powerKw: Number(point.powerKw) }));
@@ -607,7 +666,7 @@ import {
       isLive: true,
       points,
       pointCount: points.length,
-      distanceMeters: Math.max(routeDistanceMeters(points), Number(state.sessionDistanceM) || 0),
+      distanceMeters,
       powerTrack,
       socTrack,
       session: {
@@ -1336,6 +1395,7 @@ import {
     addStop,
     updateLivePosition,
     clearLivePosition,
+    setLiveRoutePoints,
     setMapFollowLive,
     loadSampleData,
     loadDemoScenario

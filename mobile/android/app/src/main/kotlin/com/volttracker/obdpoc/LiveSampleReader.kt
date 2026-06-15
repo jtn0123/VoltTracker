@@ -26,6 +26,15 @@ class LiveSampleReader(
      */
     private val parseFailureReported = HashSet<String>()
 
+    /**
+     * Consecutive speed-poll cycles on which PID 010D returned the 0xFF sentinel. The Volt reports
+     * 0xFF for speed while charging, but 0xFF is also the generic OBD "no data" value, so we require
+     * the sentinel to persist before treating it as a plugged hint to the classifier — a single
+     * transient glitch mid-drive must not flip vehicleState to PLUGGED for one sample. Reset on the
+     * initial cycle of each session (defensive; the reader is normally one instance per session).
+     */
+    private var consecutiveSpeedSentinels = 0
+
     interface SampleContext {
         fun incrementSampleCount(): Int
 
@@ -63,6 +72,15 @@ class LiveSampleReader(
                 if (!isInitialCycle) PidPollingState.wasPolledThisCycle(due, "010D") else true
             val chargeTransitionHint =
                 polledSpeedThisCycle && ObdProtocol.hasMaxSpeedSentinel(speedRaw)
+            // Debounce: only a sustained 0xFF sentinel (real charging) becomes a plugged hint, not a
+            // one-off mid-drive glitch. Count only on cycles where 010D was actually polled so a
+            // schedule skip can't reset the run.
+            if (isInitialCycle) consecutiveSpeedSentinels = 0
+            if (polledSpeedThisCycle) {
+                consecutiveSpeedSentinels =
+                    if (ObdProtocol.hasMaxSpeedSentinel(speedRaw)) consecutiveSpeedSentinels + 1 else 0
+            }
+            val sustainedChargeSentinel = consecutiveSpeedSentinels >= SPEED_SENTINEL_PLUGGED_CYCLES
             val acceptedSpeed = appendSpeed(sample, speed, polledSpeedThisCycle)
             if (acceptedSpeed == null && polledSpeedThisCycle && chargeTransitionHint) {
                 sample.put("speedRejectedKph", 255)
@@ -151,7 +169,7 @@ class LiveSampleReader(
             sample.put("sessionMs", maxOf(0, now - service.sessionStartedAtMs))
             sample.put("supportedPids", context.supportedPidsSummary())
             val packCurrentA = appendPackCurrent(sample, packCurrentRaw)
-            appendVehicleState(sample, acceptedSpeed, rpm, voltage, packCurrentA, chargeTransitionHint, now)
+            appendVehicleState(sample, acceptedSpeed, rpm, voltage, packCurrentA, sustainedChargeSentinel, now)
             sample.put("updatedAt", now)
             context.appendSessionHealth(sample)
             context.appendLocation(sample)
@@ -636,7 +654,7 @@ class LiveSampleReader(
         rpm: Float?,
         voltage: Float?,
         packCurrentA: Double?,
-        chargeTransitionHint: Boolean,
+        pluggedHint: Boolean,
         now: Long,
     ) {
         val engineRunningHint = rpm?.let { it > 200f }
@@ -647,7 +665,7 @@ class LiveSampleReader(
                     rpm?.let { Math.round(it) },
                     voltage?.toDouble(),
                     packCurrentA,
-                    if (chargeTransitionHint) true else null,
+                    if (pluggedHint) true else null,
                     engineRunningHint,
                     now,
                 )
@@ -659,5 +677,10 @@ class LiveSampleReader(
         sample.put("vehicleState", classified.state.asPayloadKey())
         sample.put("vehicleStateConfidence", classified.confidence.asPayloadKey())
         sample.put("vehicleStateReasons", JSONArray(classified.reasons))
+    }
+
+    private companion object {
+        /** Consecutive 010D 0xFF sentinels required before treating it as a plugged hint. */
+        private const val SPEED_SENTINEL_PLUGGED_CYCLES = 2
     }
 }

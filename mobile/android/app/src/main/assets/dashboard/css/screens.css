@@ -1,3 +1,35 @@
+  /* ===========================================================================
+     screens.css — per-tab / per-screen layouts (Trips, Map, Charge, Insights,
+     Settings, the floating bottom nav). Builds on the reusable pieces in
+     components.css; colors come from the base.css token palette.
+
+     SECTION TABLE OF CONTENTS (file order — annotations only, rules are NOT
+     reordered, so the cascade/specificity is unchanged):
+       1.  Trip detail & route preview SVG
+       2.  Empty / no-route states
+       3.  Map tab chrome (layer pills, route-flow, Leaflet controls, legend)
+       4.  Map sheet & route list
+       5.  Energy & charge rows
+       6.  Maintenance list & tags
+       7.  Settings controls
+       8.  Bottom navigation
+       9.  Insights / Signals SVG charts
+       10. "More signals" chip card
+       11. Scrub action & Leaflet popup
+       12. Drive-tab live cards & micro-charts
+       13. Validation card
+       14. Settings footer
+       15. Light-scheme nav companion
+
+     BREAKPOINTS in use (kept here for discoverability — NOT consolidated, as
+     that needs visual testing): (prefers-reduced-motion: reduce),
+     (hover: hover) and (pointer: fine), (min-width: 640px),
+     (min-height: 880px), (max-width: 520px), (max-width: 390px),
+     (max-width: 340px), (prefers-color-scheme: light).
+     =========================================================================== */
+
+  /* ===== 1. Trip detail & route preview SVG ===== */
+
   .detail-grid {
     display: grid;
     gap: var(--space-md);
@@ -93,13 +125,13 @@
 
   .real-route-start {
     fill: var(--ev);
-    stroke: #fff;
+    stroke: var(--on-control);
     stroke-width: 2.5;
   }
 
   .real-route-end {
     fill: var(--volt);
-    stroke: #fff;
+    stroke: var(--on-control);
     stroke-width: 2.5;
   }
 
@@ -108,6 +140,8 @@
     font-family: ui-monospace, monospace;
     font-size: 12px;
   }
+
+  /* ===== 2. Empty / no-route states ===== */
 
   /* Context-aware "no route" state: title + reason + optional enable-location CTA. */
   .route-empty-rich {
@@ -277,6 +311,8 @@
     font-size: 10px;
     letter-spacing: 0;
   }
+
+  /* ===== 3. Map tab chrome (layer pills, route-flow, Leaflet controls, legend) ===== */
 
   /* Map is the blue-themed tab, so its active layer pill + drive picker carry
      the map's blue accent instead of the global orange. */
@@ -470,6 +506,8 @@
     margin-bottom: 6px;
   }
 
+  /* ===== 4. Map sheet & route list ===== */
+
   .map-sheet {
     padding: var(--card-pad-tight) var(--card-pad);
     border: 1px solid var(--line);
@@ -527,6 +565,26 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* EV-vs-gas savings row (Insights). Sits below the lifetime stat grid. */
+  .map-sheet-savings {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+
+  .map-sheet-savings strong {
+    display: block;
+    margin-top: 5px;
+    font-size: 22px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ok, var(--soft));
+  }
+
+  .map-sheet-savings small {
+    display: block;
+    margin-top: 4px;
+  }
+
   .map-list {
     display: grid;
     gap: 8px;
@@ -537,6 +595,8 @@
     border: 1px solid rgba(var(--volt-rgb), 0.28);
     background: rgba(var(--volt-rgb), 0.10);
   }
+
+  /* ===== 5. Energy & charge rows ===== */
 
   .energy-rows {
     display: grid;
@@ -589,6 +649,8 @@
     font-weight: 850;
   }
 
+  /* ===== 6. Maintenance list & tags ===== */
+
   .maintenance-list {
     display: grid;
     gap: 8px;
@@ -630,6 +692,34 @@
     background: rgba(164,140,255,0.1);
     color: var(--mixed-soft);
   }
+
+  /* Per-entry "Remove" on a real maintenance row (M5). Quiet by default; reddens on press so a
+     destructive tap reads as destructive without shouting at rest. */
+  .maint-del {
+    flex: 0 0 auto;
+    padding: 5px 11px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--fill);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .maint-del:active {
+    border-color: rgba(255,107,95,0.4);
+    background: rgba(255,107,95,0.12);
+    color: var(--bad-soft, #ff6b5f);
+  }
+
+  /* Empty-state guidance row (M5): no logged entry yet, so it reads as a prompt, not history. */
+  .maintenance-list .maint-empty {
+    color: var(--muted);
+  }
+
+  /* ===== 7. Settings controls ===== */
 
   .setting-stack {
     display: grid;
@@ -718,6 +808,8 @@
     line-height: 1.45;
     white-space: pre-wrap;
   }
+
+  /* ===== 8. Bottom navigation ===== */
 
   .bottom-nav {
     position: fixed;
@@ -1192,6 +1284,8 @@
     width: 100%;
   }
 
+  /* ===== 9. Insights / Signals SVG charts ===== */
+
   /* Explicit heights: width:100% + viewBox alone collapses the SVG to 0px tall in
      some engines (the chart silently disappears). These match the fixed pixel
      heights the scrubber draws with (combo = 116, each detail track = 52), so the
@@ -1241,6 +1335,8 @@
     background: var(--surface-chip-strong);
     color: var(--text);
   }
+
+  /* ===== 10. "More signals" chip card ===== */
 
   /* Enhanced "More signals" card: optional Volt signals. 3 columns gives the
      unit-bearing values room (4 columns clipped them and wrapped labels). It's a
@@ -1486,6 +1582,8 @@
     cursor: pointer;
   }
 
+  /* ===== 11. Scrub action & Leaflet popup ===== */
+
   /* Primary scrubber action carries the Map tab's blue accent (not global orange). */
   .scrub-btn:first-child {
     background: var(--map-accent);
@@ -1542,6 +1640,8 @@
     font-size: 10.5px;
     color: var(--muted);
   }
+
+  /* ===== 12. Drive-tab live cards & micro-charts ===== */
 
   /* Drive-tab polish ──────────────────────────────────────────────────────────
      Reuses .map-drive-chips / .scrub-chart / .scrub-readout vocabulary from the
@@ -1918,6 +2018,8 @@
     font-size: 13.5px;
   }
 
+  /* ===== 13. Validation card ===== */
+
   /* Collapsed-by-default validation card. The summary stays as the regular
      .card-head, with a small disclosure caret tucked into the badge so the
      control discoverable but quiet. */
@@ -2042,12 +2144,16 @@
     }
   }
 
+  /* ===== 14. Settings footer ===== */
+
   /* Settings footer: app name + version (populated by telemetry.ts). */
   .app-version-footer {
     text-align: center;
     margin-top: 16px;
     opacity: 0.6;
   }
+
+  /* ===== 15. Light-scheme nav companion ===== */
 
   /* Light-scheme companion for the floating nav. The nav surface/border/text
      now flow from the role tokens in base.css; this block only re-tints the

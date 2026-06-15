@@ -38,8 +38,14 @@ class SpeedPlausibilityFilter {
             return true
         }
         val elapsedSeconds = max(0.5, (nowMs - lastAcceptedAtMs) / 1000.0)
-        val jumpPerSecond = abs(speedKph - previousKph) / elapsedSeconds
-        if (jumpPerSecond > MAX_JUMP_KPH_PER_SEC) {
+        val delta = speedKph - previousKph
+        // Asymmetric gate: a Volt sheds speed far faster under regen + friction braking than it can
+        // accelerate, so a symmetric ceiling rejected legitimate hard braking (e.g. ~40 km/h drop in
+        // under a second at the ~0.85 s poll cadence) and froze the dashboard speed at the pre-braking
+        // value. Allow a higher deceleration limit while keeping acceleration tight.
+        val limitPerSecond = if (delta < 0) MAX_DECEL_KPH_PER_SEC else MAX_ACCEL_KPH_PER_SEC
+        val jumpPerSecond = abs(delta) / elapsedSeconds
+        if (jumpPerSecond > limitPerSecond) {
             return false
         }
         lastAcceptedKph = speedKph
@@ -48,7 +54,12 @@ class SpeedPlausibilityFilter {
     }
 
     companion object {
-        /** Above this change-per-second the reading is a glitch, not real acceleration. */
-        const val MAX_JUMP_KPH_PER_SEC = 45.0
+        /** Above this rise-per-second the reading is a glitch, not real acceleration. */
+        const val MAX_ACCEL_KPH_PER_SEC = 45.0
+
+        /** Deceleration ceiling: hard braking + regen can drop speed much faster than acceleration
+         *  raises it. A panic stop is roughly 1 g (~35 km/h per second); this leaves headroom for
+         *  poll-cadence jitter while still rejecting sensor glitches (e.g. a 100→0 km/h step). */
+        const val MAX_DECEL_KPH_PER_SEC = 70.0
     }
 }

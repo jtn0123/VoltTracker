@@ -249,6 +249,18 @@ interface VoltTrip {
   maxSpeedKph?: number;
   status?: string;
   adapterName?: string;
+  /** User-authored trip label (M4); empty string when unset. */
+  label?: string;
+  [key: string]: unknown;
+}
+
+/** A user-authored maintenance-log row (M5) returned by bridge.getMaintenanceLog(). */
+interface VoltMaintenanceEntry {
+  id?: string | number;
+  createdAtMs?: number;
+  odometerKm?: number | null;
+  type?: string;
+  note?: string;
   [key: string]: unknown;
 }
 
@@ -354,7 +366,6 @@ interface VoltTroubleshooterState {
   forgetMode: boolean;
   lastSessionState: string;
   lastTelemetry: VoltTelemetry | null;
-  priorFocus?: HTMLElement | null;
   [key: string]: unknown;
 }
 
@@ -384,6 +395,8 @@ interface DashboardState {
   storage: VoltStorageSummary;
   trips: VoltTrip[];
   insights: VoltInsights;
+  /** User-authored maintenance log (M5); from bridge.getMaintenanceLog(). */
+  maintenanceLog: VoltMaintenanceEntry[];
   tripsReadError: string | null;
   insightsReadError: string | null;
   demoSessions: VoltChargeSessionRow[] | null;
@@ -655,7 +668,6 @@ interface VoltRestoreProgress {
       ...args: Parameters<VoltBridge[K]>
     ): ReturnType<VoltBridge[K]> | undefined;
     setRestoreProgress(payload: VoltRestoreProgress | string): void;
-    escapeHtml(value: unknown): string;
     /**
      * Parse a native payload (JSON string or object); returns `fallback` on
      * failure. Generic so a caller can name the expected shape
@@ -682,6 +694,12 @@ interface VoltRestoreProgress {
     ensureMapModule(): Promise<VoltDashboard>;
     requestMapRender(): Promise<VoltDashboard>;
     renderMapIfLoaded(): void;
+    /** Map module (lazy): replace the live-route buffer from an external seed, updating the
+     *  module-local reference and state together. Present only once map.js has loaded. */
+    setLiveRoutePoints?(points: unknown, startedAtMs?: unknown): void;
+    /** Connection-tools module: (re)bind the proactive-tools buttons under a fresh
+     *  AbortController so actions.resetListeners() can re-arm them alongside the rest of the UI. */
+    bindConnectionTools?(): void;
     ensureTroubleshooterModule(): Promise<VoltDashboard>;
     dtcSearchUrl(code: string): string;
     setDevices(payload: unknown): void;
@@ -706,6 +724,8 @@ interface VoltRestoreProgress {
     updateTelemetry(payload: VoltPayload): void;
     updateLiveUi(): void;
     renderOperationalState(): void;
+    /** Live time-to-full estimate on the Charge tab; reads live telemetry. */
+    renderLiveCharge(): void;
     updateValidationUi(): void;
     formatDistance(meters: unknown): string;
     formatDuration(ms: unknown): string;
@@ -721,6 +741,10 @@ interface VoltRestoreProgress {
     updateReviewUi(): void;
     renderRealV2Ui(): void;
     renderVehicleUi(): void;
+    /** M5 maintenance log: load from native into state, render the list, prompt+save a new entry. */
+    loadMaintenanceLog(): void;
+    renderMaintenanceList(): void;
+    addMaintenanceEntry(): void;
     buildRealInsights(review: VoltSessionReview): Array<{ title: string; detail: string }>;
     stateCountSummary(counts: Record<string, number>): string;
     /** True when a parsed native payload is a failed read (`ok === false`). */
@@ -800,6 +824,7 @@ interface VoltRestoreProgress {
     getLastDevice(): string;
     getDeviceHistory(): string;
     getAutoConnectState(): string;
+    getEventNotificationState(): string;
     getStorageSummary(): string;
     exportDebugBundle(): string;
     getTrips(): string;
@@ -819,8 +844,14 @@ interface VoltRestoreProgress {
     detailProbe(address: string, name: string, stage: string): void;
     exportDetailedSignalLog(id: string): string;
     exportDetailedSignalLogs(): string;
+    exportTripGpx(routeKeyOrSessionId: string): string;
+    exportTripCsv(routeKeyOrSessionId: string): string;
     deleteDetailedSignalLog(id: string): void;
     markTripNotTrip(routeKey: string): void;
+    setTripLabel(routeKey: string, label: string): void;
+    addMaintenanceEntry(json: string): void;
+    getMaintenanceLog(): string;
+    deleteMaintenanceEntry(id: string): void;
     shareBackup(): void;
     shareEncryptedBackup(passphrase: string): void;
     restoreBackup(): void;
@@ -828,6 +859,11 @@ interface VoltRestoreProgress {
     clearStoredData(): void;
     rememberDevice(address: string, name: string): void;
     setAutoConnectEnabled(enabled: boolean): void;
+    setChargeCompleteNotify(enabled: boolean): void;
+    setNewDtcNotify(enabled: boolean): void;
+    setLowSocNotify(enabled: boolean, thresholdPct: number): void;
+    setHighPackTempNotify(enabled: boolean, thresholdC: number): void;
+    setAutoScanOnConnect(enabled: boolean): void;
     connectLast(): void;
     scanLast(): void;
     tpmsScanLast(): void;
@@ -840,6 +876,7 @@ interface VoltRestoreProgress {
     cancelRetry(): void;
     tryReconnectNow(): void;
     openBluetoothSettings(): void;
+    openSetupGuide(): void;
     shareDiagnostics(): void;
     shareDiagnosticsDigest(): void;
     startTestConnection(): void;

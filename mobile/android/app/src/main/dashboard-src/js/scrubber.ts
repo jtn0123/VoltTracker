@@ -1,4 +1,6 @@
+import { el } from "./core";
 import { haversineMetersJs } from "./map-route-utils";
+import { units } from "./prefs";
 
   // Route scrubber for the Map tab. Drag through a logged drive to inspect
   // speed / elevation / grade / battery / efficiency at each point. Fed by
@@ -7,7 +9,6 @@ import { haversineMetersJs } from "./map-route-utils";
   // VD.enrichRouteEff once telemetry_samples.power_kw is available).
 
   const VD = window.VoltDashboard;
-  const el = VD.el;
 
   type ScrubPoint = {
     lat: number;
@@ -235,6 +236,8 @@ import { haversineMetersJs } from "./map-route-utils";
     const candidate = point as ScrubRoutePoint | null;
     const lat = Number(candidate && candidate.lat);
     const lng = Number(candidate && candidate.lng);
+    // Reject exact (0,0) "null island" GPS sentinel — see isValidRoutePoint in map-route-utils.
+    if (lat === 0 && lng === 0) return false;
     return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
   }
 
@@ -455,8 +458,8 @@ import { haversineMetersJs } from "./map-route-utils";
         : "soon";
     const node = el("scrubReadout");
     if (!node) return;
-    const metricUnits = VD.units.system() === "metric";
-    const dist = VD.units.distanceMiles(s.distMi);
+    const metricUnits = units.system() === "metric";
+    const dist = units.distanceMiles(s.distMi);
     const speedVal = Math.round(metricUnits ? s.mph / 0.621371 : s.mph);
     const elevText = scrubHasElev
       ? metricUnits
@@ -471,7 +474,7 @@ import { haversineMetersJs } from "./map-route-utils";
         : effText;
     node.replaceChildren(
       scrubChip("Distance", `${dist.value} ${dist.unit}`),
-      scrubChip("Speed", `${speedVal} ${VD.units.speedUnit()}`, { color: SCRUB_SPEED }),
+      scrubChip("Speed", `${speedVal} ${units.speedUnit()}`, { color: SCRUB_SPEED }),
       scrubChip("Elevation", elevText, {
         color: scrubHasElev ? SCRUB_ELEV : null
       }),
@@ -484,7 +487,7 @@ import { haversineMetersJs } from "./map-route-utils";
       // The label already carries the unit, so the value is just the number —
       // repeating the unit here overflowed the compact readout cell.
       scrubChip(
-        VD.units.efficiencyUnit(),
+        units.efficiencyUnit(),
         effDisplay,
         { dim: !scrubHasEff, color: scrubHasEff ? SCRUB_EFF : null }
       )
@@ -516,9 +519,9 @@ import { haversineMetersJs } from "./map-route-utils";
       const w = chart.clientWidth;
       // Track values stay in source units (the trace autoscales, so only the
       // header label needs to reflect the user's unit preference).
-      const metric = VD.units.system() === "metric";
+      const metric = units.system() === "metric";
       const tracks: ScrubTrack[] = [
-        ["mph", SCRUB_SPEED, "rgba(255,122,69,0.16)", `SPEED ${VD.units.speedUnit().toUpperCase()}`, false]
+        ["mph", SCRUB_SPEED, "rgba(255,122,69,0.16)", `SPEED ${units.speedUnit().toUpperCase()}`, false]
       ];
       if (scrubHasElev) {
         tracks.push([
@@ -543,7 +546,7 @@ import { haversineMetersJs } from "./map-route-utils";
           "eff",
           SCRUB_EFF,
           "rgba(184,230,59,0.16)",
-          `EFFICIENCY ${VD.units.efficiencyUnit().toUpperCase()}`,
+          `EFFICIENCY ${units.efficiencyUnit().toUpperCase()}`,
           false
         ]);
       }
@@ -590,12 +593,12 @@ import { haversineMetersJs } from "./map-route-utils";
       // it shows speed + efficiency at the current scrubbed position.
       const eff =
         scrubHasEff && Number.isFinite(s.eff)
-          ? VD.units.efficiencyText(Number(s.eff))
+          ? units.efficiencyText(Number(s.eff))
           : null;
       const grade = scrubHasElev ? scrubGrade(s.grade) : null;
-      const popupMetric = VD.units.system() === "metric";
+      const popupMetric = units.system() === "metric";
       const popupSpeed = Math.round(popupMetric ? s.mph / 0.621371 : s.mph);
-      const lines = [`${popupSpeed} ${VD.units.speedUnit()}`];
+      const lines = [`${popupSpeed} ${units.speedUnit()}`];
       if (eff) lines.push(eff);
       if (grade) lines.push("grade " + grade);
       scrubMarker.setPopupContent(

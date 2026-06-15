@@ -1,0 +1,136 @@
+package com.volttracker.obdpoc
+
+import org.json.JSONObject
+
+/**
+ * Service-side glue for the event-notification (M1) and auto-DTC-scan (M3) features. It owns the
+ * per-session [EventNotificationDecider], reads the live telemetry / scan payloads the service is
+ * already broadcasting, and posts the resulting notifications via [EventNotifier]. It also drives the
+ * gated on-connect auto-scan ([AutoScanController] + [AutoDtcScanRunner]).
+ *
+ * Lives in the service layer (no WebView), so the architecture boundary holds. A fresh
+ * [EventNotificationDecider] is built per session so charge accumulation / threshold arming start
+ * clean each drive; the DTC baseline persists in [EventNotificationPrefs] across sessions.
+ */
+class EventNotificationCoordinator(
+    private val prefs: EventNotificationPrefs,
+    private val notifier: EventNotifier,
+    private val autoScan: AutoScanController,
+    private val nowMs: () -> Long = { System.currentTimeMillis() },
+) {
+    private var decider: EventNotificationDecider = newDecider()
+
+    /** Resets per-session state. Call when a new logging session starts. */
+    fun onSessionStart() {
+        decider = newDecider()
+        autoScan.resetForConnect()
+    }
+
+    /**
+     * Feeds one broadcast telemetry payload. Live OBD samples drive the charge/threshold events; a
+     * `source=="scan"` payload with a `dtcCodes` array drives the new-DTC diff. Returns the events it
+     * posted, for tests/diagnostics.
+     */
+    fun onTelemetry(payload: JSONObject?): List<EventNotificationDecider.Event> {
+        if (payload == null) {
+            return emptyList()
+        }
+        // Re-read prefs each evaluation so a toggle/threshold change mid-session takes effect on the
+        // next sample/scan, rather than being frozen at the decider's session-start snapshot.
+        decider.updateSettings(currentSettings())
+        if (payload.optString("source") == "scan" && payload.has("dtcCodes")) {
+            return handleScanPayload(payload)
+        }
+        val sample = toSample(payload) ?: return emptyList()
+        val events = decider.onSample(sample)
+        for (event in events) {
+            notifier.notify(event)
+        }
+        return events
+    }
+
+    /**
+     * Runs the opt-in on-connect auto-scan when [AutoScanController] allows it: a generic Mode 03
+     * read whose newly-seen codes feed the same new-DTC notification path. No-op when disabled or
+     * throttled. Runs on the service IO thread (the engine's connect path).
+     */
+    fun maybeRunAutoDtcScan(engine: ObdPollingEngine?) {
+        engine ?: return
+        autoScan.onConnected {
+            val codes = AutoDtcScanRunner(engine).readGenericDtcCodes()
+            applyScanCodes(codes)
+        }
+    }
+
+    private fun handleScanPayload(payload: JSONObject): List<EventNotificationDecider.Event> {
+        val codes = ArrayList<String>()
+        val arr = payload.optJSONArray("dtcCodes") ?: return emptyList()
+        for (i in 0 until arr.length()) {
+            val code = arr.optString(i, "").trim()
+            if (code.isNotEmpty()) {
+                codes.add(code)
+            }
+        }
+        val event = applyScanCodes(codes)
+        return if (event != null) listOf(event) else emptyList()
+    }
+
+    /**
+     * Diffs [codes] against the persisted baseline, posts a new-DTC notification when warranted, and
+     * persists the new baseline regardless. Returns the posted event (or null).
+     */
+    private fun applyScanCodes(codes: Collection<String>): EventNotificationDecider.Event.NewDtc? {
+        // Auto-scan reaches the decider off the telemetry path (the connect thread), so refresh the
+        // live newDtcEnabled toggle here too.
+        decider.updateSettings(currentSettings())
+        val result = decider.onScan(codes, prefs.lastScanDtcCodes())
+        prefs.setLastScanDtcCodes(result.allCodes)
+        val event = result.event
+        if (event != null) {
+            notifier.notify(event)
+        }
+        return event
+    }
+
+    private fun toSample(payload: JSONObject): EventNotificationDecider.Sample? {
+        if (payload.optString("source") != "obd") {
+            return null
+        }
+        val capturedAt =
+            payload.optLong("updatedAt", 0L).let { if (it > 0L) it else nowMs() }
+        return EventNotificationDecider.Sample(
+            capturedAtMs = capturedAt,
+            packCurrentA = optDoubleOrNull(payload, "packCurrentA"),
+            packVoltage = optDoubleOrNull(payload, "packVoltage"),
+            speedKph = optDoubleOrNull(payload, "speedKph"),
+            socPct = optDoubleOrNull(payload, "soc"),
+            packTempC = optDoubleOrNull(payload, "batteryTemp"),
+        )
+    }
+
+    private fun newDecider(): EventNotificationDecider = EventNotificationDecider(currentSettings())
+
+    /** Snapshots the live notification toggles/thresholds from prefs. Re-read on each evaluation. */
+    private fun currentSettings(): EventNotificationDecider.Settings =
+        EventNotificationDecider.Settings(
+            chargeCompleteEnabled = prefs.chargeCompleteEnabled(),
+            newDtcEnabled = prefs.newDtcEnabled(),
+            lowSocEnabled = prefs.lowSocEnabled(),
+            lowSocThresholdPct = prefs.lowSocThresholdPct(),
+            highPackTempEnabled = prefs.highPackTempEnabled(),
+            highPackTempThresholdC = prefs.highPackTempThresholdC(),
+        )
+
+    private companion object {
+        fun optDoubleOrNull(
+            payload: JSONObject,
+            key: String,
+        ): Double? {
+            if (!payload.has(key) || payload.isNull(key)) {
+                return null
+            }
+            val value = payload.optDouble(key, Double.NaN)
+            return if (value.isNaN()) null else value
+        }
+    }
+}

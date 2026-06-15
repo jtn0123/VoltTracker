@@ -3,8 +3,11 @@ import { bindPageDragScroll } from "./actions-page-scroll";
 import { createSignalActions } from "./actions-signals";
 import { createStorageActions } from "./actions-storage";
 import type { BusyButton } from "./actions-storage";
+import { bindListenerGuarded, el } from "./core";
 import { setDataState } from "./dataset-state";
 import type { DataStateValue } from "./dataset-state";
+import { createFocusTrap } from "./focus-trap";
+import type { FocusTrap } from "./focus-trap";
 
 /*
  * actions.ts — wiring + lifecycle.
@@ -25,16 +28,16 @@ import type { DataStateValue } from "./dataset-state";
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
-  const el = VD.el;
 
   // AbortController for every listener bound below. resetListeners() aborts
   // the current set and rebinds — useful for hot-reloading WebView content or
   // for tests that swap fixtures between runs.
   let controller = new AbortController();
 
-  // Element that opened the clear-DTC alertdialog, so focus can return to it.
-  let clearDtcOpener: Element | null = null;
-  let dtcInertedNodes: HTMLElement[] = [];
+  // Focus trap for the clear-DTC alertdialog: owns background inerting,
+  // Tab/Escape containment, and focus save/restore to the opener. Created on
+  // open, deactivated (and dropped) on close.
+  let dtcTrap: FocusTrap | null = null;
 
   // Lightweight in-flight guard for bridge-triggering buttons. The Android
   // bridge calls are sync-fire-and-forget so we can't await completion; a short
@@ -266,6 +269,40 @@ import type { DataStateValue } from "./dataset-state";
     if (action === "confirmClearDtc") confirmClearDtc(button);
     if (action === "previewDtcCodes") void previewDtcCodes();
     if (action === "clearPreviewDtcCodes") clearPreviewDtcCodes();
+    if (action === "addMaintenance") VD.addMaintenanceEntry();
+  }
+
+  // Delegated handler for the per-row "Remove" button on a maintenance entry (M5). Reads the entry
+  // id off data-maint-delete and forwards it to native; the bridge refreshes the list on success.
+  function onMaintenanceDeleteClick(event: Event) {
+    const target = event.target as Element | null;
+    const button = target && (target.closest("[data-maint-delete]") as HTMLElement | null);
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const id = String(button.dataset.maintDelete || "").trim();
+    if (!id) return;
+    if (!bridge || typeof bridge.deleteMaintenanceEntry !== "function") {
+      VD.setStatus({ state: "idle", detail: "Maintenance logging is available inside the Android app." });
+      return;
+    }
+    bridge.deleteMaintenanceEntry(id);
+  }
+
+  // Background nodes the trap inerts while the clear-DTC dialog is open: every
+  // top-level / app / report-card child that is neither an ancestor nor a
+  // descendant of the panel.
+  function dtcBackgroundNodes(panel: HTMLElement): HTMLElement[] {
+    const keep = new Set<Element>();
+    let cursor: Element | null = panel;
+    while (cursor && cursor !== document.body) {
+      keep.add(cursor);
+      cursor = cursor.parentElement;
+    }
+    const candidates = Array.from(document.querySelectorAll("body > *, main.app > *, .diagnostic-report-card > *"));
+    return candidates.filter((node): node is HTMLElement =>
+      node instanceof HTMLElement && !keep.has(node) && !panel.contains(node) && !node.contains(panel)
+    );
   }
 
   function openClearDtcWarning() {
@@ -273,10 +310,14 @@ import type { DataStateValue } from "./dataset-state";
     const ack = el("dtcClearAckBox") as HTMLInputElement | null;
     const confirm = el("dtcClearConfirmBtn") as HTMLButtonElement | null;
     if (!panel) return;
-    // Remember the trigger so focus can return to it when the panel closes.
-    clearDtcOpener = document.activeElement;
+    // The shared trap remembers the trigger (current focus) so it can be
+    // restored on close, and inerts the background.
+    dtcTrap = createFocusTrap(panel, {
+      backgroundNodes: () => dtcBackgroundNodes(panel),
+      onEscape: closeClearDtcWarning
+    });
     panel.hidden = false;
-    setDtcBackgroundInert(true);
+    dtcTrap.activate();
     if (ack) ack.checked = false;
     if (confirm) confirm.disabled = true;
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -287,87 +328,16 @@ import type { DataStateValue } from "./dataset-state";
   function closeClearDtcWarning() {
     const panel = el("dtcClearWarning");
     if (panel) panel.hidden = true;
-    setDtcBackgroundInert(false);
-    // Return focus to whatever opened the panel (the "Clear codes" button).
-    if (clearDtcOpener instanceof HTMLElement && typeof clearDtcOpener.focus === "function") {
-      clearDtcOpener.focus();
+    // Restore the inert background and return focus to whatever opened the panel.
+    if (dtcTrap) {
+      dtcTrap.deactivate();
+      dtcTrap = null;
     }
-    clearDtcOpener = null;
   }
 
   function dtcDialogOpen() {
     const panel = el("dtcClearWarning");
     return Boolean(panel && !panel.hidden);
-  }
-
-  function setDtcBackgroundInert(open: boolean) {
-    if (!open) {
-      dtcInertedNodes.forEach((node) => {
-        (node as HTMLElement & { inert?: boolean }).inert = false;
-        node.removeAttribute("aria-hidden");
-        node.removeAttribute("data-dtc-dialog-inert");
-      });
-      dtcInertedNodes = [];
-      return;
-    }
-    const panel = el("dtcClearWarning");
-    if (!panel) return;
-    const keep = new Set<Element>();
-    let cursor: Element | null = panel;
-    while (cursor && cursor !== document.body) {
-      keep.add(cursor);
-      cursor = cursor.parentElement;
-    }
-    const candidates = Array.from(document.querySelectorAll("body > *, main.app > *, .diagnostic-report-card > *"));
-    dtcInertedNodes = [];
-    candidates.forEach((node) => {
-      if (!(node instanceof HTMLElement) || keep.has(node) || panel.contains(node) || node.contains(panel)) return;
-      (node as HTMLElement & { inert?: boolean }).inert = true;
-      node.setAttribute("aria-hidden", "true");
-      node.setAttribute("data-dtc-dialog-inert", "true");
-      dtcInertedNodes.push(node);
-    });
-  }
-
-  function focusableInDtcDialog() {
-    const panel = el("dtcClearWarning");
-    if (!panel || panel.hidden) return [];
-    const nodes = Array.from(
-      panel.querySelectorAll<HTMLElement>(
-        "button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
-      )
-    );
-    return nodes.filter((node) => !node.hidden && node.offsetParent !== null);
-  }
-
-  function trapDtcDialogKeydown(event: KeyboardEvent) {
-    if (!dtcDialogOpen()) return;
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeClearDtcWarning();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusables = focusableInDtcDialog();
-    if (focusables.length === 0) {
-      event.preventDefault();
-      const panel = el("dtcClearWarning");
-      if (panel && typeof panel.focus === "function") panel.focus();
-      return;
-    }
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    const active = document.activeElement;
-    if (!focusables.includes(active as HTMLElement)) {
-      event.preventDefault();
-      (event.shiftKey ? last : first).focus();
-    } else if (event.shiftKey && active === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && active === last) {
-      event.preventDefault();
-      first.focus();
-    }
   }
 
   function confirmClearDtc(button?: BusyButton | null) {
@@ -475,6 +445,51 @@ import type { DataStateValue } from "./dataset-state";
     markMapSessionNotTrip(button.dataset.mapSession);
   }
 
+  // Delegated handler for the per-row "Export GPX / Export CSV" buttons (map session list +
+  // charge rows). Reads the route key + format off data-trip-export(-key) and forwards to the
+  // native exporter, which writes the file and opens the share sheet. Stops the click before it
+  // bubbles to the row-select / long-press handlers on the same list.
+  function onTripExportClick(event: Event) {
+    const target = event.target as Element | null;
+    const button = target && (target.closest("[data-trip-export]") as HTMLElement | null);
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressNextMapClick = true;
+    const wantCsv = button.dataset.tripExport === "csv";
+    const routeKey = String(button.dataset.tripExportKey || "").trim();
+    if (!routeKey) return;
+    const fn = wantCsv ? bridge?.exportTripCsv : bridge?.exportTripGpx;
+    if (!bridge || typeof fn !== "function") {
+      VD.setStatus({ state: "idle", detail: "Drive export is available inside the Android app." });
+      return;
+    }
+    fn.call(bridge, routeKey);
+  }
+
+  // Delegated handler for the per-row "Rename / Name" button on a stored map route (M4). Reads the
+  // route key + current label off data-trip-rename(-label), prompts for a new name, and forwards it
+  // to the native setTripLabel. An empty/blank submission clears the label; cancel is a no-op.
+  function onTripRenameClick(event: Event) {
+    const target = event.target as Element | null;
+    const button = target && (target.closest("[data-trip-rename]") as HTMLElement | null);
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressNextMapClick = true;
+    const routeKey = String(button.dataset.tripRename || "").trim();
+    if (!routeKey) return;
+    if (!bridge || typeof bridge.setTripLabel !== "function") {
+      VD.setStatus({ state: "idle", detail: "Trip rename is available inside the Android app." });
+      return;
+    }
+    const current = String(button.dataset.tripRenameLabel || "");
+    const next = window.prompt("Name this drive (leave blank to clear):", current);
+    // prompt returns null on Cancel — do nothing. An empty string clears the label.
+    if (next === null) return;
+    bridge.setTripLabel(routeKey, next.trim());
+  }
+
   function handleDtcSearch(event: Event) {
     const target = event.target as Element | null;
     if (!target) return;
@@ -569,6 +584,12 @@ import type { DataStateValue } from "./dataset-state";
         VD.setStatus({ state: "blocked", detail: "Demo data could not be loaded." });
         return;
       }
+      // Start every demo run from a clean live route so a previous demo/live track isn't
+      // stitched onto the new synthetic GPS (stop→start again, or a scenario re-seed that
+      // keeps demo active). clearLivePosition lives in the lazy map module; fall back to
+      // clearing state directly when it hasn't loaded yet (map.ts seeds from state on load).
+      if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
+      else { state.liveRoutePoints = []; state.liveRouteStartedAtMs = null; }
       seedDemoScenario();
       VD.setDemoActive(true, "Demo preview is running.");
       // Choose by method availability, not bare bridge presence: an older APK's
@@ -755,37 +776,44 @@ import type { DataStateValue } from "./dataset-state";
       VD.setState({ selectedMapSessionId: (button as HTMLElement).dataset.mapSession as string });
       void VD.requestMapRender().catch(() => {});
     };
-    VD.bindListenerGuarded("mapSessionList", "click", onSessionClick, opts);
-    VD.bindListenerGuarded("mapSessionList", "pointerdown", onMapSessionPointerDown, opts);
-    VD.bindListenerGuarded("mapSessionList", "pointerup", onMapSessionPointerEnd, opts);
-    VD.bindListenerGuarded("mapSessionList", "pointerleave", onMapSessionPointerEnd, opts);
-    VD.bindListenerGuarded("mapSessionList", "pointercancel", onMapSessionPointerEnd, opts);
-    VD.bindListenerGuarded("mapSessionList", "contextmenu", onMapSessionContextMenu, opts);
+    // Bound before the row-select click so the export/rename buttons' stopPropagation keeps a tap
+    // from also selecting the session.
+    bindListenerGuarded("mapSessionList", "click", onTripRenameClick, opts);
+    bindListenerGuarded("mapSessionList", "click", onTripExportClick, opts);
+    bindListenerGuarded("mapSessionList", "click", onSessionClick, opts);
+    // Per-entry "Remove" on a maintenance row (M5) — the list is re-rendered dynamically, so
+    // delegate off the stable container.
+    bindListenerGuarded("maintenanceList", "click", onMaintenanceDeleteClick, opts);
+    bindListenerGuarded("mapSessionList", "pointerdown", onMapSessionPointerDown, opts);
+    bindListenerGuarded("mapSessionList", "pointerup", onMapSessionPointerEnd, opts);
+    bindListenerGuarded("mapSessionList", "pointerleave", onMapSessionPointerEnd, opts);
+    bindListenerGuarded("mapSessionList", "pointercancel", onMapSessionPointerEnd, opts);
+    bindListenerGuarded("mapSessionList", "contextmenu", onMapSessionContextMenu, opts);
     // The new drive-chip strip uses the same [data-map-session] attribute, so
     // share the handler. Without this, tapping a chip did nothing.
-    VD.bindListenerGuarded("mapDriveChips", "click", onSessionClick, opts);
-    VD.bindListenerGuarded("mapDriveChips", "pointerdown", onMapSessionPointerDown, opts);
-    VD.bindListenerGuarded("mapDriveChips", "pointerup", onMapSessionPointerEnd, opts);
-    VD.bindListenerGuarded("mapDriveChips", "pointerleave", onMapSessionPointerEnd, opts);
-    VD.bindListenerGuarded("mapDriveChips", "pointercancel", onMapSessionPointerEnd, opts);
-    VD.bindListenerGuarded("mapDriveChips", "contextmenu", onMapSessionContextMenu, opts);
-    VD.bindListenerGuarded("mapFullBtn", "click", () => {
+    bindListenerGuarded("mapDriveChips", "click", onSessionClick, opts);
+    bindListenerGuarded("mapDriveChips", "pointerdown", onMapSessionPointerDown, opts);
+    bindListenerGuarded("mapDriveChips", "pointerup", onMapSessionPointerEnd, opts);
+    bindListenerGuarded("mapDriveChips", "pointerleave", onMapSessionPointerEnd, opts);
+    bindListenerGuarded("mapDriveChips", "pointercancel", onMapSessionPointerEnd, opts);
+    bindListenerGuarded("mapDriveChips", "contextmenu", onMapSessionContextMenu, opts);
+    bindListenerGuarded("mapFullBtn", "click", () => {
       state.mapFull = !state.mapFull;
       void VD.requestMapRender().catch(() => {});
     }, opts);
-    VD.bindListenerGuarded("liveSignalsFilter", "click", (event: Event) => {
+    bindListenerGuarded("liveSignalsFilter", "click", (event: Event) => {
       const target = (event.target as HTMLElement | null)?.closest("[data-live-signal-filter]") as HTMLElement | null;
       if (!target) return;
       state.liveSignalsFilter = target.dataset.liveSignalFilter === "missing" ? "missing" : "all";
       if (typeof VD.updateDiagnostics === "function") VD.updateDiagnostics();
     }, opts);
-    VD.bindListenerGuarded("mapFollowBtn", "click", () => {
+    bindListenerGuarded("mapFollowBtn", "click", () => {
       // Toggle live-follow; turning it on recenters on the current drive. The map
       // module owns the recenter + button state (it may not be loaded yet, hence
       // the guard — the button is only visible once a live route exists).
       if (typeof VD.setMapFollowLive === "function") VD.setMapFollowLive();
     }, opts);
-    VD.bindListenerGuarded("errorBannerHelp", "click", () => {
+    bindListenerGuarded("errorBannerHelp", "click", () => {
       if (typeof VD.ensureTroubleshooterModule !== "function") return;
       void VD.ensureTroubleshooterModule()
         .then((dashboard) => {
@@ -795,7 +823,7 @@ import type { DataStateValue } from "./dataset-state";
         .catch(() => {});
     }, opts);
     document.addEventListener("click", handleDtcSearch, opts);
-    VD.bindListenerGuarded("dtcSearchInput", "input", renderDtcLookup, opts);
+    bindListenerGuarded("dtcSearchInput", "input", renderDtcLookup, opts);
     document.addEventListener("change", (event) => {
       const target = event.target as HTMLInputElement | null;
       if (target && target.id === "dtcClearAckBox") {
@@ -803,7 +831,6 @@ import type { DataStateValue } from "./dataset-state";
         if (confirm) confirm.disabled = !target.checked;
       }
     }, opts);
-    document.addEventListener("keydown", trapDtcDialogKeydown, opts);
     // Tapping outside the open Clear-codes dialog dismisses it, matching the
     // Esc path. The background is inert while the dialog is open, so this
     // click lands on a non-interactive ancestor and can't trigger anything
@@ -828,18 +855,18 @@ import type { DataStateValue } from "./dataset-state";
         return;
       }
     }, opts);
-    VD.bindListenerGuarded("permissionBtn", "click", () => handleAction("permissions"), opts);
-    VD.bindListenerGuarded("refreshBtn", "click", () => handleAction("refresh"), opts);
-    VD.bindListenerGuarded("lastBtn", "click", () => handleAction("last"), opts);
-    VD.bindListenerGuarded("scanBtn", "click", (event) => handleAction("scan", event.currentTarget as BusyButton), opts);
-    VD.bindListenerGuarded("tpmsScanBtn", "click", (event) => handleAction("tpmsScan", event.currentTarget as BusyButton), opts);
-    VD.bindListenerGuarded("exportSignalLogsBtn", "click", exportSignalLogs, opts);
-    VD.bindListenerGuarded("connectBtn", "click", (event) => {
+    bindListenerGuarded("permissionBtn", "click", () => handleAction("permissions"), opts);
+    bindListenerGuarded("refreshBtn", "click", () => handleAction("refresh"), opts);
+    bindListenerGuarded("lastBtn", "click", () => handleAction("last"), opts);
+    bindListenerGuarded("scanBtn", "click", (event) => handleAction("scan", event.currentTarget as BusyButton), opts);
+    bindListenerGuarded("tpmsScanBtn", "click", (event) => handleAction("tpmsScan", event.currentTarget as BusyButton), opts);
+    bindListenerGuarded("exportSignalLogsBtn", "click", exportSignalLogs, opts);
+    bindListenerGuarded("connectBtn", "click", (event) => {
       const btn = el("connectBtn");
       const action = (btn && btn.dataset.primaryAction) || "connect";
       handleAction(action, event.currentTarget as BusyButton);
     }, opts);
-    VD.bindListenerGuarded("demoStopBtn", "click", stopDemo, opts);
+    bindListenerGuarded("demoStopBtn", "click", stopDemo, opts);
     bindPageDragScroll(VD, opts);
   }
 
@@ -853,6 +880,10 @@ import type { DataStateValue } from "./dataset-state";
     controller.abort();
     controller = new AbortController();
     bindListeners();
+    // The connection-tools module owns its own AbortController; re-arm it here so its
+    // proactive-tools buttons are reset alongside the rest of the UI rather than left
+    // double-bound or dead after an in-place re-bootstrap.
+    if (typeof VD.bindConnectionTools === "function") VD.bindConnectionTools();
   }
 
   VD.actions = {

@@ -174,10 +174,13 @@ class SessionRecorder {
             if (closingSessionId > 0 && store != null) {
                 val status = ObdElmDecode.finishStatusFor(state)
                 val endedAtMs = System.currentTimeMillis()
-                val droppedBeforeClose = worker.drainDroppedTelemetryCount()
                 worker.submitLifecycle(
                     {
                         worker.awaitTelemetryDrain()
+                        // Count drops AFTER the drain so telemetry discarded between session-end and
+                        // the drain completing (back-pressure during shutdown) is included — a snapshot
+                        // taken before submitting this task would under-report those late drops.
+                        val droppedBeforeClose = worker.drainDroppedTelemetryCount()
                         if (droppedBeforeClose > 0) {
                             val droppedPayload = JSONObject()
                             try {

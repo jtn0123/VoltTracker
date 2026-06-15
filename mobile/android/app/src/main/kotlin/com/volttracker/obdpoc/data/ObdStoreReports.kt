@@ -527,6 +527,46 @@ class ObdStoreReports(
         return payload
     }
 
+    /**
+     * The user-authored maintenance log (M5), newest first. Each row carries `id`, `createdAtMs`,
+     * `odometerKm` (JSON null when unknown), `type`, and `note`. The dashboard renders these as the
+     * real maintenance entries, replacing the old hardcoded placeholder rows.
+     */
+    fun maintenanceLogJson(limit: Int): JSONArray {
+        val payload = JSONArray()
+        val db = helper.readableDatabase
+        db
+            .query(
+                VoltTrackerDb.TABLE_MAINTENANCE_LOG,
+                arrayOf("_id", "created_at_ms", "odometer_km", "type", "note"),
+                null,
+                null,
+                null,
+                null,
+                "created_at_ms DESC, _id DESC",
+                ObdStoreSupport.boundedLimit(limit),
+            ).use { cursor ->
+                val odoIndex = cursor.getColumnIndexOrThrow("odometer_km")
+                while (cursor.moveToNext()) {
+                    val item = JSONObject()
+                    try {
+                        item.put("id", cursor.getLong(0))
+                        item.put("createdAtMs", cursor.getLong(1))
+                        item.put(
+                            "odometerKm",
+                            if (cursor.isNull(odoIndex)) JSONObject.NULL else cursor.getDouble(odoIndex),
+                        )
+                        item.put("type", cursor.getString(3) ?: "")
+                        item.put("note", cursor.getString(4) ?: "")
+                    } catch (ignored: JSONException) {
+                        // Local fields are safe.
+                    }
+                    payload.put(item)
+                }
+            }
+        return payload
+    }
+
     private fun overviewJson(db: SQLiteDatabase): JSONObject {
         val payload = JSONObject()
         payload.put("distanceMeters", trips.totalDistanceMeters())

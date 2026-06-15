@@ -39,6 +39,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
         VoltTrackerSchema.createPruneIndexes(db)
         VoltTrackerSchema.createSessionTripRollups(db)
         VoltTrackerSchema.createTripListCache(db)
+        VoltTrackerSchema.createMaintenanceLog(db)
     }
 
     override fun onUpgrade(
@@ -114,6 +115,22 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 VoltTrackerSchema.createTripListCache(target)
             }
         }
+        if (oldVersion < 12) {
+            runMigrationStep(db, oldVersion, 12, "trip-labels-and-maintenance-log") { target ->
+                // M4: nullable label column on materialized trips (non-destructive ADD COLUMN).
+                // trip_segments has existed since v4, but guard the ALTER so a partial/legacy
+                // schema missing the table can't abort the whole step — the table is recreated by
+                // its own (idempotent) roadmap-table DDL below if absent.
+                if (!hasTable(target, TABLE_TRIP_SEGMENTS)) {
+                    VoltTrackerSchema.createRoadmapTables(target)
+                    VoltTrackerSchema.createRoadmapIndexes(target)
+                } else if (!hasColumn(target, TABLE_TRIP_SEGMENTS, "label")) {
+                    target.execSQL("ALTER TABLE $TABLE_TRIP_SEGMENTS ADD COLUMN label TEXT")
+                }
+                // M5: user-authored maintenance log (CREATE TABLE IF NOT EXISTS — no data touched).
+                VoltTrackerSchema.createMaintenanceLog(target)
+            }
+        }
     }
 
     fun interface MigrationStep {
@@ -122,7 +139,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
 
     companion object {
         const val DATABASE_NAME = "volttracker_obd_poc.db"
-        const val DATABASE_VERSION = 11
+        const val DATABASE_VERSION = 12
 
         const val TABLE_SESSIONS = "obd_sessions"
         const val TABLE_TELEMETRY = "telemetry_samples"
@@ -140,6 +157,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
         const val TABLE_BATTERY_SNAPSHOTS = "battery_snapshots"
         const val TABLE_CELL_SNAPSHOTS = "cell_snapshots"
         const val TABLE_EXPORTS = "exports"
+        const val TABLE_MAINTENANCE_LOG = "maintenance_log"
 
         @JvmField
         val KNOWN_TABLES: Set<String> =
@@ -160,6 +178,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 TABLE_BATTERY_SNAPSHOTS,
                 TABLE_CELL_SNAPSHOTS,
                 TABLE_EXPORTS,
+                TABLE_MAINTENANCE_LOG,
             )
 
         /**
@@ -201,6 +220,19 @@ class VoltTrackerDb : SQLiteOpenHelper {
                         }
                     }
             }
+        }
+
+        private fun hasTable(
+            db: SQLiteDatabase,
+            table: String,
+        ): Boolean {
+            db
+                .rawQuery(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+                    arrayOf(table),
+                ).use { cursor ->
+                    return cursor.moveToFirst()
+                }
         }
 
         private fun hasColumn(
