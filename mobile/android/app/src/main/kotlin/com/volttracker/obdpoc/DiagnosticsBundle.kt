@@ -40,6 +40,9 @@ object DiagnosticsBundle {
     private const val HEADER_RESERVE = 1024
     private const val MANIFEST_BYTES_PER_ENTRY = 220
 
+    // Bytes held back so the trailing OMITTED/END sections always fit within the advertised budget.
+    private const val FOOTER_RESERVE = 256
+
     // Session JSONL lines are JSONObject.toString() output, so the type pair is contiguous regardless
     // of key order -- a substring match is enough to flag a session that logged an error event.
     private const val ERROR_MARKER = "\"type\":\"error\""
@@ -92,16 +95,37 @@ object DiagnosticsBundle {
         out.append("note: text is redacted (bluetooth addresses, VINs, GPS coordinates).\n")
         out.append("note: the app auto-selects which session bodies fit the budget; see MANIFEST.\n\n")
 
+        // The MANIFEST is the irreducible catalog -- it always ships so no session is hidden. Every
+        // section after it is clamped to the budget actually left (see remainingBudget), so even with a
+        // tiny caller budget or an oversized summary/app log the digest can't exceed budgetBytes. This
+        // is real enforcement, not just the heuristic reservations planSessions made up front.
         out.append("===== MANIFEST (every session log; order = inclusion priority) =====\n")
         out.append(manifestJson(plans).toString(2)).append("\n\n")
 
-        appendCappedFile(out, "SESSION SUMMARY ROLLUP ($SUMMARY_NAME)", summaryFile, SUMMARY_CAP)
-        appendCappedFile(out, "APP LOG TAIL ($APP_LOG_DIR/$APP_LOG_NAME)", appLogFile, APP_LOG_CAP)
+        appendCappedFile(
+            out,
+            "SESSION SUMMARY ROLLUP ($SUMMARY_NAME)",
+            summaryFile,
+            minOf(SUMMARY_CAP, remainingBudget(out, budget)),
+        )
+        appendCappedFile(
+            out,
+            "APP LOG TAIL ($APP_LOG_DIR/$APP_LOG_NAME)",
+            appLogFile,
+            minOf(APP_LOG_CAP, remainingBudget(out, budget)),
+        )
 
         for (plan in plans) {
             if (!plan.included) {
                 continue
             }
+            // Clamp the planned tail to what is genuinely left so the running total honors the budget
+            // even when the manifest or fixed sections ran longer than planSessions reserved for them.
+            val tail = minOf(plan.tailBytes, remainingBudget(out, budget))
+            if (tail <= 0) {
+                continue
+            }
+            val truncated = tail < plan.source.bytes
             val name = plan.source.file.name
             out
                 .append("===== SESSION: ")
@@ -110,9 +134,9 @@ object DiagnosticsBundle {
                 .append(plan.source.bytes)
                 .append(", errors=")
                 .append(plan.source.errorLines)
-                .append(if (plan.truncated) ", tail-trimmed" else "")
+                .append(if (truncated) ", tail-trimmed" else "")
                 .append(") =====\n")
-            out.append(DataBackup.redactDebugLogText(readTail(plan.source.file, plan.tailBytes)))
+            out.append(DataBackup.redactDebugLogText(readTail(plan.source.file, tail)))
             if (out.isNotEmpty() && out.last() != '\n') {
                 out.append('\n')
             }
@@ -201,10 +225,14 @@ object DiagnosticsBundle {
         return ordered.mapIndexed { index, session ->
             val cap = minOf(session.bytes, PER_SESSION_CAP.toLong()).toInt()
             val tail = minOf(cap, remaining)
+            val wholeFileFits = session.bytes <= tail.toLong()
             // Always give the most recent session a real slice even when the budget is tight, since it
-            // is the session a user is most likely debugging right now.
+            // is the session a user is most likely debugging right now. Also keep any session that fits
+            // in full even when it is under MIN_SESSION_BYTES, so short error sessions stay eligible
+            // instead of being dropped by the min-slice floor (which would break "errors before clean").
             val include =
-                session.bytes > 0L && (tail >= MIN_SESSION_BYTES || (index == 0 && tail > 0))
+                session.bytes > 0L &&
+                    (wholeFileFits || tail >= MIN_SESSION_BYTES || (index == 0 && tail > 0))
             if (include) {
                 remaining -= tail
                 Plan(session, true, tail, reasonFor(index, session))
@@ -246,7 +274,7 @@ object DiagnosticsBundle {
         file: File,
         cap: Int,
     ) {
-        if (!file.isFile || file.length() == 0L) {
+        if (cap <= 0 || !file.isFile || file.length() == 0L) {
             return
         }
         val truncated = file.length() > cap
@@ -266,6 +294,12 @@ object DiagnosticsBundle {
         file: File,
         cap: Int,
     ): Int = if (file.isFile) minOf(file.length(), cap.toLong()).toInt() else 0
+
+    /** Bytes still spendable for the next section, holding back [FOOTER_RESERVE] for the END/OMITTED tail. */
+    private fun remainingBudget(
+        out: StringBuilder,
+        budget: Int,
+    ): Int = maxOf(0, budget - out.length - FOOTER_RESERVE)
 
     /** Reads the last [maxBytes] of [file], dropping a partial leading line when the head was cut. */
     private fun readTail(

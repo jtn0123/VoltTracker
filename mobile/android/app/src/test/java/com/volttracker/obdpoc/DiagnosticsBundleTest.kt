@@ -141,6 +141,43 @@ class DiagnosticsBundleTest {
     }
 
     @Test
+    fun smallSessionThatFitsInFullIsKeptEvenBelowTheMinSliceFloor() {
+        // Newest clean session + a tiny (<256 byte) error session. The error session is well under
+        // MIN_SESSION_BYTES but fits in full, so it must still be embedded -- otherwise short error
+        // sessions are permanently ineligible and the "errors before clean ones" rule never applies.
+        writeSession(1_000L, "scan", "{\"ts\":1,\"type\":\"error\",\"payload\":{}}\n") // ~37 bytes
+        writeSession(2_000L, "obd", body(1_000, errorLines = 0))
+
+        val digest = DiagnosticsBundle.build(filesDir, DiagnosticsBundle.DEFAULT_BUDGET_BYTES, NOW)
+        val byName = manifestByName(digest)
+
+        assertTrue(
+            "a tiny error session that fits in full should be included",
+            byName.getValue("session-1000-scan.jsonl").getBoolean("included"),
+        )
+        assertTrue("its body is embedded", digest.contains("SESSION: session-1000-scan.jsonl"))
+    }
+
+    @Test
+    fun digestNeverExceedsBudgetEvenWithLargeFixedSectionsAndTightBudget() {
+        // A summary and app log that, appended at their full caps, would dwarf a tight budget. The
+        // digest must enforce the real remaining budget on every section, not blindly append the caps.
+        writeSession(9_000L, "obd", body(4_000, errorLines = 0))
+        File(sessionDir, "sessions-summary.jsonl").writeText("x".repeat(40_000) + "\n")
+        File(appLogDir, "app.log").writeText("y".repeat(40_000) + "\n")
+
+        val budget = 4_000
+        val digest = DiagnosticsBundle.build(filesDir, budget, NOW)
+
+        assertTrue(
+            "digest length ${digest.length} must stay within the advertised budget $budget",
+            digest.length <= budget,
+        )
+        // The manifest is the irreducible catalog and still ships, so nothing is silently hidden.
+        assertTrue("manifest still present under budget pressure", digest.contains("MANIFEST"))
+    }
+
+    @Test
     fun emptyDeviceProducesAMinimalDigestWithoutCrashing() {
         val digest = DiagnosticsBundle.build(filesDir, DiagnosticsBundle.DEFAULT_BUDGET_BYTES, NOW)
 

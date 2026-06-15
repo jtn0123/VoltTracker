@@ -351,6 +351,7 @@ class VoltBridgeTest {
                 "openBluetoothSettings",
                 // Bucket 4b — status & proactive tools bridge surface.
                 "shareDiagnostics",
+                "shareDiagnosticsDigest",
                 "startTestConnection",
                 "scheduleAdapterReadyNotify",
                 "cancelAdapterReadyNotify",

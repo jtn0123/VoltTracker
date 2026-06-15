@@ -198,14 +198,22 @@ class DiagnosticsShareIntentTest {
         val zip = DiagnosticsShareIntent.buildZip(context)
         assertNotNull(zip)
 
-        val entries = listZip(zip!!)
+        val entries = listZipInOrder(zip!!)
         assertTrue(
             "the AI-facing digest should ship in the zip: $entries",
             entries.contains("diagnostics-bundle.txt"),
         )
+        assertEquals(
+            "the digest must be the first zip entry so it's the obvious file to hand to a debugger",
+            "diagnostics-bundle.txt",
+            entries.firstOrNull(),
+        )
         val digest = readZipText(zip, "diagnostics-bundle.txt")
         assertTrue("digest carries the manifest", digest.contains("MANIFEST"))
-        assertTrue("digest embeds the session body", digest.contains("session-1000-obd.jsonl"))
+        // Assert on the embedded body content, not just the filename: the filename also appears in the
+        // MANIFEST, so a digest that catalogued the session but failed to embed its body would still
+        // pass a filename check. The redacted "010C" command only exists if the body was embedded.
+        assertTrue("digest embeds the redacted session body", digest.contains("\"command\":\"010C\""))
         assertFalse("digest must be redacted", digest.contains("AA:BB:CC:DD:EE:FF"))
         assertTrue(digest.contains("[bluetooth-address-redacted]"))
     }
@@ -296,6 +304,20 @@ class DiagnosticsShareIntentTest {
         @Throws(IOException::class)
         private fun listZip(zip: File): Set<String> {
             val entries = HashSet<String>()
+            ZipInputStream(FileInputStream(zip)).use { zis ->
+                var e = zis.nextEntry
+                while (e != null) {
+                    entries.add(e.name)
+                    zis.closeEntry()
+                    e = zis.nextEntry
+                }
+            }
+            return entries
+        }
+
+        @Throws(IOException::class)
+        private fun listZipInOrder(zip: File): List<String> {
+            val entries = ArrayList<String>()
             ZipInputStream(FileInputStream(zip)).use { zis ->
                 var e = zis.nextEntry
                 while (e != null) {
