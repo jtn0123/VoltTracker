@@ -1,6 +1,165 @@
 # CHANGELOG
 
 
+## v0.14.0 (2026-06-15)
+
+### Features
+
+- **diagnostics**: Add self-selecting, budget-bounded diagnostics digest
+  ([#210](https://github.com/jtn0123/VoltTracker/pull/210),
+  [`a5dc070`](https://github.com/jtn0123/VoltTracker/commit/a5dc07017e0948d53ef764c39c2457eeced625e9))
+
+* Add self-selecting, budget-bounded diagnostics digest
+
+The "Send diagnostics" zip previously shipped the raw last-5 session JSONLs plus the full app log,
+  which can overflow an external debugging tool's context (e.g. an AI assistant) and forces a human
+  to guess which session to share.
+
+Add DiagnosticsBundle, which lets the app do the choosing: it catalogues every session log in a
+  MANIFEST, then embeds only the most relevant bodies (most recent session always, then sessions
+  that logged error events, then by recency) until a byte budget is spent. Oversize bodies are
+  tail-trimmed (failures cluster at the end), per-section caps keep one noisy source from crowding
+  out the rest, and all embedded text is run through the existing redaction pass.
+
+The digest ships as diagnostics-bundle.txt inside the existing diagnostics zip, so the current share
+  flow is unchanged for power users while the digest is the artifact to hand straight to a debugging
+  session.
+
+Tested: DiagnosticsBundleTest (selection priority, budget cutoff, tail-trimming, redaction, empty
+  device) and a new redacted-digest case in DiagnosticsShareIntentTest.
+
+https://claude.ai/code/session_01X7ahxzdfaJAqVMmT68YCLU
+
+* feat(diagnostics): add standalone "Send AI digest" share
+
+Follow-up to the diagnostics digest: surface it as its own share action so the budget-bounded,
+  redacted digest can be handed straight to a debugging session without opening the diagnostics zip
+  and fishing out the file.
+
+- DiagnosticsShareIntent.buildDigestIntent/buildDigestFile write the digest as a single text/plain
+  file under cacheDir/diagnostics and share it via FileProvider; the stale-clearing dir prep is
+  factored into prepareOutDir and shared with buildZip. - Bridge plumbing:
+  VoltBridge.shareDiagnosticsDigest -> VoltBridgeDiagnostics -> DashboardHost/MainActivity ->
+  TroubleshooterBridge.shareDiagnosticsDigest, reusing the same redaction-disclosure dialog as the
+  full diagnostics share. - Dashboard: a "Send AI digest" button next to "Send diagnostics" in the
+  collapsed backup/diagnostics tools, wired in connection-tools.ts, typed in dashboard-globals.d.ts,
+  with the generated index.html regenerated.
+
+Tests: split the digest coverage into a content test (buildDigestFile) and an intent test
+  (buildDigestIntent), and reset FileProvider's static PathStrategy cache in setUp so multiple
+  getUriForFile tests in one class stop colliding on each other's temp cacheDir. All app unit tests
+  + 341 dashboard tests pass.
+
+* fix(diagnostics): enforce real byte budget + keep small fitting sessions (PR #210 review)
+
+Address CodeRabbit review on the diagnostics digest:
+
+- Enforce the actual remaining budget on every section after the manifest. The summary rollup,
+  app-log tail, and each session body are now clamped to the bytes genuinely left (remainingBudget),
+  with a FOOTER_RESERVE held back for the OMITTED/END tail. Previously these were appended at their
+  full caps regardless, so a tiny caller budget or an oversized summary/app log could push the
+  digest past its advertised budgetBytes before any session body was added. The MANIFEST stays the
+  irreducible catalog so nothing is hidden. - Keep any session that fits in full even when it is
+  below MIN_SESSION_BYTES, so short error sessions stay eligible instead of being dropped by the
+  min-slice floor (which broke the "error sessions before clean ones" rule). - Strengthen
+  DiagnosticsShareIntentTest: assert the digest is the first zip entry and that the redacted session
+  body is actually embedded (not just catalogued in the manifest). - Add DiagnosticsBundleTest cases
+  for the budget ceiling under pressure and for small-session inclusion. - Pin the new
+  shareDiagnosticsDigest bridge method in VoltBridgeTest (the PR added the method but left the
+  bridge-surface test failing).
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* fix(obd): correct Gen2 Volt cell-voltage scale and quiet false PID parse failures
+
+Findings from a day of on-device field logs (user's Gen2 Volt + OBDLink MX+):
+
+- Min/max cell voltage (224329/22432B) never decoded: every read is a 2-byte word in 0x1644-0x1A90,
+  but the Bolt-derived 5/65535 scale mapped those to ~0.44 V, which the 1.5-4.5 V sanity bound
+  rejected on all 3,642 samples. So minCellVoltage/maxCellVoltage/cellBalanceMv were always null and
+  the cell-balance view was permanently empty. Rescale 224329/22432B to 1/1600 V/count,
+  field-validated against a pack-voltage/96 anchor (N=118; 95-97% of reads land in 3.0-4.2 V). The
+  unvalidated average (22C218) and individual cell probes keep the legacy scale -- no field anchor
+  for them yet and the probe DIDs answer at a different magnitude.
+
+- pid_parse_failed cried wolf on valid ECU sentinels: cell-number PIDs (22432A/22432C) returning 00,
+  engine torque (22203F) returning 62203F00, and redundantly 010D=410DFF. Add
+  ObdProtocol.isBenignSentinelResponse (all-zero Mode 22 payload, or the 010D 0xFF speed sentinel)
+  and skip those in LiveSampleReader.reportParseFailures. Genuinely unmodeled non-zero frames still
+  surface as parse failures.
+
+- Engine torque (22203F): documented that this Volt answers with a single byte (mostly 00/NO DATA),
+  not the 2-byte word the community sheet models, so the 1-byte scale needs an engine-running
+  capture before it can be decoded. Left unparsed rather than guessed.
+
+Tests: rescaled the cell-voltage decoder cases to the Volt encoding, added a real-field-frame decode
+  test and a benign-sentinel test, and split the probe sample-response fixture. Full
+  :app:testDebugUnitTest + spotlessCheck green. See docs/pid-validation-2026-06-03.md for the
+  analysis.
+
+* docs(obd): add field-capture handoff note + log cell-number semantics question
+
+Captures the two OBD decoder questions that need fresh on-car data (engine torque 22203F 1-byte
+  scale; cell-number 22432A/22432C semantics, which show min#>max# in ~half of paired field rows).
+  The handoff note is self-contained: how to pull logs over wireless-debugging adb, what to capture,
+  and how to validate each item, so a future session can act without prior context.
+
+* fix(ci): green detekt + dashboard coverage; strengthen digest body tests
+
+- detekt: bump LargeClass threshold for ObdProtocol (now carries isBenignSentinelResponse + the
+  cell-voltage scale) and TooManyFunctions thresholdInClasses for MainActivity (PR added
+  shareDiagnosticsDigestFromBridge), matching the project's documented per-god-class threshold
+  convention. Fix the ImplicitDefaultLocale flag in DiagnosticsBundleTest with an explicit
+  Locale.US. - dashboard coverage: add a troubleshooter.test.js case for the new "Send AI digest"
+  button (bindSendAiDigest -> shareDiagnosticsDigest, busy-state + cooldown), restoring
+  connection-tools.ts above the line/function gates. - tests: assert the digest embeds the redacted
+  session body ("command":"010C") in buildDigestFileWritesRedactedDigestText, per CodeRabbit, so a
+  manifest-only pass can't hide a missing body.
+
+Verified locally (JDK 21): verifyGeneratedDashboardClean, :app:detekt, :app:spotlessCheck,
+  :app:testDebugUnitTest, and dashboard vitest + coverage gate all green.
+
+* fix(diagnostics): keep MANIFEST in lockstep with emitted bodies; accurate detekt note
+
+- DiagnosticsBundle: render the session bodies (and the OMITTED count) from the same `plans` the
+  MANIFEST is built from, instead of re-clamping each body to the live remaining budget. The old
+  per-body clamp could mark a session "included":true in the manifest yet skip it from the output
+  under a tight budget. Budget safety is preserved by making MANIFEST_BYTES_PER_ENTRY a true upper
+  bound (220 -> 256) so planSessions reserves at least the real manifest + fixed-section size, and
+  the summary/app-log tails are still runtime-clamped for tiny caller budgets. Added a regression
+  test asserting every manifest 'included' flag matches the emitted body under budget pressure. -
+  detekt: correct the LargeClass comment — ObdProtocol measures 1168 by detekt's LargeClass metric
+  (logical lines), not the ~1366 physical wc -l a reviewer might read; threshold pinned at 1169 per
+  the project's per-class convention.
+
+Verified locally (JDK 21): :app:detekt, :app:spotlessCheck, :app:testDebugUnitTest green.
+
+* ci(android): collapse duplicate push+PR runs to stop emulator-smoke flaking
+
+A push to a PR branch fires both `push` and `pull_request`, each running the whole "Android unit
+  tests" workflow — including the heavy emulator-smoke job — for the same commit. With the separate
+  android-emulator-smoke.yml also running on PRs, up to three emulators spun up concurrently for one
+  commit and starved each other on the 2-core runners; the push-triggered emulator-smoke lost the
+  race every time (rotating `adb: device offline` / `Instrumentation Process crashed`) while the PR
+  runs passed.
+
+Add a concurrency group keyed on the commit SHA (which push and pull_request share — github.ref does
+  not) so the duplicate runs collapse into one. Release pushes to main have no PR and run
+  uncontended.
+
+* ci(android): queue duplicate push+PR runs instead of cancelling
+
+cancel-in-progress: true collapsed the duplicate push/PR runs but left the cancelled
+
+run's checks (ci-success et al.) reporting as failed. Switch to cancel-in-progress: false so the two
+  same-SHA runs serialize and both finish with real results — still no concurrent emulator
+  contention, but no cancelled-run red either.
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.13.1 (2026-06-14)
 
 ### Bug Fixes
