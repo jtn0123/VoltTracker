@@ -19,6 +19,16 @@ on:
       - '.github/workflows/android.yml'
   workflow_dispatch:
 
+# A push to a PR branch fires both `push` and `pull_request`, each running this whole
+# workflow — including the heavy emulator-smoke job — for the same commit. Keyed on the
+# commit SHA (which push and pull_request share, unlike github.ref) so those duplicate
+# runs collapse into one instead of competing for emulator resources on the shared
+# runners, which starved the emulator and made emulator-smoke flake. Release pushes to
+# main have no PR, so they still run uncontended.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
