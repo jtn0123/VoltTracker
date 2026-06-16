@@ -295,7 +295,7 @@ class VoltBridge(
         }
         val suffix = if (dropped > 0) " (suppressed $dropped over-rate calls)" else ""
         Log.e(
-            TAG,
+            AppPrefs.LOG_TAG,
             "dashboard client error [${safe(label, MAX_LABEL_LEN)}]: ${safe(detail, MAX_DETAIL_LEN)}$suffix",
         )
     }
@@ -376,13 +376,12 @@ class VoltBridge(
     }
 
     companion object {
-        private const val TAG = "VoltTracker"
         internal const val MAX_ADDRESS_LEN = 64
         internal const val MAX_NAME_LEN = 256
 
-        // General-purpose cap for short identifier-ish bridge inputs (route keys, session ids, client
-        // error labels). The TRIP-LABEL path does NOT use this — it references the data layer's
-        // ObdTripLabels.MAX_LABEL_LEN so the user-visible label cap is defined once. (Report item A2.)
+        // General-purpose cap for short identifier-ish bridge inputs (e.g. route keys, session ids,
+        // short labels and numeric id strings). The TRIP-LABEL path does NOT use this — it references
+        // the data layer's ObdTripLabels.MAX_LABEL_LEN so the user-visible label cap is defined once.
         internal const val MAX_LABEL_LEN = 128
         internal const val MAX_STAGE_LEN = 32
         internal const val MAX_DETAIL_LEN = 4096

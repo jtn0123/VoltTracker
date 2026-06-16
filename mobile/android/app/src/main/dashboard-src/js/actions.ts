@@ -206,11 +206,19 @@ import type { FocusTrap } from "./focus-trap";
       return;
     }
     if (!bridge) return;
+    // Scan is a native-only capability: an older APK's bridge may lack scan(),
+    // in which case we must NOT silently fall through to a plain connect after
+    // showConnectionProgress() already painted "Starting scan...". Tell the user
+    // instead of issuing a connect they didn't ask for.
+    if (scan && typeof bridge.scan !== "function") {
+      VD.setStatus({ state: "idle", detail: "Scan is only available inside the Android app." });
+      return;
+    }
     showConnectionProgress(selected, scan);
     // Guard the bridge call so a quick double-tap doesn't issue two
     // overlapping connect/scan invocations against the adapter.
     withBusy(button, () => {
-      if (scan && typeof bridge.scan === "function") bridge.scan(selected.address, selected.name);
+      if (scan) bridge.scan(selected.address, selected.name);
       else VD.callBridge("connect", selected.address, selected.name);
     });
   }
@@ -228,7 +236,7 @@ import type { FocusTrap } from "./focus-trap";
     }
     if (!bridge || typeof bridge.detailProbe !== "function") {
       VD.setStatus({ state: "idle", detail: "Detail Probe is only available inside the Android app." });
-      setEnhancedProbeBadge("app only", "idle");
+      setEnhancedProbeBadge("in app", "idle");
       return;
     }
     const stage = String(state.signalProbeStage || "tires");
@@ -249,32 +257,37 @@ import type { FocusTrap } from "./focus-trap";
   }
 
   function handleAction(action: string | undefined, button: BusyButton | null = null) {
-    if (action === "permissions") bridge && VD.callBridge("requestPermissions");
-    if (action === "refresh") bridge && VD.callBridge("refreshDevices");
-    if (action === "refreshStorage") refreshStorage();
-    if (action === "clearStorage") clearStorage(button);
-    if (action === "exportDebug") exportDebugBundle();
-    if (action === "backup") shareBackup(button);
-    if (action === "backupEncrypted") shareEncryptedBackup(button);
-    if (action === "restore") restoreBackup(button);
-    if (action === "restoreEncrypted") restoreEncryptedBackup(button);
-    if (action === "last") connectLastAdapter(button);
-    if (action === "scan") connectSelected(true, button);
-    if (action === "tpmsScan") tpmsScanSelected(button);
-    if (action === "detailProbe") detailProbeSelected(button);
-    if (action === "connect") connectSelected(false, button);
-    if (action === "demo") startDemo();
-    if (action === "stopDemo") stopDemo();
-    if (action === "stop") stopAll();
-    if (action === "openClearDtc") openClearDtcWarning();
-    if (action === "cancelClearDtc") closeClearDtcWarning();
-    if (action === "confirmClearDtc") confirmClearDtc(button);
-    if (action === "previewDtcCodes") void previewDtcCodes();
-    if (action === "clearPreviewDtcCodes") clearPreviewDtcCodes();
-    if (action === "addMaintenance") VD.addMaintenanceEntry();
-    if (action === "cancelMaintenance") VD.closeMaintenanceForm();
-    if (action === "exportAllTripsCsv") exportAllTripsCsv();
-    if (action === "closeTripDetail") closeTripDetail();
+    // Actions are mutually exclusive, so stop at the first match instead of
+    // re-testing every branch. (tpmsScan/detailProbe both route to the same
+    // detail-probe handler, but each is matched as its own case.)
+    switch (action) {
+      case "permissions": bridge && VD.callBridge("requestPermissions"); return;
+      case "refresh": bridge && VD.callBridge("refreshDevices"); return;
+      case "refreshStorage": refreshStorage(); return;
+      case "clearStorage": clearStorage(button); return;
+      case "exportDebug": exportDebugBundle(); return;
+      case "backup": shareBackup(button); return;
+      case "backupEncrypted": shareEncryptedBackup(button); return;
+      case "restore": restoreBackup(button); return;
+      case "restoreEncrypted": restoreEncryptedBackup(button); return;
+      case "last": connectLastAdapter(button); return;
+      case "scan": connectSelected(true, button); return;
+      case "tpmsScan": tpmsScanSelected(button); return;
+      case "detailProbe": detailProbeSelected(button); return;
+      case "connect": connectSelected(false, button); return;
+      case "demo": startDemo(); return;
+      case "stopDemo": stopDemo(); return;
+      case "stop": stopAll(); return;
+      case "openClearDtc": openClearDtcWarning(); return;
+      case "cancelClearDtc": closeClearDtcWarning(); return;
+      case "confirmClearDtc": confirmClearDtc(button); return;
+      case "previewDtcCodes": void previewDtcCodes(); return;
+      case "clearPreviewDtcCodes": clearPreviewDtcCodes(); return;
+      case "addMaintenance": VD.addMaintenanceEntry(); return;
+      case "cancelMaintenance": VD.closeMaintenanceForm(); return;
+      case "exportAllTripsCsv": exportAllTripsCsv(); return;
+      case "closeTripDetail": closeTripDetail(); return;
+    }
   }
 
   // Bulk all-trips CSV export (M6): forwards to native, which serializes every logged drive into one

@@ -6,6 +6,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.ByteBuffer
 import java.security.GeneralSecurityException
 import java.security.SecureRandom
 import javax.crypto.Cipher
@@ -182,20 +183,11 @@ object BackupCrypto {
 
     /** Big-endian 4-byte encoding of the KDF iteration count for the v3 header. */
     private fun encodeIterations(iterations: Int): ByteArray =
-        byteArrayOf(
-            (iterations ushr 24).toByte(),
-            (iterations ushr 16).toByte(),
-            (iterations ushr 8).toByte(),
-            iterations.toByte(),
-        )
+        ByteBuffer.allocate(ENCRYPTION_ITER_FIELD_BYTES).putInt(iterations).array()
 
     @Throws(IOException::class)
     private fun decodeIterations(bytes: ByteArray): Int {
-        val value =
-            ((bytes[0].toInt() and 0xFF) shl 24) or
-                ((bytes[1].toInt() and 0xFF) shl 16) or
-                ((bytes[2].toInt() and 0xFF) shl 8) or
-                (bytes[3].toInt() and 0xFF)
+        val value = ByteBuffer.wrap(bytes).int
         if (value < MIN_PBKDF2_ITERATIONS || value > MAX_PBKDF2_ITERATIONS) {
             throw IOException("Encrypted backup header has an out-of-range iteration count")
         }

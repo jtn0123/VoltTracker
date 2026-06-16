@@ -14,8 +14,8 @@ import org.json.JSONObject
  *
  * Every method is crash-safe: a failure here must never disturb the session's broadcast/telemetry
  * path, so all work is wrapped and swallowed. Snapshot fields are MERGED across calls (telemetry
- * supplies SOC/charging/vehicleState; status supplies the connection flag), so a status-only update
- * keeps the last known SOC and vice-versa.
+ * supplies SOC/vehicleState/connected, with the charging flag derived from vehicleState; status
+ * supplies the connection flag), so a status-only update keeps the last known SOC and vice-versa.
  */
 class WidgetUpdater(
     private val context: Context,
@@ -27,7 +27,10 @@ class WidgetUpdater(
     // clobber each other's fields (e.g. a status-only update racing a telemetry update).
     private val snapshotLock = Any()
 
-    /** Folds a telemetry payload into the snapshot (SOC, charging, vehicleState, connected). */
+    /**
+     * Folds a telemetry payload into the snapshot. The payload supplies SOC, vehicleState, and
+     * connected; the charging flag is derived from vehicleState rather than read as a payload field.
+     */
     fun onTelemetry(payload: JSONObject?) {
         if (payload == null) {
             return
@@ -48,7 +51,7 @@ class WidgetUpdater(
                 val merged =
                     WidgetSnapshot(
                         socPct = soc,
-                        charging = vehicleState == VEHICLE_STATE_CHARGING,
+                        charging = vehicleState == WidgetStateFormatter.VEHICLE_STATE_CHARGING,
                         connected = connected,
                         vehicleState = vehicleState,
                         // updatedAtMs proposes "now" as the new change time; the store keeps it only
@@ -91,8 +94,6 @@ class WidgetUpdater(
     }
 
     companion object {
-        private const val VEHICLE_STATE_CHARGING = "charging"
-
         /**
          * Rounds the Double SOC telemetry value to the nearest whole percent, matching the dashboard's
          * SOC rounding, rather than truncating it (82.9 -> 83, not 82). A non-finite reading keeps the

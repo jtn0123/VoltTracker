@@ -97,7 +97,11 @@ class VoltWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        /** Pushes a fresh redraw to every placed instance (used by tests and direct callers). */
+        /**
+         * Pushes a fresh redraw to every placed instance. This is the primary in-app redraw path:
+         * [WidgetUpdater] calls it on each meaningful state change (and tests call it directly) to
+         * bypass the slow system update cadence rather than waiting for the next [onUpdate].
+         */
         @JvmStatic
         fun refreshAll(context: Context) {
             val app = context.applicationContext

@@ -396,12 +396,6 @@
     line-height: 1;
   }
 
-  .mini-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
   .mini, .metric, .list-card, .insight, .charge-kpi, .setting-row {
     padding: var(--card-pad-tight);
   }
@@ -518,12 +512,6 @@
   .charge-session-row[data-charging="1"] > b {
     border-color: rgba(184,230,59,0.5);
     background: rgba(184,230,59,0.2);
-  }
-
-  .drive-signal-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-    gap: 10px;
   }
 
   .real-overview-grid {
@@ -1075,7 +1063,7 @@
   }
 
   .charge-energy-cost strong {
-    color: var(--ok, #b8e63b);
+    color: var(--ok);
   }
 
   #chargeEnergyHint {
@@ -1493,7 +1481,7 @@
   .cell-balance-card .badge[data-tone="bad"] {
     border-color: rgba(255,107,95,0.4);
     background: rgba(255,107,95,0.14);
-    color: var(--bad-soft, #ff8f86);
+    color: var(--bad-soft);
   }
 
   .cell-balance-track {

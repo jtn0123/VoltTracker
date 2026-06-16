@@ -24,7 +24,15 @@ object ObdTripLabels {
     @JvmStatic
     fun cleanLabel(raw: String?): String {
         val trimmed = raw?.trim().orEmpty()
-        return if (trimmed.length <= MAX_LABEL_LEN) trimmed else trimmed.substring(0, MAX_LABEL_LEN)
+        if (trimmed.length <= MAX_LABEL_LEN) {
+            return trimmed
+        }
+        // Back off one char if the cut lands mid-surrogate-pair, so we never persist a lone surrogate.
+        var end = MAX_LABEL_LEN
+        if (trimmed[end - 1].isHighSurrogate()) {
+            end -= 1
+        }
+        return trimmed.substring(0, end)
     }
 
     @JvmStatic

@@ -19,7 +19,8 @@ class AutoDtcScanRunner(
     /** Sends generic Mode 03 and returns the deduped, upper-cased DTC codes found (may be empty). */
     fun readGenericDtcCodes(): List<String> =
         try {
-            // Generic functional header so the parse maps to the generic-OBD module like a manual scan.
+            // Set the generic OBD-II broadcast (tester) request header 7DF so the reply parses into
+            // the generic-OBD module like a manual scan.
             engine.sendRecoverableCommand("ATSH7DF", 1800)
             val response = engine.sendRecoverableCommand("03", 3500)
             extractCodes(response)

@@ -7,14 +7,14 @@ internal class VoltBridgeConnections(
         address: String?,
         name: String?,
     ) {
-        startSelectedDeviceAction(address, name, ObdService.ACTION_CONNECT, "Choose a valid Bluetooth adapter.")
+        startSelectedDeviceAction(address, name, ObdService.ACTION_CONNECT, MSG_PICK_VALID_ADAPTER)
     }
 
     fun scan(
         address: String?,
         name: String?,
     ) {
-        startSelectedDeviceAction(address, name, ObdService.ACTION_SCAN, "Choose a valid Bluetooth adapter.")
+        startSelectedDeviceAction(address, name, ObdService.ACTION_SCAN, MSG_PICK_VALID_ADAPTER)
     }
 
     fun detailProbe(
@@ -28,7 +28,7 @@ internal class VoltBridgeConnections(
         activity.runOnUiThread {
             activity.rememberDevice(cleanAddress, cleanName)
             if (!VoltBridge.validBluetoothAddress(cleanAddress)) {
-                activity.publishStatus("blocked", "Choose a valid Bluetooth adapter.", true)
+                activity.publishStatus("blocked", MSG_PICK_VALID_ADAPTER, true)
                 return@runOnUiThread
             }
             activity.startObdService(ObdService.ACTION_TPMS_SCAN, cleanAddress, cleanName, cleanStage)
@@ -144,5 +144,9 @@ internal class VoltBridgeConnections(
             activity.rememberDevice(address, name)
             activity.startObdService(action, address, name)
         }
+    }
+
+    private companion object {
+        const val MSG_PICK_VALID_ADAPTER = "Choose a valid Bluetooth adapter."
     }
 }

@@ -262,6 +262,11 @@ import type { MapSessionFilter } from "./map-session-list";
 
   const MAP_TILE_WARNING_THRESHOLD = 3;
   const MAP_TILE_FALLBACK_THRESHOLD = 6;
+  // Cap on stop markers drawn (and counted in the badge) so a long stop-and-go
+  // drive can't flood the map; keep the badge count and the drawn markers in sync.
+  const MAX_DRAWN_STOPS = 20;
+  // Meters/second to miles/hour.
+  const MPS_TO_MPH = 2.2369363;
 
   function syncRemoteTiles() {
     const map = mapInstance;
@@ -377,11 +382,11 @@ import type { MapSessionFilter } from "./map-session-list";
     const isLiveRoute = routeIsLive(route);
     const hasMapContent = hasRoute || (isLiveRoute && points.some(isValidRoutePoint));
     const layer = isLiveRoute ? "routes" : state.mapLayer;
-    const stops = hasRoute ? detectStops(points) : [];
+    const stops = hasRoute ? detectStops(points.filter(isValidRoutePoint)) : [];
 
     const frame = el("mapFrame");
     if (frame) frame.dataset.layer = layer;
-    VD.setText("mapStopsCount", stops.length ? String(Math.min(20, stops.length)) : "0");
+    VD.setText("mapStopsCount", stops.length ? String(Math.min(MAX_DRAWN_STOPS, stops.length)) : "0");
     document.querySelectorAll("[data-map-layer]").forEach((node) => {
       const button = node as HTMLElement;
       const active = button.dataset.mapLayer === layer;
@@ -696,7 +701,7 @@ import type { MapSessionFilter } from "./map-session-list";
   // Horizontal drive-picker chips above the map. Each chip shows the drive's
   // start time, distance, and a color-coded average efficiency dot — same
   // pattern as the demo's drive picker. Click delegation flows through the
-  // existing [data-map-session] handler in actions.js.
+  // existing [data-map-session] handler in actions.ts.
   function renderMapDriveChips(routes: MapRoute[]) {
     const wrap = el("mapDriveChips");
     if (!wrap) return;
@@ -861,7 +866,7 @@ import type { MapSessionFilter } from "./map-session-list";
     mapLayerGroups.stops = L.layerGroup([
       L.polyline(latlngs, { color: routeColor, weight: 2.5, opacity: 0.4 })
     ]);
-    const stops = detectStops(drawable).slice(0, 20);
+    const stops = detectStops(drawable).slice(0, MAX_DRAWN_STOPS);
     stops.forEach((stop) => {
       const radius = Math.min(13, 7 + stop.durationMs / 120000);
       L.circleMarker([stop.lat, stop.lng], {
@@ -1065,8 +1070,8 @@ import type { MapSessionFilter } from "./map-session-list";
   }
 
   // Pool per-point { mph, eff, grade } for ONE drive (the per-drive analogue of
-  // insights-panel.ts#renderInsightScatter). Returns the samples and the SVG, or
-  // null when too few samples carry derived efficiency.
+  // insights-panel.ts#renderInsightScatter). Returns the rendered SVG, or null
+  // when too few samples carry derived efficiency.
   function buildTripScatter(route: MapRoute): SVGElement | null {
     if (typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
     const points = Array.isArray(route.points) ? route.points : [];
@@ -1087,7 +1092,7 @@ import type { MapSessionFilter } from "./map-session-list";
           mps = 0;
         }
       }
-      const mph = Math.max(0, mps) * 2.2369363;
+      const mph = Math.max(0, mps) * MPS_TO_MPH;
       if (mph < 10) continue;
       let grade = 0;
       const prev = points[i - 1];
@@ -1273,7 +1278,6 @@ import type { MapSessionFilter } from "./map-session-list";
   // A real ~23 mi logged drive (session 2 of the test database), kept as [secondsFromStart,
   // lat, lng] triples. Used only as preview content when no Android bridge is present, so
   // the dashboard can be reviewed loaded; it never runs inside the real app.
-  const _SAMPLE_ROUTE_START_MS = 1779281066443;
   const SAMPLE_ROUTE: Array<[number, number, number]> = [[0,32.80131,-116.9513],[29,32.80324,-116.95098],[58,32.80344,-116.95173],[86,32.80321,-116.95898],[112,32.80314,-116.96924],[139,32.79793,-116.97686],[167,32.78853,-116.97791],[194,32.78066,-116.9825],[220,32.77918,-116.99186],[247,32.77833,-117.00258],[273,32.77462,-117.01211],[299,32.77102,-117.02164],[326,32.77389,-117.03147],[352,32.77268,-117.04105],[378,32.77609,-117.0498],[405,32.77837,-117.05984],[431,32.77939,-117.06921],[457,32.7801,-117.07931],[483,32.78089,-117.0893],[511,32.77943,-117.09954],[537,32.77872,-117.10943],[563,32.77788,-117.1194],[590,32.77325,-117.12789],[616,32.77062,-117.13732],[642,32.76709,-117.14734],[669,32.7644,-117.15821],[695,32.76095,-117.16827],[721,32.75943,-117.17893],[748,32.76013,-117.18982],[774,32.76021,-117.19997],[800,32.75575,-117.20492],[826,32.75121,-117.20511],[852,32.74743,-117.2089],[878,32.74532,-117.21175],[905,32.74297,-117.21367],[934,32.73984,-117.21632],[961,32.73651,-117.21916],[989,32.73247,-117.22261],[1017,32.72903,-117.22553],[1045,32.7292,-117.22551],[1074,32.72893,-117.22561],[1103,32.72679,-117.22744],[1130,32.72613,-117.228],[1158,32.72348,-117.23026],[1188,32.72314,-117.23053],[1217,32.72154,-117.23188],[1245,32.7204,-117.23277],[1273,32.71904,-117.23456],[1301,32.71875,-117.23497],[1329,32.71858,-117.2352],[1358,32.71839,-117.23547],[1386,32.71828,-117.23569],[1415,32.71818,-117.2357],[1444,32.71791,-117.23587],[1473,32.71751,-117.23595],[1501,32.71704,-117.23612],[1530,32.71623,-117.23621],[1557,32.71601,-117.23646],[1585,32.71559,-117.23663],[1613,32.71527,-117.23675],[1640,32.71482,-117.23691],[1667,32.71444,-117.23707],[1693,32.71383,-117.23737],[1721,32.71325,-117.23766],[1747,32.71302,-117.23772],[1773,32.71254,-117.23785],[1801,32.71167,-117.2381],[1829,32.71131,-117.23819],[1857,32.71064,-117.23836],[1885,32.71034,-117.23846],[1913,32.70995,-117.23854],[1941,32.70949,-117.23866],[1971,32.70894,-117.2388],[1999,32.70801,-117.23906],[2027,32.70724,-117.23926],[2056,32.70754,-117.23883],[2085,32.70661,-117.23928],[2112,32.70621,-117.23918],[2140,32.70603,-117.2382],[2168,32.70531,-117.23915],[2194,32.705,-117.23913],[2221,32.70452,-117.23904],[2249,32.70137,-117.23966],[2276,32.69781,-117.24032],[2303,32.69418,-117.24076],[2331,32.69063,-117.23976],[2360,32.68805,-117.23964],[2389,32.68648,-117.23939],[2417,32.6851,-117.23849],[2445,32.68422,-117.23824],[2474,32.68409,-117.23972],[2503,32.68402,-117.23975],[2529,32.68412,-117.2397]];
 
   // Build one synthetic route from a slice of SAMPLE_ROUTE. Each route gets its
@@ -1321,7 +1325,6 @@ import type { MapSessionFilter } from "./map-session-list";
     }
 
     const socTrack: Array<{ atMs: number; soc: number }> = [];
-    const socEnd = Math.max(15, opts.startSoc - opts.socDrop);
     for (let i = 0; i <= 24; i += 1) {
       const f = i / 24;
       socTrack.push({
@@ -1365,8 +1368,7 @@ import type { MapSessionFilter } from "./map-session-list";
     };
     return {
       session, points, pointCount: points.length,
-      distanceMeters, bounds: {}, socTrack, powerTrack,
-      socEnd: socEnd
+      distanceMeters, bounds: {}, socTrack, powerTrack
     };
   }
 

@@ -89,7 +89,7 @@ internal class VoltBridgeDiagnostics(
     }
 
     fun scheduleAdapterReadyNotify(mins: Int) {
-        val clamped = maxOf(1, minOf(30, mins))
+        val clamped = mins.coerceIn(MIN_ADAPTER_READY_MINS, MAX_ADAPTER_READY_MINS)
         activity.runOnUiThread {
             activity.scheduleAdapterReadyNotifyFromBridge(clamped)
         }
@@ -106,5 +106,11 @@ internal class VoltBridgeDiagnostics(
     companion object {
         /** Upper bound for the JS-supplied recent-session count. */
         internal const val MAX_RECENT_SESSIONS = 100
+
+        /** Lower bound (minutes) for the JS-supplied adapter-ready notify delay. */
+        internal const val MIN_ADAPTER_READY_MINS = 1
+
+        /** Upper bound (minutes) for the JS-supplied adapter-ready notify delay. */
+        internal const val MAX_ADAPTER_READY_MINS = 30
     }
 }

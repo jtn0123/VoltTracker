@@ -3,7 +3,7 @@ package com.volttracker.obdpoc
 import org.json.JSONObject
 
 /**
- * Service-side glue for the event-notification (M1) and auto-DTC-scan (M3) features. It owns the
+ * Service-side glue for the event-notification (M1) and auto-DTC-scan features. It owns the
  * per-session [EventNotificationDecider], reads the live telemetry / scan payloads the service is
  * already broadcasting, and posts the resulting notifications via [EventNotifier]. It also drives the
  * gated on-connect auto-scan ([AutoScanController] + [AutoDtcScanRunner]).
@@ -72,13 +72,11 @@ class EventNotificationCoordinator(
     }
 
     private fun handleScanPayload(payload: JSONObject): List<EventNotificationDecider.Event> {
-        val codes = ArrayList<String>()
         val arr = payload.optJSONArray("dtcCodes") ?: return emptyList()
+        // Pass raw strings through; Decider.normalizeCodes does the canonical trim + drop-empties.
+        val codes = ArrayList<String>(arr.length())
         for (i in 0 until arr.length()) {
-            val code = arr.optString(i, "").trim()
-            if (code.isNotEmpty()) {
-                codes.add(code)
-            }
+            codes.add(arr.optString(i))
         }
         val event = applyScanCodes(codes)
         return if (event != null) listOf(event) else emptyList()

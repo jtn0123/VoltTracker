@@ -451,7 +451,7 @@ class ObdStoreReports(
                 }
             // Query is newest-first for the LIMIT; flip to oldest-first so the chart reads left→right.
             val array = JSONArray()
-            for (i in rows.indices.reversed()) array.put(rows[i])
+            for (row in rows.asReversed()) array.put(row)
             array
         }
 

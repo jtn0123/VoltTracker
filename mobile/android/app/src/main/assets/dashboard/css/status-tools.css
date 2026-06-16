@@ -226,11 +226,8 @@
 
 /* ---- Settings-tab proactive tools panel ---- */
 
-.connection-tools {
-  /* Inherits .view + .is-active toggling from base.css. Stacks the panel after
-     the existing settings panels on the Settings tab. */
-}
-
+/* .connection-tools inherits .view + .is-active toggling from base.css. The
+   panel stacks after the existing settings panels on the Settings tab. */
 .connection-tools__panel {
   display: grid;
   gap: 8px;

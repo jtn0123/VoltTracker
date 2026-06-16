@@ -79,7 +79,7 @@ class DataBackup(
             "sessionCommandTrace",
             recentLogEntries(sessionLogDir, "session-", ".jsonl", MAX_DEBUG_SESSION_LOGS),
         )
-        diagnostics.put("appLog", recentLogEntries(appLogDir, "app.log", "", MAX_DEBUG_APP_LOGS))
+        diagnostics.put("appLog", recentLogEntries(appLogDir, APP_LOG_SENTINEL, "", MAX_DEBUG_APP_LOGS))
         return diagnostics
     }
 
@@ -95,8 +95,8 @@ class DataBackup(
                 .listFiles { file ->
                     if (!file.isFile) {
                         false
-                    } else if (prefix == "app.log") {
-                        file.name == "app.log" || file.name == "app.log.1"
+                    } else if (prefix == APP_LOG_SENTINEL) {
+                        file.name in APP_LOG_NAMES
                     } else {
                         file.name.startsWith(prefix) && (suffix.isEmpty() || file.name.endsWith(suffix))
                     }
@@ -181,7 +181,7 @@ class DataBackup(
                 return null
             }
             clearOldBackups(dir)
-            val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+            val stamp = SimpleDateFormat(BACKUP_TIMESTAMP_PATTERN, Locale.US).format(Date())
             val dest = File(dir, "volttracker-backup-$stamp.db")
             copyFile(
                 source,
@@ -222,7 +222,7 @@ class DataBackup(
                 return null
             }
             clearOldBackups(dir)
-            val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+            val stamp = SimpleDateFormat(BACKUP_TIMESTAMP_PATTERN, Locale.US).format(Date())
             val dest = File(dir, "volttracker-backup-$stamp.vtdb")
             progress?.onProgress(
                 ProgressSnapshot(
@@ -493,6 +493,16 @@ class DataBackup(
         private const val MAX_DEBUG_LOG_BYTES = 64 * 1024
         private const val MAX_DEBUG_SESSION_LOGS = 3
         private const val MAX_DEBUG_APP_LOGS = 2
+
+        // Backup filenames embed a timestamp using this pattern (see buildBackupFile /
+        // buildEncryptedBackupFile).
+        private const val BACKUP_TIMESTAMP_PATTERN = "yyyyMMdd-HHmmss"
+
+        // Sentinel prefix passed to recentLogEntries to request exact-app-log matching (the live
+        // "app.log" plus its rolled "app.log.1" sibling) instead of the usual prefix/suffix match.
+        // Mirrors RollingAppLog.LIVE_NAME / ROLLED_NAME, which are private there.
+        private const val APP_LOG_SENTINEL = "app.log"
+        private val APP_LOG_NAMES = setOf("app.log", "app.log.1")
         private val BLUETOOTH_ADDRESS_RE = Regex("\\b[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}\\b")
         private val VIN_RE = Regex("\\b[A-HJ-NPR-Za-hj-npr-z0-9]{17}\\b")
         private val COORDINATE_FIELD_RE =

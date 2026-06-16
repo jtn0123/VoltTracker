@@ -63,18 +63,17 @@ class OnboardingFlow(
      * the call-to-action and counts as done only once a session is live; ALL_SET (the terminal
      * confirmation) is done once the three configurable prerequisites are satisfied.
      */
-    fun stepsFor(state: State): List<StepStatus> {
-        val pairDone = state.hasPairedAdapter
-        val btDone = state.hasBluetoothPermission
-        val locDone = state.hasLocationPermission
-        return listOf(
-            StepStatus(Step.PAIR_ADAPTER, pairDone),
-            StepStatus(Step.GRANT_BLUETOOTH, btDone),
-            StepStatus(Step.GRANT_LOCATION, locDone),
+    fun stepsFor(state: State): List<StepStatus> =
+        listOf(
+            StepStatus(Step.PAIR_ADAPTER, state.hasPairedAdapter),
+            StepStatus(Step.GRANT_BLUETOOTH, state.hasBluetoothPermission),
+            StepStatus(Step.GRANT_LOCATION, state.hasLocationPermission),
             StepStatus(Step.CONNECT_OR_DEMO, state.loggingActive),
-            StepStatus(Step.ALL_SET, pairDone && btDone && locDone),
+            StepStatus(
+                Step.ALL_SET,
+                state.hasPairedAdapter && state.hasBluetoothPermission && state.hasLocationPermission,
+            ),
         )
-    }
 
     /**
      * Steps the user is actually walked through against [state]: every not-yet-satisfied actionable

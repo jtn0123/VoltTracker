@@ -188,11 +188,10 @@ class RollingAppLog {
             return
         }
         // The live file is now gone; the FileWriter below will recreate it on next write.
-        // Reset the birth marker so the new live file starts a fresh 7-day window.
-        if (bornFile.exists() && !bornFile.delete()) {
-            // Best-effort: a stale marker would make the next rotation fire too early (also
-            // acceptable) rather than too late, so it's not catastrophic. Try once.
-        }
+        // Reset the birth marker so the new live file starts a fresh 7-day window. Best-effort:
+        // a stale marker would make the next rotation fire too early (also acceptable) rather than
+        // too late, so it's not catastrophic. Try once.
+        bornFile.delete()
     }
 
     private fun readBornMs(): Long {

@@ -734,7 +734,6 @@ import { prefs, units } from "./prefs";
     const charge = storage.chargeSummary || {};
     const route = selectedRouteForOverview(storage);
     const hasRows = VD.dbRowCount(storage) > 0;
-    const _hasRoute = Number(route.pointCount || 0) >= 2;
     const hasCharge = Number(charge.chargeSessionCount || charge.chargingHintCount || 0) > 0;
     const latest = latestInsightReading(storage);
     toggleHidden("appEmptyState", hasRows);
@@ -1141,7 +1140,7 @@ import { prefs, units } from "./prefs";
     // `undefined` locale follows the device's runtime locale; the month-short
     // option keeps the compact "May ’26" shape across locales.
     const label = d.toLocaleDateString(undefined, { month: "short" }) + " ’" + String(year).slice(-2);
-    return { key: `${year}-${String(month).padStart(2, "0")}`, label, firstMs: new Date(year, month, 1).getTime() };
+    return { key: `${year}-${String(month + 1).padStart(2, "0")}`, label, firstMs: new Date(year, month, 1).getTime() };
   }
 
   // Group sessions by month, summing positive energy. Months with no energy are
@@ -1243,7 +1242,7 @@ import { prefs, units } from "./prefs";
     const fmt = (v: number) => (showCost ? formatMoney(v) : `${v.toFixed(1)} kWh`);
     VD.setText("chargeCostTrendTitle", showCost ? "Monthly charging cost" : "Monthly charging energy");
     VD.setText("chargeCostTrendLatest", fmt(values[values.length - 1] as number));
-    VD.setText("chargeCostTrendSpanLabel", showCost ? "Avg / month" : "Avg / month");
+    VD.setText("chargeCostTrendSpanLabel", "Avg / month");
     VD.setText("chargeCostTrendAvg", fmt(avg));
     VD.setText("chargeCostTrendMonths", String(buckets.length));
     VD.setText("chargeCostTrendTotal", fmt(total));
@@ -1326,7 +1325,7 @@ import { prefs, units } from "./prefs";
     if (!row) return;
     const voltage = firstNum([latest.packVoltage]);
     const temp = firstNum([latest.batteryTempC, latest.batteryTemp]);
-    const soh = firstNum([latest.sohPct]);
+    const soh = Number(latest.sohPct);
     const packPower = firstNum([latest.packPowerKw, latest.powerKw]);
     const stats: Array<[string, string | null]> = [
       ["Pack", Number.isFinite(voltage) ? `${Math.round(voltage)} V` : null],

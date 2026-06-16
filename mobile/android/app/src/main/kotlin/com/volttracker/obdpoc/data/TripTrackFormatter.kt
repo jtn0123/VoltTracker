@@ -94,8 +94,8 @@ object TripTrackFormatter {
         point: JSONObject,
     ) {
         val speed = optDoubleOrNull(point, "speedMps") ?: return
-        // GPX 1.1 has no first-class speed on a trkpt; the conventional carrier is a namespaced
-        // <extensions> block. Plain <speed> (meters/second) is what Garmin/Strava importers read.
+        // GPX 1.1 has no first-class speed on a trkpt; the carrier is a bare <extensions> block
+        // holding a plain <speed> element (meters/second), which Garmin/Strava importers read.
         builder
             .append("        <extensions>\n          <speed>")
             .append(coord(speed))

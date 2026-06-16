@@ -220,7 +220,7 @@ class EventNotificationDecider(
         }
         lastChargingSocPct = soc
         val target = settings.targetSocPct
-        if (!settings.chargeCompleteEnabled || target >= FULL_CHARGE_SOC_PCT) {
+        if (!settings.chargeCompleteEnabled || target >= DEFAULT_TARGET_SOC_PCT) {
             return null
         }
         if (targetSocArmed && soc >= target) {
@@ -278,7 +278,11 @@ class EventNotificationDecider(
             lowSocArmed = false
             return Event.LowSoc(soc, threshold)
         }
-        if (!lowSocArmed && soc >= threshold + SOC_HYSTERESIS_PCT) {
+        // Cap the re-arm target at SOC_MAX_PCT: a threshold clamped near 100 would otherwise need an
+        // SOC above 100 (e.g. 99 + 3 = 102) to re-arm, which never occurs — the alert could never fire
+        // again in a session. Capping keeps the re-arm headroom reachable at a fully charged pack.
+        val rearmAt = minOf(threshold + SOC_HYSTERESIS_PCT, SOC_MAX_PCT)
+        if (!lowSocArmed && soc >= rearmAt) {
             lowSocArmed = true
         }
         return null
@@ -304,7 +308,10 @@ class EventNotificationDecider(
     }
 
     companion object {
-        /** Pack current more negative than this (amps INTO the pack) counts as charging. */
+        /**
+         * Pack current more negative than this (amps INTO the pack) counts as charging — but only as
+         * one of the two gates; see [isChargingSample], which also requires the car to be stationary.
+         */
         const val CHARGING_PACK_CURRENT_A_THRESHOLD = 1.0
 
         /** Speed above this means the car is moving — not charging. */
@@ -316,14 +323,17 @@ class EventNotificationDecider(
         /** SOC must recover this far above the threshold before the low-SOC alert re-arms. */
         const val SOC_HYSTERESIS_PCT = 3.0
 
+        /** Maximum reachable SOC; caps the low-SOC re-arm target so it stays attainable. */
+        const val SOC_MAX_PCT = 100.0
+
         /** Pack temp must fall this far below the threshold before the high-temp alert re-arms. */
         const val TEMP_HYSTERESIS_C = 3.0
 
-        /** Default charge target — a full charge (M2). */
+        /**
+         * Default charge target — a full charge (M2). A target at or above this is a full charge, so
+         * the target-reached ping defers to the charge-complete alert.
+         */
         const val DEFAULT_TARGET_SOC_PCT = 100.0
-
-        /** A target at or above this is a full charge, so target-reached defers to charge-complete. */
-        const val FULL_CHARGE_SOC_PCT = 100.0
 
         /**
          * A charge that stops this far (or more) below the target is reported as INTERRUPTED rather
@@ -332,6 +342,12 @@ class EventNotificationDecider(
          */
         const val INTERRUPTED_SOC_MARGIN_PCT = 5.0
 
+        /**
+         * A sample counts as charging only when BOTH gates pass: the car is stationary (speed at or
+         * below [STATIONARY_SPEED_KPH], or unknown) AND pack current is flowing into the pack (more
+         * negative than [CHARGING_PACK_CURRENT_A_THRESHOLD]). A moving car, or one with no/positive
+         * pack current, is not charging.
+         */
         private fun isChargingSample(sample: Sample): Boolean {
             val speed = sample.speedKph
             if (speed != null && speed > STATIONARY_SPEED_KPH) {

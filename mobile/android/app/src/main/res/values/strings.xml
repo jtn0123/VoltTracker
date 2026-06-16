@@ -75,7 +75,7 @@
     <string name="notification_charge_interrupted_title">Charging stopped</string>
     <string name="notification_charge_interrupted_text">Charging stopped at %1$s%% (target %2$s%%). Check the plug and charger.</string>
     <string name="notification_target_soc_title">Charge target reached</string>
-    <string name="notification_target_soc_text">Battery reached your %2$s%% target (now %1$s%%). You can unplug.</string>
+    <string name="notification_target_soc_text">Battery reached %1$s%% (your %2$s%% target). You can unplug.</string>
     <string name="notification_new_dtc_title">New diagnostic code</string>
     <plurals name="notification_new_dtc_text">
         <item quantity="one">New code %2$s found. Tap to review.</item>

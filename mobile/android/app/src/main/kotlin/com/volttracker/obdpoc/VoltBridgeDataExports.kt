@@ -208,7 +208,7 @@ internal class VoltBridgeDataExports(
         }
         // The label cap is owned by the data layer (ObdTripLabels re-truncates to the same length on
         // store), so reference that single constant rather than a second, larger bridge cap that the
-        // storage would silently clip — keeping one cap for the trip-label path. (Report item A2.)
+        // storage would silently clip — keeping one cap for the trip-label path.
         val cleanLabel = VoltBridge.safe(label, ObdTripLabels.MAX_LABEL_LEN)
         activity.runOnBackground {
             val changed =

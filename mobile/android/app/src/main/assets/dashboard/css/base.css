@@ -963,7 +963,7 @@
 
   .tile-toggle[data-on="true"] {
     border-color: rgba(184, 230, 59, 0.4);
-    color: var(--ok, #b8e63b);
+    color: var(--ok);
     background: rgba(184, 230, 59, 0.08);
   }
 

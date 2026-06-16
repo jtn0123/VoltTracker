@@ -120,7 +120,7 @@ class BackupController(
                     R.string.progress_preparing_backup_detail
                 },
             )
-        showRestoreProgress(title, detail, phase = activity.getString(R.string.progress_preparing_backup_title))
+        showRestoreProgress(title, detail)
         runBackground(activity.getString(R.string.status_backup_worker_failed)) {
             val progress = ProgressEmitter(title, detail)
             // Set when DataBackup's pre-export quick_check reports problems. The backup still
@@ -425,7 +425,7 @@ class BackupController(
                         logRestore("merge_ok", emptyMap<String, Any?>())
                         activity.publishStatus(
                             "ready",
-                            activity.getString(R.string.merge_reconnect_suffix, outcome.message),
+                            activity.getString(R.string.merge_reconnect_suffix, mergeMessage),
                             false,
                         )
                     } else if (outcome.result == RestoreResult.LOGGING_ACTIVE) {
@@ -776,7 +776,7 @@ class BackupController(
         } finally {
             DataBackup.deleteIfExists(restoreTemp)
             DataBackup.deleteIfExists(restoreBackup)
-            staged.delete()
+            DataBackup.deleteIfExists(staged)
         }
     }
 

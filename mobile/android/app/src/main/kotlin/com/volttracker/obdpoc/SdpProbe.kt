@@ -49,7 +49,7 @@ open class SdpProbe {
         val device =
             try {
                 adapter.getRemoteDevice(address)
-            } catch (ex: IllegalArgumentException) {
+            } catch (_: IllegalArgumentException) {
                 log("sdp_refresh_skipped", address, "reason", "invalid_address")
                 return false
             }
@@ -81,7 +81,7 @@ open class SdpProbe {
         return try {
             val uuids = device.uuids
             if (uuids == null) "[]" else Arrays.toString(uuids)
-        } catch (ex: SecurityException) {
+        } catch (_: SecurityException) {
             ""
         }
     }

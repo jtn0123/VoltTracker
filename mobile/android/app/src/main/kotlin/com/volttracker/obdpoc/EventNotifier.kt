@@ -38,9 +38,9 @@ open class EventNotifier(
             Log.i(MainActivity.TAG, "event notification skipped: POST_NOTIFICATIONS not granted")
             return
         }
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
         val spec = describe(event) ?: return
         try {
-            val manager = context.getSystemService(NotificationManager::class.java) ?: return
             ensureChannel(context)
             manager.notify(spec.notificationId, build(spec.title, spec.text))
         } catch (ex: RuntimeException) {

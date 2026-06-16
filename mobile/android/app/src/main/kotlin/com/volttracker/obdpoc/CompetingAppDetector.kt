@@ -76,7 +76,7 @@ open class CompetingAppDetector(
         } catch (_: PackageManager.NameNotFoundException) {
             false
         } catch (ex: RuntimeException) {
-            Log.w("VoltTracker", "Competing-app package probe failed for $packageName", ex)
+            Log.w(AppPrefs.LOG_TAG, "Competing-app package probe failed for $packageName", ex)
             false
         }
     }

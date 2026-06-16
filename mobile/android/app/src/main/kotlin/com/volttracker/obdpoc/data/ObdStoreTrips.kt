@@ -107,7 +107,7 @@ class ObdStoreTrips(
             ObdStoreRouteProjection.routePointsForSessionJson(
                 db,
                 session.id,
-                1000,
+                ObdStoreRouteProjection.MAX_TRACK_POINTS,
                 window.startedAtMs,
                 window.endedAtMs,
             )
@@ -321,7 +321,12 @@ class ObdStoreTrips(
                 hasRoute = computedHasRoute
                 maxSpeed = computedMaxSpeed
             } else {
-                val points = ObdStoreRouteProjection.routePointsForSessionJson(db, session.id, 1000)
+                val points =
+                    ObdStoreRouteProjection.routePointsForSessionJson(
+                        db,
+                        session.id,
+                        ObdStoreRouteProjection.MAX_TRACK_POINTS,
+                    )
                 distance = ObdStoreSupport.distanceMeters(points)
                 hasRoute = points.length() >= 2
                 maxSpeed = null

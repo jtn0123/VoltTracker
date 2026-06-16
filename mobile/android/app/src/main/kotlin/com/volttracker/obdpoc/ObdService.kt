@@ -85,7 +85,7 @@ open class ObdService :
 
     @JvmField var voltageProbe: VoltageProbe? = null
 
-    override var activeName = "OBD adapter"
+    override var activeName = DEFAULT_ADAPTER_NAME
 
     override var sessionStartedAtMs = 0L
 
@@ -152,10 +152,6 @@ open class ObdService :
     fun setCompetingApps(csv: String?) {
         competingAppsCsv = csv
     }
-
-    fun getLastVoltage(): Double? = lastVoltage
-
-    fun getCompetingAppsCsv(): String? = competingAppsCsv
 
     override fun onCreate() {
         super.onCreate()
@@ -846,6 +842,7 @@ open class ObdService :
         const val EXTRA_NAME = "name"
         const val EXTRA_JSON = "json"
         const val EXTRA_DETAIL_STAGE = "detail_stage"
+        private const val DEFAULT_ADAPTER_NAME = "OBD adapter"
         private const val WAKE_LOCK_TAG = "VoltTracker:ObdSession"
 
         // Leak ceiling only (see acquireSessionWakeLock); generously above any realistic drive.
@@ -858,7 +855,7 @@ open class ObdService :
         @JvmStatic
         fun adapterNameFrom(intent: Intent?): String {
             val name = intent?.getStringExtra(EXTRA_NAME)
-            return if (name.isNullOrBlank()) "OBD adapter" else name
+            return if (name.isNullOrBlank()) DEFAULT_ADAPTER_NAME else name
         }
     }
 }

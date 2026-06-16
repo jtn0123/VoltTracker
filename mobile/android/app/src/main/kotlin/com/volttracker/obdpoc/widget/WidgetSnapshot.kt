@@ -28,7 +28,7 @@ data class WidgetSnapshot(
     val lastSampleAtMs: Long = updatedAtMs,
 ) {
     /** True when nothing has ever been persisted — the widget shows its empty/onboarding line. */
-    fun hasData(): Boolean = lastSampleAtMs > 0L || updatedAtMs > 0L
+    fun hasData(): Boolean = freshnessAtMs() > 0L
 
     /** True when SOC is known (non-negative). */
     fun hasSoc(): Boolean = socPct >= 0

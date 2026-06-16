@@ -52,7 +52,7 @@ function autoConnectStatusText(state: Record<string, unknown>) {
   const enabled = state.enabled !== false;
   const hasAdapter = Boolean(String(state.lastAddress || "").trim());
   const name = String(state.lastName || "").trim();
-  const label = name || (hasAdapter ? "last adapter" : "last adapter");
+  const label = name || "last adapter";
   if (!enabled) {
     return "Off. Manual Connect still works.";
   }

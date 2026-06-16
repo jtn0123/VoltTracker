@@ -245,7 +245,7 @@ interface DashboardHost :
      * mixing its toggles into the host's flat override surface. The bridge calls e.g.
      * `eventNotifications().setNewDtcEnabled(...)`. `MainActivity` returns its
      * [EventNotificationHostDelegate] here, so the seven toggle bodies live entirely on the delegate
-     * and the Activity exposes the cluster with a single member (report items A1/I3).
+     * and the Activity exposes the cluster with a single member.
      */
     fun eventNotifications(): EventNotificationCommands
 }

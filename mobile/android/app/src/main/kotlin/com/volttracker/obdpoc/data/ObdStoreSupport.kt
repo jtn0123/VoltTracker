@@ -100,7 +100,7 @@ object ObdStoreSupport {
         value: Double?,
     ) {
         if (value != null) {
-            json.put(key, value.toDouble())
+            json.put(key, value)
         }
     }
 
@@ -112,7 +112,7 @@ object ObdStoreSupport {
         value: Long?,
     ) {
         if (value != null) {
-            json.put(key, value.toLong())
+            json.put(key, value)
         }
     }
 
@@ -430,20 +430,6 @@ object ObdStoreSupport {
     }
 
     @JvmStatic
-    fun maxDouble(
-        db: SQLiteDatabase,
-        table: String,
-        column: String,
-    ): Double {
-        val safeTable = requireKnownTable(table)
-        val safeColumn = requireSimpleIdentifier(column)
-        val where = if (VoltTrackerDb.TABLE_TELEMETRY == safeTable) " WHERE $USEFUL_TELEMETRY_WHERE" else ""
-        return db.rawQuery("SELECT MAX($safeColumn) FROM $safeTable$where", null).use { cursor ->
-            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getDouble(0) else 0.0
-        }
-    }
-
-    @JvmStatic
     fun maxIntForSession(
         db: SQLiteDatabase,
         column: String,
@@ -527,9 +513,6 @@ object ObdStoreSupport {
         }
         return target
     }
-
-    @JvmStatic
-    fun <T> firstOrNull(items: List<T>): T? = if (items.isEmpty()) null else items[0]
 
     @JvmStatic
     fun getRecentSessions(

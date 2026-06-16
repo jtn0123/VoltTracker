@@ -11,13 +11,14 @@ package com.volttracker.obdpoc.widget
  * the branching logic here, where it can be tested cheaply.
  */
 object WidgetStateFormatter {
+    private const val MS_PER_MINUTE = 60L * 1000L
+
     /** Beyond this age the displayed data is considered stale and flagged as such. */
-    const val STALE_AFTER_MS = 15L * 60L * 1000L
+    const val STALE_AFTER_MS = 15L * MS_PER_MINUTE
 
     /** Below this age we show "just now" instead of a minute count. */
-    const val JUST_NOW_UNDER_MS = 60L * 1000L
+    const val JUST_NOW_UNDER_MS = MS_PER_MINUTE
 
-    private const val MS_PER_MINUTE = 60L * 1000L
     private const val MS_PER_HOUR = 60L * MS_PER_MINUTE
     private const val HOURS_PER_DAY = 24L
 
@@ -57,8 +58,12 @@ object WidgetStateFormatter {
         val stale: Boolean,
     )
 
+    // The formatter is framework-free and cannot read R.string, so this literal must stay in sync
+    // with R.string.widget_soc_placeholder (the provider's resource for the same unknown-SOC case).
+    private const val SOC_UNKNOWN_TEXT = "—"
+
     /** Formats SOC as a percent, or an em-dash placeholder when unknown. */
-    fun socText(snapshot: WidgetSnapshot): String = if (snapshot.hasSoc()) "${snapshot.socPct}%" else "—"
+    fun socText(snapshot: WidgetSnapshot): String = if (snapshot.hasSoc()) "${snapshot.socPct}%" else SOC_UNKNOWN_TEXT
 
     /** Decides the status line given the snapshot. */
     fun status(snapshot: WidgetSnapshot): Status =
@@ -118,5 +123,5 @@ object WidgetStateFormatter {
     }
 
     /** Keeps the formatter independent of the classifier enum while matching its payload key. */
-    private const val VEHICLE_STATE_CHARGING = "charging"
+    internal const val VEHICLE_STATE_CHARGING = "charging"
 }

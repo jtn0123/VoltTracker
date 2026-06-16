@@ -68,12 +68,15 @@ object MainActivityUtils {
         return ""
     }
 
+    /** Number of trailing address characters kept by [redactAddress]. */
+    private const val REDACT_SUFFIX_LEN = 5
+
     /** Returns the last 5 chars of a MAC-like address prefixed with "...", or "" for shorts. */
     @JvmStatic
     fun redactAddress(address: String?): String {
-        if (address == null || address.length < 5) {
+        if (address == null || address.length < REDACT_SUFFIX_LEN) {
             return ""
         }
-        return "..." + address.substring(address.length - 5)
+        return "..." + address.substring(address.length - REDACT_SUFFIX_LEN)
     }
 }

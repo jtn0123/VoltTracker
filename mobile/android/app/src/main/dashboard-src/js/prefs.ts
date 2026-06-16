@@ -152,7 +152,6 @@
   // Central unit formatting. Data crosses the bridge in SI-ish units (speed in
   // km/h, distance in km/m, temp in °C, efficiency in mi/kWh); renderers call
   // these so a single `units` preference flips every surface consistently.
-  const KPH_TO_MPH = 0.621371;
   const KM_TO_MI = 0.621371;
 
   function unitSystem(): "imperial" | "metric" {
@@ -161,7 +160,7 @@
 
   function speed(kph: number): { value: number; unit: string } {
     const metric = unitSystem() === "metric";
-    return { value: Math.round(metric ? kph : kph * KPH_TO_MPH), unit: metric ? "km/h" : "mph" };
+    return { value: Math.round(metric ? kph : kph * KM_TO_MI), unit: metric ? "km/h" : "mph" };
   }
 
   function distanceKm(km: number): { value: string; unit: string } {
@@ -236,9 +235,9 @@
   // and a data-contrast="high" attr on :root (document.documentElement), both
   // swapping centralized CSS tokens (base.css). Loaded at boot so the chosen
   // size/contrast is in place before first paint.
-  const FONT_SCALE_MIN = 1;
-  const FONT_SCALE_MAX = 1.5;
   const FONT_SCALE_CHOICES = [1, 1.25, 1.5];
+  const FONT_SCALE_MIN = FONT_SCALE_CHOICES[0];
+  const FONT_SCALE_MAX = FONT_SCALE_CHOICES[FONT_SCALE_CHOICES.length - 1];
 
   function fontScale(): number {
     const raw = Number(get<number>("fontScale", 1));
@@ -247,7 +246,7 @@
   }
 
   function highContrast(): boolean {
-    return get<boolean>("highContrast", false) === true;
+    return get<boolean>("highContrast", false);
   }
 
   // Snap an arbitrary stored scale to the nearest offered choice so the
@@ -344,27 +343,27 @@
     // legacy-WebView replaceChildren polyfill, so this must not depend on it.
     while (root.firstChild) root.removeChild(root.firstChild);
     cfg.forEach((entry, index) => {
+      const label = tileLabel(entry.key);
       const row = document.createElement("div");
       row.className = "tile-edit-row";
       const up = document.createElement("button");
       up.type = "button";
       up.className = "tile-move";
       up.textContent = "↑";
-      up.setAttribute("aria-label", `Move ${tileLabel(entry.key)} up`);
+      up.setAttribute("aria-label", `Move ${label} up`);
       up.disabled = index === 0;
       up.addEventListener("click", () => reorderTile(entry.key, -1));
       const down = document.createElement("button");
       down.type = "button";
       down.className = "tile-move";
       down.textContent = "↓";
-      down.setAttribute("aria-label", `Move ${tileLabel(entry.key)} down`);
+      down.setAttribute("aria-label", `Move ${label} down`);
       down.disabled = index === cfg.length - 1;
       down.addEventListener("click", () => reorderTile(entry.key, 1));
       const name = document.createElement("span");
       name.className = "tile-edit-label";
-      name.textContent = tileLabel(entry.key);
+      name.textContent = label;
       const toggle = document.createElement("button");
-      const label = tileLabel(entry.key);
       toggle.type = "button";
       toggle.className = "tile-toggle";
       toggle.dataset.on = String(entry.on);

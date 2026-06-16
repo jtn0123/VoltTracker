@@ -27,6 +27,10 @@ import { initialTelemetryState } from "./telemetry-state";
     .filter(Boolean);
   // How long (ms) since the last accepted sample before we mark tiles stale.
   const STALE_THRESHOLD_MS = 3000;
+  // Max age (ms) of an inactive-status sample we'll still accept as recent.
+  const RECENT_SAMPLE_ACCEPT_MS = 30000;
+  // Below this duration, formatShortDuration shows one decimal (e.g. "1.5s").
+  const SHORT_DURATION_DECIMAL_CUTOFF_MS = 10000;
   let rateChipReconnectBound = false;
   // One-shot guard so we only ask the backend to rehydrate the live track once per
   // session activation (reset in resetTelemetry). Recovers the in-progress drive's
@@ -37,10 +41,6 @@ import { initialTelemetryState } from "./telemetry-state";
   // as fresh when its updatedAt actually advances past this marker — otherwise
   // a wedged adapter keeps the stale indicator and rate chip reporting "live".
   let lastSeenSampleUpdatedAt = 0;
-
-  function average(values: number[]) {
-    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
-  }
 
   function pushBounded(values: number[], value: number, limit: number) {
     values.push(value);
@@ -154,7 +154,7 @@ import { initialTelemetryState } from "./telemetry-state";
     if (source.includes("demo")) return state.demoActive || isActiveStatus();
     const updatedAt = Number(sample.updatedAt || 0);
     const ageMs = updatedAt > 0 ? Date.now() - updatedAt : Number.POSITIVE_INFINITY;
-    return isActiveStatus() || ageMs < 30000;
+    return isActiveStatus() || ageMs < RECENT_SAMPLE_ACCEPT_MS;
   }
 
   function isActiveStatus() {
@@ -407,7 +407,7 @@ import { initialTelemetryState } from "./telemetry-state";
   function formatShortDuration(ms: number) {
     const value = Math.max(0, Number(ms) || 0);
     if (value < 1000) return `${Math.round(value)}ms`;
-    return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}s`;
+    return `${(value / 1000).toFixed(value < SHORT_DURATION_DECIMAL_CUTOFF_MS ? 1 : 0)}s`;
   }
 
   function setOptionalLiveText(id: string, value: unknown) {
@@ -683,12 +683,15 @@ import { initialTelemetryState } from "./telemetry-state";
         speedMeter.setAttribute("aria-label", `Vehicle speed in ${primary.unit}`);
       } else {
         // Without valuenow the meter is indeterminate; valuetext keeps screen
-        // readers announcing "no data yet" instead of a bare "--".
+        // readers announcing "no data yet" instead of a bare "--". Reset the
+        // unit-specific label too so a reader doesn't keep announcing the stale
+        // "Vehicle speed in mph" for a tile that now has no reading.
         speedMeter.removeAttribute("aria-valuenow");
         speedMeter.setAttribute("aria-valuetext", "no data yet");
+        speedMeter.setAttribute("aria-label", "Vehicle speed");
       }
     }
-    setOptionalLiveText("rpmValue", t.rpm == null || t.rpm === "" ? "--" : `${t.rpm}`);
+    setOptionalLiveText("rpmValue", t.rpm);
     // voltageValue is the aux 12V (ATRV from the ELM adapter), labelled accordingly
     // in the partial. The HV traction-pack voltage is rendered via drivePackVoltage below.
     setOptionalLiveText(
@@ -1325,8 +1328,9 @@ import { initialTelemetryState } from "./telemetry-state";
         : backgroundDetail,
       foregroundService ? (appForeground ? "armed" : "active") : "manual"
     );
+    const total = document.querySelectorAll(".validation-row").length;
     const okCount = document.querySelectorAll(".validation-row[data-tone='ok']").length;
-    VD.setText("validationSummary", okCount ? `${okCount}/5 ok` : "waiting");
+    VD.setText("validationSummary", okCount ? `${okCount}/${total} ok` : "waiting");
   }
 
   function setValidationRow(
@@ -1377,7 +1381,6 @@ import { initialTelemetryState } from "./telemetry-state";
   setInterval(applyStaleIndicator, 1000);
 
   Object.assign(VD, {
-    average,
     formatDistance,
     setStatus,
     setAppState,

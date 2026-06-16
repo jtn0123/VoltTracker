@@ -525,11 +525,11 @@
   }
 
   .map-sheet-head h2 {
-    margin-top: 4px;
+    margin-top: 1px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 17px;
+    font-size: 15px;
     font-weight: 700;
     letter-spacing: -0.01em;
   }
@@ -537,8 +537,8 @@
   .map-sheet-stats {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin-top: 12px;
-    padding-top: 12px;
+    margin-top: 9px;
+    padding-top: 9px;
     border-top: 1px solid var(--line);
   }
 
@@ -557,11 +557,11 @@
 
   .map-sheet-stats strong {
     display: block;
-    margin-top: 5px;
+    margin-top: 3px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 20px;
+    font-size: 17px;
     font-variant-numeric: tabular-nums;
   }
 
@@ -747,7 +747,7 @@
   .maint-del:active {
     border-color: rgba(255,107,95,0.4);
     background: rgba(255,107,95,0.12);
-    color: var(--bad-soft, #ff6b5f);
+    color: var(--bad-soft);
   }
 
   /* Empty-state guidance row (M5): no logged entry yet, so it reads as a prompt, not history. */
@@ -769,7 +769,7 @@
   }
 
   .maint-due[data-due="overdue"] {
-    color: var(--bad-soft, #ff6b5f);
+    color: var(--bad-soft);
   }
 
   /* Aggregate "service due soon / overdue" banner above the list (M1/C4). */
@@ -793,7 +793,7 @@
   .maintenance-due-hint[data-due="overdue"] {
     border-color: rgba(255,107,95,0.4);
     background: rgba(255,107,95,0.12);
-    color: var(--bad-soft, #ff6b5f);
+    color: var(--bad-soft);
   }
 
   /* Inline "Add entry" form (M1/C4), replacing the old window.prompt() chain. */
@@ -1183,7 +1183,6 @@
 
   @media (min-width: 640px) {
     .app { padding-inline: 18px; }
-    .drive-signal-grid { grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr); }
     .detail-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
     .button-grid { grid-template-columns: repeat(6, 1fr); }
   }
@@ -1201,7 +1200,6 @@
     .connection-head { grid-template-columns: 1fr; }
     .primary-action { width: 100%; }
     .ring { margin-inline: auto; }
-    .drive-signal-grid { grid-template-columns: 1fr; }
     .dtc-action-row { grid-template-columns: 1fr; }
     .dtc-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .dtc-item { grid-template-columns: 1fr; }
@@ -1782,21 +1780,6 @@
     color: var(--on-map-accent);
     border-color: transparent;
     font-weight: 800;
-  }
-
-  .map-sheet-head h2 {
-    margin-top: 1px;
-    font-size: 15px;
-  }
-
-  .map-sheet-stats {
-    margin-top: 9px;
-    padding-top: 9px;
-  }
-
-  .map-sheet-stats strong {
-    margin-top: 3px;
-    font-size: 17px;
   }
 
   /* Leaflet popup that opens when the user taps the scrub marker. */

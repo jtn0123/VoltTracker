@@ -61,7 +61,7 @@ function parseSessions(n: number): RecentSession[] {
       const raw = bridge.getRecentSessions(n);
       const arr: unknown = JSON.parse(raw || "[]");
       result = Array.isArray(arr) ? arr.filter(isRecentSession) : [];
-    } catch (ignored) {
+    } catch (_err) {
       result = [];
     }
   }
@@ -356,7 +356,7 @@ function installStatusObserver() {
           ? VD.parsePayload<LowVoltageStatus>(payload, {})
           : (payload as LowVoltageStatus | null | undefined);
         noteStatus(parsed);
-      } catch (ignored) {
+      } catch (_err) {
         // Observer must never break the underlying setStatus call.
       }
       return result;
@@ -378,7 +378,7 @@ function installTelemetryObserver() {
       }
       try {
         renderStatusPopover();
-      } catch (ignored) {
+      } catch (_err) {
         // Observer must never break the underlying updateTelemetry call.
       }
       return result;

@@ -79,8 +79,8 @@ class LocationManagerTracker(
     private fun requestUpdates() {
         locationManager = context.getSystemService(LocationManager::class.java)
         val manager = locationManager ?: return
-        val gps = requestProvider(manager, LocationManager.GPS_PROVIDER, 1000L)
-        val network = requestProvider(manager, LocationManager.NETWORK_PROVIDER, 5000L)
+        val gps = requestProvider(manager, LocationManager.GPS_PROVIDER, GPS_MIN_INTERVAL_MS)
+        val network = requestProvider(manager, LocationManager.NETWORK_PROVIDER, NETWORK_MIN_INTERVAL_MS)
         // Only mark updates active when at least one provider actually subscribed;
         // otherwise resumeUpdatesIfPermitted() would be suppressed forever after a
         // total failure even though nothing is delivering fixes.
@@ -202,6 +202,12 @@ class LocationManagerTracker(
 
         /** How long the tracker waits for any fix before re-subscribing a hung provider. */
         internal const val WATCHDOG_TIMEOUT_MS = 60_000L
+
+        /** Minimum interval between GPS-provider fixes, in milliseconds. */
+        private const val GPS_MIN_INTERVAL_MS = 1000L
+
+        /** Minimum interval between network-provider fixes, in milliseconds. */
+        private const val NETWORK_MIN_INTERVAL_MS = 5000L
 
         private fun round6(value: Double): Double = Math.round(value * 1_000_000.0) / 1_000_000.0
 

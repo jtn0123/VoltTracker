@@ -76,9 +76,12 @@ import { prefs, units } from "./prefs";
   // carry the EV energy actually used while driving (it currently doesn't —
   // VoltInsights has distance/time/speed, not kWh). A real-world Gen-2 Volt
   // averages roughly 3.5 mi/kWh of usable energy; the resulting figure is an
-  // estimate and is labelled as such in the UI.
+  // estimate, and the savings note states the assumed mi/kWh (see
+  // renderSavingsVsGas) so it's clear the savings are approximate.
   const ASSUMED_VOLT_MI_PER_KWH = 3.5;
   const METERS_PER_MILE = 1609.344;
+  const KM_PER_MILE = 1.609344;
+  const MPS_TO_MPH = 2.2369363;
 
   // Renders the savings-row note as plain text (the normal "estimated vs …"
   // assumptions line). Replaces any prompt-state children with a single text
@@ -237,7 +240,7 @@ import { prefs, units } from "./prefs";
         const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
         mps = haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / dt;
       }
-      return Math.max(0, mps) * 2.2369363;
+      return Math.max(0, mps) * MPS_TO_MPH;
     });
     // Drop regen samples (kW < 0) from the per-point efficiency average. Including them with
     // the old `Math.max(60, s/c)` clamp folded every regen-dominant segment into the same
@@ -295,7 +298,7 @@ import { prefs, units } from "./prefs";
           const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
           mps = haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / dt;
         }
-        const mph = Math.max(0, mps) * 2.2369363;
+        const mph = Math.max(0, mps) * MPS_TO_MPH;
         if (mph < 10) continue;
         let grade = 0;
         if (
@@ -449,7 +452,7 @@ import { prefs, units } from "./prefs";
       head.replaceChildren();
       if (best.e > 0) {
         const speed = document.createElement("b");
-        speed.textContent = units.speedText(best.mph / 0.621371);
+        speed.textContent = units.speedText(best.mph * KM_PER_MILE);
         speed.style.color = evColor;
         head.append(
           "Most efficient around ",

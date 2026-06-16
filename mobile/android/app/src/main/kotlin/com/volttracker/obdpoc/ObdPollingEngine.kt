@@ -193,6 +193,8 @@ open class ObdPollingEngine(
                 everConnected.toString(),
             )
         }
+        // Keep this literal in sync with R.string.status_retry_cancelled (the value ObdService
+        // broadcasts). The engine has no Context, so it can't resolve the resource itself.
         service.broadcastStatus("idle", "Retry cancelled.", false)
         service.stopSelf()
         return true

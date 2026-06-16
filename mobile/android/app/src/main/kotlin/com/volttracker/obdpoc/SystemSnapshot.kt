@@ -20,6 +20,9 @@ import org.json.JSONObject
  * connect five seconds ago or five days?) without having to correlate three other log files.
  */
 object SystemSnapshot {
+    /** How many recent sessions to scan when looking for the last successful one. */
+    private const val RECENT_SESSION_SCAN = 20
+
     /**
      * Builds the snapshot. Pass a [SessionSummaryStore] so `lastSuccessfulSessionMs` can be filled
      * in; pass `null` to omit that field (e.g. during very early startup before the store is wired
@@ -59,7 +62,7 @@ object SystemSnapshot {
             // -- Last successful session timestamp --
             if (summaryStore != null) {
                 var lastOkMs = 0L
-                for (summary in summaryStore.getRecent(20)) {
+                for (summary in summaryStore.getRecent(RECENT_SESSION_SCAN)) {
                     if (SessionSummary.OUTCOME_SUCCESS == summary.outcome && summary.endMs > lastOkMs) {
                         lastOkMs = summary.endMs
                     }
@@ -115,7 +118,7 @@ object SystemSnapshot {
         }
         try {
             output.put("btEnabled", adapter.isEnabled)
-        } catch (ignored: SecurityException) {
+        } catch (_: SecurityException) {
             // isEnabled() is permission-free on most platforms, but be defensive.
         }
     }

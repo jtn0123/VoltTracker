@@ -210,6 +210,10 @@ import { initialTelemetryState } from "./telemetry-state";
     return (fn as (...callArgs: unknown[]) => ReturnType<VoltBridge[K]>).apply(target, args);
   }
 
+  // How long the restore dialog lingers on a successful finish before auto-hiding,
+  // so the user can read the "Done" result before it disappears.
+  const RESTORE_DONE_HIDE_MS = 2200;
+
   function clearRestoreProgressTimer() {
     if (restoreProgressHideTimer) {
       clearTimeout(restoreProgressHideTimer);
@@ -258,9 +262,12 @@ import { initialTelemetryState } from "./telemetry-state";
   function formatProgressBytes(value: number) {
     if (!Number.isFinite(value) || value <= 0) return "0 B";
     if (value < 1024) return `${Math.round(value)} B`;
-    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-    if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
-    return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
+    // `undefined` locale follows the device's runtime locale for the decimal separator.
+    const oneDecimal = (scaled: number) =>
+      scaled.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    if (value < 1024 * 1024) return `${oneDecimal(value / 1024)} KB`;
+    if (value < 1024 * 1024 * 1024) return `${oneDecimal(value / 1024 / 1024)} MB`;
+    return `${oneDecimal(value / 1024 / 1024 / 1024)} GB`;
   }
 
   function formatProgressCount(value: number) {
@@ -275,7 +282,7 @@ import { initialTelemetryState } from "./telemetry-state";
     if (bytesDone != null && bytesTotal != null && bytesTotal > 0) {
       return `${formatProgressBytes(bytesDone)} of ${formatProgressBytes(bytesTotal)}`;
     }
-    if (bytesDone != null && bytesDone >= 0) {
+    if (bytesDone != null) {
       return `${formatProgressBytes(bytesDone)} processed`;
     }
     const rowsDone = progressNumber(progress.rowsDone);
@@ -283,7 +290,7 @@ import { initialTelemetryState } from "./telemetry-state";
     if (rowsDone != null && rowsTotal != null && rowsTotal > 0) {
       return `${formatProgressCount(rowsDone)} of ${formatProgressCount(rowsTotal)} rows`;
     }
-    if (rowsDone != null && rowsDone >= 0) {
+    if (rowsDone != null) {
       return `${formatProgressCount(rowsDone)} rows processed`;
     }
     return "Preparing work.";
@@ -361,7 +368,7 @@ import { initialTelemetryState } from "./telemetry-state";
     if (busy) document.body.dataset.restoreBusy = "true";
     else delete document.body.dataset.restoreBusy;
     if (!busy && tone === "ok") {
-      restoreProgressHideTimer = setTimeout(hideRestoreProgress, 2200);
+      restoreProgressHideTimer = setTimeout(hideRestoreProgress, RESTORE_DONE_HIDE_MS);
     }
     // Only move focus when the dialog first appears — native pushes progress
     // continuously, and re-focusing on every tick steals keyboard/SR focus.
@@ -926,7 +933,6 @@ import { initialTelemetryState } from "./telemetry-state";
   function updateViewHeading() {
     // Demo uses the same headings as real — it only simulates numbers, it doesn't relabel the UI.
     const meta = realViewMeta[String(state.view)] || realViewMeta.drive;
-    if (!meta) return;
     setText("screenKicker", meta[0]);
     setText("screenTitle", meta[1]);
     const icon = el("screenTitleIcon");
@@ -1019,7 +1025,7 @@ import { initialTelemetryState } from "./telemetry-state";
       const option = document.createElement("option");
       option.value = String(device.address || "");
       option.dataset.name = device.name || "OBD adapter";
-      option.textContent = `${device.name || "OBD adapter"} · ${device.address}`;
+      option.textContent = `${device.name || "OBD adapter"} · ${device.address || "unknown"}`;
       select.append(option);
     });
     if (preferred.address) {

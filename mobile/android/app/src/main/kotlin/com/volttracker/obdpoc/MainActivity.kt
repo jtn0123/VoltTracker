@@ -539,11 +539,11 @@ open class MainActivity :
                 publishStatus("blocked", getString(R.string.status_turn_on_bluetooth), true)
                 try {
                     startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                } catch (ex: Exception) {
+                } catch (ex: RuntimeException) {
                     Log.w(TAG, "Bluetooth enable prompt failed; falling back to Bluetooth settings", ex)
                     try {
                         startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                    } catch (settingsEx: Exception) {
+                    } catch (settingsEx: RuntimeException) {
                         Log.w(TAG, "Bluetooth settings fallback failed", settingsEx)
                         publishStatus("blocked", getString(R.string.status_open_bluetooth_settings_manually), true)
                     }
@@ -691,8 +691,6 @@ open class MainActivity :
     override fun getStorageSummaryJson(): String = storageReader.storageSummaryJson()
 
     override fun getTripsJson(): String = storageReader.tripsJson()
-
-    open fun getTripRouteJson(sessionId: Long): String = getTripRouteJson(sessionId.toString())
 
     override fun getTripRouteJson(routeKey: String?): String = storageReader.tripRouteJson(routeKey)
 

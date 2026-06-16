@@ -3,10 +3,10 @@
 // This is the FIRST STEP of internationalizing the WebView UI, not the whole job.
 // Today the vast majority of user-facing copy is still inlined as English literals
 // in the TS sources and HTML partials. Extracting all of it into this table is a
-// large, mechanical follow-up (see docs note at the bottom of this file). What lives
-// here proves the path end-to-end on a small, representative slice: a typed default
-// (English) catalog, a `t()` lookup with `{placeholder}` interpolation, a partial
-// per-locale override mechanism, and locale resolution from `navigator.language`.
+// large, mechanical follow-up. What lives here proves the path end-to-end on a small,
+// representative slice: a typed default (English) catalog, a `t()` lookup with
+// `{placeholder}` interpolation, a partial per-locale override mechanism, and locale
+// resolution from `navigator.language`.
 //
 // Design notes:
 //   - The English catalog (`EN`) is the source of truth and the type. `MessageKey`
@@ -105,8 +105,9 @@ export function resolveDeviceLocale(): string {
   }
 }
 
-// Substitute `{key}` tokens with stringified params. Unmatched tokens are left intact
-// so a missing param is visible in dev rather than silently blanked.
+// Substitute `{key}` tokens with stringified params. A token whose param is absent —
+// or present but null/undefined — is left intact so a missing param is visible in dev
+// rather than silently blanked.
 function interpolate(template: string, params?: MessageParams): string {
   if (!params) return template;
   return template.replace(/\{(\w+)\}/g, (match, name: string) => {

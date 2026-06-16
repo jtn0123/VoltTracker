@@ -396,7 +396,6 @@ class BluetoothStateReporter(
                 BluetoothDevice.DEVICE_TYPE_CLASSIC -> "classic"
                 BluetoothDevice.DEVICE_TYPE_LE -> "le"
                 BluetoothDevice.DEVICE_TYPE_DUAL -> "dual"
-                BluetoothDevice.DEVICE_TYPE_UNKNOWN -> "unknown($type)"
                 else -> "unknown($type)"
             }
 

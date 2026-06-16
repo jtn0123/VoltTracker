@@ -34,6 +34,8 @@ type DemoDashboardData = {
 
 export function voltDashboardDemoData(): DemoDashboardData {
   return {
+      // `efficiency` is a pre-formatted imperial display string (e.g. "4.1 mi/kWh", "41.7 MPG");
+      // it is intentionally not unit-converted in demo mode, so it is not a metric/units bug.
       trips: [
         { id: 8421, label: "Home -> Office", date: "Apr 30 - 08:14", miles: 18.4, mins: 28, efficiency: "4.1 mi/kWh", mode: "ev", wh: 241 },
         { id: 8420, label: "Office -> Trader Joe's", date: "Apr 29 - 17:42", miles: 6.1, mins: 14, efficiency: "3.9 mi/kWh", mode: "ev", wh: 256 },
@@ -51,7 +53,7 @@ export function voltDashboardDemoData(): DemoDashboardData {
       hourly: [8, 12, 18, 24, 16, 10, 4, 0, 0, 2, 4, 8, 12, 10, 6, 4, 8, 14, 22, 30, 42, 68, 82, 54],
       insights: [
         { kind: "good", icon: "+", title: "Best month yet for EV ratio", body: "April hit 78% electric, up from 64% in March. Projected annual savings rises about $45." },
-        { kind: "good", icon: "OK", title: "Battery degrading below average", body: "8.7% capacity loss across 38k miles vs about 12% expected for 2017 Volts." },
+        { kind: "good", icon: "OK", title: "Battery degrading slower than average", body: "8.7% capacity loss across 38k miles vs about 12% expected for 2017 Volts." },
         { kind: "warn", icon: "!", title: "Cell 47 trending low", body: "Cell 47 has drifted 18 mV below the pack mean over the past two weeks." },
         { kind: "info", icon: "i", title: "Charging cost trends month to month", body: "Set your electricity rate in Preferences to see a per-month charging-cost trend on the Charge tab." },
         { kind: "good", icon: "EV", title: "Tahoe trip MPG within 4% of route avg", body: "Apr 28's 184 mile roundtrip hit 41.7 MPG for that elevation profile." }

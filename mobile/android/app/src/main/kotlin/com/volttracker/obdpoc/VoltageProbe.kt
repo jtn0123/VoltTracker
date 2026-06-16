@@ -83,6 +83,12 @@ class VoltageProbe(
 
         const val DEFAULT_TIMEOUT_MS: Long = 1000L
 
+        /** Lower bound for a plausible decoded control-module voltage. */
+        private const val MIN_PLAUSIBLE_VOLTS = 0.0
+
+        /** Upper bound for a plausible decoded control-module voltage (load-bearing per tests). */
+        private const val MAX_PLAUSIBLE_VOLTS = 32.0
+
         /**
          * Decodes a raw `0142` response per SAE J1979: looks for the `4142` header byte, then reads
          * the next two bytes as a big-endian unsigned 16-bit voltage in millivolts.
@@ -103,7 +109,7 @@ class VoltageProbe(
                 val a = hex.substring(dataStart, dataStart + 2).toInt(16)
                 val b = hex.substring(dataStart + 2, dataStart + 4).toInt(16)
                 val volts = (a * 256.0 + b) / 1000.0
-                if (volts < 0.0 || volts > 32.0) {
+                if (volts < MIN_PLAUSIBLE_VOLTS || volts > MAX_PLAUSIBLE_VOLTS) {
                     null
                 } else {
                     volts
