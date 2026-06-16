@@ -39,11 +39,13 @@ object DiagnosticsBundle {
     private const val MIN_SESSION_BYTES = 256
     private const val HEADER_RESERVE = 1024
 
-    // Upper bound on one pretty-printed MANIFEST entry (a worst-case entry — long filename, large
-    // byte/ms numbers, longest reason — serializes to ~238 chars). Keeping this an over-estimate means
-    // planSessions reserves at least the real manifest size, so the session bodies it admits are
-    // guaranteed to fit even though they are emitted verbatim (not re-clamped) for MANIFEST/body parity.
-    private const val MANIFEST_BYTES_PER_ENTRY = 256
+    // Upper bound on the marginal cost of one pretty-printed MANIFEST entry. A worst-case entry — long
+    // filename, max-width byte/ms numbers, longest reason — adds ~260 chars per entry inside the
+    // 2-space-indented JSONArray (verified empirically), so 256 actually UNDER-reserves once enough
+    // sessions accumulate. Keeping this a true over-estimate means planSessions reserves at least the
+    // real manifest size, so the session bodies it admits are guaranteed to fit even though they are
+    // emitted verbatim (not re-clamped) for MANIFEST/body parity.
+    private const val MANIFEST_BYTES_PER_ENTRY = 320
 
     // Bytes held back so the trailing OMITTED/END sections always fit within the advertised budget.
     private const val FOOTER_RESERVE = 256

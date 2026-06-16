@@ -408,6 +408,7 @@ object DatabaseMerger {
                     )
                 if (existing == null) {
                     target.insertOrThrow(VoltTrackerDb.TABLE_ADAPTER_HISTORY, null, cv)
+                    touched++
                 } else {
                     val merged = ContentValues()
                     val donorContained = donorIntervalContained(existing, cv)
@@ -435,7 +436,6 @@ object DatabaseMerger {
                     }
                     target.update(VoltTrackerDb.TABLE_ADAPTER_HISTORY, merged, "adapter_key = ?", arrayOf(key))
                 }
-                touched++
             }
         }
         return touched
@@ -473,6 +473,7 @@ object DatabaseMerger {
                     )
                 if (existing == null) {
                     target.insertOrThrow(VoltTrackerDb.TABLE_DIAGNOSTIC_CODES, null, cv)
+                    touched++
                 } else {
                     val merged = ContentValues()
                     mergeCounter(merged, "seen_count", existing, cv, donorIntervalContained(existing, cv))
@@ -495,7 +496,6 @@ object DatabaseMerger {
                     }
                     target.update(VoltTrackerDb.TABLE_DIAGNOSTIC_CODES, merged, where, args)
                 }
-                touched++
             }
         }
         return touched

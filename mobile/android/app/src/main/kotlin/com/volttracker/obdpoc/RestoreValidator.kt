@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.database.sqlite.SQLiteDatabase
 import com.volttracker.obdpoc.data.VoltTrackerDb
+import java.io.DataInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
@@ -98,10 +99,9 @@ object RestoreValidator {
         }
         val header = ByteArray(16)
         try {
-            FileInputStream(file).use { input ->
-                if (input.read(header) != header.size ||
-                    !String(header, StandardCharsets.US_ASCII).startsWith("SQLite format 3")
-                ) {
+            DataInputStream(FileInputStream(file)).use { input ->
+                input.readFully(header)
+                if (!String(header, StandardCharsets.US_ASCII).startsWith("SQLite format 3")) {
                     return false
                 }
             }
@@ -140,6 +140,9 @@ object RestoreValidator {
             val columns = HashSet<String>()
             db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
                 val nameIndex = cursor.getColumnIndex("name")
+                if (nameIndex < 0) {
+                    return false
+                }
                 while (cursor.moveToNext()) {
                     columns.add(cursor.getString(nameIndex))
                 }

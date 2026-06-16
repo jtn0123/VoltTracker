@@ -47,7 +47,7 @@ class BluetoothStateReporter(
     @Volatile private var activeAddress: String? = null
 
     /** Tracks consecutive status broadcasts in `connecting` with a non-null failureClass. */
-    private var connectingWithFailureStreak = 0
+    @Volatile private var connectingWithFailureStreak = 0
 
     /**
      * Registers the OS-level Bluetooth receiver plus our own status receiver. Caller (the service)
@@ -108,8 +108,13 @@ class BluetoothStateReporter(
         if (address == null || address.trim().isEmpty()) {
             return
         }
+        // Only reset the failure streak when we switch to a different device. Resetting on every
+        // pre-flight defeated the repeat-failure SDP refresh: two consecutive failed connects to the
+        // *same* device must be able to reach the streak threshold and trigger the UUID refresh.
+        if (!address.equals(activeAddress, ignoreCase = true)) {
+            connectingWithFailureStreak = 0
+        }
         activeAddress = address
-        connectingWithFailureStreak = 0
         val service = service ?: return
         val recorder = service.recorder ?: return
         val adapter = BluetoothAdapters.get(service)

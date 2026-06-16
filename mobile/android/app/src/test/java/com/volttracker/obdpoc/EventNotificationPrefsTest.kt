@@ -121,10 +121,12 @@ class EventNotificationPrefsTest {
         assertTrue("a threshold change advances it again", subject.settingsVersion() > afterOneToggle)
 
         // Scan/throttle bookkeeping is NOT part of the cached Settings snapshot, so it must not churn
-        // the version (which would defeat the coordinator's per-sample cache).
+        // the version (which would defeat the coordinator's per-sample cache). The auto-scan-on-connect
+        // toggle is likewise absent from that snapshot, so it must leave the version alone too.
         val beforeBookkeeping = subject.settingsVersion()
         subject.setLastScanDtcCodes(listOf("P0AA6"))
         subject.setLastAutoScanAtMs(123L)
+        subject.setAutoScanOnConnectEnabled(true)
         assertEquals("scan bookkeeping leaves the version alone", beforeBookkeeping, subject.settingsVersion())
     }
 

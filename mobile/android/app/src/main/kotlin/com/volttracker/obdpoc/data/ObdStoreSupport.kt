@@ -606,14 +606,22 @@ object ObdStoreSupport {
         var maxLat = -Double.MAX_VALUE
         var minLng = Double.MAX_VALUE
         var maxLng = -Double.MAX_VALUE
+        var sawFinite = false
         for (i in 0 until points.length()) {
             val point = points.getJSONObject(i)
             val lat = point.optDouble("lat")
             val lng = point.optDouble("lng")
+            if (lat.isNaN() || lng.isNaN()) {
+                continue
+            }
+            sawFinite = true
             minLat = minOf(minLat, lat)
             maxLat = maxOf(maxLat, lat)
             minLng = minOf(minLng, lng)
             maxLng = maxOf(maxLng, lng)
+        }
+        if (!sawFinite) {
+            return payload
         }
         payload.put("minLat", minLat)
         payload.put("maxLat", maxLat)

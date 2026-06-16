@@ -340,8 +340,28 @@ open class ObdLocalStore(
      * the active session's row the whole time). Reuses the same projection as completed trips.
      */
     open fun getCurrentSessionRouteJson(): JSONObject {
-        val active = getRecentSessions(5).firstOrNull { it.status == STATUS_ACTIVE } ?: return JSONObject()
-        return reports.tripRouteJson(active.id)
+        // Direct lookup of the newest in-progress (STATUS_ACTIVE) session, independent of how many
+        // newer started rows exist: a fixed-size recent scan could miss the live drive after a
+        // finalize race or rapid scan/demo churn pushed enough completed rows ahead of it; this
+        // status-filtered query always finds it. Inlined (not a helper) to keep the class function
+        // count under the detekt TooManyFunctions ratchet.
+        var active: ObdSessionRecord? = null
+        helper.readableDatabase
+            .query(
+                VoltTrackerDb.TABLE_SESSIONS,
+                null,
+                "status = ?",
+                arrayOf(STATUS_ACTIVE),
+                null,
+                null,
+                "started_at_ms DESC",
+                "1",
+            ).use { cursor ->
+                if (cursor.moveToNext()) {
+                    active = ObdStoreSupport.readSession(cursor)
+                }
+            }
+        return active?.let { reports.tripRouteJson(it.id) } ?: JSONObject()
     }
 
     /** Battery-health snapshots (oldest-first) for the dashboard's pack-health trend chart. */

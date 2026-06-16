@@ -84,22 +84,23 @@ class TroubleshooterBridge(
         if (packageName.isNullOrEmpty()) {
             return false
         }
-        if (!CompetingAppDetector.KNOWN_OBD_PACKAGES.contains(packageName.lowercase(Locale.US))) {
-            Log.w(MainActivity.TAG, "forceStopPackage rejected non-OBD package $packageName")
+        val pkg = packageName.lowercase(Locale.US)
+        if (!CompetingAppDetector.KNOWN_OBD_PACKAGES.contains(pkg)) {
+            Log.w(MainActivity.TAG, "forceStopPackage rejected non-OBD package $pkg")
             return false
         }
         try {
-            activity.packageManager.getPackageInfo(packageName, 0)
+            activity.packageManager.getPackageInfo(pkg, 0)
         } catch (notInstalled: PackageManager.NameNotFoundException) {
             return false
         }
         return try {
             val am = activity.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
-            am.killBackgroundProcesses(packageName)
-            Log.i(MainActivity.TAG, "forceStopPackage: requested kill of $packageName")
+            am.killBackgroundProcesses(pkg)
+            Log.i(MainActivity.TAG, "forceStopPackage: requested kill of $pkg")
             true
         } catch (ex: SecurityException) {
-            Log.w(MainActivity.TAG, "forceStopPackage denied for $packageName", ex)
+            Log.w(MainActivity.TAG, "forceStopPackage denied for $pkg", ex)
             false
         }
     }

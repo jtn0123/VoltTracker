@@ -137,7 +137,18 @@ class DataBackup(
                 remaining -= skipped
             }
             val bytes = input.readBytes()
-            return String(bytes, StandardCharsets.UTF_8)
+            // When the tail window starts mid-character (skipBytes > 0 can land inside a
+            // multi-byte UTF-8 sequence), drop the leading continuation bytes (10xxxxxx) so the
+            // excerpt begins on a valid character. Otherwise the first line decodes with U+FFFD
+            // garbling, which can also defeat the redaction regexes (Bluetooth address / VIN /
+            // coordinates) on that line.
+            var start = 0
+            if (skipBytes > 0L) {
+                while (start < bytes.size && (bytes[start].toInt() and 0xC0) == 0x80) {
+                    start++
+                }
+            }
+            return String(bytes, start, bytes.size - start, StandardCharsets.UTF_8)
         }
     }
 

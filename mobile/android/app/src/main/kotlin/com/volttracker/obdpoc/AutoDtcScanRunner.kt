@@ -26,6 +26,10 @@ class AutoDtcScanRunner(
             extractCodes(response)
         } catch (_: IOException) {
             emptyList()
+        } catch (_: RuntimeException) {
+            // Uphold the documented never-throws contract: a parse failure in extractCodes()
+            // must not break the connect path either.
+            emptyList()
         }
 
     private fun extractCodes(response: String?): List<String> {

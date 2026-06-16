@@ -130,7 +130,7 @@ function renderLowVoltageHint(status: LowVoltageStatus | null | undefined) {
       v.toFixed(2) +
       " V). The OBD port may sleep - start the car before the next probe.";
     hint.hidden = false;
-  } else if (v < 12.7) {
+  } else if (v <= 12.7) {
     setDataTone(hint, "warn");
     hint.textContent = "Battery voltage is borderline (" + v.toFixed(2) + " V).";
     hint.hidden = false;

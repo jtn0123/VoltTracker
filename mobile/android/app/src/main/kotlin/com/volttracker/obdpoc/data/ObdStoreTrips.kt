@@ -42,7 +42,14 @@ class ObdStoreTrips(
                     arrayOf(limit.toString()),
                 ).use { cursor ->
                     while (cursor.moveToNext()) {
-                        allTrips.add(JSONObject(cursor.getString(0)))
+                        val parsed =
+                            try {
+                                JSONObject(cursor.getString(0))
+                            } catch (ex: JSONException) {
+                                Log.w(TAG, "skipping corrupt cached trip_json", ex)
+                                continue
+                            }
+                        allTrips.add(parsed)
                     }
                 }
             Collections.sort(allTrips) { left, right ->

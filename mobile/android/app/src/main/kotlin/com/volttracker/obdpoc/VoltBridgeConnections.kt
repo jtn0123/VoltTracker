@@ -58,7 +58,7 @@ internal class VoltBridgeConnections(
         startLastDeviceAction(
             ObdService.ACTION_SCAN,
             "No remembered adapter yet. Connect once to save it.",
-            requireValidAddress = false,
+            requireValidAddress = true,
         )
     }
 

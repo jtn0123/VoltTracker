@@ -447,9 +447,12 @@ import type { FocusTrap } from "./focus-trap";
         hintNode.textContent = "";
         hintNode.hidden = true;
       }
-    } else if (!isRetrying) {
+    } else if (stateName !== "connecting" && !isRetrying) {
       // Reset to the default banner label when there's no live failure to
-      // describe (e.g. a generic JS error coming from window.error).
+      // describe (e.g. a generic JS error coming from window.error). Skip
+      // in-flight connect/retry transitions so an active connect attempt
+      // doesn't clobber existing actionable failure copy with the generic
+      // "Dashboard error" line.
       titleNode.textContent = "Dashboard error";
       if (hintNode) {
         hintNode.textContent = "";
@@ -499,7 +502,7 @@ import type { FocusTrap } from "./focus-trap";
     // Track session terminations: edge from connecting/scanning -> failed/idle.
     const prev = t.lastSessionState;
     if (
-      (prev === "connecting" || prev === "connected" || prev === "initializing") &&
+      (prev === "connecting" || prev === "connected" || prev === "scanning" || prev === "initializing") &&
       (stateName === "failed" || (stateName === "idle" && Boolean(status.blocked)))
     ) {
       t.consecutiveFailedSessions += 1;

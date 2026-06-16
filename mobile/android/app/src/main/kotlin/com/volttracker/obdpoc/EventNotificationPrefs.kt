@@ -81,7 +81,12 @@ class EventNotificationPrefs(
 
     fun setTargetSocPct(pct: Double) = mutateSettings { putFloat(PREF_TARGET_SOC, clampTargetSoc(pct).toFloat()) }
 
-    fun setAutoScanOnConnectEnabled(enabled: Boolean) = putBool(PREF_AUTO_SCAN_ENABLED, enabled)
+    // Written directly without a version bump: auto-scan-on-connect is NOT part of the decider's
+    // cached [Settings] snapshot (see EventNotificationCoordinator.currentSettings), so bumping
+    // PREF_SETTINGS_VERSION here would needlessly invalidate that cache and force a rebuild.
+    fun setAutoScanOnConnectEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(PREF_AUTO_SCAN_ENABLED, enabled) }
+    }
 
     /** Epoch millis of the last completed auto-scan, or 0 when none has run. */
     fun lastAutoScanAtMs(): Long = prefs.getLong(PREF_LAST_AUTO_SCAN_MS, 0L)

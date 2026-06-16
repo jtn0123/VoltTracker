@@ -106,7 +106,7 @@ open class EventNotifier(
                     context.getString(R.string.notification_charge_interrupted_title),
                     context.getString(
                         R.string.notification_charge_interrupted_text,
-                        format0(event.socPct),
+                        format1(event.socPct),
                         format0(event.targetPct),
                     ),
                 )
@@ -116,7 +116,7 @@ open class EventNotifier(
                     context.getString(R.string.notification_target_soc_title),
                     context.getString(
                         R.string.notification_target_soc_text,
-                        format0(event.socPct),
+                        format1(event.socPct),
                         format0(event.targetPct),
                     ),
                 )
@@ -144,7 +144,9 @@ open class EventNotifier(
         }
 
     private fun chargeCompleteText(energyKwh: Double): String =
-        if (energyKwh > 0.0) {
+        // Gate on the displayed precision: a charge that format1 would round to "0.0" uses the
+        // clearer no-energy copy instead of a misleading "Added 0.0 kWh".
+        if (energyKwh >= MIN_DISPLAYED_KWH) {
             context.getString(R.string.notification_charge_complete_text, format1(energyKwh))
         } else {
             context.getString(R.string.notification_charge_complete_text_no_energy)
@@ -176,6 +178,10 @@ open class EventNotifier(
         const val NOTIFICATION_ID_LOW_SOC = 4303
         const val NOTIFICATION_ID_HIGH_TEMP = 4304
         const val NOTIFICATION_ID_TARGET_SOC = 4305
+
+        // Below this, format1 rounds the energy to "0.0", so the charge-complete copy switches to
+        // the no-energy variant rather than claiming "Added 0.0 kWh".
+        private const val MIN_DISPLAYED_KWH = 0.05
 
         @JvmStatic
         fun ensureChannel(ctx: Context?) {

@@ -441,6 +441,10 @@ open class ObdService :
         }
         sessionStartedAtMs = System.currentTimeMillis()
         sessionStateMachine.start(request.phase, request.phaseDetail)
+        // Clear any voltage carried over from a prior session: if this connect's 0142 probe
+        // doesn't run, broadcastStatus must not re-emit the previous drive's reading into the
+        // low-voltage hint / adapter-ready check.
+        lastVoltage = null
         engine.beginSession(request.engineMode)
         try {
             eventCoordinator?.onSessionStart()

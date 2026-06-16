@@ -121,6 +121,12 @@ class EventNotificationDecider(
     // (at/near target -> ChargeComplete) from an interrupted one (well below target -> M3).
     private var lastChargingSocPct: Double? = null
 
+    // Highest SOC seen across the charge. The interrupted-vs-complete decision uses this peak rather
+    // than the single final reading so one noisy low final SOC sample cannot flip a charge that
+    // actually reached (near) the target into a false "interrupted" alert. The event still reports
+    // the SOC at stop.
+    private var maxChargingSocPct: Double? = null
+
     // Armed once per charge so the target-SOC-reached ping fires exactly once when the SOC first
     // crosses the target; reset when a new charge begins (M2).
     private var targetSocArmed = true
@@ -192,16 +198,19 @@ class EventNotificationDecider(
         val energy = chargeEnergyKwh
         val samples = chargeSamples
         val socAtStop = lastChargingSocPct
+        val peakSoc = maxChargingSocPct
         val target = settings.targetSocPct
         resetChargeAccumulator()
         if (!settings.chargeCompleteEnabled || samples < MIN_CHARGE_SAMPLES) {
             return
         }
-        // Interrupted = the charge stopped with a known SOC well below the target (EVSE tripped /
-        // cable unplugged). Otherwise it's a normal completed charge. A null SOC at stop (current
-        // seen but SOC never reported) falls back to the complete copy rather than a false "check
-        // the plug" alert.
-        if (socAtStop != null && socAtStop <= target - INTERRUPTED_SOC_MARGIN_PCT) {
+        // Interrupted = the charge's PEAK SOC stayed well below the target (EVSE tripped / cable
+        // unplugged). Using the peak rather than the single final reading means one noisy low final
+        // sample cannot flip a charge that actually reached near target into a false "interrupted"
+        // alert. Otherwise it's a normal completed charge. A null SOC at stop (current seen but SOC
+        // never reported) falls back to the complete copy rather than a false "check the plug" alert;
+        // the event still reports the SOC at stop.
+        if (socAtStop != null && peakSoc != null && peakSoc <= target - INTERRUPTED_SOC_MARGIN_PCT) {
             events.add(Event.ChargeInterrupted(socAtStop, target))
             return
         }
@@ -219,6 +228,7 @@ class EventNotificationDecider(
             return null
         }
         lastChargingSocPct = soc
+        maxChargingSocPct = maxOf(maxChargingSocPct ?: soc, soc)
         val target = settings.targetSocPct
         if (!settings.chargeCompleteEnabled || target >= DEFAULT_TARGET_SOC_PCT) {
             return null
@@ -245,12 +255,20 @@ class EventNotificationDecider(
         }
         val pKw = prevChargeKw
         val pMs = prevChargeMs
-        if (pKw != null && pMs != null) {
-            val hours = (sample.capturedAtMs - pMs) / 3_600_000.0
-            if (hours > 0.0) {
-                chargeEnergyKwh += ((pKw + kw) / 2.0) * hours
-            }
+        if (pKw == null || pMs == null) {
+            // First charging sample: establish the integration baseline.
+            prevChargeKw = kw
+            prevChargeMs = sample.capturedAtMs
+            return
         }
+        val hours = (sample.capturedAtMs - pMs) / 3_600_000.0
+        if (hours <= 0.0) {
+            // Out-of-order or duplicate-timestamp sample: ignore it entirely and keep the existing
+            // baseline. Rolling the baseline backward would double-count energy on the next in-order
+            // sample, so we must not advance prevChargeKw/prevChargeMs here.
+            return
+        }
+        chargeEnergyKwh += ((pKw + kw) / 2.0) * hours
         prevChargeKw = kw
         prevChargeMs = sample.capturedAtMs
     }
@@ -262,6 +280,7 @@ class EventNotificationDecider(
         prevChargeKw = null
         prevChargeMs = null
         lastChargingSocPct = null
+        maxChargingSocPct = null
         targetSocArmed = true
     }
 
