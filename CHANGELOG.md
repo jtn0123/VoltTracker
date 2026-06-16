@@ -1,6 +1,47 @@
 # CHANGELOG
 
 
+## v0.17.0 (2026-06-16)
+
+### Features
+
+- **ux,a11y,docs**: Execute the B-grade Frontend + Docs findings
+  ([#218](https://github.com/jtn0123/VoltTracker/pull/218),
+  [`c1e84d2`](https://github.com/jtn0123/VoltTracker/commit/c1e84d21e1e211df55e5a445ce5f04adfdf8a414))
+
+Batch A of the B-grade fix list (multi-agent, file-partitioned, adversarially reviewed). Frontend
+  UX/accessibility + documentation; no Kotlin. All gates green: dashboard typecheck/lint/461 tests,
+  lint, assemble, generated index.html refreshed.
+
+Frontend (C): - Android Back now closes the trip-detail sheet / restore dialog / app-dialog before
+  falling through to tab-switch; the restore-progress alertdialog gets a real focus trap + Escape. -
+  Status popover restores focus to the badge that opened it on close (a focus trap was the wrong
+  tool — it re-renders every telemetry sample). - Number inputs show a "adjusted to the N–M range"
+  hint + aria-invalid instead of silently rewriting the value. - Maintenance form: inline error next
+  to Save (not the far-away topbar), and a 0/negative odometer now warns instead of being silently
+  dropped. - Favorite star flips optimistically before the bridge round-trip. -
+  Notification/auto-scan toggles announce a confirmation (aria-live). - Trip-detail scatter gets a
+  grade legend + descriptive aria-label. - Drive GPS tile uses the friendly "Off — location
+  permission needed" copy. - Charge-status badge text+color derive from one map (no desync);
+  maintenance inputs use the standard field surface; charge KPIs stack on very narrow phones; the
+  active bottom-nav glow and segmented controls honor the theme tokens; the Text-size control lays
+  out as one even 3-button row. - (gpsText moved to telemetry.ts to break an import cycle it would
+  have created.)
+
+Docs (H): - README: fix the version, the SDK platform (37), the coverage floors (80/90), add the 3
+  missing shipped features (target-SOC, accessibility theme, favorites), link CHANGELOG.
+  CONTRIBUTING: same floors. - privacy-data-handling: document the backup crypto (AES-GCM +
+  PBKDF2-600k) and that the maintenance log survives a data clear / rides in backups. -
+  bridge-abi.md: backfill the ~20 missing bridge methods + a sync marker. - New top-level
+  SECURITY.md (data classes, on-device posture, backup crypto, reporting).
+
+Deferred (needs a bigger change, not this batch): the Drive live-tile empty-state screen-reader text
+  (the empty group is display:none, so it needs a visibility rework) and the font-scale rem
+  migration.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.16.3 (2026-06-16)
 
 ### Bug Fixes
