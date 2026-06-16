@@ -113,14 +113,14 @@ notifications live in the same service/notification layer as `ObdNotifications`.
   `EventNotificationDecider`; changing them changes alert sensitivity and is
   covered by regression tests.
 
-### Still open: encrypted-backup crypto/format has no ADR
+### Encrypted-backup crypto/format ADR (now closed)
 
 The encrypted-backup path (passphrase-protected portable backup, see
 `docs/privacy-data-handling.md`) makes a real cryptographic decision — KDF,
-cipher, and on-disk container format — that is **not yet captured in any ADR**.
-This ADR does not close that gap; the backup crypto/format decision remains an
-open ADR to write. It is called out here so the omission is tracked rather than
-silently assumed.
+cipher, and on-disk container format. This ADR does not cover it; that decision
+is now recorded in its own
+[ADR 0008](0008-encrypted-backup-format-and-kdf.md) (originally tracked here as
+the remaining open crypto/format ADR, report item H3).
 
 ## References
 
