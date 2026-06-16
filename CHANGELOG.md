@@ -1,6 +1,37 @@
 # CHANGELOG
 
 
+## v0.16.2 (2026-06-16)
+
+### Bug Fixes
+
+- **obd**: Parser correctness fixes in ObdProtocol/ObdElmDecode
+  ([#215](https://github.com/jtn0123/VoltTracker/pull/215),
+  [`ef15810`](https://github.com/jtn0123/VoltTracker/commit/ef15810264d3a7d4c6adeb855f47b6f3b07b7bea))
+
+The parser items pass 2's scanner found but that were reverted half-applied when the workflow hit
+  its run limit — re-done cleanly and adversarially verified.
+
+- mode01PayloadBytes: 1F (engine run time) and 42 (control module voltage) are 2-byte batched
+  Mode-01 PIDs, not 1-byte. Undercounting let the batch completeness gate accept a frame truncated
+  by one byte, then the 2-byte decoders silently returned null instead of forcing a clean single-PID
+  re-read. - 222487 (ev distance this cycle): decoded signed + unbounded, so a high-bit word flipped
+  this odometer-style counter to a large negative km. Decode unsigned and bound 0..655.35 km
+  (0xFFFF/100). - 222889 (PRNDL): emitted the diagnostic "RAW_<n>" sentinel text to the user; emit
+  the plain gear number instead. - 2243A6 / 2241EC: both labelled "HV isolation resistance" despite
+  decoding in different units (~1000x apart); disambiguate to "(kOhm)" / "(ohm)" on both the decode
+  label and ObdElmDecode.nameForCommand. - parseDiagnosticTroubleCodes: a line carrying two modules'
+  replies (ATH0) had the second marker's count overwrite the first's outstanding ISO-TP continuation
+  count, dropping the first ECU's spilled multi-frame codes; sum per-marker counts instead.
+  Single-marker behaviour is unchanged.
+
+Tests: pin a sub-zero HV pack temperature (-20 C, the safety-relevant cold-soak case) and the
+  ev-distance high-word (0x8000 -> 327.68 km, not negative). All gates green: 1181 Kotlin tests,
+  detekt, spotless, jacoco, lint, assemble.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.16.1 (2026-06-16)
 
 ### Bug Fixes
