@@ -404,6 +404,17 @@ import { initialTelemetryState } from "./telemetry-state";
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
+  // Map an unfriendly GPS enum state to plain copy. Raw "blocked" reads as bare jargon and an
+  // empty/unknown state would otherwise drop the status-popover row (renderRows skips empty
+  // values). Shared by the status popover and the Drive GPS tile. (Lives here, not in
+  // connection-status, so telemetry doesn't import connection-status — that would be a cycle.)
+  export function gpsText(rawState: unknown) {
+    const g = String(rawState || "");
+    if (g === "blocked") return "Off — location permission needed";
+    if (g === "waiting" || g === "") return "Waiting for fix";
+    return g;
+  }
+
   function formatShortDuration(ms: number) {
     const value = Math.max(0, Number(ms) || 0);
     if (value < 1000) return `${Math.round(value)}ms`;
@@ -424,7 +435,8 @@ import { initialTelemetryState } from "./telemetry-state";
   function syncOptionalLiveGroup(group: LiveCellGroup) {
     if (!group) return;
     const cells = Array.from(group.querySelectorAll("[data-live-cell]"));
-    group.classList.toggle("is-empty", cells.length > 0 && cells.every((cell) => cell.classList.contains("is-empty")));
+    const isEmpty = cells.length > 0 && cells.every((cell) => cell.classList.contains("is-empty"));
+    group.classList.toggle("is-empty", isEmpty);
   }
 
   function selectDevice(address: unknown, name?: unknown) {
@@ -704,13 +716,20 @@ import { initialTelemetryState } from "./telemetry-state";
     const lat = Number(t.latitude);
     const lon = Number(t.longitude);
     const acc = Number(t.accuracyM);
+    const gpsState = String((state.appState.gps || {}).state || "");
     // Surface fix quality, not just "locked": ±Nm tells the user whether the GPS
     // is precise enough to trust the route. accuracyM is already in the payload.
+    // No fix yet: reuse the status-popover's shared gpsText() wording so the tile
+    // and the popover agree. A "blocked" permission is an actionable status worth
+    // showing in-cell; the plain waiting/unknown case stays the "--" empty
+    // sentinel so the cell (and group empty-text) can collapse as before.
     const gpsTile = Number.isFinite(lat) && Number.isFinite(lon)
       ? Number.isFinite(acc) && acc > 0
         ? `±${Math.round(acc)} m`
         : "locked"
-      : "--";
+      : gpsState === "blocked"
+        ? gpsText(gpsState)
+        : "--";
     setOptionalLiveText("gpsValue", gpsTile);
 
     // Enhanced Volt signals — decoded mode-22 PIDs that already ride to the

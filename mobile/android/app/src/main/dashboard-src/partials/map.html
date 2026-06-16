@@ -208,6 +208,11 @@
         <h4 id="tripDetailScatterHead">Efficiency by speed for this drive.</h4>
       </header>
       <div class="eff-scatter" id="tripDetailScatter"></div>
+      <div class="eff-scatter-legend" aria-label="Dot color shows road grade">
+        <span><i data-grade="downhill"></i>↘ downhill</span>
+        <span><i data-grade="flat"></i>→ level</span>
+        <span><i data-grade="uphill"></i>↗ uphill</span>
+      </div>
       <p id="tripDetailScatterEmpty" class="status-copy" hidden>
         Not enough power/efficiency samples on this drive to plot efficiency vs
         speed. It fills in when the OBD loop captured battery current.

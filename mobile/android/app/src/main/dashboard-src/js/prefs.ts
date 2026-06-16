@@ -425,6 +425,33 @@
     window.scrollTo({ top: scrollY, behavior: "auto" });
   }
 
+  // Finds (or lazily creates) the transient hint node that bindNumericPref uses to
+  // tell a screen-reader / sighted user that their out-of-range entry was adjusted.
+  // It rides next to the field as a polite live region so the announcement isn't a
+  // silent rewrite. Inserted after the input's wrapping <label> (or the input
+  // itself) so it lands just below the control in both the pref-row and the
+  // live-charge layouts.
+  function numericPrefHint(input: HTMLInputElement): HTMLElement | null {
+    const existingId = input.getAttribute("aria-describedby");
+    if (existingId) {
+      const existing = document.getElementById(existingId);
+      if (existing) return existing;
+    }
+    const anchor =
+      input.closest("label") instanceof HTMLElement ? (input.closest("label") as HTMLElement) : input;
+    const parent = anchor.parentNode;
+    if (!parent) return null;
+    const hint = document.createElement("p");
+    hint.id = `${input.id}Clamp`;
+    hint.className = "numeric-pref-hint";
+    hint.setAttribute("role", "status");
+    hint.setAttribute("aria-live", "polite");
+    hint.hidden = true;
+    parent.insertBefore(hint, anchor.nextSibling);
+    input.setAttribute("aria-describedby", hint.id);
+    return hint;
+  }
+
   // Wires a clamped numeric preference input: hydrate from the store, persist on
   // every keystroke (clamped to [min, max]), reflect the clamped value back only
   // when it actually differs (so typing a valid "0.14" isn't disrupted) and never
@@ -432,9 +459,15 @@
   // re-render so typing doesn't re-render four times. Shared by the electricity
   // rate, gas MPG, and gas price fields.
   //
+  // When an in-range entry is silently clamped (e.g. "140" → 100), surface a
+  // transient inline hint in a polite live region and mark the field aria-invalid;
+  // a subsequent valid entry clears both so the rewrite is never invisible.
+  //
   // `defaultValue` is the value used for an unset pref / a cleared (blank) field —
   // it defaults to 0, which suits the cost fields (an unset rate means "no rate").
   // The charge-target field passes 100 so an empty field means a full charge, not 0.
+  // `rangeUnit` is appended to the upper bound in the hint ("%" for the charge
+  // target) so it reads "Adjusted to the 50–100% range".
   // `onCommit` runs with the clamped value after each edit (e.g. to push it across
   // the native bridge), in addition to the standard units re-render.
   function bindNumericPref(
@@ -442,17 +475,36 @@
     prefKey: string,
     min: number,
     max: number,
-    options?: { defaultValue?: number; onCommit?: (value: number) => void }
+    options?: { defaultValue?: number; rangeUnit?: string; onCommit?: (value: number) => void }
   ): void {
     const input = document.getElementById(inputId) as HTMLInputElement | null;
     if (!input) return;
     const fallback = options && typeof options.defaultValue === "number" ? options.defaultValue : 0;
+    const rangeUnit = options && typeof options.rangeUnit === "string" ? options.rangeUnit : "";
     const stored = get<number>(prefKey, fallback);
     // Show the stored value; for the cost fields (fallback 0) keep the old "blank
     // when unset" behaviour, but for a non-zero default (charge target) always
     // reflect it so the field never reads empty.
     if (stored > 0 || fallback > 0) input.value = String(stored);
     let rerenderTimer = 0;
+    let hintTimer = 0;
+    const clearHint = () => {
+      input.removeAttribute("aria-invalid");
+      const hint = numericPrefHint(input);
+      if (hint) hint.hidden = true;
+    };
+    const showClampHint = () => {
+      input.setAttribute("aria-invalid", "true");
+      const hint = numericPrefHint(input);
+      if (hint) {
+        hint.textContent = `Adjusted to the ${min}–${max}${rangeUnit} range`;
+        hint.hidden = false;
+      }
+      // Transient: drop the notice (and the invalid flag) after a few seconds so a
+      // stale "adjusted" message doesn't linger over a now-valid field.
+      window.clearTimeout(hintTimer);
+      hintTimer = window.setTimeout(clearHint, 4000);
+    };
     input.addEventListener("input", () => {
       const parsed = parseFloat(input.value);
       const clamped = Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
@@ -461,6 +513,10 @@
         ? clamped !== parsed
         : input.value.trim() !== "";
       if (reflect) input.value = String(clamped);
+      // A finite entry that the bounds had to move is the "silently rewritten"
+      // case worth flagging; a blank/NaN field (falling back to the default) is not.
+      if (Number.isFinite(parsed) && clamped !== parsed) showClampHint();
+      else clearHint();
       if (options && options.onCommit) {
         try {
           options.onCommit(clamped);
@@ -493,6 +549,7 @@
     // tell a finished charge from an interrupted one. Default 100 = full charge.
     bindNumericPref("liveChargeTargetInput", "chargeTargetSoc", 50, 100, {
       defaultValue: 100,
+      rangeUnit: "%",
       onCommit: (value) => {
         try {
           const bridge = window.VoltTrackerAndroid;

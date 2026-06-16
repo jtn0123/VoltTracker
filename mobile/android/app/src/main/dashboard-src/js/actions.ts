@@ -40,6 +40,11 @@ import type { FocusTrap } from "./focus-trap";
   let dtcTrap: FocusTrap | null = null;
   // Focus trap for the per-trip detail sheet (M7), same lifecycle as dtcTrap.
   let tripDetailTrap: FocusTrap | null = null;
+  // Route key of the row whose "Details" button opened the trip-detail sheet.
+  // Used on close to restore focus to a stable target when the original opener
+  // button was removed by a mid-open trip-list re-render (else focus falls to
+  // <body>). Cleared on close.
+  let tripDetailOpenerKey: string | null = null;
 
   // Lightweight in-flight guard for bridge-triggering buttons. The Android
   // bridge calls are sync-fire-and-forget so we can't await completion; a short
@@ -569,6 +574,16 @@ import type { FocusTrap } from "./focus-trap";
       return;
     }
     const next = button.dataset.tripFavoriteState !== "1";
+    // Optimistically paint the new favorite state on the tapped star before the
+    // bridge call so the user gets instant feedback; the subsequent native list
+    // re-render reconciles. Mirrors buildFavoriteButton()'s render contract so a
+    // rapid second tap (which re-reads tripFavoriteState) flips correctly too.
+    button.dataset.tripFavoriteState = next ? "1" : "0";
+    button.setAttribute("aria-pressed", next ? "true" : "false");
+    button.classList.toggle("is-favorite", next);
+    button.title = next ? "Remove this drive from favorites." : "Add this drive to favorites.";
+    button.setAttribute("aria-label", next ? "Unfavorite this drive" : "Favorite this drive");
+    button.textContent = next ? "★" : "☆";
     bridge.setTripFavorite(routeKey, next);
   }
 
@@ -609,6 +624,7 @@ import type { FocusTrap } from "./focus-trap";
     if (!opened) return;
     const panel = el("tripDetailSheet");
     if (!panel) return;
+    tripDetailOpenerKey = routeKey || null;
     tripDetailTrap = createFocusTrap(panel, {
       backgroundNodes: () => tripDetailBackgroundNodes(panel),
       onEscape: closeTripDetail,
@@ -619,14 +635,50 @@ import type { FocusTrap } from "./focus-trap";
     if (typeof panel.focus === "function") panel.focus();
   }
 
+  // Find a stable focus target for closeTripDetail() when the original opener
+  // button has been removed by a mid-open trip-list re-render. Prefer the row
+  // matching the opener's route key (the Details button if it survived, else the
+  // row-select button), and fall back to the trip-list container so focus never
+  // lands on <body>. Iterates rather than building an attribute selector because
+  // the route key is an untyped native value (CSS-escape-unsafe).
+  function tripDetailFocusFallback(): HTMLElement | null {
+    const key = String(tripDetailOpenerKey || "").trim();
+    if (key) {
+      const detailBtns = document.querySelectorAll<HTMLElement>("[data-trip-detail]");
+      for (const node of Array.from(detailBtns)) {
+        if (String(node.dataset.tripDetail || "").trim() === key) return node;
+      }
+      const rows = document.querySelectorAll<HTMLElement>("[data-map-session]");
+      for (const node of Array.from(rows)) {
+        if (String(node.dataset.mapSession || "").trim() === key) return node;
+      }
+    }
+    return el("mapSessionList");
+  }
+
   function closeTripDetail() {
     if (typeof VD.closeTripDetail === "function") VD.closeTripDetail();
     const panel = el("tripDetailSheet");
     if (panel) panel.hidden = true;
     if (tripDetailTrap) {
+      // deactivate() restores focus to the saved opener only when it still exists
+      // in the DOM; a mid-open list re-render can remove it, dropping focus to
+      // <body>. Detect that and redirect to a stable target instead.
       tripDetailTrap.deactivate();
       tripDetailTrap = null;
+      const active = document.activeElement;
+      if (!active || active === document.body) {
+        const fallback = tripDetailFocusFallback();
+        if (fallback && typeof fallback.focus === "function") {
+          // The list container is a plain <div> (not in the Tab order); give it a
+          // programmatic-only tabindex so .focus() actually lands. Buttons already
+          // focus natively, so the no-op assignment there is harmless.
+          if (!fallback.hasAttribute("tabindex")) fallback.setAttribute("tabindex", "-1");
+          fallback.focus();
+        }
+      }
     }
+    tripDetailOpenerKey = null;
   }
 
   // ---- M4 trip-list search / sort / favorites controls ---------------------

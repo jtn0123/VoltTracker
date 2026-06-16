@@ -8,7 +8,7 @@
 // isNativeError, reportNativeReadError, buildStatusCopy, toggleHidden — are
 // published on VD here so this module stays the single owner of them.
 import { el, setSvgAttrs } from "./core";
-import { setDataState } from "./dataset-state";
+import { setDataState, type DataStateValue } from "./dataset-state";
 import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
 
@@ -723,6 +723,17 @@ import { prefs, units } from "./prefs";
     if (chart) chart.replaceChildren(buildSohSvg(points));
   }
 
+  // Single source of truth for the charge-status badge: each key maps to BOTH
+  // its visible label and its data-state color token, so the badge text and the
+  // pill color are derived together and can never drift apart. Labels keep the
+  // existing strings ("needs data" for the empty/waiting case).
+  const CHARGE_STATUS_DISPLAY: Record<string, { label: string; state: DataStateValue }> = {
+    charging: { label: "charging", state: "charging" },
+    recorded: { label: "recorded", state: "recorded" },
+    "needs-review": { label: "needs review", state: "needs-review" },
+    waiting: { label: "needs data", state: "waiting" },
+  };
+
   function renderRealV2Ui() {
     const storage = state.storage || {};
     const overview: Record<string, unknown> = storage.overview || {};
@@ -749,14 +760,16 @@ import { prefs, units } from "./prefs";
     VD.setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
     const chargingNow = (Array.isArray(charge.recentSessions) ? charge.recentSessions : [])
       .some(isChargeInProgress);
-    VD.setText("realChargeStatus", chargingNow ? "charging" : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs review" : "needs data")));
+    // Derive the badge label AND its data-state color from one key so the text
+    // and the pill color can never desync (they used to be twin ternaries that
+    // could drift). Keys map to the existing strings exactly.
+    const chargeStatusKey = chargingNow
+      ? "charging"
+      : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs-review" : "waiting"));
+    const chargeStatus = CHARGE_STATUS_DISPLAY[chargeStatusKey];
+    VD.setText("realChargeStatus", chargeStatus.label);
     // Keep the status pill's color in sync with the text (see base.css badge states).
-    setDataState(
-      el("realChargeStatusBadge"),
-      chargingNow
-        ? "charging"
-        : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs-review" : "waiting"))
-    );
+    setDataState(el("realChargeStatusBadge"), chargeStatus.state);
     renderChargeSessions(charge);
     renderBatterySohTrend();
 
@@ -981,6 +994,7 @@ import { prefs, units } from "./prefs";
     const unitLabel = units.distanceUnit() === "mi" ? "mi" : "km";
     VD.setText("maintOdometerLabel", `Odometer (${unitLabel})`);
     VD.setText("maintIntervalKmLabel", `Every (${unitLabel})`);
+    clearMaintFormErrors();
     form.hidden = false;
     if (btn) btn.setAttribute("aria-expanded", "true");
     const typeInput = el("maintTypeInput") as HTMLInputElement | null;
@@ -994,6 +1008,7 @@ import { prefs, units } from "./prefs";
       form.reset();
       form.hidden = true;
     }
+    clearMaintFormErrors();
     if (btn) btn.setAttribute("aria-expanded", "false");
   }
 
@@ -1007,6 +1022,39 @@ import { prefs, units } from "./prefs";
     openMaintenanceForm();
   }
 
+  // Shows/clears an inline error message inside the maintenance form (next to the
+  // Save button), instead of the far-away topbar status. role="alert" on the
+  // element announces the message to screen readers.
+  function setMaintFormError(message: string) {
+    const node = el("maintFormError");
+    if (!node) return;
+    node.textContent = message;
+    node.hidden = !message;
+  }
+
+  // Shows/clears a per-field "enter a number above 0" hint and toggles aria-invalid
+  // on the input so the bad value is surfaced inline instead of being silently dropped.
+  function setMaintFieldHint(inputId: string, hintId: string, message: string) {
+    const hint = el(hintId);
+    if (hint) {
+      hint.textContent = message;
+      hint.hidden = !message;
+    }
+    const input = el(inputId);
+    if (input) {
+      if (message) input.setAttribute("aria-invalid", "true");
+      else input.removeAttribute("aria-invalid");
+    }
+  }
+
+  // Clears every inline validation message (form-level + per-field). Run on
+  // open/close and at the start of each submit so stale errors never linger.
+  function clearMaintFormErrors() {
+    setMaintFormError("");
+    setMaintFieldHint("maintOdometerInput", "maintOdometerHint", "");
+    setMaintFieldHint("maintIntervalKmInput", "maintIntervalKmHint", "");
+  }
+
   // Reads the inline form and forwards a JSON payload to native. Type is required; odometer, note,
   // and the two interval fields are optional. Distances are converted from the display unit to km.
   function submitMaintenanceForm() {
@@ -1014,10 +1062,12 @@ import { prefs, units } from "./prefs";
       VD.setStatus({ state: "idle", detail: "Maintenance logging is available inside the Android app." });
       return;
     }
+    clearMaintFormErrors();
     const type = String((el("maintTypeInput") as HTMLInputElement | null)?.value || "").trim();
     const note = String((el("maintNoteInput") as HTMLInputElement | null)?.value || "").trim();
     if (!type && !note) {
-      VD.setStatus({ state: "blocked", detail: "Add a service type or note before saving." });
+      // Inline error next to Save (role=alert announces it) rather than the far-away topbar status.
+      setMaintFormError("Pick a service type or add a note before saving.");
       return;
     }
     const payload: {
@@ -1028,10 +1078,16 @@ import { prefs, units } from "./prefs";
       intervalKm?: number;
       intervalMonths?: number;
     } = { type, note, date: Date.now() };
-    const odoKm = parseOdometerKm((el("maintOdometerInput") as HTMLInputElement | null)?.value || "");
-    if (odoKm != null) payload.odometerKm = odoKm;
-    const intervalKm = parseOdometerKm((el("maintIntervalKmInput") as HTMLInputElement | null)?.value || "");
-    if (intervalKm != null) payload.intervalKm = intervalKm;
+    // Distinguish blank (omit, fine) from invalid (0/negative/NaN): a blank field
+    // simply omits the value, but an invalid entry surfaces a per-field hint and
+    // blocks the save instead of being silently dropped.
+    const odo = parseOdometerKm((el("maintOdometerInput") as HTMLInputElement | null)?.value || "");
+    if (odo.invalid) setMaintFieldHint("maintOdometerInput", "maintOdometerHint", "Enter a number above 0.");
+    else if (odo.km != null) payload.odometerKm = odo.km;
+    const interval = parseOdometerKm((el("maintIntervalKmInput") as HTMLInputElement | null)?.value || "");
+    if (interval.invalid) setMaintFieldHint("maintIntervalKmInput", "maintIntervalKmHint", "Enter a number above 0.");
+    else if (interval.km != null) payload.intervalKm = interval.km;
+    if (odo.invalid || interval.invalid) return;
     const months = Math.round(Number(String((el("maintIntervalMonthsInput") as HTMLInputElement | null)?.value || "").trim()));
     if (Number.isFinite(months) && months > 0) payload.intervalMonths = months;
     bridge.addMaintenanceEntry(JSON.stringify(payload));
@@ -1039,11 +1095,15 @@ import { prefs, units } from "./prefs";
   }
 
   // Converts a user-entered odometer/interval reading (in their display distance unit) to km for
-  // storage. Returns null for blank/invalid input so the entry simply omits the value.
-  function parseOdometerKm(raw: string): number | null {
-    const value = Number(String(raw || "").trim());
-    if (!Number.isFinite(value) || value <= 0) return null;
-    return units.distanceUnit() === "mi" ? value * 1.609344 : value;
+  // storage. Returns { km: null, invalid: false } for blank (the entry simply omits the value) and
+  // { km: null, invalid: true } for a non-blank but invalid (0/negative/NaN) entry, so the caller
+  // can surface a per-field hint instead of silently dropping a bad value.
+  function parseOdometerKm(raw: string): { km: number | null; invalid: boolean } {
+    const text = String(raw || "").trim();
+    if (!text) return { km: null, invalid: false };
+    const value = Number(text);
+    if (!Number.isFinite(value) || value <= 0) return { km: null, invalid: true };
+    return { km: units.distanceUnit() === "mi" ? value * 1.609344 : value, invalid: false };
   }
 
   // A charge row counts as "in progress" only when it has no end time AND a

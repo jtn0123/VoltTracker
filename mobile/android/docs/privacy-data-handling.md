@@ -27,6 +27,13 @@ Use a strong, unique passphrase for encrypted backups. Volt Tracker cannot
 recover the backup if that passphrase is lost, and weak or reused passphrases
 make the encrypted file easier to attack offline.
 
+An encrypted backup is protected with AES-256-GCM, and the key is derived from
+your passphrase with PBKDF2-HMAC-SHA256 at 600,000 iterations (`BackupCrypto.kt`).
+The current backup format (v3) records that iteration count in its header; older
+backups written before this change still decrypt at the legacy count of 150,000.
+Because the key is stretched per-passphrase rather than stored, the strength of
+the encryption rests on the passphrase you choose.
+
 Plaintext backup remains available as an advanced compatibility option when a
 trusted tool specifically needs the raw SQLite database. Plaintext files can
 include precise GPS routes, raw OBD samples, Bluetooth adapter addresses, and
@@ -38,6 +45,14 @@ session logs, rolling app logs, and environment details useful for debugging an
 adapter or phone issue. Before writing a debug summary or diagnostics share zip,
 Volt Tracker redacts Bluetooth MAC addresses, VIN-like identifiers, and precise
 coordinate fields from the included log tails.
+
+The user-authored maintenance log (your service-history entries) is deliberately
+kept separate from drive data: the `maintenance_log` table has no foreign keys
+(see `data-model.md`), so it intentionally **survives a full data clear** that
+drops sessions, telemetry, and GPS routes. It is also part of the on-device
+SQLite database, so it **is included in encrypted backups** and travels with
+them. Keep this in mind if you would not expect logged service history to persist
+after clearing data or to leave the device inside a shared backup file.
 
 ### Per-trip GPX / CSV exports contain full-precision location
 

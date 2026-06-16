@@ -675,6 +675,14 @@
     gap: 10px;
   }
 
+  /* On the narrowest phones the two KPI columns get cramped, so stack to a
+     single column (mirrors how .state-grid drops a column at narrow widths). */
+  @media (max-width: 360px) {
+    .charge-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .session-badge {
     display: inline-flex;
     align-items: center;
@@ -820,7 +828,10 @@
     padding: 8px 10px;
     border: 1px solid var(--line);
     border-radius: 8px;
-    background: var(--bg, rgba(0,0,0,0.2));
+    /* Use the standard input surface token (matches the global `select, input`
+       rule) rather than --bg — the page background made the field read as the
+       page itself, not an input, especially in the light scheme. */
+    background: var(--panel-2);
     color: var(--text);
     font-size: 14px;
   }
@@ -1041,27 +1052,27 @@
   }
 
   body[data-active-view="map"] .bottom-nav button.is-active {
-    border-color: rgba(76,196,255,0.28);
+    border-color: rgba(var(--map-accent-rgb),0.28);
     background:
-      linear-gradient(180deg, rgba(76,196,255,0.16), rgba(76,196,255,0.055)),
+      linear-gradient(180deg, rgba(var(--map-accent-rgb),0.16), rgba(var(--map-accent-rgb),0.055)),
       var(--fill-soft);
     color: var(--accent-soft);
     box-shadow:
       inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(76,196,255,0.12);
+      0 7px 18px rgba(var(--map-accent-rgb),0.12);
   }
 
   body[data-active-view="map"] .bottom-nav button.is-active i {
     background:
       radial-gradient(circle at 50% 25%, rgba(142,228,255,0.32), transparent 48%),
-      rgba(76,196,255,0.18);
+      rgba(var(--map-accent-rgb),0.18);
     box-shadow:
-      inset 0 0 0 1px rgba(76,196,255,0.24),
-      0 7px 18px rgba(76,196,255,0.13);
+      inset 0 0 0 1px rgba(var(--map-accent-rgb),0.24),
+      0 7px 18px rgba(var(--map-accent-rgb),0.13);
   }
 
   body[data-active-view="map"] .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(76,196,255,0.46));
+    filter: drop-shadow(0 0 7px rgba(var(--map-accent-rgb),0.46));
   }
 
   body[data-active-view="charge"] .bottom-nav button.is-active {

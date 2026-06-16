@@ -12,7 +12,7 @@ The app also includes a demo telemetry mode so the UI can be tested without a sc
 
 ## Features
 
-Beyond live OBD streaming, the app (v0.15.0) ships these user-facing features:
+Beyond live OBD streaming, the app ships these user-facing features:
 
 - **Home-screen widget** — an at-a-glance vehicle snapshot (SOC, charging/connection
   state, and an "updated Xm ago" freshness line). Place it like any Android widget:
@@ -40,6 +40,16 @@ Beyond live OBD streaming, the app (v0.15.0) ships these user-facing features:
 - **Guided onboarding** — a first-run setup walkthrough (pair adapter → grant
   Bluetooth → grant location → connect or demo) that skips steps already satisfied.
   Re-open it any time from the **Setup guide** affordance.
+- **Charge target SOC** — set a daily charge ceiling (e.g. 80%) on the Charge tab;
+  the live-charge ETA targets it, and a one-shot **"charge target reached"** alert
+  fires once per charge when the SOC crosses it (posted to the same alerts channel
+  as the other event notifications).
+- **Accessibility theme** — an Accessibility section in Settings with a **font-scale**
+  multiplier (1×/1.25×/1.5×) and a **high-contrast, colorblind-safe** status-color
+  toggle; animations also honor the OS **reduced-motion** preference.
+- **Trip favorites** — star any logged drive and filter the Map/Trips list to
+  favorites only. The flag is keyed to the drive and survives trip re-detection,
+  like trip labels.
 
 ## Codebase Map
 
@@ -141,7 +151,7 @@ Styles are plain CSS in `app/src/main/assets/dashboard/css/` (no build step).
 Use the pinned toolchain before running the full verification task:
 
 - JDK 21. CI uses Temurin 21.
-- Android SDK with platform 36 and build tools installed.
+- Android SDK with platform 37 and build tools installed.
 - Node 22. The root `.nvmrc` and `.node-version` both pin this.
 - npm dependencies for the dashboard test/build workspace.
 
@@ -162,6 +172,7 @@ Useful local tasks:
 ```
 
 For install/release packaging details, see [`docs/release.md`](docs/release.md).
+For release history, see the repo-root [`CHANGELOG.md`](../../CHANGELOG.md).
 For common field failures, see [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
 Domain terms are defined in [`docs/glossary.md`](docs/glossary.md).
 
@@ -273,10 +284,14 @@ Playwright readiness without installing anything.
 npm --prefix dashboard-tests run test:coverage   # dashboard Vitest + Istanbul coverage
 ```
 
-`jacocoTestCoverageVerification` enforces a coverage floor that a PR must clear:
-**71% line coverage project-wide** and **89% for the `data/` package** (the
-append-only persistence layer is held to a higher bar). The dashboard Vitest
-suite has its own Istanbul thresholds in `dashboard-tests/vitest.config.js`.
+`jacocoTestCoverageVerification` enforces ratcheting coverage floors a PR must
+clear: **80% line coverage project-wide** and **90% for the `data/` package** (the
+append-only persistence layer is held to a higher bar). Additional focused
+per-package and per-class floors guard the pure-logic modules (`materialize`,
+`classify`, `widget`, and feature deciders like `EventNotificationDecider`) so a
+regression there can't hide behind the project aggregate — see `app/jacoco.gradle`
+for the current values. The dashboard Vitest suite has its own Istanbul thresholds
+in `dashboard-tests/vitest.config.js`.
 
 ### Outdated dependency report
 

@@ -223,23 +223,43 @@ function bindNotifyWhenReady(opts?: AddEventListenerOptions) {
   }, opts);
 }
 
+// Writes a short confirmation into an aria-live status line so screen-reader users hear that a
+// toggle/threshold change took effect (sighted users see it too). Mirrors the notify-when-ready /
+// auto-connect status pattern. No-op when the target node is absent.
+function announceStatus(id: string, message: string) {
+  const status = el(id);
+  if (status) status.textContent = message;
+}
+
 // Event-notification + auto-scan toggles (M1/M3). Each toggle reflects the native-owned setting
 // read once from getEventNotificationState, and writes back through its own bridge setter. Threshold
 // <select>s ride along with the low-SOC / high-temp toggles; the Android side clamps the values.
+// Every change also confirms itself in an aria-live status line (eventNotifyStatus / autoScanStatus).
 function bindEventNotifications(opts?: AddEventListenerOptions) {
   const state = parseBridgeJson(safeCall("getEventNotificationState"));
+  const onOff = (checked: boolean) => (checked ? "on" : "off");
   bindBoolToggle("notifyChargeCompleteToggle", state.chargeComplete !== false, (checked) => {
     safeCall("setChargeCompleteNotify", checked);
+    announceStatus("eventNotifyStatus", "Charge-complete alerts " + onOff(checked) + ".");
   }, opts);
   bindBoolToggle("notifyNewDtcToggle", state.newDtc !== false, (checked) => {
     safeCall("setNewDtcNotify", checked);
+    announceStatus("eventNotifyStatus", "New diagnostic-code alerts " + onOff(checked) + ".");
   }, opts);
   bindThresholdToggle(
     "notifyLowSocToggle",
     "notifyLowSocThreshold",
     state.lowSoc === true,
     Number(state.lowSocThresholdPct) || 20,
-    (checked, value) => safeCall("setLowSocNotify", checked, value),
+    (checked, value) => {
+      safeCall("setLowSocNotify", checked, value);
+      announceStatus(
+        "eventNotifyStatus",
+        checked
+          ? "Low-battery threshold set to " + value + "%."
+          : "Low-battery alerts off.",
+      );
+    },
     opts,
   );
   bindThresholdToggle(
@@ -247,11 +267,20 @@ function bindEventNotifications(opts?: AddEventListenerOptions) {
     "notifyHighTempThreshold",
     state.highPackTemp === true,
     Number(state.highPackTempThresholdC) || 45,
-    (checked, value) => safeCall("setHighPackTempNotify", checked, value),
+    (checked, value) => {
+      safeCall("setHighPackTempNotify", checked, value);
+      announceStatus(
+        "eventNotifyStatus",
+        checked
+          ? "High-temperature threshold set to " + value + "°C."
+          : "High-temperature alerts off.",
+      );
+    },
     opts,
   );
   bindBoolToggle("autoScanOnConnectToggle", state.autoScanOnConnect === true, (checked) => {
     safeCall("setAutoScanOnConnect", checked);
+    announceStatus("autoScanStatus", "Auto-scan on connect " + onOff(checked) + ".");
   }, opts);
 }
 

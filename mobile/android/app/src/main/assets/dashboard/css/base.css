@@ -853,6 +853,13 @@
     margin: 0;
   }
 
+  /* The text-size control has three buttons, so override the 2-col grid it
+     inherits from .signal-stage-tabs to an even 3-up row (the 2-button Units
+     .pref-seg above keeps the inherited repeat(2, 1fr)). */
+  .pref-seg-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
   /* Accessibility section (M9): a <fieldset>/<legend> groups the font-scale
      control for SRs. Strip the native fieldset chrome so it lays out like the
      other .pref-rows; the legend uses the .pref-label type already. */

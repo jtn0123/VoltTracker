@@ -1560,8 +1560,15 @@
   }
 
   /* Probe-mode picker: a 2x2 segmented control. Own styling (green accent) so
-     it matches the Signals tab rather than inheriting the orange map layer pills. */
+     it matches the Signals tab rather than inheriting the orange map layer pills.
+
+     The selected-button tint is tokenized via --seg-accent-rgb / --seg-accent-soft
+     (defaulting to the Signals green) so the same control can re-skin its active
+     state per screen — see .pref-seg below, which retints it to the Settings amber
+     so the chosen Units/Text-size button speaks the Settings color language. */
   .signal-stage-tabs {
+    --seg-accent-rgb: 53, 230, 160;
+    --seg-accent-soft: var(--ok-soft);
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 6px;
@@ -1591,20 +1598,29 @@
 
   @media (hover: hover) and (pointer: fine) {
     .signal-stage-tabs button:hover {
-      border-color: rgba(53,230,160,0.26);
+      border-color: rgba(var(--seg-accent-rgb), 0.26);
       color: var(--text);
     }
   }
 
   .signal-stage-tabs button.is-active {
-    border-color: rgba(53,230,160,0.42);
-    color: var(--ok-soft);
+    border-color: rgba(var(--seg-accent-rgb), 0.42);
+    color: var(--seg-accent-soft);
     background:
-      linear-gradient(180deg, rgba(53,230,160,0.18), rgba(53,230,160,0.06)),
+      linear-gradient(180deg, rgba(var(--seg-accent-rgb), 0.18), rgba(var(--seg-accent-rgb), 0.06)),
       var(--fill-soft);
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,0.08),
-      0 6px 16px rgba(53,230,160,0.12);
+      0 6px 16px rgba(var(--seg-accent-rgb), 0.12);
+  }
+
+  /* Settings → Preferences reuses the segmented control for Units / Text-size.
+     Retint the active/hover accent to the Settings amber (the --warn family the
+     Settings tab uses everywhere) so the selected option matches that screen's
+     color language instead of reading as the Signals green. */
+  .pref-seg {
+    --seg-accent-rgb: 255, 184, 74;
+    --seg-accent-soft: var(--warn-soft);
   }
 
   .signal-stage-actions {

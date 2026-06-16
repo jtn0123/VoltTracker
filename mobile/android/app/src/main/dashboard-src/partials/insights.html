@@ -299,6 +299,7 @@
             placeholder="Oil change, Tire rotation…"
             maxlength="80"
             autocomplete="off"
+            required
           />
         </label>
         <label class="maint-field">
@@ -311,7 +312,14 @@
             min="0"
             step="any"
             placeholder="optional"
+            aria-describedby="maintOdometerHint"
           />
+          <small
+            id="maintOdometerHint"
+            class="maint-field-hint"
+            role="alert"
+            hidden
+          ></small>
         </label>
         <label class="maint-field">
           <span>Note</span>
@@ -335,7 +343,14 @@
               min="0"
               step="any"
               placeholder="optional"
+              aria-describedby="maintIntervalKmHint"
             />
+            <small
+              id="maintIntervalKmHint"
+              class="maint-field-hint"
+              role="alert"
+              hidden
+            ></small>
           </label>
           <label class="maint-field">
             <span>Every (months)</span>
@@ -350,6 +365,13 @@
             />
           </label>
         </div>
+        <p
+          id="maintFormError"
+          class="maint-form-error"
+          role="alert"
+          aria-live="assertive"
+          hidden
+        ></p>
         <div class="maint-form-actions">
           <button type="button" data-action="cancelMaintenance">Cancel</button>
           <button type="submit" class="primary" id="maintSaveBtn">

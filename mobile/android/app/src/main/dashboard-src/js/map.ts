@@ -1122,7 +1122,10 @@ import type { MapSessionFilter } from "./map-session-list";
     svg.setAttribute("height", String(h));
     svg.setAttribute("class", "trip-detail-scatter-svg");
     svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "Efficiency versus speed for this drive");
+    svg.setAttribute(
+      "aria-label",
+      "Efficiency versus speed for this drive; each dot is colored by road grade — downhill, level, or uphill"
+    );
     const appendLine = (attrs: Record<string, string | number>) =>
       svg.append(setSvgAttrs(document.createElementNS(ns, "line"), attrs));
     const appendText = (text: string, attrs: Record<string, string | number>) => {

@@ -1034,6 +1034,11 @@
         <h4 id="tripDetailScatterHead">Efficiency by speed for this drive.</h4>
       </header>
       <div class="eff-scatter" id="tripDetailScatter"></div>
+      <div class="eff-scatter-legend" aria-label="Dot color shows road grade">
+        <span><i data-grade="downhill"></i>↘ downhill</span>
+        <span><i data-grade="flat"></i>→ level</span>
+        <span><i data-grade="uphill"></i>↗ uphill</span>
+      </div>
       <p id="tripDetailScatterEmpty" class="status-copy" hidden>
         Not enough power/efficiency samples on this drive to plot efficiency vs
         speed. It fills in when the OBD loop captured battery current.
@@ -1738,6 +1743,7 @@
             placeholder="Oil change, Tire rotation…"
             maxlength="80"
             autocomplete="off"
+            required
           />
         </label>
         <label class="maint-field">
@@ -1750,7 +1756,14 @@
             min="0"
             step="any"
             placeholder="optional"
+            aria-describedby="maintOdometerHint"
           />
+          <small
+            id="maintOdometerHint"
+            class="maint-field-hint"
+            role="alert"
+            hidden
+          ></small>
         </label>
         <label class="maint-field">
           <span>Note</span>
@@ -1774,7 +1787,14 @@
               min="0"
               step="any"
               placeholder="optional"
+              aria-describedby="maintIntervalKmHint"
             />
+            <small
+              id="maintIntervalKmHint"
+              class="maint-field-hint"
+              role="alert"
+              hidden
+            ></small>
           </label>
           <label class="maint-field">
             <span>Every (months)</span>
@@ -1789,6 +1809,13 @@
             />
           </label>
         </div>
+        <p
+          id="maintFormError"
+          class="maint-form-error"
+          role="alert"
+          aria-live="assertive"
+          hidden
+        ></p>
         <div class="maint-form-actions">
           <button type="button" data-action="cancelMaintenance">Cancel</button>
           <button type="submit" class="primary" id="maintSaveBtn">
@@ -2119,6 +2146,12 @@
         Battery alerts need notification permission and fire once each time a
         reading crosses the threshold.
       </small>
+      <small
+        id="eventNotifyStatus"
+        class="status-copy"
+        role="status"
+        aria-live="polite"
+      ></small>
     </fieldset>
 
     <!-- Auto-scan for diagnostic codes shortly after a successful connect (M3). -->
@@ -2138,6 +2171,12 @@
         Runs one background Mode 03 scan shortly after connecting (at most once
         per drive). New codes feed the diagnostic-code notification above.
       </small>
+      <small
+        id="autoScanStatus"
+        class="status-copy"
+        role="status"
+        aria-live="polite"
+      ></small>
     </fieldset>
   </article>
 </section>
@@ -2252,7 +2291,7 @@
         <small>Scales headings and labels across the app</small>
       </legend>
       <div
-        class="signal-stage-tabs pref-seg"
+        class="signal-stage-tabs pref-seg pref-seg-3"
         role="group"
         aria-label="Text size"
       >

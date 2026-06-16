@@ -4,6 +4,8 @@
 // and `window.VoltTrackerNative` (the WebView<-Android callback surface) are
 // preserved exactly as-is — those names are part of the ABI.
 import { asDataTone, setDataTone } from "./dataset-state";
+import { createFocusTrap } from "./focus-trap";
+import type { FocusTrap } from "./focus-trap";
 import { initialTelemetryState } from "./telemetry-state";
 
   type DashboardData = {
@@ -233,6 +235,18 @@ import { initialTelemetryState } from "./telemetry-state";
     const close = el("restoreProgressClose");
     if (close) close.hidden = true;
     delete document.body.dataset.restoreBusy;
+    // Release the focus trap (restores focus to the opener) once the dialog hides.
+    if (restoreProgressTrap) {
+      restoreProgressTrap.deactivate();
+      restoreProgressTrap = null;
+    }
+  }
+
+  // Inert everything behind the restore alertdialog — the app shell and the
+  // bottom nav — while the trap is active, mirroring the other modal dialogs.
+  function restoreProgressBackgroundNodes(): HTMLElement[] {
+    return [document.querySelector(".app"), document.querySelector(".bottom-nav")]
+      .filter((item): item is HTMLElement => item instanceof HTMLElement);
   }
 
   function progressNumber(value: unknown) {
@@ -370,11 +384,35 @@ import { initialTelemetryState } from "./telemetry-state";
     if (!busy && tone === "ok") {
       restoreProgressHideTimer = setTimeout(hideRestoreProgress, RESTORE_DONE_HIDE_MS);
     }
-    // Only move focus when the dialog first appears — native pushes progress
-    // continuously, and re-focusing on every tick steals keyboard/SR focus.
+    // Only arm the trap + move focus when the dialog first appears — native
+    // pushes progress continuously, and re-focusing on every tick steals
+    // keyboard/SR focus. activate() snapshots the opener while it still holds
+    // focus, inerts the background, and arms Tab/Escape (Escape -> hide).
     if (wasHidden) {
+      if (!restoreProgressTrap) {
+        restoreProgressTrap = createFocusTrap(node, {
+          backgroundNodes: restoreProgressBackgroundNodes,
+          // Escape dismisses only when the dialog is dismissible — a busy restore
+          // is a deliberately non-dismissible modal (its close button stays hidden).
+          onEscape: dismissRestoreProgressIfAllowed
+        });
+      }
+      restoreProgressTrap.activate();
       try { node.focus({ preventScroll: true }); } catch (ignored) {}
     }
+  }
+
+  // Hide the restore alertdialog only while it is dismissible (not busy): the
+  // close button is visible exactly when native reports !busy. Shared by Escape
+  // (focus trap) and Android Back so both honor the non-dismissible busy modal.
+  function dismissRestoreProgressIfAllowed(): boolean {
+    const node = el("restoreProgress");
+    const close = el("restoreProgressClose");
+    if (node && !node.hidden && close && !close.hidden) {
+      hideRestoreProgress();
+      return true;
+    }
+    return false;
   }
 
   window.addEventListener("error", (event) => {
@@ -426,6 +464,11 @@ import { initialTelemetryState } from "./telemetry-state";
   let cachedViewNodes: HTMLElement[] | null = null;
   let cachedNavNodes: HTMLElement[] | null = null;
   let restoreProgressHideTimer: ReturnType<typeof setTimeout> | null = null;
+  // Focus trap for the restore alertdialog: owns background inerting, Tab/Escape
+  // containment, and focus save/restore to the opener — so role="alertdialog"
+  // aria-modal="true" is real. Created the first time the dialog appears,
+  // deactivated (and cleared) by hideRestoreProgress.
+  let restoreProgressTrap: FocusTrap | null = null;
 
   function cloneDemoArray(record: Record<string, unknown>, key: "trips" | "sessions" | "hourly" | "insights") {
     const value = record[key];
@@ -903,10 +946,37 @@ import { initialTelemetryState } from "./telemetry-state";
   }
 
   // Android hardware/gesture Back. The native OnBackPressedCallback calls this and only lets the
-  // OS exit/background the app when it returns false. Dismiss the most-nested surface first: the
-  // topbar status popover, then an open troubleshooter modal, then a fullscreen map, then fall
+  // OS exit/background the app when it returns false. Dismiss the most-nested surface first: any
+  // open modal (trip-detail sheet, then the restore alertdialog, then the app confirm/prompt), then
+  // the topbar status popover, then an open troubleshooter modal, then a fullscreen map, then fall
   // back to the Drive home tab.
+  function dismissOpenDialogs(): boolean {
+    // Trip-detail sheet (map.ts) — click its Close control so actions.ts runs the
+    // trap-deactivate + focus-restore path that owns it.
+    const tripDetail = el("tripDetailSheet");
+    if (tripDetail && !tripDetail.hidden) {
+      el("tripDetailClose")?.click();
+      return true;
+    }
+    // Restore alertdialog — only dismissible while NOT busy (the busy restore is a
+    // deliberately non-dismissible modal). hideRestoreProgress releases the trap.
+    if (dismissRestoreProgressIfAllowed()) {
+      return true;
+    }
+    // App confirm/prompt (app-dialog.ts) — click Cancel so it settles its promise
+    // and runs its own trap-deactivate + focus-restore path.
+    const appDialog = el("appDialog");
+    if (appDialog && !appDialog.hidden) {
+      el("appDialogCancel")?.click();
+      return true;
+    }
+    return false;
+  }
+
   function handleAndroidBack(): boolean {
+    if (dismissOpenDialogs()) {
+      return true;
+    }
     if (typeof VD.closeStatusPopover === "function" && VD.closeStatusPopover()) {
       return true;
     }

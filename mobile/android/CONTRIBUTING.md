@@ -176,10 +176,16 @@ domain language lives in [`docs/glossary.md`](docs/glossary.md).
 
 ## Coverage floors
 
-JaCoCo enforces ratcheting baselines (see `app/jacoco.gradle`):
+JaCoCo enforces ratcheting baselines (see `app/jacoco.gradle` for the
+authoritative numbers — the per-CLASS floors and history notes live there too):
 
-- Project: 71% LINE
-- `com.volttracker.obdpoc.data` package: 89% LINE
+- Project: 80% LINE
+- `com.volttracker.obdpoc.data` package: 90% LINE
+- Focused per-package LINE floors guard the pure-logic packages so a regression
+  can't hide behind the aggregate project floor: `materialize` 85%, `classify`
+  95%, `widget` 89%.
 
 When you genuinely improve coverage, bump the floor in the same PR. Never lower
 without a note in the PR description.
+
+Release notes for shipped versions live in [`../../CHANGELOG.md`](../../CHANGELOG.md).

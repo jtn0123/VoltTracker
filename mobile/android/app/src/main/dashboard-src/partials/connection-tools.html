@@ -185,6 +185,12 @@
         Battery alerts need notification permission and fire once each time a
         reading crosses the threshold.
       </small>
+      <small
+        id="eventNotifyStatus"
+        class="status-copy"
+        role="status"
+        aria-live="polite"
+      ></small>
     </fieldset>
 
     <!-- Auto-scan for diagnostic codes shortly after a successful connect (M3). -->
@@ -204,6 +210,12 @@
         Runs one background Mode 03 scan shortly after connecting (at most once
         per drive). New codes feed the diagnostic-code notification above.
       </small>
+      <small
+        id="autoScanStatus"
+        class="status-copy"
+        role="status"
+        aria-live="polite"
+      ></small>
     </fieldset>
   </article>
 </section>

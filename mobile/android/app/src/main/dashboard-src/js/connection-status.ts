@@ -7,7 +7,7 @@
 import { asDataState, setDataState, setDataTone } from "./dataset-state";
 import { resolveDeviceLocale, t } from "./i18n";
 import { units } from "./prefs";
-import { formatDuration } from "./telemetry";
+import { formatDuration, gpsText } from "./telemetry";
 
 // Pick up the device locale once at module load so the demo-migrated copy below
 // resolves to a registered translation when one matches navigator.language. The
@@ -158,6 +158,8 @@ type StatusRow = [string, string];
 const ACTIVE_TRIP_STATES = ["connected", "connecting", "initializing", "scanning", "scan-complete", "demo"];
 
 let popoverDismiss: AbortController | null = null;
+// Contains Tab within the popover and restores focus to the opening badge on close.
+let popoverOpener: HTMLElement | null = null;
 
 // The popover reads the shared state bag through its real DashboardState type
 // (and the VoltAppState sub-blocks declared in dashboard-globals.d.ts) instead
@@ -215,16 +217,11 @@ function connectionRows(status: VoltStatus): StatusRow[] {
     : t("status.logging.notLogging");
   const last = lastRealSession();
 
-  // Map unfriendly GPS enum states to plain copy. Raw "blocked" reads as bare jargon and an
-  // empty/unknown state would drop the row entirely (renderRows skips empty values).
-  const g = String(gps.state || "");
-  const gpsText = g === "blocked" ? "Off — location permission needed" : g === "waiting" || g === "" ? "Waiting for fix" : g;
-
   return [
     ["Adapter", address ? `${adapterName} (${address})` : adapterName],
     ["Bluetooth", bluetoothSummary(app.permissions || {}, status)],
     ["Logging", logging],
-    ["GPS", gpsText],
+    ["GPS", gpsText(gps.state)],
     ["Last connected", last ? `${last.adapter || t("status.adapter.fallbackName")} · ${formatRelative(last.endMs || last.startMs)}` : ""]
   ];
 }
@@ -299,6 +296,13 @@ function closeStatusPopover(): boolean {
   setBadgeExpanded(false);
   popoverDismiss?.abort();
   popoverDismiss = null;
+  // Restore focus to the badge that opened the popover (it re-renders on every
+  // telemetry sample, so a full focus-trap is the wrong tool here — restoring the
+  // opener is the real a11y win; Tab containment is intentionally left light).
+  if (popoverOpener && typeof popoverOpener.focus === "function" && document.contains(popoverOpener)) {
+    popoverOpener.focus();
+  }
+  popoverOpener = null;
   return true;
 }
 
@@ -311,8 +315,10 @@ function openStatusPopover() {
   popoverDismiss?.abort();
   const controller = new AbortController();
   popoverDismiss = controller;
-  // Light-dismiss: tap anywhere outside (the openers handle their own toggle)
-  // or Escape. The Android Back gesture goes through VD.closeStatusPopover.
+  // Remember the control that opened the popover so close() can return focus to it.
+  popoverOpener = (document.activeElement as HTMLElement | null) ?? el("stateBadge");
+  // Light-dismiss: tap anywhere outside (the openers handle their own toggle) or
+  // Escape. The Android Back gesture goes through VD.closeStatusPopover.
   document.addEventListener(
     "click",
     (event) => {
