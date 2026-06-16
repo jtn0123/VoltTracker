@@ -291,10 +291,14 @@ object ObdProtocol {
             )?.let { bounded(it, HV_VOLTAGE_RANGE) }?.let {
                 value("motor B voltage", it, "V", 2)
             }
-            "222487" -> return voltWordValue(response, cleanCommand, 100.0, true)?.let {
-                value("ev distance this cycle", it, "km", 2)
+            // Distance-this-cycle is non-negative: decode unsigned (a high bit must not flip it
+            // negative) and bound it.
+            "222487" -> return voltWordValue(response, cleanCommand, 100.0, false)?.let {
+                // Bound 0..(0xFFFF/100) km: non-negative and within an unsigned 16-bit word.
+                value("ev distance this cycle", bounded(it, Range(0.0, 655.35)), "km", 2)
             }
-            "222889" -> return rawByteValue(response, cleanCommand, "prndl state", "")
+            // PRNDL is a clean gear code; emit the number, not rawByteValue's "RAW_<n>".
+            "222889" -> return value("prndl state", voltByteValue(response, cleanCommand, 1.0, 0.0), "", 0)
             "221940", "22194001" -> return voltByteValue(response, cleanCommand, 1.0, -40.0)
                 ?.let {
                     bounded(it, TEMP_C_RANGE)
@@ -438,15 +442,17 @@ object ObdProtocol {
                 ?.let {
                     value("APM output current", it, "A", 2)
                 }
+            // 2243A6 and 2241EC are distinct PIDs in different units/magnitudes (~1000x apart); keep
+            // the unit in the name so two isolation-resistance rows aren't indistinguishable.
             "2243A6" -> return voltByteValue(response, cleanCommand, 25.0, 0.0)
                 ?.let { bounded(it, ISOLATION_KOHM_RANGE) }
                 ?.let {
-                    value("HV isolation resistance", it, "kOhm", 0)
+                    value("HV isolation resistance (kOhm)", it, "kOhm", 0)
                 }
             "2241EC" -> return voltWordValue(response, cleanCommand, 1.0, false)
                 ?.let { bounded(it, ISOLATION_OHM_RANGE) }
                 ?.let {
-                    value("HV isolation resistance", it, "ohm", 0)
+                    value("HV isolation resistance (ohm)", it, "ohm", 0)
                 }
             "2241B1" -> return voltWordValue(response, cleanCommand, 1.0, true)
                 ?.let { bounded(it, HEATER_POWER_RANGE) }
@@ -632,8 +638,12 @@ object ObdProtocol {
                 }
                 continue
             }
+            // A single reassembled line can carry two modules' replies concatenated (ATH0). Reset,
+            // then SUM each marker's outstanding-pair count instead of overwriting, so a second
+            // message can't zero out the first's promised ISO-TP continuation (dropping its codes).
+            remainingPairs = 0
             while (index >= 0) {
-                remainingPairs =
+                remainingPairs +=
                     parseDtcMessageStart(
                         hex.substring(index + marker.length),
                         marker,
@@ -727,7 +737,9 @@ object ObdProtocol {
         return voltage.valueNumeric * current.valueNumeric / 1000.0
     }
 
-    private fun mode01PayloadBytes(pidHex: String): Int = if (pidHex == "0C") 2 else 1
+    // 0C, 1F and 42 are the 2-byte batched Mode-01 PIDs; undercounting a trailing 2-byte PID would
+    // let the completeness gate accept a frame truncated by one byte (the 2-byte decoders then null).
+    private fun mode01PayloadBytes(pid: String): Int = if (pid == "0C" || pid == "1F" || pid == "42") 2 else 1
 
     internal fun parseControlModuleVoltage(response: String?): Double? =
         mode01Bytes(response, "42", 2)?.let { ((it[0] * 256.0) + it[1]) / 1000.0 }

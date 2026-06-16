@@ -204,6 +204,12 @@ class ObdProtocolTest {
         assertNotNull(v)
         assertEquals(20.0, v!!.valueNumeric!!, 0.01)
         assertEquals("deg C", v.unit)
+        // A sub-zero cold-soaked pack is a real operating condition (it feeds the HighPackTemp alert
+        // and health logic) and must survive the signed-offset decode + TEMP_C_RANGE(-50,150) bound.
+        // 0x14 = 20 -> 20 - 40 = -20 C.
+        val cold = ObdProtocol.parseKnownValue("22434F", "62434F14")
+        assertNotNull(cold)
+        assertEquals(-20.0, cold!!.valueNumeric!!, 0.01)
     }
 
     @Test
@@ -581,6 +587,11 @@ class ObdProtocolTest {
         assertNotNull(evKm)
         assertEquals("ev distance this cycle", evKm!!.name)
         assertEquals(12.34, evKm.valueNumeric!!, 0.01)
+        // A high-bit-set word must not flip this odometer-style counter negative: it decodes
+        // unsigned (0x8000 = 32768 -> 327.68 km) and is floored at 0, not read as -327.68.
+        val evHigh = ObdProtocol.parseKnownValue("222487", "6224878000")
+        assertNotNull(evHigh)
+        assertEquals(327.68, evHigh!!.valueNumeric!!, 0.01)
     }
 
     @Test
