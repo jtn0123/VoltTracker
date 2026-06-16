@@ -746,11 +746,11 @@ class BackupController(
             }
             try {
                 DataBackup.renameFile(restoreTemp, dbFile)
-            } catch (ex: Exception) {
-                if (ex is IOException || ex is RuntimeException) {
-                    restoreOriginalDatabase(dbFile, restoreBackup)
-                    throw ex
-                }
+            } catch (ex: IOException) {
+                restoreOriginalDatabase(dbFile, restoreBackup)
+                throw ex
+            } catch (ex: RuntimeException) {
+                restoreOriginalDatabase(dbFile, restoreBackup)
                 throw ex
             }
             try {
@@ -808,23 +808,27 @@ class BackupController(
 
         private fun hasPassphrase(passphrase: String?): Boolean = !passphrase?.trim().isNullOrEmpty()
 
+        private fun progressUnits(
+            bytesDone: Long,
+            bytesTotal: Long,
+            rowsDone: Long,
+            rowsTotal: Long,
+        ): LongArray? =
+            if (bytesTotal > 0L && bytesDone >= 0L) {
+                longArrayOf(bytesDone, bytesTotal)
+            } else if (rowsTotal > 0L && rowsDone >= 0L) {
+                longArrayOf(rowsDone, rowsTotal)
+            } else {
+                null
+            }
+
         private fun progressPercent(
             bytesDone: Long,
             bytesTotal: Long,
             rowsDone: Long,
             rowsTotal: Long,
         ): Int {
-            val done: Long
-            val total: Long
-            if (bytesTotal > 0L && bytesDone >= 0L) {
-                done = bytesDone
-                total = bytesTotal
-            } else if (rowsTotal > 0L && rowsDone >= 0L) {
-                done = rowsDone
-                total = rowsTotal
-            } else {
-                return -1
-            }
+            val (done, total) = progressUnits(bytesDone, bytesTotal, rowsDone, rowsTotal) ?: return -1
             return ((done.toDouble() / total.toDouble()) * 100.0).toInt().coerceIn(0, 100)
         }
 
@@ -836,17 +840,7 @@ class BackupController(
             startedAtMs: Long,
             nowMs: Long,
         ): Long {
-            val done: Long
-            val total: Long
-            if (bytesTotal > 0L && bytesDone >= 0L) {
-                done = bytesDone
-                total = bytesTotal
-            } else if (rowsTotal > 0L && rowsDone >= 0L) {
-                done = rowsDone
-                total = rowsTotal
-            } else {
-                return -1L
-            }
+            val (done, total) = progressUnits(bytesDone, bytesTotal, rowsDone, rowsTotal) ?: return -1L
             if (done >= total) {
                 return 0L
             }

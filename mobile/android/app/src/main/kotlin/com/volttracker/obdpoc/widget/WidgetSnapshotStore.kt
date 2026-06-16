@@ -66,7 +66,7 @@ class WidgetSnapshotStore(
         return try {
             val current = read()
             val sampleAt = snapshot.freshnessAtMs()
-            if (sameDisplayFields(current, snapshot)) {
+            if (sameDisplayFields(current, snapshot) && current.hasData()) {
                 // No display change: bump only the freshness timestamp (cheap single-key write) so the
                 // widget stays "fresh" without a redraw.
                 if (sampleAt > current.lastSampleAtMs) {

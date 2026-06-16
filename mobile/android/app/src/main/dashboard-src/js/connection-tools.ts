@@ -71,16 +71,23 @@ function autoConnectStatusText(state: Record<string, unknown>) {
 
 let autoConnectCooldownTimer = 0;
 
+// Busy-restore timers for the test-connection and diagnostics buttons. These outlive a single
+// click handler, so a re-bind (hot reload / test-fixture swap) via bindConnectionTools() must
+// clear any in-flight ones before re-querying the buttons, else a stale timer fires against the
+// freshly-bound button. Tracked at module scope and cleared at the top of bindConnectionTools().
+let testConnTimer = 0;
+const diagnosticsTimers: number[] = [];
+
 // Paints the status line; while a cooldown is counting down it re-polls the bridge
 // once a second so the remaining seconds tick toward zero (then stops).
-function applyAutoConnectStatus(state: Record<string, unknown>, toggle: HTMLInputElement | null) {
+function applyAutoConnectStatus(state: Record<string, unknown>) {
   const status = el("autoConnectStatus");
   if (status) status.textContent = autoConnectStatusText(state);
   window.clearTimeout(autoConnectCooldownTimer);
   const cooldownMs = Number(state.cooldownRemainingMs) || 0;
   if (state.enabled !== false && cooldownMs > 0) {
     autoConnectCooldownTimer = window.setTimeout(() => {
-      applyAutoConnectStatus(parseBridgeJson(safeCall("getAutoConnectState")), toggle);
+      applyAutoConnectStatus(parseBridgeJson(safeCall("getAutoConnectState")));
     }, 1000);
   }
 }
@@ -90,14 +97,14 @@ function bindAutoConnect(opts?: AddEventListenerOptions) {
   if (!toggle) return;
   const state = parseBridgeJson(safeCall("getAutoConnectState"));
   toggle.checked = state.enabled !== false;
-  applyAutoConnectStatus(state, toggle);
+  applyAutoConnectStatus(state);
   toggle.addEventListener("change", () => {
     safeCall("setAutoConnectEnabled", toggle.checked);
     // Re-poll instead of reusing the bind-time snapshot so the status line
     // reflects the bridge's CURRENT adapter name / cooldown, then overlay the
     // new toggle value (the bridge may not re-report it synchronously).
     const fresh = parseBridgeJson(safeCall("getAutoConnectState"));
-    applyAutoConnectStatus({ ...fresh, enabled: toggle.checked }, toggle);
+    applyAutoConnectStatus({ ...fresh, enabled: toggle.checked });
   }, opts);
 }
 
@@ -115,7 +122,7 @@ function bindTestConnection(opts?: AddEventListenerOptions) {
     safeCall("startTestConnection");
     // Match the Android-side TEST_CONNECTION_DURATION_MS (25s) so the UI
     // re-enables roughly when the service stops itself.
-    setTimeout(() => {
+    testConnTimer = window.setTimeout(() => {
       setButtonBusy(btn, false, original);
     }, 25_500);
   }, opts);
@@ -132,9 +139,9 @@ function bindSendDiagnostics(opts?: AddEventListenerOptions) {
       const original = btn.textContent;
       setButtonBusy(btn, true, "Preparing...");
       safeCall("shareDiagnostics");
-      setTimeout(() => {
+      diagnosticsTimers.push(window.setTimeout(() => {
         setButtonBusy(btn, false, original);
-      }, 1500);
+      }, 1500));
     }, opts);
   });
 }
@@ -150,9 +157,9 @@ function bindSendAiDigest(opts?: AddEventListenerOptions) {
     const original = btn.textContent;
     setButtonBusy(btn, true, "Preparing...");
     safeCall("shareDiagnosticsDigest");
-    setTimeout(() => {
+    diagnosticsTimers.push(window.setTimeout(() => {
       setButtonBusy(btn, false, original);
-    }, 1500);
+    }, 1500));
   }, opts);
 }
 
@@ -175,6 +182,19 @@ function bindNotifyWhenReady(opts?: AddEventListenerOptions) {
       group.dataset.busy = next ? "true" : "false";
     }
   }
+  function scheduleNotify() {
+    const minutes = Math.max(1, Math.min(30, parseInt(minsInput.value, 10) || 10));
+    // Reflect the clamped value back into the input so the UI never advertises a duration
+    // (e.g., 999) that the bridge silently shrank to 30.
+    minsInput.value = String(minutes);
+    safeCall("scheduleAdapterReadyNotify", minutes);
+    if (status) {
+      status.textContent =
+        "Checking every 30s for the next " +
+        minutes +
+        " min - you'll get a notification when the adapter responds.";
+    }
+  }
   function applyToggleState() {
     if (busy) return;
     setNotifyBusy(true);
@@ -187,23 +207,15 @@ function bindNotifyWhenReady(opts?: AddEventListenerOptions) {
       setTimeout(() => setNotifyBusy(false), 600);
       return;
     }
-    const minutes = Math.max(1, Math.min(30, parseInt(minsInput.value, 10) || 10));
-    // Reflect the clamped value back into the input so the UI never advertises a duration
-    // (e.g., 999) that the bridge silently shrank to 30.
-    minsInput.value = String(minutes);
-    safeCall("scheduleAdapterReadyNotify", minutes);
-    if (status) {
-      status.textContent =
-        "Checking every 30s for the next " +
-        minutes +
-        " min - you'll get a notification when the adapter responds.";
-    }
+    scheduleNotify();
     setTimeout(() => setNotifyBusy(false), 600);
   }
   toggleInput.addEventListener("change", applyToggleState, opts);
   minsInput.addEventListener("change", () => {
-    // Re-arm with the new duration when the user picks a different value while toggled on.
-    if (toggleInput.checked) applyToggleState();
+    // Re-arm with the new duration when toggled on. Re-arming is idempotent native-side, so call
+    // scheduleNotify() directly rather than applyToggleState() - the latter early-returns during
+    // the 600ms busy window after a toggle/change, which would drop the new duration.
+    if (toggleInput.checked) scheduleNotify();
   }, opts);
 }
 
@@ -284,6 +296,14 @@ let connectionToolsController = new AbortController();
 function bindConnectionTools() {
   connectionToolsController.abort();
   connectionToolsController = new AbortController();
+  // Busy-restore / cooldown-poll timers aren't tied to the controller's signal, so clear any
+  // in-flight handles before re-querying the buttons - otherwise a stale timer fires against the
+  // freshly-bound element after a re-bind.
+  window.clearTimeout(testConnTimer);
+  testConnTimer = 0;
+  diagnosticsTimers.splice(0).forEach((id) => window.clearTimeout(id));
+  window.clearTimeout(autoConnectCooldownTimer);
+  autoConnectCooldownTimer = 0;
   const opts: AddEventListenerOptions = { signal: connectionToolsController.signal };
   bindTestConnection(opts);
   bindSendDiagnostics(opts);

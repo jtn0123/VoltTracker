@@ -96,32 +96,16 @@ object ObdProtocol {
         mode01Bytes(response, "05", 1)?.let { boundedInt(it[0] - 40, TEMP_C_RANGE) }
 
     @JvmStatic
-    fun parseEngineLoadPct(response: String?): Int? =
-        mode01Bytes(response, "04", 1)?.let {
-            Math.round(
-                it[0] * 100f / 255f,
-            )
-        }
+    fun parseEngineLoadPct(response: String?): Int? = parsePercentMode01Byte(response, "04")
 
     @JvmStatic
-    fun parseThrottlePct(response: String?): Int? =
-        mode01Bytes(response, "11", 1)?.let { Math.round(it[0] * 100f / 255f) }
+    fun parseThrottlePct(response: String?): Int? = parsePercentMode01Byte(response, "11")
 
     @JvmStatic
-    fun parseAccelPedalPct(response: String?): Int? =
-        mode01Bytes(response, "49", 1)?.let {
-            Math.round(
-                it[0] * 100f / 255f,
-            )
-        }
+    fun parseAccelPedalPct(response: String?): Int? = parsePercentMode01Byte(response, "49")
 
     @JvmStatic
-    fun parseStateOfChargePct(response: String?): Int? =
-        mode01Bytes(response, "5B", 1)?.let {
-            Math.round(
-                it[0] * 100f / 255f,
-            )
-        }
+    fun parseStateOfChargePct(response: String?): Int? = parsePercentMode01Byte(response, "5B")
 
     @JvmStatic
     fun buildMode01MultiCommand(pidHex: List<String>): String =
@@ -737,9 +721,17 @@ object ObdProtocol {
         return voltage.valueNumeric * current.valueNumeric / 1000.0
     }
 
-    // 0C, 1F and 42 are the 2-byte batched Mode-01 PIDs; undercounting a trailing 2-byte PID would
-    // let the completeness gate accept a frame truncated by one byte (the 2-byte decoders then null).
-    private fun mode01PayloadBytes(pid: String): Int = if (pid == "0C" || pid == "1F" || pid == "42") 2 else 1
+    // 0C, 1F and 42 are the 2-byte batched Mode-01 PIDs and A6 is the 4-byte odometer; undercounting a
+    // trailing multi-byte PID would let the completeness gate accept a frame truncated by a byte (the
+    // multi-byte decoders then null).
+    private fun mode01PayloadBytes(pid: String): Int =
+        if (pid == "0C" || pid == "1F" || pid == "42") {
+            2
+        } else if (pid == "A6") {
+            4
+        } else {
+            1
+        }
 
     internal fun parseControlModuleVoltage(response: String?): Double? =
         mode01Bytes(response, "42", 2)?.let { ((it[0] * 256.0) + it[1]) / 1000.0 }
@@ -1056,17 +1048,7 @@ object ObdProtocol {
         command: String?,
         divisor: Double,
         signed: Boolean,
-    ): Double? {
-        val payload = mode22Payload(response, command)
-        if (payload == null || payload.size < 2) {
-            return null
-        }
-        var word = payload[0] * 256 + payload[1]
-        if (signed && word > 0x7FFF) {
-            word -= 0x10000
-        }
-        return word / divisor
-    }
+    ): Double? = mode22Word(response, command, signed)?.let { it / divisor }
 
     private fun voltWordLinearValue(
         response: String?,

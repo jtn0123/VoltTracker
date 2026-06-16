@@ -288,17 +288,19 @@ object EnhancedPidProfiles {
     ): EnhancedPidProfile? {
         val cleanHeader = normalizeHeader(header)
         val cleanCommand = clean(command)
+        var broadcastFallback: EnhancedPidProfile? = null
         for (profile in ALL) {
-            if (profile.command == cleanCommand && normalizeHeader(profile.header) == cleanHeader) {
+            if (profile.command != cleanCommand) {
+                continue
+            }
+            if (normalizeHeader(profile.header) == cleanHeader) {
                 return profile
             }
-        }
-        for (profile in ALL) {
-            if (profile.command == cleanCommand && profile.header.isEmpty()) {
-                return profile
+            if (broadcastFallback == null && profile.header.isEmpty()) {
+                broadcastFallback = profile
             }
         }
-        return null
+        return broadcastFallback
     }
 
     /**

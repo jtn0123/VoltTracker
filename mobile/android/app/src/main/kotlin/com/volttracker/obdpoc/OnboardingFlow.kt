@@ -54,8 +54,12 @@ class OnboardingFlow(
         if (state.loggingActive || prefs.getBoolean(KEY_COMPLETED, false)) {
             return false
         }
-        return !state.hasPairedAdapter || !state.hasBluetoothPermission || !state.hasLocationPermission
+        return !prerequisitesMet(state)
     }
+
+    /** True once the three configurable setup prerequisites are satisfied. */
+    private fun prerequisitesMet(state: State): Boolean =
+        state.hasPairedAdapter && state.hasBluetoothPermission && state.hasLocationPermission
 
     /**
      * The full ordered step list annotated with completion against [state]. A step is "done" when the
@@ -69,10 +73,7 @@ class OnboardingFlow(
             StepStatus(Step.GRANT_BLUETOOTH, state.hasBluetoothPermission),
             StepStatus(Step.GRANT_LOCATION, state.hasLocationPermission),
             StepStatus(Step.CONNECT_OR_DEMO, state.loggingActive),
-            StepStatus(
-                Step.ALL_SET,
-                state.hasPairedAdapter && state.hasBluetoothPermission && state.hasLocationPermission,
-            ),
+            StepStatus(Step.ALL_SET, prerequisitesMet(state)),
         )
 
     /**

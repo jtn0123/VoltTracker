@@ -53,7 +53,6 @@ import { prefs, units } from "./prefs";
       if (err.error) storageError.error = err.error;
       state.storage = storageError;
       updateStorageUi();
-      updateReviewUi();
       renderRealV2Ui();
       VD.renderMapIfLoaded();
       VD.updateValidationUi();
@@ -72,7 +71,6 @@ import { prefs, units } from "./prefs";
     }
     state.storage = parsed;
     updateStorageUi();
-    updateReviewUi();
     renderRealV2Ui();
     VD.renderMapIfLoaded();
     VD.updateValidationUi();
@@ -318,18 +316,15 @@ import { prefs, units } from "./prefs";
     drive.textContent = drivabilityLine(severity);
     moduleBlock.append(drive);
 
+    const small = document.createElement("small");
+    const headerLabel = code.header ? `header ${code.header} · ` : "";
     if (info && info.description) {
-      const small = document.createElement("small");
-      const headerLabel = code.header ? `header ${code.header} · ` : "";
       small.textContent = `${code.moduleName || "generic OBD-II"} · ${headerLabel}first ${VD.formatWhen(code.firstSeenMs)}`;
-      moduleBlock.append(small);
     } else {
-      const small = document.createElement("small");
-      const headerLabel = code.header ? `header ${code.header} · ` : "";
       const moduleLabel = info && info.category ? (code.moduleName || "generic OBD-II") + " · " : "";
       small.textContent = `${moduleLabel}${headerLabel}first ${VD.formatWhen(code.firstSeenMs)} · last ${VD.formatWhen(code.lastSeenMs)}`;
-      moduleBlock.append(small);
     }
+    moduleBlock.append(small);
 
     if (info && Array.isArray(info.causes) && info.causes.length) {
       const causesWrap = document.createElement("div");
@@ -1323,7 +1318,7 @@ import { prefs, units } from "./prefs";
   function renderPackStats(latest: Record<string, unknown>) {
     const row = el("realPackStats");
     if (!row) return;
-    const voltage = firstNum([latest.packVoltage]);
+    const voltage = chargeNum(latest.packVoltage);
     const temp = firstNum([latest.batteryTempC, latest.batteryTemp]);
     const soh = Number(latest.sohPct);
     const packPower = firstNum([latest.packPowerKw, latest.powerKw]);

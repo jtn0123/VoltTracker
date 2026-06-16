@@ -721,50 +721,47 @@ import { initialTelemetryState } from "./telemetry-state";
       const n = Number(value);
       return value == null || value === "" || !Number.isFinite(n) ? null : n;
     };
-    const motorA = finiteNum(t.motorAPowerKw);
-    setOptionalLiveText("moreMotorA", motorA != null ? `${motorA.toFixed(1)} kW` : "--");
-    const motorB = finiteNum(t.motorBPowerKw);
-    setOptionalLiveText("moreMotorB", motorB != null ? `${motorB.toFixed(1)} kW` : "--");
+    const liveNum = (id: string, value: unknown, fmt: (n: number) => string) => {
+      const n = finiteNum(value);
+      setOptionalLiveText(id, n != null ? fmt(n) : "--");
+    };
+    liveNum("moreMotorA", t.motorAPowerKw, (n) => `${n.toFixed(1)} kW`);
+    liveNum("moreMotorB", t.motorBPowerKw, (n) => `${n.toFixed(1)} kW`);
     const gear = t.prndlState == null || t.prndlState === "" ? null : String(t.prndlState);
     setOptionalLiveText("moreGear", gear || "--");
-    const evKm = finiteNum(t.evDistanceThisCycleKm);
-    setOptionalLiveText("moreEvRange", evKm != null ? units.distanceText(evKm) : "--");
-    const transC = finiteNum(t.transmissionTempC);
-    setOptionalLiveText("moreTransTemp", transC != null ? units.tempText(transC) : "--");
-    const ambientC = finiteNum(t.outsideTempC);
-    setOptionalLiveText("moreAmbient", ambientC != null ? units.tempText(ambientC) : "--");
-    const oilLife = finiteNum(t.engineOilLifePct);
-    setOptionalLiveText("moreOilLife", oilLife != null ? `${Math.round(oilLife)}%` : "--");
-    const torque = finiteNum(t.engineTorqueNm);
-    setOptionalLiveText("moreTorque", torque != null ? `${Math.round(torque)} Nm` : "--");
+    liveNum("moreEvRange", t.evDistanceThisCycleKm, (n) => units.distanceText(n));
+    liveNum("moreTransTemp", t.transmissionTempC, (n) => units.tempText(n));
+    liveNum("moreAmbient", t.outsideTempC, (n) => units.tempText(n));
+    liveNum("moreOilLife", t.engineOilLifePct, (n) => `${Math.round(n)}%`);
+    liveNum("moreTorque", t.engineTorqueNm, (n) => `${Math.round(n)} Nm`);
 
     VD.setText("rawFrames", t.raw || "Waiting for telemetry...");
-    const soc = t.soc == null || t.soc === "" ? NaN : Number(t.soc);
-    const batteryTemp = t.batteryTemp == null || t.batteryTemp === "" ? NaN : Number(t.batteryTemp);
-    VD.setText("driveSocValue", Number.isFinite(soc) ? `${Math.round(soc)}%` : "--");
+    const soc = finiteNum(t.soc);
+    const batteryTemp = finiteNum(t.batteryTemp);
+    VD.setText("driveSocValue", soc != null ? `${Math.round(soc)}%` : "--");
     // Pass the raw (possibly NaN) value through; setMeter clears the meter to an
     // indeterminate state for a missing reading rather than announcing a false 0%.
-    VD.setMeter("driveSocMeter", soc);
-    VD.setText("drivePackTempValue", Number.isFinite(batteryTemp) ? units.tempText(batteryTemp) : "--");
-    const power = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
-    VD.setText("powerValue", Number.isFinite(power) ? `${power.toFixed(1)} kW` : "--");
+    VD.setMeter("driveSocMeter", soc ?? NaN);
+    VD.setText("drivePackTempValue", batteryTemp != null ? units.tempText(batteryTemp) : "--");
+    const power = finiteNum(t.powerKw);
+    VD.setText("powerValue", power != null ? `${power.toFixed(1)} kW` : "--");
     // HV traction-pack live readings (mode-22 PIDs 222429 / 222414). When the
     // adapter hasn't responded yet these fall back to "--" exactly like the rest of
     // the live readout.
-    const packV = t.packVoltage == null || t.packVoltage === "" ? NaN : Number(t.packVoltage);
-    setOptionalLiveText("drivePackVoltage", Number.isFinite(packV) ? `${packV.toFixed(1)} V` : "--");
-    const packA = t.packCurrentA == null || t.packCurrentA === "" ? NaN : Number(t.packCurrentA);
+    const packV = finiteNum(t.packVoltage);
+    setOptionalLiveText("drivePackVoltage", packV != null ? `${packV.toFixed(1)} V` : "--");
+    const packA = finiteNum(t.packCurrentA);
     // Sign convention: discharge is positive (Volt mode-22 222414), so "+" means
     // current flowing OUT of the pack (driving), "-" means INTO it (regen / charging).
     setOptionalLiveText(
       "drivePackCurrent",
-      Number.isFinite(packA) ? `${packA >= 0 ? "+" : ""}${packA.toFixed(1)} A` : "--"
+      packA != null ? `${packA >= 0 ? "+" : ""}${packA.toFixed(1)} A` : "--"
     );
     setOptionalLiveText(
       "drivePackPower",
-      Number.isFinite(power) ? `${power >= 0 ? "+" : ""}${power.toFixed(1)} kW` : "--"
+      power != null ? `${power >= 0 ? "+" : ""}${power.toFixed(1)} kW` : "--"
     );
-    const powerState = !Number.isFinite(power) ? "coast"
+    const powerState = power == null ? "coast"
       : power < -0.5 ? "regen"
       : power > 0.5 ? "drive"
       : "coast";
@@ -773,16 +770,16 @@ import { initialTelemetryState } from "./telemetry-state";
       powerDetail.textContent = powerState;
       setDataState(powerDetail, powerState);
     }
-    const pct = Number.isFinite(power) ? Math.min(50, Math.abs(power / 80) * 50) : 0;
+    const pct = power != null ? Math.min(50, Math.abs(power / 80) * 50) : 0;
     const fill = el("powerFill");
     if (fill) {
       fill.style.width = pct + "%";
-      fill.style.left = Number.isFinite(power) && power < 0 ? (50 - pct) + "%" : "50%";
+      fill.style.left = power != null && power < 0 ? (50 - pct) + "%" : "50%";
       fill.classList.toggle("is-regen", powerState === "regen");
     }
     const powerMeter = el("powerMeter");
     if (powerMeter) {
-      if (Number.isFinite(power)) {
+      if (power != null) {
         powerMeter.setAttribute("aria-valuenow", String(Math.round(power)));
         powerMeter.setAttribute("aria-valuetext", `${Math.round(power)} kilowatts`);
       } else {

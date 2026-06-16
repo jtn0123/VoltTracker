@@ -230,19 +230,22 @@ open class ObdService :
             }
             ACTION_APP_FOREGROUND -> {
                 recordAppVisibility(true)
-                if (!running.get()) stopSelf(startId)
-                return if (running.get()) START_STICKY else START_NOT_STICKY
+                val active = running.get()
+                if (!active) stopSelf(startId)
+                return if (active) START_STICKY else START_NOT_STICKY
             }
             ACTION_APP_BACKGROUND -> {
                 recordAppVisibility(false)
-                if (!running.get()) stopSelf(startId)
-                return if (running.get()) START_STICKY else START_NOT_STICKY
+                val active = running.get()
+                if (!active) stopSelf(startId)
+                return if (active) START_STICKY else START_NOT_STICKY
             }
             ACTION_CANCEL_RETRY -> {
                 requestCancelRetry()
                 broadcastStatus("idle", getString(R.string.status_retry_cancelled), false)
-                if (!running.get()) stopSelf(startId)
-                return if (running.get()) START_STICKY else START_NOT_STICKY
+                val active = running.get()
+                if (!active) stopSelf(startId)
+                return if (active) START_STICKY else START_NOT_STICKY
             }
             ACTION_DEMO -> {
                 activeName = "Demo stream"

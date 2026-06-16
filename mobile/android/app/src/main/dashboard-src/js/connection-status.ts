@@ -92,13 +92,19 @@ function isDemoSession(s: RecentSession) {
   return /^demo/i.test(String((s && s.adapter) || ""));
 }
 
+// Most recent REAL (non-demo) session. Unifies the magic count 8 + the predicate used by the
+// last-connected badge and the status popover; the sessions cache makes the repeated calls cheap.
+function lastRealSession(): RecentSession | undefined {
+  return parseSessions(8).find((s) => !isDemoSession(s));
+}
+
 // Render the "last connected" badge from the most recent REAL session.
 function renderLastConnected() {
   const badge = el("lastConnectedBadge");
   const label = el("lastConnectedLabel");
   const at = el("lastConnectedAt");
   if (!badge || !label || !at) return;
-  const s = parseSessions(8).find((session) => !isDemoSession(session));
+  const s = lastRealSession();
   if (!s) {
     badge.hidden = true;
     return;
@@ -207,7 +213,7 @@ function connectionRows(status: VoltStatus): StatusRow[] {
         ? t("status.logging.samples", { count: samples.toLocaleString() })
         : t("status.logging.waitingForData"))
     : t("status.logging.notLogging");
-  const last = parseSessions(8).find((s) => !isDemoSession(s));
+  const last = lastRealSession();
 
   return [
     ["Adapter", address ? `${adapterName} (${address})` : adapterName],
@@ -227,10 +233,12 @@ function tripRows(status: VoltStatus): StatusRow[] {
   const active = Boolean(state.demoActive) || ACTIVE_TRIP_STATES.includes(stateName);
 
   if (!active) {
-    const last = parseSessions(8).find((s) => !isDemoSession(s));
-    const lastMs = Number(last && last.endMs) - Number(last && last.startMs);
-    if (last && Number.isFinite(lastMs) && lastMs > 0) {
-      return [["Last trip", `${formatDuration(lastMs)} · ${formatRelative(last.endMs)}`]];
+    const last = lastRealSession();
+    if (last) {
+      const lastMs = Number(last.endMs) - Number(last.startMs);
+      if (Number.isFinite(lastMs) && lastMs > 0) {
+        return [["Last trip", `${formatDuration(lastMs)} · ${formatRelative(last.endMs)}`]];
+      }
     }
     return [["Trip", t("trip.empty.noTripYet")]];
   }

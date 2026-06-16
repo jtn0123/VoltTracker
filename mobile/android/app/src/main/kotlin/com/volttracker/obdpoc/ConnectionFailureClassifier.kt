@@ -135,10 +135,12 @@ class ConnectionFailureClassifier private constructor() {
 
             // Generic timeout-flavored messages with no clearer phase signal: keep dashboard copy
             // useful by bucketing these as connect_timeout rather than UNKNOWN.
-            if (message.contains("timeout") || message.contains("timed out")) {
-                return FailureClass.CONNECT_TIMEOUT
-            }
-            if (message.contains("socket might closed") || message.contains("socket closed")) {
+            if (
+                message.contains("timeout") ||
+                message.contains("timed out") ||
+                message.contains("socket might closed") ||
+                message.contains("socket closed")
+            ) {
                 return FailureClass.CONNECT_TIMEOUT
             }
 

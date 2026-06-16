@@ -1049,9 +1049,11 @@ import { initialTelemetryState } from "./telemetry-state";
     const card = el("historyCard");
     const list = el("historyList");
     if (!card || !list) return;
-    list.replaceChildren();
     card.hidden = state.deviceHistory.length === 0;
-    if (!state.deviceHistory.length) return;
+    if (!state.deviceHistory.length) {
+      list.replaceChildren();
+      return;
+    }
     const savedCount = state.deviceHistory.filter((device: HistoryDevice) => !device.candidate).length;
     setText("historyHint", savedCount ? "tap to select" : "paired candidate");
     list.replaceChildren(...state.deviceHistory.map((device: HistoryDevice, index: number) => buildHistoryRow(device, index)));

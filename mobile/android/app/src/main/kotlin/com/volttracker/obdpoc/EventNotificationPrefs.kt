@@ -32,13 +32,7 @@ class EventNotificationPrefs(
     private var settingsVersion: Long = prefs.getLong(PREF_SETTINGS_VERSION, 0L)
 
     /** Current settings-version; a change signals a cached [Settings] snapshot must be rebuilt. */
-    fun settingsVersion(): Long {
-        val persisted = prefs.getLong(PREF_SETTINGS_VERSION, 0L)
-        if (persisted != settingsVersion) {
-            settingsVersion = persisted
-        }
-        return persisted
-    }
+    fun settingsVersion(): Long = prefs.getLong(PREF_SETTINGS_VERSION, 0L)
 
     fun chargeCompleteEnabled(): Boolean =
         prefs.getBoolean(PREF_CHARGE_COMPLETE_ENABLED, DEFAULT_CHARGE_COMPLETE_ENABLED)

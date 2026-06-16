@@ -40,13 +40,14 @@ class EventNotificationCoordinator(
         if (payload == null) {
             return emptyList()
         }
-        // Re-read prefs each evaluation so a toggle/threshold change mid-session takes effect on the
-        // next sample/scan, rather than being frozen at the decider's session-start snapshot.
-        decider.updateSettings(currentSettings())
         if (payload.optString("source") == "scan" && payload.has("dtcCodes")) {
             return handleScanPayload(payload)
         }
         val sample = toSample(payload) ?: return emptyList()
+        // Re-read prefs each evaluation so a toggle/threshold change mid-session takes effect on the
+        // next sample, rather than being frozen at the decider's session-start snapshot. The scan path
+        // refreshes separately in applyScanCodes, so it is handled before reaching here.
+        decider.updateSettings(currentSettings())
         val events = decider.onSample(sample)
         for (event in events) {
             notifier.notify(event)

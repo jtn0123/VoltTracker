@@ -68,8 +68,9 @@ class LiveSampleReader(
 
             val speedRaw = pidPolling.lastRaw("010D")
             val speed = ObdProtocol.parseSpeedKph(speedRaw)
-            val polledSpeedThisCycle =
-                if (!isInitialCycle) PidPollingState.wasPolledThisCycle(due, "010D") else true
+            // On the initial cycle dueForCurrentCycle() returns all SPECS, which always contains the
+            // hot-lane 010D (period 1), so this is true there too — no special case needed.
+            val polledSpeedThisCycle = PidPollingState.wasPolledThisCycle(due, "010D")
             val chargeTransitionHint =
                 polledSpeedThisCycle && ObdProtocol.hasMaxSpeedSentinel(speedRaw)
             // Debounce: only a sustained 0xFF sentinel (real charging) becomes a plugged hint, not a

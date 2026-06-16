@@ -49,7 +49,7 @@ internal class VoltBridgeConnections(
     fun connectLast() {
         startLastDeviceAction(
             ObdService.ACTION_CONNECT,
-            "No remembered adapter yet. Connect once to save it.",
+            MSG_NO_REMEMBERED_ADAPTER,
             requireValidAddress = true,
         )
     }
@@ -57,24 +57,19 @@ internal class VoltBridgeConnections(
     fun scanLast() {
         startLastDeviceAction(
             ObdService.ACTION_SCAN,
-            "No remembered adapter yet. Connect once to save it.",
+            MSG_NO_REMEMBERED_ADAPTER,
             requireValidAddress = true,
         )
     }
 
     fun detailProbeLast(stage: String?) {
-        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
-        val address = VoltBridge.safe(device.optString("address", ""), VoltBridge.MAX_ADDRESS_LEN)
-        val name = VoltBridge.safe(device.optString("name", ""), VoltBridge.MAX_NAME_LEN)
         val cleanStage = EnhancedPidProfiles.normalizeStage(VoltBridge.safe(stage, VoltBridge.MAX_STAGE_LEN))
-        activity.runOnUiThread {
-            if (!VoltBridge.validBluetoothAddress(address)) {
-                activity.publishStatus("blocked", "No remembered adapter yet. Connect once to save it.", true)
-                return@runOnUiThread
-            }
-            activity.rememberDevice(address, name)
-            activity.startObdService(ObdService.ACTION_TPMS_SCAN, address, name, cleanStage)
-        }
+        startLastDeviceAction(
+            ObdService.ACTION_TPMS_SCAN,
+            MSG_NO_REMEMBERED_ADAPTER,
+            requireValidAddress = true,
+            stage = cleanStage,
+        )
     }
 
     fun demo() {
@@ -131,6 +126,7 @@ internal class VoltBridgeConnections(
         action: String,
         invalidMessage: String,
         requireValidAddress: Boolean,
+        stage: String? = null,
     ) {
         val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
         val address = VoltBridge.safe(device.optString("address", ""), VoltBridge.MAX_ADDRESS_LEN)
@@ -142,11 +138,16 @@ internal class VoltBridgeConnections(
                 return@runOnUiThread
             }
             activity.rememberDevice(address, name)
-            activity.startObdService(action, address, name)
+            if (stage != null) {
+                activity.startObdService(action, address, name, stage)
+            } else {
+                activity.startObdService(action, address, name)
+            }
         }
     }
 
     private companion object {
         const val MSG_PICK_VALID_ADAPTER = "Choose a valid Bluetooth adapter."
+        const val MSG_NO_REMEMBERED_ADAPTER = "No remembered adapter yet. Connect once to save it."
     }
 }

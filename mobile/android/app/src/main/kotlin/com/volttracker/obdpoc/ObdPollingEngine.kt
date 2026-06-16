@@ -259,10 +259,7 @@ open class ObdPollingEngine(
         if (!service.running.get()) {
             return false
         }
-        var phase = connection.lastErrorPhase
-        if (phase.isNullOrEmpty()) {
-            phase = "post_connect"
-        }
+        val phase = connection.lastErrorPhase.ifEmpty { "post_connect" }
         val watchdogFired = connection.watchdogFired
         val failureClass =
             ConnectionFailureClassifier.classify(
@@ -403,15 +400,10 @@ open class ObdPollingEngine(
             ObdProbes.ELM327_SPP_UUID.toString(),
         )
         val openStart = System.currentTimeMillis()
-        var openOk = false
-        var openErrorPhase = "post_connect"
         try {
             openBluetoothSocket(address)
-            openOk = true
         } catch (ex: IOException) {
-            val phase = connection.lastErrorPhase
-            openErrorPhase = if (phase.isNullOrEmpty()) "post_connect" else phase
-            logSocketOpenResult(false, openStart, openErrorPhase)
+            logSocketOpenResult(false, openStart, connection.lastErrorPhase.ifEmpty { "post_connect" })
             throw ex
         }
         try {
@@ -424,8 +416,6 @@ open class ObdPollingEngine(
                 nudge.gotResponse.toString(),
             )
         } catch (ex: IOException) {
-            openOk = false
-            openErrorPhase = "first_read"
             service.recorder.logEvent(
                 "wake_nudge",
                 "durationMs",
@@ -435,10 +425,10 @@ open class ObdPollingEngine(
                 "error",
                 ObdElmDecode.safeMessage(ex),
             )
-            logSocketOpenResult(false, openStart, openErrorPhase)
+            logSocketOpenResult(false, openStart, "first_read")
             throw ex
         }
-        logSocketOpenResult(openOk, openStart, openErrorPhase)
+        logSocketOpenResult(true, openStart, "")
         service.broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false)
         initializeElm327()
     }
@@ -532,8 +522,7 @@ open class ObdPollingEngine(
         if (ObdElmDecode.hasElmPrompt(supportedPids)) {
             supportedPidsSummary = ObdProtocol.cleanSupportedPids(supportedPids)
             service.recorder.logEvent("protocol_probe_success", "command", "0100", "response", supportedPidsSummary)
-        }
-        if (!ObdElmDecode.hasElmPrompt(supportedPids)) {
+        } else {
             service.recorder.logEvent(
                 "protocol_probe_no_prompt",
                 "command",
@@ -554,8 +543,7 @@ open class ObdPollingEngine(
                     "response",
                     supportedPidsSummary,
                 )
-            }
-            if (!ObdElmDecode.hasElmPrompt(supportedPids)) {
+            } else {
                 service.recorder.logEvent(
                     "protocol_probe_no_prompt",
                     "command",

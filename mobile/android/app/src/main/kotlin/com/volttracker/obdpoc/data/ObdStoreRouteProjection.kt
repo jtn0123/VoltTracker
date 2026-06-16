@@ -44,16 +44,22 @@ object ObdStoreRouteProjection {
             sessionJson.put("sessionId", session.id)
         }
         if (windowStartMs != null && windowEndMs != null) {
-            sessionJson.put("startedAtMs", windowStartMs.toLong())
-            sessionJson.put("endedAtMs", windowEndMs.toLong())
+            sessionJson.put("startedAtMs", windowStartMs)
+            sessionJson.put("endedAtMs", windowEndMs)
         }
         payload.put("session", sessionJson)
         payload.put("points", points)
         payload.put("pointCount", points.length())
         payload.put("distanceMeters", ObdStoreSupport.distanceMeters(points))
         payload.put("bounds", ObdStoreSupport.boundsFor(points))
-        payload.put("socTrack", socTrackForSessionJson(db, session.id, limit, windowStartMs, windowEndMs))
-        payload.put("powerTrack", powerTrackForSessionJson(db, session.id, limit, windowStartMs, windowEndMs))
+        payload.put(
+            "socTrack",
+            scalarTrackForSessionJson(db, session.id, limit, windowStartMs, windowEndMs, "soc", "soc"),
+        )
+        payload.put(
+            "powerTrack",
+            scalarTrackForSessionJson(db, session.id, limit, windowStartMs, windowEndMs, "power_kw", "powerKw"),
+        )
         return payload
     }
 
@@ -402,37 +408,22 @@ object ObdStoreRouteProjection {
     private fun jsonNumberOrNull(value: Number?): Any = value ?: JSONObject.NULL
 
     @Throws(JSONException::class)
-    private fun socTrackForSessionJson(
+    private fun scalarTrackForSessionJson(
         db: SQLiteDatabase,
         sessionId: Long,
         limit: Int,
         windowStartMs: Long?,
         windowEndMs: Long?,
+        column: String,
+        jsonKey: String,
     ): JSONArray {
-        var where = "session_id = ? AND soc IS NOT NULL"
+        var where = "session_id = ? AND $column IS NOT NULL"
         var args = arrayOf(sessionId.toString())
         if (windowStartMs != null && windowEndMs != null) {
-            where = "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? AND soc IS NOT NULL"
+            where = "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? AND $column IS NOT NULL"
             args = arrayOf(sessionId.toString(), windowStartMs.toString(), windowEndMs.toString())
         }
-        return downsampledScalarTrack(db, args, "soc", where, "soc", maxOf(1, minOf(limit, MAX_TRACK_POINTS)))
-    }
-
-    @Throws(JSONException::class)
-    private fun powerTrackForSessionJson(
-        db: SQLiteDatabase,
-        sessionId: Long,
-        limit: Int,
-        windowStartMs: Long?,
-        windowEndMs: Long?,
-    ): JSONArray {
-        var where = "session_id = ? AND power_kw IS NOT NULL"
-        var args = arrayOf(sessionId.toString())
-        if (windowStartMs != null && windowEndMs != null) {
-            where = "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? AND power_kw IS NOT NULL"
-            args = arrayOf(sessionId.toString(), windowStartMs.toString(), windowEndMs.toString())
-        }
-        return downsampledScalarTrack(db, args, "power_kw", where, "powerKw", maxOf(1, minOf(limit, MAX_TRACK_POINTS)))
+        return downsampledScalarTrack(db, args, column, where, jsonKey, maxOf(1, minOf(limit, MAX_TRACK_POINTS)))
     }
 
     @Throws(JSONException::class)

@@ -508,11 +508,7 @@ describe('actions.ts — desktop drag scrolling', () => {
   let originalScrollHeight;
 
   beforeEach(async () => {
-    document.body.innerHTML = '';
-    delete window.VoltDashboard;
-    delete window.VoltTrackerNative;
-    delete window.VoltTrackerAndroid;
-    await loadDashboard();
+    await freshLoad();
     originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
     originalScrollHeight = Object.getOwnPropertyDescriptor(document.documentElement, 'scrollHeight');
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });

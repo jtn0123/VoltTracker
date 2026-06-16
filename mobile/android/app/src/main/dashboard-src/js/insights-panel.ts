@@ -66,7 +66,7 @@ import { prefs, units } from "./prefs";
     VD.setText("insightTripCount", trips || "--");
     VD.setText("insightTotalDistance", trips ? VD.formatDistance(Number(insights.totalDistanceMeters || 0)) : "--");
     VD.setText("insightDriveTime", Number(insights.totalDriveMs) > 0 ? VD.formatDuration(Number(insights.totalDriveMs)) : "--");
-    VD.setText("insightTopSpeed", insights.maxSpeedKph ? units.speedText(Number(insights.maxSpeedKph)) : "--");
+    VD.setText("insightTopSpeed", Number(insights.maxSpeedKph) > 0 ? units.speedText(Number(insights.maxSpeedKph)) : "--");
     VD.setText("insightLongest", Number(insights.longestTripMeters) > 0 ? VD.formatDistance(Number(insights.longestTripMeters)) : "--");
     VD.setText("insightGpsTrips", trips ? `${Number(insights.gpsTripCount || 0)}/${trips}` : "--");
     renderSavingsVsGas();
@@ -82,6 +82,20 @@ import { prefs, units } from "./prefs";
   const METERS_PER_MILE = 1609.344;
   const KM_PER_MILE = 1.609344;
   const MPS_TO_MPH = 2.2369363;
+
+  // Per-point speed in mph. Prefers the logged speedMps; when that's missing or
+  // negative, derives it from the haversine distance between the neighboring
+  // points over their elapsed time. Shared by enrichRouteEff and the scatter.
+  function pointMph(pts: VoltRoutePoint[], i: number) {
+    let mps = Number(pts[i].speedMps);
+    if (!Number.isFinite(mps) || mps < 0) {
+      const a = pts[Math.max(0, i - 1)];
+      const b = pts[Math.min(pts.length - 1, i + 1)];
+      const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
+      mps = haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / dt;
+    }
+    return Math.max(0, mps) * MPS_TO_MPH;
+  }
 
   // Renders the savings-row note as plain text (the normal "estimated vs …"
   // assumptions line). Replaces any prompt-state children with a single text
@@ -232,16 +246,7 @@ import { prefs, units } from "./prefs";
       }
       return Number(last.powerKw);
     };
-    const mphArr = pts.map((p, i) => {
-      let mps = Number(p.speedMps);
-      if (!Number.isFinite(mps) || mps < 0) {
-        const a = pts[Math.max(0, i - 1)];
-        const b = pts[Math.min(pts.length - 1, i + 1)];
-        const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
-        mps = haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / dt;
-      }
-      return Math.max(0, mps) * MPS_TO_MPH;
-    });
+    const mphArr = pts.map((_p, i) => pointMph(pts, i));
     // Drop regen samples (kW < 0) from the per-point efficiency average. Including them with
     // the old `Math.max(60, s/c)` clamp folded every regen-dominant segment into the same
     // upper-bound green color band as a high-efficiency cruise — visually identical and
@@ -291,14 +296,7 @@ import { prefs, units } from "./prefs";
       for (let i = 0; i < pts.length; i += 1) {
         const eff = Number(pts[i].eff);
         if (!Number.isFinite(eff)) continue;
-        let mps = Number(pts[i].speedMps);
-        if (!Number.isFinite(mps) || mps < 0) {
-          const a = pts[Math.max(0, i - 1)];
-          const b = pts[Math.min(pts.length - 1, i + 1)];
-          const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
-          mps = haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / dt;
-        }
-        const mph = Math.max(0, mps) * MPS_TO_MPH;
+        const mph = pointMph(pts, i);
         if (mph < 10) continue;
         let grade = 0;
         if (

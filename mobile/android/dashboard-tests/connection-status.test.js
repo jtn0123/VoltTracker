@@ -9,21 +9,22 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { loadDashboard } from './setup/load-dashboard.js';
 import { createVoltBridgeFixture } from './setup/voltbridge.fixture.js';
 
-describe('connection-status.ts — last connected line', () => {
-  beforeEach(() => {
-    document.body.innerHTML = '';
-    delete window.VoltDashboard;
-    delete window.VoltTrackerNative;
-    delete window.VoltTrackerAndroid;
+beforeEach(() => {
+  document.body.innerHTML = '';
+  delete window.VoltDashboard;
+  delete window.VoltTrackerNative;
+  delete window.VoltTrackerAndroid;
+});
+
+async function loadWithSessions(sessions = []) {
+  const bridge = createVoltBridgeFixture({
+    getRecentSessions: () => JSON.stringify(sessions),
   });
+  await loadDashboard({ bridge, extras: ['connection-status.js'] });
+  return window.VoltDashboard;
+}
 
-  async function loadWithSessions(sessions) {
-    const bridge = createVoltBridgeFixture({
-      getRecentSessions: () => JSON.stringify(sessions),
-    });
-    await loadDashboard({ bridge, extras: ['connection-status.js'] });
-  }
-
+describe('connection-status.ts — last connected line', () => {
   it('shows the most recent real adapter, skipping demo sessions', async () => {
     await loadWithSessions([
       { adapter: 'Demo stream', endMs: 5_000_000, outcome: 'success' },
@@ -82,21 +83,6 @@ describe('connection-status.ts — last connected line', () => {
 });
 
 describe('connection-status.ts — status popover', () => {
-  beforeEach(() => {
-    document.body.innerHTML = '';
-    delete window.VoltDashboard;
-    delete window.VoltTrackerNative;
-    delete window.VoltTrackerAndroid;
-  });
-
-  async function loadWithSessions(sessions = []) {
-    const bridge = createVoltBridgeFixture({
-      getRecentSessions: () => JSON.stringify(sessions),
-    });
-    await loadDashboard({ bridge, extras: ['connection-status.js'] });
-    return window.VoltDashboard;
-  }
-
   function popover() {
     return document.getElementById('statusPopover');
   }

@@ -27,15 +27,10 @@ object DatabaseMerger {
                 sb.append("no new sessions")
             }
             if (vehiclesAdded > 0) {
-                sb.append(", ").append(vehiclesAdded).append(
-                    if (vehiclesAdded ==
-                        1
-                    ) {
-                        " new vehicle"
-                    } else {
-                        " new vehicles"
-                    },
-                )
+                sb
+                    .append(", ")
+                    .append(vehiclesAdded)
+                    .append(if (vehiclesAdded == 1) " new vehicle" else " new vehicles")
             }
             if (vehiclesMerged > 0) {
                 sb

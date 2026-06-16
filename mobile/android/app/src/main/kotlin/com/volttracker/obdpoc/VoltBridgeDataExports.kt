@@ -125,23 +125,23 @@ internal class VoltBridgeDataExports(
             return
         }
         activity.runOnBackground {
-            var deleted = 0
-            try {
-                deleted = activity.localStore?.deleteEnhancedCapability(rowId) ?: 0
-            } catch (ex: RuntimeException) {
-                Log.w(MainActivity.TAG, "deleteDetailedSignalLog failed", ex)
-            }
-            val deletedRows = deleted
+            val deleted =
+                try {
+                    activity.localStore?.deleteEnhancedCapability(rowId) ?: 0
+                } catch (ex: RuntimeException) {
+                    Log.w(MainActivity.TAG, "deleteDetailedSignalLog failed", ex)
+                    0
+                }
             activity.runOnUiThread {
                 activity.publishStorageSummary()
                 activity.publishStatus(
-                    if (deletedRows > 0) "ready" else "blocked",
-                    if (deletedRows > 0) {
+                    if (deleted > 0) "ready" else "blocked",
+                    if (deleted > 0) {
                         "Detailed signal log removed."
                     } else {
                         "Detailed signal log was already gone."
                     },
-                    deletedRows <= 0,
+                    deleted <= 0,
                 )
             }
         }

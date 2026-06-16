@@ -367,15 +367,6 @@ import type { MapSessionFilter } from "./map-session-list";
   function renderMap() {
     const storage = state.storage || {};
     const routes = mapRoutes(storage);
-    if (routes.length) {
-      const selectedExists = routes.some((route: MapRoute) =>
-        String((route.session || {}).id || "") === String(state.selectedMapSessionId || "")
-      );
-      if (!selectedExists) {
-        const firstId = (routes[0].session || {}).id;
-        state.selectedMapSessionId = firstId == null ? null : String(firstId);
-      }
-    }
     const route = ensureRoutePoints(selectedMapRoute(storage, routes));
     const points = Array.isArray(route.points) ? route.points : [];
     const hasRoute = points.length >= 2;
@@ -987,8 +978,6 @@ import type { MapSessionFilter } from "./map-session-list";
   // without a full renderMap() — which would refit the Leaflet bounds and tug
   // the map view away from whatever route the user is inspecting.
   function refreshMapSessionList() {
-    const list = el("mapSessionList");
-    if (!list) return;
     renderMapSessionList(mapRoutes(state.storage || {}));
   }
 
@@ -1340,12 +1329,11 @@ import type { MapSessionFilter } from "./map-session-list";
       const a = points[Math.max(0, i - 1)];
       const b = points[Math.min(points.length - 1, i + 1)];
       const point = points[i];
-      const previousPoint = points[Math.max(0, i - 1)];
-      if (!a || !b || !point || !previousPoint) continue;
+      if (!a || !b || !point) continue;
       const dt = Math.max(1, (b.atMs - a.atMs) / 1000);
       const v = haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / dt;
       const horiz = Math.max(8, haversineMetersJs(a.lat, a.lng, point.lat, point.lng) || 1);
-      const dz = Number(point.altM) - Number(previousPoint.altM || point.altM);
+      const dz = Number(point.altM) - Number(a.altM);
       const grade = Math.max(-0.13, Math.min(0.13, dz / horiz));
       const accel = i > 0 ? (v - prevV) / dt : 0;
       prevV = v;

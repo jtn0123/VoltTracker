@@ -59,6 +59,7 @@ class PidPollingState(
         if (setAtMs != null && clock.nowMs() - setAtMs > carryForwardMaxAgeMsFor(command)) {
             lastRawByCommand.remove(command)
             lastRawSetAtMsByCommand.remove(command)
+            lastPolledAtMsByCommand.remove(command)
             return null
         }
         return lastRawByCommand[command]
@@ -107,17 +108,16 @@ class PidPollingState(
             return
         }
         val batchedTier1 = tryBatchTier1Mode01(due, rawThisCycle)
-        var switchedHeader = false
-        var lastHeaderSet = Header.BROADCAST
+        var switched = false
         for (header in Header.entries) {
             val headerSpecs = filterByHeader(due, header)
             if (headerSpecs.isEmpty()) {
                 continue
             }
-            if (header != Header.BROADCAST && header != lastHeaderSet) {
+            if (header != Header.BROADCAST) {
                 val headerCommand = header.atCommand
                 if (headerCommand == null) {
-                    service.recorder?.logEvent(
+                    service.recorder.logEvent(
                         "pid_header_skipped",
                         "header",
                         header.name,
@@ -127,8 +127,7 @@ class PidPollingState(
                     continue
                 }
                 engine.sendCommand(headerCommand, 1500)
-                switchedHeader = true
-                lastHeaderSet = header
+                switched = true
             }
             val extraBatch =
                 if (mode01BatchSupported) {
@@ -155,7 +154,7 @@ class PidPollingState(
                 lastPolledAtMsByCommand[spec.command] = now
             }
         }
-        if (switchedHeader) {
+        if (switched) {
             engine.sendCommand(PidSchedule.RESTORE_BROADCAST_HEADER_COMMAND, 1500)
         }
     }
@@ -177,7 +176,7 @@ class PidPollingState(
         val response = engine.sendRecoverableCommand(batched, 1500)
         if (!ObdProtocol.responseContainsAllMode01Pids(response, PidSchedule.MODE_01_BATCH_PIDS_HEX)) {
             mode01BatchSupported = false
-            service.recorder?.logEvent(
+            service.recorder.logEvent(
                 "mode01_batch_disabled",
                 "reason",
                 "incomplete_response",
@@ -221,13 +220,7 @@ class PidPollingState(
 
         @JvmStatic
         fun carryForwardMaxAgeMsFor(command: String): Long {
-            var periodCycles = 1
-            for (spec in PidSchedule.SPECS) {
-                if (spec.command == command) {
-                    periodCycles = maxOf(periodCycles, spec.periodCycles)
-                    break
-                }
-            }
+            val periodCycles = PidSchedule.SPECS.firstOrNull { it.command == command }?.periodCycles ?: 1
             return maxOf(CARRY_FORWARD_MAX_AGE_MS, periodCycles * CARRY_FORWARD_MS_PER_SCHEDULE_CYCLE)
         }
 

@@ -538,21 +538,13 @@ class ObdStoreReports(
         val sessions = getRecentSessions(limit)
         val usefulBySession = ObdStoreSupport.usefulSampleCountsBySession(db, sessions.map { it.id })
         for (record in sessions) {
-            val item = JSONObject()
+            var item = JSONObject()
             try {
-                item.put("id", record.id)
-                item.put("mode", record.mode)
-                item.put("adapterAddress", record.adapterAddress)
-                item.put("adapterName", record.adapterName)
-                item.put("startedAtMs", record.startedAtMs)
-                item.put("endedAtMs", record.endedAtMs)
-                item.put("status", record.status)
+                item = ObdStoreSupport.sessionToJson(record)
                 item.put("supportedPids", record.supportedPids)
-                item.put("sampleCount", record.sampleCount)
                 val usefulSamples = usefulBySession[record.id] ?: 0L
                 item.put("usefulSampleCount", usefulSamples)
                 item.put("emptySampleCount", maxOf(0L, record.sampleCount - usefulSamples))
-                item.put("lastEventAtMs", record.lastEventAtMs)
             } catch (ignored: JSONException) {
                 // Local fields are safe.
             }
