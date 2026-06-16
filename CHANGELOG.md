@@ -1,6 +1,88 @@
 # CHANGELOG
 
 
+## v0.16.3 (2026-06-16)
+
+### Bug Fixes
+
+- **ui**: End-user accessibility and clarity polish
+  ([#217](https://github.com/jtn0123/VoltTracker/pull/217),
+  [`d09df82`](https://github.com/jtn0123/VoltTracker/commit/d09df8218541722effee9f92fa50708f9073a824))
+
+* polish(ux,a11y): end-user accessibility + clarity pass (~24 items)
+
+UX/accessibility-weighted pass (multi-agent, file-partitioned, adversarially reviewed). All gates
+  green: dashboard typecheck/lint/461 tests, Kotlin tests/ detekt/spotless/jacoco/lint/assemble,
+  index.html regenerated.
+
+Accessibility: - Widget exposes a content description ("Volt Tracker: <SOC> state of charge,
+  <status>. <freshness>") for TalkBack (the a11y item deferred in an earlier pass). -
+  Efficiency-vs-speed scatter SVG gets role="img" + an aria-label matching the visible headline;
+  cell/route charts already had labels. - Live regions announced: error-banner repeat count,
+  auto-connect / notify-ready status lines, the live-rate and charge-status badges
+  (aria-live=polite). - Map layer tabs drop an invalid aria-pressed (role="tab" uses aria-selected).
+  - Route-playback button's accessible name now tracks Play/Stop state. - Status badges expose a
+  visually-hidden "Connection status:" prefix + initial aria-expanded; topbar nav label matches its
+  visible text (WCAG 2.5.3). - DTC search + small controls get a visible focus outline and 44px-ish
+  targets.
+
+UX / copy: - GPS status shows friendly text ("Off — location permission needed" / "Waiting for fix")
+  instead of the raw enum, and no longer drops the row. - Charge-sessions card title says "Latest 12
+  of N" instead of overstating. - Empty efficiency-scatter headline reads as guidance, not a stuck
+  spinner. - Notify-minutes select is greyed out while background checking is off. - Troubleshooter
+  force-stop buttons get distinguishing accessible names; the competing-apps step auto-expands when
+  its fix is relevant. - Low-voltage hint fallback copy aligned with the live render.
+
+(During central verification I reverted three over-reaching workflow edits: a .map-empty padding
+  change that broke its layout test, an EventNotifier SOC-format change that reintroduced
+  inconsistency, and setup-step copy that dropped the wizard's step numbers and the re-open-guide
+  hint.)
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* test(visual): refresh the 4 insights baselines for the scatter-legend/copy polish
+
+The a11y/copy pass changed the Insights efficiency-scatter legend (arrow glyphs) and headline copy;
+  refresh the Linux baselines from the dashboard-visual CI artifact (run 27638786227). Only the
+  insights scenarios shifted.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+### Refactoring
+
+- De-complicate hot paths + fix edge-case bugs (26 files)
+  ([#216](https://github.com/jtn0123/VoltTracker/pull/216),
+  [`811d3a5`](https://github.com/jtn0123/VoltTracker/commit/811d3a5b643b8f48cc830b8d008ad13cfa177948))
+
+Fourth pass, focused on over-complicated code and bugs (multi-agent, file-partitioned, every change
+  adversarially re-verified as behavior-identical or a correct fix). All gates green: Kotlin
+  tests/detekt/spotless/jacoco/lint/ assemble, dashboard typecheck/lint/461 tests.
+
+Bugs: - ObdProtocol.mode01PayloadBytes: PID A6 (odometer) is 4 bytes, not 1 — the batch-completeness
+  gate under-counted it. - ObdService.onStartCommand: the running AtomicBoolean was read twice per
+  visibility/cancel action (could disagree under a race); snapshot once. - PidPollingState: a
+  carry-forward age-out left lastPolledAtMs set, emitting an orphan *StaleMs marker without its
+  value; clear it on age-out. - WidgetSnapshotStore: the first all-default snapshot took the
+  freshness-only branch and read back as EMPTY; force the full write when !hasData(). -
+  connection-tools.ts: busy/cooldown setTimeout handles escaped the re-bootstrap AbortController
+  (timer leak); a new notify duration was dropped if a select landed in the 600ms busy window;
+  dropped a dead toggle param. - map.ts buildSampleRoute: a legitimately-zero previous altitude was
+  treated as missing (and the previous point was aliased). - insights-panel.ts: maxSpeedKph used raw
+  truthiness, dropping a sub-1/0 value.
+
+Simplify (all behavior-identical): collapse EnhancedPidProfiles.find() two scans into one; delegate
+  voltWordValue->mode22Word and four percent parsers-> parsePercentMode01Byte; drop dead
+  error-phase/openOk tracking in ObdPollingEngine; move the notification settings refresh off the
+  every-call path; unify socTrack/powerTrack and the route/session JSON builders; hoist duplicated
+  bridge message + last-device flow; collapse EventNotificationPrefs.settingsVersion; de-duplicate
+  connection-status/telemetry/storage-status/map/core DOM helpers; and hoist two duplicated test
+  setups. Net -76 lines.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.16.2 (2026-06-16)
 
 ### Bug Fixes
