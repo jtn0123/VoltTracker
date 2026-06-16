@@ -1,6 +1,81 @@
 # CHANGELOG
 
 
+## v0.16.1 (2026-06-16)
+
+### Bug Fixes
+
+- Deeper edge-case bug-fix pass (18 files) ([#214](https://github.com/jtn0123/VoltTracker/pull/214),
+  [`e272e14`](https://github.com/jtn0123/VoltTracker/commit/e272e14b803b84e70ac6ce5959093fa215d6d359))
+
+A second, deeper audit pass (multi-agent, file-scoped, each fix adversarially re-verified). All
+  gates green: Kotlin tests/detekt/spotless/jacoco/lint/assemble, dashboard typecheck/lint/461
+  tests. Mostly real edge-case fixes:
+
+Data layer: - ObdStoreSupport.boundsFor: a non-finite (NaN) lat/lng point poisoned all four route
+  bounds; skip non-finite points and return empty when none are finite. - ObdStoreTrips.tripsJson:
+  one corrupt cached trip_json row blanked the entire Trips list; guard the per-row parse and skip
+  just the bad row. - ObdLocalStore.getCurrentSessionRouteJson: the live drive could be missed
+  behind a fixed 5-row recent scan after a finalize race; query status=ACTIVE directly. -
+  DatabaseMerger: an updated existing row was wrongly counted as "imported".
+
+Service / connection: - ObdService: lastVoltage wasn't reset between sessions, so a new connect
+  could republish the prior drive's voltage into the status/low-voltage hint. -
+  BluetoothStateReporter: the connecting-failure streak reset every attempt, so it never reached the
+  SDP-refresh threshold; reset only on device change (and make it @Volatile). - AutoDtcScanRunner:
+  documented "never throws" but a parse RuntimeException could escape; catch it and return an empty
+  list.
+
+Notifications: - EventNotificationDecider: an out-of-order/duplicate-timestamp sample corrupted the
+  charge energy-integration baseline; a single noisy final SOC reading could flip a finished charge
+  to "interrupted" — both fixed at the boundary. - EventNotifier: a tiny charge that rounds to "0.0
+  kWh" now uses the no-energy copy; measured-SOC precision made consistent across alert copy. -
+  EventNotificationPrefs: the auto-scan-on-connect toggle needlessly bumped the settings version
+  (not in the decider snapshot), invalidating the cache.
+
+Diagnostics / backup / bridge: - TroubleshooterBridge.forceStopPackage: validated the lower-cased
+  name but killed the raw-case string (case-sensitivity mismatch). - DiagnosticsBundle: manifest
+  byte-budget reserve could under-estimate. - DataBackup/RestoreValidator: UTF-8 tail-read
+  continuation-byte handling and a short-read false-reject in the encrypted-header sniff. -
+  VoltBridgeConnections.scanLast: validate the address like connectLast does. - connection-status.ts
+  / troubleshooter.ts: low-voltage hint threshold aligned with the backend; failure-banner copy and
+  scan-failure counting fixed.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+### Refactoring
+
+- Simplify, polish, and debug ~90 small areas across the app
+  ([#213](https://github.com/jtn0123/VoltTracker/pull/213),
+  [`6cb5c0f`](https://github.com/jtn0123/VoltTracker/commit/6cb5c0f95dae96f1e23ea773b6b36483b7d8c8b3))
+
+A breadth-first cleanup pass (found via a multi-agent audit, each change file-scoped and
+  individually verified) across ~50 files. No behavior change except the explicit bug fixes noted
+  below. All gates green locally: Kotlin tests/detekt/spotless/jacoco/lint/assemble, dashboard
+  typecheck/lint/461 tests/spotless, generated index.html clean.
+
+Debug (real fixes): - strings.xml: notification_target_soc_text had reversed %1$s/%2$s vs the (soc,
+  target) order EventNotifier passes — corrected to match the siblings. - EventNotificationDecider:
+  low-SOC alert could never re-arm when the threshold was clamped near 100 (re-arm point
+  unreachable); cap it at a reachable SOC. - ObdTripLabels: surrogate-pair-safe truncation (no
+  lone-surrogate mojibake). - core.ts: device option label rendered "undefined" when address
+  missing; locale-aware byte formatting in the restore progress. - map.ts: stops badge now counts
+  valid-only points so it matches the drawn markers. - actions.ts: scan request no longer silently
+  falls through to connect when bridge.scan is absent (old APK) — shows an in-app-only hint. -
+  telemetry.ts: reset the speed-meter aria-label when the reading disappears; derive the validation
+  denominator from the live row count. - insights-panel.ts: use the exact km-per-mile reciprocal for
+  the mph->kph back-conversion. storage-status.ts: 1-based month bucket key. - BackupController:
+  merge-success status could render literal "null".
+
+Simplify / polish: removed dead helpers/getters/constants/CSS rules, extracted repeated magic
+  numbers and duplicated string literals to named constants, de-duplicated the logcat TAG (via the
+  neutral AppPrefs.LOG_TAG), collapsed redundant guards/branches, switched a 28-branch if-chain to a
+  switch, replaced hand-rolled big-endian shifts with ByteBuffer, fixed stale comments/KDoc, and
+  tidied several user-facing strings.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.16.0 (2026-06-15)
 
 ### Features
