@@ -45,9 +45,15 @@ class VoltWidgetProvider : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.widget_volt)
             val display = WidgetStateFormatter.format(snapshot, System.currentTimeMillis())
 
+            val status = statusText(context, display.status)
+            val freshness = freshnessText(context, display)
             views.setTextViewText(R.id.widget_soc, display.socText)
-            views.setTextViewText(R.id.widget_status, statusText(context, display.status))
-            views.setTextViewText(R.id.widget_updated, freshnessText(context, display))
+            views.setTextViewText(R.id.widget_status, status)
+            views.setTextViewText(R.id.widget_updated, freshness)
+            views.setContentDescription(
+                R.id.widget_root,
+                context.getString(R.string.widget_content_description, display.socText, status, freshness),
+            )
             views.setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
             return views
         }

@@ -215,11 +215,16 @@ function connectionRows(status: VoltStatus): StatusRow[] {
     : t("status.logging.notLogging");
   const last = lastRealSession();
 
+  // Map unfriendly GPS enum states to plain copy. Raw "blocked" reads as bare jargon and an
+  // empty/unknown state would drop the row entirely (renderRows skips empty values).
+  const g = String(gps.state || "");
+  const gpsText = g === "blocked" ? "Off — location permission needed" : g === "waiting" || g === "" ? "Waiting for fix" : g;
+
   return [
     ["Adapter", address ? `${adapterName} (${address})` : adapterName],
     ["Bluetooth", bluetoothSummary(app.permissions || {}, status)],
     ["Logging", logging],
-    ["GPS", String(gps.state || "")],
+    ["GPS", gpsText],
     ["Last connected", last ? `${last.adapter || t("status.adapter.fallbackName")} · ${formatRelative(last.endMs || last.startMs)}` : ""]
   ];
 }

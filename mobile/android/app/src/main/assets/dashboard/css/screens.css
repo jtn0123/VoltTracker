@@ -493,6 +493,8 @@
        the two grid rows stretch apart. */
     align-content: center;
     gap: 12px;
+    /* 120px top clears the floating map overlay controls so the empty-state copy
+       sits below them, not behind them (guarded by layout-css.test.js). */
     padding: 120px 20px 56px;
     text-align: center;
     color: var(--muted);

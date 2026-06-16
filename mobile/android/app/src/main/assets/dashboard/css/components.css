@@ -2094,6 +2094,11 @@
     background: rgba(92,200,255,0.18);
   }
 
+  .dtc-search:focus-visible {
+    outline: 2px solid var(--accent, #4cc4ff);
+    outline-offset: 2px;
+  }
+
   .dtc-clear-warning {
     margin-top: 4px;
     padding: 12px;
@@ -2318,6 +2323,7 @@
   button.busy {
     opacity: 0.55;
     pointer-events: none;
+    cursor: not-allowed;
   }
 
   /* Sustained in-flight feedback for the connect/scan primary action.

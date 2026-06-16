@@ -242,7 +242,7 @@ import type { FocusTrap } from "./focus-trap";
       VD.setStatus({
         state: "blocked",
         detail:
-          "Open Android Settings > Bluetooth, forget the adapter, then pair it again."
+          "Open Android Settings, then Bluetooth, forget the adapter, then pair it again."
       });
     }
   }
@@ -278,6 +278,12 @@ import type { FocusTrap } from "./focus-trap";
       return;
     }
     stepNode.hidden = false;
+    // Expand the collapsible body so the one-tap fix is visible the moment a
+    // competing app is found, instead of staying hidden behind a tap.
+    const body = el("troubleshooterStepCompetingBody");
+    if (body) body.hidden = false;
+    const head = stepNode.querySelector(".troubleshooter-step-head");
+    if (head) head.setAttribute("aria-expanded", "true");
     listNode.replaceChildren(...packages.map(buildCompetingRow));
   }
 
@@ -306,6 +312,7 @@ import type { FocusTrap } from "./focus-trap";
     button.type = "button";
     button.className = "troubleshooter-force-stop";
     button.textContent = "Force-stop";
+    button.setAttribute("aria-label", "Force-stop " + pkg);
     button.addEventListener("click", () => {
       // Disable + relabel so the user gets immediate feedback even though
       // killBackgroundProcesses returns void on the Android side.

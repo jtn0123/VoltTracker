@@ -216,4 +216,5 @@
     <string name="widget_updated_hours">Updated %1$dh ago</string>
     <string name="widget_updated_days">Updated %1$dd ago</string>
     <string name="widget_updated_stale">%1$s (stale)</string>
+    <string name="widget_content_description">Volt Tracker: %1$s state of charge, %2$s. %3$s</string>
 </resources>

@@ -361,6 +361,7 @@ import { prefs, units } from "./prefs";
     svg.setAttribute("width", String(w));
     svg.setAttribute("height", String(h));
     svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    svg.setAttribute("role", "img");
     const appendLine = (attrs: Record<string, string | number>) => {
       svg.append(setSvgAttrs(document.createElementNS(svgNs, "line"), attrs));
     };
@@ -445,6 +446,12 @@ import { prefs, units } from "./prefs";
       "font-family": "ui-monospace,monospace",
       "text-anchor": "end"
     });
+    svg.setAttribute(
+      "aria-label",
+      best.e > 0
+        ? `Efficiency versus speed scatter; most efficient around ${units.speedText(best.mph * KM_PER_MILE)}`
+        : "Efficiency versus speed scatter across logged drives"
+    );
     chart.replaceChildren(svg);
     if (head) {
       head.replaceChildren();
@@ -458,7 +465,7 @@ import { prefs, units } from "./prefs";
           " - about " + units.efficiencyText(best.e) + "."
         );
       } else {
-        head.textContent = "Pooling samples across every logged drive.";
+        head.textContent = "Log a few more drives to see your most efficient speed.";
       }
     }
     if (statsEl) {

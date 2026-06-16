@@ -740,7 +740,10 @@ import { units } from "./prefs";
     if (scrubAnim) cancelAnimationFrame(scrubAnim);
     scrubAnim = null;
     setScrubAnimMode(false);
-    if (playBtn) playBtn.textContent = PLAY_LABEL;
+    if (playBtn) {
+      playBtn.textContent = PLAY_LABEL;
+      playBtn.setAttribute("aria-label", "Play route playback");
+    }
   }
   if (playBtn) {
     playBtn.addEventListener("click", () => {
@@ -752,6 +755,7 @@ import { units } from "./prefs";
         return;
       }
       playBtn.textContent = STOP_LABEL;
+      playBtn.setAttribute("aria-label", "Stop route playback");
       setScrubAnimMode(true);
       const lastPoint = scrubData[scrubData.length - 1];
       const totalMi = (lastPoint && lastPoint.distMi) || 22;

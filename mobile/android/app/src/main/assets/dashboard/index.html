@@ -393,9 +393,9 @@
       aria-haspopup="dialog"
       aria-expanded="false"
       aria-controls="statusPopover"
-      aria-label="Connection status details"
     >
-      <span class="dot"></span><span id="stateText">idle</span>
+      <span class="visually-hidden">Connection status: </span
+      ><span class="dot"></span><span id="stateText">idle</span>
     </button>
   </div>
   <!--
@@ -410,7 +410,9 @@
       data-state="unknown"
       hidden
       aria-haspopup="dialog"
+      aria-expanded="false"
       aria-controls="statusPopover"
+      aria-label="Last connection. Tap for status details"
     >
       <span class="connection-status__line-dot" aria-hidden="true"></span>
       <strong id="lastConnectedLabel">--</strong>
@@ -1174,17 +1176,21 @@
   </article>
   <section class="charge-grid" aria-label="Charging summary" aria-live="polite">
     <article class="panel charge-kpi">
-      <header><span>Sessions</span><span>real</span></header>
+      <header><span>Sessions</span><span aria-hidden="true">real</span></header>
       <strong id="realChargeSessions">0</strong>
       <small>Charging sessions recorded</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Plug-ins</span><span>detected</span></header>
+      <header>
+        <span>Plug-ins</span><span aria-hidden="true">detected</span>
+      </header>
       <strong id="realChargeHints">0</strong>
       <small>Times the car looked plugged in</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Max power</span><span>observed</span></header>
+      <header>
+        <span>Max power</span><span aria-hidden="true">observed</span>
+      </header>
       <strong id="realChargePower">--</strong>
       <small>Peak charging power seen</small>
     </article>
@@ -1245,7 +1251,8 @@
       </div>
     </div>
     <p id="liveChargeTargetHint" class="status-copy live-charge-target-hint">
-      You'll get a notification when the battery reaches this target.
+      If notifications are on, you'll get an alert when the battery reaches this
+      target.
     </p>
     <p class="status-copy">
       Estimated — actual time varies as charging tapers.
@@ -1584,7 +1591,13 @@
             aria-label="Search diagnostic trouble codes"
           />
         </label>
-        <div id="dtcSearchResult" class="dtc-lookup-result" hidden></div>
+        <div
+          id="dtcSearchResult"
+          class="dtc-lookup-result"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></div>
       </div>
 
       <div
@@ -1683,9 +1696,9 @@
       </header>
       <div class="eff-scatter" id="effScatter"></div>
       <div class="eff-scatter-legend">
-        <span><i data-grade="downhill"></i>downhill</span>
-        <span><i data-grade="flat"></i>flat</span>
-        <span><i data-grade="uphill"></i>uphill</span>
+        <span><i data-grade="downhill"></i>↘ downhill</span>
+        <span><i data-grade="flat"></i>→ flat</span>
+        <span><i data-grade="uphill"></i>↗ uphill</span>
       </div>
       <div class="eff-scatter-stats" id="effScatterStats"></div>
     </article>
@@ -1948,7 +1961,7 @@
       aria-live="polite"
       hidden
     >
-      Battery voltage looks low. Start the engine before the next test.
+      Battery voltage looks low. Start the car before the next probe.
     </p>
 
     <div class="connection-tools__actions">
@@ -1986,7 +1999,12 @@
           <span>Connect when last adapter is seen</span>
         </label>
       </div>
-      <small id="autoConnectStatus" class="status-copy">
+      <small
+        id="autoConnectStatus"
+        class="status-copy"
+        role="status"
+        aria-live="polite"
+      >
         Uses the last adapter and Bluetooth connection events. It does not run
         Bluetooth discovery.
       </small>
@@ -2021,7 +2039,12 @@
           </select>
         </label>
       </div>
-      <small id="notifyWhenReadyStatus" class="status-copy">
+      <small
+        id="notifyWhenReadyStatus"
+        class="status-copy"
+        role="status"
+        aria-live="polite"
+      >
         Probes the last-used adapter every 30s and posts a notification when it
         responds.
       </small>
@@ -2156,7 +2179,7 @@
     <div class="pref-row">
       <div class="pref-label">
         <strong>Electricity rate</strong>
-        <small>Estimates charging cost on the Charge tab</small>
+        <small>Charging cost on Charge, and savings vs gas on Insights</small>
       </div>
       <label class="pref-price">
         <span>$</span>
@@ -2694,7 +2717,7 @@
             /></svg></i
         ><span>Insights</span>
       </button>
-      <button type="button" data-nav="diagnostics" aria-label="Diagnostics">
+      <button type="button" data-nav="diagnostics" aria-label="Diag">
         <i
           ><svg viewBox="0 0 24 24" aria-hidden="true">
             <path

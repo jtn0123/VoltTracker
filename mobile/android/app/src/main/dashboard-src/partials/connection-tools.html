@@ -27,7 +27,7 @@
       aria-live="polite"
       hidden
     >
-      Battery voltage looks low. Start the engine before the next test.
+      Battery voltage looks low. Start the car before the next probe.
     </p>
 
     <div class="connection-tools__actions">
@@ -65,7 +65,12 @@
           <span>Connect when last adapter is seen</span>
         </label>
       </div>
-      <small id="autoConnectStatus" class="status-copy">
+      <small
+        id="autoConnectStatus"
+        class="status-copy"
+        role="status"
+        aria-live="polite"
+      >
         Uses the last adapter and Bluetooth connection events. It does not run
         Bluetooth discovery.
       </small>
@@ -100,7 +105,12 @@
           </select>
         </label>
       </div>
-      <small id="notifyWhenReadyStatus" class="status-copy">
+      <small
+        id="notifyWhenReadyStatus"
+        class="status-copy"
+        role="status"
+        aria-live="polite"
+      >
         Probes the last-used adapter every 30s and posts a notification when it
         responds.
       </small>

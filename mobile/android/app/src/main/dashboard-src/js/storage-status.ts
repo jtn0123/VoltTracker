@@ -1073,7 +1073,13 @@ import { prefs, units } from "./prefs";
       renderChargeEnergy(sessions);
       return;
     }
-    VD.setText("chargeSessionsTitle", `${sessions.length} recent charge${sessions.length === 1 ? "" : "s"}`);
+    const shown = Math.min(sessions.length, 12);
+    VD.setText(
+      "chargeSessionsTitle",
+      sessions.length > 12
+        ? `Latest ${shown} of ${sessions.length} charges`
+        : `${sessions.length} recent charge${sessions.length === 1 ? "" : "s"}`
+    );
     list.replaceChildren(...sessions.slice(0, 12).map(buildChargeSessionRow));
     renderChargeEnergy(sessions);
   }

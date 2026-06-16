@@ -24,9 +24,9 @@
       aria-haspopup="dialog"
       aria-expanded="false"
       aria-controls="statusPopover"
-      aria-label="Connection status details"
     >
-      <span class="dot"></span><span id="stateText">idle</span>
+      <span class="visually-hidden">Connection status: </span
+      ><span class="dot"></span><span id="stateText">idle</span>
     </button>
   </div>
   <!--
@@ -41,7 +41,9 @@
       data-state="unknown"
       hidden
       aria-haspopup="dialog"
+      aria-expanded="false"
       aria-controls="statusPopover"
+      aria-label="Last connection. Tap for status details"
     >
       <span class="connection-status__line-dot" aria-hidden="true"></span>
       <strong id="lastConnectedLabel">--</strong>

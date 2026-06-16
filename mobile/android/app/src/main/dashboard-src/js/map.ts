@@ -383,7 +383,6 @@ import type { MapSessionFilter } from "./map-session-list";
       const active = button.dataset.mapLayer === layer;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-selected", active ? "true" : "false");
-      button.setAttribute("aria-pressed", active ? "true" : "false");
     });
     const mapCard = el("mapCard");
     if (mapCard) mapCard.classList.toggle("is-fullscreen", state.mapFull);

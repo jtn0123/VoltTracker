@@ -152,7 +152,13 @@
             aria-label="Search diagnostic trouble codes"
           />
         </label>
-        <div id="dtcSearchResult" class="dtc-lookup-result" hidden></div>
+        <div
+          id="dtcSearchResult"
+          class="dtc-lookup-result"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></div>
       </div>
 
       <div
@@ -251,9 +257,9 @@
       </header>
       <div class="eff-scatter" id="effScatter"></div>
       <div class="eff-scatter-legend">
-        <span><i data-grade="downhill"></i>downhill</span>
-        <span><i data-grade="flat"></i>flat</span>
-        <span><i data-grade="uphill"></i>uphill</span>
+        <span><i data-grade="downhill"></i>↘ downhill</span>
+        <span><i data-grade="flat"></i>→ flat</span>
+        <span><i data-grade="uphill"></i>↗ uphill</span>
       </div>
       <div class="eff-scatter-stats" id="effScatterStats"></div>
     </article>

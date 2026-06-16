@@ -35,17 +35,21 @@
   </article>
   <section class="charge-grid" aria-label="Charging summary" aria-live="polite">
     <article class="panel charge-kpi">
-      <header><span>Sessions</span><span>real</span></header>
+      <header><span>Sessions</span><span aria-hidden="true">real</span></header>
       <strong id="realChargeSessions">0</strong>
       <small>Charging sessions recorded</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Plug-ins</span><span>detected</span></header>
+      <header>
+        <span>Plug-ins</span><span aria-hidden="true">detected</span>
+      </header>
       <strong id="realChargeHints">0</strong>
       <small>Times the car looked plugged in</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Max power</span><span>observed</span></header>
+      <header>
+        <span>Max power</span><span aria-hidden="true">observed</span>
+      </header>
       <strong id="realChargePower">--</strong>
       <small>Peak charging power seen</small>
     </article>
@@ -106,7 +110,8 @@
       </div>
     </div>
     <p id="liveChargeTargetHint" class="status-copy live-charge-target-hint">
-      You'll get a notification when the battery reaches this target.
+      If notifications are on, you'll get an alert when the battery reaches this
+      target.
     </p>
     <p class="status-copy">
       Estimated — actual time varies as charging tapers.

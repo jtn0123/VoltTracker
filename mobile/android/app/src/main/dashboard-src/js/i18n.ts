@@ -29,7 +29,7 @@ export const EN = {
   "status.logging.notLogging": "Not logging",
   "status.adapter.fallbackName": "OBD adapter",
   "trip.empty.noTripYet": "No trip yet — connect to start logging.",
-  "trip.waitingForFirstSamples": "Waiting for the first samples...",
+  "trip.waitingForFirstSamples": "Waiting for the first samples…",
   // Count-bearing example proving `{placeholder}` interpolation end-to-end.
   "status.logging.samples": "{count} samples",
 } as const;

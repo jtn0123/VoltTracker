@@ -173,6 +173,9 @@ function bindNotifyWhenReady(opts?: AddEventListenerOptions) {
   if (!toggle || !mins) return;
   const toggleInput = toggle;
   const minsInput = mins;
+  // The minutes select only re-arms while background checking is on, so grey it
+  // out until the toggle is checked to match its actual behavior.
+  minsInput.disabled = !toggleInput.checked;
   const group = toggleInput.closest("fieldset") as HTMLElement | null;
   let busy = false;
   function setNotifyBusy(next: boolean) {
@@ -198,6 +201,7 @@ function bindNotifyWhenReady(opts?: AddEventListenerOptions) {
   function applyToggleState() {
     if (busy) return;
     setNotifyBusy(true);
+    minsInput.disabled = !toggleInput.checked;
     if (!toggleInput.checked) {
       safeCall("cancelAdapterReadyNotify");
       if (status) {
