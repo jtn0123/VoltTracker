@@ -1,11 +1,12 @@
 name: Android emulator smoke
 
-# STATUS: SUPPLEMENTAL scheduled smoke. The pull-request-required WebView smoke
-# lives in `.github/workflows/android.yml` and is included in `ci-success`.
+# STATUS: SUPPLEMENTAL scheduled/manual smoke. The pull-request-required WebView
+# smoke lives in `.github/workflows/android.yml` and is included in `ci-success`.
 #
-# This job still runs on dashboard/startup PRs and weekly as an extra artifact
-# source, but the authoritative required lane is the `emulator-smoke` job in
-# android.yml. Keep the script contract aligned between both jobs.
+# This job intentionally does not run on PRs: dashboard/startup PRs already boot
+# an emulator through the required `emulator-smoke` job in android.yml. Keeping
+# this lane scheduled/manual avoids a second slow emulator run and still leaves
+# an on-demand artifact source for investigating hosted-emulator drift.
 #
 # TEST CONTRACT: the smoke's pass signal is the exact logcat line
 # "dashboard handshake received" (emitted by MainActivity.onDashboardReady,
@@ -17,18 +18,6 @@ on:
   schedule:
     - cron: '30 14 * * 1'
   workflow_dispatch:
-  # Also run on PRs that touch the dashboard or the WebView startup wiring — the exact
-  # surface where a regression can leave the dashboard loading but its JS silently dead
-  # (the file:// ES-module class of bug). Other PRs skip the emulator job.
-  pull_request:
-    paths:
-      - 'mobile/android/app/src/main/dashboard-src/**'
-      - 'mobile/android/app/src/main/assets/dashboard/**'
-      - 'mobile/android/app/src/main/kotlin/com/volttracker/obdpoc/WebViewBootstrap.kt'
-      - 'mobile/android/app/src/main/kotlin/com/volttracker/obdpoc/MainActivity.kt'
-      - 'mobile/android/app/src/main/kotlin/com/volttracker/obdpoc/VoltBridge.kt'
-      - '.github/workflows/android-emulator-smoke.yml'
-      - 'mobile/android/scripts/emulator-smoke.sh'
 
 concurrency:
   group: android-emulator-smoke-${{ github.ref }}

@@ -1,13 +1,13 @@
 name: Android unit tests
 
-# The push trigger also fires on python-semantic-release's version-bump commits
-# (which only touch VERSION and pyproject.toml). Re-running this workflow after a
-# bump rebuilds the rolling latest-debug APK with the new versionName baked in,
-# so the in-app "Volt Tracker vX.Y.Z" footer stays in sync with the most recent
-# tag instead of lagging one release behind. Pull-request paths intentionally
-# stay narrow — release commits never arrive as PRs.
+# The push trigger is limited to main so python-semantic-release's version-bump
+# commits (which only touch VERSION and pyproject.toml) still rebuild the
+# rolling latest-debug APK with the new versionName baked in, while PR branches
+# rely on the pull_request trigger below instead of running this slow workflow
+# twice for the same commit.
 on:
   push:
+    branches: [main]
     paths:
       - 'mobile/android/**'
       - '.github/workflows/android.yml'
@@ -19,22 +19,42 @@ on:
       - '.github/workflows/android.yml'
   workflow_dispatch:
 
-# A push to a PR branch fires both `push` and `pull_request`, each running this whole
-# workflow — including the heavy emulator-smoke job — for the same commit. Grouped by the
-# commit SHA (which push and pull_request share, unlike github.ref) so the two runs
-# serialize instead of competing for emulator resources on the shared runners, which
-# starved the emulator and made emulator-smoke flake. cancel-in-progress is false so the
-# queued duplicate still runs to completion with real results rather than leaving a
-# cancelled run whose checks report as failed. Release pushes to main have no PR, so they
-# run uncontended.
+# Keep only the newest run for a PR branch or main push. PR branch pushes no
+# longer trigger this workflow directly, so canceling superseded runs now removes
+# stale slow jobs instead of leaving duplicate checks behind.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      emulator_smoke: ${{ steps.filter.outputs.emulator_smoke }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Detect paths that need WebView runtime smoke
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        with:
+          filters: |
+            emulator_smoke:
+              - '.github/workflows/android.yml'
+              - 'mobile/android/build.gradle'
+              - 'mobile/android/settings.gradle'
+              - 'mobile/android/gradle.properties'
+              - 'mobile/android/gradle/**'
+              - 'mobile/android/app/build.gradle'
+              - 'mobile/android/app/src/main/**'
+              - 'mobile/android/app/src/androidTest/**'
+              - 'mobile/android/scripts/emulator-smoke.sh'
+
   unit-tests:
     runs-on: ubuntu-latest
     defaults:
@@ -695,6 +715,10 @@ jobs:
     # the debug APK on an emulator, asserts the dashboard JS reaches the native
     # "dashboard handshake received" logcat marker, starts demo telemetry, and
     # taps through the dashboard tabs while scanning logcat for runtime errors.
+    # PRs that only touch JVM tests, docs, or other non-runtime files skip this
+    # slow lane; pushes to main and manual runs always execute it.
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.emulator_smoke == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -765,6 +789,7 @@ jobs:
     if: always()
     needs:
       [
+        changes,
         unit-tests,
         dashboard-tests,
         dashboard-e2e,
@@ -779,12 +804,12 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
           echo "$NEEDS_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value.result)"'
-          failed="$(echo "$NEEDS_JSON" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')"
+          failed="$(echo "$NEEDS_JSON" | jq -r '[to_entries[] | select(.value.result != "success" and (.key != "emulator-smoke" or .value.result != "skipped")) | .key] | join(", ")')"
           if [ -n "$failed" ]; then
             echo "::error::One or more required CI jobs did not succeed: $failed"
             exit 1
           fi
-          echo "All required CI jobs succeeded."
+          echo "All required CI jobs succeeded or were intentionally path-skipped."
 
   publish-debug-release:
     # Rolling debug build of main, surfaced as a permanent download URL:
