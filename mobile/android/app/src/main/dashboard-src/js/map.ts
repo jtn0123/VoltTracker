@@ -1094,7 +1094,20 @@ import type { MapSessionFilter } from "./map-session-list";
     return drawTripScatterSvg(pool);
   }
 
+  // mi → km factor, mirroring the units module (km/h = mph * KM_PER_MILE,
+  // km/kWh = mi/kWh * KM_PER_MILE). Used to convert the scatter axes for metric.
+  const KM_PER_MILE = 1.609344;
+
   function drawTripScatterSvg(pool: Array<{ mph: number; eff: number; grade: number }>): SVGElement {
+    // Units-aware axes (C2): the pool is mph / (mi/kWh) internally, but a metric
+    // user must see km/h and km/kWh axes so the chart matches the unit-aware
+    // headline. Read the preference at render time (the trip-detail sheet is
+    // rebuilt on open, after a units toggle takes effect).
+    const metric = VD.units.system() === "metric";
+    const speedUnitLabel = VD.units.speedUnit(); // "km/h" | "mph"
+    const effUnitLabel = VD.units.efficiencyUnit(); // "km/kWh" | "mi/kWh"
+    const speedToDisplay = (mph: number) => (metric ? mph * KM_PER_MILE : mph);
+    const effToDisplay = (miPerKwh: number) => (metric ? miPerKwh * KM_PER_MILE : miPerKwh);
     // Theme-aware colors (CSS vars don't cascade into SVG fill/stroke).
     const tokens = getComputedStyle(document.documentElement);
     const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
@@ -1135,11 +1148,11 @@ import type { MapSessionFilter } from "./map-session-list";
     };
     for (let gx = 0; gx <= axisMaxMph; gx += 15) {
       appendLine({ x1: xOf(gx), y1: padT, x2: xOf(gx), y2: h - padB, stroke: lineColor });
-      appendText(String(gx), { x: xOf(gx), y: h - padB + 14, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle" });
+      appendText(String(Math.round(speedToDisplay(gx))), { x: xOf(gx), y: h - padB + 14, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle" });
     }
     for (let gy = 0; gy <= 7; gy += 1) {
       appendLine({ x1: padL, y1: yS(gy), x2: w - padR, y2: yS(gy), stroke: lineColor });
-      appendText(String(gy), { x: padL - 6, y: yS(gy) + 3, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end" });
+      appendText(String(Math.round(effToDisplay(gy))), { x: padL - 6, y: yS(gy) + 3, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end" });
     }
     pool.forEach((p) => {
       svg.append(setSvgAttrs(document.createElementNS(ns, "circle"), {
@@ -1150,7 +1163,9 @@ import type { MapSessionFilter } from "./map-session-list";
         "fill-opacity": 0.55,
       }));
     });
-    appendText("speed (mph) ->", { x: w - padR, y: h - 4, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end" });
+    appendText(`speed (${speedUnitLabel}) ->`, { x: w - padR, y: h - 4, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end" });
+    // Y-axis (efficiency) unit annotation, rotated up the left gutter.
+    appendText(effUnitLabel, { x: 9, y: padT + (h - padT - padB) / 2, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle", transform: `rotate(-90 9 ${(padT + (h - padT - padB) / 2).toFixed(1)})` });
     return svg;
   }
 

@@ -326,6 +326,17 @@ import { prefs, units } from "./prefs";
       return;
     }
     card.hidden = false;
+    // Units-aware axes (C2): the pool is always mph / (mi/kWh) internally (see
+    // enrichRouteEff + pointMph), but a metric user must see km/h and km/kWh axes
+    // so the chart never contradicts the headline (which already converts via the
+    // units helper). Read the preference at render time — prefs.rerenderForUnits
+    // re-runs this on a units toggle. Conversions mirror the units module:
+    // km/h = mph * KM_PER_MILE, km/kWh = mi/kWh * KM_PER_MILE.
+    const metric = units.system() === "metric";
+    const speedUnitLabel = units.speedUnit(); // "km/h" | "mph"
+    const effUnitLabel = units.efficiencyUnit(); // "km/kWh" | "mi/kWh"
+    const speedToDisplay = (mph: number) => (metric ? mph * KM_PER_MILE : mph);
+    const effToDisplay = (miPerKwh: number) => (metric ? miPerKwh * KM_PER_MILE : miPerKwh);
     // Theme-aware colors for the inline SVG. CSS variables don't cascade into
     // SVG presentation attributes (fill/stroke) here the way they do for CSS
     // properties, so read the resolved token values once and inject the
@@ -378,7 +389,7 @@ import { prefs, units } from "./prefs";
         y2: h - padB,
         stroke: lineColor
       });
-      appendText(String(gx), {
+      appendText(String(Math.round(speedToDisplay(gx))), {
         x: xOf(gx),
         y: h - padB + 15,
         fill: axisColor,
@@ -395,7 +406,7 @@ import { prefs, units } from "./prefs";
         y2: yS(gy),
         stroke: lineColor
       });
-      appendText(String(gy), {
+      appendText(String(Math.round(effToDisplay(gy))), {
         x: padL - 6,
         y: yS(gy) + 3,
         fill: axisColor,
@@ -438,13 +449,24 @@ import { prefs, units } from "./prefs";
         "stroke-linejoin": "round"
       })
     );
-    appendText("speed (mph) ->", {
+    appendText(`speed (${speedUnitLabel}) ->`, {
       x: w - padR,
       y: h - 4,
       fill: axisColor,
       "font-size": 9,
       "font-family": "ui-monospace,monospace",
       "text-anchor": "end"
+    });
+    // Y-axis unit annotation (efficiency), rotated to read up the left gutter so
+    // a metric user knows the 0..7 grid is km/kWh, not mi/kWh.
+    appendText(effUnitLabel, {
+      x: 10,
+      y: padT + (h - padT - padB) / 2,
+      fill: axisColor,
+      "font-size": 9,
+      "font-family": "ui-monospace,monospace",
+      "text-anchor": "middle",
+      transform: `rotate(-90 10 ${(padT + (h - padT - padB) / 2).toFixed(1)})`
     });
     svg.setAttribute(
       "aria-label",

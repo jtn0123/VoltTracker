@@ -921,12 +921,34 @@ import { initialTelemetryState } from "./telemetry-state";
     return `${Math.round(ms / 3_600_000)}h ago`;
   }
 
+  // Signature of the last renderLiveSignals() paint. A parked/flat car pushes the
+  // same telemetry every rAF, and renderLiveSignals() otherwise rebuilds ~45 rows
+  // each frame; this dirty-check (mirroring renderCellGrid's lastCellGridSig)
+  // hashes the (value, staleAge) tuples for every LIVE_SIGNALS key plus the filter
+  // mode + hasLiveData, and early-returns when nothing changed.
+  let lastLiveSignalsSig = "";
+
   function renderLiveSignals() {
     const list = el("liveSignalsList");
     if (!list) return;
     const t = state.telemetry || {};
     const hasLiveData = isActiveStatus() || Number(t.sampleCount || 0) > 0;
     const missingOnly = String(state.liveSignalsFilter || "all") === "missing";
+    // Dirty-check: build a signature from each signal's value + stale age, plus the
+    // inputs that change the rendered output (filter mode, live-data state). Skip
+    // the full rebuild when it matches the previous paint.
+    const sig =
+      `${missingOnly ? "missing" : "all"}|${hasLiveData ? 1 : 0}|` +
+      LIVE_SIGNALS
+        .map((spec) => {
+          const raw = t[spec.key];
+          const v = raw === undefined || raw === null ? "" : String(raw);
+          const age = spec.staleKey ? String(t[spec.staleKey] ?? "") : "";
+          return `${v}:${age}`;
+        })
+        .join(",");
+    if (sig === lastLiveSignalsSig) return;
+    lastLiveSignalsSig = sig;
     // Sync the filter buttons' active state with the current filter.
     document.querySelectorAll("[data-live-signal-filter]").forEach((node) => {
       const button = node as HTMLElement;

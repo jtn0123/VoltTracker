@@ -1,4 +1,5 @@
 import { runBrowserDemoStream } from "./actions-demo";
+import { confirmAppDialog } from "./app-dialog";
 import { bindPageDragScroll } from "./actions-page-scroll";
 import { createSignalActions } from "./actions-signals";
 import { createStorageActions } from "./actions-storage";
@@ -326,7 +327,18 @@ import type { FocusTrap } from "./focus-trap";
       VD.setStatus({ state: "idle", detail: "Maintenance logging is available inside the Android app." });
       return;
     }
-    bridge.deleteMaintenanceEntry(id);
+    // Removal is a no-undo data loss; route through the shared confirm dialog
+    // (focus trap + background inert) like the other destructive actions before
+    // forwarding to native.
+    void confirmAppDialog({
+      title: "Remove maintenance entry",
+      message: "Remove this maintenance entry? This can't be undone.",
+      confirmLabel: "Remove"
+    }).then((confirmed) => {
+      if (!confirmed) return;
+      if (!bridge || typeof bridge.deleteMaintenanceEntry !== "function") return;
+      bridge.deleteMaintenanceEntry(id);
+    });
   }
 
   // Background nodes the trap inerts while the clear-DTC dialog is open: every

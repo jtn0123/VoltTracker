@@ -330,7 +330,29 @@ describe('M5 — maintenance log', () => {
     expect(addMaintenanceEntry).not.toHaveBeenCalled();
   });
 
-  it('Remove forwards the entry id to bridge.deleteMaintenanceEntry', async () => {
+  it('Remove forwards the entry id to bridge.deleteMaintenanceEntry after confirming', async () => {
+    const deleteMaintenanceEntry = vi.fn();
+    await loadWithMaintenance(
+      () => JSON.stringify([{ id: 9, createdAtMs: 1_700_000_000_000, type: 'Oil change', note: '' }]),
+      { deleteMaintenanceEntry },
+    );
+    window.VoltDashboard.setStorage({});
+
+    // C1: removal is a no-undo data loss, so it now routes through the shared
+    // confirm dialog. The bridge is only called after the user confirms.
+    document.querySelector('#maintenanceList [data-maint-delete]').click();
+    const dialog = document.getElementById('appDialog');
+    expect(dialog.hidden).toBe(false);
+    expect(deleteMaintenanceEntry).not.toHaveBeenCalled();
+
+    document.getElementById('appDialogConfirm').click();
+    // confirmAppDialog settles its promise on the confirm click; let the .then()
+    // that fires the bridge call run.
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    expect(deleteMaintenanceEntry).toHaveBeenCalledWith('9');
+  });
+
+  it('Remove does NOT call the bridge when the confirm dialog is cancelled', async () => {
     const deleteMaintenanceEntry = vi.fn();
     await loadWithMaintenance(
       () => JSON.stringify([{ id: 9, createdAtMs: 1_700_000_000_000, type: 'Oil change', note: '' }]),
@@ -339,7 +361,9 @@ describe('M5 — maintenance log', () => {
     window.VoltDashboard.setStorage({});
 
     document.querySelector('#maintenanceList [data-maint-delete]').click();
-    expect(deleteMaintenanceEntry).toHaveBeenCalledWith('9');
+    document.getElementById('appDialogCancel').click();
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    expect(deleteMaintenanceEntry).not.toHaveBeenCalled();
   });
 });
 

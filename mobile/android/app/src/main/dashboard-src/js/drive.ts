@@ -74,6 +74,18 @@ type ChartPoint = {
     return width;
   }
 
+  // Parse a resolved CSS color token to "r, g, b" so canvas code can build rgba()
+  // fades/shadows from a theme token instead of a hardcoded literal. Handles the
+  // "#rrggbb" form the volt tokens use; a non-hex value (rare) falls back to the
+  // caller's default. Returns just the channels so callers append the alpha.
+  function rgbChannels(color: string, fallback: string): string {
+    const hex = color.trim();
+    const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+    if (!m) return fallback;
+    const n = parseInt(m[1], 16);
+    return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+  }
+
   // ----- session chip strip -------------------------------------------------
 
   function fmtDuration(ms: number) {
@@ -228,11 +240,26 @@ type ChartPoint = {
       : "waiting for samples";
     if (!ctx) return;
 
+    // Theme-aware colors: a <canvas> can't read CSS vars, so resolve the relevant
+    // tokens once per render (renderDriveLive re-runs each frame, so a theme flip
+    // is picked up). Mirrors the insights-panel.ts / map.ts scatter pattern. The
+    // gradient/glow/wash are rgba fades derived from the resolved --volt / --text
+    // channels so they track the theme instead of being dark-only literals.
+    const tokens = getComputedStyle(document.documentElement);
+    const token = (name: string, fallback: string) =>
+      (tokens.getPropertyValue(name) || "").trim() || fallback;
+    const lineColor = token("--line", "rgba(255, 255, 255, 0.06)"); // gridlines
+    const mutedColor = token("--muted", "#5d5e69"); // empty-state label
+    const voltColor = token("--volt", "#ff7a45"); // trace stroke
+    const dotColor = token("--volt-soft", "#ffd0b8"); // now-cursor dot
+    const voltRgb = rgbChannels(voltColor, "255, 122, 69"); // gradient + glow base
+    const textRgb = rgbChannels(token("--text", "#ffffff"), "255, 255, 255"); // bg wash base
+
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "rgba(255, 255, 255, 0.012)";
+    ctx.fillStyle = `rgba(${textRgb}, 0.012)`;
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+    ctx.strokeStyle = lineColor;
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i += 1) {
       const y = padT + (i / 4) * (h - padT - padB);
@@ -242,7 +269,7 @@ type ChartPoint = {
       ctx.stroke();
     }
     if (samples.length < 2) {
-      ctx.fillStyle = "#5d5e69";
+      ctx.fillStyle = mutedColor;
       ctx.font = "11px ui-monospace, monospace";
       ctx.textAlign = "center";
       ctx.fillText("waiting for samples", w / 2, h / 2);
@@ -262,8 +289,8 @@ type ChartPoint = {
     if (!firstPoint || !latest) return;
 
     const gradient = ctx.createLinearGradient(0, padT, 0, h - padB);
-    gradient.addColorStop(0, "rgba(255, 122, 69, 0.2)");
-    gradient.addColorStop(1, "rgba(255, 122, 69, 0)");
+    gradient.addColorStop(0, `rgba(${voltRgb}, 0.2)`);
+    gradient.addColorStop(1, `rgba(${voltRgb}, 0)`);
     ctx.beginPath();
     points.forEach((point, index) => {
       if (index === 0) ctx.moveTo(point.x, point.y);
@@ -280,18 +307,18 @@ type ChartPoint = {
       if (index === 0) ctx.moveTo(point.x, point.y);
       else ctx.lineTo(point.x, point.y);
     });
-    ctx.strokeStyle = "#ff7a45";
+    ctx.strokeStyle = voltColor;
     ctx.lineWidth = 2.4;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.shadowColor = "rgba(255, 122, 69, 0.38)";
+    ctx.shadowColor = `rgba(${voltRgb}, 0.38)`;
     ctx.shadowBlur = 12;
     ctx.stroke();
     ctx.shadowBlur = 0;
 
     ctx.beginPath();
     ctx.arc(latest.x, latest.y, 3.2, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffd0b8";
+    ctx.fillStyle = dotColor;
     ctx.fill();
   }
 

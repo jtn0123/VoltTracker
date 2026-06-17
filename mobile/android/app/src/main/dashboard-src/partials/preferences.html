@@ -92,6 +92,29 @@
         <span>/gal</span>
       </label>
     </div>
+    <!-- Charge target SOC (M2/C3). Canonical home for the target so it's
+         configurable when parked, not only inside the live-charge card which is
+         hidden unless actively charging. Writes the same "chargeTargetSoc" pref
+         the in-card #liveChargeTargetInput mirrors; both stay in sync. -->
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Charge target</strong>
+        <small>Notify and estimate time to this state of charge</small>
+      </div>
+      <label class="pref-price">
+        <input
+          id="prefChargeTargetInput"
+          type="number"
+          inputmode="numeric"
+          min="50"
+          max="100"
+          step="1"
+          placeholder="100"
+          aria-label="Charge target state of charge, percent"
+        />
+        <span>%</span>
+      </label>
+    </div>
   </article>
 
   <article class="panel pref-card">

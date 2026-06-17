@@ -527,6 +527,18 @@
       window.clearTimeout(rerenderTimer);
       rerenderTimer = window.setTimeout(rerenderForUnits, 400);
     });
+    // Keep this field in sync when the SAME pref is changed elsewhere — e.g. the
+    // charge-target lives in BOTH the Preferences panel and the live-charge card
+    // (C3), and editing one must reflect in the other. Skip the input the user is
+    // actively typing in (it already holds the authoritative value) so a mirror
+    // update never clobbers mid-edit text. Show the stored value only when it
+    // matches the field's hydrate rule (non-zero, or a non-zero default).
+    subscribe(prefKey, (value) => {
+      if (document.activeElement === input) return;
+      const next = Number(value);
+      if (!Number.isFinite(next)) return;
+      if (next > 0 || fallback > 0) input.value = String(next);
+    });
   }
 
   function bootPrefsUi(): void {
@@ -543,14 +555,19 @@
     // fat-fingered entry can't poison the estimate.
     bindNumericPref("gasMpgInput", "mpg", 5, 150);
     bindNumericPref("gasPricePerGalInput", "gasPricePerGal", 0, 20);
-    // Charge target SOC (M2): lives on the Charge tab. Drives the live-charge ETA
-    // (telemetry.ts reads the "chargeTargetSoc" pref) and is mirrored to the native
-    // side so EventNotificationDecider can fire the "target reached" notification and
-    // tell a finished charge from an interrupted one. Default 100 = full charge.
-    bindNumericPref("liveChargeTargetInput", "chargeTargetSoc", 50, 100, {
+    // Charge target SOC (M2/C3): now lives in BOTH the Preferences panel
+    // (#prefChargeTargetInput — the canonical, always-reachable home) and the
+    // live-charge card (#liveChargeTargetInput — a synced mirror, shown only while
+    // charging). Both bind the SAME "chargeTargetSoc" pref; bindNumericPref's
+    // subscribe() keeps the inactive field in sync when the other is edited.
+    // The pref drives the live-charge ETA (telemetry.ts reads "chargeTargetSoc")
+    // and is mirrored to the native side so EventNotificationDecider can fire the
+    // "target reached" notification and tell a finished charge from an interrupted
+    // one. Default 100 = full charge.
+    const chargeTargetOptions = {
       defaultValue: 100,
       rangeUnit: "%",
-      onCommit: (value) => {
+      onCommit: (value: number) => {
         try {
           const bridge = window.VoltTrackerAndroid;
           if (bridge && typeof bridge.setChargeTargetSoc === "function") {
@@ -566,7 +583,9 @@
           /* no-op */
         }
       },
-    });
+    };
+    bindNumericPref("prefChargeTargetInput", "chargeTargetSoc", 50, 100, chargeTargetOptions);
+    bindNumericPref("liveChargeTargetInput", "chargeTargetSoc", 50, 100, chargeTargetOptions);
     // Install the delegated preferences click handler at most once per document.
     // Production loads prefs once, but the guard keeps a stray double-load (or a
     // re-imported test module) from stacking a second toggle listener — which
