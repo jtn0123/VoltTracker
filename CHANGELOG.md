@@ -1,6 +1,58 @@
 # CHANGELOG
 
 
+## v0.18.1 (2026-06-17)
+
+### Bug Fixes
+
+- **android**: End asleep-car sessions cleanly and retire dead PIDs
+  ([#227](https://github.com/jtn0123/VoltTracker/pull/227),
+  [`7b42e41`](https://github.com/jtn0123/VoltTracker/commit/7b42e4185b4c7e6c595d8621594d4a956920442a))
+
+Real device logs showed two issues, both rooted in the live-poll loop not noticing when the car goes
+  to sleep:
+
+1. "Failed/connect_timeout" sessions were mostly successful drives. After a drive the car
+  parks/charges and its modules sleep, but the engine kept polling a silent bus for ~70 min until
+  Bluetooth finally dropped, then logged the whole session as connect_timeout. Across 29 logged
+  sessions, 12 of 15 "failures" were really drove-then-parked (500-2472 samples each). Fix: when no
+  fresh PID data arrives for VEHICLE_SLEEP_GIVE_UP_MS (3 min) and the car isn't actively driving,
+  end the session cleanly (idle status, drive saved) instead of churning into a connect_timeout. A
+  reconnect-exhausted drop while the car was last parked/plugged/charging is likewise recorded as a
+  clean end, not a red "reconnect failed" error.
+
+2. Four PIDs never answer on this Volt (015C oil temp, 01A6 odometer, 221940 / 22194001 trans temp)
+  yet were re-issued every rotation; the two GM ones cost the full ~455 ms timeout (~80 s of dead
+  blocking per session). Fix: a per-session negative-PID cache retires a PID after
+  MAX_CONSECUTIVE_NO_DATA bus-alive NO-DATA replies. It only counts a miss when some other PID
+  answered that cycle (a fully silent bus blames nobody), resets on any live read, and exempts
+  charge-family PIDs that legitimately NO-DATA while driving, so a supported-but-inactive PID is
+  never disabled. Reset each session.
+
+New pure helpers (ObdElmDecode.isNoDataResponse, PidSchedule.isConditional,
+  ObdPollingEngine.shouldEndForVehicleSleep / isVehicleOffDisconnect, PidPollingState negative cache
+  + msSinceLastLiveData) are unit-tested. No ABI, schema, or dashboard change. All gates green
+  (detekt, spotless, unit tests, jacoco, lint, assembleDebug).
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+- **dashboard**: Style maintenance-form inline validation messages
+  ([#226](https://github.com/jtn0123/VoltTracker/pull/226),
+  [`d3c538e`](https://github.com/jtn0123/VoltTracker/commit/d3c538e90fd97dd9d0e21abe7fa602b576503973))
+
+The maintenance "Add entry" form gained three inline-validation elements (.maint-form-error and two
+  .maint-field-hint) that had no dedicated CSS, so they rendered in the default body color. Style
+  them with the existing --bad-soft danger token (matching
+  .maintenance-due-hint[data-due="overdue"]): the form-level <p> at 12px/700 with zeroed margins
+  (the grid gap already spaces it), the per-field hints at 11px/600. Neither rule sets display, so
+  the global [hidden] { display:none !important } keeps them hidden by default.
+
+CSS loads directly into the WebView (no build step); generated index.html and the JS bundle are
+  untouched.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.18.0 (2026-06-17)
 
 ### Chores
