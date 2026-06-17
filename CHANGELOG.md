@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.18.8 (2026-06-17)
+
+### Performance Improvements
+
+- Add startup benchmark and lazy dashboard panels
+  ([#234](https://github.com/jtn0123/VoltTracker/pull/234),
+  [`ff9af7b`](https://github.com/jtn0123/VoltTracker/commit/ff9af7b516d7e4573d54570507fb0d66e3b227db))
+
+* perf: add startup benchmark and lazy dashboard panels
+
+* fix: preserve dashboard state in lazy insights bundle
+
+* fix: address lazy dashboard review feedback
+
+
 ## v0.18.7 (2026-06-17)
 
 ### Performance Improvements
