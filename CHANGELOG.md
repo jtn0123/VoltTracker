@@ -1,6 +1,64 @@
 # CHANGELOG
 
 
+## v0.18.6 (2026-06-17)
+
+### Performance Improvements
+
+- **obd,storage**: Finish remaining items — drop dead torque PID, faster prompt-recovery,
+  single-scan counts (L3, L5, L10)
+  ([`e7d8218`](https://github.com/jtn0123/VoltTracker/commit/e7d8218fb731867d2f3f2ad5ebeee29489874584))
+
+Finishes the remaining performance items from the field-log audit. (L2 was found already fully
+  implemented; L4 genuinely needs on-device Bluetooth A/B testing — see below.)
+
+## L3 — drop undecodable engine-torque PID `22203F` This gen-2 Volt answers `22203F` with a single
+  byte, but the decoder needs a 2-byte word, so `engineTorqueNm` was a permanently-blank gauge and
+  the deep-lane PID was polled every 24 cycles for nothing. The community `((256·A)+B)/4` formula is
+  2-byte/gen-1 and the real 1-byte scale is unproven, so the PID is removed (rather than guess a
+  scale and show wrong numbers) until a Torque Pro cross-check pins it. Removed from
+  `PidSchedule.SPECS`, `LiveSampleReader`, `ObdProtocol`, `ObdProbes.VOLT_7E0_PROBES`, and the
+  `ObdElmDecode` label; tests updated.
+
+## L5 — exit a promptless read on an inter-byte quiet period When the ELM327 v1.4b drops the `>`
+  prompt, `transact()` waited out the full command timeout (~1.5 s) before prompt-recovery could run
+  — ~27 s across a long field session. It now gives up once a response has arrived and the adapter
+  has gone quiet for `NO_PROMPT_QUIET_PERIOD_MS` (250 ms) — far above a normal inter-frame gap (<100
+  ms), so legitimate slow multi-frame replies aren't truncated. New test asserts the early exit;
+  existing timing tests preserved (clock read once for deadline + last-byte init).
+
+## L10 — count total + useful telemetry in one scan, not two `storageCountsProjection` ran two
+  separate `COUNT(*)` scans of `telemetry_samples` (millions of rows). They now come from one scan
+  (`COUNT(*)` + `COALESCE(SUM(CASE WHEN <USEFUL_TELEMETRY_WHERE> …)))`, reusing the exact same
+  predicate). The other ~14 counts are small, different tables. L9a already moved this projection
+  off the first-paint path; this halves its dominant cost when it runs on a large history.
+
+## Not in this PR - **L2** (force-stop competing app) — **already fully built**
+  (CompetingAppDetector + `VoltBridge.forceStopPackage` + troubleshooter step-3 UI + tests). Needs
+  device QA only. - **L4** (~10.8 s Bluetooth socket open) — needs on-device A/B testing (an
+  insecure-socket change could help the OBDLink MX+ but regress another adapter). Genuinely can't be
+  shipped safely from code alone.
+
+## Test plan - [x] Full gate suite green: `detekt spotlessCheck testDebugUnitTest
+  jacocoTestCoverageVerification lintDebug assembleDebug`. - [x] New/updated unit tests for L3
+  (schedule + decode), L5 (quiet-period exit), L10 (single-scan counts).
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Bug Fixes** * Removed engine torque telemetry field that was producing null values due to data
+  format incompatibility. * Enhanced OBD adapter connection timeout detection to respond faster when
+  the adapter becomes unresponsive.
+
+* **Performance** * Optimized storage summary calculations by performing telemetry counts in a
+  single database query instead of multiple separate queries.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+
 ## v0.18.5 (2026-06-17)
 
 ### Performance Improvements
