@@ -59,12 +59,16 @@ object PidSchedule {
      * @property header CAN header to select before polling [command].
      * @property periodCycles `1` means every cycle; higher values poll less often.
      * @property phaseOffset slot inside [periodCycles], used to spread slow PIDs across cycles.
+     * @property conditional when `true`, this PID is only expected to answer in a specific vehicle
+     *   mode (e.g. charger PIDs while charging), so it must be exempt from the live-poll negative-PID
+     *   cache — a legitimate "NO DATA" while the car is driving must not disable it for the session.
      */
     class PidSpec(
         command: String?,
         header: Header?,
         @JvmField val periodCycles: Int,
         @JvmField val phaseOffset: Int,
+        @JvmField val conditional: Boolean = false,
     ) {
         init {
             require(!command.isNullOrEmpty()) { "command must be non-empty" }
@@ -125,13 +129,16 @@ object PidSchedule {
             PidSpec("222884", Header.HV_PACK_7E1, 12, 4), // motor B current
             PidSpec("222886", Header.HV_PACK_7E1, 12, 4), // motor B voltage
             PidSpec("222889", Header.HV_PACK_7E1, 24, 10), // PRNDL / gear state
-            PidSpec("222487", Header.HV_PACK_7E1, 48, 16), // EV distance this cycle
+            PidSpec("222487", Header.HV_PACK_7E1, 48, 16, conditional = true), // EV distance this cycle
             PidSpec("221940", Header.TRANSMISSION_7E2, 48, 24), // trans temp
             PidSpec("22194001", Header.TRANSMISSION_7E2, 48, 34), // trans temp, GM selector variant
-            PidSpec("22436B", Header.HV_PACK_7E4, 24, 14), // charger HV voltage
-            PidSpec("22436C", Header.HV_PACK_7E4, 24, 14), // charger HV current
-            PidSpec("224373", Header.HV_PACK_7E4, 24, 18), // charging mode
-            PidSpec("224531", Header.HV_PACK_7E4, 24, 18), // charging level
+            // Charge-family PIDs only answer while plugged/charging on some Volt model-years, so they
+            // are marked conditional = exempt from the negative-PID cache (a "NO DATA" while driving
+            // must not disable them before a later charge session).
+            PidSpec("22436B", Header.HV_PACK_7E4, 24, 14, conditional = true), // charger HV voltage
+            PidSpec("22436C", Header.HV_PACK_7E4, 24, 14, conditional = true), // charger HV current
+            PidSpec("224373", Header.HV_PACK_7E4, 24, 18, conditional = true), // charging mode
+            PidSpec("224531", Header.HV_PACK_7E4, 24, 18, conditional = true), // charging level
             PidSpec("2243AF", Header.HV_PACK_7E4, 24, 22), // raw precise SOC
             // Cell-balance trio shares phase 22 with 2243AF so they batch on the same 7E4 header
             // switch; balance changes slowly, so every 24 cycles is plenty.
@@ -147,8 +154,8 @@ object PidSchedule {
             PidSpec("2241B6", Header.HV_PACK_7E4, 48, 38), // battery heater power
             PidSpec("22801E", Header.HV_PACK_7E4, 120, 96), // outside temp raw
             PidSpec("22801F", Header.HV_PACK_7E4, 120, 102), // outside temp filtered
-            PidSpec("2243A5", Header.HV_PACK_7E4, 120, 84), // charge count
-            PidSpec("22437D", Header.HV_PACK_7E4, 120, 90), // last charge energy
+            PidSpec("2243A5", Header.HV_PACK_7E4, 120, 84, conditional = true), // charge count
+            PidSpec("22437D", Header.HV_PACK_7E4, 120, 90, conditional = true), // last charge energy
             PidSpec("2241A3", Header.HV_PACK_7E4, 240, 210), // HV battery capacity, rare trend sample
         )
 
@@ -176,4 +183,12 @@ object PidSchedule {
         }
         return SPECS.filter { shouldPoll(cycleNum, it) }
     }
+
+    /**
+     * True if [command] is a [PidSpec.conditional] PID — one the negative-PID cache must never
+     * disable because it only answers in a specific vehicle mode. Unknown commands are not
+     * conditional (the cache treats them normally).
+     */
+    @JvmStatic
+    fun isConditional(command: String): Boolean = SPECS.firstOrNull { it.command == command }?.conditional ?: false
 }

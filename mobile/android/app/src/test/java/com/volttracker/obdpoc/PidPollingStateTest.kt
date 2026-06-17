@@ -236,6 +236,104 @@ class PidPollingStateTest {
         }
     }
 
+    // ---- Negative-PID cache + idle-data clock ---------------------------------------
+
+    @Test
+    fun unsupportedPidIsRetiredAfterRepeatedNoDataWhileBusAlive() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "41 0D 28\r>" // live speed every cycle
+        engine.responses["015C"] = "NO DATA\r>" // unsupported on this car
+        val due = specs("010D", "015C")
+
+        repeat(PidPollingState.MAX_CONSECUTIVE_NO_DATA) {
+            state.runScheduledPolls(due, StringBuilder())
+            nowMs += 1_000
+        }
+
+        assertTrue("a PID that only ever NO-DATAs must be retired", state.isCommandDisabled("015C"))
+        assertEquals(1, state.disabledCommandCount())
+        assertFalse("a live PID must never be retired", state.isCommandDisabled("010D"))
+        assertTrue(
+            "a retired PID must drop out of the schedule",
+            state.dueForCurrentCycle().none { it.command == "015C" },
+        )
+    }
+
+    @Test
+    fun conditionalPidIsExemptFromTheNegativeCache() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "41 0D 28\r>"
+        engine.responses["224373"] = "NO DATA\r>" // charging-mode PID: only answers while charging
+        val due = specs("010D", "224373")
+
+        repeat(PidPollingState.MAX_CONSECUTIVE_NO_DATA + 2) {
+            state.runScheduledPolls(due, StringBuilder())
+            nowMs += 1_000
+        }
+
+        assertFalse("a conditional PID must survive NO-DATA while driving", state.isCommandDisabled("224373"))
+        assertEquals(0, state.disabledCommandCount())
+    }
+
+    @Test
+    fun aFullyAsleepBusRetiresNothing() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        // No scripted responses -> every read returns ">" which classifies as NO DATA: the whole car
+        // is asleep, so no single PID may be blamed as unsupported.
+        val due = specs("010D", "015C")
+        repeat(10) {
+            state.runScheduledPolls(due, StringBuilder())
+            nowMs += 1_000
+        }
+        assertEquals("a bus-wide outage must not retire any PID", 0, state.disabledCommandCount())
+    }
+
+    @Test
+    fun aLiveReadResetsTheNoDataStreak() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "41 0D 28\r>"
+        val due = specs("010D", "015C")
+
+        engine.responses["015C"] = "NO DATA\r>"
+        repeat(2) {
+            state.runScheduledPolls(due, StringBuilder())
+            nowMs += 1_000
+        }
+        // One real read clears the streak...
+        engine.responses["015C"] = "41 5C 50\r>"
+        state.runScheduledPolls(due, StringBuilder())
+        nowMs += 1_000
+        // ...so two more misses still fall short of the disable threshold.
+        engine.responses["015C"] = "NO DATA\r>"
+        repeat(2) {
+            state.runScheduledPolls(due, StringBuilder())
+            nowMs += 1_000
+        }
+        assertFalse("an intermittently-answering PID must not be retired", state.isCommandDisabled("015C"))
+    }
+
+    @Test
+    fun msSinceLastLiveDataTracksTheLastFreshRead() {
+        var nowMs = 10_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "41 0D 28\r>"
+
+        state.runScheduledPolls(specs("010D"), StringBuilder())
+        assertEquals("a live read resets the idle clock", 0L, state.msSinceLastLiveData())
+
+        nowMs += 5_000L
+        assertEquals(5_000L, state.msSinceLastLiveData())
+
+        // A fully silent cycle (015C unset -> ">" -> NO DATA) must NOT refresh the idle clock.
+        state.runScheduledPolls(specs("015C"), StringBuilder())
+        nowMs += 1_000L
+        assertEquals("silent cycles keep the idle clock running", 6_000L, state.msSinceLastLiveData())
+    }
+
     // ---- helpers --------------------------------------------------------------------
 
     private companion object {

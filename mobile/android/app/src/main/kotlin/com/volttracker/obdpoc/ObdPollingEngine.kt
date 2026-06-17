@@ -43,6 +43,10 @@ open class ObdPollingEngine(
     private var supportedPidsSummary = ""
     private var redactedVin = ""
 
+    // Last vehicleState seen on a broadcast sample this session. Used to tell a benign "adapter went
+    // to sleep with the car" disconnect (parked/plugged/charging) apart from a real mid-drive drop.
+    private var lastVehicleState = ""
+
     init {
         sessionHealth = SessionHealthTracker(service)
         pidPolling = PidPollingState(service, this)
@@ -59,6 +63,7 @@ open class ObdPollingEngine(
         speedFilter.reset()
         supportedPidsSummary = supportedPidsSeed ?: ""
         redactedVin = ""
+        lastVehicleState = ""
         pidPolling.reset()
     }
 
@@ -331,6 +336,28 @@ open class ObdPollingEngine(
             "stackHead",
             stackHead(ex),
         )
+        // A link drop while the car was last seen parked/plugged/charging is the adapter going to
+        // sleep with the car, not a connection fault — record a clean end (drive saved) instead of a
+        // red "reconnect failed" error so a normal drive isn't mislabeled as a failure.
+        if (failureClass == FailureClass.CONNECT_TIMEOUT &&
+            isVehicleOffDisconnect(decision.everConnected, lastVehicleState)
+        ) {
+            service.recorder.logEvent(
+                "ended_vehicle_off",
+                "phase",
+                "reconnect_exhausted",
+                "lastVehicleState",
+                lastVehicleState,
+            )
+            service.clearLastFailureClass()
+            service.broadcastStatus(
+                "idle",
+                "Adapter went to sleep with the car. Logging stopped — your drive was saved.",
+                false,
+            )
+            service.stopSelf()
+            return
+        }
         service.broadcastStatus(
             "error",
             if (decision.everConnected) {
@@ -490,6 +517,13 @@ open class ObdPollingEngine(
                 continue
             }
             service.broadcastTelemetry(sample)
+            lastVehicleState = sample.optString("vehicleState", lastVehicleState)
+            // When the car has been asleep long enough (no fresh PID data while parked), stop instead
+            // of polling a dead bus for an hour and eventually logging a bogus connect_timeout.
+            if (shouldEndForVehicleSleep(pidPolling.msSinceLastLiveData(), lastVehicleState)) {
+                endForVehicleSleep()
+                return
+            }
             // Adapt the cadence to the vehicle state: a parked/charging car changes slowly, so we
             // poll less often to save adapter round-trips and battery; a moving car keeps the
             // responsive ~850 ms cadence. Derived from the sample the engine just read/broadcast.
@@ -497,6 +531,31 @@ open class ObdPollingEngine(
                 return
             }
         }
+    }
+
+    /**
+     * Ends the live session cleanly because the vehicle went to sleep (the bus has returned no fresh
+     * data for [VEHICLE_SLEEP_GIVE_UP_MS]). Broadcasts a non-error "idle" status and clears any
+     * carried failure class so the session finalizes as a successful drive — not the
+     * `error`/`connect_timeout` the old "poll until Bluetooth drops" path produced.
+     */
+    private fun endForVehicleSleep() {
+        service.recorder.logEvent(
+            "ended_vehicle_off",
+            "phase",
+            "idle_no_data",
+            "lastVehicleState",
+            lastVehicleState,
+            "idleMs",
+            pidPolling.msSinceLastLiveData().toString(),
+        )
+        service.clearLastFailureClass()
+        service.broadcastStatus(
+            "idle",
+            "Car went to sleep — stopped logging. Your drive was saved.",
+            false,
+        )
+        service.stopSelf()
     }
 
     fun runDemoLoop() {
@@ -747,6 +806,54 @@ open class ObdPollingEngine(
                 else -> DRIVE_POLL_INTERVAL_MS
             }
         }
+
+        /**
+         * The bus has returned no fresh PID data for this long → treat the car as asleep and end the
+         * session cleanly. Generous (3 min) so a rough mid-drive patch can't end a live session; a
+         * parked/charging car that has truly gone to sleep stays silent far longer than this.
+         */
+        const val VEHICLE_SLEEP_GIVE_UP_MS = 180_000L
+
+        /**
+         * Pure decision (extracted for testability): end the live session because the vehicle is
+         * asleep when no fresh PID data has arrived for [VEHICLE_SLEEP_GIVE_UP_MS] AND the last known
+         * state is not an actively-driving one. During real sleep the classifier yields
+         * parked/unknown, so the state guard only blocks a false stop on a transient mid-drive stall
+         * that still reports motion.
+         */
+        @JvmStatic
+        fun shouldEndForVehicleSleep(
+            msSinceLiveData: Long,
+            vehicleState: String,
+        ): Boolean {
+            if (msSinceLiveData < VEHICLE_SLEEP_GIVE_UP_MS) {
+                return false
+            }
+            return when (vehicleState) {
+                VehicleState.DRIVING_EV.asPayloadKey(),
+                VehicleState.DRIVING_GAS.asPayloadKey(),
+                VehicleState.READY.asPayloadKey(),
+                -> false
+                else -> true
+            }
+        }
+
+        /**
+         * Pure decision (extracted for testability): a reconnect-exhausted drop counts as the adapter
+         * going to sleep with the car — a benign end, not a fault — when the link had connected at
+         * least once and the car was last seen parked, plugged, or charging.
+         */
+        @JvmStatic
+        fun isVehicleOffDisconnect(
+            everConnected: Boolean,
+            lastVehicleState: String,
+        ): Boolean =
+            everConnected &&
+                (
+                    lastVehicleState == VehicleState.PARKED.asPayloadKey() ||
+                        lastVehicleState == VehicleState.PLUGGED.asPayloadKey() ||
+                        lastVehicleState == VehicleState.CHARGING.asPayloadKey()
+                )
 
         @JvmStatic
         fun boundedRawTranscript(rawThisCycle: StringBuilder?): String =

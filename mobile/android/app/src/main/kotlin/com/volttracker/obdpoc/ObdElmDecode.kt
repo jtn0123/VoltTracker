@@ -10,6 +10,26 @@ object ObdElmDecode {
     @JvmStatic
     fun hasElmPrompt(response: String?): Boolean = response != null && response.indexOf('>') >= 0
 
+    /**
+     * True when an ELM reply carries no usable OBD payload for the PID that was asked — the adapter
+     * answered "NO DATA" or returned only a prompt / whitespace. The live-poll negative-PID cache
+     * uses this to stop re-issuing PIDs the car never answers, and the engine uses it to notice a
+     * fully asleep bus.
+     *
+     * Deliberately narrow: transient "CAN ERROR" / "STOPPED" / "BUFFER FULL" frames all carry
+     * hex-ish characters and are NOT treated as no-data, so a momentary bus hiccup can never disable
+     * a PID that is actually supported. ("NO DATA" itself contains hex letters A/D, so the literal
+     * check must come before the no-hex fallback.)
+     */
+    @JvmStatic
+    fun isNoDataResponse(response: String?): Boolean {
+        val cleaned = (response ?: "").uppercase(Locale.US)
+        if (cleaned.contains("NO DATA")) {
+            return true
+        }
+        return cleaned.none { it in '0'..'9' || it in 'A'..'F' }
+    }
+
     @JvmStatic
     fun appendRaw(
         raw: String,

@@ -5,6 +5,7 @@ import com.volttracker.obdpoc.PidSchedule.PidSpec
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 /** Owns live-poll PID scheduling, batching, carry-forward raw values, and stale timers. */
@@ -22,6 +23,23 @@ class PidPollingState(
     private val lastRawByCommand = ConcurrentHashMap<String, String>()
     private val lastPolledAtMsByCommand = ConcurrentHashMap<String, Long>()
     private val lastRawSetAtMsByCommand = ConcurrentHashMap<String, Long>()
+
+    // Negative-PID cache: PIDs that answer "NO DATA" on this car for [MAX_CONSECUTIVE_NO_DATA]
+    // consecutive polls *while the bus is otherwise alive* are dropped from the schedule for the rest
+    // of the session, so we stop paying their (often full-timeout) round-trip every rotation. Cleared
+    // by reset(), so each new session re-probes every PID from scratch.
+    private val consecutiveNoDataByCommand = ConcurrentHashMap<String, Int>()
+
+    // newSetFromMap(ConcurrentHashMap) rather than ConcurrentHashMap.newKeySet(): the latter needs
+    // API 24 and minSdk is 23. Same concurrent-set semantics, available on every supported device.
+    private val disabledCommands: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+
+    // Wall-clock of the last cycle that returned at least one fresh PID value. The engine reads the
+    // age of this (see [msSinceLastLiveData]) to notice a fully asleep bus and end the session
+    // cleanly instead of polling a dead bus until Bluetooth eventually drops. @Volatile is cheap
+    // insurance: it is written and read on the poll thread today, but the engine could move the
+    // read off-thread without that being obviously unsafe.
+    @Volatile private var lastLiveDataAtMs = 0L
     private var clock = Clock { System.currentTimeMillis() }
 
     /** Time source, overridable in tests. */
@@ -39,12 +57,18 @@ class PidPollingState(
         lastRawByCommand.clear()
         lastPolledAtMsByCommand.clear()
         lastRawSetAtMsByCommand.clear()
+        consecutiveNoDataByCommand.clear()
+        disabledCommands.clear()
+        lastLiveDataAtMs = clock.nowMs()
     }
 
     fun isInitialCycle(): Boolean = cycleNum == 0
 
-    fun dueForCurrentCycle(): List<PidSpec> =
-        if (isInitialCycle()) PidSchedule.SPECS else PidSchedule.dueOnCycle(cycleNum)
+    fun dueForCurrentCycle(): List<PidSpec> {
+        val due = if (isInitialCycle()) PidSchedule.SPECS else PidSchedule.dueOnCycle(cycleNum)
+        // Drop PIDs the negative-PID cache has retired this session so we stop re-issuing dead reads.
+        return if (disabledCommands.isEmpty()) due else due.filterNot { disabledCommands.contains(it.command) }
+    }
 
     fun advanceCycle() {
         cycleNum += 1
@@ -107,7 +131,14 @@ class PidPollingState(
         if (due.isEmpty()) {
             return
         }
+        // (command -> wasNoData) for every PID actually issued this cycle; feeds the negative-PID
+        // cache once the whole cycle is known (so a single live read can shield the rest).
+        val outcomes = ArrayList<Pair<String, Boolean>>()
         val batchedTier1 = tryBatchTier1Mode01(due, rawThisCycle)
+        if (batchedTier1) {
+            // A successful batch means every batched PID returned data.
+            PidSchedule.MODE_01_BATCH_COMMANDS.forEach { outcomes.add(it to false) }
+        }
         var switched = false
         for (header in Header.entries) {
             val headerSpecs = filterByHeader(due, header)
@@ -136,6 +167,9 @@ class PidPollingState(
                     emptyList()
                 }
             val batchedExtra = extraBatch.size >= 2 && tryBatchMode01Group(extraBatch, rawThisCycle)
+            if (batchedExtra) {
+                extraBatch.forEach { outcomes.add(it.command to false) }
+            }
             for (spec in headerSpecs) {
                 if (
                     batchedTier1 &&
@@ -152,12 +186,60 @@ class PidPollingState(
                 val now = clock.nowMs()
                 putLastRaw(spec.command, response, now)
                 lastPolledAtMsByCommand[spec.command] = now
+                outcomes.add(spec.command to ObdElmDecode.isNoDataResponse(response))
             }
         }
         if (switched) {
             engine.sendCommand(PidSchedule.RESTORE_BROADCAST_HEADER_COMMAND, 1500)
         }
+        applyNoDataCache(outcomes)
     }
+
+    /**
+     * Per-cycle update of the negative-PID cache and the live-data clock. A PID's NO-DATA only counts
+     * toward disabling it when the bus is otherwise alive this cycle (some other PID answered) — a
+     * fully silent cycle means the whole car is asleep, not that any single PID is unsupported, so no
+     * PID is ever disabled during a bus-wide outage. [PidSchedule.isConditional] PIDs (charger etc.)
+     * are exempt because they legitimately go NO-DATA outside their vehicle mode.
+     */
+    private fun applyNoDataCache(outcomes: List<Pair<String, Boolean>>) {
+        if (outcomes.isEmpty()) {
+            return
+        }
+        val anyLive = outcomes.any { !it.second }
+        if (anyLive) {
+            lastLiveDataAtMs = clock.nowMs()
+        }
+        for ((command, noData) in outcomes) {
+            if (!noData) {
+                consecutiveNoDataByCommand.remove(command)
+                continue
+            }
+            if (!anyLive || PidSchedule.isConditional(command)) {
+                continue
+            }
+            val streak = (consecutiveNoDataByCommand[command] ?: 0) + 1
+            consecutiveNoDataByCommand[command] = streak
+            if (streak >= MAX_CONSECUTIVE_NO_DATA && disabledCommands.add(command)) {
+                service.recorder.logEvent(
+                    "pid_disabled_no_data",
+                    "command",
+                    command,
+                    "consecutiveNoData",
+                    streak.toString(),
+                )
+            }
+        }
+    }
+
+    /** Milliseconds since the most recent cycle that returned any fresh PID value. */
+    fun msSinceLastLiveData(): Long = maxOf(0L, clock.nowMs() - lastLiveDataAtMs)
+
+    /** Count of PIDs the negative-PID cache has disabled this session (logging + tests). */
+    fun disabledCommandCount(): Int = disabledCommands.size
+
+    /** True if [command] is currently retired by the negative-PID cache. */
+    fun isCommandDisabled(command: String): Boolean = disabledCommands.contains(command)
 
     @Throws(IOException::class)
     private fun tryBatchTier1Mode01(
@@ -217,6 +299,13 @@ class PidPollingState(
     companion object {
         const val CARRY_FORWARD_MAX_AGE_MS: Long = 30_000L
         private const val CARRY_FORWARD_MS_PER_SCHEDULE_CYCLE: Long = 2_500L
+
+        /**
+         * Consecutive bus-alive NO-DATA replies before the negative-PID cache stops scheduling a PID
+         * for the rest of the session. 3 keeps a single transient miss from disabling a supported PID
+         * while still retiring a genuinely-unsupported one within a few of its poll cycles.
+         */
+        const val MAX_CONSECUTIVE_NO_DATA: Int = 3
 
         @JvmStatic
         fun carryForwardMaxAgeMsFor(command: String): Long {

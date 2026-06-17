@@ -302,6 +302,54 @@ class ObdPollingEngineTest {
     }
 
     @Test
+    fun vehicleSleepGiveUpWaitsForTheIdleWindowAndSkipsActiveDriving() {
+        // Below the idle window: never give up, even while parked.
+        assertEquals(false, ObdPollingEngine.shouldEndForVehicleSleep(0L, "parked"))
+        assertEquals(
+            false,
+            ObdPollingEngine.shouldEndForVehicleSleep(ObdPollingEngine.VEHICLE_SLEEP_GIVE_UP_MS - 1, "parked"),
+        )
+        // Past the window while parked / plugged / unknown / absent: end the asleep session.
+        for (state in listOf("parked", "plugged", "charging", "unknown", "")) {
+            assertEquals(
+                "silent + $state past the window must end the session",
+                true,
+                ObdPollingEngine.shouldEndForVehicleSleep(ObdPollingEngine.VEHICLE_SLEEP_GIVE_UP_MS, state),
+            )
+        }
+        // Never give up while the car still reports active driving, no matter how long the stall.
+        for (state in listOf("driving_ev", "driving_gas", "ready")) {
+            assertEquals(
+                "$state must keep the session alive through a stall",
+                false,
+                ObdPollingEngine.shouldEndForVehicleSleep(ObdPollingEngine.VEHICLE_SLEEP_GIVE_UP_MS * 5, state),
+            )
+        }
+    }
+
+    @Test
+    fun vehicleOffDisconnectNeedsAConnectedSessionAndAStoppedState() {
+        for (state in listOf("parked", "plugged", "charging")) {
+            assertEquals(
+                "a drop while $state after connecting is the adapter sleeping, not a fault",
+                true,
+                ObdPollingEngine.isVehicleOffDisconnect(true, state),
+            )
+        }
+        assertEquals(
+            "a drop that never connected is a real connect failure",
+            false,
+            ObdPollingEngine.isVehicleOffDisconnect(false, "parked"),
+        )
+        assertEquals(
+            "a drop while driving is a real mid-drive disconnect",
+            false,
+            ObdPollingEngine.isVehicleOffDisconnect(true, "driving_ev"),
+        )
+        assertEquals(false, ObdPollingEngine.isVehicleOffDisconnect(true, "unknown"))
+    }
+
+    @Test
     fun rawTranscriptIsCappedWithTruncationMarker() {
         val raw = StringBuilder()
         repeat(ObdPollingEngine.RAW_TRANSCRIPT_MAX_CHARS + 50) {

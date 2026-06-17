@@ -133,6 +133,21 @@ class PidScheduleTest {
     }
 
     @Test
+    fun chargeFamilyPidsAreConditionalAndAlwaysOnPidsAreNot() {
+        // Charge/plug-only PIDs must be exempt from the live-poll negative-PID cache so a legitimate
+        // NO-DATA while driving can't disable them before a later charge session.
+        for (command in arrayOf("22436B", "22436C", "224373", "224531", "22437D", "2243A5", "222487")) {
+            assertTrue("$command must be conditional", findByCommand(command).conditional)
+            assertTrue("$command must report conditional via the lookup", PidSchedule.isConditional(command))
+        }
+        // Core always-on PIDs and unknown commands are not conditional.
+        for (command in arrayOf("010D", "015C", "222414")) {
+            assertFalse("$command must not be conditional", PidSchedule.isConditional(command))
+        }
+        assertFalse("an unknown command is not conditional", PidSchedule.isConditional("ZZZZ"))
+    }
+
+    @Test
     fun cellBalancePidsArePolledOnTheBatteryHeader() {
         // Min/max cell voltage + SOC-variation poll every 24 cycles; the cell index numbers move
         // slowly so they ride the 48-cycle lane. All sit on the 7E4 battery header.
