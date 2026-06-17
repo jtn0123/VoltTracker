@@ -282,6 +282,23 @@ class ObdServiceIntegrationTest {
     }
 
     @Test
+    fun broadcastTelemetryCoalescesWidgetSideEffectsWithoutDroppingTelemetryBroadcasts() {
+        val controller = newController(null)
+        val service = controller.create().get()
+        val captured = captureBroadcasts()
+
+        service.broadcastTelemetry(JSONObject().put("source", "obd").put("soc", 50).put("connected", true))
+        service.broadcastTelemetry(JSONObject().put("source", "obd").put("soc", 51).put("connected", true))
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals("live telemetry broadcasts stay per-sample", 2, captured.telemetry.size)
+        assertTrue(
+            "second sample should coalesce into the pending widget update",
+            service.drainCoalescedWidgetTelemetryCountForTest() >= 1L,
+        )
+    }
+
+    @Test
     fun broadcastTelemetryDropsEmptyPayloads() {
         val controller = newController(null)
         val service = controller.create().get()

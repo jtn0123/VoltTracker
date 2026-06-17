@@ -72,8 +72,11 @@ class DashboardStorageReaderClosedStoreTest {
     private fun allReads(): List<String> =
         listOf(
             reader.storageSummaryJson(),
+            reader.storageDetailsJson(),
             reader.tripsJson(),
             reader.tripRouteJson("route-key"),
             reader.insightsJson(),
+            reader.currentSessionRouteJson(),
+            reader.batterySohHistoryJson(),
         )
 }

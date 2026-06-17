@@ -5,6 +5,7 @@ import com.volttracker.obdpoc.StorageSummaryJson
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -113,6 +114,34 @@ class ObdStoreReportsDbTest {
         assertEquals(id, summary.optLong("lastSessionId"))
         assertEquals("obd", summary.optString("lastMode"))
         assertEquals("Adapter", summary.optString("lastAdapter"))
+    }
+
+    @Test
+    fun storageOverviewOmitsHeavyPanelsWhileDetailsExposeThem() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L))
+
+        val overview = StorageSummaryJson.buildOverview(store.getStorageOverviewRecord())
+        assertEquals(1, overview.optInt("sessionCount"))
+        assertTrue("overview keeps recent session breadcrumbs", overview.has("recentSessions"))
+        assertTrue("overview keeps latest diagnostic report shell", overview.has("latestDiagnosticCodes"))
+        assertFalse("route review must be lazy", overview.has("latestReview"))
+        assertFalse("recent route projections must be lazy", overview.has("recentRoutes"))
+        assertFalse("charge history must be lazy", overview.has("chargeSummary"))
+        assertFalse("battery history must be lazy", overview.has("batterySummary"))
+        assertFalse("capability evidence must be lazy", overview.has("enhancedCapabilities"))
+        assertFalse("catalog payload must be lazy", overview.has("detailedSignalCatalog"))
+
+        val details = store.getStorageDetailsJson()
+        assertTrue(details.optBoolean("storageDetails"))
+        assertTrue(details.has("latestReview"))
+        assertTrue(details.has("latestRoute"))
+        assertTrue(details.has("recentRoutes"))
+        assertTrue(details.has("overview"))
+        assertTrue(details.has("chargeSummary"))
+        assertTrue(details.has("batterySummary"))
+        assertTrue(details.has("enhancedCapabilities"))
+        assertTrue(details.has("detailedSignalCatalog"))
     }
 
     @Test
@@ -459,6 +488,37 @@ class ObdStoreReportsDbTest {
         assertEquals(15.0, latest.getDouble("startSoc"), 0.001)
         assertEquals(95.0, latest.getDouble("endSoc"), 0.001)
         assertTrue(latest.getDouble("energyKwh") > 10.0)
+    }
+
+    @Test
+    fun chargeSummaryIncludesOldUsefulDriveBeyondRecentSessionCap() {
+        val oldDrive = store.startSession("obd", "00:11", "Adapter", 1_000L)
+        store.recordTelemetry(oldDrive, sample(40, 15.0, 32.70, -117.10, 2_000L))
+        store.recordTelemetry(oldDrive, sample(42, 15.0, 32.71, -117.10, 3_000L))
+        store.finishSession(oldDrive, ObdLocalStore.STATUS_COMPLETE, 4_000L, "")
+
+        // More than the recent-session cap, deliberately newer than oldDrive and with no useful OBD
+        // telemetry. The charge projection must not select sessions by first reading the capped
+        // all-session list and filtering in Kotlin, or the old useful drive disappears.
+        repeat(501) { index ->
+            val startedAtMs = 10_000L + index * 1_000L
+            val filler = store.startSession("scan", "00:ff", "Scan filler", startedAtMs)
+            store.finishSession(filler, ObdLocalStore.STATUS_COMPLETE, startedAtMs + 100L, "")
+        }
+
+        val newDriveStartedAtMs = 1_000_000L
+        val newDrive = store.startSession("obd", "00:11", "Adapter", newDriveStartedAtMs)
+        store.recordTelemetry(newDrive, sample(35, 95.0, 32.71, -117.10, newDriveStartedAtMs + 1_000L))
+        store.recordTelemetry(newDrive, sample(38, 94.0, 32.72, -117.10, newDriveStartedAtMs + 2_000L))
+        store.finishSession(newDrive, ObdLocalStore.STATUS_COMPLETE, newDriveStartedAtMs + 3_000L, "")
+
+        val charge = store.projections().chargeSummary()
+
+        assertEquals(1, charge.getInt("chargeSessionCount"))
+        val latest = charge.getJSONObject("latest")
+        assertEquals("inferred", latest.getString("chargerType"))
+        assertEquals(15.0, latest.getDouble("startSoc"), 0.001)
+        assertEquals(95.0, latest.getDouble("endSoc"), 0.001)
     }
 
     // ---- G2 per-session charge-rollup cache ----------------------------------------

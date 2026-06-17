@@ -22,8 +22,12 @@ import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Foreground service that owns an OBD logging session: Android lifecycle, session start/stop,
@@ -34,6 +38,7 @@ open class ObdService :
     EngineHost {
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val competingAppExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val telemetrySideEffectExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
 
     override val ioLock = Any()
 
@@ -69,6 +74,9 @@ open class ObdService :
     // Nullable + guarded: created in onCreate so test subclasses that drive broadcast* directly
     // without onCreate (or before it) simply skip the widget hook instead of crashing.
     private var widgetUpdater: WidgetUpdater? = null
+    private val latestWidgetTelemetry = AtomicReference<JSONObject?>()
+    private val widgetTelemetryScheduled = AtomicBoolean(false)
+    private val coalescedWidgetTelemetryCount = AtomicLong()
 
     // The process-wide app-log mirror installed in onCreate. Held so onDestroy can detach it from
     // OBDLog and release the long-lived buffered-writer file handle (G1) instead of leaking it for
@@ -294,6 +302,7 @@ open class ObdService :
         bluetoothObservability?.unregister(this)
         executor.shutdownNow()
         competingAppExecutor.shutdownNow()
+        telemetrySideEffectExecutor.shutdownNow()
         recorder.shutdown()
         localStore?.close()
         localStore = null
@@ -600,10 +609,49 @@ open class ObdService :
         val payload = telemetry.toJson()
         recorder.logJson("telemetry", payload)
         recorder.persistTelemetry(payload)
-        maybePostEventNotifications(payload)
-        maybeUpdateWidgetTelemetry(payload)
+        enqueueEventNotifications(payload)
+        enqueueWidgetTelemetry(payload)
         broadcast(BROADCAST_TELEMETRY, payload)
     }
+
+    private fun enqueueEventNotifications(payload: JSONObject) {
+        try {
+            telemetrySideEffectExecutor.execute {
+                maybePostEventNotifications(payload)
+            }
+        } catch (ex: RejectedExecutionException) {
+            Log.w(MainActivity.TAG, "event notification enqueue failed", ex)
+        }
+    }
+
+    private fun enqueueWidgetTelemetry(payload: JSONObject) {
+        latestWidgetTelemetry.set(payload)
+        if (!widgetTelemetryScheduled.compareAndSet(false, true)) {
+            coalescedWidgetTelemetryCount.incrementAndGet()
+            return
+        }
+        try {
+            telemetrySideEffectExecutor.schedule(
+                {
+                    val latest = latestWidgetTelemetry.getAndSet(null)
+                    if (latest != null) {
+                        maybeUpdateWidgetTelemetry(latest)
+                    }
+                    widgetTelemetryScheduled.set(false)
+                    if (latestWidgetTelemetry.get() != null) {
+                        enqueueWidgetTelemetry(latestWidgetTelemetry.get()!!)
+                    }
+                },
+                WIDGET_TELEMETRY_COALESCE_MS,
+                TimeUnit.MILLISECONDS,
+            )
+        } catch (ex: RejectedExecutionException) {
+            widgetTelemetryScheduled.set(false)
+            Log.w(MainActivity.TAG, "widget telemetry enqueue failed", ex)
+        }
+    }
+
+    fun drainCoalescedWidgetTelemetryCountForTest(): Long = coalescedWidgetTelemetryCount.getAndSet(0L)
 
     private fun maybeUpdateWidgetTelemetry(payload: JSONObject) {
         try {
@@ -851,6 +899,7 @@ open class ObdService :
         const val EXTRA_DETAIL_STAGE = "detail_stage"
         private const val DEFAULT_ADAPTER_NAME = "OBD adapter"
         private const val WAKE_LOCK_TAG = "VoltTracker:ObdSession"
+        private const val WIDGET_TELEMETRY_COALESCE_MS = 500L
 
         // Leak ceiling only (see acquireSessionWakeLock); generously above any realistic drive.
         private const val SESSION_WAKE_LOCK_TIMEOUT_MS = 12L * 60L * 60L * 1000L

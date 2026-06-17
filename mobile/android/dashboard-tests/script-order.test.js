@@ -17,7 +17,8 @@ const BUILD_MJS = resolve('build.mjs');
 // Dependency order: prefs first (seeds the preference store other modules read at
 // init), then core (it seeds window.VoltDashboard); actions' bootstrap calls into
 // drive/telemetry/etc., so it comes after them. Map and the troubleshooter are
-// lazy chunks loaded by core.ts on demand.
+// lazy chunks loaded by core.ts on demand; secondary action groups are lazy chunks
+// loaded by actions.ts on first use.
 const EXPECTED_EAGER_ORDER = [
   'prefs',
   'core',
@@ -46,6 +47,11 @@ function firstPartyScripts(html) {
     .filter((script) => script.src.startsWith('js/'));
 }
 
+function allScriptSrcs(html) {
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  return [...parsed.querySelectorAll('script[src]')].map((script) => script.getAttribute('src') ?? '');
+}
+
 describe('dashboard production script bundle', () => {
   it('ships js/app.js as a single classic (non-module) script', () => {
     for (const html of [
@@ -57,6 +63,21 @@ describe('dashboard production script bundle', () => {
       // A module would silently never load over file:// in the WebView.
       expect(scripts.every((s) => s.type !== 'module')).toBe(true);
     }
+  });
+
+  it('keeps Leaflet off the dashboard startup script path', () => {
+    for (const html of [
+      readFileSync(DASHBOARD_HTML, 'utf8'),
+      readFileSync(TEMPLATE_HTML, 'utf8'),
+    ]) {
+      expect(allScriptSrcs(html)).not.toContain('lib/leaflet/leaflet.js');
+    }
+
+    const core = readFileSync(resolve('../app/src/main/dashboard-src/js/core.ts'), 'utf8');
+    expect(core).toContain('loadDashboardScript("lib/leaflet/leaflet.js")');
+    expect(core.indexOf('loadDashboardScript("lib/leaflet/leaflet.js")')).toBeLessThan(
+      core.indexOf('loadDashboardScript("js/map.js")'),
+    );
   });
 
   it('build.mjs bundles the eager source files in dependency order', () => {
@@ -72,7 +93,16 @@ describe('dashboard production script bundle', () => {
     const match = build.match(/const LAZY = \[([\s\S]*?)\];/);
     expect(match).not.toBeNull();
     const lazy = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-    expect(lazy).toEqual(['map', 'troubleshooter', 'dtc-lookup', 'dtc-causes', 'demo-data']);
+    expect(lazy).toEqual([
+      'map',
+      'troubleshooter',
+      'dtc-lookup',
+      'dtc-causes',
+      'demo-data',
+      'actions-storage',
+      'actions-signals',
+      'actions-demo',
+    ]);
   });
 
   it('ships syntax that Android 9 WebView can parse', () => {

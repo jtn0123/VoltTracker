@@ -45,6 +45,15 @@ class MainActivityStorageReadErrorTest {
     }
 
     @Test
+    fun storageDetailsFailureReturnsStructuredError() {
+        val payload = JSONObject(activity.getStorageDetailsJson())
+
+        assertFalse(payload.optBoolean("ok", true))
+        assertEquals("storage_details_failed", payload.optString("error"))
+        assertEquals("Could not read local storage details.", payload.optString("message"))
+    }
+
+    @Test
     fun tripsFailureReturnsStructuredErrorInsteadOfEmptyArray() {
         val payload = JSONObject(activity.getTripsJson())
 
@@ -66,6 +75,10 @@ class MainActivityStorageReadErrorTest {
         context: Context,
     ) : ObdLocalStore(context) {
         override fun getStorageSummaryRecord(): StorageSummaryRecord = throw RuntimeException("summary boom")
+
+        override fun getStorageOverviewRecord(): StorageSummaryRecord = throw RuntimeException("overview boom")
+
+        override fun getStorageDetailsJson(): JSONObject = throw RuntimeException("details boom")
 
         override fun getTripsJson(limit: Int): JSONArray = throw RuntimeException("trips boom")
 

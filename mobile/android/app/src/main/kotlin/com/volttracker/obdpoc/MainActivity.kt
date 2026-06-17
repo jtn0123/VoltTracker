@@ -728,6 +728,8 @@ open class MainActivity :
 
     override fun getStorageSummaryJson(): String = storageReader.storageSummaryJson()
 
+    override fun getStorageDetailsJson(): String = storageReader.storageDetailsJson()
+
     override fun getTripsJson(): String = storageReader.tripsJson()
 
     override fun getTripRouteJson(routeKey: String?): String = storageReader.tripRouteJson(routeKey)

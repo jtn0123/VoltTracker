@@ -42,6 +42,8 @@ open class ObdPollingEngine(
     private var sampleCount = 0
     private var supportedPidsSummary = ""
     private var redactedVin = ""
+    private var connectAttemptStartedAtMs = 0L
+    private var firstSampleTimingLogged = false
 
     // Last vehicleState seen on a broadcast sample this session. Used to tell a benign "adapter went
     // to sleep with the car" disconnect (parked/plugged/charging) apart from a real mid-drive drop.
@@ -69,6 +71,8 @@ open class ObdPollingEngine(
         redactedVin = ""
         lastVehicleState = ""
         deferredInitProbesPending = false
+        connectAttemptStartedAtMs = 0L
+        firstSampleTimingLogged = false
         pidPolling.reset()
     }
 
@@ -432,6 +436,8 @@ open class ObdPollingEngine(
             ObdProbes.ELM327_SPP_UUID.toString(),
         )
         val openStart = System.currentTimeMillis()
+        connectAttemptStartedAtMs = openStart
+        firstSampleTimingLogged = false
         try {
             openBluetoothSocket(address)
         } catch (ex: IOException) {
@@ -522,6 +528,7 @@ open class ObdPollingEngine(
                 continue
             }
             service.broadcastTelemetry(sample)
+            logFirstSampleTiming()
             lastVehicleState = sample.optString("vehicleState", lastVehicleState)
             // First real data is on screen — now run the deferred connect-time probes (VIN, mode-01
             // batch capability, aux voltage) that we moved off the pre-first-sample critical path.
@@ -571,6 +578,30 @@ open class ObdPollingEngine(
 
     fun runDemoLoop() {
         demoLoop.run()
+    }
+
+    private fun logFirstSampleTiming() {
+        if (firstSampleTimingLogged) {
+            return
+        }
+        val startedAtMs = connectAttemptStartedAtMs
+        if (startedAtMs <= 0L) {
+            return
+        }
+        firstSampleTimingLogged = true
+        service.recorder.logEvent(
+            "first_sample_latency",
+            "durationMs",
+            maxOf(0L, System.currentTimeMillis() - startedAtMs).toString(),
+            "sampleCount",
+            sampleCount.toString(),
+            "rfcommConnectMs",
+            connection.rfcommConnectMs.toString(),
+            "getStreamsMs",
+            connection.getStreamsMs.toString(),
+            "firstReadMs",
+            connection.firstReadMs.toString(),
+        )
     }
 
     override fun incrementSampleCount(): Int {

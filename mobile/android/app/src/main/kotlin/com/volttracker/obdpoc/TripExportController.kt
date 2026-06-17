@@ -45,7 +45,7 @@ class TripExportController(
         val format =
             TripExportShareIntent.Format.fromKey(formatKey)
                 ?: return error("invalid_format", "Choose GPX or CSV.")
-        val cleanKey = VoltBridge.safe(routeKey, VoltBridge.MAX_LABEL_LEN)
+        val cleanKey = bridgeSafe(routeKey, BRIDGE_MAX_LABEL_LEN)
         if (cleanKey.isEmpty()) {
             return error("invalid_id", "Choose a saved drive to export.")
         }
@@ -144,7 +144,7 @@ class TripExportController(
      * non-positive / non-finite value yields null, which omits the estimated-cost column.
      */
     private fun parsePricePerKwh(rateArg: String?): Double? {
-        val cleaned = VoltBridge.safe(rateArg, VoltBridge.MAX_LABEL_LEN)
+        val cleaned = bridgeSafe(rateArg, BRIDGE_MAX_LABEL_LEN)
         if (cleaned.isEmpty()) {
             return null
         }

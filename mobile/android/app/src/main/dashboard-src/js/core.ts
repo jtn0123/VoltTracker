@@ -588,6 +588,7 @@ import { initialTelemetryState } from "./telemetry-state";
   }
 
   let dtcDataPromise: Promise<VoltDashboard> | null = null;
+  let leafletRuntimePromise: Promise<void> | null = null;
 
   function dtcDataLoaded() {
     return typeof VD.dtcInfo === "function" && Array.isArray(VD.dtcSampleCodes);
@@ -628,10 +629,34 @@ import { initialTelemetryState } from "./telemetry-state";
     return VD.renderMapLoaded === true;
   }
 
+  function leafletRuntimeLoaded() {
+    return Boolean(window.L && typeof window.L.map === "function");
+  }
+
+  function ensureLeafletRuntime() {
+    if (leafletRuntimeLoaded()) return Promise.resolve();
+    if (!leafletRuntimePromise) {
+      const loadedByHarness = Boolean(window.__VoltDashboardLoadScript);
+      leafletRuntimePromise = loadDashboardScript("lib/leaflet/leaflet.js")
+        .then(() => {
+          if (!leafletRuntimeLoaded() && !loadedByHarness) {
+            throw new Error("Leaflet script loaded but window.L.map was not registered.");
+          }
+        })
+        .catch((err) => {
+          leafletRuntimePromise = null;
+          reportClientError("leaflet.load", err && err.message);
+          throw err;
+        });
+    }
+    return leafletRuntimePromise;
+  }
+
   function ensureMapModule() {
     if (mapModuleLoaded()) return Promise.resolve(VD);
     if (!mapModulePromise) {
-      mapModulePromise = loadDashboardScript("js/map.js")
+      mapModulePromise = ensureLeafletRuntime()
+        .then(() => loadDashboardScript("js/map.js"))
         .then(() => {
           if (!mapModuleLoaded() || typeof VD.renderMap !== "function") {
             throw new Error("Map script loaded but expected globals were not registered.");
@@ -657,6 +682,7 @@ import { initialTelemetryState } from "./telemetry-state";
   function pendingLazyLoads(): Promise<unknown[]> {
     const pending: Array<Promise<unknown>> = [];
     if (dtcDataPromise) pending.push(dtcDataPromise.catch(() => undefined));
+    if (leafletRuntimePromise) pending.push(leafletRuntimePromise.catch(() => undefined));
     if (mapModulePromise) pending.push(mapModulePromise.catch(() => undefined));
     if (troubleshooterModulePromise) {
       pending.push(troubleshooterModulePromise.catch(() => undefined));
@@ -1171,6 +1197,7 @@ import { initialTelemetryState } from "./telemetry-state";
     setDemoActive,
     clearDemoTelemetry,
     ensureDemoData,
+    loadDashboardScript,
     ensureDtcData,
     dtcDataLoaded,
     ensureMapModule,

@@ -22,12 +22,12 @@ internal class VoltBridgeConnections(
         name: String?,
         stage: String?,
     ) {
-        val cleanAddress = VoltBridge.safe(address, VoltBridge.MAX_ADDRESS_LEN)
-        val cleanName = VoltBridge.safe(name, VoltBridge.MAX_NAME_LEN)
-        val cleanStage = EnhancedPidProfiles.normalizeStage(VoltBridge.safe(stage, VoltBridge.MAX_STAGE_LEN))
+        val cleanAddress = bridgeSafe(address, BRIDGE_MAX_ADDRESS_LEN)
+        val cleanName = bridgeSafe(name, BRIDGE_MAX_NAME_LEN)
+        val cleanStage = EnhancedPidProfiles.normalizeStage(bridgeSafe(stage, BRIDGE_MAX_STAGE_LEN))
         activity.runOnUiThread {
             activity.rememberDevice(cleanAddress, cleanName)
-            if (!VoltBridge.validBluetoothAddress(cleanAddress)) {
+            if (!validBridgeBluetoothAddress(cleanAddress)) {
                 activity.publishStatus("blocked", MSG_PICK_VALID_ADAPTER, true)
                 return@runOnUiThread
             }
@@ -39,8 +39,8 @@ internal class VoltBridgeConnections(
         address: String?,
         name: String?,
     ) {
-        val cleanAddress = VoltBridge.safe(address, VoltBridge.MAX_ADDRESS_LEN)
-        val cleanName = VoltBridge.safe(name, VoltBridge.MAX_NAME_LEN)
+        val cleanAddress = bridgeSafe(address, BRIDGE_MAX_ADDRESS_LEN)
+        val cleanName = bridgeSafe(name, BRIDGE_MAX_NAME_LEN)
         activity.runOnUiThread {
             activity.rememberDevice(cleanAddress, cleanName)
         }
@@ -63,7 +63,7 @@ internal class VoltBridgeConnections(
     }
 
     fun detailProbeLast(stage: String?) {
-        val cleanStage = EnhancedPidProfiles.normalizeStage(VoltBridge.safe(stage, VoltBridge.MAX_STAGE_LEN))
+        val cleanStage = EnhancedPidProfiles.normalizeStage(bridgeSafe(stage, BRIDGE_MAX_STAGE_LEN))
         startLastDeviceAction(
             ObdService.ACTION_TPMS_SCAN,
             MSG_NO_REMEMBERED_ADAPTER,
@@ -88,8 +88,8 @@ internal class VoltBridgeConnections(
 
     fun tryReconnectNow() {
         val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
-        val address = VoltBridge.safe(device.optString("address", ""), VoltBridge.MAX_ADDRESS_LEN)
-        val name = VoltBridge.safe(device.optString("name", ""), VoltBridge.MAX_NAME_LEN)
+        val address = bridgeSafe(device.optString("address", ""), BRIDGE_MAX_ADDRESS_LEN)
+        val name = bridgeSafe(device.optString("name", ""), BRIDGE_MAX_NAME_LEN)
         activity.runOnUiThread {
             if (address.isEmpty()) {
                 activity.publishStatus("blocked", "No remembered adapter yet. Pick one and try Connect.", true)
@@ -110,11 +110,11 @@ internal class VoltBridgeConnections(
         action: String,
         invalidMessage: String,
     ) {
-        val cleanAddress = VoltBridge.safe(address, VoltBridge.MAX_ADDRESS_LEN)
-        val cleanName = VoltBridge.safe(name, VoltBridge.MAX_NAME_LEN)
+        val cleanAddress = bridgeSafe(address, BRIDGE_MAX_ADDRESS_LEN)
+        val cleanName = bridgeSafe(name, BRIDGE_MAX_NAME_LEN)
         activity.runOnUiThread {
             activity.rememberDevice(cleanAddress, cleanName)
-            if (!VoltBridge.validBluetoothAddress(cleanAddress)) {
+            if (!validBridgeBluetoothAddress(cleanAddress)) {
                 activity.publishStatus("blocked", invalidMessage, true)
                 return@runOnUiThread
             }
@@ -129,10 +129,10 @@ internal class VoltBridgeConnections(
         stage: String? = null,
     ) {
         val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
-        val address = VoltBridge.safe(device.optString("address", ""), VoltBridge.MAX_ADDRESS_LEN)
-        val name = VoltBridge.safe(device.optString("name", ""), VoltBridge.MAX_NAME_LEN)
+        val address = bridgeSafe(device.optString("address", ""), BRIDGE_MAX_ADDRESS_LEN)
+        val name = bridgeSafe(device.optString("name", ""), BRIDGE_MAX_NAME_LEN)
         activity.runOnUiThread {
-            val invalid = if (requireValidAddress) !VoltBridge.validBluetoothAddress(address) else address.isEmpty()
+            val invalid = if (requireValidAddress) !validBridgeBluetoothAddress(address) else address.isEmpty()
             if (invalid) {
                 activity.publishStatus("blocked", invalidMessage, true)
                 return@runOnUiThread

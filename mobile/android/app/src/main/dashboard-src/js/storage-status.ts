@@ -19,6 +19,8 @@ import { prefs, units } from "./prefs";
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
+  let storageDetailsScheduled = false;
+  let applyingStorageDetails = false;
 
   // Plain boolean (not a type predicate): the parsed payloads it screens —
   // VoltStorageSummary, VoltTrip[], VoltInsights — structurally overlap
@@ -44,12 +46,49 @@ import { prefs, units } from "./prefs";
     }
   }
 
+  function isStorageDetailsPayload(payload: unknown): boolean {
+    return Boolean(
+      payload != null &&
+      typeof payload === "object" &&
+      (payload as { storageDetails?: unknown }).storageDetails
+    );
+  }
+
+  function scheduleStorageDetailsLoad() {
+    if (!bridge || typeof bridge.getStorageDetails !== "function") return;
+    if (storageDetailsScheduled) return;
+    storageDetailsScheduled = true;
+    const load = () => {
+      storageDetailsScheduled = false;
+      const payload =
+        typeof VD.callBridge === "function"
+          ? VD.callBridge("getStorageDetails")
+          : bridge.getStorageDetails();
+      if (payload != null) {
+        applyingStorageDetails = true;
+        try {
+          setStorage(payload);
+        } finally {
+          applyingStorageDetails = false;
+        }
+      }
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(load, { timeout: 2000 });
+    } else {
+      setTimeout(load, 0);
+    }
+  }
+
   function setStorage(payload: unknown) {
     const parsed = VD.parsePayload<VoltStorageSummary>(payload, {});
     validatePayload("setStorage", parsed);
     if (isNativeError(parsed)) {
       const err = parsed as VoltNativeError;
       reportNativeReadError(parsed, "Could not read local storage summary.");
+      if (applyingStorageDetails || err.error === "storage_details_failed") {
+        return;
+      }
       const storageError: VoltStorageSummary = { message: err.message || "" };
       if (err.error) storageError.error = err.error;
       state.storage = storageError;
@@ -59,25 +98,42 @@ import { prefs, units } from "./prefs";
       VD.updateValidationUi();
       return;
     }
+    const isDetails = isStorageDetailsPayload(parsed);
     const newRoutes =
       parsed && Array.isArray(parsed.recentRoutes) ? parsed.recentRoutes : [];
     if (state.demoActive && state.demoPreviewStorage) {
       // Park the real summary while demo preview owns the screen (cross-module
       // invariant: restored when demo stops).
-      VD.setState({ realStorage: parsed });
+      if (isDetails) {
+        const details = { ...(parsed as Record<string, unknown>) };
+        delete details.storageDetails;
+        VD.setState({ realStorage: { ...(state.realStorage || {}), ...details } });
+      } else {
+        VD.setState({ realStorage: parsed });
+        scheduleStorageDetailsLoad();
+      }
       return;
     }
     if (newRoutes.length > 0) {
       state._mapSampleLoaded = false;
     }
-    state.storage = parsed;
+    if (isDetails) {
+      const details = { ...(parsed as Record<string, unknown>) };
+      delete details.storageDetails;
+      state.storage = { ...(state.storage || {}), ...details };
+    } else {
+      state.storage = parsed;
+    }
     updateStorageUi();
     renderRealV2Ui();
     VD.renderMapIfLoaded();
     VD.updateValidationUi();
-    VD.loadTrips();
-    VD.loadInsights();
-    loadMaintenanceLog();
+    if (!isDetails) {
+      VD.loadTrips();
+      VD.loadInsights();
+      loadMaintenanceLog();
+      scheduleStorageDetailsLoad();
+    }
   }
 
   function updateStorageUi() {

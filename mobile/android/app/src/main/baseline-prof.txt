@@ -1,5 +1,6 @@
-# Hand-authored baseline profile for the cold-start path (no Macrobenchmark rig yet —
-# regenerate with one if/when on-device profiling lands; see androidx baseline profiles docs).
+# Hand-authored baseline profile for the cold-start path (no Macrobenchmark rig yet;
+# regenerate with one if/when on-device profiling lands). See
+# docs/performance-contracts.md for startup validation ownership.
 # AGP compiles these rules into the APK's ART profile; androidx.profileinstaller installs
 # them on devices without Play-delivered compilation. Rules are HSP (hot/startup/post-startup)
 # and deliberately scoped to what runs before the dashboard handshake:

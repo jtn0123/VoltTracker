@@ -26,6 +26,7 @@ class SessionRecorder {
     private var currentHeader = ""
     private var lastPersistedStatusKey = ""
     private var lastPersistedStatusAtMs = 0L
+    private val pendingPidObservations = ArrayList<PendingPidObservation>(PID_OBSERVATION_BATCH_SIZE)
 
     /**
      * True once [SessionSummaryStore.recordStart] succeeded for the active session, so closeSession
@@ -88,6 +89,7 @@ class SessionRecorder {
                 activeAdapterName = adapterName ?: ""
                 activeAddress = address ?: ""
                 activeStartedAtMs = startedAtMs
+                pendingPidObservations.clear()
                 activeSessionId =
                     localStore?.startSession(activeMode, activeAddress, activeAdapterName, startedAtMs) ?: 0L
                 sessionLog.open(mode ?: "")
@@ -172,6 +174,7 @@ class SessionRecorder {
             sessionLog.close()
             val store = localStore
             if (closingSessionId > 0 && store != null) {
+                flushPendingPidObservationsLocked()
                 val status = ObdElmDecode.finishStatusFor(state)
                 val endedAtMs = System.currentTimeMillis()
                 worker.submitLifecycle(
@@ -399,6 +402,9 @@ class SessionRecorder {
 
     /** Drains pending database writes and shuts both recording executors down. */
     fun shutdown() {
+        synchronized(lock) {
+            flushPendingPidObservationsLocked()
+        }
         worker.shutdown()
     }
 
@@ -482,32 +488,63 @@ class SessionRecorder {
         val summary = ObdElmDecode.summarizeForStorage(safeCommand, response)
         val parsed = ObdProtocol.parseKnownValue(safeCommand, response)
         val diagnosticCodes = ObdProtocol.parseDiagnosticTroubleCodes(safeCommand, response, header)
-        worker.submitTelemetry {
-            val payload = JSONObject()
-            try {
-                payload.put("observedAtMs", observedAtMs)
-                payload.put("command", safeCommand)
-                payload.put("header", header ?: "")
-                payload.put("pid", ObdElmDecode.pidForCommand(safeCommand))
-                payload.put("name", parsed?.name ?: ObdElmDecode.nameForCommand(safeCommand))
-                if (parsed != null) {
-                    payload.put("valueText", parsed.valueText)
-                    if (parsed.valueNumeric != null) {
-                        payload.put("valueNumeric", parsed.valueNumeric.toDouble())
-                    }
-                    payload.put("unit", parsed.unit)
+        val payload = JSONObject()
+        try {
+            payload.put("observedAtMs", observedAtMs)
+            payload.put("command", safeCommand)
+            payload.put("header", header ?: "")
+            payload.put("pid", ObdElmDecode.pidForCommand(safeCommand))
+            payload.put("name", parsed?.name ?: ObdElmDecode.nameForCommand(safeCommand))
+            if (parsed != null) {
+                payload.put("valueText", parsed.valueText)
+                if (parsed.valueNumeric != null) {
+                    payload.put("valueNumeric", parsed.valueNumeric.toDouble())
                 }
-                payload.put("rawRequest", safeCommand)
-                payload.put("rawResponse", summary)
-                payload.put("gotPrompt", response != null && response.indexOf('>') >= 0)
-                payload.put("timeoutMs", timeoutMs)
-                payload.put("durationMs", durationMs)
-            } catch (ignored: JSONException) {
-                // Local values are safe.
+                payload.put("unit", parsed.unit)
             }
+            payload.put("rawRequest", safeCommand)
+            payload.put("rawResponse", summary)
+            payload.put("gotPrompt", response != null && response.indexOf('>') >= 0)
+            payload.put("timeoutMs", timeoutMs)
+            payload.put("durationMs", durationMs)
+        } catch (ignored: JSONException) {
+            // Local values are safe.
+        }
+        val diagnosticPayloads = diagnosticCodes.map { diagnosticCodeJson(it, observedAtMs, safeCommand) }
+        if (shouldBatchPidObservations()) {
+            pendingPidObservations.add(PendingPidObservation(sessionId, payload, diagnosticPayloads))
+            if (pendingPidObservations.size >= PID_OBSERVATION_BATCH_SIZE) {
+                flushPendingPidObservationsLocked()
+            }
+            return
+        }
+        worker.submitTelemetry {
             store.recordPidObservation(sessionId, payload, observedAtMs)
-            for (code in diagnosticCodes) {
-                store.recordDiagnosticCode(sessionId, diagnosticCodeJson(code, observedAtMs, safeCommand))
+            for (code in diagnosticPayloads) {
+                store.recordDiagnosticCode(sessionId, code)
+            }
+        }
+    }
+
+    private fun shouldBatchPidObservations(): Boolean =
+        activeMode == ObdLocalStore.MODE_SCAN || activeMode.endsWith("-scan")
+
+    private fun flushPendingPidObservationsLocked() {
+        if (pendingPidObservations.isEmpty()) {
+            return
+        }
+        val batch = ArrayList(pendingPidObservations)
+        pendingPidObservations.clear()
+        val store = localStore ?: return
+        worker.submitTelemetry {
+            val bySession = batch.groupBy { it.sessionId }
+            for ((sessionId, observations) in bySession) {
+                store.recordPidObservations(sessionId, observations.map { it.payload })
+                for (item in observations) {
+                    for (code in item.diagnosticCodes) {
+                        store.recordDiagnosticCode(sessionId, code)
+                    }
+                }
             }
         }
     }
@@ -531,6 +568,7 @@ class SessionRecorder {
         const val LIFECYCLE_QUEUE_CAPACITY: Int = ObdPersistenceWorker.LIFECYCLE_QUEUE_CAPACITY
         const val STATUS_RATE_MAX_PER_WINDOW: Int = 12
         const val STATUS_RATE_WINDOW_MS: Long = 5000L
+        private const val PID_OBSERVATION_BATCH_SIZE = 16
 
         @JvmStatic
         fun diagnosticCodeJson(
@@ -589,4 +627,10 @@ class SessionRecorder {
             return null
         }
     }
+
+    private data class PendingPidObservation(
+        val sessionId: Long,
+        val payload: JSONObject,
+        val diagnosticCodes: List<JSONObject>,
+    )
 }

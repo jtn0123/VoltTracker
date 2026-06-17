@@ -167,11 +167,14 @@ Useful local tasks:
 ```sh
 ./gradlew generateDashboardHtml          # rebuild assets/dashboard/index.html from partials
 ./gradlew verifyGeneratedDashboardClean  # fail if generated HTML is stale
+./gradlew dashboardAssetReport           # print dashboard asset sizes and bundle-budget headroom
+./gradlew verifyPerformance              # performance-focused dashboard + Android regression lane
 ./gradlew :app:spotlessApply             # format Kotlin/Java and dashboard partials
 ./gradlew :app:testDebugUnitTest         # JVM/Robolectric unit tests
 ```
 
 For install/release packaging details, see [`docs/release.md`](docs/release.md).
+For performance review rules, see [`docs/performance-contracts.md`](docs/performance-contracts.md).
 For release history, see the repo-root [`CHANGELOG.md`](../../CHANGELOG.md).
 For common field failures, see [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
 Domain terms are defined in [`docs/glossary.md`](docs/glossary.md).
@@ -257,8 +260,9 @@ dashboard drift, and migration straggler guards. See
 [`docs/validation-matrix.md`](docs/validation-matrix.md) for what this proves
 and which real-device/real-car checks still need separate evidence.
 
-Dashboard tooling is validated on Node 22 in CI. Use the root `.nvmrc` or
-`.node-version` when setting up a local shell.
+Dashboard tooling is validated on Node 22 in CI and enforced by Gradle's
+dashboard npm tasks. Use the root `.nvmrc` or `.node-version` when setting up a
+local shell.
 
 The aggregate task is configuration-cache ready. For faster repeated local
 loops, run `./gradlew verifyActiveApp --configuration-cache`; the second run
@@ -270,11 +274,13 @@ Run the no-network doctor when a new machine or agent shell behaves differently
 from CI:
 
 ```sh
+./gradlew doctor
 ./scripts/doctor.sh
 ```
 
-It reports Java, Android SDK, adb/device, Node/npm, dashboard dependency, and
-Playwright readiness without installing anything.
+These report Java, Android SDK, adb/device, Node/npm, dashboard dependency, and
+Playwright readiness without installing anything. The Gradle task fails on
+required runtime mismatches.
 
 #### Running pieces individually
 
@@ -301,6 +307,7 @@ List outdated direct and transitive dependencies (advisory; nothing fails):
 ./gradlew dependencyUpdates -Drevision=release
 ```
 
+Dependency update policy is in [`docs/dependencies.md`](docs/dependencies.md).
 Dependency snapshots and other dated audits are indexed in
 [`docs/reports-index.md`](docs/reports-index.md).
 The scheduled `Dependency snapshot` workflow refreshes the Gradle release
@@ -334,8 +341,8 @@ scrcpy
 ## Current Notes
 
 - The app intentionally keeps a small dependency surface. Runtime code directly
-  ships AndroidX Core for `FileProvider`, notification/service compatibility,
-  and package-version helpers; test code uses JUnit, Robolectric, and `org.json`.
+  ships AndroidX Activity, AndroidX Core, and ProfileInstaller; test code uses
+  JUnit, Robolectric, and `org.json`.
 - Bluetooth permissions are requested at runtime on Android 12+.
 - A foreground service keeps the OBD session alive while polling.
 - The WebView only loads local assets from `app/src/main/assets/dashboard`.
@@ -345,8 +352,8 @@ scrcpy
   coordinates.
 - The service uses the standard ELM327 serial UUID: `00001101-0000-1000-8000-00805F9B34FB`.
 
-Fresh graded audits are written to `.claude/grade-report.md`, which is
-repo-local and gitignored. Historical tracked reports remain under `docs/`.
+Fresh graded audits are written to `.Codex/grade-report.md`, which is repo-local
+and gitignored. Historical tracked reports remain under `docs/`.
 
 ## Pulling Field-Test Logs
 

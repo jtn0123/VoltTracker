@@ -4,7 +4,7 @@ The VoltTracker WebView dashboard talks to the Android side through a manual ABI
 There are **two** call directions:
 
 1. **Dashboard → Android**: dashboard code calls `window.VoltTrackerAndroid.<method>(...)` —
-   each method is a `@JavascriptInterface` on `VoltBridge.kt`.
+   each method is a `@JavascriptInterface` on the `VoltBridge*` bridge classes.
 2. **Android → Dashboard**: Android code calls `webView.evaluateJavascript("window.VoltTrackerNative.<method>(...)")` —
    each method is a setter the dashboard TypeScript defines.
 
@@ -12,18 +12,19 @@ Drift between either side is caught only at runtime (or by the Vitest smoke
 suite under `mobile/android/dashboard-tests/`). Update this doc whenever you
 add or rename a bridge method.
 
-## Dashboard → Android (calls into `VoltBridge.kt`)
+## Dashboard → Android (calls into `VoltBridge*`)
 
-All string arguments are passed through `safe(value, maxLen)` which null-coalesces,
-trims, and truncates. The bounds are `MAX_ADDRESS_LEN=64`, `MAX_NAME_LEN=256`,
-`MAX_LABEL_LEN=128`, `MAX_STAGE_LEN=32`, `MAX_DTC_LEN=16`, `MAX_PASSPHRASE_LEN=256`,
-`MAX_DETAIL_LEN=4096`. See `VoltBridge.kt`.
+All string arguments are passed through `bridgeSafe(value, maxLen)` which null-coalesces,
+trims, and truncates. The bounds are `BRIDGE_MAX_ADDRESS_LEN=64`, `BRIDGE_MAX_NAME_LEN=256`,
+`BRIDGE_MAX_LABEL_LEN=128`, `BRIDGE_MAX_STAGE_LEN=32`, `BRIDGE_MAX_DTC_LEN=16`,
+`BRIDGE_MAX_PASSPHRASE_LEN=256`, `BRIDGE_MAX_DETAIL_LEN=4096`. See `BridgeInput.kt`.
 
-> **Last synced: this table documents all 64 `@JavascriptInterface` methods** — the
+> **Last synced: this table documents all 67 `@JavascriptInterface` methods** — the
 > frozen `VOLT_BRIDGE_METHODS` contract in
 > `dashboard-tests/setup/voltbridge.fixture.js`. If that count changes, this table
 > has drifted: re-diff it against the fixture and `VoltBridge.kt` (plus its
-> `VoltBridgeConnections` / `VoltBridgeDataExports` / `VoltBridgeDiagnostics`
+> `VoltBridgeConnections` / `VoltBridgeDataExports` / `VoltBridgeDiagnostics` /
+> `VoltBridgeNotifications` / `VoltBridgeStorage`
 > delegates) and update the rows below.
 
 | Method | Args | Returns | Validation | Notes |
@@ -40,7 +41,8 @@ trims, and truncates. The bounds are `MAX_ADDRESS_LEN=64`, `MAX_NAME_LEN=256`,
 | `getDeviceHistory()` | — | `String` (JSON array) | — | Returns `DeviceCatalog.getDeviceHistoryJson()`. |
 | `getAutoConnectState()` | — | `String` (JSON object) | — | Returns `DashboardHost.getAutoConnectStateJson()` (`{enabled, available}`) — the snapshot the dashboard renders its auto-connect toggle from. |
 | `setAutoConnectEnabled(enabled)` | `boolean` | void | — | Toggles auto-connect-on-launch. Marshals to the UI thread, then `DashboardHost.setAutoConnectEnabledFromBridge` (persists the pref, may trigger `maybeAutoConnect`/`startObdService`). |
-| `getStorageSummary()` | — | `String` (JSON object) | — | Synchronous; calls `MainActivity.getStorageSummaryJson()`. |
+| `getStorageSummary()` | — | `String` (JSON object) | — | Synchronous overview read; calls `MainActivity.getStorageSummaryJson()`. This is the dashboard-ready payload and intentionally excludes route review, recent routes, charge summary, battery summary, and enhanced-capability detail blocks. |
+| `getStorageDetails()` | — | `String` (JSON object) | — | Synchronous lazy detail read; calls `MainActivity.getStorageDetailsJson()`. Returns `{storageDetails:true, latestReview, latestRoute, recentRoutes, overview, chargeSummary, batterySummary, latestVehicle, enhancedCapabilities, detailedSignalCatalog}` and is requested by the dashboard after the overview renders. |
 | `exportDebugBundle()` | — | `String` (JSON object) | — | Returns `{ok, path}` or `{ok:false, error}` from `DataBackup.exportDebugBundle`. |
 | `shareBackup()` | — | void | — | Launches the share intent via `BackupController.launchShare`. |
 | `shareEncryptedBackup(passphrase)` | `String` | void | `safe(passphrase, 256)` | Launches an encrypted-backup share via `BackupController.launchEncryptedShare`. The passphrase derives the AES key (see `docs/privacy-data-handling.md`); marshalled to the UI thread. |
@@ -115,7 +117,7 @@ receives a **JSON-encoded string** (Android calls `JSONObject.quote(...)` before
 | `setDevices(json)` | `String` (JSON array) | `[{address, name, obdCandidate?}, …]` from `DeviceCatalog.getBondedDevicesJson()` | `MainActivity.publishDeviceList` | `VD.setDevices` (`core.ts`) |
 | `setHistory(json)` | `String` (JSON array) | `[{address, name, lastSeen?, connectCount?, candidate?}, …]` from `DeviceCatalog.getDeviceHistoryJson()` | `MainActivity.publishDeviceList` | `VD.setHistory` (`core.ts`) |
 | `setStatus(json)` | `String` (JSON object) | `{state, detail, blocked, bluetoothReady, lastAddress, lastName}` assembled in `MainActivity.publishStatus` | also broadcast-mirrored from `ObdService.BROADCAST_STATUS` | `VD.setStatus` (`telemetry.ts`) |
-| `setStorage(json)` | `String` (JSON object) | `{sessionCount, sampleCount, eventCount, pidObservationCount, diagnosticCodeCount, locationSampleCount, tripSegmentCount, chargeSessionCount, batterySnapshotCount, cellSnapshotCount, …}` from `ObdLocalStore.getStorageSummary()` | `MainActivity.publishStorageSummary` | `VD.setStorage` (`storage-status.ts`) |
+| `setStorage(json)` | `String` (JSON object) | Overview payload from `ObdLocalStore.getStorageOverviewRecord()` or lazy detail payload from `ObdLocalStore.getStorageDetailsJson()`; detail payloads carry `storageDetails:true` and patch-merge into the existing overview. | `MainActivity.publishStorageSummary`; dashboard also calls `getStorageDetails()` lazily | `VD.setStorage` (`storage-status.ts`) |
 | `setAppState(json)` | `String` (JSON object) | `{app:{version, schemaVersion}, permissions:{bluetooth, bluetoothPermission, bluetoothEnabled, location, notifications}, adapter:{name, address, remembered, connected}, session:{mode, state, detail, sampleCount, sessionMs, backgroundSampleCount, sampleGapCount, maxSampleGapMs}, vehicle:{state, confidence, vinStored}, gps:{state, accuracyM?, ageMs?}, lifecycle:{appForeground, foregroundServiceActive, backgroundSampleCount, sampleGapCount, lastSampleGapMs, maxSampleGapMs}, latestTelemetry:{…}, storage:{…}}` — exact shape in `AppStateJson.build` | `MainActivity.publishAppState` | `VD.setAppState` (`telemetry.ts`) |
 | `updateTelemetry(json)` | `String` (JSON object) | One telemetry sample. Common keys: `source`, `adapter`, `speedKph`, `rpm`, `voltage`, `coolantC`, `loadPct`, `throttlePct`, `soc`, `batteryTemp`, `powerKw`, `vehicleState`, `vehicleStateConfidence`, `latitude`, `longitude`, `accuracyM`, `locationAgeMs`, `appForeground`, `foregroundServiceActive`, `sampleCount`, `sessionMs`, `backgroundSampleCount`, `sampleGapCount`, `lastSampleGapMs`, `maxSampleGapMs`, `updatedAt`. Producer: `ObdService` / `ObdPollingEngine`; consumed via `ObdService.BROADCAST_TELEMETRY` in `MainActivity` | `MainActivity` broadcast receiver | `VD.updateTelemetry` (`telemetry.ts`) |
 
@@ -136,7 +138,7 @@ All `evaluateJavascript` calls funnel through `MainActivity.callDashboard`
 If you add or rename a bridge method:
 
 1. Update both sides:
-   - Dashboard → Android: `VoltBridge.kt` **and** `dashboard-tests/setup/voltbridge.fixture.js`
+   - Dashboard → Android: `VoltBridge*` bridge classes **and** `dashboard-tests/setup/voltbridge.fixture.js`
      (both the `createVoltBridgeFixture` stubs and the `VOLT_BRIDGE_METHODS` frozen list).
    - Android → Dashboard: the `window.VoltTrackerNative` object literal in `actions.ts`
      **and** the `VD.<setter>` implementation in its owning TypeScript file.

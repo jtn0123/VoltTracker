@@ -121,6 +121,11 @@ open class ObdLocalStore(
         observedAtMs: Long,
     ): Long = writer.recordPidObservation(sessionId, observation, observedAtMs)
 
+    open fun recordPidObservations(
+        sessionId: Long,
+        observations: List<JSONObject>,
+    ): Int = writer.recordPidObservations(sessionId, observations)
+
     open override fun recordPidObservation(
         sessionId: Long,
         observedAtMs: Long,
@@ -240,6 +245,11 @@ open class ObdLocalStore(
     open override fun getAdapterHistory(limit: Int): List<AdapterHistoryRecord> = reports.getAdapterHistory(limit)
 
     open override fun getStorageSummaryRecord(): StorageSummaryRecord = reports.storageSummaryRecord(getDatabaseFile())
+
+    open override fun getStorageOverviewRecord(): StorageSummaryRecord =
+        reports.storageOverviewRecord(getDatabaseFile())
+
+    open override fun getStorageDetailsJson(): JSONObject = reports.storageDetailsJson()
 
     open fun getRecentRoutesJson(
         limit: Int,

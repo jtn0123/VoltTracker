@@ -8,27 +8,36 @@ bloating, `verifyDashboardBundleSize` (in `build.gradle`, wired into `check` and
 
 Not all dashboard bytes are equal:
 
-- **Core bundle** — the boot + interactive JS and all CSS. This is loaded up front
-  and is what affects startup time and responsiveness.
+- **Startup bundle** — `js/app.js` and all CSS. This is loaded up front and is
+  what affects startup time and responsiveness.
+- **Lazy support JS** — first-party feature chunks such as Map, Troubleshooter,
+  demo data/streaming, and secondary action groups. These are loaded on demand
+  and stay bounded separately from startup.
 - **DTC reference data** — `js/dtc-lookup.js` and `js/dtc-causes.js`, ~337 KB of
   pure lookup tables. These are **lazy-loaded** via `loadDashboardScript` only when
   a user opens a specific diagnostic code, so they don't touch startup.
 
 A single combined budget let the lazy DTC tables (≈60% of the bytes) dominate the
-number, so the core bundle could creep up unnoticed while the total still looked
-fine — and conversely a one-line copy edit to core could fail CI because the total
-sat 566 bytes under the cap. Splitting fixes both: core gets a tight guard, the DTC
-data gets its own (larger) ceiling, and neither can grow unchecked.
+number, so startup code could creep up unnoticed while the total still looked
+fine — and conversely a one-line copy edit to startup code could fail CI because
+the total sat 566 bytes under the cap. Splitting fixes both: startup gets a tight
+guard, lazy support and DTC data get their own ceilings, and no bucket can grow
+unchecked.
 
 ## Current budgets
 
 | Bucket | Files | Budget | Roughly today |
 |--------|-------|--------|---------------|
-| Core | `js/**/*.js` + `css/**/*.css`, excl. `lib/**` and the DTC data files | **400,000 B** | ~377 KB |
+| Startup | `js/app.js` + `css/**/*.css` | **360,000 B** | ~331 KB |
+| Lazy support JS | first-party lazy JS chunks except DTC data | **90,000 B** | ~66 KB |
 | DTC data | `js/dtc-lookup.js`, `js/dtc-causes.js` | **380,000 B** | ~337 KB |
 
 `lib/**` (vendored Leaflet) is excluded from both — it's third-party code we don't
-own and don't edit.
+own and don't edit. Leaflet JavaScript is also off the startup script path; it is
+loaded by `ensureMapModule()` only when the Map tab needs it.
+
+Use `./gradlew dashboardAssetReport` to print eager JS, lazy JS, CSS, Leaflet
+assets, generated HTML, and the current budget headroom.
 
 ## What loads over `file://`
 
@@ -46,6 +55,7 @@ DTC family (`P04`, `U00`, etc.) before raising the byte budget.
 
 ## Bumping a budget
 
-Raise the relevant constant in `build.gradle` (`dashboardCoreBudgetBytes` /
-`dashboardDtcDataBudgetBytes`) and say why in the commit. Treat the core budget as
-a ratchet you justify, not a number you quietly grow.
+Raise the relevant constant in `build.gradle` (`dashboardStartupBudgetBytes`,
+`dashboardLazySupportBudgetBytes`, or `dashboardDtcDataBudgetBytes`) and say why
+in the commit. Treat the startup budget as a ratchet you justify, not a number
+you quietly grow.

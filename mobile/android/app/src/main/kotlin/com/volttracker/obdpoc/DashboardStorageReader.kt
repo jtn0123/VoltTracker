@@ -10,67 +10,91 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 class DashboardStorageReader(
     private val storeProvider: () -> ObdLocalStore?,
 ) {
-    fun storageSummaryJson(): String {
+    fun storageSummaryJson(): String = storageSummary().serialize()
+
+    internal fun storageSummary(): BridgeJsonResult {
         val store = storeOrUnavailable() ?: return storageUnavailable()
         return try {
-            StorageSummaryJson.build(store.getStorageSummaryRecord()).toString()
+            BridgeJsonResult.obj(StorageSummaryJson.buildOverview(store.getStorageOverviewRecord()))
         } catch (ex: RuntimeException) {
             Log.w(TAG, "getStorageSummary failed", ex)
-            MainActivityUtils.errorPayload("storage_summary_failed", "Could not read local storage summary.").toString()
+            BridgeJsonResult.error("storage_summary_failed", "Could not read local storage summary.")
         }
     }
 
-    fun tripsJson(): String {
+    fun storageDetailsJson(): String = storageDetails().serialize()
+
+    internal fun storageDetails(): BridgeJsonResult {
+        val store = storeOrUnavailable() ?: return storageUnavailable()
+        return try {
+            BridgeJsonResult.obj(store.getStorageDetailsJson())
+        } catch (ex: RuntimeException) {
+            Log.w(TAG, "getStorageDetails failed", ex)
+            BridgeJsonResult.error("storage_details_failed", "Could not read local storage details.")
+        }
+    }
+
+    fun tripsJson(): String = trips().serialize()
+
+    internal fun trips(): BridgeJsonResult {
         val store = storeOrUnavailable() ?: return storageUnavailable()
         return try {
             // Rows come from the trip-list cache (no per-session recomputation) and are
             // small metadata objects, so a deep window is cheap. The map's session list
             // is fed from these beyond the storage summary's few detailed recentRoutes,
             // so this limit decides how many weeks of drives stay reachable there.
-            store.getTripsJson(TRIP_LIST_LIMIT).toString()
+            BridgeJsonResult.array(store.getTripsJson(TRIP_LIST_LIMIT))
         } catch (ex: RuntimeException) {
             Log.w(TAG, "getTripsJson failed", ex)
-            MainActivityUtils.errorPayload("trips_read_failed", "Could not read logged trips.").toString()
+            BridgeJsonResult.error("trips_read_failed", "Could not read logged trips.")
         }
     }
 
-    fun tripRouteJson(routeKey: String?): String {
+    fun tripRouteJson(routeKey: String?): String = tripRoute(routeKey).serialize()
+
+    internal fun tripRoute(routeKey: String?): BridgeJsonResult {
         val store = storeOrUnavailable() ?: return storageUnavailable()
         return try {
-            store.getTripRouteJson(routeKey).toString()
+            BridgeJsonResult.obj(store.getTripRouteJson(routeKey))
         } catch (ex: RuntimeException) {
             Log.w(TAG, "getTripRouteJson failed", ex)
-            MainActivityUtils.errorPayload("trip_route_read_failed", "Could not read the trip route.").toString()
+            BridgeJsonResult.error("trip_route_read_failed", "Could not read the trip route.")
         }
     }
 
-    fun insightsJson(): String {
+    fun insightsJson(): String = insights().serialize()
+
+    internal fun insights(): BridgeJsonResult {
         val store = storeOrUnavailable() ?: return storageUnavailable()
         return try {
-            store.getInsightsJson().toString()
+            BridgeJsonResult.obj(store.getInsightsJson())
         } catch (ex: RuntimeException) {
             Log.w(TAG, "getInsightsJson failed", ex)
-            MainActivityUtils.errorPayload("insights_read_failed", "Could not read vehicle insights.").toString()
+            BridgeJsonResult.error("insights_read_failed", "Could not read vehicle insights.")
         }
     }
 
-    fun currentSessionRouteJson(): String {
+    fun currentSessionRouteJson(): String = currentSessionRoute().serialize()
+
+    internal fun currentSessionRoute(): BridgeJsonResult {
         val store = storeOrUnavailable() ?: return storageUnavailable()
         return try {
-            store.getCurrentSessionRouteJson().toString()
+            BridgeJsonResult.obj(store.getCurrentSessionRouteJson())
         } catch (ex: RuntimeException) {
             Log.w(TAG, "getCurrentSessionRouteJson failed", ex)
-            MainActivityUtils.errorPayload("current_route_read_failed", "Could not read the current route.").toString()
+            BridgeJsonResult.error("current_route_read_failed", "Could not read the current route.")
         }
     }
 
-    fun batterySohHistoryJson(): String {
+    fun batterySohHistoryJson(): String = batterySohHistory().serialize()
+
+    internal fun batterySohHistory(): BridgeJsonResult {
         val store = storeOrUnavailable() ?: return storageUnavailable()
         return try {
-            store.getBatterySohHistoryJson().toString()
+            BridgeJsonResult.array(store.getBatterySohHistoryJson())
         } catch (ex: RuntimeException) {
             Log.w(TAG, "getBatterySohHistoryJson failed", ex)
-            MainActivityUtils.errorPayload("battery_soh_history_failed", "Could not read battery history.").toString()
+            BridgeJsonResult.error("battery_soh_history_failed", "Could not read battery history.")
         }
     }
 
@@ -79,12 +103,11 @@ class DashboardStorageReader(
     // storage_unavailable payload instead of throwing into the bridge.
     private fun storeOrUnavailable(): ObdLocalStore? = storeProvider()?.takeIf { it.isOpen }
 
-    private fun storageUnavailable(): String =
-        MainActivityUtils
-            .errorPayload(
-                "storage_unavailable",
-                "Local storage is not ready yet.",
-            ).toString()
+    private fun storageUnavailable(): BridgeJsonResult =
+        BridgeJsonResult.error(
+            "storage_unavailable",
+            "Local storage is not ready yet.",
+        )
 
     private companion object {
         const val TAG = "DashboardStorageReader"

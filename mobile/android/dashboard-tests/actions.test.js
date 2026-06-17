@@ -304,7 +304,7 @@ describe('actions.ts — bridge dispatch', () => {
   });
 
   it('deleteSignalLog() uses the app dialog before deleting one evidence row', async () => {
-    VD.actions.deleteSignalLog(5);
+    await VD.actions.deleteSignalLog(5);
     expect(appDialog().hidden).toBe(false);
     expect(appDialogMessage()).toMatch(/delete this saved detailed signal/i);
     await clickAppDialogConfirm();
@@ -324,7 +324,7 @@ describe('actions.ts — bridge dispatch', () => {
     });
 
     try {
-      VD.actions.exportSignalLog(5);
+      await VD.actions.exportSignalLog(5);
       await Promise.resolve();
 
       expect(bridge.exportDetailedSignalLog).toHaveBeenCalledWith('5');
@@ -335,7 +335,7 @@ describe('actions.ts — bridge dispatch', () => {
     }
   });
 
-  it('exportSignalLogs() downloads all evidence rows when browser downloads are available', () => {
+  it('exportSignalLogs() downloads all evidence rows when browser downloads are available', async () => {
     const originalCreate = Object.getOwnPropertyDescriptor(window.URL, 'createObjectURL');
     const originalRevoke = Object.getOwnPropertyDescriptor(window.URL, 'revokeObjectURL');
     const createObjectURL = vi.fn(() => 'blob:volt-logs');
@@ -354,7 +354,7 @@ describe('actions.ts — bridge dispatch', () => {
     });
 
     try {
-      VD.actions.exportSignalLogs();
+      await VD.actions.exportSignalLogs();
 
       expect(bridge.exportDetailedSignalLogs).toHaveBeenCalledTimes(1);
       expect(createObjectURL).toHaveBeenCalledTimes(1);
@@ -371,7 +371,7 @@ describe('actions.ts — bridge dispatch', () => {
 
   it('clearStorage() bails when the user cancels the app dialog', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm');
-    VD.actions.clearStorage(button);
+    await VD.actions.clearStorage(button);
     expect(appDialog().hidden).toBe(false);
     await clickAppDialogCancel();
     expect(confirmSpy).not.toHaveBeenCalled();
@@ -379,14 +379,14 @@ describe('actions.ts — bridge dispatch', () => {
   });
 
   it('clearStorage() invokes the bridge after app-dialog confirmation', async () => {
-    VD.actions.clearStorage(button);
+    await VD.actions.clearStorage(button);
     expect(appDialogMessage()).toMatch(/clear local obd sessions/i);
     await clickAppDialogConfirm();
     expect(bridge.clearStoredData).toHaveBeenCalledTimes(1);
   });
 
   it('shareBackup() invokes bridge.shareBackup after app-dialog confirmation', async () => {
-    VD.actions.shareBackup(button);
+    await VD.actions.shareBackup(button);
     expect(appDialogMessage()).toMatch(/plaintext backup/i);
     expect(appDialogMessage()).toMatch(/encrypted backup/i);
     await clickAppDialogConfirm();
@@ -394,7 +394,7 @@ describe('actions.ts — bridge dispatch', () => {
   });
 
   it('shareEncryptedBackup() passes the app-dialog passphrase to the bridge', async () => {
-    VD.actions.shareEncryptedBackup(button);
+    await VD.actions.shareEncryptedBackup(button);
     expect(appDialog().hidden).toBe(false);
     enterAppDialogInput('secret-pass');
     await clickAppDialogConfirm();
@@ -410,22 +410,22 @@ describe('actions.ts — bridge dispatch', () => {
   });
 
   it('shareBackup() cancel path sets a ready status and skips the bridge', async () => {
-    VD.actions.shareBackup(button);
+    await VD.actions.shareBackup(button);
     await clickAppDialogCancel();
     expect(bridge.shareBackup).not.toHaveBeenCalled();
     expect(VD.state.status).toMatchObject({ state: 'ready' });
     expect(VD.state.status.detail).toMatch(/cancel/i);
   });
 
-  it('restoreBackup() invokes bridge.restoreBackup without a pre-pick browser dialog', () => {
+  it('restoreBackup() invokes bridge.restoreBackup without a pre-pick browser dialog', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm');
-    VD.actions.restoreBackup(button);
+    await VD.actions.restoreBackup(button);
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(bridge.restoreBackup).toHaveBeenCalledTimes(1);
   });
 
   it('restoreEncryptedBackup() requires an app-dialog passphrase before picker launch', async () => {
-    VD.actions.restoreEncryptedBackup(button);
+    await VD.actions.restoreEncryptedBackup(button);
     enterAppDialogInput('secret-pass');
     await clickAppDialogConfirm();
     expect(bridge.restoreEncryptedBackup).toHaveBeenCalledWith('secret-pass');

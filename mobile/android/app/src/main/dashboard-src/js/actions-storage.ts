@@ -122,3 +122,6 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
     exportDebugBundle
   };
 }
+
+window.VoltDashboardActionModules = window.VoltDashboardActionModules || {};
+window.VoltDashboardActionModules.createStorageActions = createStorageActions;

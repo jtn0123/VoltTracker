@@ -117,3 +117,6 @@ export function createSignalActions({ VD, bridge }: SignalActionContext) {
 
   return { exportSignalLog, exportSignalLogs, deleteSignalLog };
 }
+
+window.VoltDashboardActionModules = window.VoltDashboardActionModules || {};
+window.VoltDashboardActionModules.createSignalActions = createSignalActions;

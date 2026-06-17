@@ -1,6 +1,5 @@
 package com.volttracker.obdpoc
 
-import android.bluetooth.BluetoothAdapter
 import android.util.Log
 import android.webkit.JavascriptInterface
 
@@ -9,10 +8,11 @@ import android.webkit.JavascriptInterface
  */
 class VoltBridge(
     private val activity: DashboardHost,
-) {
+) : VoltBridgeNotifications(activity) {
     private val connections = VoltBridgeConnections(activity)
     private val dataExports = VoltBridgeDataExports(activity, activity)
     private val diagnostics = VoltBridgeDiagnostics(activity)
+    private val storage = VoltBridgeStorage(activity)
     private val clientErrorRateLimiter = ClientErrorRateLimiter()
 
     @JavascriptInterface
@@ -82,54 +82,10 @@ class VoltBridge(
     }
 
     @JavascriptInterface
-    fun getEventNotificationState(): String = activity.eventNotifications().getEventNotificationStateJson()
+    fun getStorageSummary(): String = storage.getStorageSummary()
 
     @JavascriptInterface
-    fun setChargeCompleteNotify(enabled: Boolean) {
-        // State-mutating entry point: marshal off the WebView JavaBridge thread before touching
-        // Activity-owned settings, mirroring setAutoConnectEnabled. The event-notification toggles
-        // route through the host's eventNotifications() seam (the delegate holds the bodies).
-        activity.runOnUiThread { activity.eventNotifications().setChargeCompleteEnabled(enabled) }
-    }
-
-    @JavascriptInterface
-    fun setNewDtcNotify(enabled: Boolean) {
-        activity.runOnUiThread { activity.eventNotifications().setNewDtcEnabled(enabled) }
-    }
-
-    @JavascriptInterface
-    fun setLowSocNotify(
-        enabled: Boolean,
-        thresholdPct: Double,
-    ) {
-        activity.runOnUiThread { activity.eventNotifications().setLowSocEnabled(enabled, thresholdPct) }
-    }
-
-    @JavascriptInterface
-    fun setHighPackTempNotify(
-        enabled: Boolean,
-        thresholdC: Double,
-    ) {
-        activity.runOnUiThread { activity.eventNotifications().setHighPackTempEnabled(enabled, thresholdC) }
-    }
-
-    @JavascriptInterface
-    fun setChargeTargetSoc(targetPct: Double) {
-        activity.runOnUiThread { activity.eventNotifications().setChargeTargetSoc(targetPct) }
-    }
-
-    @JavascriptInterface
-    fun setAutoScanOnConnect(enabled: Boolean) {
-        activity.runOnUiThread { activity.eventNotifications().setAutoScanOnConnectEnabled(enabled) }
-    }
-
-    @JavascriptInterface
-    fun setMaintenanceDueNotify(enabled: Boolean) {
-        activity.runOnUiThread { activity.eventNotifications().setMaintenanceDueEnabled(enabled) }
-    }
-
-    @JavascriptInterface
-    fun getStorageSummary(): String = activity.getStorageSummaryJson()
+    fun getStorageDetails(): String = storage.getStorageDetails()
 
     @JavascriptInterface
     fun exportDebugBundle(): String = dataExports.exportDebugBundle()
@@ -151,27 +107,27 @@ class VoltBridge(
     fun restoreEncryptedBackup(passphrase: String?) = dataExports.restoreEncryptedBackup(passphrase)
 
     @JavascriptInterface
-    fun getTrips(): String = activity.getTripsJson()
+    fun getTrips(): String = storage.getTrips()
 
     @JavascriptInterface
-    fun getInsights(): String = activity.getInsightsJson()
+    fun getInsights(): String = storage.getInsights()
 
     /**
      * Full route geometry for a logged trip.
      */
     @JavascriptInterface
-    fun getTripRoute(sessionId: String?): String = activity.getTripRouteJson(safe(sessionId, MAX_LABEL_LEN))
+    fun getTripRoute(sessionId: String?): String = storage.getTripRoute(sessionId)
 
     /**
      * Route geometry for the in-progress session, so the dashboard can rehydrate the live track
      * after a mid-drive WebView teardown/recreate. Empty JSON when nothing is recording.
      */
     @JavascriptInterface
-    fun getCurrentSessionRoute(): String = activity.getCurrentSessionRouteJson()
+    fun getCurrentSessionRoute(): String = storage.getCurrentSessionRoute()
 
     /** Battery-health snapshot history (JSON array) for the dashboard's pack-health trend chart. */
     @JavascriptInterface
-    fun getBatterySohHistory(): String = activity.getBatterySohHistoryJson()
+    fun getBatterySohHistory(): String = storage.getBatterySohHistory()
 
     @JavascriptInterface
     fun clearStoredData() {
@@ -305,7 +261,8 @@ class VoltBridge(
         val suffix = if (dropped > 0) " (suppressed $dropped over-rate calls)" else ""
         Log.e(
             AppPrefs.LOG_TAG,
-            "dashboard client error [${safe(label, MAX_LABEL_LEN)}]: ${safe(detail, MAX_DETAIL_LEN)}$suffix",
+            "dashboard client error [${bridgeSafe(label, BRIDGE_MAX_LABEL_LEN)}]: " +
+                "${bridgeSafe(detail, BRIDGE_MAX_DETAIL_LEN)}$suffix",
         )
     }
 
@@ -359,45 +316,5 @@ class VoltBridge(
     @JavascriptInterface
     fun cancelAdapterReadyNotify() {
         diagnostics.cancelAdapterReadyNotify()
-    }
-
-    companion object {
-        internal const val MAX_ADDRESS_LEN = 64
-        internal const val MAX_NAME_LEN = 256
-
-        // General-purpose cap for short identifier-ish bridge inputs (e.g. route keys, session ids,
-        // short labels and numeric id strings). The TRIP-LABEL path does NOT use this — it references
-        // the data layer's ObdTripLabels.MAX_LABEL_LEN so the user-visible label cap is defined once.
-        internal const val MAX_LABEL_LEN = 128
-        internal const val MAX_STAGE_LEN = 32
-        internal const val MAX_DETAIL_LEN = 4096
-        internal const val MAX_DTC_LEN = 16
-        internal const val MAX_PASSPHRASE_LEN = 256
-
-        internal fun safe(
-            value: String?,
-            maxLen: Int,
-        ): String {
-            val trimmed = value?.trim() ?: return ""
-            if (trimmed.length <= maxLen) {
-                return trimmed
-            }
-            var cut = maxLen
-            if (cut > 0 && Character.isHighSurrogate(trimmed[cut - 1])) {
-                cut -= 1
-            }
-            return trimmed.substring(0, cut)
-        }
-
-        internal fun validBluetoothAddress(address: String?): Boolean =
-            address != null && BluetoothAdapter.checkBluetoothAddress(address.trim())
-
-        internal fun parsePositiveId(value: String?): Long =
-            try {
-                val parsed = safe(value, MAX_LABEL_LEN).toLong()
-                if (parsed > 0L) parsed else -1L
-            } catch (ex: RuntimeException) {
-                -1L
-            }
     }
 }

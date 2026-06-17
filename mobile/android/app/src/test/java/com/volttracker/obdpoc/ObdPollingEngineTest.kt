@@ -13,6 +13,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
 import java.io.IOException
 import java.util.Collections
 import java.util.UUID
@@ -102,6 +103,35 @@ class ObdPollingEngineTest {
         )
         // closeSocket runs in the finally block of runBluetoothLoop.
         assertTrue("connection must be closed at session end", fake.closeCalls.get() >= 1)
+    }
+
+    @Test
+    fun firstSampleLatencyIsRecordedInSessionLog() {
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["ATRV"] = "13.8V\r>"
+        fake.responses["010D"] = "41 0D 28\r>"
+        fake.responses["010C"] = "41 0C 0F A0\r>"
+        fake.afterCommand("ATSH7DF") { service.running.set(false) }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        val log = latestObdLogText()
+        assertTrue(
+            "diagnostics log must include durable first-sample timing",
+            log.contains("\"event\":\"first_sample_latency\""),
+        )
+        assertTrue(
+            "first-sample timing must carry total duration",
+            log.contains("\"durationMs\""),
+        )
+        assertTrue(
+            "first-sample timing must keep socket phase timings",
+            log.contains("\"rfcommConnectMs\"") &&
+                log.contains("\"getStreamsMs\"") &&
+                log.contains("\"firstReadMs\""),
+        )
     }
 
     @Test
@@ -746,6 +776,12 @@ class ObdPollingEngineTest {
                 fail("engine worker did not exit within $ENGINE_JOIN_TIMEOUT_MS ms")
             }
         }
+    }
+
+    private fun latestObdLogText(): String {
+        val logDir = File(service.filesDir, "obd-logs")
+        val latest = File(logDir, "latest.txt").readText().trim()
+        return File(logDir, latest).readText()
     }
 
     private companion object {

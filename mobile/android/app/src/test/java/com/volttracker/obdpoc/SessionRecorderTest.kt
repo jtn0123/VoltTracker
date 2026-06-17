@@ -338,6 +338,24 @@ class SessionRecorderTest {
         assertTrue("observedAtMs should be set", obs.observedAtMs > 0L)
     }
 
+    @Test
+    @Throws(InterruptedException::class)
+    fun scanModeBatchesPidObservationsUntilShutdown() {
+        val store = RecordingStore()
+        val recorder = newOpenScanRecorder(store, "sr-pid-batch-test")
+
+        recorder.logCommand("0105", 1_000L, 25L, "41 05 7B")
+        recorder.logCommand("010C", 1_000L, 20L, "41 0C 1A F8")
+        assertEquals("scan observations should wait for the batch flush", 0, store.pidObservationCalls.size)
+
+        recorder.shutdown()
+
+        assertEquals("shutdown must flush the partial scan batch", 2, store.pidObservationCalls.size)
+        assertEquals("0105", store.pidObservationCalls[0].payload!!.optString("command"))
+        assertEquals("010C", store.pidObservationCalls[1].payload!!.optString("command"))
+        assertEquals(1, store.pidBatchCalls.get())
+    }
+
     /**
      * Calling `shutdown()` twice is safe: a second shutdown on an already-terminated executor
      * returns cleanly without throwing. Defends against a service teardown path that may
@@ -534,6 +552,17 @@ class SessionRecorderTest {
         return recorder
     }
 
+    private fun newOpenScanRecorder(
+        store: RecordingStore,
+        dirName: String,
+    ): SessionRecorder {
+        val logsDir = File(System.getProperty("java.io.tmpdir"), dirName)
+        logsDir.mkdirs()
+        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        recorder.openSession(ObdLocalStore.MODE_SCAN, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
+        return recorder
+    }
+
     // ---- fake store ---------------------------------------------------------------
 
     /**
@@ -547,6 +576,7 @@ class SessionRecorderTest {
         val telemetryCalls = ArrayList<RecordedTelemetry>()
         val statusCalls = ArrayList<RecordedStatus>()
         val pidObservationCalls = ArrayList<RecordedPidObservation>()
+        val pidBatchCalls = AtomicInteger()
         val eventCalls = ArrayList<RecordedEvent>()
         val arrivalCounter = AtomicLong()
 
@@ -612,6 +642,25 @@ class SessionRecorderTest {
                 )
             }
             return pidObservationCalls.size.toLong()
+        }
+
+        override fun recordPidObservations(
+            sessionId: Long,
+            observations: List<JSONObject>,
+        ): Int {
+            pidBatchCalls.incrementAndGet()
+            synchronized(pidObservationCalls) {
+                for (observation in observations) {
+                    pidObservationCalls.add(
+                        RecordedPidObservation(
+                            sessionId,
+                            observation,
+                            observation.optLong("observedAtMs", 0L),
+                        ),
+                    )
+                }
+            }
+            return observations.size
         }
 
         override fun finalizeSession(

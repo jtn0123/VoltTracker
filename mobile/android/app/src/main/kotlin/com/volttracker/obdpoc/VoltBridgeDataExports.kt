@@ -19,7 +19,7 @@ internal class VoltBridgeDataExports(
     }
 
     fun shareEncryptedBackup(passphrase: String?) {
-        val cleanPassphrase = VoltBridge.safe(passphrase, VoltBridge.MAX_PASSPHRASE_LEN)
+        val cleanPassphrase = bridgeSafe(passphrase, BRIDGE_MAX_PASSPHRASE_LEN)
         activity.runOnUiThread {
             stateProvider.requireBackupController().launchEncryptedShare(cleanPassphrase)
         }
@@ -30,7 +30,7 @@ internal class VoltBridgeDataExports(
     }
 
     fun restoreEncryptedBackup(passphrase: String?) {
-        val cleanPassphrase = VoltBridge.safe(passphrase, VoltBridge.MAX_PASSPHRASE_LEN)
+        val cleanPassphrase = bridgeSafe(passphrase, BRIDGE_MAX_PASSPHRASE_LEN)
         activity.runOnUiThread {
             stateProvider.requireBackupController().launchEncryptedRestorePicker(cleanPassphrase)
         }
@@ -77,14 +77,14 @@ internal class VoltBridgeDataExports(
     }
 
     fun exportDetailedSignalLog(id: String?): String {
-        val rowId = VoltBridge.parsePositiveId(id)
+        val rowId = parseBridgePositiveId(id)
         // isOpen guard: same teardown-race contract as DashboardStorageReader — a store
         // closed by onDestroy must degrade to an error payload, not throw into the bridge.
         val store = activity.localStore?.takeIf { it.isOpen }
         if (rowId <= 0L || store == null) {
             return errorPayload("invalid_id", "Choose a saved detailed signal log.")
         }
-        return store.getEnhancedCapabilityExportJson(rowId).toString()
+        return BridgeJsonResult.obj(store.getEnhancedCapabilityExportJson(rowId)).serialize()
     }
 
     fun exportDetailedSignalLogs(): String {
@@ -92,7 +92,7 @@ internal class VoltBridgeDataExports(
         if (store == null) {
             return errorPayload("storage_unavailable", "Local storage is not ready.")
         }
-        return store.getEnhancedCapabilitiesExportJson(250).toString()
+        return BridgeJsonResult.obj(store.getEnhancedCapabilitiesExportJson(250)).serialize()
     }
 
     /**
@@ -102,11 +102,11 @@ internal class VoltBridgeDataExports(
      * or a `sessionId:startedAt:endedAt` route key — the store resolves both.
      */
     fun exportTripGpx(routeKeyOrSessionId: String?): String =
-        activity.exportTripFromBridge(VoltBridge.safe(routeKeyOrSessionId, VoltBridge.MAX_LABEL_LEN), "gpx")
+        activity.exportTripFromBridge(bridgeSafe(routeKeyOrSessionId, BRIDGE_MAX_LABEL_LEN), "gpx")
 
     /** Exports the same trip as a CSV sample log. See [exportTripGpx]. */
     fun exportTripCsv(routeKeyOrSessionId: String?): String =
-        activity.exportTripFromBridge(VoltBridge.safe(routeKeyOrSessionId, VoltBridge.MAX_LABEL_LEN), "csv")
+        activity.exportTripFromBridge(bridgeSafe(routeKeyOrSessionId, BRIDGE_MAX_LABEL_LEN), "csv")
 
     /**
      * Bulk all-trips CSV export (M6): every logged trip's GPS samples in one combined CSV with a
@@ -125,10 +125,10 @@ internal class VoltBridgeDataExports(
      * the host's JSON result verbatim.
      */
     fun exportChargeSessionsCsv(pricePerKwh: String?): String =
-        activity.exportTripFromBridge(VoltBridge.safe(pricePerKwh, VoltBridge.MAX_LABEL_LEN), "csv_charges")
+        activity.exportTripFromBridge(bridgeSafe(pricePerKwh, BRIDGE_MAX_LABEL_LEN), "csv_charges")
 
     fun deleteDetailedSignalLog(id: String?) {
-        val rowId = VoltBridge.parsePositiveId(id)
+        val rowId = parseBridgePositiveId(id)
         if (rowId <= 0L) {
             activity.runOnUiThread {
                 activity.publishStatus("blocked", "Choose a saved detailed signal log.", true)
@@ -176,15 +176,10 @@ internal class VoltBridgeDataExports(
     private fun errorPayload(
         error: String,
         message: String,
-    ): String =
-        JSONObject()
-            .put("ok", false)
-            .put("error", error)
-            .put("message", message)
-            .toString()
+    ): String = BridgeJsonResult.error(error, message).serialize()
 
     fun markTripNotTrip(routeKey: String?) {
-        val cleanRouteKey = VoltBridge.safe(routeKey, VoltBridge.MAX_LABEL_LEN)
+        val cleanRouteKey = bridgeSafe(routeKey, BRIDGE_MAX_LABEL_LEN)
         if (cleanRouteKey.isEmpty()) {
             activity.runOnUiThread {
                 activity.publishStatus("blocked", "Choose a stored map trip to mark as not a trip.", true)
@@ -210,7 +205,7 @@ internal class VoltBridgeDataExports(
         routeKey: String?,
         label: String?,
     ) {
-        val cleanRouteKey = VoltBridge.safe(routeKey, VoltBridge.MAX_LABEL_LEN)
+        val cleanRouteKey = bridgeSafe(routeKey, BRIDGE_MAX_LABEL_LEN)
         if (cleanRouteKey.isEmpty()) {
             activity.runOnUiThread {
                 activity.publishStatus("blocked", "Choose a stored trip to rename.", true)
@@ -220,7 +215,7 @@ internal class VoltBridgeDataExports(
         // The label cap is owned by the data layer (ObdTripLabels re-truncates to the same length on
         // store), so reference that single constant rather than a second, larger bridge cap that the
         // storage would silently clip — keeping one cap for the trip-label path.
-        val cleanLabel = VoltBridge.safe(label, ObdTripLabels.MAX_LABEL_LEN)
+        val cleanLabel = bridgeSafe(label, ObdTripLabels.MAX_LABEL_LEN)
         activity.runOnBackground {
             val changed =
                 try {
@@ -254,7 +249,7 @@ internal class VoltBridgeDataExports(
         routeKey: String?,
         favorite: Boolean,
     ) {
-        val cleanRouteKey = VoltBridge.safe(routeKey, VoltBridge.MAX_LABEL_LEN)
+        val cleanRouteKey = bridgeSafe(routeKey, BRIDGE_MAX_LABEL_LEN)
         if (cleanRouteKey.isEmpty()) {
             activity.runOnUiThread {
                 activity.publishStatus("blocked", "Choose a stored trip to favorite.", true)
@@ -293,13 +288,13 @@ internal class VoltBridgeDataExports(
     fun addMaintenanceEntry(json: String?) {
         val parsed =
             try {
-                JSONObject(VoltBridge.safe(json, VoltBridge.MAX_DETAIL_LEN))
+                JSONObject(bridgeSafe(json, BRIDGE_MAX_DETAIL_LEN))
             } catch (ex: org.json.JSONException) {
                 Log.w(MainActivity.TAG, "addMaintenanceEntry: bad JSON", ex)
                 JSONObject()
             }
-        val type = VoltBridge.safe(parsed.optString("type", ""), VoltBridge.MAX_LABEL_LEN)
-        val note = VoltBridge.safe(parsed.optString("note", ""), VoltBridge.MAX_DETAIL_LEN)
+        val type = bridgeSafe(parsed.optString("type", ""), BRIDGE_MAX_LABEL_LEN)
+        val note = bridgeSafe(parsed.optString("note", ""), BRIDGE_MAX_DETAIL_LEN)
         if (type.isEmpty() && note.isEmpty()) {
             activity.runOnUiThread {
                 activity.publishStatus("blocked", "Add a maintenance type or note before saving.", true)
@@ -349,7 +344,7 @@ internal class VoltBridgeDataExports(
             return "[]"
         }
         return try {
-            store.getMaintenanceLogJson(MAX_MAINTENANCE_ROWS).toString()
+            BridgeJsonResult.array(store.getMaintenanceLogJson(MAX_MAINTENANCE_ROWS)).serialize()
         } catch (ex: RuntimeException) {
             Log.w(MainActivity.TAG, "getMaintenanceLog failed", ex)
             "[]"
@@ -358,7 +353,7 @@ internal class VoltBridgeDataExports(
 
     /** Deletes one maintenance-log entry by id (M5), then refreshes the dashboard. */
     fun deleteMaintenanceEntry(id: String?) {
-        val rowId = VoltBridge.parsePositiveId(id)
+        val rowId = parseBridgePositiveId(id)
         if (rowId <= 0L) {
             activity.runOnUiThread {
                 activity.publishStatus("blocked", "Choose a maintenance entry to remove.", true)

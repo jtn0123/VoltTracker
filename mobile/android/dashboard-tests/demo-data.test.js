@@ -123,6 +123,7 @@ describe('dashboard demo data', () => {
     expect(document.getElementById('realPackStats').hidden).toBe(false);
 
     VD.actions.stopDemo();
+    await VD.pendingLazyLoads();
 
     expect(bridge.disconnect).toHaveBeenCalledTimes(1);
     expect(VD.state.demoActive).toBe(false);

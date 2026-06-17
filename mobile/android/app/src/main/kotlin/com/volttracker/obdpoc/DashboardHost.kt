@@ -183,6 +183,8 @@ interface SessionDataReader {
 
     fun getStorageSummaryJson(): String
 
+    fun getStorageDetailsJson(): String
+
     fun getAppStateJson(): String
 
     fun getTripsJson(): String

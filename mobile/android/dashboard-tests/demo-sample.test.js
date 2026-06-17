@@ -67,7 +67,7 @@ describe('demo sample data', () => {
     await loadDashboard({ withBridge: false });
 
     const VD = window.VoltDashboard;
-    VD.actions.runBrowserDemo();
+    await VD.actions.runBrowserDemo();
     try {
       // DemoPollingLoop.kt emits 24.0 + sin(t/8) °C; telemetry.ts renders the
       // field through units.tempText, which converts °C→°F. A Fahrenheit-shaped
@@ -105,12 +105,12 @@ describe('demo sample data', () => {
     expect(VD.state.insights).toEqual({});
   });
 
-  it('keeps the browser demo live GPS in the sample route region', () => {
+  it('keeps the browser demo live GPS in the sample route region', async () => {
     vi.useFakeTimers();
     const livePosition = vi.fn();
     window.VoltDashboard.updateLivePosition = livePosition;
 
-    window.VoltDashboard.actions.runBrowserDemo();
+    await window.VoltDashboard.actions.runBrowserDemo();
     vi.advanceTimersByTime(1000);
 
     expect(livePosition).toHaveBeenCalled();
@@ -121,11 +121,11 @@ describe('demo sample data', () => {
     expect(lng).toBeLessThan(-116.8);
   });
 
-  it('feeds the raw-frame panel with demo ELM327-style responses', () => {
+  it('feeds the raw-frame panel with demo ELM327-style responses', async () => {
     vi.useFakeTimers();
     const VD = window.VoltDashboard;
 
-    VD.actions.runBrowserDemo();
+    await VD.actions.runBrowserDemo();
     VD.flushRender();
 
     const raw = document.getElementById('rawFrames').textContent;

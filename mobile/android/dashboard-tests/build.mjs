@@ -12,8 +12,8 @@
 //
 // - The eager scripts (loaded up front, in dependency order by index.html) bundle
 //   into a single app.js.
-// - The lazy chunks (map / troubleshooter / dtc-lookup / dtc-causes / demo-data, injected on demand by
-//   core.ts) keep their emitted filenames so the existing loadDashboardScript() paths
+// - The lazy chunks (map / troubleshooter / dtc data / demo data / secondary action groups,
+//   injected on demand by core.ts/actions.ts) keep their emitted filenames so the existing loadDashboardScript() paths
 //   resolve unchanged.
 import { build } from "esbuild";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -82,7 +82,16 @@ const EAGER = [
   "connection-tools",
 ];
 
-const LAZY = ["map", "troubleshooter", "dtc-lookup", "dtc-causes", "demo-data"];
+const LAZY = [
+  "map",
+  "troubleshooter",
+  "dtc-lookup",
+  "dtc-causes",
+  "demo-data",
+  "actions-storage",
+  "actions-signals",
+  "actions-demo",
+];
 
 function sourceFor(name) {
   const file = `${SRC}/${name}.ts`;

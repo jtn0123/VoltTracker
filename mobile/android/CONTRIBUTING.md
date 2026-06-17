@@ -18,6 +18,10 @@ npm --prefix dashboard-tests ci
 #     opening or updating a PR.
 ./gradlew verifyActiveApp --configuration-cache
 
+# 1c) PERFORMANCE — dashboard asset report, bundle budget, dashboard tests, and Android
+#     unit/regression tests for storage and route paths.
+./gradlew verifyPerformance --configuration-cache
+
 # 2) Local lint with HTML report
 ./gradlew :app:lintDebug
 # macOS:
@@ -37,6 +41,10 @@ npm --prefix dashboard-tests run lint
 ```
 
 Windows users: substitute `.\gradlew.bat` for `./gradlew` and use PowerShell.
+
+Run `./gradlew doctor` or `./scripts/doctor.sh` when a local shell does not
+match CI. Dashboard tooling requires Node 22; use the repo-root `.nvmrc` or
+`.node-version`.
 
 ## Build JDK
 
@@ -83,6 +91,9 @@ Tests read the **source** (`dashboard-src/js/`): Vitest/ESLint/`tsc` all point t
 so you don't need to rebuild to run them. Playwright e2e serves the real `index.html`
 (→ the built `app.js`), so it builds the bundle first. CI runs `verifyGeneratedDashboardClean`
 (index.html freshness) and `verifyDashboardBundleSize` (against the built bundle).
+Run `./gradlew dashboardAssetReport` before reviewing loading-sensitive dashboard
+changes; it prints eager JS, lazy JS, CSS, Leaflet assets, generated HTML, and
+budget headroom.
 
 ## Pre-commit hooks
 
@@ -169,10 +180,13 @@ for the full rule, and the ADRs in [`docs/adr/`](docs/adr/) for the load-bearing
 design decisions.
 
 Historical audit reports and dependency snapshots are indexed in
-[`docs/reports-index.md`](docs/reports-index.md). Privacy/data-handling behavior
-is summarized in [`docs/privacy-data-handling.md`](docs/privacy-data-handling.md).
-Release packaging lives in [`docs/release.md`](docs/release.md), and shared
-domain language lives in [`docs/glossary.md`](docs/glossary.md).
+[`docs/reports-index.md`](docs/reports-index.md). Performance contracts live in
+[`docs/performance-contracts.md`](docs/performance-contracts.md), dependency
+policy lives in [`docs/dependencies.md`](docs/dependencies.md),
+privacy/data-handling behavior is summarized in
+[`docs/privacy-data-handling.md`](docs/privacy-data-handling.md), release
+packaging lives in [`docs/release.md`](docs/release.md), and shared domain
+language lives in [`docs/glossary.md`](docs/glossary.md).
 
 ## Coverage floors
 

@@ -12,10 +12,10 @@ internal class VoltBridgeDiagnostics(
 ) {
     fun clearVehicleDtcCodes() {
         val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
-        val address = VoltBridge.safe(device.optString("address", ""), VoltBridge.MAX_ADDRESS_LEN)
-        val name = VoltBridge.safe(device.optString("name", ""), VoltBridge.MAX_NAME_LEN)
+        val address = bridgeSafe(device.optString("address", ""), BRIDGE_MAX_ADDRESS_LEN)
+        val name = bridgeSafe(device.optString("name", ""), BRIDGE_MAX_NAME_LEN)
         activity.runOnUiThread {
-            if (!VoltBridge.validBluetoothAddress(address)) {
+            if (!validBridgeBluetoothAddress(address)) {
                 activity.publishStatus("blocked", "No remembered adapter yet. Connect once to save it.", true)
                 return@runOnUiThread
             }
@@ -31,7 +31,7 @@ internal class VoltBridgeDiagnostics(
     }
 
     fun openExternalSearch(dtc: String?) {
-        val code = VoltBridge.safe(dtc, VoltBridge.MAX_DTC_LEN)
+        val code = bridgeSafe(dtc, BRIDGE_MAX_DTC_LEN)
         if (code.isEmpty()) return
         activity.runOnUiThread {
             try {
@@ -51,7 +51,7 @@ internal class VoltBridgeDiagnostics(
         // Normalize once: the allowlist is lower-cased, and the confirm dialog, the
         // force-stop call, and the status messages must all use the validated form
         // rather than the caller's mixed-case spelling.
-        val pkg = VoltBridge.safe(packageName, VoltBridge.MAX_NAME_LEN).lowercase(Locale.US)
+        val pkg = bridgeSafe(packageName, BRIDGE_MAX_NAME_LEN).lowercase(Locale.US)
         // Validate against the known-OBD-app allowlist BEFORE showing the confirmation dialog:
         // dashboard JS must not be able to put an arbitrary package name in front of the user.
         if (pkg.isEmpty() || !CompetingAppDetector.KNOWN_OBD_PACKAGES.contains(pkg)) {

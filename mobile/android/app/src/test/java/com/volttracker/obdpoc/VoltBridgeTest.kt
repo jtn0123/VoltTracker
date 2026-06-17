@@ -142,6 +142,7 @@ class VoltBridgeTest {
             "getLastDevice",
             "getDeviceHistory",
             "getStorageSummary",
+            "getStorageDetails",
             "exportDebugBundle",
             "exportDetailedSignalLogs",
             "getTrips",
@@ -329,6 +330,7 @@ class VoltBridgeTest {
                 // M2 maintenance-overdue alert toggle.
                 "setMaintenanceDueNotify",
                 "getStorageSummary",
+                "getStorageDetails",
                 "exportDebugBundle",
                 "shareBackup",
                 "shareEncryptedBackup",

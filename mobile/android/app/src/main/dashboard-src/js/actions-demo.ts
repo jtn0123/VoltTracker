@@ -93,3 +93,6 @@ export function runBrowserDemoStream(
   emitSample();
   window.__voltDemoTimer = window.setInterval(emitSample, 1000);
 }
+
+window.VoltDashboardActionModules = window.VoltDashboardActionModules || {};
+window.VoltDashboardActionModules.runBrowserDemoStream = runBrowserDemoStream;

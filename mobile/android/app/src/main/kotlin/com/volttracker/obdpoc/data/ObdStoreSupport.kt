@@ -336,8 +336,6 @@ object ObdStoreSupport {
     @JvmStatic
     fun boundedLimit(limit: Int): String = maxOf(1, minOf(limit, 500)).toString()
 
-    private const val DEFAULT_SESSION_READ_LIMIT = 500
-
     private val SESSION_COLUMNS =
         arrayOf(
             "_id",
@@ -539,8 +537,24 @@ object ObdStoreSupport {
     ): List<ObdSessionRecord> = getSessions(db, boundedLimit(limit))
 
     @JvmStatic
-    fun getAllSessions(db: SQLiteDatabase): List<ObdSessionRecord> =
-        getSessions(db, boundedLimit(DEFAULT_SESSION_READ_LIMIT))
+    fun getObdSessionsWithUsefulTelemetry(db: SQLiteDatabase): List<ObdSessionRecord> {
+        val projection = SESSION_COLUMNS.joinToString(", ") { "s.$it" }
+        val records = ArrayList<ObdSessionRecord>()
+        db
+            .rawQuery(
+                "SELECT $projection FROM ${VoltTrackerDb.TABLE_SESSIONS} s " +
+                    "WHERE s.mode = ? AND EXISTS (" +
+                    "SELECT 1 FROM ${VoltTrackerDb.TABLE_TELEMETRY} t " +
+                    "WHERE t.session_id = s._id AND $USEFUL_TELEMETRY_WHERE LIMIT 1" +
+                    ") ORDER BY s.started_at_ms ASC",
+                arrayOf(ObdLocalStore.MODE_OBD),
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    records.add(readSession(cursor))
+                }
+            }
+        return records
+    }
 
     private fun getSessions(
         db: SQLiteDatabase,

@@ -185,12 +185,13 @@ interface VoltSessionReview {
   [key: string]: unknown;
 }
 
-/** The storage-summary payload (StorageSummaryJson.build + putLatestSession).
+/** The storage payload (StorageSummaryJson.buildOverview plus lazy storageDetails).
  *  Surfaced via VD.setStorage and stashed on state.storage. Nested blocks
  *  (overview/batterySummary) are read field-by-field, so they stay open records. */
 interface VoltStorageSummary {
   error?: string;
   message?: string;
+  storageDetails?: boolean;
   database?: string;
   databaseBytes?: number;
   sessionCount?: number;
@@ -692,6 +693,7 @@ interface VoltRestoreProgress {
     setDemoActive(active: boolean, detail?: string): void;
     clearDemoTelemetry(): void;
     ensureDemoData(callback?: (error: Error | null, data: VoltDashboard["data"]) => void): void;
+    loadDashboardScript(src: string): Promise<unknown>;
     ensureDtcData(): Promise<VoltDashboard>;
     /** Harness seam: settles when in-flight lazy-chunk loads have run their handlers. */
     pendingLazyLoads(): Promise<unknown[]>;
@@ -845,6 +847,7 @@ interface VoltRestoreProgress {
     getAutoConnectState(): string;
     getEventNotificationState(): string;
     getStorageSummary(): string;
+    getStorageDetails(): string;
     exportDebugBundle(): string;
     getTrips(): string;
     getInsights(): string;
@@ -922,6 +925,23 @@ interface VoltRestoreProgress {
     __VoltDashboardLoadScript?: (src: string) => unknown;
     /** Demo telemetry fixture factory (demo-data.ts source, shipped as demo-data.js). */
     VoltDashboardDemoData?: (() => any) | any;
+    /** Leaflet runtime global, loaded lazily before map.js. */
+    L?: {
+      map?: (...args: any[]) => any;
+    };
+    /** Lazy action-module registry populated by actions-*.js chunks. */
+    VoltDashboardActionModules?: {
+      createStorageActions?: (context: {
+        VD: VoltDashboard;
+        bridge: VoltBridge | null;
+        withBusy: <T>(button: (HTMLElement & { disabled?: boolean }) | null | undefined, fn: () => T) => T | undefined;
+      }) => Record<string, (...args: any[]) => any>;
+      createSignalActions?: (context: {
+        VD: VoltDashboard;
+        bridge: VoltBridge | null;
+      }) => Record<string, (...args: any[]) => any>;
+      runBrowserDemoStream?: (dashboard: VoltDashboard, state: DashboardState) => void;
+    };
     /** Interval handle for the demo-preview ticker (actions.ts). */
     __voltDemoTimer?: ReturnType<typeof setInterval> | null;
   }

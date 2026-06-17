@@ -1,14 +1,30 @@
-import { runBrowserDemoStream } from "./actions-demo";
 import { confirmAppDialog } from "./app-dialog";
 import { bindPageDragScroll } from "./actions-page-scroll";
-import { createSignalActions } from "./actions-signals";
-import { createStorageActions } from "./actions-storage";
-import type { BusyButton } from "./actions-storage";
 import { bindListenerGuarded, el } from "./core";
 import { setDataState } from "./dataset-state";
 import type { DataStateValue } from "./dataset-state";
 import { createFocusTrap } from "./focus-trap";
 import type { FocusTrap } from "./focus-trap";
+
+type BusyButton = HTMLElement & {
+  disabled?: boolean;
+};
+
+type StorageActions = {
+  refreshStorage(): void;
+  clearStorage(button?: BusyButton | null): void;
+  shareBackup(button?: BusyButton | null): void;
+  shareEncryptedBackup(button?: BusyButton | null): void;
+  restoreBackup(button?: BusyButton | null): void;
+  restoreEncryptedBackup(button?: BusyButton | null): void;
+  exportDebugBundle(): void;
+};
+
+type SignalActions = {
+  exportSignalLog(id: unknown): void;
+  exportSignalLogs(): void;
+  deleteSignalLog(id: unknown): void;
+};
 
 /*
  * actions.ts — wiring + lifecycle.
@@ -78,21 +94,161 @@ import type { FocusTrap } from "./focus-trap";
     }
   }
 
-  const {
-    refreshStorage,
-    clearStorage,
-    shareBackup,
-    shareEncryptedBackup,
-    restoreBackup,
-    restoreEncryptedBackup,
-    exportDebugBundle
-  } = createStorageActions({ VD, bridge, withBusy });
+  const pendingActionLoads = new Set<Promise<unknown>>();
+  let storageActions: StorageActions | null = null;
+  let storageActionsPromise: Promise<StorageActions> | null = null;
+  let signalActions: SignalActions | null = null;
+  let signalActionsPromise: Promise<SignalActions> | null = null;
+  let demoActionsPromise: Promise<(dashboard: VoltDashboard, dashboardState: DashboardState) => void> | null = null;
 
-  const {
-    exportSignalLog,
-    exportSignalLogs,
-    deleteSignalLog
-  } = createSignalActions({ VD, bridge });
+  function loadActionScript<T>(
+    src: string,
+    label: string,
+    resolveModule: () => T | null
+  ): Promise<T> {
+    const existing = resolveModule();
+    if (existing) return Promise.resolve(existing);
+    if (typeof VD.loadDashboardScript !== "function") {
+      return Promise.reject(new Error("Dashboard script loader is not available."));
+    }
+    const load = VD.loadDashboardScript(src)
+      .then(() => {
+        const loaded = resolveModule();
+        if (!loaded) throw new Error(label + " loaded but did not register.");
+        return loaded;
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err || "unknown error");
+        if (typeof VD.reportClientError === "function") VD.reportClientError(label + ".load", message);
+        if (typeof VD.setStatus === "function") {
+          VD.setStatus({ state: "blocked", detail: "Dashboard action module failed to load." });
+        }
+        throw err;
+      });
+    pendingActionLoads.add(load);
+    load.finally(() => pendingActionLoads.delete(load)).catch(() => {});
+    return load;
+  }
+
+  function ensureStorageActions(): Promise<StorageActions> {
+    if (storageActions) return Promise.resolve(storageActions);
+    if (!storageActionsPromise) {
+      storageActionsPromise = loadActionScript(
+        "js/actions-storage.js",
+        "actions-storage",
+        () => {
+          const factory = window.VoltDashboardActionModules?.createStorageActions;
+          if (typeof factory !== "function") return null;
+          storageActions = factory({ VD, bridge, withBusy }) as StorageActions;
+          return storageActions;
+        }
+      ).catch((err) => {
+        storageActionsPromise = null;
+        throw err;
+      });
+    }
+    return storageActionsPromise;
+  }
+
+  function ensureSignalActions(): Promise<SignalActions> {
+    if (signalActions) return Promise.resolve(signalActions);
+    if (!signalActionsPromise) {
+      signalActionsPromise = loadActionScript(
+        "js/actions-signals.js",
+        "actions-signals",
+        () => {
+          const factory = window.VoltDashboardActionModules?.createSignalActions;
+          if (typeof factory !== "function") return null;
+          signalActions = factory({ VD, bridge }) as SignalActions;
+          return signalActions;
+        }
+      ).catch((err) => {
+        signalActionsPromise = null;
+        throw err;
+      });
+    }
+    return signalActionsPromise;
+  }
+
+  function ensureBrowserDemoStream(): Promise<(dashboard: VoltDashboard, dashboardState: DashboardState) => void> {
+    const loaded = window.VoltDashboardActionModules?.runBrowserDemoStream;
+    if (typeof loaded === "function") return Promise.resolve(loaded);
+    if (!demoActionsPromise) {
+      demoActionsPromise = loadActionScript(
+        "js/actions-demo.js",
+        "actions-demo",
+        () => {
+          const run = window.VoltDashboardActionModules?.runBrowserDemoStream;
+          return typeof run === "function" ? run : null;
+        }
+      ).catch((err) => {
+        demoActionsPromise = null;
+        throw err;
+      });
+    }
+    return demoActionsPromise;
+  }
+
+  const priorPendingLazyLoads = VD.pendingLazyLoads;
+  VD.pendingLazyLoads = function pendingLazyLoadsWithActions() {
+    const core = typeof priorPendingLazyLoads === "function" ? priorPendingLazyLoads() : Promise.resolve([]);
+    const actions = Array.from(pendingActionLoads, (promise) => promise.catch(() => undefined));
+    return Promise.all([core, Promise.all(actions)]).then(([coreResults, actionResults]) =>
+      ([] as unknown[]).concat(coreResults || [], actionResults || [])
+    );
+  };
+
+  function withStorageActions(run: (actions: StorageActions) => void): Promise<void> {
+    return ensureStorageActions().then((actions) => {
+      run(actions);
+    }).catch(() => {});
+  }
+
+  function withSignalActions(run: (actions: SignalActions) => void): Promise<void> {
+    return ensureSignalActions().then((actions) => {
+      run(actions);
+    }).catch(() => {});
+  }
+
+  function refreshStorage(): Promise<void> {
+    return withStorageActions((actions) => actions.refreshStorage());
+  }
+
+  function clearStorage(button?: BusyButton | null): Promise<void> {
+    return withStorageActions((actions) => actions.clearStorage(button));
+  }
+
+  function shareBackup(button?: BusyButton | null): Promise<void> {
+    return withStorageActions((actions) => actions.shareBackup(button));
+  }
+
+  function shareEncryptedBackup(button?: BusyButton | null): Promise<void> {
+    return withStorageActions((actions) => actions.shareEncryptedBackup(button));
+  }
+
+  function restoreBackup(button?: BusyButton | null): Promise<void> {
+    return withStorageActions((actions) => actions.restoreBackup(button));
+  }
+
+  function restoreEncryptedBackup(button?: BusyButton | null): Promise<void> {
+    return withStorageActions((actions) => actions.restoreEncryptedBackup(button));
+  }
+
+  function exportDebugBundle(): Promise<void> {
+    return withStorageActions((actions) => actions.exportDebugBundle());
+  }
+
+  function exportSignalLog(id: unknown): Promise<void> {
+    return withSignalActions((actions) => actions.exportSignalLog(id));
+  }
+
+  function exportSignalLogs(): Promise<void> {
+    return withSignalActions((actions) => actions.exportSignalLogs());
+  }
+
+  function deleteSignalLog(id: unknown): Promise<void> {
+    return withSignalActions((actions) => actions.deleteSignalLog(id));
+  }
 
   function refreshDevices() {
     if (!bridge) {
@@ -269,13 +425,13 @@ import type { FocusTrap } from "./focus-trap";
     switch (action) {
       case "permissions": bridge && VD.callBridge("requestPermissions"); return;
       case "refresh": bridge && VD.callBridge("refreshDevices"); return;
-      case "refreshStorage": refreshStorage(); return;
-      case "clearStorage": clearStorage(button); return;
-      case "exportDebug": exportDebugBundle(); return;
-      case "backup": shareBackup(button); return;
-      case "backupEncrypted": shareEncryptedBackup(button); return;
-      case "restore": restoreBackup(button); return;
-      case "restoreEncrypted": restoreEncryptedBackup(button); return;
+      case "refreshStorage": void refreshStorage(); return;
+      case "clearStorage": void clearStorage(button); return;
+      case "exportDebug": void exportDebugBundle(); return;
+      case "backup": void shareBackup(button); return;
+      case "backupEncrypted": void shareEncryptedBackup(button); return;
+      case "restore": void restoreBackup(button); return;
+      case "restoreEncrypted": void restoreEncryptedBackup(button); return;
       case "last": connectLastAdapter(button); return;
       case "scan": connectSelected(true, button); return;
       case "tpmsScan": tpmsScanSelected(button); return;
@@ -841,7 +997,7 @@ import type { FocusTrap } from "./focus-trap";
       // bridge object may lack demo(), and callBridge would then no-op while the
       // UI claims the demo is running. Fall back to the browser demo instead.
       if (bridge && typeof bridge.demo === "function") VD.callBridge("demo");
-      else runBrowserDemo();
+      else void runBrowserDemo();
     });
   }
 
@@ -903,7 +1059,7 @@ import type { FocusTrap } from "./focus-trap";
       VD.renderInsightStats();
       return;
     }
-    refreshStorage();
+    void refreshStorage();
     if (typeof VD.loadTrips === "function") VD.loadTrips();
     if (typeof VD.loadInsights === "function") VD.loadInsights();
     if (typeof VD.renderRealV2Ui === "function") VD.renderRealV2Ui();
@@ -944,8 +1100,10 @@ import type { FocusTrap } from "./focus-trap";
     VD.setStatus({ state: "idle", detail: "Stopped." });
   }
 
-  function runBrowserDemo() {
-    runBrowserDemoStream(VD, state);
+  function runBrowserDemo(): Promise<void> {
+    return ensureBrowserDemoStream().then((stream) => {
+      stream(VD, state);
+    }).catch(() => {});
   }
 
   function bindListeners() {
@@ -1098,12 +1256,12 @@ import type { FocusTrap } from "./focus-trap";
       const target = event.target as Element | null;
       const signalExport = target && target.closest("[data-signal-export]");
       if (signalExport) {
-        exportSignalLog((signalExport as HTMLElement).dataset.signalExport);
+        void exportSignalLog((signalExport as HTMLElement).dataset.signalExport);
         return;
       }
       const signalDelete = target && target.closest("[data-signal-delete]");
       if (signalDelete) {
-        deleteSignalLog((signalDelete as HTMLElement).dataset.signalDelete);
+        void deleteSignalLog((signalDelete as HTMLElement).dataset.signalDelete);
         return;
       }
     }, opts);
@@ -1112,7 +1270,7 @@ import type { FocusTrap } from "./focus-trap";
     bindListenerGuarded("lastBtn", "click", () => handleAction("last"), opts);
     bindListenerGuarded("scanBtn", "click", (event) => handleAction("scan", event.currentTarget as BusyButton), opts);
     bindListenerGuarded("tpmsScanBtn", "click", (event) => handleAction("tpmsScan", event.currentTarget as BusyButton), opts);
-    bindListenerGuarded("exportSignalLogsBtn", "click", exportSignalLogs, opts);
+    bindListenerGuarded("exportSignalLogsBtn", "click", () => { void exportSignalLogs(); }, opts);
     bindListenerGuarded("connectBtn", "click", (event) => {
       const btn = el("connectBtn");
       const action = (btn && btn.dataset.primaryAction) || "connect";
@@ -1253,7 +1411,7 @@ import type { FocusTrap } from "./focus-trap";
     // Guarded like the other VD.* cross-module calls: this runs a frame after the
     // dashboardReady handshake, so a bootstrap context missing a loader must not
     // throw asynchronously and destabilize startup.
-    refreshStorage();
+    void refreshStorage();
     if (typeof VD.loadTrips === "function") VD.loadTrips();
     if (typeof VD.loadInsights === "function") VD.loadInsights();
   };

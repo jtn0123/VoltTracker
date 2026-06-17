@@ -262,6 +262,46 @@ class ObdStoreWriter(
         return id
     }
 
+    fun recordPidObservations(
+        sessionId: Long,
+        observations: List<JSONObject>,
+    ): Int {
+        if (observations.isEmpty()) {
+            return 0
+        }
+        val db = helper.writableDatabase
+        var inserted = 0
+        db.transaction {
+            val adapterKey = adapterKeyForSession(db, sessionId)
+            val capabilities = LinkedHashMap<CapabilityKey, CapabilityAccumulator>()
+            var latestObservedAtMs = 0L
+            for (observation in observations) {
+                val observedAtMs =
+                    ObdStoreSupport.optTimestamp(
+                        observation,
+                        "observedAtMs",
+                        ObdStoreSupport.optTimestamp(
+                            observation,
+                            "observedAt",
+                            observation.optLong("updatedAt", System.currentTimeMillis()),
+                        ),
+                    )
+                val values = snapshots.pidObservationValues(sessionId, observation, observedAtMs)
+                db.insertOrThrow(VoltTrackerDb.TABLE_PID_OBSERVATIONS, null, values)
+                inserted += 1
+                if (observedAtMs > latestObservedAtMs) {
+                    latestObservedAtMs = observedAtMs
+                }
+                collectFieldCapability(adapterKey, observation, observedAtMs, capabilities)
+            }
+            upsertFieldCapabilities(db, adapterKey, capabilities)
+            if (latestObservedAtMs > 0L) {
+                ObdStoreSupport.updateSessionLastEvent(db, sessionId, latestObservedAtMs)
+            }
+        }
+        return inserted
+    }
+
     fun recordPidObservation(
         sessionId: Long,
         observedAtMs: Long,
@@ -348,6 +388,113 @@ class ObdStoreWriter(
             return
         }
         db.insertOrThrow(VoltTrackerDb.TABLE_FIELD_CAPABILITIES, null, values)
+    }
+
+    private fun collectFieldCapability(
+        adapterKey: String,
+        observation: JSONObject,
+        observedAtMs: Long,
+        capabilities: MutableMap<CapabilityKey, CapabilityAccumulator>,
+    ) {
+        val command = ObdStoreSupport.clean(observation.optString("command", ""))
+        val header = ObdStoreSupport.clean(observation.optString("header", ""))
+        val profile = EnhancedPidProfiles.find(header, command) ?: return
+        val pid = ObdStoreSupport.clean(observation.optString("pid", profile.pid))
+        val protocol = ObdStoreSupport.clean(profile.protocol)
+        val rawResponse = ObdStoreSupport.clean(observation.optString("rawResponse", ""))
+        val positive = EnhancedPidProfiles.isPositiveResponse(command, rawResponse)
+        val key = CapabilityKey(adapterKey, protocol, header, command, pid)
+        val accumulator =
+            capabilities.getOrPut(key) {
+                CapabilityAccumulator(key, profile)
+            }
+        accumulator.add(observation, observedAtMs, positive)
+    }
+
+    private fun upsertFieldCapabilities(
+        db: SQLiteDatabase,
+        adapterKey: String,
+        capabilities: Map<CapabilityKey, CapabilityAccumulator>,
+    ) {
+        if (capabilities.isEmpty()) {
+            return
+        }
+        val existing = existingCapabilitiesForAdapter(db, adapterKey)
+        for ((key, accumulator) in capabilities) {
+            val row = existing[key]
+            val firstSeenMs = row?.firstSeenMs ?: accumulator.firstSeenMs
+            val nextResponseCount = (row?.responseCount ?: 0L) + accumulator.positiveCount
+            val values = ContentValues()
+            values.put("adapter_key", key.adapterKey)
+            values.put("protocol", key.protocol)
+            values.put("header", key.header)
+            values.put("command", key.command)
+            values.put("pid", key.pid)
+            values.put("name", ObdStoreSupport.clean(accumulator.profile.name))
+            values.put("unit", ObdStoreSupport.clean(accumulator.profile.unit))
+            values.put("supported", if (nextResponseCount > 0L) 1 else 0)
+            values.put("response_count", nextResponseCount)
+            values.put("first_seen_ms", firstSeenMs)
+            values.put("last_seen_ms", accumulator.lastSeenMs)
+            values.put(
+                "sample_json",
+                capabilitySampleJson(
+                    accumulator.profile,
+                    accumulator.latestObservation ?: JSONObject(),
+                    accumulator.latestPositive,
+                ).toString(),
+            )
+
+            if (row != null) {
+                db.update(VoltTrackerDb.TABLE_FIELD_CAPABILITIES, values, "_id = ?", arrayOf(row.id.toString()))
+            } else {
+                db.insertOrThrow(VoltTrackerDb.TABLE_FIELD_CAPABILITIES, null, values)
+            }
+        }
+    }
+
+    private fun existingCapabilitiesForAdapter(
+        db: SQLiteDatabase,
+        adapterKey: String,
+    ): Map<CapabilityKey, ExistingCapability> {
+        val rows = HashMap<CapabilityKey, ExistingCapability>()
+        db
+            .query(
+                VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
+                arrayOf(
+                    "_id",
+                    "adapter_key",
+                    "protocol",
+                    "header",
+                    "command",
+                    "pid",
+                    "first_seen_ms",
+                    "response_count",
+                ),
+                "adapter_key = ?",
+                arrayOf(adapterKey),
+                null,
+                null,
+                null,
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val key =
+                        CapabilityKey(
+                            cursor.getString(cursor.getColumnIndexOrThrow("adapter_key")),
+                            cursor.getString(cursor.getColumnIndexOrThrow("protocol")),
+                            cursor.getString(cursor.getColumnIndexOrThrow("header")),
+                            cursor.getString(cursor.getColumnIndexOrThrow("command")),
+                            cursor.getString(cursor.getColumnIndexOrThrow("pid")),
+                        )
+                    rows[key] =
+                        ExistingCapability(
+                            cursor.getLong(cursor.getColumnIndexOrThrow("_id")),
+                            cursor.getLong(cursor.getColumnIndexOrThrow("first_seen_ms")),
+                            cursor.getLong(cursor.getColumnIndexOrThrow("response_count")),
+                        )
+                }
+            }
+        return rows
     }
 
     fun recordDiagnosticCode(
@@ -680,6 +827,54 @@ class ObdStoreWriter(
         statementCache.close()
         synchronized(adapterKeyCache) {
             adapterKeyCache.clear()
+        }
+    }
+
+    private data class CapabilityKey(
+        val adapterKey: String,
+        val protocol: String,
+        val header: String,
+        val command: String,
+        val pid: String,
+    )
+
+    private data class ExistingCapability(
+        val id: Long,
+        val firstSeenMs: Long,
+        val responseCount: Long,
+    )
+
+    private class CapabilityAccumulator(
+        val key: CapabilityKey,
+        val profile: EnhancedPidProfile,
+    ) {
+        var firstSeenMs: Long = Long.MAX_VALUE
+            private set
+        var lastSeenMs: Long = 0L
+            private set
+        var positiveCount: Long = 0L
+            private set
+        var latestObservation: JSONObject? = null
+            private set
+        var latestPositive: Boolean = false
+            private set
+
+        fun add(
+            observation: JSONObject,
+            observedAtMs: Long,
+            positive: Boolean,
+        ) {
+            if (observedAtMs < firstSeenMs) {
+                firstSeenMs = observedAtMs
+            }
+            if (observedAtMs >= lastSeenMs) {
+                lastSeenMs = observedAtMs
+                latestObservation = observation
+                latestPositive = positive
+            }
+            if (positive) {
+                positiveCount += 1L
+            }
         }
     }
 

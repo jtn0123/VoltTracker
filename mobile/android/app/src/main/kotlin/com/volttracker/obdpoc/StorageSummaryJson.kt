@@ -10,7 +10,15 @@ import org.json.JSONObject
 
 object StorageSummaryJson {
     @JvmStatic
-    fun build(record: StorageSummaryRecord?): JSONObject {
+    fun build(record: StorageSummaryRecord?): JSONObject = build(record, includeDetails = true)
+
+    @JvmStatic
+    fun buildOverview(record: StorageSummaryRecord?): JSONObject = build(record, includeDetails = false)
+
+    private fun build(
+        record: StorageSummaryRecord?,
+        includeDetails: Boolean,
+    ): JSONObject {
         val payload = JSONObject()
         if (record == null) {
             return payload
@@ -39,15 +47,17 @@ object StorageSummaryJson {
             payload.put("recentSessions", recentSessionsJson(record))
             payload.put("adapters", adapterHistoryJson(record))
             payload.put("latestDiagnosticCodes", diagnosticCodesJson(record))
-            payload.put("latestReview", copy(record.latestReview))
-            payload.put("latestRoute", copy(record.latestRoute))
-            payload.put("recentRoutes", copy(record.recentRoutes))
-            payload.put("overview", copy(record.overview))
-            payload.put("chargeSummary", copy(record.chargeSummary))
-            payload.put("batterySummary", copy(record.batterySummary))
             payload.put("latestVehicle", copy(record.latestVehicle))
-            payload.put("enhancedCapabilities", copy(record.enhancedCapabilities))
-            payload.put("detailedSignalCatalog", EnhancedPidProfiles.catalogJson())
+            if (includeDetails) {
+                payload.put("latestReview", copy(record.latestReview))
+                payload.put("latestRoute", copy(record.latestRoute))
+                payload.put("recentRoutes", copy(record.recentRoutes))
+                payload.put("overview", copy(record.overview))
+                payload.put("chargeSummary", copy(record.chargeSummary))
+                payload.put("batterySummary", copy(record.batterySummary))
+                payload.put("enhancedCapabilities", copy(record.enhancedCapabilities))
+                payload.put("detailedSignalCatalog", EnhancedPidProfiles.catalogJson())
+            }
         } catch (_: JSONException) {
             // Static keys and already-normalized local values are safe.
         }

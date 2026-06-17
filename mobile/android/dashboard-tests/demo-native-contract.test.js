@@ -83,8 +83,9 @@ const dtcSource = readNativeSource('data/DiagnosticCodeReport.kt');
 // state.storage top level = the keys build() puts directly, plus the flattened
 // "last*" keys putLatestSession() merges onto the same payload object.
 const NATIVE_STORAGE = union(
-  putKeys(methodBody(storageSource, ['JSONObject build(StorageSummaryRecord record)', 'fun build(record: StorageSummaryRecord?)'])),
+  putKeys(methodBody(storageSource, ['private fun build('])),
   putKeys(methodBody(storageSource, ['putLatestSession(JSONObject payload, ObdSessionRecord latest)', 'fun putLatestSession('])),
+  putKeys(methodBody(reportsSource, ['fun storageDetailsJson(): JSONObject'])),
 );
 const NATIVE_RECENT_SESSION = putKeys(
   methodBody(storageSource, ['JSONArray recentSessionsJson(StorageSummaryRecord record)', 'fun recentSessionsJson(record: StorageSummaryRecord)']),

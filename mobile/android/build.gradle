@@ -19,27 +19,89 @@ tasks.named("dependencyUpdates").configure {
 def dashboardTestsDir = file("dashboard-tests")
 def dashboardE2eDir = file("dashboard-e2e")
 def dashboardAssetDir = file("app/src/main/assets/dashboard")
+def requiredNodeMajor = 22
+def unsupportedNodeOverrideEnv = "VOLTTRACKER_ALLOW_UNSUPPORTED_NODE"
 def productionJavaStragglers = fileTree("app/src/main/java") {
     include "**/*.java"
 }
 def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
     include "**/*.js"
 }
-// Split budget (C2): the *core* bundle (boot + interactive JS/CSS) is what affects
-// startup and responsiveness, so it gets a tight budget. The DTC lookup tables
-// (dtc-lookup.js + dtc-causes.js) are lazy-loaded reference data — only fetched when
-// a user drills into a specific diagnostic code — so they get their own, larger
-// budget instead of crowding the core number. Both are still bounded; neither can
-// grow unchecked. See docs/bundle-budget.md.
-// Raised 360_000 -> 400_000 for the enhanced-signals workspace: the Signals tab,
-// per-session charge list, HV-pack stats, demo-scenario system, and the per-tab
-// polish add ~66 KB of legitimate feature JS/CSS. ~14 KB headroom remains.
-def dashboardCoreBudgetBytes = 400_000L
+// Split budget (C2/G4): startup JS/CSS is what affects first paint, so it gets
+// the tightest budget. Non-DTC lazy support chunks (map, troubleshooter, demo,
+// and secondary action groups) are still bounded, but they no longer crowd the
+// startup number. DTC lookup tables remain a separate lazy reference-data bucket.
+// See docs/bundle-budget.md.
+def dashboardStartupBudgetBytes = 360_000L
+def dashboardLazySupportBudgetBytes = 90_000L
 def dashboardDtcDataBudgetBytes = 380_000L
 def dashboardDtcDataFiles = ["js/dtc-lookup.js", "js/dtc-causes.js"]
+def dashboardStartupAssets = files(new File(dashboardAssetDir, "js/app.js"), fileTree(dashboardAssetDir) { include "css/**/*.css" })
+def dashboardLazySupportAssets = files(fileTree(dashboardAssetDir) {
+    include "js/**/*.js"
+    exclude "js/app.js"
+    dashboardDtcDataFiles.each { exclude it }
+})
+def dashboardDtcDataAssets = files(dashboardDtcDataFiles.collect { new File(dashboardAssetDir, it) })
+def dashboardEagerJsAssets = files(new File(dashboardAssetDir, "js/app.js"))
+def dashboardLazyJsAssets = files(fileTree(dashboardAssetDir) {
+    include "js/**/*.js"
+    exclude "js/app.js"
+})
+def dashboardCssAssets = files(fileTree(dashboardAssetDir) { include "css/**/*.css" })
+def dashboardLeafletAssets = files(fileTree(dashboardAssetDir) { include "lib/leaflet/**" })
+def dashboardGeneratedHtmlAssets = files(new File(dashboardAssetDir, "index.html"))
+def sumBytes = { assets ->
+    assets.files.findAll { it.exists() }.sum { it.length() } ?: 0L
+}
+def commandOutput = { List<String> command ->
+    try {
+        def proc = new ProcessBuilder(command).redirectErrorStream(true).start()
+        def text = proc.inputStream.getText("UTF-8").trim()
+        proc.waitFor()
+        return proc.exitValue() == 0 ? text : "unavailable (${text})"
+    } catch (Exception ignored) {
+        return "unavailable"
+    }
+}
+def majorVersionOrNull = { String version ->
+    def parts = (version ?: "").tokenize(".")
+    if (parts.empty || !(parts[0] ==~ /\d+/)) {
+        return null
+    }
+    return parts[0] as int
+}
+
+tasks.register("verifyDashboardNodeVersion") {
+    description = "Fails early when dashboard tooling is not running on Node 22.x."
+    doLast {
+        def override = ["1", "true", "yes"].contains((System.getenv(unsupportedNodeOverrideEnv) ?: "").toLowerCase())
+        def version = commandOutput(["node", "-p", "process.versions.node"])
+        if (version.startsWith("unavailable")) {
+            throw new GradleException(
+                    "Node.js ${requiredNodeMajor}.x is required for dashboard tooling. " +
+                            "Install/use Node ${requiredNodeMajor} (repo .nvmrc/.node-version) and retry.")
+        }
+        def major = majorVersionOrNull(version)
+        if (major == null) {
+            throw new GradleException(
+                    "Node.js ${requiredNodeMajor}.x is required for dashboard tooling; found ${version}. " +
+                            "Run `nvm use` from the repo root.")
+        }
+        if (major != requiredNodeMajor && !override) {
+            throw new GradleException(
+                    "Node.js ${requiredNodeMajor}.x is required for dashboard tooling; found ${version}. " +
+                            "Run `nvm use` from the repo root, or set ${unsupportedNodeOverrideEnv}=1 for a temporary local override.")
+        }
+        if (major != requiredNodeMajor) {
+            logger.warn("Using unsupported Node ${version} because ${unsupportedNodeOverrideEnv} is set.")
+        }
+    }
+}
 
 tasks.register("dashboardNpmCi", Exec) {
     description = "Installs dashboard test dependencies from package-lock.json."
+    dependsOn("verifyDashboardNodeVersion")
     workingDir = dashboardTestsDir
     commandLine "npm", "ci"
     inputs.file(file("${dashboardTestsDir}/package.json"))
@@ -85,6 +147,7 @@ tasks.register("dashboardTypecheck", Exec) {
 
 tasks.register("dashboardE2eNpmCi", Exec) {
     description = "Installs Playwright dashboard e2e dependencies from package-lock.json."
+    dependsOn("verifyDashboardNodeVersion")
     workingDir = dashboardE2eDir
     commandLine "npm", "ci"
     inputs.file(file("${dashboardE2eDir}/package.json"))
@@ -137,33 +200,53 @@ tasks.register("verifyGeneratedDashboardClean") {
 }
 
 tasks.register("verifyDashboardBundleSize") {
-    description = "Fails when the core dashboard bundle or the DTC data exceeds its size budget."
+    description = "Fails when dashboard startup, lazy support, or DTC data exceeds its size budget."
     // Measures the BUILT bundle (app.js + lazy chunks), so it must build first.
     dependsOn("buildDashboardJs")
-    // Core = boot/interactive JS + CSS, minus the lazy DTC reference tables.
-    def coreAssets = files(fileTree(dashboardAssetDir) {
-        include "js/**/*.js", "css/**/*.css"
-        exclude "lib/**"
-        dashboardDtcDataFiles.each { exclude it }
-    })
-    def dtcDataAssets = files(dashboardDtcDataFiles.collect { new File(dashboardAssetDir, it) })
-    inputs.files(coreAssets)
-    inputs.files(dtcDataAssets)
+    inputs.files(dashboardStartupAssets, dashboardLazySupportAssets, dashboardDtcDataAssets)
     doLast {
-        def sumBytes = { assets -> assets.files.sum { it.length() } ?: 0L }
-        def coreBytes = sumBytes(coreAssets)
-        def dtcBytes = sumBytes(dtcDataAssets)
-        if (coreBytes > dashboardCoreBudgetBytes) {
+        def startupBytes = sumBytes(dashboardStartupAssets)
+        def lazySupportBytes = sumBytes(dashboardLazySupportAssets)
+        def dtcBytes = sumBytes(dashboardDtcDataAssets)
+        if (startupBytes > dashboardStartupBudgetBytes) {
             throw new GradleException(
-                    "Core dashboard JS/CSS bundle is ${coreBytes} bytes, over budget ${dashboardCoreBudgetBytes} bytes")
+                    "Dashboard startup JS/CSS is ${startupBytes} bytes, over budget ${dashboardStartupBudgetBytes} bytes")
+        }
+        if (lazySupportBytes > dashboardLazySupportBudgetBytes) {
+            throw new GradleException(
+                    "Dashboard lazy support JS is ${lazySupportBytes} bytes, over budget ${dashboardLazySupportBudgetBytes} bytes")
         }
         if (dtcBytes > dashboardDtcDataBudgetBytes) {
             throw new GradleException(
                     "DTC data bundle is ${dtcBytes} bytes, over budget ${dashboardDtcDataBudgetBytes} bytes")
         }
         logger.lifecycle(
-                "Dashboard core bundle: ${coreBytes} bytes (budget ${dashboardCoreBudgetBytes}); " +
+                "Dashboard startup JS/CSS: ${startupBytes} bytes (budget ${dashboardStartupBudgetBytes}); " +
+                        "lazy support JS: ${lazySupportBytes} bytes (budget ${dashboardLazySupportBudgetBytes}); " +
                         "DTC data: ${dtcBytes} bytes (budget ${dashboardDtcDataBudgetBytes})")
+    }
+}
+
+tasks.register("dashboardAssetReport") {
+    description = "Prints dashboard asset byte counts and bundle-budget headroom."
+    dependsOn("buildDashboardJs", ":app:generateDashboardHtml")
+    inputs.files(dashboardEagerJsAssets, dashboardLazyJsAssets, dashboardCssAssets, dashboardLeafletAssets, dashboardGeneratedHtmlAssets)
+    doLast {
+        def startupBytes = sumBytes(dashboardStartupAssets)
+        def lazySupportBytes = sumBytes(dashboardLazySupportAssets)
+        def dtcBytes = sumBytes(dashboardDtcDataAssets)
+        logger.lifecycle("")
+        logger.lifecycle("Dashboard asset report")
+        logger.lifecycle("----------------------")
+        logger.lifecycle(String.format("%-22s %10d bytes", "eager app.js", sumBytes(dashboardEagerJsAssets)))
+        logger.lifecycle(String.format("%-22s %10d bytes", "lazy JS chunks", sumBytes(dashboardLazyJsAssets)))
+        logger.lifecycle(String.format("%-22s %10d bytes", "CSS", sumBytes(dashboardCssAssets)))
+        logger.lifecycle(String.format("%-22s %10d bytes", "Leaflet assets", sumBytes(dashboardLeafletAssets)))
+        logger.lifecycle(String.format("%-22s %10d bytes", "generated HTML", sumBytes(dashboardGeneratedHtmlAssets)))
+        logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "startup budget set", startupBytes, dashboardStartupBudgetBytes - startupBytes))
+        logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "lazy support budget", lazySupportBytes, dashboardLazySupportBudgetBytes - lazySupportBytes))
+        logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "DTC data budget set", dtcBytes, dashboardDtcDataBudgetBytes - dtcBytes))
+        logger.lifecycle("")
     }
 }
 
@@ -207,6 +290,30 @@ tasks.register("verifyActiveApp") {
             "verifyGeneratedDashboardClean")
 }
 
+tasks.register("doctor") {
+    description = "Prints local Android/dashboard tool versions and fails on required runtime mismatches."
+    doLast {
+        def javaVersion = System.getProperty("java.version")
+        def nodeVersion = commandOutput(["node", "-p", "process.versions.node"])
+        def npmVersion = commandOutput(["npm", "--version"])
+        def adbVersion = commandOutput(["adb", "version"]).readLines().take(1).join("")
+        def androidHome = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT") ?: "unset"
+        logger.lifecycle("VoltTracker local doctor")
+        logger.lifecycle("-------------------------")
+        logger.lifecycle("Gradle JVM: ${javaVersion}")
+        logger.lifecycle("Node: ${nodeVersion}")
+        logger.lifecycle("npm: ${npmVersion}")
+        logger.lifecycle("Android SDK: ${androidHome}")
+        logger.lifecycle("adb: ${adbVersion}")
+        def nodeMajor = majorVersionOrNull(nodeVersion)
+        if (nodeMajor != requiredNodeMajor) {
+            throw new GradleException(
+                    "Node.js ${requiredNodeMajor}.x is required for dashboard tooling; found ${nodeVersion}. " +
+                            "Run `nvm use` from the repo root.")
+        }
+    }
+}
+
 // Fast inner-loop tier (I5): the subset of verifyActiveApp that catches the mistakes you make
 // while editing — formatting, static analysis, broken Kotlin/dashboard logic — WITHOUT the two
 // slow steps: the Playwright e2e run (dashboardE2e, which boots a browser) and the full
@@ -222,6 +329,15 @@ tasks.register("verifyFast") {
             "dashboardLint",
             "dashboardTypecheck",
             "dashboardTest")
+}
+
+tasks.register("verifyPerformance") {
+    description = "Performance-focused validation: dashboard budgets/tests plus Android unit performance regressions."
+    dependsOn(
+            "dashboardAssetReport",
+            "verifyDashboardBundleSize",
+            "dashboardTest",
+            ":app:testDebugUnitTest")
 }
 
 subprojects {

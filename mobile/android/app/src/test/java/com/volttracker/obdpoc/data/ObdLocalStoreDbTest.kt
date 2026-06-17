@@ -229,6 +229,62 @@ class ObdLocalStoreDbTest {
     }
 
     @Test
+    fun batchedEnhancedPidObservationsUpsertCapabilitiesOncePerLookupKey() {
+        val id = store.startSession("scan", "00:11", "Adapter")
+
+        val inserted =
+            store.recordPidObservations(
+                id,
+                listOf(
+                    pidObservation(
+                        1000L,
+                        "221154",
+                        "ATSH7E0",
+                        "1154",
+                        "engine oil temperature",
+                        "56",
+                        56.0,
+                        "C",
+                        "62115460",
+                    ),
+                    pidObservation(
+                        1100L,
+                        "221154",
+                        "ATSH7E0",
+                        "1154",
+                        "engine oil temperature",
+                        "57",
+                        57.0,
+                        "C",
+                        "62115461",
+                    ),
+                    pidObservation(
+                        1200L,
+                        "221154",
+                        "ATSH7E0",
+                        "1154",
+                        "engine oil temperature",
+                        "",
+                        null,
+                        "C",
+                        "NO DATA",
+                    ),
+                ),
+            )
+
+        assertEquals(3, inserted)
+        val capabilities = store.getEnhancedCapabilitiesJson(10)
+        assertEquals(1, capabilities.length())
+        val capability = capabilities.getJSONObject(0)
+        assertEquals("221154", capability.optString("command"))
+        assertTrue(capability.optBoolean("supported"))
+        assertEquals(2L, capability.optLong("responseCount"))
+        assertEquals(1000L, capability.optLong("firstSeenMs"))
+        assertEquals(1200L, capability.optLong("lastSeenMs"))
+        assertFalse(capability.getJSONObject("sample").optBoolean("positiveResponse"))
+    }
+
+    @Test
     fun enhancedCapabilityKeepsSupportAfterLaterNoData() {
         val id = store.startSession("scan", "00:11", "Adapter")
         store.recordPidObservation(

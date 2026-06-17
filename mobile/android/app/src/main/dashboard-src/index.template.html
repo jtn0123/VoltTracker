@@ -17,14 +17,7 @@
       content="default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; base-uri 'none'; form-action 'none';"
     />
     <title>Volt Tracker OBD</title>
-    <!--
-      Leaflet (~147 KB) is only needed when the user opens the Map tab, which lazily loads
-      js/map.js (core.ts#ensureMapModule) — the only consumer of the `L` global. `defer` keeps
-      its parse/execute off the first-paint critical path; deferred scripts still finish before
-      DOMContentLoaded, long before any map interaction. Its stylesheet is likewise only needed
-      once a map renders, so map.ts injects it on demand instead of blocking first paint here.
-    -->
-    <script src="lib/leaflet/leaflet.js" defer></script>
+    <!-- Leaflet JS/CSS are loaded by core.ts/map.ts only when the Map tab is opened. -->
     <link rel="stylesheet" href="css/base.css" />
     <link rel="stylesheet" href="css/components.css" />
     <link rel="stylesheet" href="css/screens.css" />

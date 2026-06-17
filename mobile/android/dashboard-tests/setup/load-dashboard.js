@@ -29,6 +29,9 @@ const DASHBOARD_INDEX_HTML = resolve(HERE, '../../app/src/main/assets/dashboard/
 
 const DASHBOARD_MODULE_LOADERS = {
   'actions.js': () => import('../../app/src/main/dashboard-src/js/actions.ts'),
+  'actions-demo.js': () => import('../../app/src/main/dashboard-src/js/actions-demo.ts'),
+  'actions-signals.js': () => import('../../app/src/main/dashboard-src/js/actions-signals.ts'),
+  'actions-storage.js': () => import('../../app/src/main/dashboard-src/js/actions-storage.ts'),
   'connection-status.js': () => import('../../app/src/main/dashboard-src/js/connection-status.ts'),
   'connection-tools.js': () => import('../../app/src/main/dashboard-src/js/connection-tools.ts'),
   'core.js': () => import('../../app/src/main/dashboard-src/js/core.ts'),
@@ -338,12 +341,16 @@ export async function loadDashboard({ bridge, extras, extraDom, withBridge = tru
   clearDashboardTimers();
   installCanvasShim();
   installScrollShim();
+  delete window.VoltDashboardActionModules;
   const bridgeImpl = withBridge ? (bridge ?? createVoltBridgeFixture()) : null;
   // The Android side exposes the bridge as `window.VoltTrackerAndroid` before
   // the dashboard's scripts run, so do the same here.
   if (bridgeImpl) window.VoltTrackerAndroid = bridgeImpl;
   else delete window.VoltTrackerAndroid;
   window.__VoltDashboardLoadScript = async (src) => {
+    if (src === 'lib/leaflet/leaflet.js') {
+      return;
+    }
     const file = String(src || '').replace(/^js\//, '');
     const loadModule = DASHBOARD_MODULE_LOADERS[file];
     if (!loadModule) {

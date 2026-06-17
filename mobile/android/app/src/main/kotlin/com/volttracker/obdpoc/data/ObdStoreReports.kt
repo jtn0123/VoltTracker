@@ -3,6 +3,7 @@ package com.volttracker.obdpoc.data
 import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
+import com.volttracker.obdpoc.EnhancedPidProfiles
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -322,6 +323,73 @@ class ObdStoreReports(
             safeArray { enhancedCapabilitiesJson(24) },
         )
     }
+
+    fun storageOverviewRecord(databaseFile: File): StorageSummaryRecord {
+        val db = helper.readableDatabase
+        val counts = storageCountsProjection(db, databaseFile)
+        return StorageSummaryRecord(
+            counts.database,
+            counts.databaseBytes,
+            counts.sessionCount,
+            counts.rawTelemetryCount,
+            counts.sampleCount,
+            counts.emptyTelemetryCount,
+            counts.eventCount,
+            counts.adapterCount,
+            counts.pidObservationCount,
+            counts.diagnosticCodeCount,
+            counts.diagnosticCodeStatusCounts,
+            counts.locationSampleCount,
+            counts.vehicleCount,
+            counts.fieldCapabilityCount,
+            counts.tripSegmentCount,
+            counts.chargeSessionCount,
+            counts.batterySnapshotCount,
+            counts.cellSnapshotCount,
+            counts.exportCount,
+            counts.latestSession,
+            recentSessionSummaries(db, 6),
+            getAdapterHistory(6),
+            latestDiagnosticCodeReports(db, 12),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            safeJson { latestVehicleJson(db) },
+            null,
+        )
+    }
+
+    fun storageDetailsJson(): JSONObject =
+        safeJson {
+            val db = helper.readableDatabase
+            val reviewSession = ObdStoreSessionReview.latestReviewableSession(db)
+            JSONObject()
+                .put("storageDetails", true)
+                .put(
+                    "latestReview",
+                    if (reviewSession == null) {
+                        JSONObject()
+                    } else {
+                        safeJson { ObdStoreSessionReview.sessionReview(db, reviewSession) }
+                    },
+                ).put(
+                    "latestRoute",
+                    if (reviewSession == null) {
+                        JSONObject()
+                    } else {
+                        safeJson { ObdStoreRouteProjection.routeForSession(db, reviewSession, 240) }
+                    },
+                ).put("recentRoutes", recentRoutesProjectionJson(8, 500))
+                .put("overview", overviewProjectionJson())
+                .put("chargeSummary", chargeSummaryProjectionJson())
+                .put("batterySummary", batterySummaryProjectionJson())
+                .put("latestVehicle", safeJson { latestVehicleJson(db) })
+                .put("enhancedCapabilities", safeArray { enhancedCapabilitiesJson(24) })
+                .put("detailedSignalCatalog", EnhancedPidProfiles.catalogJson())
+        }
 
     fun storageCountsJson(databaseFile: File): JSONObject =
         storageCountsProjection(helper.readableDatabase, databaseFile).toJson()
@@ -1254,20 +1322,16 @@ class ObdStoreReports(
         )
 
         /**
-         * Enumerates trip sessions in the exact order the uncached scan used
-         * (`getAllSessions` filtered to trip sessions, oldest-first) and returns each one's charge
-         * contribution. For a finalized session cached at [CHARGE_ROLLUP_CACHE_VERSION] the cached
-         * blob is served; otherwise the contribution is computed, and — only for finalized sessions —
-         * persisted before being returned. The active (not-yet-finalized) session is always computed
-         * live and never cached. Output order matches the uncached path, so downstream assembly is
-         * byte-identical.
+         * Enumerates every OBD session with useful telemetry in oldest-first order and returns each
+         * one's charge contribution. The qualifying-session query is intentionally one SQL pass rather
+         * than the old bounded session read plus per-session COUNT(*) filter, so whole-history charge
+         * summaries do not inherit the recent-session cap or an N+1 query pattern. For a finalized
+         * session cached at [CHARGE_ROLLUP_CACHE_VERSION] the cached blob is served; otherwise the
+         * contribution is computed, and — only for finalized sessions — persisted before being returned.
+         * The active (not-yet-finalized) session is always computed live and never cached.
          */
         private fun sessionChargeContributions(db: SQLiteDatabase): List<SessionChargeContribution> {
-            val sessions =
-                ObdStoreSupport
-                    .getAllSessions(db)
-                    .filter { ObdSessionClassifier.isTripSession(db, it) }
-                    .sortedBy { it.startedAtMs }
+            val sessions = ObdStoreSupport.getObdSessionsWithUsefulTelemetry(db)
             if (sessions.isEmpty()) {
                 return emptyList()
             }

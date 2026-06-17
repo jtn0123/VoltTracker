@@ -373,6 +373,8 @@ class TripExportControllerTest {
 
         override fun getStorageSummaryJson() = unused()
 
+        override fun getStorageDetailsJson() = unused()
+
         override fun getAppStateJson() = unused()
 
         override fun getTripsJson() = unused()

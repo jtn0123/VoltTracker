@@ -90,7 +90,7 @@ section "Node and Dashboard Tooling"
 if need_cmd node; then
   node_version="$(node --version 2>&1 | head -n 1)"
   printf '%s\n' "$node_version"
-  expected_node_major="20"
+  expected_node_major="22"
   if [ -f "$REPO_ROOT/.nvmrc" ]; then
     expected_node_major="$(sed -E 's/^v?([0-9]+).*/\1/' "$REPO_ROOT/.nvmrc")"
   fi

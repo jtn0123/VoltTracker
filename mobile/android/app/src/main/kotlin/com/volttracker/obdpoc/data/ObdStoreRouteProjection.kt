@@ -335,7 +335,7 @@ object ObdStoreRouteProjection {
         var tail: JSONObject? = null
         val cursor =
             if (total > target && stride > 1L) {
-                sampledRouteCursor(db, table, columns, where, whereArgs, stride, target)
+                sampledCursor(db, table, columns, where, whereArgs, stride, target)
             } else {
                 db.query(table, columns, where, whereArgs, null, null, "captured_at_ms ASC")
             }
@@ -363,7 +363,7 @@ object ObdStoreRouteProjection {
         return points
     }
 
-    private fun sampledRouteCursor(
+    private fun sampledCursor(
         db: SQLiteDatabase,
         table: String,
         columns: Array<String>,
@@ -440,37 +440,39 @@ object ObdStoreRouteProjection {
             return JSONArray()
         }
         val stride = strideFor(total, target)
-        db
-            .query(
-                VoltTrackerDb.TABLE_TELEMETRY,
-                arrayOf("captured_at_ms", column),
-                where,
-                args,
-                null,
-                null,
-                "captured_at_ms ASC",
-            ).use { cursor ->
-                val track = JSONArray()
-                var tail: JSONObject? = null
-                var idx = 0L
-                while (cursor.moveToNext()) {
-                    val item = JSONObject()
-                    item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")))
-                    item.put(jsonKey, cursor.getDouble(cursor.getColumnIndexOrThrow(column)))
-                    if (cursor.isLast) {
-                        tail = item
-                        break
-                    }
-                    val strideKeep = total <= target || idx % stride == 0L
-                    val withinCap = total <= target || track.length() < target - 1
-                    if (strideKeep && withinCap) {
-                        track.put(item)
-                    }
-                    idx++
-                }
-                tail?.let { track.put(it) }
-                return track
+        val columns = arrayOf("captured_at_ms", column)
+        val cursor =
+            if (total > target && stride > 1L) {
+                sampledCursor(db, VoltTrackerDb.TABLE_TELEMETRY, columns, where, args, stride, target)
+            } else {
+                db.query(VoltTrackerDb.TABLE_TELEMETRY, columns, where, args, null, null, "captured_at_ms ASC")
             }
+        cursor.use { cursor ->
+            val track = JSONArray()
+            var tail: JSONObject? = null
+            var idx = 0L
+            while (cursor.moveToNext()) {
+                val item = JSONObject()
+                item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")))
+                item.put(jsonKey, cursor.getDouble(cursor.getColumnIndexOrThrow(column)))
+                if (total > target && stride > 1L) {
+                    track.put(item)
+                    continue
+                }
+                if (cursor.isLast) {
+                    tail = item
+                    break
+                }
+                val strideKeep = total <= target || idx % stride == 0L
+                val withinCap = total <= target || track.length() < target - 1
+                if (strideKeep && withinCap) {
+                    track.put(item)
+                }
+                idx++
+            }
+            tail?.let { track.put(it) }
+            return track
+        }
     }
 
     private fun strideFor(

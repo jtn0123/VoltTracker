@@ -159,6 +159,85 @@ jobs:
           if-no-files-found: ignore
       - name: Verify dashboard bundle budget
         run: ./gradlew --no-daemon --configuration-cache verifyDashboardBundleSize
+      - name: Publish performance trend snapshot
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path("app/src/main/assets/dashboard")
+          report_dir = Path("build/reports/performance-trends")
+          report_dir.mkdir(parents=True, exist_ok=True)
+          startup_budget = 360_000
+          lazy_support_budget = 90_000
+          dtc_budget = 380_000
+          dtc_files = {root / "js/dtc-lookup.js", root / "js/dtc-causes.js"}
+
+          def size(path):
+              return path.stat().st_size if path.exists() else 0
+
+          js_files = list((root / "js").glob("*.js")) if (root / "js").exists() else []
+          css_files = list((root / "css").glob("*.css")) if (root / "css").exists() else []
+          leaflet_files = [p for p in (root / "lib/leaflet").rglob("*") if p.is_file()] if (root / "lib/leaflet").exists() else []
+          eager_js = size(root / "js/app.js")
+          lazy_js = sum(size(p) for p in js_files if p.name != "app.js")
+          css = sum(size(p) for p in css_files)
+          leaflet = sum(size(p) for p in leaflet_files)
+          html = size(root / "index.html")
+          dtc = sum(size(p) for p in dtc_files)
+          startup = eager_js + css
+          lazy_support = sum(size(p) for p in js_files if p.name != "app.js" and p not in dtc_files)
+
+          payload = {
+              "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+              "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+              "sha": os.environ.get("GITHUB_SHA", ""),
+              "asset_bytes": {
+                  "eager_js": eager_js,
+                  "lazy_js": lazy_js,
+                  "css": css,
+                  "leaflet": leaflet,
+                  "generated_html": html,
+                  "startup_js_css": startup,
+                  "lazy_support_js": lazy_support,
+                  "dtc_data": dtc,
+              },
+              "budgets": {
+                  "startup_js_css": startup_budget,
+                  "lazy_support_js": lazy_support_budget,
+                  "dtc_data": dtc_budget,
+              },
+              "headroom": {
+                  "startup_js_css": startup_budget - startup,
+                  "lazy_support_js": lazy_support_budget - lazy_support,
+                  "dtc_data": dtc_budget - dtc,
+              },
+          }
+          (report_dir / "performance-summary.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+          lines = [
+              "### Performance trend snapshot",
+              "",
+              "| Metric | Bytes | Budget/headroom |",
+              "|---|---:|---:|",
+              f"| Eager JS | {eager_js} | |",
+              f"| Lazy JS | {lazy_js} | |",
+              f"| CSS | {css} | |",
+              f"| Leaflet assets | {leaflet} | lazy |",
+              f"| Generated HTML | {html} | |",
+              f"| Startup JS/CSS | {startup} | {startup_budget} / {startup_budget - startup} |",
+              f"| Lazy support JS | {lazy_support} | {lazy_support_budget} / {lazy_support_budget - lazy_support} |",
+              f"| DTC data | {dtc} | {dtc_budget} / {dtc_budget - dtc} |",
+              "",
+          ]
+          (report_dir / "performance-summary.md").write_text("\n".join(lines), encoding="utf-8")
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write("\n".join([""] + lines))
+          PY
       - name: JaCoCo coverage report
         run: ./gradlew --no-daemon --configuration-cache :app:jacocoTestReport
       - name: Verify coverage thresholds
@@ -183,6 +262,13 @@ jobs:
         with:
           name: unit-test-report
           path: mobile/android/app/build/reports/tests/
+          if-no-files-found: ignore
+      - name: Upload performance trend snapshot
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: performance-trend-snapshot
+          path: mobile/android/build/reports/performance-trends/
           if-no-files-found: ignore
       - name: Report job wall-clock time
         if: always()
@@ -303,30 +389,34 @@ jobs:
               fi
             done
           } >> "$GITHUB_STEP_SUMMARY"
-          # Split budget (build.gradle:verifyDashboardBundleSize): core bundle vs lazy DTC
-          # data. The budgets are read from their single source of truth —
-          # dashboardCoreBudgetBytes / dashboardDtcDataBudgetBytes in
-          # mobile/android/build.gradle — so this report can't drift from the Gradle gate.
+          # Split budget (build.gradle:verifyDashboardBundleSize): startup JS/CSS,
+          # non-DTC lazy support JS, and lazy DTC data. The budgets are read from
+          # their single source of truth in mobile/android/build.gradle, so this
+          # report can't drift from the Gradle gate.
           # The Gradle task is the hard gate (it fails the unit-tests job when a budget is
           # exceeded); this report is advisory only — it surfaces remaining headroom and
           # warns when a bundle is within 15 KB of its budget, without failing the build.
           budget_gradle="$GITHUB_WORKSPACE/mobile/android/build.gradle"
           read_budget() {
-            # Matches e.g. `def dashboardCoreBudgetBytes = 400_000L`; strips Groovy's
+            # Matches e.g. `def dashboardStartupBudgetBytes = 360_000L`; strips Groovy's
             # underscore digit separators.
             sed -n "s/^def $1 = \([0-9_][0-9_]*\)L.*$/\1/p" "$budget_gradle" | tr -d '_'
           }
-          core_budget="$(read_budget dashboardCoreBudgetBytes)"
+          startup_budget="$(read_budget dashboardStartupBudgetBytes)"
+          lazy_support_budget="$(read_budget dashboardLazySupportBudgetBytes)"
           dtc_budget="$(read_budget dashboardDtcDataBudgetBytes)"
-          if [ -z "$core_budget" ] || [ -z "$dtc_budget" ]; then
+          if [ -z "$startup_budget" ] || [ -z "$lazy_support_budget" ] || [ -z "$dtc_budget" ]; then
             echo "::error title=Dashboard bundle budget::could not extract budget constants from $budget_gradle (declaration renamed/reformatted?)"
             exit 1
           fi
           warn_floor=15000
           dtc=$(cat js/dtc-lookup.js js/dtc-causes.js | wc -c | tr -d ' ')
-          all=$(find js css -type f \( -name "*.js" -o -name "*.css" \) ! -path "*/lib/*" -exec cat {} + | wc -c | tr -d ' ')
-          core=$((all - dtc))
-          core_headroom=$((core_budget - core))
+          eager=$(wc -c < js/app.js | tr -d ' ')
+          css_bytes=$(find css -type f -name "*.css" -exec cat {} + | wc -c | tr -d ' ')
+          startup=$((eager + css_bytes))
+          lazy_support=$(find js -type f -name "*.js" ! -name "app.js" ! -name "dtc-lookup.js" ! -name "dtc-causes.js" -exec cat {} + | wc -c | tr -d ' ')
+          startup_headroom=$((startup_budget - startup))
+          lazy_support_headroom=$((lazy_support_budget - lazy_support))
           dtc_headroom=$((dtc_budget - dtc))
           {
             echo ""
@@ -334,13 +424,19 @@ jobs:
             echo ""
             echo "| Bundle | Bytes | Budget | Headroom |"
             echo "|--------|------:|-------:|---------:|"
-            echo "| core (JS + CSS, excl lib/ and DTC data) | $core | $core_budget | $core_headroom |"
+            echo "| startup JS/CSS (app.js + CSS) | $startup | $startup_budget | $startup_headroom |"
+            echo "| lazy support JS (non-DTC chunks) | $lazy_support | $lazy_support_budget | $lazy_support_headroom |"
             echo "| dtc data (dtc-lookup.js + dtc-causes.js) | $dtc | $dtc_budget | $dtc_headroom |"
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$core_headroom" -lt "$warn_floor" ]; then
-            echo "::warning title=Dashboard bundle headroom::core bundle headroom is ${core_headroom} bytes (under 15 KB of the ${core_budget}-byte budget)"
+          if [ "$startup_headroom" -lt "$warn_floor" ]; then
+            echo "::warning title=Dashboard bundle headroom::startup headroom is ${startup_headroom} bytes (under 15 KB of the ${startup_budget}-byte budget)"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "WARNING: core bundle headroom is ${core_headroom} bytes (under 15 KB)." >> "$GITHUB_STEP_SUMMARY"
+            echo "WARNING: startup headroom is ${startup_headroom} bytes (under 15 KB)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$lazy_support_headroom" -lt "$warn_floor" ]; then
+            echo "::warning title=Dashboard bundle headroom::lazy support headroom is ${lazy_support_headroom} bytes (under 15 KB of the ${lazy_support_budget}-byte budget)"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "WARNING: lazy support headroom is ${lazy_support_headroom} bytes (under 15 KB)." >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ "$dtc_headroom" -lt "$warn_floor" ]; then
             echo "::warning title=Dashboard bundle headroom::DTC data headroom is ${dtc_headroom} bytes (under 15 KB of the ${dtc_budget}-byte budget)"

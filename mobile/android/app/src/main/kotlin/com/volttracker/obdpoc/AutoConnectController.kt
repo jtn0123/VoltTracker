@@ -34,7 +34,7 @@ class AutoConnectController(
             payload.put("enabled", isEnabled())
             payload.put("lastAddress", catalog.lastAddress())
             payload.put("lastName", catalog.lastName())
-            payload.put("available", VoltBridge.validBluetoothAddress(catalog.lastAddress()))
+            payload.put("available", validBridgeBluetoothAddress(catalog.lastAddress()))
             payload.put("cooldownRemainingMs", cooldownRemainingMs(now))
         } catch (_: JSONException) {
             // Local values are safe.
@@ -54,7 +54,7 @@ class AutoConnectController(
             return false
         }
         val address = catalog.lastAddress().trim()
-        if (!VoltBridge.validBluetoothAddress(address)) {
+        if (!validBridgeBluetoothAddress(address)) {
             return false
         }
         val observed = observedAddress?.trim().orEmpty()

@@ -31,6 +31,10 @@ interface ObdQueryStore : MaterializerData {
 
     fun getStorageSummaryRecord(): StorageSummaryRecord
 
+    fun getStorageOverviewRecord(): StorageSummaryRecord
+
+    fun getStorageDetailsJson(): JSONObject
+
     fun getRecentSessionsJson(limit: Int): JSONArray
 
     fun getAdapterHistoryJson(limit: Int): JSONArray
