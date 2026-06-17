@@ -1,6 +1,126 @@
 # CHANGELOG
 
 
+## v0.18.0 (2026-06-17)
+
+### Chores
+
+- **dashboard**: Sort VOLT_DTC entries into ascending order within their blocks
+  ([#225](https://github.com/jtn0123/VoltTracker/pull/225),
+  [`b0854c8`](https://github.com/jtn0123/VoltTracker/commit/b0854c816311fa872ec5915d23fe073bac9d8c5b))
+
+Pure source-readability cleanup of dtc-lookup.ts: four comment-delimited blocks had entries inserted
+  out of numeric order (the P0A80-P0A9F run dumped after P0AF8; P0496/P0497 before the P0460-P0463
+  fuel-sensor run; the P0C00-P0C20 on-board-charger run after P0CE0; the P0D08+ run after P0DAA —
+  topic-grouped rather than strictly numeric).
+
+Reordered each affected block into ascending code order. Behavior-preserving: VOLT_DTC is a keyed
+  object, so iteration/lookup order doesn't change any rendered output and the derived family counts
+  / dtcLookupCodes come from keys regardless of insertion order. Verified a pure line reorder
+  (entry-line multiset identical before/after, no description string changed), bundle rebuilt, and
+  the dtc-data/dtc-severity/dtc-clearability suites pass (20 tests).
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+### Features
+
+- **android**: Charge CSV export, maintenance alerts, per-trip cost, charge-scan cache
+  ([#224](https://github.com/jtn0123/VoltTracker/pull/224),
+  [`d6c3466`](https://github.com/jtn0123/VoltTracker/commit/d6c3466df4573ac57e0038412e1945b706c20ae5))
+
+* feat(android): export charge sessions as CSV (M1)
+
+Charge sessions were viewable but, unlike trips, not exportable. Adds an "Export CSV" action on the
+  Recent-charges card mirroring the M6 all-trips pattern:
+
+- New @JavascriptInterface exportChargeSessionsCsv(pricePerKwh) on VoltBridge ->
+  VoltBridgeDataExports, riding the existing exportTripFromBridge host seam with a "csv_charges"
+  sentinel (no new MainActivity override, detekt ceiling unchanged). - TripExportController
+  dispatches the sentinel to exportChargeSessionsAndShare, reading rows via
+  store.projections().chargeSessionsForExport(<=500) and writing via TripExportShareIntent. -
+  TripTrackFormatter.toChargeSessionsCsv: id/start/end/SOC/kWh/peak/charger/ confidence columns + an
+  optional est_cost column when the dashboard's pricePerKwh is set (passed through the bridge); CSV
+  formula-injection guarded. - Dashboard "Export CSV" button wired in storage-status.ts +
+  actions.ts; bridge ABI mirror (VOLT_BRIDGE_METHODS) + bridge-abi.md + VoltBridgeTest updated. -
+  Tests: TripTrackFormatterTest (+7), TripExportControllerTest (+5).
+
+All Kotlin + dashboard gates green locally.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* perf(android): cache the per-session inferred-charge scan (G2)
+
+The charge-summary projection re-scanned the entire drive history on every dashboard storage refresh
+  (per-session telemetry + drive-window queries on the JS-bridge thread), so cost grew linearly with
+  history even though finalized sessions' charge facts never change.
+
+Mirrors the existing session_trip_rollups cache: - New charge_session_rollups table (schema v14):
+  per-session charge contribution JSON + rollup_version, FK ON DELETE CASCADE. Guarded,
+  own-transaction, non-destructive v13->v14 migration. - ObdStoreReports computes each finalized
+  session's charge contribution once, caches it, and serves the cache on subsequent reads (current
+  rollup_version); the active session is always computed live, never cached. The cross-session
+  assembly/sort is unchanged, so the charge-summary JSON is byte-identical — a dedicated test
+  asserts the second (cached) read equals the first. - Invalidation mirrors the trip cache:
+  clearAllData (16th DELETE), prune, merge, mark-not-trip, and restore-regenerable-cache paths. -
+  Tests: v13->v14 migration test, cache/identical-output test, active-session never-cached test,
+  clearAllData drops rollups. data-model.md + bridge-abi.md updated to v14 / "16 tables".
+
+All Kotlin gates green locally (1204 tests).
+
+* feat(android): notify when scheduled maintenance goes overdue (M2)
+
+The app already computed maintenance overdue/due-soon (interval_km/interval_months vs latest
+  odometer + elapsed months) and rendered it on the Insights tab, but it was purely visual — unlike
+  charge/DTC/SOC/temp alerts, an overdue oil change never notified.
+
+- MaintenanceDueEvaluator: pure, Android-free evaluator ported 1:1 from the dashboard's
+  maintenanceDue math (AVG_DAYS_PER_MONTH=30.4375, overdue-only), returning only newly-overdue
+  entries keyed by a per-crossing signature (<id>:km / <id>:months) so each crossing fires exactly
+  once. - Opt-in maintenanceDueEnabled toggle + persisted notified-signature set in
+  EventNotificationPrefs (mirrors the DTC baseline persistence; no settings-version bump since it's
+  off the per-sample path). - MaintenanceDueNotifier runs on app open (MainActivity.onResume -> one
+  background call): reads the maintenance log + latest odometer, posts one EventNotifier alert per
+  newly-overdue entry (reuses the alerts channel + POST_NOTIFICATIONS handling), unions the new
+  signatures. New Event.MaintenanceDue variant. - "Maintenance due" toggle in the Alerts fieldset,
+  wired end-to-end via the grouped eventNotifications() delegate + new setMaintenanceDueNotify
+  bridge method (ABI mirror + bridge-abi.md + VoltBridgeTest updated). No flat MainActivity
+  override. - Adding the bridge method tripped VoltBridge's TooManyFunctions ceiling; fixed properly
+  by extracting ClientErrorRateLimiter (also fixes a 0L epoch-clock sentinel bug), not by
+  suppressing. - Tests: evaluator (9), notifier (6), rate-limiter (3), prefs/notifier/dispatch
+  additions; focused jacoco floor on the evaluator.
+
+* feat(dashboard): per-trip cost/savings + home vs public charging rates (M3)
+
+Cost/savings was a single lifetime aggregate at one flat $/kWh; the per-trip detail sheet showed no
+  cost, and one rate is wrong for owners on time-of-use billing (cheap home overnight vs expensive
+  public/DCFC).
+
+- Extracted the cost model into a shared pure module cost-model.ts (computeSavingsVsGas, rate
+  selection, money formatting, ASSUMED_VOLT_MI_PER_KWH). renderSavingsVsGas now calls it
+  (byte-identical math), so per-trip and lifetime figures can never diverge. - Trip-detail sheet
+  (map.ts openTripDetail) shows Est. cost + Savings-vs-gas for that drive, mirroring the lifetime
+  row's three states (hidden / prompt-to-set / figures + assumptions note). XSS-safe. - New optional
+  "Public charging rate" pref (publicPricePerKwhInput); the existing rate is relabeled "Home
+  electricity rate". rateForCharger() bills each charge session by its chargerType (public/DCFC ->
+  public rate when set, else home); an unset public rate falls back to the single home rate
+  everywhere, so existing users see no change. Wired into all three charge-cost sites (per-session
+  row, lifetime energy total, monthly cost trend). - Tests: cost-model.test.js (8) +
+  trip-detail/charge-sessions/charge-cost-trend extensions (+8). 510 vitest passing.
+
+Dashboard build/typecheck/lint/test all green locally.
+
+* test(visual): refresh power-user-charge baseline for the charge-tab additions
+
+The charge tab gained the M1 "Export CSV" button and the M3 per-session est-cost column + "set your
+  electricity rate" prompt, so the power-user-charge visual snapshot shifted. Baseline refreshed
+  from the CI (Linux) render; the change is confined to those intended additions (dashboard-e2e
+  semantic guards pass).
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.17.3 (2026-06-17)
 
 ### Performance Improvements
