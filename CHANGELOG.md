@@ -1,6 +1,42 @@
 # CHANGELOG
 
 
+## v0.18.5 (2026-06-17)
+
+### Performance Improvements
+
+- More boot/dashboard fast-path wins (DataBackup off main thread, lazy troubleshooter.css)
+  ([#231](https://github.com/jtn0123/VoltTracker/pull/231),
+  [`37aa37d`](https://github.com/jtn0123/VoltTracker/commit/37aa37d2f4c42686018da7f90b0128decfe2ee5f))
+
+* perf(boot): sweep transient cache files off the cold-start main thread
+
+DataBackup.init{} ran three cache-dir cleanup traversals (leftover restore/backup/export temp files)
+  synchronously on construction — and DataBackup is constructed in MainActivity.onCreate, i.e. on
+  the main thread during cold start. The sweep is best-effort housekeeping (nothing depends on it
+  having run; the export/backup paths recreate their dirs on demand), so it moves to
+  sweepTransientCacheFiles() which MainActivity now schedules on its existing background executor.
+  Removes main-thread disk I/O from the boot path (most impactful after a crash mid-backup/export
+  leaves temp files behind). Two DataBackupTest cases updated to call the explicit sweep.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* perf(dashboard): lazy-inject troubleshooter.css off first paint (L7 tail)
+
+troubleshooter.css (7.9 KB) was render-blocking in <head> even though the troubleshooter modal only
+  appears on a connection error. Like leaflet.css (L7), it is now injected by its lazy chunk
+  (troubleshooter.ts) when that module loads. 7,922 bytes off the render-blocking first-paint path
+  on every launch.
+
+Verified in the dashboard preview: absent from <head> at load, injected exactly once when the
+  troubleshooter chunk loads, the modal opens with its CSS applied (display:flex), no console
+  errors; 510 dashboard vitest tests pass.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.18.4 (2026-06-17)
 
 ### Bug Fixes
