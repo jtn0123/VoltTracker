@@ -13,10 +13,7 @@ class VoltBridge(
     private val connections = VoltBridgeConnections(activity)
     private val dataExports = VoltBridgeDataExports(activity, activity)
     private val diagnostics = VoltBridgeDiagnostics(activity)
-    private val clientErrorLock = Any()
-    private var clientErrorTokens = LOG_CLIENT_ERROR_BURST.toDouble()
-    private var clientErrorLastRefillMs = 0L
-    private var clientErrorDroppedCount = 0L
+    private val clientErrorRateLimiter = ClientErrorRateLimiter()
 
     @JavascriptInterface
     fun dashboardReady() {
@@ -127,6 +124,11 @@ class VoltBridge(
     }
 
     @JavascriptInterface
+    fun setMaintenanceDueNotify(enabled: Boolean) {
+        activity.runOnUiThread { activity.eventNotifications().setMaintenanceDueEnabled(enabled) }
+    }
+
+    @JavascriptInterface
     fun getStorageSummary(): String = activity.getStorageSummaryJson()
 
     @JavascriptInterface
@@ -230,6 +232,13 @@ class VoltBridge(
     @JavascriptInterface
     fun exportAllTripsCsv(): String = dataExports.exportAllTripsCsv()
 
+    /**
+     * Exports the charge history as one CSV (M1) and opens the share sheet. [pricePerKwh] (the user's
+     * electricity rate, as a string) adds an estimated-cost column when it parses as a positive rate.
+     */
+    @JavascriptInterface
+    fun exportChargeSessionsCsv(pricePerKwh: String?): String = dataExports.exportChargeSessionsCsv(pricePerKwh)
+
     @JavascriptInterface
     fun deleteDetailedSignalLog(id: String?) {
         dataExports.deleteDetailedSignalLog(id)
@@ -289,7 +298,7 @@ class VoltBridge(
         label: String?,
         detail: String?,
     ) {
-        val dropped = acquireClientErrorTokenOrCountDrop()
+        val dropped = clientErrorRateLimiter.acquireOrCountDrop()
         if (dropped < 0) {
             return
         }
@@ -299,29 +308,6 @@ class VoltBridge(
             "dashboard client error [${safe(label, MAX_LABEL_LEN)}]: ${safe(detail, MAX_DETAIL_LEN)}$suffix",
         )
     }
-
-    private fun acquireClientErrorTokenOrCountDrop(): Long =
-        synchronized(clientErrorLock) {
-            val now = System.currentTimeMillis()
-            if (clientErrorLastRefillMs == 0L) {
-                clientErrorLastRefillMs = now
-            }
-            val elapsed = maxOf(0L, now - clientErrorLastRefillMs)
-            if (elapsed > 0L) {
-                val refill = elapsed / 1000.0 * LOG_CLIENT_ERROR_RATE_PER_SEC
-                clientErrorTokens = minOf(LOG_CLIENT_ERROR_BURST.toDouble(), clientErrorTokens + refill)
-                clientErrorLastRefillMs = now
-            }
-            if (clientErrorTokens < 1.0) {
-                clientErrorDroppedCount++
-                -1L
-            } else {
-                clientErrorTokens -= 1.0
-                val dropped = clientErrorDroppedCount
-                clientErrorDroppedCount = 0L
-                dropped
-            }
-        }
 
     @JavascriptInterface
     fun forceStopPackage(packageName: String?): Boolean = diagnostics.forceStopPackage(packageName)
@@ -387,8 +373,6 @@ class VoltBridge(
         internal const val MAX_DETAIL_LEN = 4096
         internal const val MAX_DTC_LEN = 16
         internal const val MAX_PASSPHRASE_LEN = 256
-        private const val LOG_CLIENT_ERROR_RATE_PER_SEC = 5
-        private const val LOG_CLIENT_ERROR_BURST = 10
 
         internal fun safe(
             value: String?,

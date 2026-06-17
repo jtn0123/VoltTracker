@@ -326,6 +326,8 @@ class VoltBridgeTest {
                 // M2 charge target SOC.
                 "setChargeTargetSoc",
                 "setAutoScanOnConnect",
+                // M2 maintenance-overdue alert toggle.
+                "setMaintenanceDueNotify",
                 "getStorageSummary",
                 "exportDebugBundle",
                 "shareBackup",
@@ -348,6 +350,7 @@ class VoltBridgeTest {
                 "exportTripGpx",
                 "exportTripCsv",
                 "exportAllTripsCsv",
+                "exportChargeSessionsCsv",
                 "deleteDetailedSignalLog",
                 "markTripNotTrip",
                 "setTripLabel",

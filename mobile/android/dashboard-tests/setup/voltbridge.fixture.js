@@ -17,7 +17,8 @@ export function createVoltBridgeFixture(overrides = {}) {
     getAutoConnectState: stub('{"enabled":false,"available":false}'),
     getEventNotificationState: stub(
       '{"chargeComplete":true,"newDtc":true,"lowSoc":false,"lowSocThresholdPct":20,' +
-        '"highPackTemp":false,"highPackTempThresholdC":45,"autoScanOnConnect":false}',
+        '"highPackTemp":false,"highPackTempThresholdC":45,"autoScanOnConnect":false,' +
+        '"maintenanceDue":false}',
     ),
     getStorageSummary: stub('{}'),
     exportDebugBundle: stub('{"ok":true,"path":"/tmp/debug"}'),
@@ -60,6 +61,7 @@ export function createVoltBridgeFixture(overrides = {}) {
     setHighPackTempNotify: voidStub,
     setChargeTargetSoc: voidStub,
     setAutoScanOnConnect: voidStub,
+    setMaintenanceDueNotify: voidStub,
     connectLast: voidStub,
     scanLast: voidStub,
     tpmsScanLast: voidStub,
@@ -106,6 +108,7 @@ export const VOLT_BRIDGE_METHODS = Object.freeze([
   'setHighPackTempNotify',
   'setChargeTargetSoc',
   'setAutoScanOnConnect',
+  'setMaintenanceDueNotify',
   'getStorageSummary',
   'exportDebugBundle',
   'shareBackup',
@@ -129,6 +132,7 @@ export const VOLT_BRIDGE_METHODS = Object.freeze([
   'exportTripGpx',
   'exportTripCsv',
   'exportAllTripsCsv',
+  'exportChargeSessionsCsv',
   'deleteDetailedSignalLog',
   'markTripNotTrip',
   'setTripLabel',

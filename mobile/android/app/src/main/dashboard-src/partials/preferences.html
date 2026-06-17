@@ -35,7 +35,7 @@
     </div>
     <div class="pref-row">
       <div class="pref-label">
-        <strong>Electricity rate</strong>
+        <strong>Home electricity rate</strong>
         <small>Charging cost on Charge, and savings vs gas on Insights</small>
       </div>
       <label class="pref-price">
@@ -48,7 +48,35 @@
           max="100"
           step="0.01"
           placeholder="0.00"
-          aria-label="Electricity rate in dollars per kilowatt-hour"
+          aria-label="Home electricity rate in dollars per kilowatt-hour"
+        />
+        <span>/kWh</span>
+      </label>
+    </div>
+    <!-- Optional public/DC-fast charging rate (M3). When set, charge-cost
+         estimates bill public / DC-fast sessions at this rate and home (Level
+         1/2, unknown) sessions at the home rate above. Left blank, every
+         session uses the single home rate, so nothing changes for users who
+         don't charge in public. -->
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Public charging rate</strong>
+        <small
+          >Optional — DC-fast / public sessions use this; home sessions use the
+          rate above. Leave blank to use one rate everywhere.</small
+        >
+      </div>
+      <label class="pref-price">
+        <span>$</span>
+        <input
+          id="publicPricePerKwhInput"
+          type="number"
+          inputmode="decimal"
+          min="0"
+          max="100"
+          step="0.01"
+          placeholder="0.00"
+          aria-label="Public or DC-fast charging rate in dollars per kilowatt-hour"
         />
         <span>/kWh</span>
       </label>

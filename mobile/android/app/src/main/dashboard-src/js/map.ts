@@ -1,4 +1,10 @@
 import {
+  ASSUMED_VOLT_MI_PER_KWH,
+  computeSavingsVsGas,
+  formatSignedMoney,
+  savingsPrefsReady
+} from "./cost-model";
+import {
   CURRENT_DRIVE_LABEL,
   LIVE_ROUTE_ID,
   appendLiveRoutePoint,
@@ -1186,6 +1192,76 @@ import type { MapSessionFilter } from "./map-session-list";
     if (head) head.textContent = "Grade-coded efficiency at each speed on this drive.";
   }
 
+  // Estimated electricity cost + savings-vs-gas for ONE drive, shown in the
+  // trip-detail sheet. Reuses the SHARED cost model (cost-model.ts) so this
+  // per-trip figure and the lifetime Insights figure (insights-panel.ts) use the
+  // exact same math — only the distance differs (this drive vs every drive).
+  // Mirrors renderSavingsVsGas's three states:
+  //   • no logged distance        → cost/savings rows hidden, no note
+  //   • distance but prefs unset   → rows hidden, a tap-through prompt to Settings
+  //   • distance + all prefs set   → the estimated cost + savings figures + note
+  // XSS-safe throughout (textContent / createElement only).
+  function renderTripDetailCost(stats: TripDriveStats): void {
+    const costRow = el("tripDetailCostRow");
+    const savingsRow = el("tripDetailSavingsRow");
+    const note = el("tripDetailCostNote");
+    const meters = stats.distanceMeters;
+    const prefs = VD.prefs;
+    const mpg = prefs.get<number>("mpg", 0);
+    const gasPrice = prefs.get<number>("gasPricePerGal", 0);
+    const pricePerKwh = prefs.get<number>("pricePerKwh", 0);
+    const setHidden = (node: HTMLElement | null, hidden: boolean) => {
+      if (node) node.hidden = hidden;
+    };
+    if (!(meters > 0)) {
+      // No distance to estimate against — keep the rows out entirely.
+      setHidden(costRow, true);
+      setHidden(savingsRow, true);
+      VD.setText("tripDetailCost", "--");
+      VD.setText("tripDetailSavings", "--");
+      if (note) note.replaceChildren();
+      return;
+    }
+    if (!savingsPrefsReady(mpg, gasPrice, pricePerKwh)) {
+      // Distance exists but the comparison prefs are missing — surface the same
+      // tap-through-to-Settings prompt the lifetime savings row uses, rather than
+      // silently hiding cost/savings. Built with createElement/textContent only.
+      setHidden(costRow, true);
+      setHidden(savingsRow, true);
+      VD.setText("tripDetailCost", "--");
+      VD.setText("tripDetailSavings", "--");
+      if (note) {
+        const text = document.createTextNode(
+          "Set your MPG, gas price, and rate in Settings to estimate this drive's cost. "
+        );
+        const link = document.createElement("button");
+        link.type = "button";
+        link.className = "link-btn";
+        link.dataset.navJump = "settings";
+        link.textContent = "Open Settings";
+        note.replaceChildren(text, link);
+      }
+      return;
+    }
+    const { evCost, savings } = computeSavingsVsGas({
+      meters,
+      mpg,
+      gasPricePerGal: gasPrice,
+      pricePerKwh
+    });
+    setHidden(costRow, false);
+    setHidden(savingsRow, false);
+    VD.setText("tripDetailCost", formatSignedMoney(evCost));
+    VD.setText("tripDetailSavings", formatSignedMoney(savings));
+    if (note) {
+      note.replaceChildren(
+        document.createTextNode(
+          `Estimated vs a ${Math.round(mpg)} mpg car at $${gasPrice.toFixed(2)}/gal · assumes ${ASSUMED_VOLT_MI_PER_KWH} mi/kWh`
+        )
+      );
+    }
+  }
+
   // Open the trip-detail sheet for a route key, filling stats + the per-drive
   // scatter. Returns true when a route was found (so actions.ts can decide
   // whether to activate the focus trap).
@@ -1207,6 +1283,7 @@ import type { MapSessionFilter } from "./map-session-list";
     VD.setText("tripDetailAvgSpeed", stats.avgKph > 0 ? `${avg.value} ${avg.unit}` : "--");
     VD.setText("tripDetailMaxSpeed", stats.maxKph > 0 ? VD.units.speedText(stats.maxKph) : "--");
     VD.setText("tripDetailEfficiency", stats.miPerKwh != null && stats.miPerKwh > 0 ? VD.units.efficiencyText(stats.miPerKwh) : "--");
+    renderTripDetailCost(stats);
     VD.setText("tripDetailPoints", stats.pointCount > 0 ? String(stats.pointCount) : "--");
     VD.setText("tripDetailStart", Number.isFinite(stats.startedAtMs) ? VD.formatWhen(stats.startedAtMs) : "--");
     VD.setText("tripDetailEnd", Number.isFinite(stats.endedAtMs) ? VD.formatWhen(stats.endedAtMs) : "--");

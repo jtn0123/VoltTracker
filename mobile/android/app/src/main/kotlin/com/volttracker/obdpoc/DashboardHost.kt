@@ -97,6 +97,8 @@ interface EventNotificationCommands {
     fun setChargeTargetSoc(targetPct: Double)
 
     fun setAutoScanOnConnectEnabled(enabled: Boolean)
+
+    fun setMaintenanceDueEnabled(enabled: Boolean)
 }
 
 /**

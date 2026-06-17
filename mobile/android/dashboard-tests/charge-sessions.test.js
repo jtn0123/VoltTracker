@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
@@ -104,5 +104,63 @@ describe('dashboard charge session history', () => {
     expect(rows[0].dataset.charging).toBe('1');
     expect(rows[0].textContent).toContain('charging now');
     expect(document.getElementById('realChargeStatus').textContent).toBe('charging');
+  });
+
+  // M3 — optional public/DC-fast rate. A public session is billed at the public
+  // rate when one is set; home (Level 1/2) sessions stay on the home rate. With
+  // no public rate set, every session uses the single home rate.
+  describe('home vs public charging rate (M3)', () => {
+    // These cases set rate prefs; the outer beforeEach doesn't clear
+    // localStorage, so isolate each case so a prior rate can't leak forward.
+    beforeEach(() => window.localStorage.clear());
+    afterEach(() => window.localStorage.clear());
+
+    function twoSessions() {
+      const now = Date.now();
+      return {
+        chargeSummary: {
+          chargeSessionCount: 2,
+          recentSessions: [
+            // Newest first: a 10 kWh public DC-fast session, then a 10 kWh home L2 session.
+            { id: 2, startedAtMs: now - 3_600_000, endedAtMs: now - 600_000, chargerType: 'DC fast (CCS, 150 kW pedestal)', startSoc: 30, endSoc: 70, powerKw: 50, energyKwh: 10 },
+            { id: 1, startedAtMs: now - 90_000_000, endedAtMs: now - 86_000_000, chargerType: 'level2', startSoc: 40, endSoc: 90, powerKw: 7.2, energyKwh: 10 },
+          ],
+        },
+      };
+    }
+
+    it('bills a public session at the public rate and a home session at the home rate', () => {
+      window.VoltDashboard.prefs.set('pricePerKwh', 0.12);
+      window.VoltDashboard.prefs.set('publicPricePerKwh', 0.45);
+      window.VoltDashboard.setStorage(twoSessions());
+
+      const rows = document.querySelectorAll('#chargeSessionsList .charge-session-row');
+      // Row 0 = public DC-fast: 10 kWh × $0.45 = $4.50.
+      expect(rows[0].querySelector('b').textContent).toBe('10.0 kWh · $4.50');
+      // Row 1 = home L2: 10 kWh × $0.12 = $1.20.
+      expect(rows[1].querySelector('b').textContent).toBe('10.0 kWh · $1.20');
+      // Lifetime energy-card cost bills each session at its own rate: 4.50 + 1.20.
+      expect(document.getElementById('chargeEnergyCost').textContent).toBe('$5.70');
+    });
+
+    it('falls back to the single home rate everywhere when no public rate is set', () => {
+      window.VoltDashboard.prefs.set('pricePerKwh', 0.12);
+      window.VoltDashboard.setStorage(twoSessions());
+
+      const rows = document.querySelectorAll('#chargeSessionsList .charge-session-row');
+      // Both sessions billed at the home rate: 10 kWh × $0.12 = $1.20 each.
+      expect(rows[0].querySelector('b').textContent).toBe('10.0 kWh · $1.20');
+      expect(rows[1].querySelector('b').textContent).toBe('10.0 kWh · $1.20');
+      expect(document.getElementById('chargeEnergyCost').textContent).toBe('$2.40');
+    });
+
+    it('shows kWh only (no cost) when the home rate is unset', () => {
+      window.VoltDashboard.prefs.set('publicPricePerKwh', 0.45); // public set but no home rate
+      window.VoltDashboard.setStorage(twoSessions());
+      const rows = document.querySelectorAll('#chargeSessionsList .charge-session-row');
+      expect(rows[0].querySelector('b').textContent).toBe('10.0 kWh');
+      expect(rows[1].querySelector('b').textContent).toBe('10.0 kWh');
+      expect(document.getElementById('chargeEnergyCost').textContent).toBe('--');
+    });
   });
 });

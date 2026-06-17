@@ -98,6 +98,17 @@ class EventNotificationDecider(
         data class NewDtc(
             val newCodes: List<String>,
         ) : Event
+
+        /**
+         * A tracked maintenance item just went overdue (M2). [serviceType] is the user's label for
+         * the service and [overdueByText] is the short amount-overdue string ("1,000 km" / "12 days").
+         * Decided on app-open by [MaintenanceDueEvaluator] (not the per-sample core); rides the
+         * maintenance-due toggle and only this [Event] kind reaches [EventNotifier].
+         */
+        data class MaintenanceDue(
+            val serviceType: String,
+            val overdueByText: String,
+        ) : Event
     }
 
     /** A single live telemetry reading the decider cares about. All fields are nullable/absent. */

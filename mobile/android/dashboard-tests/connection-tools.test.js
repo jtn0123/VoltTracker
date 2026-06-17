@@ -27,6 +27,7 @@ describe('connection-tools toggles and buttons', () => {
       setLowSocNotify: vi.fn(),
       setHighPackTempNotify: vi.fn(),
       setAutoScanOnConnect: vi.fn(),
+      setMaintenanceDueNotify: vi.fn(),
       setAutoConnectEnabled: vi.fn(),
       startTestConnection: vi.fn(),
       shareDiagnostics: vi.fn(),
@@ -76,6 +77,18 @@ describe('connection-tools toggles and buttons', () => {
     autoScan.checked = true;
     fire(autoScan, 'change');
     expect(bridge.setAutoScanOnConnect).toHaveBeenCalledWith(true);
+  });
+
+  it('maintenance-due toggle writes through its bridge setter (M2)', () => {
+    const toggle = document.getElementById('notifyMaintenanceDueToggle');
+    expect(toggle).toBeTruthy();
+    toggle.checked = true;
+    fire(toggle, 'change');
+    expect(bridge.setMaintenanceDueNotify).toHaveBeenCalledWith(true);
+
+    toggle.checked = false;
+    fire(toggle, 'change');
+    expect(bridge.setMaintenanceDueNotify).toHaveBeenLastCalledWith(false);
   });
 
   it('auto-connect toggle writes the enabled flag', () => {

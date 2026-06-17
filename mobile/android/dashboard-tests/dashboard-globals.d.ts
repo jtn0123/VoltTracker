@@ -753,6 +753,9 @@ interface VoltRestoreProgress {
     addMaintenanceEntry(): void;
     submitMaintenanceForm(): void;
     closeMaintenanceForm(): void;
+    /** M1 charge-history CSV export: read the electricity-rate pref and forward it to
+     *  bridge.exportChargeSessionsCsv so native can append an estimated-cost column. */
+    exportChargeSessionsCsv(): void;
     buildRealInsights(review: VoltSessionReview): Array<{ title: string; detail: string }>;
     stateCountSummary(counts: Record<string, number>): string;
     /** True when a parsed native payload is a failed read (`ok === false`). */
@@ -863,6 +866,7 @@ interface VoltRestoreProgress {
     exportTripGpx(routeKeyOrSessionId: string): string;
     exportTripCsv(routeKeyOrSessionId: string): string;
     exportAllTripsCsv(): string;
+    exportChargeSessionsCsv(pricePerKwh: string): string;
     deleteDetailedSignalLog(id: string): void;
     markTripNotTrip(routeKey: string): void;
     setTripLabel(routeKey: string, label: string): void;
@@ -883,6 +887,7 @@ interface VoltRestoreProgress {
     setHighPackTempNotify(enabled: boolean, thresholdC: number): void;
     setChargeTargetSoc(targetPct: number): void;
     setAutoScanOnConnect(enabled: boolean): void;
+    setMaintenanceDueNotify(enabled: boolean): void;
     connectLast(): void;
     scanLast(): void;
     tpmsScanLast(): void;

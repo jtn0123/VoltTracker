@@ -255,20 +255,57 @@ open class ObdLocalStore(
      */
     open fun projections(): StoreProjections = StoreProjections(reports, getDatabaseFile())
 
-    /** Read-side projections grouped off [ObdLocalStore]'s class surface; each delegates to [reports]. */
-    class StoreProjections internal constructor(
-        private val reports: ObdStoreReports,
-        private val databaseFile: File,
-    ) {
-        fun storageCounts(): JSONObject = reports.storageCountsJson(databaseFile)
+    /**
+     * Read-side projections grouped off [ObdLocalStore]'s class surface; each delegates to [reports].
+     * Open with an open [chargeSessionsForExport] + a no-arg [protected] constructor so a test fake
+     * store can serve canned charge rows without standing up a real database (the all-trips export
+     * fakes a flat [ObdLocalStore] method instead; charges ride this sub-accessor because
+     * [ObdLocalStore] is at the detekt TooManyFunctions ceiling — see `app/detekt.yml`).
+     */
+    open class StoreProjections {
+        private val reports: ObdStoreReports?
+        private val databaseFile: File?
 
-        fun diagnosticsSummary(limit: Int): JSONObject = reports.diagnosticsSummaryJson(limit)
+        internal constructor(
+            reports: ObdStoreReports,
+            databaseFile: File,
+        ) {
+            this.reports = reports
+            this.databaseFile = databaseFile
+        }
 
-        fun chargeSummary(): JSONObject = reports.chargeSummaryProjectionJson()
+        /** No-arg seam for test subclasses that override the projections they exercise. */
+        protected constructor() {
+            this.reports = null
+            this.databaseFile = null
+        }
 
-        fun batterySummary(): JSONObject = reports.batterySummaryProjectionJson()
+        private fun requireReports(): ObdStoreReports =
+            reports ?: throw UnsupportedOperationException("StoreProjections built without a store")
 
-        fun latestVehicle(): JSONObject = reports.latestVehicleRecord()
+        fun storageCounts(): JSONObject = requireReports().storageCountsJson(databaseFile!!)
+
+        fun diagnosticsSummary(limit: Int): JSONObject = requireReports().diagnosticsSummaryJson(limit)
+
+        fun chargeSummary(): JSONObject = requireReports().chargeSummaryProjectionJson()
+
+        fun batterySummary(): JSONObject = requireReports().batterySummaryProjectionJson()
+
+        fun latestVehicle(): JSONObject = requireReports().latestVehicleRecord()
+
+        /**
+         * The most recent odometer reading in km, or null when none was ever captured. Backs the
+         * maintenance-overdue alert's distance math (M2). Open so a test fake can serve a canned
+         * odometer without a real database.
+         */
+        open fun latestOdometerKm(): Double? = requireReports().latestOdometerKm()
+
+        /**
+         * Charge-session rows bundled for the CSV export (M1): the newest [limit] charges as a JSON
+         * array, each `{ id, startedAtMs, endedAtMs, chargerType, startSoc, endSoc, powerKw,
+         * energyKwh, confidence }`. `TripTrackFormatter.toChargeSessionsCsv` turns it into one CSV.
+         */
+        open fun chargeSessionsForExport(limit: Int): JSONArray = requireReports().chargeSessionsForExportJson(limit)
     }
 
     open override fun getRecentSessionsJson(limit: Int): JSONArray = reports.recentSessionsJson(limit)

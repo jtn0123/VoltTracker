@@ -672,6 +672,13 @@ class VoltBridgeDispatchTest {
         assertEquals(true, activity.lastAutoScanEnabled)
     }
 
+    @Test
+    fun setMaintenanceDueNotifyForwardsViaUiThread() {
+        bridge.setMaintenanceDueNotify(true)
+        drain()
+        assertEquals(true, activity.lastMaintenanceDueEnabled)
+    }
+
     // ---- read-through getter -----------------------------------------------------------
 
     @Test
@@ -762,6 +769,7 @@ class VoltBridgeDispatchTest {
         var lastHighTempThreshold = Double.MIN_VALUE
         var lastChargeTargetSoc = Double.MIN_VALUE
         var lastAutoScanEnabled: Boolean? = null
+        var lastMaintenanceDueEnabled: Boolean? = null
 
         var lastStartedActivity: Intent? = null
 
@@ -946,6 +954,10 @@ class VoltBridgeDispatchTest {
 
                 override fun setAutoScanOnConnectEnabled(enabled: Boolean) {
                     lastAutoScanEnabled = enabled
+                }
+
+                override fun setMaintenanceDueEnabled(enabled: Boolean) {
+                    lastMaintenanceDueEnabled = enabled
                 }
             }
 

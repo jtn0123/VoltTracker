@@ -115,6 +115,30 @@ class EventNotifierTest {
     }
 
     @Test
+    fun maintenanceDuePostsUnderItsOwnBandAndDistinctServicesCoexist() {
+        grantPostNotifications()
+        val notifier = EventNotifier(context)
+
+        notifier.notify(EventNotificationDecider.Event.MaintenanceDue("Oil change", "1000 km"))
+        notifier.notify(EventNotificationDecider.Event.MaintenanceDue("Tire rotation", "12 days"))
+
+        // Two distinct services -> two coexisting alerts (different per-service ids in the band).
+        assertEquals(2, shadowOf(manager).size())
+    }
+
+    @Test
+    fun maintenanceDueReusesTheSameIdForTheSameService() {
+        grantPostNotifications()
+        val notifier = EventNotifier(context)
+
+        notifier.notify(EventNotificationDecider.Event.MaintenanceDue("Oil change", "1000 km"))
+        notifier.notify(EventNotificationDecider.Event.MaintenanceDue("Oil change", "1500 km"))
+
+        // Same service label -> same id -> the second replaces the first rather than stacking.
+        assertEquals(1, shadowOf(manager).size())
+    }
+
+    @Test
     fun postIsANoOpWhenPostNotificationsIsDenied() {
         // Robolectric denies runtime permissions by default; on API 33+ canPost() returns false, so
         // the alert is dropped (logged) instead of crashing or surfacing.

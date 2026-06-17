@@ -76,6 +76,36 @@ describe('charging cost/energy trend (M5)', () => {
     expect(document.getElementById('chargeCostTrendAvg').textContent).toBe('$3.00');
   });
 
+  it('bills public sessions at the public rate per month when one is set (M3)', () => {
+    window.VoltDashboard.prefs.set('pricePerKwh', 0.1);
+    window.VoltDashboard.prefs.set('publicPricePerKwh', 0.5);
+    window.VoltDashboard.setStorage(chargeSummary([
+      // Jan: 10 kWh home L2 → $1.00.
+      { id: 1, startedAtMs: monthMs(2026, 0, 10), chargerType: 'level2', energyKwh: 10 },
+      // Feb: 10 kWh home L2 ($1.00) + 4 kWh public DC-fast ($2.00) → $3.00.
+      { id: 2, startedAtMs: monthMs(2026, 1, 5), chargerType: 'level2', energyKwh: 10 },
+      { id: 3, startedAtMs: monthMs(2026, 1, 20), chargerType: 'dc_fast', energyKwh: 4 },
+    ]));
+
+    expect(document.getElementById('chargeCostTrendTitle').textContent).toBe('Monthly charging cost');
+    // Latest month (Feb) = $1.00 home + $2.00 public = $3.00.
+    expect(document.getElementById('chargeCostTrendLatest').textContent).toBe('$3.00');
+    // Total = $1.00 (Jan) + $3.00 (Feb) = $4.00.
+    expect(document.getElementById('chargeCostTrendTotal').textContent).toBe('$4.00');
+    // Avg = $4.00 / 2 = $2.00.
+    expect(document.getElementById('chargeCostTrendAvg').textContent).toBe('$2.00');
+  });
+
+  it('bills every session at the home rate when no public rate is set (unchanged fallback)', () => {
+    window.VoltDashboard.prefs.set('pricePerKwh', 0.1);
+    window.VoltDashboard.setStorage(chargeSummary([
+      { id: 1, startedAtMs: monthMs(2026, 0, 10), chargerType: 'level2', energyKwh: 10 }, // Jan $1.00
+      { id: 2, startedAtMs: monthMs(2026, 1, 20), chargerType: 'dc_fast', energyKwh: 4 }, // Feb $0.40 (home rate)
+    ]));
+    expect(document.getElementById('chargeCostTrendLatest').textContent).toBe('$0.40');
+    expect(document.getElementById('chargeCostTrendTotal').textContent).toBe('$1.40');
+  });
+
   it('ignores sessions with no positive energy when bucketing', () => {
     window.VoltDashboard.setStorage(chargeSummary([
       { id: 1, startedAtMs: monthMs(2026, 0, 10), energyKwh: 10 },

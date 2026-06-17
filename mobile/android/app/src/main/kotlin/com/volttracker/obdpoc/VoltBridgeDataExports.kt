@@ -116,6 +116,17 @@ internal class VoltBridgeDataExports(
      */
     fun exportAllTripsCsv(): String = activity.exportTripFromBridge(null, "csv_all")
 
+    /**
+     * Charge-history CSV export (M1): every logged charge session's start/end time, SOC, energy, peak
+     * power, charger type, and confidence in one CSV, with an optional estimated-cost column when
+     * [pricePerKwh] is a positive rate. Rides the existing trip-export host seam with the
+     * `csv_charges` sentinel format (so it needs no new host override; the controller dispatches it to
+     * the charge path), passing the rate through the routeKey slot (unused for bulk exports). Returns
+     * the host's JSON result verbatim.
+     */
+    fun exportChargeSessionsCsv(pricePerKwh: String?): String =
+        activity.exportTripFromBridge(VoltBridge.safe(pricePerKwh, VoltBridge.MAX_LABEL_LEN), "csv_charges")
+
     fun deleteDetailedSignalLog(id: String?) {
         val rowId = VoltBridge.parsePositiveId(id)
         if (rowId <= 0L) {

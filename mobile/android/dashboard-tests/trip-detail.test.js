@@ -142,4 +142,62 @@ describe('per-trip detail sheet (M7)', () => {
     expect(title.querySelector('img')).toBeNull();
     expect(title.textContent).toBe('<img src=x onerror=alert(1)>');
   });
+
+  // M3 — per-trip estimated cost + savings vs gas, computed from the SAME shared
+  // cost model the lifetime Insights figure uses (cost-model.ts), just fed this
+  // drive's distance.
+  describe('per-trip cost + savings (M3)', () => {
+    const METERS_PER_MILE = 1609.344;
+    const ASSUMED_MI_PER_KWH = 3.5;
+
+    it('hides the cost/savings rows and prompts for prefs until MPG, gas price, and rate are set', () => {
+      const id = seed({ distanceMeters: 18000 });
+      VD.openTripDetail(id);
+      // No prefs yet → rows hidden, no fabricated numbers, a tap-through prompt.
+      expect(document.getElementById('tripDetailCostRow').hidden).toBe(true);
+      expect(document.getElementById('tripDetailSavingsRow').hidden).toBe(true);
+      expect(document.getElementById('tripDetailCost').textContent).toBe('--');
+      const note = document.getElementById('tripDetailCostNote');
+      expect(note.textContent).toContain('Set your MPG, gas price, and rate in Settings');
+      const jump = note.querySelector('[data-nav-jump="settings"]');
+      expect(jump).not.toBeNull();
+      jump.click();
+      expect(window.VoltDashboard.state.view).toBe('settings');
+    });
+
+    it('shows the estimated cost + savings for this drive once all prefs are set', () => {
+      const distanceMeters = 18000;
+      const id = seed({ distanceMeters });
+      VD.prefs.set('mpg', 30);
+      VD.prefs.set('gasPricePerGal', 4);
+      VD.prefs.set('pricePerKwh', 0.14);
+      VD.openTripDetail(id);
+
+      expect(document.getElementById('tripDetailCostRow').hidden).toBe(false);
+      expect(document.getElementById('tripDetailSavingsRow').hidden).toBe(false);
+
+      const miles = distanceMeters / METERS_PER_MILE;
+      const gasCost = (miles / 30) * 4;
+      const evCost = (miles / ASSUMED_MI_PER_KWH) * 0.14;
+      const expectedCost = '$' + evCost.toFixed(2);
+      const expectedSavings = '$' + (gasCost - evCost).toFixed(2);
+      expect(document.getElementById('tripDetailCost').textContent).toBe(expectedCost);
+      expect(document.getElementById('tripDetailSavings').textContent).toBe(expectedSavings);
+      // Note reads as an estimate, with the assumptions, and no stale prompt link.
+      const note = document.getElementById('tripDetailCostNote');
+      expect(note.querySelector('[data-nav-jump="settings"]')).toBeNull();
+      expect(note.textContent).toContain('Estimated');
+      expect(note.textContent).toContain('30 mpg');
+      expect(note.textContent).toContain('3.5 mi/kWh');
+    });
+
+    it('builds the prompt with createElement only (no markup injection)', () => {
+      const id = seed();
+      VD.openTripDetail(id);
+      const note = document.getElementById('tripDetailCostNote');
+      // Only a text node + a real <button>; no smuggled markup.
+      expect(note.querySelector('script')).toBeNull();
+      expect(note.querySelector('button[data-nav-jump="settings"]')).not.toBeNull();
+    });
+  });
 });

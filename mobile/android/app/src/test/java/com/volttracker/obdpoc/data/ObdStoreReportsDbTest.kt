@@ -442,6 +442,95 @@ class ObdStoreReportsDbTest {
         assertTrue(latest.getDouble("energyKwh") > 10.0)
     }
 
+    // ---- G2 per-session charge-rollup cache ----------------------------------------
+
+    @Test
+    fun chargeSummaryCachesFinalizedSessionsAndReturnsIdenticalOutputOnSecondRead() {
+        // Two finalized drive sessions with a big SOC gain between them — the same inferred-charge
+        // scenario the projection detects. The first read must populate the per-session charge
+        // rollup cache for the (finalized) sessions; the second read must serve the cache and yield
+        // byte-for-byte identical JSON.
+        val first = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(first, sample(40, 15.0, 32.70, -117.10, 1_000L))
+        store.recordTelemetry(first, sample(42, 15.0, 32.71, -117.10, 2_000L))
+        store.finishSession(first, ObdLocalStore.STATUS_COMPLETE, 3_000L, "")
+
+        val second = store.startSession("obd", "00:11", "Adapter", 8 * 3_600_000L)
+        store.recordTelemetry(second, sample(35, 95.0, 32.71, -117.10, 8 * 3_600_000L + 1_000L))
+        store.recordTelemetry(second, sample(38, 94.0, 32.72, -117.10, 8 * 3_600_000L + 2_000L))
+        store.finishSession(second, ObdLocalStore.STATUS_COMPLETE, 8 * 3_600_000L + 3_000L, "")
+
+        assertEquals("cache must be empty before the first read", 0L, countChargeRollups())
+
+        val firstRead = store.projections().chargeSummary().toString()
+        val rollupsAfterFirstRead = countChargeRollups()
+        assertTrue(
+            "finalized sessions must be cached after the first read, saw $rollupsAfterFirstRead",
+            rollupsAfterFirstRead >= 2L,
+        )
+
+        val secondRead = store.projections().chargeSummary().toString()
+        assertEquals("cached read must be byte-for-byte identical", firstRead, secondRead)
+        assertEquals(
+            "second read must not add or drop cache rows",
+            rollupsAfterFirstRead,
+            countChargeRollups(),
+        )
+
+        // Sanity: the detection itself still fires (1 inferred charge) through the cache.
+        val charge = store.projections().chargeSummary()
+        assertEquals(1, charge.getInt("chargeSessionCount"))
+        assertEquals("inferred", charge.getJSONObject("latest").getString("chargerType"))
+        assertEquals(95.0, charge.getJSONObject("latest").getDouble("endSoc"), 0.001)
+    }
+
+    @Test
+    fun chargeSummaryNeverCachesTheActiveSession() {
+        // An open (not-yet-finalized) session is always computed live and must never be cached, so a
+        // mid-drive read can't freeze a stale charge contribution for it.
+        val active = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(active, sample(40, 50.0, 32.70, -117.10, 1_000L))
+        store.recordTelemetry(active, sample(45, 51.0, 32.71, -117.10, 2_000L))
+        // No finishSession — the session stays active.
+
+        store.projections().chargeSummary()
+
+        assertEquals("the active session must never be cached", 0L, countChargeRollups())
+    }
+
+    @Test
+    fun clearAllDataDropsChargeRollups() {
+        val first = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(first, sample(40, 15.0, 32.70, -117.10, 1_000L))
+        store.recordTelemetry(first, sample(42, 15.0, 32.71, -117.10, 2_000L))
+        store.finishSession(first, ObdLocalStore.STATUS_COMPLETE, 3_000L, "")
+
+        val second = store.startSession("obd", "00:11", "Adapter", 8 * 3_600_000L)
+        store.recordTelemetry(second, sample(35, 95.0, 32.71, -117.10, 8 * 3_600_000L + 1_000L))
+        store.recordTelemetry(second, sample(38, 94.0, 32.72, -117.10, 8 * 3_600_000L + 2_000L))
+        store.finishSession(second, ObdLocalStore.STATUS_COMPLETE, 8 * 3_600_000L + 3_000L, "")
+
+        store.projections().chargeSummary()
+        assertTrue("cache must be populated before clear", countChargeRollups() > 0L)
+
+        store.clearAllData()
+
+        assertEquals("clearAllData must drop every charge rollup", 0L, countChargeRollups())
+    }
+
+    private fun countChargeRollups(): Long {
+        val helper = VoltTrackerDb(RuntimeEnvironment.getApplication())
+        try {
+            helper.readableDatabase
+                .rawQuery("SELECT COUNT(*) FROM ${VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS}", null)
+                .use { cursor ->
+                    return if (cursor.moveToFirst()) cursor.getLong(0) else 0L
+                }
+        } finally {
+            helper.close()
+        }
+    }
+
     @Test
     fun chargeSummaryInfersChargeBetweenDriveWindowsInsideLongSession() {
         val id = store.startSession("obd", "00:11", "Adapter")

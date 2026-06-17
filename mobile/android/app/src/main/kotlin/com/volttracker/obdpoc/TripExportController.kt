@@ -37,6 +37,11 @@ class TripExportController(
         if (ALL_TRIPS_FORMAT.equals(formatKey?.trim(), ignoreCase = true)) {
             return exportAllTripsAndShare()
         }
+        // The charge-history CSV export (M1) rides the same host seam with its own sentinel format,
+        // passing the optional electricity rate through the (otherwise-unused-for-bulk) routeKey slot.
+        if (CHARGE_SESSIONS_FORMAT.equals(formatKey?.trim(), ignoreCase = true)) {
+            return exportChargeSessionsAndShare(routeKey)
+        }
         val format =
             TripExportShareIntent.Format.fromKey(formatKey)
                 ?: return error("invalid_format", "Choose GPX or CSV.")
@@ -97,6 +102,72 @@ class TripExportController(
             .put("tripCount", trips.length())
             .put("pointCount", export.pointCount)
             .toString()
+    }
+
+    /**
+     * Charge-history CSV export (M1): reads the logged charge sessions, serializes them into one CSV
+     * (one row per charge — start/end time + SOC, energy, peak power, charger type, confidence, plus
+     * an estimated-cost column when [rateArg] parses as a positive finite per-kWh rate), records the
+     * export, launches the share sheet, and returns the bridge JSON result. Bounded by
+     * [MAX_CHARGE_SESSIONS]. Reached via [exportAndShare] with the [CHARGE_SESSIONS_FORMAT] sentinel;
+     * the rate rides through the routeKey slot (unused for bulk exports).
+     */
+    private fun exportChargeSessionsAndShare(rateArg: String?): String {
+        val store =
+            host.localStore?.takeIf { it.isOpen }
+                ?: return error("storage_unavailable", "Local storage is not ready.")
+        val rate = parsePricePerKwh(rateArg)
+        val rows = readChargeSessions(store)
+        if (rows.length() == 0) {
+            return error("empty_route", context.getString(R.string.status_charge_sessions_export_empty))
+        }
+        val export =
+            TripExportShareIntent.writeChargeSessionsCsv(context, rows, rate, rows.length())
+                ?: return error("export_failed", "Could not write the charge-history CSV file.")
+        recordChargeSessionsExport(store, export)
+        val shareIntent =
+            TripExportShareIntent.buildShareIntent(context, export)
+                ?: return error("share_failed", context.getString(R.string.status_trip_export_share_failed))
+        launchShare(shareIntent, R.string.status_charge_sessions_export_ready)
+        return JSONObject()
+            .put("ok", true)
+            .put("format", "csv")
+            .put("fileName", export.name)
+            .put("bytes", export.bytes)
+            .put("sessionCount", rows.length())
+            .put("withCost", rate != null)
+            .toString()
+    }
+
+    /**
+     * Parses the electricity rate the bridge forwarded through the routeKey slot. A null/blank or
+     * non-positive / non-finite value yields null, which omits the estimated-cost column.
+     */
+    private fun parsePricePerKwh(rateArg: String?): Double? {
+        val cleaned = VoltBridge.safe(rateArg, VoltBridge.MAX_LABEL_LEN)
+        if (cleaned.isEmpty()) {
+            return null
+        }
+        return cleaned.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
+    }
+
+    private fun readChargeSessions(store: ObdLocalStore): org.json.JSONArray =
+        try {
+            store.projections().chargeSessionsForExport(MAX_CHARGE_SESSIONS)
+        } catch (ex: RuntimeException) {
+            Log.w(MainActivity.TAG, "charge-sessions export read failed", ex)
+            org.json.JSONArray()
+        }
+
+    private fun recordChargeSessionsExport(
+        store: ObdLocalStore,
+        export: TripExportShareIntent.TripExportFile,
+    ) {
+        try {
+            store.recordAllTripsExport("csv_charges", export.name, export.format.mime, export.bytes)
+        } catch (ex: RuntimeException) {
+            Log.w(MainActivity.TAG, "charge-sessions export recordExport failed", ex)
+        }
     }
 
     private fun readAllTrips(store: ObdLocalStore): org.json.JSONArray =
@@ -195,8 +266,18 @@ class TripExportController(
          */
         const val ALL_TRIPS_FORMAT = "csv_all"
 
+        /**
+         * Sentinel "format" the bridge passes through [DashboardHost.exportTripFromBridge] to trigger
+         * the charge-history CSV export (M1) without a dedicated host override (same flat-host-surface
+         * rationale as [ALL_TRIPS_FORMAT]). The electricity rate rides through the routeKey slot.
+         */
+        const val CHARGE_SESSIONS_FORMAT = "csv_charges"
+
         /** Bulk-export bound: most-recent N trips, so a huge history can't blow up memory/file size. */
         const val MAX_ALL_TRIPS = 500
+
+        /** Charge-export bound: most-recent N charge sessions, mirroring [MAX_ALL_TRIPS]. */
+        const val MAX_CHARGE_SESSIONS = 500
 
         /** Bulk-export bound: samples per trip (caps the per-trip route projection). */
         const val ALL_TRIPS_POINT_LIMIT = 500

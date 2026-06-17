@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.data
 
+import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import org.json.JSONArray
@@ -333,6 +334,30 @@ class ObdStoreReports(
      */
     fun latestVehicleRecord(): JSONObject = latestVehicleJson(helper.readableDatabase)
 
+    /**
+     * The most recent odometer reading in km, or null when the car has never answered the odometer
+     * PID. Mirrors the dashboard's `latestOdometerKm` primary source (the newest battery snapshot's
+     * `odometer_km`); the maintenance-overdue alert (M2) drives its distance math from this.
+     */
+    fun latestOdometerKm(): Double? {
+        helper.readableDatabase
+            .query(
+                VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS,
+                arrayOf("odometer_km"),
+                "odometer_km IS NOT NULL AND odometer_km > 0",
+                null,
+                null,
+                null,
+                "captured_at_ms DESC",
+                "1",
+            ).use { cursor ->
+                if (!cursor.moveToFirst()) {
+                    return null
+                }
+                return cursor.getDouble(0)
+            }
+    }
+
     fun recentRoutesProjectionJson(
         limit: Int,
         pointLimit: Int,
@@ -413,7 +438,22 @@ class ObdStoreReports(
 
     fun overviewProjectionJson(): JSONObject = safeJson { overviewJson(helper.readableDatabase) }
 
-    fun chargeSummaryProjectionJson(): JSONObject = safeJson { chargeSummaryJson(helper.readableDatabase) }
+    // Writable: chargeSummaryJson lazily backfills the per-session charge-rollup cache (G2) for
+    // finalized sessions on first read, so it needs a writable handle.
+    fun chargeSummaryProjectionJson(): JSONObject = safeJson { chargeSummaryJson(helper.writableDatabase) }
+
+    /**
+     * Charge-session rows bundled for the CSV export (M1, "grade-report"). Reuses the same
+     * [chargeSummaryRows] detection (observed + inferred) the dashboard's charge card renders, then
+     * serializes the newest [limit] rows with [chargeSummaryRowJson] — so the export carries id,
+     * start/end ms, start/end SOC, peak/avg power, energy, charger type, and confidence. Bounded by
+     * [limit] (like the all-trips export) so a huge history can't blow up memory or the share file.
+     *
+     * `TripTrackFormatter.toChargeSessionsCsv` turns this into one CSV (one row per charge).
+     */
+    fun chargeSessionsForExportJson(limit: Int): JSONArray =
+        // Writable: chargeSummaryRows backfills the per-session charge-rollup cache (G2) on read.
+        safeArray { chargeSummaryRowsJson(chargeSummaryRows(helper.writableDatabase), limit) }
 
     fun batterySummaryProjectionJson(): JSONObject = safeJson { batterySummaryJson(helper.readableDatabase) }
 
@@ -709,6 +749,15 @@ class ObdStoreReports(
         private const val ESTIMATED_USABLE_BATTERY_KWH = 14.0
         private const val CHARGE_DRIVING_SPEED_KPH = 5
         private const val CHARGE_DRIVING_SPEED_MPS = CHARGE_DRIVING_SPEED_KPH / 3.6
+
+        // Bump to invalidate cached per-session charge rollups (G2): a logic change in the
+        // within-session SOC scan or the drive/SOC-boundary detection makes old blobs stale, so
+        // raising this forces a one-time recompute-and-rewrite on the next storage-summary read.
+        private const val CHARGE_ROLLUP_CACHE_VERSION = 1
+
+        // Keeps an IN (...) list under SQLite's bind-argument limit (the rollup-version bind shares
+        // the budget, so this leaves ample headroom below the 999/1000 ceiling).
+        private const val SQLITE_BIND_CHUNK = 500
 
         private data class ChargeSummaryRow(
             val id: Any,
@@ -1052,30 +1101,39 @@ class ObdStoreReports(
 
         private fun inferredChargeRowsWithinSessions(db: SQLiteDatabase): List<ChargeSummaryRow> {
             val rows = ArrayList<ChargeSummaryRow>()
-            val sessions =
-                ObdStoreSupport
-                    .getAllSessions(db)
-                    .filter { ObdSessionClassifier.isTripSession(db, it) }
-                    .sortedBy { it.startedAtMs }
-            for (session in sessions) {
-                var previous: SocDriveSample? = null
-                db
-                    .rawQuery(
-                        "SELECT captured_at_ms, soc FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
-                            "WHERE session_id = ? AND soc IS NOT NULL AND speed_kph IS NOT NULL " +
-                            "AND speed_kph >= ? ORDER BY captured_at_ms ASC",
-                        arrayOf(session.id.toString(), CHARGE_DRIVING_SPEED_KPH.toString()),
-                    ).use { cursor ->
-                        while (cursor.moveToNext()) {
-                            val current = SocDriveSample(session.id, cursor.getLong(0), cursor.getDouble(1))
-                            val last = previous
-                            if (last != null) {
-                                maybeInferredChargeRow(last, current)?.let { rows.add(it) }
-                            }
-                            previous = current
-                        }
-                    }
+            for (contribution in sessionChargeContributions(db)) {
+                rows.addAll(contribution.withinSessionRows)
             }
+            return rows
+        }
+
+        /**
+         * Computes this session's within-session inferred-charge rows directly from its telemetry
+         * (the intra-session SOC-gain scan). Pure function of one session's rows — cached per
+         * finalized session in [sessionChargeContributions].
+         */
+        private fun computeWithinSessionRows(
+            db: SQLiteDatabase,
+            session: ObdSessionRecord,
+        ): List<ChargeSummaryRow> {
+            val rows = ArrayList<ChargeSummaryRow>()
+            var previous: SocDriveSample? = null
+            db
+                .rawQuery(
+                    "SELECT captured_at_ms, soc FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                        "WHERE session_id = ? AND soc IS NOT NULL AND speed_kph IS NOT NULL " +
+                        "AND speed_kph >= ? ORDER BY captured_at_ms ASC",
+                    arrayOf(session.id.toString(), CHARGE_DRIVING_SPEED_KPH.toString()),
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val current = SocDriveSample(session.id, cursor.getLong(0), cursor.getDouble(1))
+                        val last = previous
+                        if (last != null) {
+                            maybeInferredChargeRow(last, current)?.let { rows.add(it) }
+                        }
+                        previous = current
+                    }
+                }
             return rows
         }
 
@@ -1135,37 +1193,42 @@ class ObdStoreReports(
         }
 
         private fun meaningfulDriveSocBoundaries(db: SQLiteDatabase): List<DriveSocBoundary> {
-            val sessions =
-                ObdStoreSupport
-                    .getAllSessions(db)
-                    .filter { ObdSessionClassifier.isTripSession(db, it) }
-                    .sortedBy { it.startedAtMs }
-            if (sessions.isEmpty()) {
-                return emptyList()
-            }
-            val windowsBySession = DriveWindowDetector.windowsForSessions(db, sessions)
             val boundaries = ArrayList<DriveSocBoundary>()
-            for (session in sessions) {
-                for (window in windowsBySession[session.id].orEmpty()) {
-                    val points =
-                        ObdStoreRouteProjection.routePointsForSessionJson(
-                            db,
-                            session.id,
-                            1000,
-                            window.startedAtMs,
-                            window.endedAtMs,
-                        )
-                    val distanceMeters = ObdStoreSupport.distanceMeters(points)
-                    val maxSpeed = ObdSessionClassifier.maxSpeedKphForWindow(db, session.id, window)
-                    if (!ObdSessionClassifier.isMeaningfulTrip(points.length(), distanceMeters, maxSpeed)) {
-                        continue
-                    }
-                    val startSoc = socForWindow(db, session.id, window, "ASC") ?: continue
-                    val endSoc = socForWindow(db, session.id, window, "DESC") ?: continue
-                    boundaries.add(DriveSocBoundary(session.id, window.startedAtMs, window.endedAtMs, startSoc, endSoc))
-                }
+            for (contribution in sessionChargeContributions(db)) {
+                boundaries.addAll(contribution.boundaries)
             }
             return boundaries.sortedBy { it.startedAtMs }
+        }
+
+        /**
+         * Computes this session's meaningful drive/SOC boundaries directly from its drive windows
+         * and telemetry. Pure function of one session's rows — cached per finalized session in
+         * [sessionChargeContributions]. The caller applies the final sort across all sessions.
+         */
+        private fun computeBoundaries(
+            db: SQLiteDatabase,
+            session: ObdSessionRecord,
+        ): List<DriveSocBoundary> {
+            val boundaries = ArrayList<DriveSocBoundary>()
+            for (window in DriveWindowDetector.windowsForSession(db, session)) {
+                val points =
+                    ObdStoreRouteProjection.routePointsForSessionJson(
+                        db,
+                        session.id,
+                        1000,
+                        window.startedAtMs,
+                        window.endedAtMs,
+                    )
+                val distanceMeters = ObdStoreSupport.distanceMeters(points)
+                val maxSpeed = ObdSessionClassifier.maxSpeedKphForWindow(db, session.id, window)
+                if (!ObdSessionClassifier.isMeaningfulTrip(points.length(), distanceMeters, maxSpeed)) {
+                    continue
+                }
+                val startSoc = socForWindow(db, session.id, window, "ASC") ?: continue
+                val endSoc = socForWindow(db, session.id, window, "DESC") ?: continue
+                boundaries.add(DriveSocBoundary(session.id, window.startedAtMs, window.endedAtMs, startSoc, endSoc))
+            }
+            return boundaries
         }
 
         private fun socForWindow(
@@ -1183,6 +1246,187 @@ class ObdStoreReports(
                 ).use { cursor ->
                     if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getDouble(0) else null
                 }
+
+        /**
+         * Per-session contribution to the inferred-charge scan (G2): this session's within-session
+         * inferred-charge rows plus its meaningful drive/SOC boundaries. Both are pure functions of
+         * one finalized session's raw rows, so they are cached per session in `charge_session_rollups`
+         * and reassembled by the cross-session merge/sort, which is what makes the cache transparent.
+         */
+        private class SessionChargeContribution(
+            val withinSessionRows: List<ChargeSummaryRow>,
+            val boundaries: List<DriveSocBoundary>,
+        )
+
+        /**
+         * Enumerates trip sessions in the exact order the uncached scan used
+         * (`getAllSessions` filtered to trip sessions, oldest-first) and returns each one's charge
+         * contribution. For a finalized session cached at [CHARGE_ROLLUP_CACHE_VERSION] the cached
+         * blob is served; otherwise the contribution is computed, and — only for finalized sessions —
+         * persisted before being returned. The active (not-yet-finalized) session is always computed
+         * live and never cached. Output order matches the uncached path, so downstream assembly is
+         * byte-identical.
+         */
+        private fun sessionChargeContributions(db: SQLiteDatabase): List<SessionChargeContribution> {
+            val sessions =
+                ObdStoreSupport
+                    .getAllSessions(db)
+                    .filter { ObdSessionClassifier.isTripSession(db, it) }
+                    .sortedBy { it.startedAtMs }
+            if (sessions.isEmpty()) {
+                return emptyList()
+            }
+            val cached = cachedChargeContributions(db, sessions.map { it.id })
+            val contributions = ArrayList<SessionChargeContribution>(sessions.size)
+            for (session in sessions) {
+                val finalized = session.endedAtMs > 0
+                val hit = if (finalized) cached[session.id] else null
+                if (hit != null) {
+                    contributions.add(hit)
+                    continue
+                }
+                val computed =
+                    SessionChargeContribution(
+                        computeWithinSessionRows(db, session),
+                        computeBoundaries(db, session),
+                    )
+                if (finalized) {
+                    writeChargeRollup(db, session.id, computed)
+                }
+                contributions.add(computed)
+            }
+            return contributions
+        }
+
+        /**
+         * Loads cached charge contributions for [sessionIds] that are still at the current
+         * [CHARGE_ROLLUP_CACHE_VERSION], parsing each stored blob back into a contribution. A blob
+         * that fails to parse is skipped (treated as a miss), so the session recomputes and rewrites
+         * a fresh row instead of poisoning the projection.
+         */
+        private fun cachedChargeContributions(
+            db: SQLiteDatabase,
+            sessionIds: List<Long>,
+        ): Map<Long, SessionChargeContribution> {
+            val result = HashMap<Long, SessionChargeContribution>()
+            for (chunk in sessionIds.chunked(SQLITE_BIND_CHUNK)) {
+                val placeholders = chunk.joinToString(",") { "?" }
+                val args = (chunk.map { it.toString() } + CHARGE_ROLLUP_CACHE_VERSION.toString()).toTypedArray()
+                db
+                    .rawQuery(
+                        "SELECT session_id, charge_json FROM ${VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS} " +
+                            "WHERE session_id IN ($placeholders) AND rollup_version = ?",
+                        args,
+                    ).use { cursor ->
+                        while (cursor.moveToNext()) {
+                            val sessionId = cursor.getLong(0)
+                            parseChargeContribution(cursor.getString(1))?.let { result[sessionId] = it }
+                        }
+                    }
+            }
+            return result
+        }
+
+        private fun writeChargeRollup(
+            db: SQLiteDatabase,
+            sessionId: Long,
+            contribution: SessionChargeContribution,
+        ) {
+            val values =
+                ContentValues().apply {
+                    put("session_id", sessionId)
+                    put("rollup_version", CHARGE_ROLLUP_CACHE_VERSION)
+                    put("computed_at_ms", System.currentTimeMillis())
+                    put("charge_json", serializeChargeContribution(contribution).toString())
+                }
+            db.insertWithOnConflict(
+                VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS,
+                null,
+                values,
+                SQLiteDatabase.CONFLICT_REPLACE,
+            )
+        }
+
+        @Throws(JSONException::class)
+        private fun serializeChargeContribution(contribution: SessionChargeContribution): JSONObject {
+            val rows = JSONArray()
+            for (row in contribution.withinSessionRows) {
+                rows.put(serializeChargeRow(row))
+            }
+            val boundaries = JSONArray()
+            for (boundary in contribution.boundaries) {
+                boundaries.put(serializeBoundary(boundary))
+            }
+            return JSONObject().put("rows", rows).put("boundaries", boundaries)
+        }
+
+        private fun parseChargeContribution(json: String?): SessionChargeContribution? {
+            if (json.isNullOrEmpty()) {
+                return null
+            }
+            return try {
+                val obj = JSONObject(json)
+                val rowsArray = obj.getJSONArray("rows")
+                val rows = ArrayList<ChargeSummaryRow>(rowsArray.length())
+                for (i in 0 until rowsArray.length()) {
+                    rows.add(parseChargeRow(rowsArray.getJSONObject(i)))
+                }
+                val boundariesArray = obj.getJSONArray("boundaries")
+                val boundaries = ArrayList<DriveSocBoundary>(boundariesArray.length())
+                for (i in 0 until boundariesArray.length()) {
+                    boundaries.add(parseBoundary(boundariesArray.getJSONObject(i)))
+                }
+                SessionChargeContribution(rows, boundaries)
+            } catch (ex: JSONException) {
+                null
+            }
+        }
+
+        @Throws(JSONException::class)
+        private fun serializeChargeRow(row: ChargeSummaryRow): JSONObject =
+            JSONObject()
+                .put("id", row.id)
+                .put("startedAtMs", row.startedAtMs)
+                .put("endedAtMs", row.endedAtMs ?: JSONObject.NULL)
+                .put("chargerType", row.chargerType ?: JSONObject.NULL)
+                .put("startSoc", row.startSoc ?: JSONObject.NULL)
+                .put("endSoc", row.endSoc ?: JSONObject.NULL)
+                .put("powerKw", row.powerKw ?: JSONObject.NULL)
+                .put("energyKwh", row.energyKwh ?: JSONObject.NULL)
+                .put("confidence", row.confidence ?: JSONObject.NULL)
+
+        @Throws(JSONException::class)
+        private fun parseChargeRow(obj: JSONObject): ChargeSummaryRow =
+            ChargeSummaryRow(
+                obj.get("id"),
+                obj.getLong("startedAtMs"),
+                if (obj.isNull("endedAtMs")) null else obj.getLong("endedAtMs"),
+                if (obj.isNull("chargerType")) null else obj.getString("chargerType"),
+                if (obj.isNull("startSoc")) null else obj.getDouble("startSoc"),
+                if (obj.isNull("endSoc")) null else obj.getDouble("endSoc"),
+                if (obj.isNull("powerKw")) null else obj.getDouble("powerKw"),
+                if (obj.isNull("energyKwh")) null else obj.getDouble("energyKwh"),
+                if (obj.isNull("confidence")) null else obj.getDouble("confidence"),
+            )
+
+        @Throws(JSONException::class)
+        private fun serializeBoundary(boundary: DriveSocBoundary): JSONObject =
+            JSONObject()
+                .put("sessionId", boundary.sessionId)
+                .put("startedAtMs", boundary.startedAtMs)
+                .put("endedAtMs", boundary.endedAtMs)
+                .put("startSoc", boundary.startSoc)
+                .put("endSoc", boundary.endSoc)
+
+        @Throws(JSONException::class)
+        private fun parseBoundary(obj: JSONObject): DriveSocBoundary =
+            DriveSocBoundary(
+                obj.getLong("sessionId"),
+                obj.getLong("startedAtMs"),
+                obj.getLong("endedAtMs"),
+                obj.getDouble("startSoc"),
+                obj.getDouble("endSoc"),
+            )
 
         private fun isInsideInferredCharge(
             observed: ChargeSummaryRow,

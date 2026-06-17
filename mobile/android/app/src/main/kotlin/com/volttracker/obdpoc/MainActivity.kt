@@ -74,6 +74,24 @@ open class MainActivity :
     // off this class surface, mirroring EventNotificationHostDelegate.
     private val tripExportController by lazy { TripExportController(applicationContext, this) }
 
+    // App-open maintenance-overdue check (M2). Reads the maintenance log + latest odometer, runs the
+    // pure evaluator, and posts via EventNotifier; the body lives on the notifier so this Activity
+    // adds a single onResume() call. Lazy so it survives the test seam that skips super.onCreate(),
+    // and because eventNotificationPrefs/localStore only exist after onCreate.
+    private val maintenanceDueNotifier by lazy {
+        val notifier = EventNotifier(applicationContext)
+        MaintenanceDueNotifier(
+            isEnabled = { eventNotificationPrefs?.maintenanceDueEnabled() == true },
+            readMaintenanceLogJson = {
+                localStore?.getMaintenanceLogJson(MaintenanceDueNotifier.MAX_MAINTENANCE_ROWS)
+            },
+            readLatestOdometerKm = { localStore?.projections()?.latestOdometerKm() },
+            readNotifiedSignatures = { eventNotificationPrefs?.notifiedMaintenanceSignatures() ?: emptySet() },
+            persistNotifiedSignatures = { eventNotificationPrefs?.setNotifiedMaintenanceSignatures(it) },
+            notify = { event -> notifier.notify(event) },
+        )
+    }
+
     private var autoConnectController: AutoConnectController? = null
     private var eventNotificationPrefs: EventNotificationPrefs? = null
 
@@ -353,6 +371,21 @@ open class MainActivity :
         publishAppState()
         reportAppVisibility(true)
         maybeAutoConnect(AutoConnectController.TRIGGER_APP_RESUME, null)
+        checkMaintenanceDueOnAppOpen()
+    }
+
+    // M2: on every foreground entry, fire a one-shot alert for any tracked maintenance item that has
+    // newly gone overdue. Off the UI thread (it reads SQLite); the notifier no-ops when the toggle is
+    // off and de-dups each overdue crossing via the persisted signatures, so re-running on each resume
+    // is cheap and never re-nags. A store/exception is swallowed so a resume can never crash on it.
+    private fun checkMaintenanceDueOnAppOpen() {
+        submitBackground {
+            try {
+                maintenanceDueNotifier.checkOnAppOpen()
+            } catch (ex: RuntimeException) {
+                Log.w(TAG, "maintenance-due check failed", ex)
+            }
+        }
     }
 
     override fun onPause() {

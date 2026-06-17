@@ -148,6 +148,14 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
             includes = ["com.volttracker.obdpoc.AutoScanController"]
             limit { counter = "LINE"; minimum = 0.78 }
         }
+        // M2 maintenance-overdue evaluator: pure due/overdue math + crossing-signature de-dup, the
+        // exact "pure, testable domain logic" the focused floors guard. MaintenanceDueEvaluatorTest
+        // exercises every branch; floor set just under the measured line rate for churn room.
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.MaintenanceDueEvaluator"]
+            limit { counter = "LINE"; minimum = 0.90 }
+        }
         rule {
             limit { counter = "LINE"; minimum = 0.80 }
         }

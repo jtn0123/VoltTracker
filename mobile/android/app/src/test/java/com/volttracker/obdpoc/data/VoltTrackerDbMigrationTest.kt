@@ -548,6 +548,90 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun upgradeFromV13_addsChargeSessionRollupsTable() {
+        // The v13→v14 migration creates the charge_session_rollups cache table (G2). The step is
+        // non-destructive: an existing session row must survive untouched while the new table
+        // appears empty, ready to be backfilled lazily on the next storage-summary read.
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_v13_v14.db"
+        context.deleteDatabase(name)
+
+        val v13Helper =
+            object : SQLiteOpenHelper(context.applicationContext, name, null, 13) {
+                override fun onCreate(db: SQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE " +
+                            VoltTrackerDb.TABLE_SESSIONS +
+                            " (_id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                            " mode TEXT NOT NULL, adapter_address TEXT," +
+                            " adapter_name TEXT, started_at_ms INTEGER NOT NULL," +
+                            " ended_at_ms INTEGER, status TEXT NOT NULL," +
+                            " supported_pids TEXT," +
+                            " sample_count INTEGER NOT NULL DEFAULT 0," +
+                            " last_event_at_ms INTEGER," +
+                            " created_at_ms INTEGER NOT NULL)",
+                    )
+                    db.execSQL(
+                        "INSERT INTO " +
+                            VoltTrackerDb.TABLE_SESSIONS +
+                            " (mode, started_at_ms, status, created_at_ms)" +
+                            " VALUES ('obd', 1000, 'complete', 1000)",
+                    )
+                }
+
+                override fun onUpgrade(
+                    db: SQLiteDatabase,
+                    oldVersion: Int,
+                    newVersion: Int,
+                ) {
+                    // unused
+                }
+            }
+        val v13Db = v13Helper.writableDatabase
+        assertFalse(
+            "v13 schema must not pre-contain the charge session rollups table",
+            readTableNames(v13Db).contains(VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS),
+        )
+        v13Helper.close()
+
+        newHelper = VoltTrackerDb(context, name)
+        val newDb = newHelper!!.writableDatabase
+        assertEquals(
+            "Reopened DB should be at the current schema version after onUpgrade.",
+            VoltTrackerDb.DATABASE_VERSION,
+            newDb.version,
+        )
+        assertTrue(
+            "After v13->v14 upgrade, the charge session rollups table must exist.",
+            readTableNames(newDb).contains(VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS),
+        )
+        // It carries the documented cache columns and starts empty.
+        val columns = readColumnNames(newDb, VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS)
+        assertTrue("rollup table must key on session_id", columns.contains("session_id"))
+        assertTrue("rollup table must carry rollup_version", columns.contains("rollup_version"))
+        assertTrue("rollup table must carry charge_json", columns.contains("charge_json"))
+        newDb
+            .rawQuery("SELECT COUNT(*) FROM ${VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS}", null)
+            .use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("new cache table must start empty", 0L, cursor.getLong(0))
+            }
+        // The pre-existing session row survives untouched.
+        newDb
+            .rawQuery(
+                "SELECT status FROM ${VoltTrackerDb.TABLE_SESSIONS} WHERE started_at_ms = 1000",
+                null,
+            ).use { cursor ->
+                assertTrue("pre-existing session row must survive", cursor.moveToFirst())
+                assertEquals("complete", cursor.getString(0))
+            }
+
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun databaseVersionBumpRequiresMigrationCoverageUpdate() {
         assertEquals(
             "DATABASE_VERSION changed. Add a focused migration test for the new version, " +
@@ -692,7 +776,7 @@ class VoltTrackerDbMigrationTest {
     }
 
     companion object {
-        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 13
+        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 14
 
         private val V7_INDEXES =
             arrayOf(

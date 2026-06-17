@@ -36,6 +36,7 @@ class EventNotificationPrefsTest {
         assertFalse("low-SOC defaults off", subject.lowSocEnabled())
         assertFalse("high-temp defaults off", subject.highPackTempEnabled())
         assertFalse("auto-scan defaults off", subject.autoScanOnConnectEnabled())
+        assertFalse("maintenance-due defaults off (opt-in)", subject.maintenanceDueEnabled())
         assertEquals(20.0, subject.lowSocThresholdPct(), 0.001)
         assertEquals(45.0, subject.highPackTempThresholdC(), 0.001)
         assertEquals("target SOC defaults to a full charge", 100.0, subject.targetSocPct(), 0.001)
@@ -51,6 +52,7 @@ class EventNotificationPrefsTest {
         subject.setHighPackTempThresholdC(50.0)
         subject.setTargetSocPct(80.0)
         subject.setAutoScanOnConnectEnabled(true)
+        subject.setMaintenanceDueEnabled(true)
 
         val reloaded = EventNotificationPrefs(prefs)
         assertFalse(reloaded.chargeCompleteEnabled())
@@ -61,6 +63,25 @@ class EventNotificationPrefsTest {
         assertEquals(50.0, reloaded.highPackTempThresholdC(), 0.001)
         assertEquals(80.0, reloaded.targetSocPct(), 0.001)
         assertTrue(reloaded.autoScanOnConnectEnabled())
+        assertTrue(reloaded.maintenanceDueEnabled())
+    }
+
+    @Test
+    fun maintenanceSignaturesRoundTripAndDefaultEmpty() {
+        assertTrue("no fired crossings before any write", subject.notifiedMaintenanceSignatures().isEmpty())
+        subject.setNotifiedMaintenanceSignatures(listOf(" 7:km ", "3:months", "7:km"))
+        // Trimmed and deduped; order-insensitive equality via Set.
+        assertEquals(setOf("7:km", "3:months"), EventNotificationPrefs(prefs).notifiedMaintenanceSignatures())
+    }
+
+    @Test
+    fun maintenanceTogglesLeaveTheSettingsVersionAlone() {
+        // The maintenance-due feature runs on app-open, not the per-sample decider, so its toggle +
+        // signature writes must not churn the cached Settings version (mirrors the auto-scan flag).
+        val before = subject.settingsVersion()
+        subject.setMaintenanceDueEnabled(true)
+        subject.setNotifiedMaintenanceSignatures(listOf("7:km"))
+        assertEquals("maintenance writes leave the version alone", before, subject.settingsVersion())
     }
 
     @Test
@@ -152,6 +173,7 @@ class EventNotificationPrefsTest {
         assertFalse(json.getBoolean("highPackTemp"))
         assertEquals(100.0, json.getDouble("targetSocPct"), 0.001)
         assertFalse(json.getBoolean("autoScanOnConnect"))
+        assertFalse("maintenance-due reflected and defaults off", json.getBoolean("maintenanceDue"))
     }
 
     @Test

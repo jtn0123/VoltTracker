@@ -181,9 +181,20 @@
           </select>
         </label>
       </div>
+      <div class="connection-tools__notify-row">
+        <label class="connection-tools__notify-toggle">
+          <input
+            id="notifyMaintenanceDueToggle"
+            type="checkbox"
+            data-action="notify-maintenance-due"
+          />
+          <span>Notify when maintenance is overdue</span>
+        </label>
+      </div>
       <small class="status-copy">
         Battery alerts need notification permission and fire once each time a
-        reading crosses the threshold.
+        reading crosses the threshold. The maintenance alert fires once when a
+        tracked service first goes overdue.
       </small>
       <small
         id="eventNotifyStatus"

@@ -278,6 +278,10 @@ function bindEventNotifications(opts?: AddEventListenerOptions) {
     },
     opts,
   );
+  bindBoolToggle("notifyMaintenanceDueToggle", state.maintenanceDue === true, (checked) => {
+    safeCall("setMaintenanceDueNotify", checked);
+    announceStatus("eventNotifyStatus", "Maintenance-overdue alerts " + onOff(checked) + ".");
+  }, opts);
   bindBoolToggle("autoScanOnConnectToggle", state.autoScanOnConnect === true, (checked) => {
     safeCall("setAutoScanOnConnect", checked);
     announceStatus("autoScanStatus", "Auto-scan on connect " + onOff(checked) + ".");

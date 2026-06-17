@@ -272,6 +272,9 @@ class ObdStoreTrips(
         val db = helper.writableDatabase
         db.delete(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, "session_id = ?", arrayOf(sessionId.toString()))
         db.delete(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, "session_id = ?", arrayOf(sessionId.toString()))
+        // G2: hiding a trip changes drive-window detection, which feeds the session's inferred-charge
+        // drive/SOC boundaries, so drop its cached charge rollup too (recomputes on the next read).
+        db.delete(VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS, "session_id = ?", arrayOf(sessionId.toString()))
     }
 
     private fun ensureRollupsAndCollectActive(db: SQLiteDatabase): List<ObdSessionRecord> {

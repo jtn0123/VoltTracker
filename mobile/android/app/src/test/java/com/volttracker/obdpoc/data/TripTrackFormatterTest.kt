@@ -230,6 +230,94 @@ class TripTrackFormatterTest {
         assertEquals(TripTrackFormatter.ALL_TRIPS_CSV_HEADER + "\n", TripTrackFormatter.toAllTripsCsv(JSONArray()))
     }
 
+    // ---- charge-sessions CSV (M1) ------------------------------------------------------
+
+    @Test
+    fun chargeSessionsCsvHasHeaderThenOneRowPerCharge() {
+        val rows = JSONArray()
+        rows.put(chargeRow(id = 7, startMs = 10_000L, endMs = 30_000L, startSoc = 40.0, endSoc = 80.0))
+        rows.put(chargeRow(id = 8, startMs = 100_000L, endMs = 200_000L, startSoc = 20.0, endSoc = 55.0))
+
+        val csv = TripTrackFormatter.toChargeSessionsCsv(rows, null)
+        val lines = csv.trimEnd('\n').split("\n")
+
+        assertEquals("no-cost header", TripTrackFormatter.CHARGE_SESSIONS_CSV_HEADER, lines[0])
+        assertEquals("header + one row per charge", 3, lines.size)
+        // First data row: id, ISO/epoch start+end, start/end soc, energy, peak power, charger, confidence.
+        assertTrue("first row carries the id", lines[1].startsWith("7,"))
+        assertTrue("ISO-8601 UTC start time", lines[1].contains("1970-01-01T00:00:10Z"))
+        assertTrue("epoch start ms", lines[1].contains(",10000,"))
+        assertTrue("start soc", lines[1].contains(",40.0,"))
+        assertTrue("end soc", lines[1].contains(",80.0,"))
+        assertTrue("charger type", lines[1].contains(",L2,"))
+    }
+
+    @Test
+    fun chargeSessionsCsvOmitsCostColumnWhenNoRate() {
+        val rows = JSONArray().put(chargeRow(id = 1, startMs = 10_000L, endMs = 30_000L, energyKwh = 10.0))
+
+        val csv = TripTrackFormatter.toChargeSessionsCsv(rows, null)
+
+        assertEquals(TripTrackFormatter.CHARGE_SESSIONS_CSV_HEADER, csv.trimEnd('\n').split("\n")[0])
+        assertFalse("no est_cost column without a rate", csv.contains("est_cost"))
+    }
+
+    @Test
+    fun chargeSessionsCsvAddsCostColumnWhenRateIsSet() {
+        val rows = JSONArray().put(chargeRow(id = 1, startMs = 10_000L, endMs = 30_000L, energyKwh = 10.0))
+
+        val csv = TripTrackFormatter.toChargeSessionsCsv(rows, 0.155)
+        val lines = csv.trimEnd('\n').split("\n")
+
+        assertEquals("with-cost header", TripTrackFormatter.CHARGE_SESSIONS_CSV_HEADER_WITH_COST, lines[0])
+        assertTrue("header ends with est_cost", lines[0].endsWith(",est_cost"))
+        // 10 kWh × $0.155 = $1.55, 2 dp.
+        assertTrue("estimated cost is energyKwh × rate at 2 dp", lines[1].endsWith(",1.55"))
+    }
+
+    @Test
+    fun chargeSessionsCsvLeavesCostBlankWhenEnergyMissingButRateSet() {
+        // A charge stub with no energy reading cannot have a cost; the column stays blank rather than 0.
+        val rows = JSONArray().put(chargeRow(id = 1, startMs = 10_000L, endMs = 30_000L, energyKwh = null))
+
+        val csv = TripTrackFormatter.toChargeSessionsCsv(rows, 0.20)
+
+        assertTrue("blank cost cell for a charge with no energy", csv.trimEnd('\n').endsWith(","))
+    }
+
+    @Test
+    fun chargeSessionsCsvNeutralizesFormulaInjectionInChargerType() {
+        // charger_type is free-text that can arrive from a merged backup; a leading = must be defused so
+        // Excel/Sheets treats it as text, not a formula (CSV injection).
+        val rows = JSONArray().put(chargeRow(id = 1, startMs = 10_000L, endMs = 30_000L, chargerType = "=cmd|'/c'"))
+
+        val csv = TripTrackFormatter.toChargeSessionsCsv(rows, null)
+
+        assertTrue("formula charger type is apostrophe-guarded", csv.contains(",'=cmd|"))
+        assertFalse("no cell exposes an unguarded =formula", csv.contains(",=cmd|"))
+    }
+
+    @Test
+    fun chargeSessionsCsvHeaderOnlyWhenNoCharges() {
+        assertEquals(
+            TripTrackFormatter.CHARGE_SESSIONS_CSV_HEADER + "\n",
+            TripTrackFormatter.toChargeSessionsCsv(JSONArray(), null),
+        )
+    }
+
+    @Test
+    fun chargeSessionsCsvLeavesMissingNumericFieldsBlank() {
+        // A row with no SOC / power / confidence emits empty cells, not zeros.
+        val rows = JSONArray().put(JSONObject().put("id", 5).put("startedAtMs", 10_000L))
+
+        val csv = TripTrackFormatter.toChargeSessionsCsv(rows, null)
+        val row = csv.trimEnd('\n').split("\n")[1]
+
+        // id, start_iso, start_epoch, then blank end_iso/end_epoch/soc/soc/energy/power/charger/confidence.
+        assertTrue("starts with id + start columns", row.startsWith("5,1970-01-01T00:00:10Z,10000,"))
+        assertTrue("trailing fields are blank", row.endsWith(",,,,,,,,"))
+    }
+
     private companion object {
         private val SAMPLE_POINTS =
             listOf(
@@ -261,6 +349,33 @@ class TripTrackFormatterTest {
                     "session",
                     JSONObject().put("id", "1:10000:30000").put("sessionId", 1).put("adapterName", "OBDLink"),
                 ).put("points", arr)
+        }
+
+        /**
+         * A charge-session export row mirroring the shape `ObdStoreReports.chargeSummaryRowJson`
+         * builds (M1). Defaults give a complete L2 charge; pass null to drop a field (absent key).
+         */
+        @Suppress("LongParameterList")
+        private fun chargeRow(
+            id: Any,
+            startMs: Long,
+            endMs: Long? = null,
+            startSoc: Double? = 30.0,
+            endSoc: Double? = 70.0,
+            energyKwh: Double? = 6.0,
+            powerKw: Double? = 7.2,
+            chargerType: String? = "L2",
+            confidence: Double? = 0.9,
+        ): JSONObject {
+            val obj = JSONObject().put("id", id).put("startedAtMs", startMs)
+            endMs?.let { obj.put("endedAtMs", it) }
+            startSoc?.let { obj.put("startSoc", it) }
+            endSoc?.let { obj.put("endSoc", it) }
+            energyKwh?.let { obj.put("energyKwh", it) }
+            powerKw?.let { obj.put("powerKw", it) }
+            chargerType?.let { obj.put("chargerType", it) }
+            confidence?.let { obj.put("confidence", it) }
+            return obj
         }
 
         /** A `{ tripId, label, route }` element for the bulk all-trips CSV (M6). */

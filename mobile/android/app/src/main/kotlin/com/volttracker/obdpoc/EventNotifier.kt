@@ -121,6 +121,18 @@ open class EventNotifier(
                     ),
                 )
             is EventNotificationDecider.Event.NewDtc -> describeNewDtc(event)
+            is EventNotificationDecider.Event.MaintenanceDue ->
+                NotificationSpec(
+                    // Per-service id (base + label hash) so several overdue items posted in one
+                    // app-open coexist instead of replacing one another, the way distinct event kinds do.
+                    NOTIFICATION_ID_MAINTENANCE + maintenanceIdOffset(event.serviceType),
+                    context.getString(R.string.notification_maintenance_due_title),
+                    context.getString(
+                        R.string.notification_maintenance_due_text,
+                        event.serviceType,
+                        event.overdueByText,
+                    ),
+                )
             is EventNotificationDecider.Event.LowSoc ->
                 NotificationSpec(
                     NOTIFICATION_ID_LOW_SOC,
@@ -179,6 +191,12 @@ open class EventNotifier(
         const val NOTIFICATION_ID_HIGH_TEMP = 4304
         const val NOTIFICATION_ID_TARGET_SOC = 4305
 
+        // Base id for maintenance-overdue alerts (M2); each service adds a small bounded offset
+        // (see maintenanceIdOffset) so multiple overdue items posted at once coexist. The
+        // [0, MAINTENANCE_ID_RANGE) band is reserved and stays clear of the ids above.
+        const val NOTIFICATION_ID_MAINTENANCE = 4400
+        private const val MAINTENANCE_ID_RANGE = 64
+
         // Below this, format1 rounds the energy to "0.0", so the charge-complete copy switches to
         // the no-energy variant rather than claiming "Added 0.0 kWh".
         private const val MIN_DISPLAYED_KWH = 0.05
@@ -205,5 +223,12 @@ open class EventNotifier(
         private fun format0(value: Double): String = String.format(Locale.getDefault(), "%.0f", value)
 
         private fun format1(value: Double): String = String.format(Locale.getDefault(), "%.1f", value)
+
+        // A stable, non-negative id offset within [0, MAINTENANCE_ID_RANGE) for a maintenance service
+        // label, so two overdue services post under different ids (coexist) while re-posting the same
+        // service keeps the same id (replaces, not stacks). A rare hash collision merely replaces the
+        // older alert — acceptable, since the crossing-signature de-dup already fires each once.
+        private fun maintenanceIdOffset(serviceType: String): Int =
+            (serviceType.hashCode() % MAINTENANCE_ID_RANGE + MAINTENANCE_ID_RANGE) % MAINTENANCE_ID_RANGE
     }
 }

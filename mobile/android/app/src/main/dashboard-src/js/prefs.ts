@@ -548,8 +548,14 @@
     syncAccessibilityControls();
     applyDriveTiles();
     renderTilesEditor();
-    // Electricity-rate ($/kWh) preference: hydrate the field and persist on edit.
+    // Home electricity-rate ($/kWh) preference: hydrate the field and persist on
+    // edit. This is the default rate for all charge-cost / savings math.
     bindNumericPref("pricePerKwhInput", "pricePerKwh", 0, 100);
+    // Optional public / DC-fast rate (M3). When set (> 0), charge-cost
+    // estimates bill public/DCFC sessions at this rate and home (Level 1/2,
+    // unknown) sessions at the home rate; left blank, every session uses the
+    // single home rate so behaviour is unchanged for users who never set it.
+    bindNumericPref("publicPricePerKwhInput", "publicPricePerKwh", 0, 100);
     // Comparison gas vehicle: MPG + gas price drive the "Estimated savings vs gas"
     // stat on Insights (insights-panel.ts). Clamped to plausible ranges so a
     // fat-fingered entry can't poison the estimate.

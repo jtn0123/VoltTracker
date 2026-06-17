@@ -192,7 +192,20 @@
         <span class="kicker">GPS points</span
         ><strong id="tripDetailPoints">--</strong>
       </div>
+      <!-- Estimated electricity cost + savings vs gas for THIS drive (M3),
+           using the same cost model as the lifetime Insights figure. Hidden
+           until the comparison prefs (MPG, gas price, $/kWh) are set; the note
+           below carries the assumptions / a prompt to set them. -->
+      <div id="tripDetailCostRow" hidden>
+        <span class="kicker">Est. cost</span
+        ><strong id="tripDetailCost">--</strong>
+      </div>
+      <div id="tripDetailSavingsRow" hidden>
+        <span class="kicker">Savings vs gas</span
+        ><strong id="tripDetailSavings">--</strong>
+      </div>
     </div>
+    <p id="tripDetailCostNote" class="status-copy trip-detail-cost-note"></p>
     <div class="trip-detail-times">
       <div>
         <span class="kicker">Started</span

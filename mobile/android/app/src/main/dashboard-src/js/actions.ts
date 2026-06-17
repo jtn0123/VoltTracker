@@ -292,6 +292,7 @@ import type { FocusTrap } from "./focus-trap";
       case "addMaintenance": VD.addMaintenanceEntry(); return;
       case "cancelMaintenance": VD.closeMaintenanceForm(); return;
       case "exportAllTripsCsv": exportAllTripsCsv(); return;
+      case "exportChargeSessionsCsv": VD.exportChargeSessionsCsv(); return;
       case "closeTripDetail": closeTripDetail(); return;
     }
   }

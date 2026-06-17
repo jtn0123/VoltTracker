@@ -306,9 +306,19 @@
         <span class="kicker">Recent charges</span>
         <h3 id="chargeSessionsTitle">Charge sessions</h3>
       </div>
-      <button type="button" class="link-btn" data-action="refreshStorage">
-        Refresh
-      </button>
+      <div class="map-sheet-actions">
+        <button
+          type="button"
+          class="link-btn"
+          data-action="exportChargeSessionsCsv"
+          id="exportChargeSessionsBtn"
+        >
+          Export CSV
+        </button>
+        <button type="button" class="link-btn" data-action="refreshStorage">
+          Refresh
+        </button>
+      </div>
     </header>
     <div
       id="chargeSessionsList"

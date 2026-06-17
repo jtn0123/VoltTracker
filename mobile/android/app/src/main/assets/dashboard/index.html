@@ -1018,7 +1018,20 @@
         <span class="kicker">GPS points</span
         ><strong id="tripDetailPoints">--</strong>
       </div>
+      <!-- Estimated electricity cost + savings vs gas for THIS drive (M3),
+           using the same cost model as the lifetime Insights figure. Hidden
+           until the comparison prefs (MPG, gas price, $/kWh) are set; the note
+           below carries the assumptions / a prompt to set them. -->
+      <div id="tripDetailCostRow" hidden>
+        <span class="kicker">Est. cost</span
+        ><strong id="tripDetailCost">--</strong>
+      </div>
+      <div id="tripDetailSavingsRow" hidden>
+        <span class="kicker">Savings vs gas</span
+        ><strong id="tripDetailSavings">--</strong>
+      </div>
     </div>
+    <p id="tripDetailCostNote" class="status-copy trip-detail-cost-note"></p>
     <div class="trip-detail-times">
       <div>
         <span class="kicker">Started</span
@@ -1452,9 +1465,19 @@
         <span class="kicker">Recent charges</span>
         <h3 id="chargeSessionsTitle">Charge sessions</h3>
       </div>
-      <button type="button" class="link-btn" data-action="refreshStorage">
-        Refresh
-      </button>
+      <div class="map-sheet-actions">
+        <button
+          type="button"
+          class="link-btn"
+          data-action="exportChargeSessionsCsv"
+          id="exportChargeSessionsBtn"
+        >
+          Export CSV
+        </button>
+        <button type="button" class="link-btn" data-action="refreshStorage">
+          Refresh
+        </button>
+      </div>
     </header>
     <div
       id="chargeSessionsList"
@@ -2163,9 +2186,20 @@
           </select>
         </label>
       </div>
+      <div class="connection-tools__notify-row">
+        <label class="connection-tools__notify-toggle">
+          <input
+            id="notifyMaintenanceDueToggle"
+            type="checkbox"
+            data-action="notify-maintenance-due"
+          />
+          <span>Notify when maintenance is overdue</span>
+        </label>
+      </div>
       <small class="status-copy">
         Battery alerts need notification permission and fire once each time a
-        reading crosses the threshold.
+        reading crosses the threshold. The maintenance alert fires once when a
+        tracked service first goes overdue.
       </small>
       <small
         id="eventNotifyStatus"
@@ -2238,7 +2272,7 @@
     </div>
     <div class="pref-row">
       <div class="pref-label">
-        <strong>Electricity rate</strong>
+        <strong>Home electricity rate</strong>
         <small>Charging cost on Charge, and savings vs gas on Insights</small>
       </div>
       <label class="pref-price">
@@ -2251,7 +2285,35 @@
           max="100"
           step="0.01"
           placeholder="0.00"
-          aria-label="Electricity rate in dollars per kilowatt-hour"
+          aria-label="Home electricity rate in dollars per kilowatt-hour"
+        />
+        <span>/kWh</span>
+      </label>
+    </div>
+    <!-- Optional public/DC-fast charging rate (M3). When set, charge-cost
+         estimates bill public / DC-fast sessions at this rate and home (Level
+         1/2, unknown) sessions at the home rate above. Left blank, every
+         session uses the single home rate, so nothing changes for users who
+         don't charge in public. -->
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Public charging rate</strong>
+        <small
+          >Optional — DC-fast / public sessions use this; home sessions use the
+          rate above. Leave blank to use one rate everywhere.</small
+        >
+      </div>
+      <label class="pref-price">
+        <span>$</span>
+        <input
+          id="publicPricePerKwhInput"
+          type="number"
+          inputmode="decimal"
+          min="0"
+          max="100"
+          step="0.01"
+          placeholder="0.00"
+          aria-label="Public or DC-fast charging rate in dollars per kilowatt-hour"
         />
         <span>/kWh</span>
       </label>

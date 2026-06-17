@@ -7,6 +7,7 @@
 // the sibling panels (signals-panel.ts, insights-panel.ts) reach for —
 // isNativeError, reportNativeReadError, buildStatusCopy, toggleHidden — are
 // published on VD here so this module stays the single owner of them.
+import { rateForCharger } from "./cost-model";
 import { el, setSvgAttrs } from "./core";
 import { setDataState, type DataStateValue } from "./dataset-state";
 import { validatePayload } from "./payload-validators";
@@ -1148,6 +1149,45 @@ import { prefs, units } from "./prefs";
     return "$" + value.toFixed(2);
   }
 
+  // The two electricity rates that drive every charge-cost figure. `home` is the
+  // single rate used everywhere by default; `public` (optional) is billed only
+  // to public / DC-fast sessions when set. A non-positive home rate means "no
+  // rate set" — callers hide the cost. See cost-model.rateForCharger for the
+  // per-session selection and the unset-public fallback.
+  function chargeRates(): { home: number; public: number } {
+    return {
+      home: prefs.get<number>("pricePerKwh", 0),
+      public: prefs.get<number>("publicPricePerKwh", 0)
+    };
+  }
+
+  // Total $ to charge a set of sessions, billing each session at the rate its
+  // charger type selects (public/DCFC → public rate when set; else home rate).
+  // Only positive energy contributes. Returns 0 when the home rate is unset.
+  function chargeCostFor(sessions: VoltChargeSessionRow[]): number {
+    const rates = chargeRates();
+    if (!(rates.home > 0)) return 0;
+    return sessions.reduce((acc, session) => {
+      const energy = chargeNum(session.energyKwh);
+      if (!Number.isFinite(energy) || energy <= 0) return acc;
+      return acc + energy * rateForCharger(session.chargerType, rates.home, rates.public);
+    }, 0);
+  }
+
+  // Charge-history CSV export (M1). Forwards to native, which serializes every logged charge into one
+  // CSV (one row per charge) and opens the share sheet. Passes the user's electricity rate (Settings →
+  // Preferences) through so native can append an estimated-cost column when it is set. The rate is a
+  // display-layer preference read the same way the charge cost/savings math reads it; native treats a
+  // non-positive / unparseable rate as "no cost column". Degrades to a status hint without the bridge.
+  function exportChargeSessionsCsv() {
+    if (!bridge || typeof bridge.exportChargeSessionsCsv !== "function") {
+      VD.setStatus({ state: "idle", detail: "Charge-history export is available inside the Android app." });
+      return;
+    }
+    const price = prefs.get<number>("pricePerKwh", 0);
+    bridge.exportChargeSessionsCsv(price > 0 ? String(price) : "");
+  }
+
   // Sums energy across the logged charge sessions and, when the user has set an
   // electricity rate (Settings → Preferences), shows the estimated cost. The rate
   // is a display-layer preference, so the math lives here in JS.
@@ -1172,10 +1212,13 @@ import { prefs, units } from "./prefs";
     card.hidden = false;
     VD.setText("chargeEnergyTotal", `${total.toFixed(1)} kWh`);
     VD.setText("chargeEnergySub", `across ${sessions.length} logged charge${sessions.length === 1 ? "" : "s"}`);
+    // Bill each session at the rate its charger type selects (home vs public),
+    // rather than a single flat rate on the lifetime kWh, so a mix of cheap
+    // overnight + pricey DC-fast charges estimates honestly.
     const price = prefs.get<number>("pricePerKwh", 0);
     const hint = el("chargeEnergyHint");
     if (price > 0) {
-      VD.setText("chargeEnergyCost", formatMoney(total * price));
+      VD.setText("chargeEnergyCost", formatMoney(chargeCostFor(sessions)));
       if (hint) hint.hidden = true;
     } else {
       VD.setText("chargeEnergyCost", "--");
@@ -1191,7 +1234,12 @@ import { prefs, units } from "./prefs";
   // createElement/setSvgAttrs, theme-aware tokens, XSS-safe). The single flat
   // lifetime cost figure on the Energy card answers "how much total"; this
   // answers "is it trending up or down, month to month".
-  type MonthBucket = { key: string; label: string; ms: number; energyKwh: number };
+  // `costUsd` is the month's estimated cost with each session billed at the rate
+  // its charger type selects (home vs public). It's accumulated alongside the raw
+  // energy so the trend can plot cost without re-deriving a per-session rate at
+  // render time; it's 0 when the home rate is unset (the render falls back to
+  // plotting energy in that case).
+  type MonthBucket = { key: string; label: string; ms: number; energyKwh: number; costUsd: number };
 
   // Calendar-month key + short label ("May ’26") for a charge timestamp.
   function monthBucketKey(ms: number): { key: string; label: string; firstMs: number } {
@@ -1204,18 +1252,26 @@ import { prefs, units } from "./prefs";
     return { key: `${year}-${String(month + 1).padStart(2, "0")}`, label, firstMs: new Date(year, month, 1).getTime() };
   }
 
-  // Group sessions by month, summing positive energy. Months with no energy are
-  // dropped (a charge stub with no kWh contributes nothing). Ascending by month.
+  // Group sessions by month, summing positive energy and the per-session cost
+  // (each session billed at its charger type's rate — home vs public). Months
+  // with no energy are dropped (a charge stub with no kWh contributes nothing).
+  // Ascending by month.
   function bucketChargesByMonth(sessions: VoltChargeSessionRow[]): MonthBucket[] {
+    const rates = chargeRates();
     const byKey = new Map<string, MonthBucket>();
     for (const session of sessions) {
       const ms = Number(session.startedAtMs);
       const energy = chargeNum(session.energyKwh);
       if (!Number.isFinite(ms) || ms <= 0 || !Number.isFinite(energy) || energy <= 0) continue;
+      const cost = rates.home > 0 ? energy * rateForCharger(session.chargerType, rates.home, rates.public) : 0;
       const { key, label, firstMs } = monthBucketKey(ms);
       const existing = byKey.get(key);
-      if (existing) existing.energyKwh += energy;
-      else byKey.set(key, { key, label, ms: firstMs, energyKwh: energy });
+      if (existing) {
+        existing.energyKwh += energy;
+        existing.costUsd += cost;
+      } else {
+        byKey.set(key, { key, label, ms: firstMs, energyKwh: energy, costUsd: cost });
+      }
     }
     return Array.from(byKey.values()).sort((a, b) => a.ms - b.ms);
   }
@@ -1297,7 +1353,9 @@ import { prefs, units } from "./prefs";
     if (stats) stats.hidden = false;
     const price = prefs.get<number>("pricePerKwh", 0);
     const showCost = price > 0;
-    const values = buckets.map((b) => (showCost ? b.energyKwh * price : b.energyKwh));
+    // costUsd already bills each session at its charger type's rate (home vs
+    // public); fall back to energy when no home rate is set.
+    const values = buckets.map((b) => (showCost ? b.costUsd : b.energyKwh));
     const total = values.reduce((acc, v) => acc + v, 0);
     const avg = total / values.length;
     const fmt = (v: number) => (showCost ? formatMoney(v) : `${v.toFixed(1)} kWh`);
@@ -1355,10 +1413,13 @@ import { prefs, units } from "./prefs";
     const right = document.createElement("b");
     const energy = chargeNum(session.energyKwh);
     const socGain = Number.isFinite(startSoc) && Number.isFinite(endSoc) ? endSoc - startSoc : NaN;
-    const price = prefs.get<number>("pricePerKwh", 0);
+    // Bill this session at the rate its charger type selects: the public/DCFC
+    // rate for a public charger when one is set, else the home rate.
+    const rates = chargeRates();
+    const sessionRate = rateForCharger(session.chargerType, rates.home, rates.public);
     if (Number.isFinite(energy) && energy > 0) {
       right.textContent =
-        price > 0 ? `${energy.toFixed(1)} kWh · ${formatMoney(energy * price)}` : `${energy.toFixed(1)} kWh`;
+        rates.home > 0 ? `${energy.toFixed(1)} kWh · ${formatMoney(energy * sessionRate)}` : `${energy.toFixed(1)} kWh`;
     } else if (Number.isFinite(socGain) && socGain > 0) {
       right.textContent = `+${Math.round(socGain)}%`;
     } else {
@@ -1477,6 +1538,7 @@ import { prefs, units } from "./prefs";
     addMaintenanceEntry,
     submitMaintenanceForm,
     closeMaintenanceForm,
+    exportChargeSessionsCsv,
     toggleHidden
   });
 })();

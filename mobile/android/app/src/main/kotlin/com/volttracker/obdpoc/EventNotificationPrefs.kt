@@ -59,6 +59,13 @@ class EventNotificationPrefs(
 
     fun autoScanOnConnectEnabled(): Boolean = prefs.getBoolean(PREF_AUTO_SCAN_ENABLED, DEFAULT_AUTO_SCAN_ENABLED)
 
+    /**
+     * Whether the maintenance-overdue alert (M2) is on. Opt-in (default OFF): it surfaces a service
+     * the user already chose to track, so it should not start nagging until they ask for it.
+     */
+    fun maintenanceDueEnabled(): Boolean =
+        prefs.getBoolean(PREF_MAINTENANCE_DUE_ENABLED, DEFAULT_MAINTENANCE_DUE_ENABLED)
+
     fun setChargeCompleteEnabled(enabled: Boolean) = putBool(PREF_CHARGE_COMPLETE_ENABLED, enabled)
 
     fun setNewDtcEnabled(enabled: Boolean) = putBool(PREF_NEW_DTC_ENABLED, enabled)
@@ -80,6 +87,13 @@ class EventNotificationPrefs(
     // PREF_SETTINGS_VERSION here would needlessly invalidate that cache and force a rebuild.
     fun setAutoScanOnConnectEnabled(enabled: Boolean) {
         prefs.edit { putBoolean(PREF_AUTO_SCAN_ENABLED, enabled) }
+    }
+
+    // Written directly without a version bump: the maintenance-overdue alert (M2) runs on app-open,
+    // not on the per-sample decider, so its toggle is not in the cached [Settings] snapshot and a
+    // bump would needlessly invalidate that cache.
+    fun setMaintenanceDueEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(PREF_MAINTENANCE_DUE_ENABLED, enabled) }
     }
 
     /** Epoch millis of the last completed auto-scan, or 0 when none has run. */
@@ -133,6 +147,40 @@ class EventNotificationPrefs(
         }
     }
 
+    /**
+     * Crossing signatures the maintenance-overdue alert (M2) has already fired for, so a given
+     * overdue crossing notifies once and never re-nags on later app-opens. Each is a
+     * [MaintenanceDueEvaluator] signature (`<entryId>:km` / `<entryId>:months`). Persisted as a JSON
+     * array, mirroring the DTC baseline set; empty when nothing has fired yet.
+     */
+    fun notifiedMaintenanceSignatures(): Set<String> {
+        val raw = prefs.getString(PREF_MAINTENANCE_NOTIFIED, null) ?: return emptySet()
+        return try {
+            val arr = JSONArray(raw)
+            val out = LinkedHashSet<String>(arr.length())
+            for (i in 0 until arr.length()) {
+                val sig = arr.optString(i, "").trim()
+                if (sig.isNotEmpty()) {
+                    out.add(sig)
+                }
+            }
+            out
+        } catch (_: JSONException) {
+            emptySet()
+        }
+    }
+
+    fun setNotifiedMaintenanceSignatures(signatures: Collection<String>) {
+        val arr = JSONArray()
+        for (sig in signatures) {
+            val clean = sig.trim()
+            if (clean.isNotEmpty()) {
+                arr.put(clean)
+            }
+        }
+        prefs.edit { putString(PREF_MAINTENANCE_NOTIFIED, arr.toString()) }
+    }
+
     /** Settings snapshot the dashboard renders its toggles from. */
     fun stateJson(): String {
         val payload = JSONObject()
@@ -145,6 +193,7 @@ class EventNotificationPrefs(
             payload.put("highPackTempThresholdC", highPackTempThresholdC())
             payload.put("targetSocPct", targetSocPct())
             payload.put("autoScanOnConnect", autoScanOnConnectEnabled())
+            payload.put("maintenanceDue", maintenanceDueEnabled())
         } catch (_: JSONException) {
             // Local values are safe.
         }
@@ -193,6 +242,8 @@ class EventNotificationPrefs(
         const val PREF_LAST_AUTO_SCAN_MS = "auto_scan_last_at_ms"
         const val PREF_LAST_SCAN_DTCS = "notify_last_scan_dtcs"
         const val PREF_DTC_BASELINE_SET = "notify_dtc_baseline_set"
+        const val PREF_MAINTENANCE_DUE_ENABLED = "notify_maintenance_due_enabled"
+        const val PREF_MAINTENANCE_NOTIFIED = "notify_maintenance_signatures"
         const val PREF_SETTINGS_VERSION = "notify_settings_version"
 
         const val DEFAULT_CHARGE_COMPLETE_ENABLED = true
@@ -203,6 +254,7 @@ class EventNotificationPrefs(
         const val DEFAULT_HIGH_TEMP_THRESHOLD = 45.0
         const val DEFAULT_TARGET_SOC = 100.0
         const val DEFAULT_AUTO_SCAN_ENABLED = false
+        const val DEFAULT_MAINTENANCE_DUE_ENABLED = false
 
         private const val SOC_MIN = 1.0
         private const val SOC_MAX = 99.0

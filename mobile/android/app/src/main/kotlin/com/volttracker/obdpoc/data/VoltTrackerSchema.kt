@@ -8,7 +8,7 @@ import android.database.sqlite.SQLiteDatabase
  * Foreign-key delete policy (intentional, do not "normalize"):
  * - ON DELETE CASCADE — pure raw/derived child data that is meaningless without its parent and
  *   safe to drop with it: telemetry_samples, pid_observations, location_samples, cell_snapshots,
- *   and the per-session caches (session_trip_rollups, trip_list_cache).
+ *   and the per-session caches (session_trip_rollups, trip_list_cache, charge_session_rollups).
  * - ON DELETE SET NULL — summary/history records that stay useful after the referenced row is
  *   gone (the reference is provenance, not ownership): status_events, trip_segments,
  *   charge_sessions, battery_snapshots, exports, and field_capabilities' vehicle link. They keep
@@ -160,6 +160,30 @@ object VoltTrackerSchema {
         )
         db.execSQL(
             "CREATE INDEX IF NOT EXISTS idx_trip_list_cache_session ON ${VoltTrackerDb.TABLE_TRIP_LIST_CACHE}(session_id)",
+        )
+    }
+
+    /**
+     * Per-session cache for the whole-history inferred-charge scan (G2). One row per finalized
+     * session, storing that session's contribution to the charge-summary projection as a JSON blob
+     * (its within-session inferred-charge rows + its meaningful drive/SOC boundaries), so
+     * `ObdStoreReports.chargeSummaryRows` no longer rescans every session's telemetry and drive
+     * windows on each storage-summary refresh. Populated lazily by `ObdStoreReports` (keyed off
+     * `CHARGE_ROLLUP_CACHE_VERSION`), so a version bump rebuilds it; the active (not-yet-finalized)
+     * session is computed live and absent here. The cross-session merge/sort that assembles the
+     * final rows still runs on the reassembled lists, so the projection output is byte-identical.
+     */
+    fun createChargeSessionRollups(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS ${VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS} (
+                session_id INTEGER PRIMARY KEY,
+                rollup_version INTEGER NOT NULL DEFAULT 0,
+                computed_at_ms INTEGER NOT NULL DEFAULT 0,
+                charge_json TEXT NOT NULL,
+                FOREIGN KEY(session_id) REFERENCES ${VoltTrackerDb.TABLE_SESSIONS}(_id) ON DELETE CASCADE
+            )
+            """.trimIndent(),
         )
     }
 

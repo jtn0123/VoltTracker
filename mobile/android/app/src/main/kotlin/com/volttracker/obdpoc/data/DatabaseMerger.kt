@@ -376,6 +376,9 @@ object DatabaseMerger {
             val args = arrayOf(sessionId.toString())
             db.delete(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, "session_id = ?", args)
             db.delete(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, "session_id = ?", args)
+            // G2: imported telemetry can change a session's inferred-charge scan, so drop its
+            // cached charge rollup; it recomputes on the next storage-summary read.
+            db.delete(VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS, "session_id = ?", args)
         }
     }
 

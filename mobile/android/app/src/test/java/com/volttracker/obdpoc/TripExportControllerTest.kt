@@ -193,6 +193,61 @@ class TripExportControllerTest {
         assertEquals("storage_unavailable", result.optString("error"))
     }
 
+    // ---- charge-sessions bulk path (M1) ------------------------------------------------
+
+    @Test
+    fun chargeSessionsExportWithNoChargesReturnsEmptyRoute() {
+        host.store = FakeStore(context).apply { chargeRows = JSONArray() }
+        val result = parse(controller.exportAndShare(null, "csv_charges"))
+        assertEquals("empty_route", result.optString("error"))
+        assertFalse(host.shareLaunched)
+    }
+
+    @Test
+    fun chargeSessionsExportWithMissingStoreReturnsStorageUnavailable() {
+        host.store = null
+        val result = parse(controller.exportAndShare("0.15", "csv_charges"))
+        assertEquals("storage_unavailable", result.optString("error"))
+    }
+
+    @Test
+    fun chargeSessionsExportWithChargesReturnsOkCsvWithSessionCount() {
+        host.store = FakeStore(context).apply { chargeRows = sampleChargeRows() }
+        // No rate in the routeKey slot → no cost column.
+        val result = parse(controller.exportAndShare(null, "csv_charges"))
+
+        assertTrue("the charge export succeeds", result.optBoolean("ok"))
+        assertEquals("csv", result.optString("format"))
+        assertEquals("both charges are counted", 2, result.optInt("sessionCount"))
+        assertFalse("no rate → no cost column", result.optBoolean("withCost"))
+        assertTrue(result.optLong("bytes") > 0L)
+        assertTrue(result.optString("fileName").startsWith("volt-charges-"))
+
+        assertTrue(host.shareLaunched)
+        assertEquals("ready", host.lastStatusState)
+        assertEquals("the charge export is recorded", 1, host.store!!.recordAllTripsExportCalls)
+    }
+
+    @Test
+    fun chargeSessionsExportWithValidRateSetsWithCost() {
+        host.store = FakeStore(context).apply { chargeRows = sampleChargeRows() }
+        val result = parse(controller.exportAndShare("0.155", "csv_charges"))
+
+        assertTrue(result.optBoolean("ok"))
+        assertTrue("a positive rate enables the cost column", result.optBoolean("withCost"))
+    }
+
+    @Test
+    fun chargeSessionsExportWithInvalidRateOmitsCost() {
+        host.store = FakeStore(context).apply { chargeRows = sampleChargeRows() }
+        // A non-numeric / non-positive rate must degrade to "no cost column", never throw.
+        for (badRate in listOf("not-a-number", "0", "-0.2", "")) {
+            val result = parse(controller.exportAndShare(badRate, "csv_charges"))
+            assertTrue("invalid rate '$badRate' still exports", result.optBoolean("ok"))
+            assertFalse("invalid rate '$badRate' omits the cost column", result.optBoolean("withCost"))
+        }
+    }
+
     private fun parse(json: String): JSONObject = JSONObject(json)
 
     /**
@@ -345,6 +400,7 @@ class TripExportControllerTest {
         var openValue = true
         var route: JSONObject = sampleRoute()
         var allTrips: JSONArray = JSONArray()
+        var chargeRows: JSONArray = JSONArray()
         var routeReadThrows = false
         var recordExportThrows = false
         var recordExportCalls = 0
@@ -363,6 +419,14 @@ class TripExportControllerTest {
             tripLimit: Int,
             pointLimit: Int,
         ): JSONArray = allTrips
+
+        // Serve canned charge rows without standing up a real DB: the charge export reads through the
+        // projections() sub-accessor (ObdLocalStore is at the detekt function ceiling), so the fake
+        // returns a StoreProjections subclass that overrides only chargeSessionsForExport.
+        override fun projections(): StoreProjections =
+            object : StoreProjections() {
+                override fun chargeSessionsForExport(limit: Int): JSONArray = chargeRows
+            }
 
         override fun recordExport(
             routeKey: String?,
@@ -448,6 +512,34 @@ class TripExportControllerTest {
                     .put("points", secondPoints)
             trips.put(JSONObject().put("tripId", 8).put("label", "Errand").put("route", secondRoute))
             return trips
+        }
+
+        private fun sampleChargeRows(): JSONArray {
+            val rows = JSONArray()
+            rows.put(
+                JSONObject()
+                    .put("id", 1)
+                    .put("startedAtMs", 10_000L)
+                    .put("endedAtMs", 30_000L)
+                    .put("startSoc", 40.0)
+                    .put("endSoc", 80.0)
+                    .put("energyKwh", 6.0)
+                    .put("powerKw", 7.2)
+                    .put("chargerType", "L2")
+                    .put("confidence", 0.9),
+            )
+            rows.put(
+                JSONObject()
+                    .put("id", 2)
+                    .put("startedAtMs", 100_000L)
+                    .put("endedAtMs", 200_000L)
+                    .put("startSoc", 20.0)
+                    .put("endSoc", 55.0)
+                    .put("energyKwh", 4.5)
+                    .put("chargerType", "L1")
+                    .put("confidence", 0.7),
+            )
+            return rows
         }
 
         private fun resetFileProviderCache() {

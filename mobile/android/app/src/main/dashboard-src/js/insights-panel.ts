@@ -10,6 +10,12 @@
 // haversineMetersJs comes from map-route-utils — a small shared module that is
 // already part of the eager app.js bundle (telemetry.ts imports it), so this
 // import does not drag the lazy map chunk into the main bundle.
+import {
+  ASSUMED_VOLT_MI_PER_KWH,
+  computeSavingsVsGas,
+  formatSignedMoney,
+  savingsPrefsReady
+} from "./cost-model";
 import { el, setSvgAttrs } from "./core";
 import { haversineMetersJs } from "./map-route-utils";
 import { prefs, units } from "./prefs";
@@ -72,14 +78,11 @@ import { prefs, units } from "./prefs";
     renderSavingsVsGas();
   }
 
-  // Assumed Volt drive efficiency, used ONLY when the insights payload doesn't
-  // carry the EV energy actually used while driving (it currently doesn't —
-  // VoltInsights has distance/time/speed, not kWh). A real-world Gen-2 Volt
-  // averages roughly 3.5 mi/kWh of usable energy; the resulting figure is an
-  // estimate, and the savings note states the assumed mi/kWh (see
-  // renderSavingsVsGas) so it's clear the savings are approximate.
-  const ASSUMED_VOLT_MI_PER_KWH = 3.5;
-  const METERS_PER_MILE = 1609.344;
+  // The EV cost / savings-vs-gas math (and the assumed Volt mi/kWh it leans on,
+  // because the insights payload doesn't carry the EV energy used while driving)
+  // now lives in the shared cost-model module so the lifetime figure here and
+  // the per-trip figure in the map trip-detail sheet can't diverge. The savings
+  // note states the assumed mi/kWh so the estimate reads as approximate.
   const KM_PER_MILE = 1.609344;
   const MPS_TO_MPH = 2.2369363;
 
@@ -145,7 +148,7 @@ import { prefs, units } from "./prefs";
     const gasPrice = prefs.get<number>("gasPricePerGal", 0);
     const pricePerKwh = prefs.get<number>("pricePerKwh", 0);
     const hasDistance = meters > 0;
-    const prefsReady = mpg > 0 && gasPrice > 0 && pricePerKwh > 0;
+    const prefsReady = savingsPrefsReady(mpg, gasPrice, pricePerKwh);
     if (!hasDistance) {
       // Nothing logged yet — keep the row hidden so the card never prompts for
       // prefs the user can't act on (there's no distance to estimate against).
@@ -163,15 +166,16 @@ import { prefs, units } from "./prefs";
       setSavingsNotePrompt();
       return;
     }
-    const miles = meters / METERS_PER_MILE;
-    const gasCost = (miles / mpg) * gasPrice;
-    const evEnergyKwh = miles / ASSUMED_VOLT_MI_PER_KWH;
-    const evCost = evEnergyKwh * pricePerKwh;
-    const savings = gasCost - evCost;
+    const { savings } = computeSavingsVsGas({
+      meters,
+      mpg,
+      gasPricePerGal: gasPrice,
+      pricePerKwh
+    });
     row.hidden = false;
     // Show the magnitude; a leading "-" would read as "you spent more" only when
     // EV electricity is pricier than the gas it replaced (rare but possible).
-    VD.setText("insightSavings", (savings < 0 ? "-$" : "$") + Math.abs(savings).toFixed(2));
+    VD.setText("insightSavings", formatSignedMoney(savings));
     setSavingsNoteText(
       `Estimated vs a ${Math.round(mpg)} mpg car at $${gasPrice.toFixed(2)}/gal · assumes ${ASSUMED_VOLT_MI_PER_KWH} mi/kWh`
     );

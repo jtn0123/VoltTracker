@@ -68,7 +68,7 @@
 
     <!-- Event notifications (EventNotifier / EventNotificationDecider — M1) -->
     <string name="notification_events_channel_name">Volt Tracker alerts</string>
-    <string name="notification_events_channel_description">Charge-complete, new diagnostic codes, and battery threshold alerts.</string>
+    <string name="notification_events_channel_description">Charge-complete, new diagnostic codes, battery threshold, and overdue-maintenance alerts.</string>
     <string name="notification_charge_complete_title">Charge complete</string>
     <string name="notification_charge_complete_text">Added %1$s kWh this charge. Tap to view charge details.</string>
     <string name="notification_charge_complete_text_no_energy">Charging finished. Tap to view charge details.</string>
@@ -85,6 +85,8 @@
     <string name="notification_low_soc_text">State of charge dropped to %1$s%% (alert at %2$s%%).</string>
     <string name="notification_high_temp_title">Battery temperature high</string>
     <string name="notification_high_temp_text">Pack temperature reached %1$s°C (alert at %2$s°C).</string>
+    <string name="notification_maintenance_due_title">Maintenance overdue</string>
+    <string name="notification_maintenance_due_text">%1$s is overdue by %2$s. Tap to review your maintenance log.</string>
 
     <!-- Event-notification + auto-scan settings status copy -->
     <string name="status_event_prefs_not_ready">Notification settings are not ready yet.</string>
@@ -124,6 +126,9 @@
     <!-- Bulk all-trips CSV export (M6) -->
     <string name="status_all_trips_export_ready">All-trips CSV ready — choose where to share it.</string>
     <string name="status_all_trips_export_empty">No logged drives with GPS samples to export yet.</string>
+    <!-- Charge-history CSV export (M1) -->
+    <string name="status_charge_sessions_export_ready">Charge history CSV ready — choose where to share it.</string>
+    <string name="status_charge_sessions_export_empty">No logged charge sessions to export yet.</string>
 
     <!-- Backup and restore (BackupController) -->
     <string name="status_stop_logging_before_backup">Stop logging before creating a backup.</string>

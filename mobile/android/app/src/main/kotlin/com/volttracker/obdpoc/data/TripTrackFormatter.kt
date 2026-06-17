@@ -168,6 +168,82 @@ object TripTrackFormatter {
         return builder.toString()
     }
 
+    /**
+     * Header for the charge-sessions CSV (M1). One column per [chargeRow] field. When a positive
+     * electricity rate is supplied to [toChargeSessionsCsv], a trailing `est_cost` column is appended
+     * (see [CHARGE_SESSIONS_CSV_HEADER_WITH_COST]); kept in sync with [chargeRow].
+     */
+    const val CHARGE_SESSIONS_CSV_HEADER =
+        "id,start_iso,start_epoch_ms,end_iso,end_epoch_ms," +
+            "start_soc_pct,end_soc_pct,energy_kwh,peak_power_kw,charger_type,confidence"
+
+    /** [CHARGE_SESSIONS_CSV_HEADER] plus the optional estimated-cost column (rate set). */
+    const val CHARGE_SESSIONS_CSV_HEADER_WITH_COST = "$CHARGE_SESSIONS_CSV_HEADER,est_cost"
+
+    /**
+     * Renders the charge history as CSV (M1): a header line, then one row per charge (the shape
+     * [com.volttracker.obdpoc.data.ObdStoreReports.chargeSessionsForExportJson] builds —
+     * `{ id, startedAtMs, endedAtMs, startSoc, endSoc, energyKwh, powerKw, avgPowerKw, chargerType,
+     * confidence }`). When [pricePerKwh] is a positive finite rate, an `est_cost` column (energyKwh ×
+     * rate, 2 dp) is appended; otherwise it is omitted. Returns just the header when there are no
+     * charges. The free-text `charger_type` is CSV-quoted + formula-injection-guarded via [csvField]
+     * (it may arrive from a merged backup); numeric fields use [csvNumber] / blank-for-missing.
+     */
+    fun toChargeSessionsCsv(
+        chargeRows: JSONArray,
+        pricePerKwh: Double?,
+    ): String {
+        val withCost = pricePerKwh != null && pricePerKwh.isFinite() && pricePerKwh > 0.0
+        val builder = StringBuilder(CSV_INITIAL_CAPACITY)
+        builder.append(if (withCost) CHARGE_SESSIONS_CSV_HEADER_WITH_COST else CHARGE_SESSIONS_CSV_HEADER).append('\n')
+        for (i in 0 until chargeRows.length()) {
+            val row = chargeRows.optJSONObject(i) ?: continue
+            builder.append(chargeRow(row, if (withCost) pricePerKwh else null)).append('\n')
+        }
+        return builder.toString()
+    }
+
+    private fun chargeRow(
+        row: JSONObject,
+        pricePerKwh: Double?,
+    ): String {
+        val startedAtMs = row.optLong("startedAtMs", 0L)
+        val endedAtMs = optLongOrNull(row, "endedAtMs")
+        val energyKwh = optDoubleOrNull(row, "energyKwh")
+        val cells =
+            mutableListOf(
+                csvField(row.opt("id")?.toString().orEmpty()),
+                if (startedAtMs > 0L) isoUtc(startedAtMs) else "",
+                if (startedAtMs > 0L) startedAtMs.toString() else "",
+                if (endedAtMs != null && endedAtMs > 0L) isoUtc(endedAtMs) else "",
+                if (endedAtMs != null && endedAtMs > 0L) endedAtMs.toString() else "",
+                csvNumber(optDoubleOrNull(row, "startSoc")),
+                csvNumber(optDoubleOrNull(row, "endSoc")),
+                csvNumber(energyKwh),
+                csvNumber(optDoubleOrNull(row, "powerKw")),
+                csvField(optStringOrEmpty(row, "chargerType")),
+                csvNumber(optDoubleOrNull(row, "confidence")),
+            )
+        if (pricePerKwh != null) {
+            cells.add(if (energyKwh != null) money(energyKwh * pricePerKwh) else "")
+        }
+        return cells.joinToString(",")
+    }
+
+    private fun optLongOrNull(
+        obj: JSONObject,
+        key: String,
+    ): Long? = if (!obj.has(key) || obj.isNull(key)) null else obj.optLong(key, 0L)
+
+    private fun optStringOrEmpty(
+        obj: JSONObject,
+        key: String,
+    ): String = if (!obj.has(key) || obj.isNull(key)) "" else obj.optString(key, "")
+
+    /** Fixed 2-dp currency-style rendering for the estimated-cost column (locale-independent). */
+    private fun money(value: Double): String =
+        if (!value.isFinite()) "" else value.toBigDecimal().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
+
     /** Point count actually written to a track (the projection may include null/invalid entries). */
     fun pointCount(route: JSONObject): Int {
         val points = route.optJSONArray("points") ?: return 0

@@ -1,7 +1,7 @@
 package com.volttracker.obdpoc
 
 /**
- * Backs the [EventNotificationCommands] host seam for [MainActivity]: the six toggle entry points
+ * Backs the [EventNotificationCommands] host seam for [MainActivity]: the toggle entry points
  * forward here so their bodies live off the Activity. It only reads/writes the native-owned
  * [EventNotificationPrefs] and republishes app state; the notifications themselves are posted
  * service-side from the shared prefs file.
@@ -45,6 +45,8 @@ class EventNotificationHostDelegate(
     override fun setChargeTargetSoc(targetPct: Double) = update { it.setTargetSocPct(targetPct) }
 
     override fun setAutoScanOnConnectEnabled(enabled: Boolean) = update { it.setAutoScanOnConnectEnabled(enabled) }
+
+    override fun setMaintenanceDueEnabled(enabled: Boolean) = update { it.setMaintenanceDueEnabled(enabled) }
 
     private inline fun update(mutate: (EventNotificationPrefs) -> Unit) {
         val current = prefs()

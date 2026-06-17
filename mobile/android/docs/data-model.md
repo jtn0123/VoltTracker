@@ -7,11 +7,13 @@ in
 in `VoltTrackerDb`. If this doc and the DDL disagree, the DDL wins — update this
 doc to match.
 
-Current `VoltTrackerDb.DATABASE_VERSION` is **13**. Migrations are append-only and
+Current `VoltTrackerDb.DATABASE_VERSION` is **14**. Migrations are append-only and
 non-destructive; v11 → v12 added the `maintenance_log` table and the
-`trip_segments.label` column, and v12 → v13 added the nullable
+`trip_segments.label` column, v12 → v13 added the nullable
 `maintenance_log.interval_km` (`REAL`) and `interval_months` (`INTEGER`) service-interval
-columns (M1/C4) via guarded `ALTER TABLE ADD COLUMN` (existing rows keep them `NULL`).
+columns (M1/C4) via guarded `ALTER TABLE ADD COLUMN` (existing rows keep them `NULL`),
+and v13 → v14 added the `charge_session_rollups` cache table (G2) via
+`CREATE TABLE IF NOT EXISTS` (no existing data touched; it backfills lazily on read).
 
 ## Table overview
 
@@ -39,6 +41,7 @@ Tables fall into two buckets:
 | `cell_snapshots` | derived/cache | Per-cell detail attached to a battery snapshot. |
 | `session_trip_rollups` | **derived/cache** | Per-session scalar trip rollup (distance/duration/max speed/route flag). |
 | `trip_list_cache` | **derived/cache** | One row per finalized trip caching the exact trip JSON the Trips list renders. |
+| `charge_session_rollups` | **derived/cache** | Per-finalized-session blob caching that session's contribution to the inferred-charge scan (G2). |
 | `exports` | raw | Export job records (type, status, file, range, manifest). |
 | `maintenance_log` | raw | User-authored service-log entries (M5) + optional service interval (M1/C4); FK-free, survives a data clear. |
 
@@ -113,6 +116,24 @@ Tables fall into two buckets:
   active session is always computed live.
   FK `session_id → sessions(_id) ON DELETE CASCADE`.
 
+## Per-session charge-rollup cache (schema v14)
+
+- **`charge_session_rollups`** (derived/cache) — PK is `session_id`. Caches one
+  finalized session's contribution to the whole-history **inferred-charge scan**
+  (G2) so `ObdStoreReports.chargeSummaryRows` stops rescanning every session's
+  telemetry and drive windows on each storage-summary refresh. Columns:
+  `rollup_version` (a code constant, `CHARGE_ROLLUP_CACHE_VERSION` — a logic change
+  bumps it and invalidates old blobs), `computed_at_ms`, and `charge_json` — a blob
+  holding that session's within-session inferred-charge rows **and** its meaningful
+  drive/SOC boundaries. The cross-session merge/sort that assembles the final charge
+  rows still runs on the reassembled lists, so the cache is **transparent**: the
+  charge-summary JSON is byte-for-byte identical to the uncached path. Lazily
+  populated on read in `ObdStoreReports` for **finalized** sessions only; the active
+  (not-yet-finalized) session is always computed live and never cached. Invalidated
+  per-session wherever history changes (raw-data prune, backup merge, marking a trip
+  "not a trip") and dropped wholesale by a full data clear.
+  FK `session_id → sessions(_id) ON DELETE CASCADE`.
+
 ## Maintenance log + trip labels + favorites (schema v12–v13)
 
 - **`maintenance_log`** (raw) — PK `_id`. User-authored service entries (M5):
@@ -157,8 +178,8 @@ Tables fall into two buckets:
 ## Foreign-key delete behavior at a glance
 
 - **CASCADE** (child removed with parent): `telemetry`, `pid_observations`,
-  `location_samples`, `session_trip_rollups` (all → `sessions`); `cell_snapshots`
-  → `battery_snapshots`.
+  `location_samples`, `session_trip_rollups`, `charge_session_rollups` (all →
+  `sessions`); `cell_snapshots` → `battery_snapshots`.
 - **SET NULL** (child survives, link nulled): `events` → `sessions`;
   `field_capabilities` → `vehicles`; and on `trip_segments`, `charge_sessions`,
   `battery_snapshots`, `exports`, every FK (session / vehicle / telemetry sample)

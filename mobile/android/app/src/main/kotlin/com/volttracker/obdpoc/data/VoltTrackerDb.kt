@@ -39,6 +39,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
         VoltTrackerSchema.createPruneIndexes(db)
         VoltTrackerSchema.createSessionTripRollups(db)
         VoltTrackerSchema.createTripListCache(db)
+        VoltTrackerSchema.createChargeSessionRollups(db)
         VoltTrackerSchema.createMaintenanceLog(db)
     }
 
@@ -149,6 +150,14 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 }
             }
         }
+        if (oldVersion < 14) {
+            runMigrationStep(db, oldVersion, 14, "charge-session-rollups") { target ->
+                // G2: per-session cache for the whole-history inferred-charge scan. Table starts
+                // empty (CREATE TABLE IF NOT EXISTS — no data touched); ObdStoreReports backfills it
+                // lazily on the next storage-summary read, one finalized session at a time.
+                VoltTrackerSchema.createChargeSessionRollups(target)
+            }
+        }
     }
 
     fun interface MigrationStep {
@@ -157,7 +166,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
 
     companion object {
         const val DATABASE_NAME = "volttracker_obd_poc.db"
-        const val DATABASE_VERSION = 13
+        const val DATABASE_VERSION = 14
 
         const val TABLE_SESSIONS = "obd_sessions"
         const val TABLE_TELEMETRY = "telemetry_samples"
@@ -171,6 +180,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
         const val TABLE_TRIP_SEGMENTS = "trip_segments"
         const val TABLE_SESSION_TRIP_ROLLUPS = "session_trip_rollups"
         const val TABLE_TRIP_LIST_CACHE = "trip_list_cache"
+        const val TABLE_CHARGE_SESSION_ROLLUPS = "charge_session_rollups"
         const val TABLE_CHARGE_SESSIONS = "charge_sessions"
         const val TABLE_BATTERY_SNAPSHOTS = "battery_snapshots"
         const val TABLE_CELL_SNAPSHOTS = "cell_snapshots"
@@ -192,6 +202,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 TABLE_TRIP_SEGMENTS,
                 TABLE_SESSION_TRIP_ROLLUPS,
                 TABLE_TRIP_LIST_CACHE,
+                TABLE_CHARGE_SESSION_ROLLUPS,
                 TABLE_CHARGE_SESSIONS,
                 TABLE_BATTERY_SNAPSHOTS,
                 TABLE_CELL_SNAPSHOTS,

@@ -116,12 +116,46 @@ object TripExportShareIntent {
         }
     }
 
-    private fun allTripsFileName(): String {
+    private fun allTripsFileName(): String = stampedFileName("volt-all-trips") + ".csv"
+
+    /**
+     * Serializes [chargeRows] (the charge-session bundle the store builds) as one charge-history CSV
+     * (M1) and writes it to the trip-export cache dir. [pricePerKwh] adds the estimated-cost column
+     * when positive (see [TripTrackFormatter.toChargeSessionsCsv]). [rowCount] is recorded into the
+     * `exports` table as the export's "point" count. Returns null when there are no rows or the file
+     * couldn't be written. Shares the cache-dir + FileProvider path with the trip exports, so
+     * [buildShareIntent] handles it too.
+     */
+    fun writeChargeSessionsCsv(
+        ctx: Context,
+        chargeRows: JSONArray,
+        pricePerKwh: Double?,
+        rowCount: Int,
+    ): TripExportFile? {
+        if (rowCount <= 0) {
+            return null
+        }
+        val outDir = prepareOutDir(ctx) ?: return null
+        val content = TripTrackFormatter.toChargeSessionsCsv(chargeRows, pricePerKwh)
+        val file = File(outDir, stampedFileName("volt-charges") + ".csv")
+        return try {
+            file.writeText(content, Charsets.UTF_8)
+            TripExportFile(file, Format.CSV, rowCount)
+        } catch (ex: IOException) {
+            Log.e(TAG, "charge-sessions export write failed", ex)
+            if (file.exists() && !file.delete()) {
+                Log.w(TAG, "could not delete partial charge-sessions export: $file")
+            }
+            null
+        }
+    }
+
+    private fun stampedFileName(prefix: String): String {
         val stamp =
             SimpleDateFormat("yyyy-MM-dd-HHmm", Locale.US)
                 .apply { timeZone = TimeZone.getTimeZone("UTC") }
                 .format(Date())
-        return "volt-all-trips-$stamp.csv"
+        return "$prefix-$stamp"
     }
 
     /**

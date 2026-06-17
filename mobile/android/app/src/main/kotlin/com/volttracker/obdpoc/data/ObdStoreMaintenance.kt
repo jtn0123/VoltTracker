@@ -18,6 +18,7 @@ class ObdStoreMaintenance(
             db.delete(VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS, null, null)
             db.delete(VoltTrackerDb.TABLE_EXPORTS, null, null)
             db.delete(VoltTrackerDb.TABLE_CHARGE_SESSIONS, null, null)
+            db.delete(VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS, null, null)
             db.delete(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, null, null)
             db.delete(VoltTrackerDb.TABLE_TRIP_SEGMENTS, null, null)
             db.delete(VoltTrackerDb.TABLE_FIELD_CAPABILITIES, null, null)
@@ -120,6 +121,10 @@ class ObdStoreMaintenance(
                 db.delete(VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS, "session_id IN ($placeholders)", args)
                 db.delete(VoltTrackerDb.TABLE_TRIP_LIST_CACHE, "session_id IN ($placeholders)", args)
                 db.delete(VoltTrackerDb.TABLE_TRIP_SEGMENTS, "session_id IN ($placeholders)", args)
+                // G2: pruning a session's raw telemetry changes its within-session SOC scan and
+                // drive/SOC boundaries, so drop its cached charge rollup too — it recomputes on the
+                // next storage-summary read.
+                db.delete(VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS, "session_id IN ($placeholders)", args)
             }
         }
     }
