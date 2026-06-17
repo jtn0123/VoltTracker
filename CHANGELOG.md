@@ -1,6 +1,92 @@
 # CHANGELOG
 
 
+## v0.18.3 (2026-06-17)
+
+### Performance Improvements
+
+- Faster connect + boot + steady-state (L6–L9b) with benchmarks
+  ([#229](https://github.com/jtn0123/VoltTracker/pull/229),
+  [`b1cb814`](https://github.com/jtn0123/VoltTracker/commit/b1cb814389aa5700ae9b4976e3001948a7190672))
+
+* perf(obd): defer VIN/batch/voltage probes until after the first sample (L6)
+
+initializeElm327 ran three non-critical probes synchronously before the "connected" broadcast and
+  the first live sample: mode-01 batch capability (010D0C, 1.5s), aux voltage (0142, 1.0s), and VIN
+  (0902, up to 6s when uncached). None is needed to start polling -- mode-01 batching defaults off
+  (safe single-PID reads until probed), VIN is informational, the voltage pill is UI-only -- so they
+  now run via runDeferredInitProbes() immediately AFTER the first sample is broadcast. The dashboard
+  shows real data ~2.5s sooner (more on a first-ever, uncached-VIN connect).
+
+Re-armed on every reconnect (matching the original probe-on-each-init behaviour). First cycle is
+  single-PID until the deferred batch probe confirms support, then subsequent cycles batch as
+  before.
+
+Benchmark (ObdPollingEngineTest.connectDefersNonCriticalProbesUntilAfterFirstSample, 1.2s synthetic
+  probe latency injected): time-to-first-sample 8ms vs ~1208ms before -- the probe latency is fully
+  off the pre-first-data path.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+* perf(obd): drop per-sample telemetry round-trip + tolerate transient batch misses (L8, L9b)
+
+L8: LiveSampleReader.read() round-tripped every sample through TelemetryPayload
+  (fromJson(sample).toJson()) before returning it, even though
+  ObdService.broadcastTelemetry(JSONObject) already normalizes through TelemetryPayload -- so the
+  live path did 4 conversions per sample. read() now returns the freshly-built sample directly (the
+  sample is not shared or mutated after return). A new test asserts the round-trip preserved every
+  key/value, so the dashboard feed is byte-identical. Benchmark (TelemetryRoundTripBenchmarkTest,
+  56-key sample): the removed round-trip cost ~2510ns (~2.5us) plus a 56-key JSONObject allocation
+  on every poll sample.
+
+L9b: a single incomplete mode-01 batch frame used to permanently disable multi-PID batching for the
+  whole session. It now tolerates MAX_CONSECUTIVE_BATCH_MISSES (2): a transient dropped BT frame
+  falls back to single-PID reads for that one cycle (logged mode01_batch_miss) but keeps batching
+  enabled; two misses in a row still retire it. Saves the rest of a drive's round-trip savings after
+  a one-off hiccup.
+
+* perf(dashboard): defer Leaflet off the WebView first-paint critical path (L7)
+
+index.template.html loaded Leaflet eagerly in <head> — a render-blocking 147 KB leaflet.js plus a 14
+  KB leaflet.css — even though the map only renders when the user opens the Map tab
+  (core.ts#ensureMapModule lazily loads js/map.js, the sole consumer of the `L` global).
+
+- leaflet.js now has `defer`: it no longer blocks HTML parse/first paint; deferred scripts still
+  finish before DOMContentLoaded, long before any map interaction, so `L` is available when the lazy
+  map chunk runs. - leaflet.css is removed from <head> and injected once by map.ts when the lazy map
+  chunk loads (CSP here is script-src 'self', so the onload-attr CSS-defer trick is unavailable; JS
+  injection is the CSP-safe path).
+
+161,697 bytes (157 KB) off the render-blocking first-paint path.
+
+Verified in the dashboard preview: page loads with no console errors, `L` defined, leaflet.css
+  absent from head at load; opening Map lazily loads map.js, injects leaflet.css exactly once, and
+  ensureMap() renders a fully styled .leaflet-container with controls. All 510 dashboard vitest
+  tests pass (script-order/CSP included); :app:assembleDebug + lintDebug green.
+
+* perf(dashboard): defer non-interactive bootstrap bridge calls off first paint (L9a)
+
+Two synchronous bridge->SQLite calls ran during dashboard bootstrap before first paint and feed
+  views the user isn't looking at yet:
+
+- connection-status.ts: renderLastConnected() calls getRecentSessions(n) for the "last connected"
+  badge -> now wrapped in requestIdleCallback (setTimeout(0) fallback), so it fills in a frame after
+  paint. - actions.ts: refreshStorage() (storage summary) moves into the existing
+  loadDeferredPanels() idle block alongside loadTrips()/loadInsights().
+
+refreshDevices() deliberately stays on the bootstrap path: it re-renders the adapter picker +
+  connect button, so deferring it to idle could re-render the button mid-interaction (the
+  connect-cooldown test caught exactly this). Only the pure-display summaries are deferred.
+
+The deferred work is native-bridge + SQLite latency, so the saving (audit estimate ~70-250 ms) is
+  on-device-only and not reproducible in the browser preview's mock bridge. Verified in preview:
+  clean load, Drive view renders, no console errors; all 510 dashboard vitest tests pass.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.18.2 (2026-06-17)
 
 ### Performance Improvements
