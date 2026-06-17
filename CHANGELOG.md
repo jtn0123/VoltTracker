@@ -1,6 +1,36 @@
 # CHANGELOG
 
 
+## v0.17.3 (2026-06-17)
+
+### Performance Improvements
+
+- **android**: Serve OBD-connect VIN read from one query, not the full storage summary
+  ([#223](https://github.com/jtn0123/VoltTracker/pull/223),
+  [`ebf4e09`](https://github.com/jtn0123/VoltTracker/commit/ebf4e0975c1814d0cfe99be9a9d7f6bfb7708bd6))
+
+Executes grade-report perf finding G1. ObdPollingEngine.storedRedactedVin() ran on the
+  latency-critical ELM init thread and called getStorageSummaryRecord(), which eagerly builds ~20
+  projections including a whole-history charge scan — hundreds of SQLite queries on every connect
+  just to read one VIN string.
+
+- Add ObdStoreReports.latestVehicleRecord() reusing the existing single `last_seen_ms DESC LIMIT 1`
+  query (latestVehicleJson). - storedRedactedVin() now reads store.projections().latestVehicle()
+  instead of the full storage-summary record.
+
+To stay under the ObdLocalStore TooManyFunctions detekt ceiling (66; trips at 67), group the four
+  test-only JSON projection accessors (storageCounts / diagnosticsSummary / chargeSummary /
+  batterySummary) plus the new latestVehicle behind one `projections(): StoreProjections`
+  sub-accessor — the same group-behind-one-accessor pattern used for eventNotifications().
+  ObdLocalStore goes 66 -> 63 top-level functions. ObdStoreReportsDbTest updated to the new accessor
+  + two latestVehicle projection tests.
+
+All gates green locally: detekt, spotlessCheck, testDebugUnitTest, jacocoTestCoverageVerification,
+  lintDebug.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.17.2 (2026-06-17)
 
 ### Bug Fixes
