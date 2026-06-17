@@ -250,7 +250,12 @@ open class MainActivity :
         deviceCatalog = DeviceCatalog(this, activityPrefs)
         autoConnectController = AutoConnectController(activityPrefs, requireDeviceCatalog())
         eventNotificationPrefs = EventNotificationPrefs(activityPrefs)
-        dataBackup = DataBackup(this)
+        val backup = DataBackup(this)
+        dataBackup = backup
+        // Best-effort transient-cache cleanup used to run in DataBackup's constructor on this (main)
+        // thread during onCreate. Sweep it on the background executor instead so cold start isn't
+        // blocked on cache-dir traversals.
+        backgroundExecutor.execute { backup.sweepTransientCacheFiles() }
         backupController = BackupController(this, requireDataBackup(), backgroundExecutor)
         permissionGate = PermissionGate(this, ::launchPermissionRequest)
         localStore =

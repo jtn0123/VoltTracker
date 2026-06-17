@@ -26,7 +26,14 @@ import java.util.UUID
 class DataBackup(
     private val context: Context,
 ) {
-    init {
+    /**
+     * Best-effort sweep of leftover partial restore/backup/export temp files from prior runs. This
+     * used to run in `init {}` on whatever thread constructs DataBackup — i.e. the cold-start main
+     * thread (MainActivity.onCreate) — costing three cache-dir traversals before first frame. It is
+     * pure housekeeping (nothing depends on it having completed; the export/backup paths recreate
+     * their own directories on demand), so MainActivity now schedules it on its background executor.
+     */
+    fun sweepTransientCacheFiles() {
         cleanupTransientRestoreFiles(context.cacheDir)
         cleanupTransientBackupFiles(File(context.cacheDir, "backups"))
         cleanupTransientExportFiles(File(context.cacheDir, "exports"))

@@ -27,6 +27,20 @@ import type { FocusTrap } from "./focus-trap";
   const bridge = VD.bridge;
   const el = VD.el;
 
+  // The troubleshooter stylesheet is no longer render-blocking in index.template.html (the
+  // troubleshooter modal only appears on a connection error). Inject it once when this lazy chunk
+  // loads — before any troubleshooter UI renders — so it costs nothing on a normal dashboard launch.
+  (function ensureTroubleshooterCss(): void {
+    const href = "css/troubleshooter.css";
+    if (document.querySelector(`link[href="${href}"]`)) {
+      return;
+    }
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.appendChild(link);
+  })();
+
   type FailureCopy = {
     title: string;
     hint: string;

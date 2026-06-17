@@ -207,7 +207,7 @@ class DataBackupTest {
     }
 
     @Test
-    fun constructorClearsTransientRestoreFilesFromPriorRuns() {
+    fun sweepClearsTransientRestoreFilesFromPriorRuns() {
         val context = RuntimeEnvironment.getApplication()
         val restoreDb = File(context.cacheDir, "restore-stale.db")
         val restoreBackup = File(context.cacheDir, "restore-stale.backup")
@@ -216,14 +216,14 @@ class DataBackupTest {
         assertTrue(restoreDb.exists())
         assertTrue(restoreBackup.exists())
 
-        DataBackup(context)
+        DataBackup(context).sweepTransientCacheFiles()
 
         assertFalse(restoreDb.exists())
         assertFalse(restoreBackup.exists())
     }
 
     @Test
-    fun constructorClearsTransientBackupShareFilesFromPriorRuns() {
+    fun sweepClearsTransientBackupShareFilesFromPriorRuns() {
         val context = RuntimeEnvironment.getApplication()
         val backups = File(context.cacheDir, "backups")
         assertTrue(backups.mkdirs() || backups.isDirectory)
@@ -234,7 +234,7 @@ class DataBackupTest {
         writeFile(encrypted, "encrypted backup handoff")
         writeFile(unrelated, "keep me")
 
-        DataBackup(context)
+        DataBackup(context).sweepTransientCacheFiles()
 
         assertFalse(plaintext.exists())
         assertFalse(encrypted.exists())
