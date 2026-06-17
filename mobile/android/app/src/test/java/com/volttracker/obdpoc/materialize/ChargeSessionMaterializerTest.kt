@@ -285,6 +285,132 @@ class ChargeSessionMaterializerTest {
         assertEquals(0, sessions.size)
     }
 
+    // ---- charge-energy / SOC outputs (D1) ----------------------------------------
+
+    @Test
+    fun constantPowerChargeIntegratesToExpectedKwh() {
+        // A steady 6.6 kW charge (pack 330 V, -20 A under the discharge-positive convention:
+        // -(330 * -20)/1000 = 6.6 kW) held for exactly 30 minutes. Trapezoidal integration of a
+        // constant power is just power * hours, so the analytic energy is 6.6 kW * 0.5 h = 3.3 kWh.
+        val data = StubData()
+        for (i in 0..30) {
+            data.telemetry.add(telCharge(T_BASE + i * ONE_MINUTE_MS, 330.0, -20.0, 50.0))
+        }
+
+        val sessions = ChargeSessionMaterializer.materialize(input(), data)
+
+        assertEquals(1, sessions.size)
+        val session = sessions[0]
+        // 6.6 kW * (30 min / 60) = 3.3 kWh, exact for constant power. Allow a tiny FP tolerance.
+        assertEquals(3.3, session.energyKwh!!, 1e-6)
+    }
+
+    @Test
+    fun peakPowerKwSelectsMaxChargingSampleIgnoringDischargeAndNonFinite() {
+        // A charge window where one sample peaks higher than the rest, plus a discharge sample
+        // (positive current -> negative computed power, skipped) and a NaN-current sample (skipped).
+        // peakPowerKw must report the single highest *charging* sample and ignore the others.
+        // 330 V * -20 A -> 6.6 kW; 330 V * -30 A -> 9.9 kW (the peak); 330 V * -10 A -> 3.3 kW.
+        val data = StubData()
+        data.telemetry.add(telCharge(T_BASE + 0 * ONE_MINUTE_MS, 330.0, -20.0, 40.0))
+        data.telemetry.add(telCharge(T_BASE + 1 * ONE_MINUTE_MS, 330.0, -30.0, 41.0))
+        data.telemetry.add(telCharge(T_BASE + 2 * ONE_MINUTE_MS, 330.0, -10.0, 42.0))
+        // Discharge sample (positive current) -> computed kW negative -> ignored by peak.
+        data.telemetry.add(telCharge(T_BASE + 3 * ONE_MINUTE_MS, 330.0, -20.0, 43.0, packCurrentDip = +50.0))
+        // NaN pack voltage -> NaN power -> ignored by peak.
+        data.telemetry.add(telCharge(T_BASE + 4 * ONE_MINUTE_MS, Double.NaN, -20.0, 44.0))
+
+        val sessions = ChargeSessionMaterializer.materialize(input(), data)
+
+        assertEquals(1, sessions.size)
+        // 330 V * 30 A / 1000 = 9.9 kW is the highest charging sample.
+        assertEquals(9.9, sessions[0].peakPowerKw!!, 1e-6)
+    }
+
+    @Test
+    fun briefDischargeDipDoesNotSubtractFromEnergyAndStaysNonNegative() {
+        // A constant 6.6 kW charge with a single discharge sample (current sign flipped) dropped in
+        // the middle. A positive (discharging) pack current is a charge-run *break*, so the dip is
+        // excluded from the window before integration — combined with the integrator clipping any
+        // negative computed power to 0, a discharge dip can never subtract from the running total.
+        // The integrator therefore bridges the neighbours of the dip and yields the same clean
+        // analytic energy as a dip-free run, and never goes negative.
+        val withDip = StubData()
+        val noDip = StubData()
+        for (i in 0..10) {
+            withDip.telemetry.add(telCharge(T_BASE + i * ONE_MINUTE_MS, 330.0, -20.0, 50.0))
+            noDip.telemetry.add(telCharge(T_BASE + i * ONE_MINUTE_MS, 330.0, -20.0, 50.0))
+        }
+        // Replace the minute-5 sample in withDip with a discharge dip (positive current).
+        withDip.telemetry[5] = telCharge(T_BASE + 5 * ONE_MINUTE_MS, 330.0, +20.0, 50.0)
+
+        val dipEnergy = ChargeSessionMaterializer.materialize(input(), withDip)[0].energyKwh!!
+        val fullEnergy = ChargeSessionMaterializer.materialize(input(), noDip)[0].energyKwh!!
+
+        // The dip cannot subtract: energy stays non-negative and equals the clean charging total.
+        assertTrue("discharge dip must never push energy negative", dipEnergy >= 0.0)
+        assertEquals("discharge dip must not subtract from the integral", fullEnergy, dipEnergy, 1e-9)
+        // Full run: 6.6 kW * (10 min / 60) = 1.1 kWh exactly.
+        assertEquals(1.1, fullEnergy, 1e-6)
+    }
+
+    @Test
+    fun currentOnlySamplesCarryLastVoltageForwardIntoEnergyIntegral() {
+        // B2: pack voltage is polled on a slower lane than current, so a sample with current but no
+        // fresh voltage carries the last-known voltage forward instead of being dropped. One 330 V /
+        // -20 A sample (6.6 kW) then four current-only samples at -20 A integrate as a steady 6.6 kW
+        // over 4 min = 0.44 kWh, rather than the null it would yield if the voltage-less gaps dropped.
+        val data = StubData()
+        data.telemetry.add(telCharge(T_BASE + 0 * ONE_MINUTE_MS, 330.0, -20.0, 50.0))
+        for (i in 1..4) {
+            data.telemetry.add(telWithPackCurrent(T_BASE + i * ONE_MINUTE_MS, 0.0, -20.0))
+        }
+
+        val sessions = ChargeSessionMaterializer.materialize(input(), data)
+
+        assertEquals(1, sessions.size)
+        assertEquals(6.6 * 4.0 / 60.0, sessions[0].energyKwh!!, 1e-6)
+        // Peak works off the one fully-populated sample: 330 * 20 / 1000 = 6.6 kW.
+        assertEquals(6.6, sessions[0].peakPowerKw!!, 1e-6)
+    }
+
+    @Test
+    fun chargeWindowWithoutAnyPackVoltageYieldsNullEnergy() {
+        // Even with B2's carry-forward there is no voltage to carry when a charge never reports pack
+        // voltage, so the energy integral has zero integrable points and stays null (the <2-points
+        // guard). Current + rising SOC still materialize the session.
+        val data = StubData()
+        for (i in 0..4) {
+            data.telemetry.add(
+                TelemetrySample(T_BASE + i * ONE_MINUTE_MS, 0.0, 0, null, null, -20.0, null, 50.0 + i),
+            )
+        }
+
+        val sessions = ChargeSessionMaterializer.materialize(input(), data)
+
+        assertEquals(1, sessions.size)
+        assertEquals(null, sessions[0].energyKwh)
+    }
+
+    @Test
+    fun startAndEndSocAndChargerTypePropagateFromSamples() {
+        // SOC climbs from 20% to 80% across the window; startSoc/endSoc must read the first and last
+        // finite SOC. chargerType is always "unknown" from the materializer (no charger-type input).
+        val data = StubData()
+        val socs = listOf(20.0, 35.0, 50.0, 65.0, 80.0)
+        for ((i, soc) in socs.withIndex()) {
+            data.telemetry.add(telCharge(T_BASE + i * ONE_MINUTE_MS, 330.0, -20.0, soc))
+        }
+
+        val sessions = ChargeSessionMaterializer.materialize(input(), data)
+
+        assertEquals(1, sessions.size)
+        val session = sessions[0]
+        assertEquals(20.0, session.startSoc!!, 1e-9)
+        assertEquals(80.0, session.endSoc!!, 1e-9)
+        assertEquals("unknown", session.chargerType)
+    }
+
     // ---- helpers ------------------------------------------------------------------
 
     class StubData : MaterializerData {
@@ -335,5 +461,19 @@ class ChargeSessionMaterializerTest {
             adapterVoltage: Double,
             packCurrentA: Double,
         ): TelemetrySample = TelemetrySample(atMs, speedKph, 0, adapterVoltage, null, packCurrentA, null, null)
+
+        /**
+         * Stationary charging sample that co-populates BOTH packVoltage and packCurrentA (and SOC)
+         * so the charge-energy / peak-power / SOC outputs are exercised. Discharge is positive, so a
+         * charging sample passes [packCurrentA] negative. [packCurrentDip] overrides the current for
+         * the rare discharge-dip case while keeping the other fields charge-like.
+         */
+        private fun telCharge(
+            atMs: Long,
+            packVoltage: Double,
+            packCurrentA: Double,
+            socPct: Double,
+            packCurrentDip: Double = packCurrentA,
+        ): TelemetrySample = TelemetrySample(atMs, 0.0, 0, null, packVoltage, packCurrentDip, null, socPct)
     }
 }

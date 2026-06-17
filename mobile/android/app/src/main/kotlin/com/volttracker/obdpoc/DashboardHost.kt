@@ -100,16 +100,6 @@ interface EventNotificationCommands {
 }
 
 /**
- * Backup/restore commands. The bridge drives the export builder directly and forwards share/restore
- * launches to the backup controller.
- */
-interface BackupCommands {
-    fun requireDataBackup(): DataBackup
-
-    fun requireBackupController(): BackupController
-}
-
-/**
  * Read-only app state and backup collaborators needed by bridge export paths. Keeping this seam
  * separate lets export behavior be exercised without mocking the whole Activity.
  */
@@ -232,7 +222,6 @@ interface DashboardHost :
     DeviceCommands,
     PermissionCommands,
     AutoConnectCommands,
-    BackupCommands,
     DiagnosticsCommands,
     DashboardStatePublisher,
     SessionDataReader,

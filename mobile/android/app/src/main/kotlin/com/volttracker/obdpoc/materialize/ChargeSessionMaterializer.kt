@@ -315,12 +315,13 @@ object ChargeSessionMaterializer {
         var prevMs: Long? = null
         var energyKwh = 0.0
         var integrated = 0
+        var lastV: Double? = null
         for (s in run) {
-            val v = s.packVoltage
-            val c = s.packCurrentA
-            if (v == null || c == null) {
-                continue
-            }
+            val c = s.packCurrentA ?: continue
+            // Pack voltage is polled on a slower lane than current, so carry the last-known voltage
+            // across a current-only sample rather than dropping it from the integral (B2).
+            s.packVoltage?.let { lastV = it }
+            val v = lastV ?: continue
             var kw = -(v * c) / 1000.0
             if (kw.isNaN() || kw.isInfinite()) {
                 continue

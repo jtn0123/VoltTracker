@@ -753,7 +753,7 @@ object ObdProtocol {
         val bytes = mode01Bytes(response, "A6", 4) ?: return null
         val raw =
             (bytes[0].toLong() shl 24) or (bytes[1].toLong() shl 16) or (bytes[2].toLong() shl 8) or bytes[3].toLong()
-        return raw / 10.0
+        return bounded(raw / 10.0, ODOMETER_KM_RANGE)
     }
 
     internal fun parsePercentMode01Byte(
@@ -1333,6 +1333,11 @@ object ObdProtocol {
     private val HV_VOLTAGE_RANGE = Range(0.0, 500.0)
     private val AC_VOLTAGE_RANGE = Range(0.0, 280.0)
     private val AC_CURRENT_RANGE = Range(0.0, 80.0)
+
+    // Odometer (mode-01 PID 01A6) is a 32-bit count of 0.1 km. Bound it like every other numeric
+    // decoder so a corrupt/partial 4-byte frame can't surface a garbage mileage (the raw field tops
+    // out near 4.29e8 km) that the maintenance "next due / overdue" logic would then trust.
+    private val ODOMETER_KM_RANGE = Range(0.0, 2_000_000.0)
     private val CURRENT_A_RANGE = Range(-500.0, 500.0)
 
     // Health bounds reject decode garbage, not bad news: a worn pack below 30 Ah or a faulted

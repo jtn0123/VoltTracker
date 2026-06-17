@@ -116,6 +116,7 @@ class EventNotificationDecider(
     private var chargeEnergyKwh = 0.0
     private var prevChargeKw: Double? = null
     private var prevChargeMs: Long? = null
+    private var lastChargeVoltage: Double? = null
 
     // Last SOC seen while charging, so the charging->idle transition can tell a finished charge
     // (at/near target -> ChargeComplete) from an interrupted one (well below target -> M3).
@@ -241,11 +242,12 @@ class EventNotificationDecider(
     }
 
     private fun accumulateChargeEnergy(sample: Sample) {
-        val v = sample.packVoltage
-        val c = sample.packCurrentA
-        if (v == null || c == null) {
-            return
-        }
+        val c = sample.packCurrentA ?: return
+        // Pack voltage is polled on a slower lane than current, so carry the last-known voltage
+        // across a current-only sample rather than dropping it from the integral (B2). The
+        // carried voltage resets with the rest of the accumulator at the start of each charge.
+        sample.packVoltage?.let { lastChargeVoltage = it }
+        val v = lastChargeVoltage ?: return
         var kw = -(v * c) / 1000.0
         if (kw.isNaN() || kw.isInfinite()) {
             return
@@ -279,6 +281,7 @@ class EventNotificationDecider(
         chargeEnergyKwh = 0.0
         prevChargeKw = null
         prevChargeMs = null
+        lastChargeVoltage = null
         lastChargingSocPct = null
         maxChargingSocPct = null
         targetSocArmed = true
