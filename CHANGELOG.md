@@ -1,6 +1,39 @@
 # CHANGELOG
 
 
+## v0.17.2 (2026-06-17)
+
+### Bug Fixes
+
+- **ui**: Dashboard UX + a11y polish and failure-branch test coverage
+  ([#222](https://github.com/jtn0123/VoltTracker/pull/222),
+  [`6d9de08`](https://github.com/jtn0123/VoltTracker/commit/6d9de0862bc6d7b71459da50ba8d58ab664b7233))
+
+Executes grade-report frontend findings C1–C5, perf G3, and testing D2:
+
+- C1: maintenance "Remove" now routes through the app-dialog confirm before calling
+  bridge.deleteMaintenanceEntry, mirroring the other destructive actions — no more one-tap, no-undo
+  deletion of hand-typed service history. - C2: efficiency-vs-speed scatter axes (insights-panel +
+  trip-detail map) convert and label through the same units helper the headline uses, so a metric
+  user no longer sees mph/mi-per-kWh axes under a km/h headline. - C3: charge target-SOC /
+  notify-at-X% is now configurable from Preferences (#prefChargeTargetInput), kept in sync with the
+  in-charge-card input via the shared chargeTargetSoc pref — so it can be set while parked, not only
+  mid-charge. - C4: drive live speed-trace canvas reads resolved theme tokens (getComputedStyle)
+  instead of hardcoded dark literals, so it stays legible in light/high-contrast themes. - C5:
+  charge-tab aria-live moved off the card-wide containers onto tight aria-atomic value clusters,
+  mirroring the Drive-hero fix, so a screen reader no longer re-announces static labels every update
+  during a charge. - G3: renderLiveSignals gains a signature/dirty-check (like renderCellGrid),
+  skipping the ~45-row rebuild every rAF when nothing changed (flat/parked car). - D2: new
+  actions-storage.test.js + actions-signals.test.js cover the previously untested
+  failure/cancel/blocked/missing-bridge/clipboard-fallback branches (actions-storage 56%->100%,
+  actions-signals 62%->98% line coverage).
+
+index.html regenerated via generateDashboardHtml. Dashboard build/typecheck/lint/vitest all green
+  locally (493 tests). Visual baselines refreshed separately from CI.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.17.1 (2026-06-17)
 
 ### Bug Fixes
