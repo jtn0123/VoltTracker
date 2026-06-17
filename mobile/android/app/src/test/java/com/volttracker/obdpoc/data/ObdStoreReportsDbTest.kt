@@ -121,24 +121,43 @@ class ObdStoreReportsDbTest {
         store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L))
         store.recordDiagnosticCode(id, diagnosticCode("P25A2", "stored", 1100L))
 
-        val counts = store.getStorageCountsJson()
+        val counts = store.projections().storageCounts()
         assertEquals(1L, counts.optLong("sessionCount"))
         assertEquals(1L, counts.optLong("sampleCount"))
         assertEquals(id, counts.optLong("lastSessionId"))
 
-        val diagnostics = store.getDiagnosticsSummaryJson(5)
+        val diagnostics = store.projections().diagnosticsSummary(5)
         assertEquals(1L, diagnostics.optLong("diagnosticCodeCount"))
         assertEquals(1L, diagnostics.getJSONObject("statusCounts").optLong("stored"))
         assertEquals("P25A2", diagnostics.getJSONArray("latestDiagnosticCodes").getJSONObject(0).optString("dtc"))
 
-        val charge = store.getChargeSummaryJson()
+        val charge = store.projections().chargeSummary()
         assertTrue(charge.has("chargeSessionCount"))
 
-        val battery = store.getBatterySummaryJson()
+        val battery = store.projections().batterySummary()
         assertTrue(battery.has("snapshotCount"))
 
         val routes = store.getRecentRoutesJson(4, 120)
         assertNotNull(routes)
+    }
+
+    @Test
+    fun latestVehicleProjectionSurfacesRedactedVinAndName() {
+        store.upsertVehicleFromVin("1G1ZD5ST8JF202020")
+
+        // Lightweight projection used on the OBD connect handshake: same redacted-VIN/name shape as
+        // the storage-summary record's latestVehicle slot, via a single last_seen_ms DESC query.
+        val latest = store.projections().latestVehicle()
+        assertEquals("…2020", latest.optString("vin"))
+        assertEquals("Chevrolet", latest.optString("name"))
+        assertTrue(latest.optLong("vehicleId") > 0)
+    }
+
+    @Test
+    fun latestVehicleProjectionIsEmptyWhenNoVehiclesRecorded() {
+        // No upsert → vehicles table empty → projection returns an empty object (not null).
+        val latest = store.projections().latestVehicle()
+        assertEquals(0, latest.length())
     }
 
     @Test
@@ -174,7 +193,7 @@ class ObdStoreReportsDbTest {
         sample.put("batteryTemp", 24.0)
         store.recordTelemetry(id, sample)
 
-        val battery = store.getBatterySummaryJson()
+        val battery = store.projections().batterySummary()
         assertEquals(1L, battery.optLong("snapshotCount"))
         val latest = battery.getJSONObject("latestBatterySnapshot")
         assertEquals(51.7, latest.optDouble("capacityAh"), 0.001)
@@ -191,7 +210,7 @@ class ObdStoreReportsDbTest {
         sample.put("capacityAhStaleMs", 12_000L)
         store.recordTelemetry(id, sample)
 
-        assertEquals(0L, store.getBatterySummaryJson().optLong("snapshotCount"))
+        assertEquals(0L, store.projections().batterySummary().optLong("snapshotCount"))
     }
 
     @Test
@@ -376,7 +395,7 @@ class ObdStoreReportsDbTest {
             helper.close()
         }
 
-        val charge = store.getChargeSummaryJson()
+        val charge = store.projections().chargeSummary()
         assertEquals(0, charge.getInt("chargeSessionCount"))
         assertEquals(0, charge.getJSONArray("recentSessions").length())
     }
@@ -397,7 +416,7 @@ class ObdStoreReportsDbTest {
             helper.close()
         }
 
-        val charge = store.getChargeSummaryJson()
+        val charge = store.projections().chargeSummary()
         assertEquals(0, charge.getInt("chargeSessionCount"))
         assertEquals(0, charge.getJSONArray("recentSessions").length())
     }
@@ -414,7 +433,7 @@ class ObdStoreReportsDbTest {
         store.recordTelemetry(second, sample(38, 94.0, 32.72, -117.10, 8 * 3_600_000L + 2_000L))
         store.finishSession(second, ObdLocalStore.STATUS_COMPLETE, 8 * 3_600_000L + 3_000L, "")
 
-        val charge = store.getChargeSummaryJson()
+        val charge = store.projections().chargeSummary()
         assertEquals(1, charge.getInt("chargeSessionCount"))
         val latest = charge.getJSONObject("latest")
         assertEquals("inferred", latest.getString("chargerType"))
@@ -433,7 +452,7 @@ class ObdStoreReportsDbTest {
         store.recordTelemetry(id, sample(38, 94.0, 32.72, -117.10, morning + 2_000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, morning + 3_000L, "")
 
-        val charge = store.getChargeSummaryJson()
+        val charge = store.projections().chargeSummary()
         assertEquals(1, charge.getInt("chargeSessionCount"))
         val recent = charge.getJSONArray("recentSessions")
         assertEquals("inferred", recent.getJSONObject(0).getString("chargerType"))

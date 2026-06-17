@@ -241,18 +241,35 @@ open class ObdLocalStore(
 
     open override fun getStorageSummaryRecord(): StorageSummaryRecord = reports.storageSummaryRecord(getDatabaseFile())
 
-    open fun getStorageCountsJson(): JSONObject = reports.storageCountsJson(getDatabaseFile())
-
     open fun getRecentRoutesJson(
         limit: Int,
         pointLimit: Int,
     ): JSONArray = reports.recentRoutesProjectionJson(limit, pointLimit)
 
-    open fun getDiagnosticsSummaryJson(limit: Int): JSONObject = reports.diagnosticsSummaryJson(limit)
+    /**
+     * The individual read-side JSON projections, grouped behind one accessor so they live as members
+     * of [StoreProjections] rather than as flat functions on this class — the same "group behind one
+     * accessor" pattern as `MainActivity.eventNotifications()` (see `app/detekt.yml` TooManyFunctions
+     * note), which keeps this class under the detekt ratchet. [StoreProjections.latestVehicle] is the
+     * lightweight single-query VIN/vehicle path the OBD connect handshake reads.
+     */
+    open fun projections(): StoreProjections = StoreProjections(reports, getDatabaseFile())
 
-    open fun getChargeSummaryJson(): JSONObject = reports.chargeSummaryProjectionJson()
+    /** Read-side projections grouped off [ObdLocalStore]'s class surface; each delegates to [reports]. */
+    class StoreProjections internal constructor(
+        private val reports: ObdStoreReports,
+        private val databaseFile: File,
+    ) {
+        fun storageCounts(): JSONObject = reports.storageCountsJson(databaseFile)
 
-    open fun getBatterySummaryJson(): JSONObject = reports.batterySummaryProjectionJson()
+        fun diagnosticsSummary(limit: Int): JSONObject = reports.diagnosticsSummaryJson(limit)
+
+        fun chargeSummary(): JSONObject = reports.chargeSummaryProjectionJson()
+
+        fun batterySummary(): JSONObject = reports.batterySummaryProjectionJson()
+
+        fun latestVehicle(): JSONObject = reports.latestVehicleRecord()
+    }
 
     open override fun getRecentSessionsJson(limit: Int): JSONArray = reports.recentSessionsJson(limit)
 

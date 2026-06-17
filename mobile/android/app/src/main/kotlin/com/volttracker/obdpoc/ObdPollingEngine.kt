@@ -601,8 +601,10 @@ open class ObdPollingEngine(
     private fun storedRedactedVin(): String {
         val store = service.localStore ?: return ""
         return try {
-            val latestVehicle = store.getStorageSummaryRecord().latestVehicle
-            latestVehicle?.optString("vin", "") ?: ""
+            // Lightweight single last_seen_ms DESC LIMIT 1 read instead of the full storage-summary
+            // record (which eagerly builds ~20 projections, including a whole-history charge scan) —
+            // this runs on the latency-critical connect-init thread for one VIN string.
+            store.projections().latestVehicle().optString("vin", "")
         } catch (ex: RuntimeException) {
             service.recorder.logError("vin_cache_read_failed", ex)
             ""

@@ -325,6 +325,14 @@ class ObdStoreReports(
     fun storageCountsJson(databaseFile: File): JSONObject =
         storageCountsProjection(helper.readableDatabase, databaseFile).toJson()
 
+    /**
+     * Lightweight latest-vehicle projection: a single `last_seen_ms DESC LIMIT 1` query producing
+     * the same `{name, make, model, vin, year, vehicleId, …}` JSON the storage-summary record carries
+     * in its `latestVehicle` slot, without the ~20 surrounding projections (whole-history charge scan
+     * included). Used on the latency-critical OBD connect handshake to read the stored redacted VIN.
+     */
+    fun latestVehicleRecord(): JSONObject = latestVehicleJson(helper.readableDatabase)
+
     fun recentRoutesProjectionJson(
         limit: Int,
         pointLimit: Int,
