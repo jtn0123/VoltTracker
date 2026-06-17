@@ -1,6 +1,80 @@
 # CHANGELOG
 
 
+## v0.17.1 (2026-06-17)
+
+### Bug Fixes
+
+- **android**: Odometer range guard, charge-energy carry-forward, dead-interface cleanup
+  ([#221](https://github.com/jtn0123/VoltTracker/pull/221),
+  [`50611a1`](https://github.com/jtn0123/VoltTracker/commit/50611a14dd7ec5ebfe6bbb98d013a9d62582c148))
+
+Executes grade-report backend findings B1, A1, B2 and testing finding D1:
+
+- B1: ObdProtocol.parseOdometerKm now bounds its result with ODOMETER_KM_RANGE (0..2,000,000 km),
+  matching every other numeric decoder. A corrupt/partial 4-byte 01A6 frame could previously surface
+  a garbage mileage (raw tops out near 4.29e8 km) that the maintenance "next due / overdue" logic
+  trusts as the latest odometer. - A1: delete the dead, fully-duplicated BackupCommands role
+  interface from the DashboardHost composition — BridgeStateProvider already declares the identical
+  two members and is the one actually consumed (no implementation change needed). - B2:
+  charge-energy integration carries the last-known pack voltage forward across a sample that has
+  pack current but no fresh voltage (voltage is polled on a slower lane), in both
+  ChargeSessionMaterializer.integrateChargeEnergyKwh and
+  EventNotificationDecider.accumulateChargeEnergy, instead of dropping the sample and under-counting
+  kWh. - D1: ChargeSessionMaterializer charge-energy outputs are now value-asserted (constant-power
+  kWh integration, peak power selection ignoring discharge/non-finite, discharge-dip clip,
+  no-voltage null-energy guard, SOC/charger-type propagation) — previously zero assertions hit
+  energyKwh/peakPowerKw/startSoc/chargerType.
+
+G1 (lightweight VIN read on connect) is deferred to a follow-up: it collides with the ObdLocalStore
+  TooManyFunctions detekt ceiling (66/67) and needs a group-behind-accessor refactor rather than a
+  one-line addition.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+### Chores
+
+- **tooling**: Fix stale docs, align CI node 22, harden gradle wrapper
+  ([#220](https://github.com/jtn0123/VoltTracker/pull/220),
+  [`23d63b7`](https://github.com/jtn0123/VoltTracker/commit/23d63b7e596cccff9cb50d189c8a0cb0c437c661))
+
+Executes the grade-report Documentation (H) + Dependencies (F) + DevEx (I) findings:
+
+- H1: bridge-abi.md setStorage handler panels.ts -> storage-status.ts (panels.ts was removed when it
+  was split). - H2: bridge-abi.md clearStoredData "11 DELETEs" -> "one DELETE per table (15)"; the
+  table set grew to 15 (ObdStoreMaintenance.clearAllData). - H3: bridge-abi.md getTrips "40" ->
+  "TRIP_LIST_LIMIT = 120 most-recent trips". - H4: data-model.md `events` -> `status_events` (the
+  real table name) in the overview + base-table sections, and add the required occurred_at_ms
+  column. - H5: CONTRIBUTING.md Kotlin test count 91 -> 119 (refreshed snapshot). - F1 / I (node
+  drift): codeql.yml + dependency-snapshot.yml now use node-version-file: .nvmrc (Node 22) instead
+  of a hardcoded Node 20, matching release.yml/android.yml and the declared engines field. Node 20
+  is EOL. - I1: verifyActiveApp (the documented "full" pre-push gate) now runs :app:detekt, making
+  it a true superset of verifyFast + the CI step list. - I2: add a SHA-pinned
+  gradle/actions/wrapper-validation step to the android.yml unit-tests job and pin
+  distributionSha256Sum for the Gradle 9.5.1 distribution so the wrapper jar + distribution are
+  integrity-checked on every PR.
+
+Docs-and-config only; no production code changed.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+### Documentation
+
+- **adr**: Record encrypted-backup format and key derivation
+  ([#219](https://github.com/jtn0123/VoltTracker/pull/219),
+  [`4c26e8f`](https://github.com/jtn0123/VoltTracker/commit/4c26e8f7383e7e7d9c231f29f23815c6159ea64a))
+
+Adds ADR 0008 documenting the BackupCrypto container — the versioned VTBKEN1/2/3 magic, AES-256/GCM
+  streaming, PBKDF2-HMAC-SHA256 (600k for new backups, 150k legacy) with the iteration count stored
+  in the v3 header and authenticated as GCM AAD, the salt/IV/sanity-bound details, and the bounded
+  restore. This closes the encrypted-backup crypto/format ADR gap that ADR 0007 explicitly tracked
+  as still-open (report item H3).
+
+Updates ADR 0007's "still open" note to point at ADR 0008.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.17.0 (2026-06-16)
 
 ### Features
