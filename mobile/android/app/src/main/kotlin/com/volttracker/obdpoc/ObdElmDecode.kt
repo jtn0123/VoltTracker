@@ -95,7 +95,6 @@ object ObdElmDecode {
             "015C" -> "engine oil temperature"
             "22119F", "22119F01" -> "engine oil life"
             "221154" -> "engine oil temperature"
-            "22203F" -> "engine torque"
             "015B" -> "state of charge"
             "222429" -> "hv pack voltage"
             "222414" -> "hv pack current"

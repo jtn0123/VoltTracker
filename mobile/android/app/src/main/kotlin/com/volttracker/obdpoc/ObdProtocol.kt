@@ -240,9 +240,6 @@ object ObdProtocol {
             )?.let { bounded(it, TEMP_C_RANGE) }?.let {
                 value("engine oil temperature", it, "deg C", 0)
             }
-            "22203F" -> return voltWordValue(response, cleanCommand, 4.0, false)?.let {
-                value("engine torque", it, "Nm", 1)
-            }
             "222883" -> return voltWordValue(
                 response,
                 cleanCommand,

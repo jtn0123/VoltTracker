@@ -387,6 +387,24 @@ object ObdStoreSupport {
         }
 
     /**
+     * Total and "useful" telemetry-row counts in ONE pass over telemetry_samples instead of two
+     * separate COUNT(*) scans (the table can hold millions of rows, so each scan is the dominant cost
+     * of the storage summary). Returns (total, useful); useful uses the same predicate as
+     * [USEFUL_TELEMETRY_WHERE]. COALESCE guards the SUM-over-empty-table NULL.
+     */
+    @JvmStatic
+    fun telemetryTotalAndUsefulCounts(db: SQLiteDatabase): Pair<Long, Long> =
+        db
+            .rawQuery(
+                "SELECT COUNT(*), " +
+                    "COALESCE(SUM(CASE WHEN $USEFUL_TELEMETRY_WHERE THEN 1 ELSE 0 END), 0) " +
+                    "FROM ${VoltTrackerDb.TABLE_TELEMETRY}",
+                null,
+            ).use { cursor ->
+                if (cursor.moveToFirst()) Pair(cursor.getLong(0), cursor.getLong(1)) else Pair(0L, 0L)
+            }
+
+    /**
      * Useful-telemetry-row counts for many sessions in ONE grouped query, replacing the per-session
      * COUNT(*) N+1 in the recent-sessions reads. Returns sessionId → count; sessions with zero useful
      * rows are absent (callers default to 0).

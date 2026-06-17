@@ -120,7 +120,11 @@ object PidSchedule {
             PidSpec("015C", Header.BROADCAST, 48, 36), // engine oil temp
             PidSpec("012F", Header.BROADCAST, 48, 30), // fuel level
             PidSpec("01A6", Header.BROADCAST, 240, 186), // odometer, if supported
-            PidSpec("22203F", Header.POWERTRAIN_7E0, 24, 4), // engine torque
+            // 22203F (engine torque) dropped: this gen-2 Volt answers with a single byte the 2-byte
+            // voltWordValue decoder can't read, so engineTorqueNm was permanently null. The real
+            // 1-byte scale is unproven (community (256A+B)/4 is 2-byte/gen-1), so rather than poll a
+            // deep-lane PID we can't decode, it's removed until a Torque Pro cross-check on this car
+            // pins the scale. See docs/obd-log-findings-2026-06-16.md (L3).
             PidSpec("22119F", Header.POWERTRAIN_7E0, 240, 180), // engine oil life
             PidSpec("22119F01", Header.POWERTRAIN_7E0, 240, 192), // engine oil life, GM selector variant
             PidSpec("221154", Header.POWERTRAIN_7E0, 48, 42), // engine oil temp, Volt community PID

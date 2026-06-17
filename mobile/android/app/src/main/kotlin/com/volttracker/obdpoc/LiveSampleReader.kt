@@ -359,7 +359,6 @@ class LiveSampleReader(
     @Throws(JSONException::class)
     private fun appendEnhancedContextFields(sample: JSONObject) {
         putNumericFirst(sample, "engineOilLifePct", 0, "22119F01", "22119F")
-        putNumeric(sample, "engineTorqueNm", "22203F", 1)
         putNumeric(sample, "motorACurrentA", "222883", 1)
         putNumeric(sample, "motorBCurrentA", "222884", 1)
         putNumeric(sample, "motorAVoltage", "222885", 1)
@@ -449,7 +448,6 @@ class LiveSampleReader(
             "22119F01",
             "22119F",
         )
-        putStaleMsForPresentValue(sample, "engineTorqueNm", "engineTorqueStaleMs", "22203F", now)
         putStaleMsForPresentValue(sample, "motorACurrentA", "motorAStaleMs", "222883", now)
         putStaleMsForPresentValue(sample, "motorBCurrentA", "motorBStaleMs", "222884", now)
         putStaleMsForPresentValue(

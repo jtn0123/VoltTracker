@@ -541,11 +541,6 @@ class ObdProtocolTest {
         assertEquals(50.0, voltOilTemp.valueNumeric!!, 0.01)
         assertEquals("deg C", voltOilTemp.unit)
 
-        val torque = ObdProtocol.parseKnownValue("22203F", "62203F012C")
-        assertNotNull(torque)
-        assertEquals("engine torque", torque!!.name)
-        assertEquals(75.0, torque.valueNumeric!!, 0.01)
-
         val transTemp = ObdProtocol.parseKnownValue("221940", "6219405A")
         assertNotNull(transTemp)
         assertEquals("transmission temperature", transTemp!!.name)

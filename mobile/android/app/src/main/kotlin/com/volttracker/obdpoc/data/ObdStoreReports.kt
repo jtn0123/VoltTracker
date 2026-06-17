@@ -835,14 +835,9 @@ class ObdStoreReports(
             db: SQLiteDatabase,
             databaseFile: File,
         ): StorageCountsProjection {
-            val rawTelemetryCount = ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_TELEMETRY)
-            val usefulTelemetryCount =
-                ObdStoreSupport.countRowsWhere(
-                    db,
-                    VoltTrackerDb.TABLE_TELEMETRY,
-                    ObdStoreSupport.USEFUL_TELEMETRY_WHERE,
-                    null,
-                )
+            // Total + useful telemetry counts in ONE scan of telemetry_samples (the millions-of-rows
+            // table) instead of two separate COUNT(*) passes — the dominant cost of this projection.
+            val (rawTelemetryCount, usefulTelemetryCount) = ObdStoreSupport.telemetryTotalAndUsefulCounts(db)
             val latest =
                 db
                     .query(

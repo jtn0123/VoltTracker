@@ -116,6 +116,25 @@ class ObdStoreReportsDbTest {
     }
 
     @Test
+    fun summaryDerivesTelemetryCountsFromASingleScan() {
+        // L10: storageCountsProjection now derives the raw + useful telemetry counts from one
+        // telemetry_samples scan (ObdStoreSupport.telemetryTotalAndUsefulCounts) instead of two
+        // separate COUNT(*) passes. recordTelemetry only persists useful rows, so raw == useful and
+        // the redundant (empty) count is 0; this confirms the single-pass query agrees with the data.
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L))
+        store.recordTelemetry(id, sample(50, 51.0, 32.71, -117.10, 2000L))
+
+        val summary = StorageSummaryJson.build(store.getStorageSummaryRecord())
+        assertEquals("raw count from the combined scan", 2L, summary.optLong("rawTelemetryCount"))
+        assertEquals(
+            "every persisted row is useful, so the empty count is 0",
+            0L,
+            summary.optLong("emptyTelemetryCount"),
+        )
+    }
+
+    @Test
     fun targetedStorageProjectionsExposeCountsDiagnosticsAndDomainSummaries() {
         val id = store.startSession("scan", "00:11", "Adapter")
         store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L))

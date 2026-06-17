@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,6 +48,33 @@ class ElmConnectionTest {
 
         assertEquals("41 0C 1880\r", response)
         assertEquals(true, connection.lastTransactTruncated)
+    }
+
+    @Test
+    fun promptlessResponseExitsOnQuietPeriodNotTheFullTimeout() {
+        // L5: when the ELM327 v1.4b drops the '>' prompt, transact must give up shortly after the
+        // response goes quiet rather than spinning the full command timeout, so the caller's
+        // prompt-recovery can start sooner. The reply below carries no '>' prompt.
+        val input = ReplyStream("41 0C 1880\r")
+        val out = TriggerOutputStream(input)
+        // Monotonic clock: every read advances 50 ms, so the loop always terminates (at the 5000 ms
+        // deadline if nothing else) — but the 250 ms quiet-period exit should fire long before that.
+        val now = AtomicLong(0L)
+        val clock = ElmConnection.Clock { now.getAndAdd(50L) }
+        val connection = ElmConnection(input, out, clock)
+
+        val response = connection.transact("010C", 5000L) { true }
+
+        assertEquals("41 0C 1880\r", response)
+        assertFalse(
+            "a promptless response must exit on the quiet period, not be marked deadline-truncated",
+            connection.lastTransactTruncated,
+        )
+        assertTrue(
+            "transact must give up well before the 5000 ms timeout once the adapter goes quiet " +
+                "(exited at ${now.get()} ms)",
+            now.get() < 1500L,
+        )
     }
 
     @Test

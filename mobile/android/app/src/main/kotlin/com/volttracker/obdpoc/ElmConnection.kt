@@ -215,13 +215,16 @@ open class ElmConnection
             out.flush()
 
             val response = StringBuilder()
-            val deadline = clock.nowMs() + timeoutMs
+            val startMs = clock.nowMs()
+            val deadline = startMs + timeoutMs
             val buffer = ByteArray(128)
+            var lastByteAtMs = startMs
             while (clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
                 val available = inputStream.available()
                 if (available > 0) {
                     val read = inputStream.read(buffer, 0, minOf(buffer.size, available))
                     if (read > 0) {
+                        lastByteAtMs = clock.nowMs()
                         val chunk = String(buffer, 0, read, StandardCharsets.US_ASCII)
                         response.append(chunk)
                         if (chunk.indexOf('>') >= 0) {
@@ -229,6 +232,13 @@ open class ElmConnection
                         }
                     }
                 } else {
+                    // The '>' prompt hasn't arrived. If a response already came in and the adapter has
+                    // since gone quiet for longer than any normal inter-frame gap, the ELM327 v1.4b
+                    // almost certainly dropped the prompt — stop here instead of burning the rest of
+                    // the timeout, so the caller's prompt-recovery runs now (saves ~1 s+ per drop).
+                    if (response.isNotEmpty() && clock.nowMs() - lastByteAtMs >= NO_PROMPT_QUIET_PERIOD_MS) {
+                        break
+                    }
                     sleep(25)
                 }
             }
@@ -288,6 +298,12 @@ open class ElmConnection
         }
 
         private companion object {
+            // Once a response has arrived, this much continued silence with still no '>' prompt means
+            // the ELM327 v1.4b dropped the prompt (a known quirk). It is far longer than a normal
+            // inter-frame gap (<100 ms), so a legitimate slow multi-frame reply is not truncated; it
+            // just lets prompt-recovery start ~1 s+ sooner than waiting out the full command timeout.
+            const val NO_PROMPT_QUIET_PERIOD_MS = 250L
+
             fun sleep(millis: Long) {
                 try {
                     Thread.sleep(millis)
