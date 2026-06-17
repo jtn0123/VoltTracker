@@ -201,6 +201,57 @@ class PidPollingStateTest {
     }
 
     @Test
+    fun aSingleHotLaneBatchMissKeepsBatchingEnabled() {
+        // L9b: one incomplete hot-lane batch frame is a transient BT hiccup, not a verdict that the
+        // adapter can't batch. Batching must survive it and re-engage on the next complete reply.
+        state.setMode01BatchSupported(true)
+        val hotLane = specs("010D", "010C", "0149")
+        engine.responses["010D"] = "41 0D 28\r>"
+        engine.responses["010C"] = "41 0C 0F A0\r>"
+        engine.responses["0149"] = "41 49 7F\r>"
+
+        // Cycle 1: batched reply is missing the 0C and 49 frames -> a transient miss.
+        engine.responses["010D0C49"] = "41 0D 28\r>"
+        state.runScheduledPolls(hotLane, StringBuilder())
+        assertTrue("must attempt the hot-lane batch", engine.commandLog.contains("010D0C49"))
+        assertTrue("a transient miss falls back to per-PID this cycle", engine.commandLog.contains("010D"))
+
+        // Cycle 2: the adapter answers fully -> batching must still engage (not disabled after one miss).
+        engine.commandLog.clear()
+        engine.responses["010D0C49"] = "41 0D 28 41 0C 0F A0 41 49 7F\r>"
+        state.runScheduledPolls(hotLane, StringBuilder())
+        assertTrue(
+            "one transient miss must NOT disable hot-lane batching",
+            engine.commandLog.contains("010D0C49"),
+        )
+        assertFalse("a batched cycle must not also read speed per-PID", engine.commandLog.contains("010D"))
+    }
+
+    @Test
+    fun twoConsecutiveHotLaneBatchMissesDisableBatching() {
+        // L9b: a genuinely non-batching adapter still gives up quickly — two misses in a row retire
+        // batching for the session.
+        state.setMode01BatchSupported(true)
+        val hotLane = specs("010D", "010C", "0149")
+        engine.responses["010D"] = "41 0D 28\r>"
+        engine.responses["010C"] = "41 0C 0F A0\r>"
+        engine.responses["0149"] = "41 49 7F\r>"
+        engine.responses["010D0C49"] = "41 0D 28\r>" // always incomplete
+
+        repeat(PidPollingState.MAX_CONSECUTIVE_BATCH_MISSES) {
+            state.runScheduledPolls(hotLane, StringBuilder())
+        }
+        engine.commandLog.clear()
+        state.runScheduledPolls(hotLane, StringBuilder())
+
+        assertFalse(
+            "after the miss threshold, batching is disabled and not re-attempted",
+            engine.commandLog.contains("010D0C49"),
+        )
+        assertTrue("disabled batching falls back to per-PID reads", engine.commandLog.contains("010D"))
+    }
+
+    @Test
     fun aSingleExtraMode01PidIsNotBatched() {
         state.setMode01BatchSupported(true)
         engine.responses["0105"] = "41 05 7B\r>"

@@ -16,6 +16,12 @@ class PidPollingState(
     private var cycleNum = 0
     private var mode01BatchSupported = false
 
+    // Consecutive cycles where the mode-01 batch returned an incomplete frame. A single transient
+    // miss (a dropped/garbled BT frame) shouldn't cost the rest of the drive its multi-PID batching,
+    // so we only fall back to single-PID reads permanently after [MAX_CONSECUTIVE_BATCH_MISSES] in a
+    // row. Reset on any complete batch and by reset().
+    private var consecutiveBatchMisses = 0
+
     // These carry-forward maps are read-and-mutated (including remove-on-age-out in lastRaw) on the
     // single poll thread today. They are ConcurrentHashMaps so a future "current value" query from
     // the broadcast/main thread can't structurally corrupt them under concurrent modification —
@@ -54,6 +60,7 @@ class PidPollingState(
     fun reset() {
         cycleNum = 0
         mode01BatchSupported = false
+        consecutiveBatchMisses = 0
         lastRawByCommand.clear()
         lastPolledAtMsByCommand.clear()
         lastRawSetAtMsByCommand.clear()
@@ -257,16 +264,32 @@ class PidPollingState(
         val batched = ObdProtocol.buildMode01MultiCommand(PidSchedule.MODE_01_BATCH_PIDS_HEX)
         val response = engine.sendRecoverableCommand(batched, 1500)
         if (!ObdProtocol.responseContainsAllMode01Pids(response, PidSchedule.MODE_01_BATCH_PIDS_HEX)) {
-            mode01BatchSupported = false
-            service.recorder.logEvent(
-                "mode01_batch_disabled",
-                "reason",
-                "incomplete_response",
-                "response",
-                ObdProtocol.summarize(response),
-            )
+            consecutiveBatchMisses += 1
+            if (consecutiveBatchMisses >= MAX_CONSECUTIVE_BATCH_MISSES) {
+                mode01BatchSupported = false
+                service.recorder.logEvent(
+                    "mode01_batch_disabled",
+                    "reason",
+                    "incomplete_response",
+                    "consecutiveMisses",
+                    consecutiveBatchMisses.toString(),
+                    "response",
+                    ObdProtocol.summarize(response),
+                )
+            } else {
+                // Transient miss — keep batching enabled, just fall back to single-PID reads this
+                // cycle. Avoids losing the rest of the drive's batching to one dropped BT frame.
+                service.recorder.logEvent(
+                    "mode01_batch_miss",
+                    "consecutiveMisses",
+                    consecutiveBatchMisses.toString(),
+                    "response",
+                    ObdProtocol.summarize(response),
+                )
+            }
             return false
         }
+        consecutiveBatchMisses = 0
         val now = clock.nowMs()
         appendRawTo(rawThisCycle, batched, response)
         for (command in PidSchedule.MODE_01_BATCH_COMMANDS) {
@@ -306,6 +329,14 @@ class PidPollingState(
          * while still retiring a genuinely-unsupported one within a few of its poll cycles.
          */
         const val MAX_CONSECUTIVE_NO_DATA: Int = 3
+
+        /**
+         * Consecutive incomplete mode-01 batch frames before we permanently fall back to single-PID
+         * reads for the session. 2 tolerates a one-off dropped/garbled BT frame (which would otherwise
+         * cost the rest of the drive its multi-PID batching) while still giving up quickly on an
+         * adapter that genuinely can't batch.
+         */
+        const val MAX_CONSECUTIVE_BATCH_MISSES: Int = 2
 
         @JvmStatic
         fun carryForwardMaxAgeMsFor(command: String): Long {

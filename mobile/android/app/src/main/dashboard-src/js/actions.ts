@@ -1239,18 +1239,21 @@ import type { FocusTrap } from "./focus-trap";
   // Initial paint of the Drive-tab live polish — without this the session chip
   // strip + micro-charts stay empty until the first telemetry sample arrives.
   if (typeof VD.renderDriveLive === "function") VD.renderDriveLive();
+  // refreshDevices() re-renders the adapter picker + connect button, so it stays on the
+  // bootstrap path — deferring it to idle could re-render the button mid-interaction.
   refreshDevices();
-  refreshStorage();
   if (bridge && typeof bridge.dashboardReady === "function") bridge.dashboardReady();
-  // loadTrips()/loadInsights() each make a synchronous bridge call into SQLite to
-  // populate the Trips/Insights tabs — neither is the first visible view, yet on the
-  // old ordering they ran on the bootstrap path and added ~1-2s before first paint.
-  // Defer them off the critical path (after the dashboardReady handshake) so the live
-  // Drive/Status view renders immediately; the data fills in a frame later.
+  // refreshStorage()/loadTrips()/loadInsights() each make a synchronous bridge call into
+  // SQLite to populate the storage summary + Trips/Insights tabs — none is the first visible
+  // (Drive/Status) view, and none mutates an interactive control, yet on the old ordering they
+  // ran on the bootstrap path and added latency before first paint. Defer them off the critical
+  // path (after the dashboardReady handshake) so the live view renders immediately; the data
+  // fills in a frame later.
   const loadDeferredPanels = () => {
     // Guarded like the other VD.* cross-module calls: this runs a frame after the
     // dashboardReady handshake, so a bootstrap context missing a loader must not
     // throw asynchronously and destabilize startup.
+    refreshStorage();
     if (typeof VD.loadTrips === "function") VD.loadTrips();
     if (typeof VD.loadInsights === "function") VD.loadInsights();
   };

@@ -47,6 +47,10 @@ open class ObdPollingEngine(
     // to sleep with the car" disconnect (parked/plugged/charging) apart from a real mid-drive drop.
     private var lastVehicleState = ""
 
+    // Set true by initializeElm327 on every (re)connect; the poll loop runs the deferred VIN/batch/
+    // voltage probes once, right after the first sample is broadcast, then clears it.
+    private var deferredInitProbesPending = false
+
     init {
         sessionHealth = SessionHealthTracker(service)
         pidPolling = PidPollingState(service, this)
@@ -64,6 +68,7 @@ open class ObdPollingEngine(
         supportedPidsSummary = supportedPidsSeed ?: ""
         redactedVin = ""
         lastVehicleState = ""
+        deferredInitProbesPending = false
         pidPolling.reset()
     }
 
@@ -518,6 +523,12 @@ open class ObdPollingEngine(
             }
             service.broadcastTelemetry(sample)
             lastVehicleState = sample.optString("vehicleState", lastVehicleState)
+            // First real data is on screen — now run the deferred connect-time probes (VIN, mode-01
+            // batch capability, aux voltage) that we moved off the pre-first-sample critical path.
+            if (deferredInitProbesPending) {
+                deferredInitProbesPending = false
+                runDeferredInitProbes()
+            }
             // When the car has been asleep long enough (no fresh PID data while parked), stop instead
             // of polling a dead bus for an hour and eventually logging a bogus connect_timeout.
             if (shouldEndForVehicleSleep(pidPolling.msSinceLastLiveData(), lastVehicleState)) {
@@ -616,6 +627,22 @@ open class ObdPollingEngine(
             throw IOException("Adapter did not answer the standard OBD PID probe.")
         }
         OBDLog.event("ObdPollingEngine", "protocol_init", mapOf("ok" to true))
+        // The VIN, mode-01 batch-capability, and voltage probes used to run here — synchronously
+        // blocking the "connected" broadcast and the first live sample by ~2.5s (mode-01 1.5s +
+        // voltage 1.0s), plus up to ~6s for an uncached VIN. None is needed to start polling:
+        // mode-01 batching defaults off (safe single-PID reads until probed), VIN is informational,
+        // and the voltage pill is UI-only. They now run via runDeferredInitProbes() immediately AFTER
+        // the first sample is broadcast, so the dashboard shows real data ~2.5s sooner.
+        deferredInitProbesPending = true
+    }
+
+    /**
+     * Runs the non-critical connect-time probes (VIN, mode-01 batch capability, aux voltage) that
+     * were deferred out of [initializeElm327] so the first live sample isn't blocked on them. Invoked
+     * once per (re)connect, right after the first telemetry broadcast. Re-armed on every reconnect by
+     * [initializeElm327], matching the original "probe on each init" behaviour.
+     */
+    private fun runDeferredInitProbes() {
         probeAndPersistVin()
         probeMode01Batch()
         service.maybeRunVoltageProbe(this)

@@ -409,8 +409,15 @@ function installTelemetryObserver() {
   }
 }
 
-// Initial render on load.
-renderLastConnected();
+// Initial render on load. renderLastConnected() makes a synchronous getRecentSessions(n)
+// bridge call into SQLite for the "last connected" badge — not needed for first paint, so
+// defer it off the bootstrap critical path (it fills in a frame later), mirroring the
+// loadDeferredPanels idle-defer pattern in actions.ts.
+if (typeof window.requestIdleCallback === "function") {
+  window.requestIdleCallback(() => renderLastConnected(), { timeout: 1500 });
+} else {
+  window.setTimeout(renderLastConnected, 0);
+}
 installStatusObserver();
 installTelemetryObserver();
 bindStatusPopover();

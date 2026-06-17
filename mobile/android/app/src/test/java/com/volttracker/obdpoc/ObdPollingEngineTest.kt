@@ -165,6 +165,53 @@ class ObdPollingEngineTest {
     }
 
     @Test
+    fun connectDefersNonCriticalProbesUntilAfterFirstSample() {
+        // Perf (L6): the VIN (0902), mode-01 batch (010D0C), and voltage (0142) probes used to block
+        // the first live sample. They now run right AFTER the first sample is broadcast. Inject
+        // adapter-like latency on the two unambiguous probe commands and confirm the first sample
+        // does not pay it — a reproducible time-to-first-data benchmark.
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["ATRV"] = "13.8V\r>"
+        fake.responses["010D"] = "41 0D 28\r>"
+        fake.responses["010C"] = "41 0C 0F A0\r>"
+        fake.responses["0902"] = mode09VinResponse("1G1ZD5ST8JF202020")
+        fake.delays["010D0C"] = 400L // mode-01 batch capability probe
+        fake.delays["0902"] = 800L // VIN probe
+        val deferredProbeMs = 400L + 800L
+
+        val startNanos = System.nanoTime()
+        var firstSampleMs = -1L
+        fake.afterCommand("ATSH7DF") {
+            if (firstSampleMs < 0L) firstSampleMs = (System.nanoTime() - startNanos) / 1_000_000L
+            service.running.set(false)
+        }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        val firstSampleIdx = fake.commandLog.indexOf("ATSH7DF")
+        assertTrue(
+            "VIN probe (0902) must be deferred until after the first sample",
+            fake.commandLog.indexOf("0902") > firstSampleIdx,
+        )
+        assertTrue(
+            "mode-01 batch probe (010D0C) must be deferred until after the first sample",
+            fake.commandLog.indexOf("010D0C") > firstSampleIdx,
+        )
+        assertTrue("engine must still poll a first sample", engine.sampleCount() >= 1)
+        println(
+            "[L6 benchmark] time-to-first-sample=${firstSampleMs}ms; deferred-probe latency moved " +
+                "off the pre-first-data path=${deferredProbeMs}ms (prior time-to-first-data " +
+                "~=${firstSampleMs + deferredProbeMs}ms)",
+        )
+        assertTrue(
+            "first sample must arrive without waiting on the ${deferredProbeMs}ms of deferred probes",
+            firstSampleMs < deferredProbeMs,
+        )
+    }
+
+    @Test
     fun openBluetoothSocketRejectsInvalidAddressAsIOException() {
         val realEngine = ObdPollingEngine(service)
         val ex =
@@ -561,34 +608,36 @@ class ObdPollingEngineTest {
     // ---- Mode-01 multi-PID batching (probe + per-cycle batch + per-adapter fallback) ----
 
     @Test
-    fun mode01BatchProbeRunsDuringInit() {
+    fun mode01BatchProbeRunsAfterFirstSample() {
         fake.defaultResponse = ">"
         fake.responses["0100"] = "41 00 00 00 00 00>"
         fake.responses["010D0C"] = "41 0D 28 41 0C 0F A0\r>"
         fake.responses["010D0C49"] = "41 0D 28 41 0C 0F A0 41 49 7F\r>"
-        fake.afterCommand("ATSH7DF") { service.running.set(false) }
+        val cycles = AtomicInteger(0)
+        fake.afterCommand("ATSH7DF") { if (cycles.incrementAndGet() >= 2) service.running.set(false) }
 
         openSession()
         runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
 
         assertTrue(
-            "the multi-PID capability probe (010D0C) must run during init",
+            "the multi-PID capability probe (010D0C) must run (deferred to just after the first sample)",
             fake.commandLog.contains("010D0C"),
         )
     }
 
     @Test
-    fun liveConnectReadsVinDuringInit() {
+    fun liveConnectReadsVinAfterFirstSample() {
         fake.defaultResponse = ">"
         fake.responses["0100"] = "41 00 00 00 00 00>"
         fake.responses["0902"] = mode09VinResponse("1G1ZD5ST8JF202020")
-        fake.afterCommand("ATSH7DF") { service.running.set(false) }
+        val cycles = AtomicInteger(0)
+        fake.afterCommand("ATSH7DF") { if (cycles.incrementAndGet() >= 2) service.running.set(false) }
 
         openSession()
         runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
 
         assertTrue(
-            "live init must request VIN via Mode 09 PID 02",
+            "live connect must request VIN via Mode 09 PID 02 (deferred to just after the first sample)",
             fake.commandLog.contains("0902"),
         )
         assertEquals("…2020", engine.redactedVin())
@@ -618,22 +667,29 @@ class ObdPollingEngineTest {
         // Probe returns both PIDs -> batching is supported for the session.
         fake.responses["010D0C"] = "41 0D 28 41 0C 0F A0\r>"
         fake.responses["010D0C49"] = "41 0D 28 41 0C 0F A0 41 49 7F\r>"
-        fake.afterCommand("ATSH7DF") { service.running.set(false) }
+        // The mode-01 batch probe now runs AFTER the first sample (L6 deferral), so cycle 1 is
+        // single-PID and batching is confirmed before cycle 2. Let a few cycles run so a batched
+        // cycle is observed.
+        val cycles = AtomicInteger(0)
+        fake.afterCommand("ATSH7DF") { if (cycles.incrementAndGet() >= 3) service.running.set(false) }
 
         openSession()
         runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
 
         assertTrue(
-            "hot-lane PIDs must be polled as one batched command when the adapter supports it",
+            "hot-lane PIDs must be polled as one batched command once the adapter is confirmed to support it",
             fake.commandLog.contains("010D0C49"),
         )
+        // After batching is established, the batched command carries the hot lane; the individual
+        // speed/RPM PIDs are only used for the very first (pre-probe) cycle.
+        val afterBatching = fake.commandLog.subList(fake.commandLog.indexOf("010D0C49"), fake.commandLog.size)
         assertFalse(
             "a batched cycle must not also send the individual speed PID",
-            fake.commandLog.contains("010D"),
+            afterBatching.contains("010D"),
         )
         assertFalse(
             "a batched cycle must not also send the individual RPM PID",
-            fake.commandLog.contains("010C"),
+            afterBatching.contains("010C"),
         )
     }
 
@@ -760,6 +816,12 @@ class ObdPollingEngineTest {
         /** Scripted exact-match responses, keyed on the trimmed command string. */
         val responses = LinkedHashMap<String, String>()
 
+        /**
+         * Optional per-command artificial latency (ms) used by connect/poll benchmarks to model a
+         * real adapter's round-trip time. Applied inside transact() before the response is returned.
+         */
+        val delays = LinkedHashMap<String, Long>()
+
         /** Response used when no entry matches in [responses]. Default: ELM prompt only. */
         @Volatile
         var defaultResponse = ">"
@@ -804,6 +866,7 @@ class ObdPollingEngineTest {
             keepWaiting: KeepWaiting,
         ): String {
             commandLog.add(command)
+            delays[command]?.let { if (it > 0) Thread.sleep(it) }
             val interceptor = transactInterceptor
             val intercepted = interceptor?.handle(command)
             val response: String =

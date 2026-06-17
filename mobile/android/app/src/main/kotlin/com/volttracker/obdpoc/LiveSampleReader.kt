@@ -179,7 +179,12 @@ class LiveSampleReader(
             service.recorder.logError("sample_encoding_error", ex)
             return JSONObject()
         }
-        return TelemetryPayload.fromJson(sample).toJson()
+        // Return the freshly-built sample directly. This used to be round-tripped through
+        // TelemetryPayload (fromJson(sample).toJson()), but ObdService.broadcastTelemetry(JSONObject)
+        // already normalizes through TelemetryPayload before logging/broadcasting — so this extra
+        // per-sample deep-copy + re-parse of ~60 keys was pure overhead. The sample is freshly built
+        // here and is neither shared nor mutated after return, so handing it back as-is is safe.
+        return sample
     }
 
     /**

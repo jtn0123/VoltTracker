@@ -28,6 +28,21 @@ import type { MapSessionFilter } from "./map-session-list";
   const bridge = VD.bridge;
   const el = VD.el;
 
+  // Leaflet's stylesheet is no longer render-blocking in index.template.html (it is only needed once
+  // a map renders). Inject it once, here, as soon as this lazy map chunk loads — well before the first
+  // renderMap() — so tiles and controls are styled without costing every dashboard launch ~14 KB of
+  // critical-path CSS.
+  (function ensureLeafletCss(): void {
+    const href = "lib/leaflet/leaflet.css";
+    if (document.querySelector(`link[href="${href}"]`)) {
+      return;
+    }
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.appendChild(link);
+  })();
+
   type MapStop = {
     lat: number;
     lng: number;
