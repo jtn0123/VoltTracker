@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.18.7 (2026-06-17)
+
+### Performance Improvements
+
+- Harden dashboard and storage performance
+  ([`1d10ccd`](https://github.com/jtn0123/VoltTracker/commit/1d10ccdea3865249d0337541ca4f66282bd10e95))
+
+
 ## v0.18.6 (2026-06-17)
 
 ### Performance Improvements
