@@ -61,7 +61,12 @@ describe('insights empty-state gating (fresh vs stale state.insights)', () => {
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
-    await loadDashboard({ bridge: createVoltBridgeFixture({ getInsights }) });
+    await loadDashboard({
+      bridge: createVoltBridgeFixture({ getInsights }),
+      extras: ['insights-panel.js'],
+    });
+    window.VoltDashboard.setView('insights');
+    await window.VoltDashboard.pendingLazyLoads();
   }
 
   it('hides the empty state once loadInsights refreshes the data a setStorage pass started with', async () => {
@@ -75,6 +80,7 @@ describe('insights empty-state gating (fresh vs stale state.insights)', () => {
     // it — the insights render path must re-toggle the empty state afterwards.
     getInsights.mockReturnValue(JSON.stringify({ tripCount: 3, totalDistanceMeters: 5200 }));
     window.VoltDashboard.setStorage({ sampleCount: 10 });
+    await Promise.resolve();
     expect(document.getElementById('insightsEmptyState').hidden).toBe(true);
   });
 
@@ -87,6 +93,7 @@ describe('insights empty-state gating (fresh vs stale state.insights)', () => {
     // then refreshes to {} — the guide must come back.
     getInsights.mockReturnValue('{}');
     window.VoltDashboard.setStorage({});
+    await Promise.resolve();
     expect(document.getElementById('insightsEmptyState').hidden).toBe(false);
   });
 });
@@ -97,7 +104,7 @@ describe('efficiency-vs-speed scatter axis + units', () => {
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
-    await loadDashboard();
+    await loadDashboard({ extras: ['insights-panel.js'] });
   });
 
   // A pre-enriched route (skips enrichRouteEff) with 8 highway points at
@@ -121,6 +128,7 @@ describe('efficiency-vs-speed scatter axis + units', () => {
 
   it('keeps 85-95 mph samples inside the plot by growing the x-axis with the data', () => {
     window.VoltDashboard.setStorage(fastRouteStorage());
+    window.VoltDashboard.renderInsightScatter();
     const card = document.getElementById('effScatterCard');
     expect(card.hidden).toBe(false);
     const svg = document.querySelector('#effScatter svg');
@@ -143,6 +151,7 @@ describe('efficiency-vs-speed scatter axis + units', () => {
 
   it('scatter stats follow the units preference instead of hardcoding mi/kWh', () => {
     window.VoltDashboard.setStorage(fastRouteStorage());
+    window.VoltDashboard.renderInsightScatter();
     const stats = () => document.getElementById('effScatterStats').textContent;
     expect(stats()).toContain('mi/kWh');
 

@@ -129,6 +129,7 @@ import { initialTelemetryState } from "./telemetry-state";
   // don't accumulate across re-renders. Each render aborts the previous batch
   // before binding the new one.
   let historyController: AbortController | null = null;
+  let insightsModulePromise: Promise<VoltDashboard> | null = null;
   let mapModulePromise: Promise<VoltDashboard> | null = null;
   let troubleshooterModulePromise: Promise<VoltDashboard> | null = null;
 
@@ -672,6 +673,29 @@ import { initialTelemetryState } from "./telemetry-state";
     return mapModulePromise;
   }
 
+  function insightsModuleLoaded() {
+    return typeof VD.loadTrips === "function" && typeof VD.loadInsights === "function";
+  }
+
+  function ensureInsightsModule() {
+    if (insightsModuleLoaded()) return Promise.resolve(VD);
+    if (!insightsModulePromise) {
+      insightsModulePromise = loadDashboardScript("js/insights-panel.js")
+        .then(() => {
+          if (!insightsModuleLoaded()) {
+            throw new Error("Insights script loaded but expected globals were not registered.");
+          }
+          return VD;
+        })
+        .catch((err) => {
+          insightsModulePromise = null;
+          reportClientError("insights.load", err && err.message);
+          throw err;
+        });
+    }
+    return insightsModulePromise;
+  }
+
   /**
    * Harness seam: settles once every in-flight lazy-chunk load (DTC data, map,
    * troubleshooter) has run its success/failure handlers — including the async
@@ -682,6 +706,7 @@ import { initialTelemetryState } from "./telemetry-state";
   function pendingLazyLoads(): Promise<unknown[]> {
     const pending: Array<Promise<unknown>> = [];
     if (dtcDataPromise) pending.push(dtcDataPromise.catch(() => undefined));
+    if (insightsModulePromise) pending.push(insightsModulePromise.catch(() => undefined));
     if (leafletRuntimePromise) pending.push(leafletRuntimePromise.catch(() => undefined));
     if (mapModulePromise) pending.push(mapModulePromise.catch(() => undefined));
     if (troubleshooterModulePromise) {
@@ -965,8 +990,22 @@ import { initialTelemetryState } from "./telemetry-state";
         node.removeAttribute("aria-current");
       }
     });
-    if (view === "insights") VD.loadInsights();
-    else if (view === "map") void VD.requestMapRender().catch(() => {});
+    if (view === "insights") {
+      void ensureInsightsModule()
+        .then(() => {
+          VD.loadTrips();
+          VD.loadInsights();
+        })
+        .catch(() => {});
+    } else if (view === "map") {
+      void ensureInsightsModule()
+        .catch(() => undefined)
+        .then(() => {
+          if (typeof VD.loadTrips === "function") VD.loadTrips();
+          return VD.requestMapRender();
+        })
+        .catch(() => {});
+    }
     updateViewHeading();
     scrollAppToTop();
   }
@@ -1077,8 +1116,12 @@ import { initialTelemetryState } from "./telemetry-state";
     if (!changed) return;
     updateViewHeading();
     VD.updateLiveUi();
-    VD.loadTrips();
-    VD.loadInsights();
+    void ensureInsightsModule()
+      .then(() => {
+        VD.loadTrips(true);
+        VD.loadInsights(true);
+      })
+      .catch(() => {});
   }
 
   function clearDemoTelemetry() {
@@ -1200,6 +1243,7 @@ import { initialTelemetryState } from "./telemetry-state";
     loadDashboardScript,
     ensureDtcData,
     dtcDataLoaded,
+    ensureInsightsModule,
     ensureMapModule,
     pendingLazyLoads,
     requestMapRender,

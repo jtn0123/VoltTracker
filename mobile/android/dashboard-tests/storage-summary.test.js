@@ -79,4 +79,27 @@ describe('storage summary lazy details', () => {
     expect(window.VoltDashboard.state.storage.recentRoutes).toHaveLength(1);
     expect(window.VoltDashboard.state.storage.storageDetails).toBeUndefined();
   });
+
+  it('demand-loads trip and insight rollups when their views open', async () => {
+    const bridge = createVoltBridgeFixture({
+      getStorageSummary: vi.fn(() => '{"sessionCount":1,"sampleCount":2,"recentSessions":[]}'),
+      getTrips: vi.fn(() => '[]'),
+      getInsights: vi.fn(() => '{}'),
+    });
+    await loadDashboard({ bridge });
+    await flushDeferredStorageReads();
+
+    expect(bridge.getTrips).not.toHaveBeenCalled();
+    expect(bridge.getInsights).not.toHaveBeenCalled();
+
+    window.VoltDashboard.setView('map');
+    await window.VoltDashboard.pendingLazyLoads();
+    expect(bridge.getTrips).toHaveBeenCalledTimes(1);
+    expect(bridge.getInsights).not.toHaveBeenCalled();
+
+    window.VoltDashboard.setView('insights');
+    await window.VoltDashboard.pendingLazyLoads();
+    expect(bridge.getTrips).toHaveBeenCalledTimes(1);
+    expect(bridge.getInsights).toHaveBeenCalledTimes(1);
+  });
 });

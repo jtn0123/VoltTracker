@@ -57,7 +57,6 @@ const DASHBOARD_EMITTED_JS_FILES = [
   'payload-validators.js',
   'storage-status.js',
   'signals-panel.js',
-  'insights-panel.js',
   'scrubber.js',
   'drive.js',
   'telemetry.js',
@@ -388,13 +387,9 @@ export async function loadDashboard({ bridge, extras, extraDom, withBridge = tru
     window.setTimeout = nativeSetTimeout;
   }
 
-  // The bootstrap (actions.ts) now defers loadTrips()/loadInsights() off the
-  // first-paint path via requestIdleCallback, falling back to setTimeout(0).
-  // jsdom implements neither requestIdleCallback nor a microtask flush for it,
-  // so that deferred panel load lands on a setTimeout(0) macrotask. Drain one
-  // macrotask tick here so loadDashboard() still resolves with a fully-booted
-  // dashboard (trips/insights populated) — matching the end state tests asserted
-  // when those loads ran synchronously on the boot path.
+  // The bootstrap (actions.ts) defers refreshStorage() off the first-paint path
+  // via requestIdleCallback, falling back to setTimeout(0). Trips/Insights are
+  // now demand-loaded by their views rather than drained here.
   //
   // Use the real node timer (not window.setTimeout): tests that call this under
   // vi.useFakeTimers() would otherwise schedule the drain on a faked clock that

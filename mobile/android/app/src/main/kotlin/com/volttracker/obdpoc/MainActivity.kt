@@ -286,6 +286,8 @@ open class MainActivity :
 
         val createdWebView = WebView(this)
         webView = createdWebView
+        createdWebView.id = R.id.dashboard_webview
+        createdWebView.contentDescription = DASHBOARD_LOADING_DESCRIPTION
         createdWebView.layoutParams =
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         setContentView(createdWebView)
@@ -316,6 +318,7 @@ open class MainActivity :
             return
         }
         publisher.setPageReady(true)
+        webView?.contentDescription = DASHBOARD_READY_DESCRIPTION
         publishDeviceList()
         publishStorageSummary()
         publishAppState()
@@ -857,6 +860,12 @@ open class MainActivity :
          * constant. Keep the emitted line's prefix unchanged so the live smoke still matches.
          */
         const val DASHBOARD_READY_LOG = "dashboard handshake received"
+
+        /** Stable UiAutomator signal used by the startup Macrobenchmark. */
+        const val DASHBOARD_LOADING_DESCRIPTION = "VoltTracker dashboard loading"
+
+        /** Stable UiAutomator signal used by the startup Macrobenchmark. */
+        const val DASHBOARD_READY_DESCRIPTION = "VoltTracker dashboard ready"
 
         /**
          * SharedPreferences file shared by the Activity, [ObdService], the widget package, and

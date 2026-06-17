@@ -405,6 +405,8 @@ interface DashboardState {
   maintenanceLog: VoltMaintenanceEntry[];
   tripsReadError: string | null;
   insightsReadError: string | null;
+  tripsLoaded?: boolean;
+  insightsLoaded?: boolean;
   demoSessions: VoltChargeSessionRow[] | null;
   appState: VoltAppState;
   demoActive: boolean;
@@ -698,6 +700,7 @@ interface VoltRestoreProgress {
     /** Harness seam: settles when in-flight lazy-chunk loads have run their handlers. */
     pendingLazyLoads(): Promise<unknown[]>;
     dtcDataLoaded(): boolean;
+    ensureInsightsModule(): Promise<VoltDashboard>;
     ensureMapModule(): Promise<VoltDashboard>;
     requestMapRender(): Promise<VoltDashboard>;
     renderMapIfLoaded(): void;
@@ -776,8 +779,9 @@ interface VoltRestoreProgress {
     // ----- insights-panel.ts (split from the old panels.ts) ------------------
     /** Data-loader only (the Trips tab was removed): populates state.trips for
      *  Insights/map and surfaces read errors via the global status. */
-    loadTrips(): void;
-    loadInsights(): void;
+    loadTrips(force?: boolean): void;
+    loadInsights(force?: boolean): void;
+    forceLazyStorageRead?: boolean;
     renderInsightStats(): void;
     renderInsightScatter(): void;
     enrichRouteEff(route: VoltRoute): void;

@@ -14,7 +14,12 @@ describe('insights estimated savings vs gas', () => {
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
-    await loadDashboard({ bridge: createVoltBridgeFixture({ getInsights }) });
+    await loadDashboard({
+      bridge: createVoltBridgeFixture({ getInsights }),
+      extras: ['insights-panel.js'],
+    });
+    window.VoltDashboard.setView('insights');
+    await window.VoltDashboard.pendingLazyLoads();
   }
 
   beforeEach(() => window.localStorage.clear());

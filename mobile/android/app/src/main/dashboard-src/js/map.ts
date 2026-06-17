@@ -1652,7 +1652,7 @@ import type { MapSessionFilter } from "./map-session-list";
     VD.updateStorageUi();
     VD.renderRealV2Ui();
     renderMap();
-    VD.renderInsightStats();
+    if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
   }
 
   function loadDemoScenario(name: string) {

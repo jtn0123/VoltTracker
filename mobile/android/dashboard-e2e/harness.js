@@ -69,6 +69,27 @@ async function waitForDashboardReady(page, timeout) {
   );
 }
 
+async function waitForInitialDeferredWork(page) {
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const settle = () => {
+          const VD = window.VoltDashboard;
+          if (VD && typeof VD.pendingLazyLoads === 'function') {
+            VD.pendingLazyLoads().then(resolve, resolve);
+            return;
+          }
+          resolve();
+        };
+        if (typeof window.requestIdleCallback === 'function') {
+          window.requestIdleCallback(settle, { timeout: 1500 });
+        } else {
+          window.setTimeout(settle, 0);
+        }
+      }),
+  );
+}
+
 /**
  * Loads the dashboard and waits until window.VoltDashboard is wired up.
  * @param {import('@playwright/test').Page} page
@@ -114,6 +135,7 @@ async function openDashboard(page, opts = {}) {
       );
     }
   }
+  await waitForInitialDeferredWork(page);
 }
 
 async function ensureMapModule(page) {

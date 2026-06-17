@@ -1,0 +1,23 @@
+plugins {
+    id "com.android.test"
+}
+
+android {
+    namespace = "com.volttracker.obdpoc.startupbenchmark"
+    compileSdk = 37
+
+    defaultConfig {
+        minSdk = 29
+        targetSdk = 37
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    targetProjectPath = ":app"
+}
+
+dependencies {
+    implementation libs.androidx.benchmark.macro.junit4
+    implementation libs.androidx.test.junit
+    implementation libs.androidx.test.runner
+    implementation libs.androidx.test.uiautomator
+}

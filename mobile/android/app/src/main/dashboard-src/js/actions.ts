@@ -1056,12 +1056,20 @@ type SignalActions = {
       VD.updateStorageUi();
       VD.renderRealV2Ui();
       VD.renderMapIfLoaded();
-      VD.renderInsightStats();
+      if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
+      if (typeof VD.renderInsightScatter === "function") VD.renderInsightScatter();
       return;
     }
     void refreshStorage();
-    if (typeof VD.loadTrips === "function") VD.loadTrips();
-    if (typeof VD.loadInsights === "function") VD.loadInsights();
+    const refreshRollups = () => {
+      if (typeof VD.loadTrips === "function") VD.loadTrips(VD.forceLazyStorageRead);
+      if (typeof VD.loadInsights === "function") VD.loadInsights(VD.forceLazyStorageRead);
+    };
+    if (typeof VD.ensureInsightsModule === "function") {
+      void VD.ensureInsightsModule().then(refreshRollups).catch(() => {});
+    } else {
+      refreshRollups();
+    }
     if (typeof VD.renderRealV2Ui === "function") VD.renderRealV2Ui();
     VD.renderMapIfLoaded();
     if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
@@ -1401,19 +1409,14 @@ type SignalActions = {
   // bootstrap path — deferring it to idle could re-render the button mid-interaction.
   refreshDevices();
   if (bridge && typeof bridge.dashboardReady === "function") bridge.dashboardReady();
-  // refreshStorage()/loadTrips()/loadInsights() each make a synchronous bridge call into
-  // SQLite to populate the storage summary + Trips/Insights tabs — none is the first visible
-  // (Drive/Status) view, and none mutates an interactive control, yet on the old ordering they
-  // ran on the bootstrap path and added latency before first paint. Defer them off the critical
-  // path (after the dashboardReady handshake) so the live view renders immediately; the data
-  // fills in a frame later.
+  // refreshStorage() reads the cheap overview payload after the dashboardReady handshake.
+  // Trips/Insights rollups are demand-loaded when the user opens Map/Insights, so startup
+  // no longer schedules the heavier synchronous SQLite bridge reads unconditionally.
   const loadDeferredPanels = () => {
     // Guarded like the other VD.* cross-module calls: this runs a frame after the
     // dashboardReady handshake, so a bootstrap context missing a loader must not
     // throw asynchronously and destabilize startup.
     void refreshStorage();
-    if (typeof VD.loadTrips === "function") VD.loadTrips();
-    if (typeof VD.loadInsights === "function") VD.loadInsights();
   };
   if (typeof window.requestIdleCallback === "function") {
     window.requestIdleCallback(loadDeferredPanels, { timeout: 1500 });

@@ -9,7 +9,7 @@ async function freshLoad(bridge) {
   delete window.VoltDashboard;
   delete window.VoltTrackerNative;
   delete window.VoltTrackerAndroid;
-  await loadDashboard({ bridge });
+  await loadDashboard({ bridge, extras: ['insights-panel.js'] });
   return window.VoltDashboard;
 }
 

@@ -18,6 +18,9 @@ type MapSessionListFormatters = {
   filter?: MapSessionFilter;
 };
 
+const MAP_SESSION_INITIAL_LIMIT = 80;
+const MAP_SESSION_PAGE_SIZE = 80;
+
 // The searchable text for a stored route: its user label, the mode/adapter
 // fallback title, and the formatted date — so a search matches by name OR by
 // when the drive happened. `formatWhen` (when provided) supplies the same
@@ -90,7 +93,62 @@ export function renderMapSessionListInto(
     list.replaceChildren(p);
     return;
   }
-  list.replaceChildren(...visible.map((route) => buildMapSessionEntry(route, formatters)));
+  renderVisibleMapSessions(list, visible, formatters, MAP_SESSION_INITIAL_LIMIT);
+}
+
+function renderVisibleMapSessions(
+  list: HTMLElement,
+  visible: MapRoute[],
+  formatters: MapSessionListFormatters,
+  requestedLimit: number,
+) {
+  const selectedId = String(formatters.selectedSessionId || "");
+  const selectedIndex = selectedId
+    ? visible.findIndex((route) => String((sessionForRoute(route) || {}).id || "") === selectedId)
+    : -1;
+  const limit = Math.min(
+    visible.length,
+    Math.max(requestedLimit, selectedIndex >= 0 ? selectedIndex + 1 : 0),
+  );
+  const nodes: HTMLElement[] = visible.slice(0, limit).map((route) => buildMapSessionEntry(route, formatters));
+  if (limit < visible.length) {
+    nodes.push(buildShowMoreRow(visible.length, limit, () => {
+      renderVisibleMapSessions(list, visible, formatters, limit + MAP_SESSION_PAGE_SIZE);
+      focusMapSessionPaginationTarget(list);
+    }));
+  }
+  list.replaceChildren(...nodes);
+}
+
+function focusMapSessionPaginationTarget(list: HTMLElement) {
+  const nextMore = list.querySelector<HTMLElement>("[data-map-session-more='true']");
+  if (nextMore) {
+    nextMore.focus();
+    return;
+  }
+  const rows = Array.from(list.querySelectorAll<HTMLElement>("[data-map-session]"));
+  const lastRow = rows[rows.length - 1];
+  if (lastRow) lastRow.focus();
+}
+
+function buildShowMoreRow(
+  total: number,
+  rendered: number,
+  onClick: () => void,
+): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "history-more";
+  const copy = document.createElement("p");
+  copy.className = "status-copy";
+  copy.textContent = `Showing ${rendered} of ${total} drives.`;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "history-export-btn";
+  button.dataset.mapSessionMore = "true";
+  button.textContent = "Show more drives";
+  button.addEventListener("click", onClick);
+  row.append(copy, button);
+  return row;
 }
 
 export function sessionForRoute(route: MapRoute): MapRouteSession {

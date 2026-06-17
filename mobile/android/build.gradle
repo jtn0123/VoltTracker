@@ -2,6 +2,7 @@ plugins {
     // AGP and Spotless versions live in gradle/libs.versions.toml (the single source of truth).
     // Kotlin needs no plugin here: AGP 9.0+ compiles Kotlin via its built-in support.
     alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.test) apply false
     alias(libs.plugins.spotless) apply false
     alias(libs.plugins.test.retry) apply false
     alias(libs.plugins.detekt) apply false
@@ -34,14 +35,18 @@ def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
 // See docs/bundle-budget.md.
 def dashboardStartupBudgetBytes = 360_000L
 def dashboardLazySupportBudgetBytes = 90_000L
+def dashboardLazyPanelBudgetBytes = 45_000L
 def dashboardDtcDataBudgetBytes = 380_000L
+def dashboardLazyPanelFiles = ["js/insights-panel.js"]
 def dashboardDtcDataFiles = ["js/dtc-lookup.js", "js/dtc-causes.js"]
 def dashboardStartupAssets = files(new File(dashboardAssetDir, "js/app.js"), fileTree(dashboardAssetDir) { include "css/**/*.css" })
 def dashboardLazySupportAssets = files(fileTree(dashboardAssetDir) {
     include "js/**/*.js"
     exclude "js/app.js"
+    dashboardLazyPanelFiles.each { exclude it }
     dashboardDtcDataFiles.each { exclude it }
 })
+def dashboardLazyPanelAssets = files(dashboardLazyPanelFiles.collect { new File(dashboardAssetDir, it) })
 def dashboardDtcDataAssets = files(dashboardDtcDataFiles.collect { new File(dashboardAssetDir, it) })
 def dashboardEagerJsAssets = files(new File(dashboardAssetDir, "js/app.js"))
 def dashboardLazyJsAssets = files(fileTree(dashboardAssetDir) {
@@ -203,10 +208,11 @@ tasks.register("verifyDashboardBundleSize") {
     description = "Fails when dashboard startup, lazy support, or DTC data exceeds its size budget."
     // Measures the BUILT bundle (app.js + lazy chunks), so it must build first.
     dependsOn("buildDashboardJs")
-    inputs.files(dashboardStartupAssets, dashboardLazySupportAssets, dashboardDtcDataAssets)
+    inputs.files(dashboardStartupAssets, dashboardLazySupportAssets, dashboardLazyPanelAssets, dashboardDtcDataAssets)
     doLast {
         def startupBytes = sumBytes(dashboardStartupAssets)
         def lazySupportBytes = sumBytes(dashboardLazySupportAssets)
+        def lazyPanelBytes = sumBytes(dashboardLazyPanelAssets)
         def dtcBytes = sumBytes(dashboardDtcDataAssets)
         if (startupBytes > dashboardStartupBudgetBytes) {
             throw new GradleException(
@@ -216,6 +222,10 @@ tasks.register("verifyDashboardBundleSize") {
             throw new GradleException(
                     "Dashboard lazy support JS is ${lazySupportBytes} bytes, over budget ${dashboardLazySupportBudgetBytes} bytes")
         }
+        if (lazyPanelBytes > dashboardLazyPanelBudgetBytes) {
+            throw new GradleException(
+                    "Dashboard lazy panel JS is ${lazyPanelBytes} bytes, over budget ${dashboardLazyPanelBudgetBytes} bytes")
+        }
         if (dtcBytes > dashboardDtcDataBudgetBytes) {
             throw new GradleException(
                     "DTC data bundle is ${dtcBytes} bytes, over budget ${dashboardDtcDataBudgetBytes} bytes")
@@ -223,6 +233,7 @@ tasks.register("verifyDashboardBundleSize") {
         logger.lifecycle(
                 "Dashboard startup JS/CSS: ${startupBytes} bytes (budget ${dashboardStartupBudgetBytes}); " +
                         "lazy support JS: ${lazySupportBytes} bytes (budget ${dashboardLazySupportBudgetBytes}); " +
+                        "lazy panel JS: ${lazyPanelBytes} bytes (budget ${dashboardLazyPanelBudgetBytes}); " +
                         "DTC data: ${dtcBytes} bytes (budget ${dashboardDtcDataBudgetBytes})")
     }
 }
@@ -234,6 +245,7 @@ tasks.register("dashboardAssetReport") {
     doLast {
         def startupBytes = sumBytes(dashboardStartupAssets)
         def lazySupportBytes = sumBytes(dashboardLazySupportAssets)
+        def lazyPanelBytes = sumBytes(dashboardLazyPanelAssets)
         def dtcBytes = sumBytes(dashboardDtcDataAssets)
         logger.lifecycle("")
         logger.lifecycle("Dashboard asset report")
@@ -245,6 +257,7 @@ tasks.register("dashboardAssetReport") {
         logger.lifecycle(String.format("%-22s %10d bytes", "generated HTML", sumBytes(dashboardGeneratedHtmlAssets)))
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "startup budget set", startupBytes, dashboardStartupBudgetBytes - startupBytes))
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "lazy support budget", lazySupportBytes, dashboardLazySupportBudgetBytes - lazySupportBytes))
+        logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "lazy panel budget", lazyPanelBytes, dashboardLazyPanelBudgetBytes - lazyPanelBytes))
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "DTC data budget set", dtcBytes, dashboardDtcDataBudgetBytes - dtcBytes))
         logger.lifecycle("")
     }
@@ -338,6 +351,11 @@ tasks.register("verifyPerformance") {
             "verifyDashboardBundleSize",
             "dashboardTest",
             ":app:testDebugUnitTest")
+}
+
+tasks.register("verifyStartupPerformance") {
+    description = "Runs the opt-in on-device Macrobenchmark cold-start/dashboard-ready suite. Requires a connected API 29+ device/emulator."
+    dependsOn(":startup-benchmark:connectedCheck")
 }
 
 subprojects {

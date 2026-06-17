@@ -33,7 +33,7 @@ class ObdStorePerformanceBudgetTest {
 
     @Test
     fun seededDashboardStorageReadsStayInsideJvmBudgets() {
-        seedDriveHistory()
+        seedDriveHistory(SEEDED_SESSION_COUNT, SAMPLES_PER_SESSION)
 
         // Warm the SQLite helper and generated query plans before measuring the steady-state gate.
         StorageSummaryJson.buildOverview(store.getStorageOverviewRecord())
@@ -57,16 +57,46 @@ class ObdStorePerformanceBudgetTest {
         assertBudget("single route", routeMs, ROUTE_BUDGET_MS)
     }
 
-    private fun seedDriveHistory() {
+    @Test
+    fun largerDashboardStorageReadsStayInsideJvmBudgets() {
+        seedDriveHistory(LARGE_SEEDED_SESSION_COUNT, LARGE_SAMPLES_PER_SESSION)
+
+        // Warm the SQLite helper and generated query plans before measuring the steady-state gate.
+        StorageSummaryJson.buildOverview(store.getStorageOverviewRecord())
+
+        val overviewMs =
+            measureMs {
+                StorageSummaryJson.buildOverview(store.getStorageOverviewRecord())
+            }
+        val detailsMs = measureMs { store.getStorageDetailsJson() }
+        val tripsMs = measureMs { store.getTripsJson(120) }
+        val newestRouteKey = store.getTripsJson(1).getJSONObject(0).getString("id")
+        val routeMs = measureMs { store.getTripRouteJson(newestRouteKey) }
+
+        println(
+            "[G5 storage budget] seededSessions=$LARGE_SEEDED_SESSION_COUNT " +
+                "samplesPerSession=$LARGE_SAMPLES_PER_SESSION overviewMs=$overviewMs " +
+                "detailsMs=$detailsMs tripsMs=$tripsMs routeMs=$routeMs",
+        )
+        assertBudget("large storage overview", overviewMs, LARGE_OVERVIEW_BUDGET_MS)
+        assertBudget("large lazy storage details", detailsMs, LARGE_DETAILS_BUDGET_MS)
+        assertBudget("large trips list", tripsMs, LARGE_TRIPS_BUDGET_MS)
+        assertBudget("large single route", routeMs, LARGE_ROUTE_BUDGET_MS)
+    }
+
+    private fun seedDriveHistory(
+        sessionCount: Int,
+        samplesPerSession: Int,
+    ) {
         val baseMs = 1_720_000_000_000L
-        for (sessionIndex in 0 until SEEDED_SESSION_COUNT) {
+        for (sessionIndex in 0 until sessionCount) {
             val startedAtMs = baseMs + sessionIndex * 3_600_000L
             val sessionId = store.startSession("obd", "00:11:22:33:44:55", "Budget Adapter", startedAtMs)
-            for (sampleIndex in 0 until SAMPLES_PER_SESSION) {
+            for (sampleIndex in 0 until samplesPerSession) {
                 val atMs = startedAtMs + sampleIndex * 1_000L
                 store.recordTelemetry(sessionId, sample(sessionIndex, sampleIndex, atMs))
             }
-            val endedAtMs = startedAtMs + (SAMPLES_PER_SESSION - 1) * 1_000L
+            val endedAtMs = startedAtMs + (samplesPerSession - 1) * 1_000L
             store.finalizeSession(
                 sessionId,
                 "connected",
@@ -75,7 +105,7 @@ class ObdStorePerformanceBudgetTest {
                 "00:11:22:33:44:55",
                 "Budget Adapter",
                 "obd",
-                SAMPLES_PER_SESSION,
+                samplesPerSession,
                 "seeded",
             )
             store.materializeSession(sessionId, startedAtMs, endedAtMs)
@@ -116,9 +146,15 @@ class ObdStorePerformanceBudgetTest {
     private companion object {
         const val SEEDED_SESSION_COUNT = 18
         const val SAMPLES_PER_SESSION = 90
+        const val LARGE_SEEDED_SESSION_COUNT = 96
+        const val LARGE_SAMPLES_PER_SESSION = 180
         const val OVERVIEW_BUDGET_MS = 1_500L
         const val DETAILS_BUDGET_MS = 4_000L
         const val TRIPS_BUDGET_MS = 1_500L
         const val ROUTE_BUDGET_MS = 1_500L
+        const val LARGE_OVERVIEW_BUDGET_MS = 3_000L
+        const val LARGE_DETAILS_BUDGET_MS = 7_000L
+        const val LARGE_TRIPS_BUDGET_MS = 2_500L
+        const val LARGE_ROUTE_BUDGET_MS = 2_000L
     }
 }

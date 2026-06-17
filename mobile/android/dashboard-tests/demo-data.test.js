@@ -74,7 +74,7 @@ describe('dashboard demo data', () => {
   });
 
   it('seeds the selected sample scenario before starting the native demo stream', async () => {
-    const bridge = await loadDashboard({ extras: ['demo-data.js'] });
+    const bridge = await loadDashboard({ extras: ['demo-data.js', 'insights-panel.js'] });
     bridge.demo = vi.fn();
     bridge.disconnect = vi.fn();
     bridge.getStorageSummary = vi.fn(() => JSON.stringify({
@@ -133,7 +133,7 @@ describe('dashboard demo data', () => {
   });
 
   it('browser-preview Start demo seeds and clears sample data without a native bridge', async () => {
-    await loadDashboard({ withBridge: false, extras: ['demo-data.js'] });
+    await loadDashboard({ withBridge: false, extras: ['demo-data.js', 'insights-panel.js'] });
 
     const VD = window.VoltDashboard;
     await VD.ensureMapModule();
@@ -147,8 +147,10 @@ describe('dashboard demo data', () => {
     expect(VD.state.trips.length).toBeGreaterThan(0);
     expect(VD.state.insights.tripCount).toBeGreaterThan(0);
 
+    const scatter = vi.spyOn(VD, 'renderInsightScatter');
     VD.actions.stopDemo();
 
+    expect(scatter).toHaveBeenCalled();
     expect(VD.state.demoActive).toBe(false);
     expect(document.body.classList.contains('demo-active')).toBe(false);
     expect(VD.state.storage.recentRoutes).toHaveLength(0);

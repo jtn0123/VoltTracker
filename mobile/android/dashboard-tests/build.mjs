@@ -64,16 +64,15 @@ rmSync(LEAFLET_OUT, { recursive: true, force: true });
 copyAssetTree(LEAFLET_SRC, LEAFLET_OUT, LEAFLET_ASSETS);
 
 // Keep this order in sync with index.template.html (and script-order.test.js).
-// storage-status / signals-panel / insights-panel are the three modules the old
-// panels.ts god-module was split into (C2); storage-status owns the shared
-// helpers (isNativeError/buildStatusCopy/toggleHidden) the other two read off VD.
+// storage-status / signals-panel are the eager pieces split from the old panels.ts
+// god-module (C2). insights-panel is lazy now: it owns trips/insights rollups and
+// efficiency scatter work that are not needed for the first Drive/Status paint.
 const EAGER = [
   "prefs",
   "core",
   "payload-validators",
   "storage-status",
   "signals-panel",
-  "insights-panel",
   "scrubber",
   "drive",
   "telemetry",
@@ -83,6 +82,7 @@ const EAGER = [
 ];
 
 const LAZY = [
+  "insights-panel",
   "map",
   "troubleshooter",
   "dtc-lookup",

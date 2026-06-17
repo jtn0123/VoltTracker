@@ -28,7 +28,6 @@ const EXPECTED_EAGER_ORDER = [
   'payload-validators',
   'storage-status',
   'signals-panel',
-  'insights-panel',
   'scrubber',
   'drive',
   'telemetry',
@@ -94,6 +93,7 @@ describe('dashboard production script bundle', () => {
     expect(match).not.toBeNull();
     const lazy = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     expect(lazy).toEqual([
+      'insights-panel',
       'map',
       'troubleshooter',
       'dtc-lookup',
@@ -103,6 +103,20 @@ describe('dashboard production script bundle', () => {
       'actions-signals',
       'actions-demo',
     ]);
+  });
+
+  it('keeps lazy chunks from bundling a second dashboard core/state copy', () => {
+    const build = readFileSync(BUILD_MJS, 'utf8');
+    const match = build.match(/const LAZY = \[([\s\S]*?)\];/);
+    expect(match).not.toBeNull();
+    const lazy = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+
+    for (const name of lazy) {
+      const source = readFileSync(resolve(`../app/src/main/dashboard-src/js/${name}.ts`), 'utf8');
+      expect(source, `${name}.ts must read existing VD globals instead of importing core`).not.toMatch(
+        /from\s+["']\.\/core["']/,
+      );
+    }
   });
 
   it('ships syntax that Android 9 WebView can parse', () => {

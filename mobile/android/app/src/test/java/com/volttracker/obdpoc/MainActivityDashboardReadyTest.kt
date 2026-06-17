@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.os.Looper
+import android.webkit.WebView
 import com.volttracker.obdpoc.data.ObdLocalStore
 import org.json.JSONObject
 import org.junit.After
@@ -75,10 +76,13 @@ class MainActivityDashboardReadyTest {
         launch()
         // Fresh launch: the dashboard page is not yet marked ready.
         assertFalse("precondition: page should not be ready before the handshake", activity.isDashboardReadyForTest())
+        val webView = activity.findViewById<WebView>(R.id.dashboard_webview)
+        assertEquals(MainActivity.DASHBOARD_LOADING_DESCRIPTION, webView.contentDescription)
 
         activity.onDashboardReady()
 
         assertTrue("onDashboardReady must mark the dashboard page ready", activity.isDashboardReadyForTest())
+        assertEquals(MainActivity.DASHBOARD_READY_DESCRIPTION, webView.contentDescription)
         assertTrue("onDashboardReady must publish the device list", activity.deviceListPublishCount >= 1)
         assertTrue("onDashboardReady must publish the storage summary", activity.storageSummaryPublishCount >= 1)
         assertEquals("onDashboardReady must publish a 'ready' status", "ready", activity.lastStatusState)

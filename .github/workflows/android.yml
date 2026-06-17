@@ -172,7 +172,9 @@ jobs:
           report_dir.mkdir(parents=True, exist_ok=True)
           startup_budget = 360_000
           lazy_support_budget = 90_000
+          lazy_panel_budget = 45_000
           dtc_budget = 380_000
+          lazy_panel_files = {root / "js/insights-panel.js"}
           dtc_files = {root / "js/dtc-lookup.js", root / "js/dtc-causes.js"}
 
           def size(path):
@@ -188,12 +190,18 @@ jobs:
           html = size(root / "index.html")
           dtc = sum(size(p) for p in dtc_files)
           startup = eager_js + css
-          lazy_support = sum(size(p) for p in js_files if p.name != "app.js" and p not in dtc_files)
+          lazy_panel = sum(size(p) for p in lazy_panel_files)
+          lazy_support = sum(size(p) for p in js_files if p.name != "app.js" and p not in dtc_files and p not in lazy_panel_files)
 
           payload = {
               "run_id": os.environ.get("GITHUB_RUN_ID", ""),
               "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
               "sha": os.environ.get("GITHUB_SHA", ""),
+              "startup_probe": {
+                  "macrobenchmark_task": "./gradlew verifyStartupPerformance --no-configuration-cache",
+                  "ready_description": "VoltTracker dashboard ready",
+                  "device_required": True,
+              },
               "asset_bytes": {
                   "eager_js": eager_js,
                   "lazy_js": lazy_js,
@@ -202,16 +210,19 @@ jobs:
                   "generated_html": html,
                   "startup_js_css": startup,
                   "lazy_support_js": lazy_support,
+                  "lazy_panel_js": lazy_panel,
                   "dtc_data": dtc,
               },
               "budgets": {
                   "startup_js_css": startup_budget,
                   "lazy_support_js": lazy_support_budget,
+                  "lazy_panel_js": lazy_panel_budget,
                   "dtc_data": dtc_budget,
               },
               "headroom": {
                   "startup_js_css": startup_budget - startup,
                   "lazy_support_js": lazy_support_budget - lazy_support,
+                  "lazy_panel_js": lazy_panel_budget - lazy_panel,
                   "dtc_data": dtc_budget - dtc,
               },
           }
@@ -404,8 +415,9 @@ jobs:
           }
           startup_budget="$(read_budget dashboardStartupBudgetBytes)"
           lazy_support_budget="$(read_budget dashboardLazySupportBudgetBytes)"
+          lazy_panel_budget="$(read_budget dashboardLazyPanelBudgetBytes)"
           dtc_budget="$(read_budget dashboardDtcDataBudgetBytes)"
-          if [ -z "$startup_budget" ] || [ -z "$lazy_support_budget" ] || [ -z "$dtc_budget" ]; then
+          if [ -z "$startup_budget" ] || [ -z "$lazy_support_budget" ] || [ -z "$lazy_panel_budget" ] || [ -z "$dtc_budget" ]; then
             echo "::error title=Dashboard bundle budget::could not extract budget constants from $budget_gradle (declaration renamed/reformatted?)"
             exit 1
           fi
@@ -414,9 +426,11 @@ jobs:
           eager=$(wc -c < js/app.js | tr -d ' ')
           css_bytes=$(find css -type f -name "*.css" -exec cat {} + | wc -c | tr -d ' ')
           startup=$((eager + css_bytes))
-          lazy_support=$(find js -type f -name "*.js" ! -name "app.js" ! -name "dtc-lookup.js" ! -name "dtc-causes.js" -exec cat {} + | wc -c | tr -d ' ')
+          lazy_panel=$(wc -c < js/insights-panel.js | tr -d ' ')
+          lazy_support=$(find js -type f -name "*.js" ! -name "app.js" ! -name "insights-panel.js" ! -name "dtc-lookup.js" ! -name "dtc-causes.js" -exec cat {} + | wc -c | tr -d ' ')
           startup_headroom=$((startup_budget - startup))
           lazy_support_headroom=$((lazy_support_budget - lazy_support))
+          lazy_panel_headroom=$((lazy_panel_budget - lazy_panel))
           dtc_headroom=$((dtc_budget - dtc))
           {
             echo ""
@@ -426,6 +440,7 @@ jobs:
             echo "|--------|------:|-------:|---------:|"
             echo "| startup JS/CSS (app.js + CSS) | $startup | $startup_budget | $startup_headroom |"
             echo "| lazy support JS (non-DTC chunks) | $lazy_support | $lazy_support_budget | $lazy_support_headroom |"
+            echo "| lazy panel JS (deferred panel chunks) | $lazy_panel | $lazy_panel_budget | $lazy_panel_headroom |"
             echo "| dtc data (dtc-lookup.js + dtc-causes.js) | $dtc | $dtc_budget | $dtc_headroom |"
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$startup_headroom" -lt "$warn_floor" ]; then

@@ -22,6 +22,31 @@ import { prefs, units } from "./prefs";
   let storageDetailsScheduled = false;
   let applyingStorageDetails = false;
 
+  function invalidateLazyRollups() {
+    state.tripsLoaded = false;
+    state.insightsLoaded = false;
+  }
+
+  function loadRollupsForActiveView() {
+    const activeView = () => document.body?.dataset?.activeView || "";
+    const initialView = activeView();
+    if (initialView !== "map" && initialView !== "insights") return;
+    const load = () => {
+      const view = activeView();
+      if (view === "map" && typeof VD.loadTrips === "function") {
+        VD.loadTrips();
+      } else if (view === "insights") {
+        if (typeof VD.loadTrips === "function") VD.loadTrips();
+        if (typeof VD.loadInsights === "function") VD.loadInsights();
+      }
+    };
+    if (typeof VD.ensureInsightsModule === "function") {
+      void VD.ensureInsightsModule().then(load).catch(() => {});
+      return;
+    }
+    load();
+  }
+
   // Plain boolean (not a type predicate): the parsed payloads it screens —
   // VoltStorageSummary, VoltTrip[], VoltInsights — structurally overlap
   // VoltNativeError, so a `payload is VoltNativeError` guard would narrow the
@@ -129,8 +154,8 @@ import { prefs, units } from "./prefs";
     VD.renderMapIfLoaded();
     VD.updateValidationUi();
     if (!isDetails) {
-      VD.loadTrips();
-      VD.loadInsights();
+      invalidateLazyRollups();
+      loadRollupsForActiveView();
       loadMaintenanceLog();
       scheduleStorageDetailsLoad();
     }

@@ -27,3 +27,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "VoltTrackerObdPoc"
 include ":app"
+include ":startup-benchmark"

@@ -16,7 +16,6 @@ import {
   formatSignedMoney,
   savingsPrefsReady
 } from "./cost-model";
-import { el, setSvgAttrs } from "./core";
 import { haversineMetersJs } from "./map-route-utils";
 import { prefs, units } from "./prefs";
 
@@ -26,40 +25,59 @@ import { prefs, units } from "./prefs";
   const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
+  const el = VD.el;
+  const setSvgAttrs = VD.setSvgAttrs;
+  const FORCE_LAZY_READ = true;
 
-  function loadTrips() {
+  function loadTrips(force = false) {
+    if (!force && state.tripsLoaded) return;
     if (bridge && typeof bridge.getTrips === "function") {
       const parsed = VD.parsePayload<VoltTrip[]>(bridge.getTrips(), []);
       if (VD.isNativeError(parsed)) {
         const err = parsed as VoltNativeError;
         VD.reportNativeReadError(parsed, "Could not read logged trips.");
+        state.tripsLoaded = false;
         state.tripsReadError = err.message || "Could not read logged trips.";
         state.trips = [];
       } else if (state.demoActive && Array.isArray(state.demoPreviewTrips)) {
+        state.tripsLoaded = true;
         // Park real trips behind the demo preview (cross-module demo invariant).
         VD.setState({ realTrips: Array.isArray(parsed) ? parsed : [] });
       } else {
+        state.tripsLoaded = true;
         state.tripsReadError = null;
         state.trips = Array.isArray(parsed) ? parsed : [];
       }
+    } else {
+      state.tripsLoaded = true;
     }
   }
 
-  function loadInsights() {
+  function loadInsights(force = false) {
+    if (!force && state.insightsLoaded) {
+      renderInsightStats();
+      renderInsightScatter();
+      return;
+    }
     if (bridge && typeof bridge.getInsights === "function") {
       const parsed = VD.parsePayload<VoltInsights>(bridge.getInsights(), {});
       if (VD.isNativeError(parsed)) {
         const err = parsed as VoltNativeError;
         VD.reportNativeReadError(parsed, "Could not read vehicle insights.");
+        state.insightsLoaded = false;
         state.insightsReadError = err.message || "Could not read vehicle insights.";
         state.insights = {};
       } else if (state.demoActive && state.demoPreviewInsights) {
+        state.insightsLoaded = true;
         // Park real insights behind the demo preview (cross-module demo invariant).
         VD.setState({ realInsights: parsed });
       } else {
+        state.insightsLoaded = true;
         state.insightsReadError = null;
         state.insights = parsed;
       }
+    } else {
+      state.insightsLoaded = true;
     }
     renderInsightStats();
     renderInsightScatter();
@@ -536,6 +554,7 @@ import { prefs, units } from "./prefs";
     // status. The Trips tab and all its rendering were removed.
     loadTrips,
     loadInsights,
+    forceLazyStorageRead: FORCE_LAZY_READ,
     renderInsightStats,
     renderInsightsEmptyState,
     renderInsightScatter,
