@@ -842,6 +842,23 @@
     gap: 10px;
   }
 
+  /* Inline validation messages (M1/C4). Both are `hidden` by default and the JS
+     only toggles `hidden`/textContent, so only the visible state is styled. Color
+     matches the overdue `.maintenance-due-hint` so all form errors read the same.
+     The form-level `<p>` zeroes its UA margin — the grid `gap` already spaces it. */
+  .maint-form-error {
+    margin: 0;
+    color: var(--bad-soft);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .maint-field-hint {
+    color: var(--bad-soft);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
   .maint-form-actions {
     display: flex;
     justify-content: flex-end;
