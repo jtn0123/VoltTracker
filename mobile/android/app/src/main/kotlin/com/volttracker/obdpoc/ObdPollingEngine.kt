@@ -576,51 +576,60 @@ open class ObdPollingEngine(
         sendCommand("ATH0", 1400)
         sendCommand("ATAT1", 1400)
         sendCommand("ATST64", 1400)
-        sendCommand("ATSP0", 1800)
+        // Pin the Volt's CAN protocol (ISO 15765-4, 11-bit / 500 kbaud = protocol 6) BEFORE the first
+        // 0100 so the capability probe answers immediately. The old order — ATSP0 (auto) then 0100 —
+        // made the ELM327 run a ~4.8 s SEARCHING sweep on EVERY connect even though this car never
+        // speaks anything but protocol 6 (measured 4.74–4.80 s across every field session). If the pin
+        // stays silent — a different adapter/vehicle, or a wrong pin — we fall back to ATSP0
+        // auto-detect, so connection robustness is unchanged; only the happy-path latency improves.
+        sendCommand("ATSP6", 1400)
         var supportedPids = sendCommand("0100", 9000)
-        if (ObdElmDecode.hasElmPrompt(supportedPids)) {
-            supportedPidsSummary = ObdProtocol.cleanSupportedPids(supportedPids)
-            service.recorder.logEvent("protocol_probe_success", "command", "0100", "response", supportedPidsSummary)
-        } else {
+        var probeLabel = "0100_atsp6_pinned"
+        if (!protocolProbeAnswered(supportedPids)) {
             service.recorder.logEvent(
-                "protocol_probe_no_prompt",
+                "protocol_probe_pinned_miss",
                 "command",
-                "0100",
+                probeLabel,
                 "response",
                 ObdProtocol.summarize(supportedPids),
             )
             sendEscape(600)
             sendCommand("ATPC", 1400)
-            sendCommand("ATSP6", 1400)
+            sendCommand("ATSP0", 1800)
             supportedPids = sendCommand("0100", 9000)
-            if (ObdElmDecode.hasElmPrompt(supportedPids)) {
-                supportedPidsSummary = ObdProtocol.cleanSupportedPids(supportedPids)
-                service.recorder.logEvent(
-                    "protocol_probe_success",
-                    "command",
-                    "0100_after_ATSP6",
-                    "response",
-                    supportedPidsSummary,
-                )
-            } else {
-                service.recorder.logEvent(
-                    "protocol_probe_no_prompt",
-                    "command",
-                    "0100_after_ATSP6",
-                    "response",
-                    ObdProtocol.summarize(supportedPids),
-                )
-                sendEscape(600)
-                sendCommand("ATPC", 1400)
-                sendCommand("ATSP0", 1400)
-                throw IOException("Adapter did not answer the standard OBD PID probe.")
-            }
+            probeLabel = "0100_atsp0_fallback"
+        }
+        if (protocolProbeAnswered(supportedPids)) {
+            supportedPidsSummary = ObdProtocol.cleanSupportedPids(supportedPids)
+            service.recorder.logEvent("protocol_probe_success", "command", probeLabel, "response", supportedPidsSummary)
+        } else {
+            service.recorder.logEvent(
+                "protocol_probe_no_prompt",
+                "command",
+                probeLabel,
+                "response",
+                ObdProtocol.summarize(supportedPids),
+            )
+            sendEscape(600)
+            sendCommand("ATPC", 1400)
+            sendCommand("ATSP0", 1400)
+            throw IOException("Adapter did not answer the standard OBD PID probe.")
         }
         OBDLog.event("ObdPollingEngine", "protocol_init", mapOf("ok" to true))
         probeAndPersistVin()
         probeMode01Batch()
         service.maybeRunVoltageProbe(this)
     }
+
+    /**
+     * A 0100 capability probe only counts as "answered" when the reply actually carries the Mode-01
+     * PID-00 support bitmap (`4100…`). A wrongly-pinned protocol returns `NO DATA>` — an ELM prompt
+     * with no data — so a bare prompt check would falsely accept it and skip the ATSP0 auto-detect
+     * fallback. Requiring the `4100` marker keeps the ATSP6-first fast path honest.
+     */
+    private fun protocolProbeAnswered(response: String?): Boolean =
+        ObdElmDecode.hasElmPrompt(response) &&
+            ObdProtocol.responseContainsAllMode01Pids(response, listOf("00"))
 
     private fun probeAndPersistVin() {
         val storedRedactedVin = storedRedactedVin()

@@ -105,6 +105,66 @@ class ObdPollingEngineTest {
     }
 
     @Test
+    fun pinnedProtocolFastPathSkipsTheAutoSearch() {
+        // Init now pins ATSP6 (the Volt's only CAN protocol) before the first 0100, so when the car
+        // answers we never pay the ~4.8 s ATSP0 auto-search. Verify ATSP6 precedes 0100 and ATSP0 is
+        // never sent on the happy path.
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["ATRV"] = "13.8V\r>"
+        fake.responses["010D"] = "41 0D 28\r>"
+        fake.responses["010C"] = "41 0C 0F A0\r>"
+        fake.afterCommand("ATSH7DF") { service.running.set(false) }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        assertTrue("ATSP6 pin must be issued during init", fake.commandLog.contains("ATSP6"))
+        assertFalse(
+            "ATSP0 auto-search must be skipped when the pinned protocol answers",
+            fake.commandLog.contains("ATSP0"),
+        )
+        assertTrue(
+            "ATSP6 must be sent before the 0100 capability probe",
+            fake.commandLog.indexOf("ATSP6") < fake.commandLog.indexOf("0100"),
+        )
+        assertTrue("init must still complete and poll a sample", engine.sampleCount() >= 1)
+    }
+
+    @Test
+    fun pinnedProtocolMissFallsBackToAutoSearch() {
+        // If the pinned ATSP6 probe returns no 4100 answer (wrong adapter/vehicle, or NO DATA), init
+        // must fall back to ATSP0 auto-detect and retry 0100 — connection robustness is unchanged,
+        // only the happy-path latency improves.
+        val zeroOneHundredCalls = AtomicInteger(0)
+        fake.defaultResponse = ">"
+        fake.responses["ATRV"] = "13.8V\r>"
+        fake.responses["010D"] = "41 0D 28\r>"
+        fake.responses["010C"] = "41 0C 0F A0\r>"
+        fake.transactInterceptor =
+            TransactInterceptor { command ->
+                if (command == "0100") {
+                    // First 0100 (right after the ATSP6 pin) returns NO DATA; the post-ATSP0 retry answers.
+                    if (zeroOneHundredCalls.getAndIncrement() == 0) "NO DATA>" else "41 00 00 00 00 00>"
+                } else {
+                    null
+                }
+            }
+        fake.afterCommand("ATSH7DF") { service.running.set(false) }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        assertTrue("ATSP6 pin is still attempted first", fake.commandLog.contains("ATSP6"))
+        assertTrue("ATSP0 auto-search must run when the pin misses", fake.commandLog.contains("ATSP0"))
+        assertTrue(
+            "ATSP0 fallback must come after the first 0100 probe",
+            fake.commandLog.indexOf("ATSP0") > fake.commandLog.indexOf("0100"),
+        )
+        assertTrue("init must recover and poll a sample after the fallback", engine.sampleCount() >= 1)
+    }
+
+    @Test
     fun openBluetoothSocketRejectsInvalidAddressAsIOException() {
         val realEngine = ObdPollingEngine(service)
         val ex =
@@ -484,8 +544,8 @@ class ObdPollingEngineTest {
             "TPMS-only scan must not read freeze-frame index",
             fake.commandLog.contains("0200"),
         )
-        assertFalse(
-            "TPMS-only scan must not cycle CAN protocol 6",
+        assertTrue(
+            "init pins CAN protocol 6 (ISO 15765-4) up front to skip the auto-search, even for a TPMS scan",
             fake.commandLog.contains("ATSP6"),
         )
         assertFalse(
