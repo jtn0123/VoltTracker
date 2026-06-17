@@ -142,7 +142,7 @@ Count the remaining Java test files at any time with:
 find app/src/test -name '*.java' | wc -l
 ```
 
-Current count: **0** (as of 2026-06-12; the suite is 91 Kotlin test files). Policy: do not
+Current count: **0** (as of 2026-06-16; the suite is 119 Kotlin test files). Policy: do not
 add new Java tests. If a Java test ever returns (e.g. via a revert), convert it to Kotlin
 the next time it is materially reworked — small mechanical edits don't force a conversion,
 but behavioral changes or significant additions do. Production code is already gated

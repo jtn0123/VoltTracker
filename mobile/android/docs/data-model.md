@@ -26,7 +26,7 @@ Tables fall into two buckets:
 |-------|------|----------------|
 | `sessions` | raw | One row per capture session (mode, adapter, start/end, status, sample count). |
 | `telemetry` | raw | Per-sample decoded telemetry (speed, rpm, SOC, power, pack V/A, GPS, `json`). |
-| `events` | raw | Session lifecycle / state-change events. |
+| `status_events` | raw | Session lifecycle / state-change events. |
 | `adapter_history` | raw | Per-adapter rollup keyed by `adapter_key` (seen counts, last session/mode/status). |
 | `pid_observations` | raw | Raw OBD PID request/response observations (command, header, value, `json`). |
 | `location_samples` | raw | Raw GPS fixes (lat/lng/alt/speed/bearing/accuracy, `json`). |
@@ -53,7 +53,8 @@ Tables fall into two buckets:
   `power_kw`, `pack_voltage`, `pack_current_a`, GPS fields, `sample_number`,
   `session_ms`, plus `raw` and `json` (the latter `NOT NULL`).
   FK `session_id → sessions(_id) ON DELETE CASCADE`.
-- **`events`** — PK `_id`. `kind`, `state`, `detail`, `blocked`, `payload`.
+- **`status_events`** — PK `_id`. `occurred_at_ms` (`NOT NULL`), `kind`, `state`,
+  `detail`, `blocked`, `payload`.
   FK `session_id → sessions(_id) ON DELETE SET NULL` (events survive their
   session being deleted, with the link nulled).
 - **`adapter_history`** — PK is `adapter_key` (TEXT). Lifetime per-adapter

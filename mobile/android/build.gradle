@@ -195,6 +195,7 @@ tasks.register("verifyActiveApp") {
             ":app:testDebugUnitTest",
             ":app:lintDebug",
             ":app:spotlessCheck",
+            ":app:detekt",
             ":app:assembleDebug",
             ":app:jacocoTestCoverageVerification",
             "dashboardLint",
