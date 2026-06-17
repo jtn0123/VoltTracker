@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v0.18.4 (2026-06-17)
+
+### Bug Fixes
+
+- **repo**: Remove case-duplicate .github/pull_request_template.md
+  ([#230](https://github.com/jtn0123/VoltTracker/pull/230),
+  [`adeab0f`](https://github.com/jtn0123/VoltTracker/commit/adeab0fd5ec09ad033ebad28236fe37f09560de9))
+
+The repo committed two PR templates differing only in case: .github/PULL_REQUEST_TEMPLATE.md
+  (canonical) and the lowercase .github/pull_request_template.md. On case-insensitive filesystems
+  (macOS, Windows) only one can exist on disk, so the working tree is permanently "modified" against
+  whichever index entry the on-disk file doesn't match — which silently blocks git rebase/git stash
+  for every contributor on those platforms. GitHub also resolves between the two ambiguously. Keep
+  the canonical uppercase PULL_REQUEST_TEMPLATE.md and drop the lowercase duplicate.
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.18.3 (2026-06-17)
 
 ### Performance Improvements
