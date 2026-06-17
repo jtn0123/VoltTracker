@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v0.18.2 (2026-06-17)
+
+### Performance Improvements
+
+- **obd**: Pin CAN protocol before 0100 to skip the ~4.8s connect search
+  ([#228](https://github.com/jtn0123/VoltTracker/pull/228),
+  [`6057694`](https://github.com/jtn0123/VoltTracker/commit/6057694c7496a804011d195850ac780bbd32ed25))
+
+Init sent ATSP0 (auto) then 0100, which made the ELM327 run a ~4.8s SEARCHING sweep on every connect
+  (measured 4.74-4.80s across all five field sessions today). This Volt only ever speaks ISO 15765-4
+  CAN 11-bit/500k (protocol 6), so pin ATSP6 before the first 0100 capability probe. A new
+  protocolProbeAnswered() validates a real 4100 reply, so a wrongly-pinned protocol (NO
+  DATA-with-prompt) still falls back to ATSP0 auto-detect and retries 0100 -- connection robustness
+  is unchanged, only the happy-path latency drops by ~4.5s.
+
+Also adds docs/obd-log-findings-2026-06-16.md: the on-device field-log analysis that motivated this,
+  validation that PR #227 eliminates the parked-tail waste, and the remaining backlog (L2 force-stop
+  competing app, L3 engineTorque decode, L4 socket-open latency, L5 prompt recovery).
+
+Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
 ## v0.18.1 (2026-06-17)
 
 ### Bug Fixes
