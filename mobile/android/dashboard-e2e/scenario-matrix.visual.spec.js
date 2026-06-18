@@ -23,9 +23,9 @@ const { loadDemoScenario, openDashboard, setView } = require('./harness');
 
 const FIXED = '2026-06-15T12:00:00.000Z';
 const SCENARIOS = ['typical', 'empty', 'fault', 'power-user', 'extreme'];
-// Trips was folded into Insights/Map. Diagnostics needs new Linux baselines
-// before it can join this pixel matrix; the functional/a11y suites cover it.
-const TABS = ['drive', 'map', 'charge', 'insights', 'settings'];
+// Trips was folded into Insights/Map. Diagnostics now joins the matrix so the
+// recovery-first panel's layout is pinned across demo/fault/empty states too.
+const TABS = ['drive', 'map', 'charge', 'insights', 'diagnostics', 'settings'];
 
 test.describe('visual matrix — tab × demo scenario', () => {
   for (const scenario of SCENARIOS) {
