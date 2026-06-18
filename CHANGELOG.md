@@ -1,6 +1,51 @@
 # CHANGELOG
 
 
+## v0.20.0 (2026-06-18)
+
+### Features
+
+- **dashboard**: Polish battery charts + raise backup import limit to 4 GiB
+  ([#241](https://github.com/jtn0123/VoltTracker/pull/241),
+  [`58ab6d8`](https://github.com/jtn0123/VoltTracker/commit/58ab6d8a09f2b2851683124db60421202fd77a70))
+
+* fix(backup): raise restore/import ceiling from 512 MiB to 4 GiB
+
+Histories approaching ~1 GB (lots of logged drives) hit the MAX_RESTORE_MIB = 512 cap and failed to
+  import with TOO_LARGE. Restore stages the file to cache and opens it as a SQLite DB
+  (BackupMigrator) — it is disk-bound, not loaded into memory — so the ceiling only guards against a
+  runaway file filling cache, not an OOM. Raise it to 4 GiB so ~1 GB backups import; a genuinely
+  oversized file still fails cleanly, and low free space surfaces as an IO error. Test now pins a >=
+  1 GiB floor so it can't regress below the need.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
+
+* feat(dashboard): polish battery charts + meters to convey health by color
+
+Battery visuals across Drive + Charge now read state at a glance instead of a fixed accent:
+
+- SOH trend (Charge): tone the line/dot by the latest health band (calm green >=85%, amber 70-85%,
+  red <70%) and add a soft area fill + baseline, so a healthy ~90% pack no longer reads as an
+  alarm-orange decline. data-soh drives a --soh-color/--soh-rgb token pair in CSS. - Cell balance
+  (Charge): color the spread fill by the same tone as the mV badge (tight = green, drifting =
+  amber/red) instead of a decorative blue→orange wash. - SOC meter (Drive): color the bar by charge
+  level (amber <=30%, red <=15%) so a depleted pack is obvious, not a full-green bar.
+
+Populated-chart states (no demo data) so visual baselines are unchanged; 527 vitest + 86 visual/e2e
+  green, typecheck + eslint clean. Verified via seeded runtime captures.
+
+* style(backup): satisfy ktlint blank-line-before-comment in DataBackup
+
+spotlessKotlinCheck wanted a blank line between the TAG constant and the new MAX_RESTORE_MIB
+  explanatory comment. No behavior change.
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.19.1 (2026-06-18)
 
 ### Performance Improvements
