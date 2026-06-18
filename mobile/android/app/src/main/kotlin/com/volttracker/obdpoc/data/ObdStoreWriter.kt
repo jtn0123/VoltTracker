@@ -17,6 +17,7 @@ import org.json.JSONObject
 class ObdStoreWriter(
     private val helper: VoltTrackerDb,
     private val snapshots: ObdStoreSnapshots,
+    private val invalidateStorageCounts: () -> Unit = {},
 ) {
     private val statementCache = ObdStatementCache()
 
@@ -55,7 +56,9 @@ class ObdStoreWriter(
         values.put("started_at_ms", startedAtMs)
         values.put("status", ObdLocalStore.STATUS_ACTIVE)
         values.put("created_at_ms", System.currentTimeMillis())
-        return helper.writableDatabase.insertOrThrow(VoltTrackerDb.TABLE_SESSIONS, null, values)
+        return helper.writableDatabase.insertOrThrow(VoltTrackerDb.TABLE_SESSIONS, null, values).also {
+            invalidateStorageCounts()
+        }
     }
 
     fun finishSession(
@@ -83,6 +86,7 @@ class ObdStoreWriter(
             "_id = ?",
             arrayOf(sessionId.toString()),
         )
+        invalidateStorageCounts()
         checkpointWalPassive()
     }
 
@@ -133,6 +137,7 @@ class ObdStoreWriter(
                 SQLiteDatabase.CONFLICT_REPLACE,
             )
         }
+        invalidateStorageCounts()
         checkpointWalPassive()
     }
 
@@ -184,6 +189,9 @@ class ObdStoreWriter(
                 ObdStatementCache.SQL_UPDATE_SESSION_AFTER_TELEMETRY,
                 arrayOf<Any>(capturedAtMs, supportedPids, supportedPids, sessionId),
             )
+        }
+        if (id >= 0L) {
+            invalidateStorageCounts()
         }
         return id
     }
@@ -259,6 +267,9 @@ class ObdStoreWriter(
             upsertFieldCapability(db, sessionId, safeObservation, observedAtMs)
             ObdStoreSupport.updateSessionLastEvent(db, sessionId, observedAtMs)
         }
+        if (id >= 0L) {
+            invalidateStorageCounts()
+        }
         return id
     }
 
@@ -298,6 +309,9 @@ class ObdStoreWriter(
             if (latestObservedAtMs > 0L) {
                 ObdStoreSupport.updateSessionLastEvent(db, sessionId, latestObservedAtMs)
             }
+        }
+        if (inserted > 0) {
+            invalidateStorageCounts()
         }
         return inserted
     }
@@ -516,6 +530,9 @@ class ObdStoreWriter(
                 ObdStoreSupport.updateSessionLastEvent(db, sessionId, seenAtMs)
             }
         }
+        if (id >= 0L) {
+            invalidateStorageCounts()
+        }
         return id
     }
 
@@ -556,6 +573,9 @@ class ObdStoreWriter(
             val values = snapshots.locationSampleValues(sessionId, safeSample, capturedAtMs)
             id = db.insertOrThrow(VoltTrackerDb.TABLE_LOCATION_SAMPLES, null, values)
             ObdStoreSupport.updateSessionLastEvent(db, sessionId, capturedAtMs)
+        }
+        if (id >= 0L) {
+            invalidateStorageCounts()
         }
         return id
     }
@@ -624,6 +644,9 @@ class ObdStoreWriter(
             id = db.insertOrThrow(VoltTrackerDb.TABLE_EVENTS, null, values)
             ObdStoreSupport.updateSessionLastEvent(db, sessionId, occurredAtMs)
         }
+        if (id >= 0L) {
+            invalidateStorageCounts()
+        }
         return id
     }
 
@@ -667,7 +690,9 @@ class ObdStoreWriter(
         values.put("include_precise_location", 1)
         values.put("include_raw_logs", 0)
         return try {
-            helper.writableDatabase.insertOrThrow(VoltTrackerDb.TABLE_EXPORTS, null, values)
+            helper.writableDatabase.insertOrThrow(VoltTrackerDb.TABLE_EXPORTS, null, values).also {
+                invalidateStorageCounts()
+            }
         } catch (ex: SQLException) {
             Log.w(TAG, "recordExport failed", ex)
             -1L
@@ -785,6 +810,7 @@ class ObdStoreWriter(
                 SQLiteDatabase.CONFLICT_REPLACE,
             )
         }
+        invalidateStorageCounts()
     }
 
     /**

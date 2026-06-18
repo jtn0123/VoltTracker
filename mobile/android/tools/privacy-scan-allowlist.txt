@@ -1,0 +1,28 @@
+# Privacy scan allowlist.
+#
+# Prefer small path-scoped allowlists with a reason. Do not add real vehicle,
+# location, or device data here. Synthetic fixtures should use documentation
+# coordinates or obviously fake values.
+#
+# Format:
+# path:<repo-relative-path-prefix-or-file>
+# line:<literal-substring>
+
+# Fabricated Los Angeles route used only by the archived standalone dashboard demo.
+path:mobile/android/docs/archive/efficiency-demo.html
+
+# Synthetic route/unit-test coordinates. These are not copied from device logs.
+path:mobile/android/app/src/test/java/com/volttracker/obdpoc/materialize/TripMaterializerTest.kt
+path:mobile/android/app/src/test/java/com/volttracker/obdpoc/data/QueryPlanIndexTest.kt
+path:mobile/android/app/src/test/java/com/volttracker/obdpoc/data/ObdLocalStoreDbTest.kt
+path:mobile/android/app/src/test/java/com/volttracker/obdpoc/data/ObdStoreRouteSimplifyTest.kt
+path:mobile/android/app/src/test/java/com/volttracker/obdpoc/data/ObdStoreTripsDbTest.kt
+path:mobile/android/app/src/test/java/com/volttracker/obdpoc/location/LocationManagerTrackerTest.kt
+path:mobile/android/dashboard-e2e/map.spec.js
+path:mobile/android/dashboard-e2e/error-paths.spec.js
+path:mobile/android/dashboard-e2e/demo.spec.js
+
+# Placeholder examples, not reachable private endpoints.
+line:<ip:port
+line:<ip:port-or-adb-serial>
+line:<adb-serial-or-ip:port>

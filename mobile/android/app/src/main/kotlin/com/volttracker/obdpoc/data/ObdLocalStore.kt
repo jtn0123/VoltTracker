@@ -41,7 +41,7 @@ open class ObdLocalStore(
         trips = ObdStoreTrips(helper)
         reports = ObdStoreReports(helper, trips)
         maintenance = ObdStoreMaintenance(appContext, helper)
-        writer = ObdStoreWriter(helper, ObdStoreSnapshots())
+        writer = ObdStoreWriter(helper, ObdStoreSnapshots()) { reports.invalidateStorageCountsCache() }
         vehicles = ObdStoreVehicles(helper)
         materialize = ObdStoreMaterialize(helper)
     }
@@ -341,7 +341,12 @@ open class ObdLocalStore(
 
     open fun getEnhancedCapabilitiesExportJson(limit: Int): JSONObject = reports.enhancedCapabilitiesExportJson(limit)
 
-    open fun deleteEnhancedCapability(id: Long): Int = reports.deleteEnhancedCapability(id)
+    open fun deleteEnhancedCapability(id: Long): Int =
+        reports.deleteEnhancedCapability(id).also { deleted ->
+            if (deleted > 0) {
+                reports.invalidateStorageCountsCache()
+            }
+        }
 
     open override fun getTripsJson(limit: Int): JSONArray = trips.tripsJson(limit)
 
@@ -533,6 +538,7 @@ open class ObdLocalStore(
         trips: List<Trip>?,
     ) {
         materialize.persistTrips(sessionId, trips)
+        reports.invalidateStorageCountsCache()
     }
 
     open override fun persistChargeSessions(
@@ -540,6 +546,7 @@ open class ObdLocalStore(
         sessions: List<ChargeSession>?,
     ) {
         materialize.persistChargeSessions(sessionId, sessions)
+        reports.invalidateStorageCountsCache()
     }
 
     open fun materializeSession(
@@ -554,6 +561,7 @@ open class ObdLocalStore(
 
     open override fun clearAllData() {
         maintenance.clearAllData()
+        reports.invalidateStorageCountsCache()
     }
 
     open override fun getDatabaseFile(): File = maintenance.getDatabaseFile()
@@ -565,9 +573,19 @@ open class ObdLocalStore(
     open fun mergeFrom(
         donorDbFile: File?,
         progressListener: DatabaseMerger.ProgressListener? = null,
-    ): DatabaseMerger.MergeResult = maintenance.mergeFrom(donorDbFile, progressListener)
+    ): DatabaseMerger.MergeResult =
+        maintenance.mergeFrom(donorDbFile, progressListener).also { result ->
+            if (result.ok) {
+                reports.invalidateStorageCountsCache()
+            }
+        }
 
-    open override fun pruneRawDataOlderThan(keepDays: Int): Int = maintenance.pruneRawDataOlderThan(keepDays)
+    open override fun pruneRawDataOlderThan(keepDays: Int): Int =
+        maintenance.pruneRawDataOlderThan(keepDays).also { deleted ->
+            if (deleted > 0) {
+                reports.invalidateStorageCountsCache()
+            }
+        }
 
     /** Runs `PRAGMA quick_check`; never throws. See [ObdStoreMaintenance.quickCheck]. */
     open fun quickCheck(): ObdStoreMaintenance.IntegrityResult = maintenance.quickCheck()
@@ -576,7 +594,10 @@ open class ObdLocalStore(
      * Startup maintenance: prunes raw rows older than [keepDays], then VACUUMs when enough
      * freed pages have accumulated. Returns the pruned row count.
      */
-    open fun runStartupMaintenance(keepDays: Int): Int = maintenance.runStartupMaintenance(keepDays)
+    open fun runStartupMaintenance(keepDays: Int): Int =
+        maintenance.runStartupMaintenance(keepDays).also {
+            reports.invalidateStorageCountsCache()
+        }
 
     /**
      * False once [close] has been called. Synchronous readers on other threads (the WebView

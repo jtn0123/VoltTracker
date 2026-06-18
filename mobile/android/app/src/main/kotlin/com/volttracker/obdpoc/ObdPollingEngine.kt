@@ -99,7 +99,7 @@ open class ObdPollingEngine(
         address: String?,
         scanMode: Boolean,
     ) {
-        runBluetoothLoop(address, scanMode, false)
+        runBluetoothLoop(address, scanMode, false, DiagnosticScanProfile.FULL)
     }
 
     @SuppressLint("MissingPermission")
@@ -108,7 +108,17 @@ open class ObdPollingEngine(
         scanMode: Boolean,
         clearDtcMode: Boolean,
     ) {
-        runBluetoothLoop(address, scanMode, clearDtcMode, false, "")
+        runBluetoothLoop(address, scanMode, clearDtcMode, DiagnosticScanProfile.FULL)
+    }
+
+    @SuppressLint("MissingPermission")
+    open fun runBluetoothLoop(
+        address: String?,
+        scanMode: Boolean,
+        clearDtcMode: Boolean,
+        scanProfile: DiagnosticScanProfile,
+    ) {
+        runBluetoothLoop(address, scanMode, clearDtcMode, false, "", scanProfile)
     }
 
     @SuppressLint("MissingPermission")
@@ -118,6 +128,7 @@ open class ObdPollingEngine(
         clearDtcMode: Boolean,
         tpmsScanMode: Boolean,
         detailProbeStage: String?,
+        scanProfile: DiagnosticScanProfile,
     ) {
         if (address.isNullOrBlank()) {
             abortBeforeConnect("No adapter selected.")
@@ -147,7 +158,15 @@ open class ObdPollingEngine(
                     OBDLog.event("ObdPollingEngine", "connect", mapOf("name" to service.activeName))
                     // May throw IOException from the live-poll loop, which re-enters the
                     // reconnect path below exactly like a failed connect attempt.
-                    runConnectedSession(address, scanMode, clearDtcMode, tpmsScanMode, detailProbeStage, retry)
+                    runConnectedSession(
+                        address,
+                        scanMode,
+                        clearDtcMode,
+                        tpmsScanMode,
+                        detailProbeStage,
+                        scanProfile,
+                        retry,
+                    )
                     return
                 } catch (ex: IOException) {
                     if (!handleAttemptFailure(retry, ex, attemptStart)) {
@@ -226,6 +245,7 @@ open class ObdPollingEngine(
         clearDtcMode: Boolean,
         tpmsScanMode: Boolean,
         detailProbeStage: String?,
+        scanProfile: DiagnosticScanProfile,
         retry: ConnectionRetryCoordinator,
     ) {
         if (clearDtcMode) {
@@ -233,7 +253,7 @@ open class ObdPollingEngine(
             return
         }
         if (scanMode) {
-            scanRunner.run()
+            scanRunner.run(scanProfile)
             return
         }
         if (tpmsScanMode) {
@@ -413,14 +433,14 @@ open class ObdPollingEngine(
     }
 
     fun runTpmsScanLoop(address: String?) {
-        runBluetoothLoop(address, false, false, true, "")
+        runBluetoothLoop(address, false, false, true, "", DiagnosticScanProfile.FULL)
     }
 
     fun runDetailProbeLoop(
         address: String?,
         stage: String?,
     ) {
-        runBluetoothLoop(address, false, false, false, stage)
+        runBluetoothLoop(address, false, false, false, stage, DiagnosticScanProfile.FULL)
     }
 
     @SuppressLint("MissingPermission")
@@ -438,6 +458,7 @@ open class ObdPollingEngine(
         val openStart = System.currentTimeMillis()
         connectAttemptStartedAtMs = openStart
         firstSampleTimingLogged = false
+        StartupTrace.mark("obd_socket_open_start")
         try {
             openBluetoothSocket(address)
         } catch (ex: IOException) {
@@ -468,7 +489,9 @@ open class ObdPollingEngine(
         }
         logSocketOpenResult(true, openStart, "")
         service.broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false)
-        initializeElm327()
+        StartupTrace.measure("obd_elm_init_start", "obd_elm_init_end") {
+            initializeElm327()
+        }
     }
 
     private fun logSocketOpenResult(
@@ -492,6 +515,7 @@ open class ObdPollingEngine(
             "firstReadMs",
             connection.firstReadMs.toString(),
         )
+        StartupTrace.mark(if (ok) "obd_socket_open_end" else "obd_socket_open_failed")
     }
 
     @SuppressLint("MissingPermission")
@@ -527,7 +551,14 @@ open class ObdPollingEngine(
                 service.recorder.logEvent("empty_sample_skipped")
                 continue
             }
+            val firstUsefulSample = !firstSampleTimingLogged && connectAttemptStartedAtMs > 0L
+            if (firstUsefulSample) {
+                StartupTrace.mark("obd_first_useful_sample_read")
+            }
             service.broadcastTelemetry(sample)
+            if (firstUsefulSample) {
+                StartupTrace.mark("obd_first_telemetry_broadcast")
+            }
             logFirstSampleTiming()
             lastVehicleState = sample.optString("vehicleState", lastVehicleState)
             // First real data is on screen — now run the deferred connect-time probes (VIN, mode-01

@@ -38,15 +38,25 @@ open class MainActivity :
     private var dashboardPublisher: DashboardPublisher? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isActivityResumed = false
-    private var postReadyDashboardRefreshPending = false
-    private val postReadyDashboardRefreshRunnable =
-        Runnable {
-            if (!postReadyDashboardRefreshPending || !isActivityResumed || isFinishing || isDestroyed) {
-                return@Runnable
-            }
-            postReadyDashboardRefreshPending = false
-            publishPostReadyDashboardRefresh()
-        }
+    private val dashboardReadyCoordinator =
+        DashboardReadyCoordinator(
+            mainHandler,
+            object : DashboardReadyCoordinator.Host {
+                override fun dashboardPublisher(): DashboardPublisher? = dashboardPublisher
+
+                override fun isActivityResumed(): Boolean = isActivityResumed
+
+                override fun isActivityGone(): Boolean = isFinishing || isDestroyed
+
+                override fun markDashboardContentReady() {
+                    webView?.contentDescription = DASHBOARD_READY_DESCRIPTION
+                    StartupTrace.mark("dashboard_ready_content_description")
+                }
+
+                override fun publishPostReadyDashboardRefresh() = this@MainActivity.publishPostReadyDashboardRefresh()
+            },
+            POST_READY_REFRESH_DELAY_MS,
+        )
 
     // System Back handling lives in DashboardBackPressCallback; see its KDoc.
     private val backCallback = DashboardBackPressCallback({ webView }, { exitToBackground() })
@@ -107,6 +117,8 @@ open class MainActivity :
 
     private var autoConnectController: AutoConnectController? = null
     private var eventNotificationPrefs: EventNotificationPrefs? = null
+    private var startupMaintenanceScheduler: StartupMaintenanceScheduler? = null
+    private var appResumePublisher: AppResumePublisher? = null
 
     // Backs the EventNotificationCommands seam (M1/M3 settings). Kept off the Activity body so the
     // six toggle handlers don't swell MainActivity's surface; reads the prefs lazily because they
@@ -282,6 +294,33 @@ open class MainActivity :
         deviceCatalog = DeviceCatalog(this, activityPrefs)
         autoConnectController = AutoConnectController(activityPrefs, requireDeviceCatalog())
         eventNotificationPrefs = EventNotificationPrefs(activityPrefs)
+        startupMaintenanceScheduler =
+            StartupMaintenanceScheduler(
+                prefs = activityPrefs,
+                mainHandler = mainHandler,
+                submitBackground = { task -> submitBackground(task) },
+                readRetentionDays = {
+                    activityPrefs.getInt(
+                        "raw_retention_days",
+                        ObdLocalStore.DEFAULT_RAW_RETENTION_DAYS,
+                    )
+                },
+                isSessionActive = { isLoggingActive() },
+                runStartupMaintenance = { retentionDays -> localStore?.runStartupMaintenance(retentionDays) },
+                markStorageSummaryDirty = { markStorageSummaryDirty() },
+            )
+        appResumePublisher =
+            AppResumePublisher(
+                publishDeviceList = { publishDeviceList() },
+                publishStorageSummary = { publishStorageSummary() },
+                publishAppState = { publishAppState() },
+                reportAppVisible = { reportAppVisibility(true) },
+                maybeAutoConnectOnResume = { maybeAutoConnect(AutoConnectController.TRIGGER_APP_RESUME, null) },
+                scheduleStartupMaintenance = { startupMaintenanceScheduler?.scheduleAfterDashboardReady() },
+                submitBackground = { task -> submitBackground(task) },
+                checkMaintenanceDue = { maintenanceDueNotifier.checkOnAppOpen() },
+                logMaintenanceFailure = { ex -> Log.w(TAG, "maintenance-due check failed", ex) },
+            )
         val backup = DataBackup(this)
         dataBackup = backup
         // Best-effort transient-cache cleanup used to run in DataBackup's constructor on this (main)
@@ -304,19 +343,6 @@ open class MainActivity :
             }
         troubleshooter = TroubleshooterBridge(this)
         ObdNotifications.ensureChannel(this)
-        submitBackground {
-            try {
-                val retentionDays =
-                    activityPrefs.getInt("raw_retention_days", ObdLocalStore.DEFAULT_RAW_RETENTION_DAYS)
-                val pruned = localStore?.runStartupMaintenance(retentionDays) ?: 0
-                if (pruned > 0) {
-                    markStorageSummaryDirty()
-                    Log.i(TAG, "Pruned $pruned raw rows older than $retentionDays days")
-                }
-            } catch (ex: RuntimeException) {
-                Log.w(TAG, "Retention prune failed; continuing without it", ex)
-            }
-        }
 
         StartupTrace.mark("webview_create_start")
         val createdWebView = WebView(this)
@@ -353,20 +379,8 @@ open class MainActivity :
     }
 
     override fun onDashboardReady() {
-        StartupTrace.mark("dashboard_ready_bridge_start")
         Log.i(TAG, "$DASHBOARD_READY_LOG: JS is live")
-        val publisher = dashboardPublisher ?: return
-        if (publisher.isPageReady()) {
-            return
-        }
-        publisher.setPageReady(true)
-        webView?.contentDescription = DASHBOARD_READY_DESCRIPTION
-        StartupTrace.mark("dashboard_ready_content_description")
-        StartupTrace.mark("dashboard_ready_post_work_scheduled")
-        postReadyDashboardRefreshPending = true
-        mainHandler.removeCallbacks(postReadyDashboardRefreshRunnable)
-        mainHandler.postDelayed(postReadyDashboardRefreshRunnable, POST_READY_REFRESH_DELAY_MS)
-        StartupTrace.mark("dashboard_ready_native_complete")
+        dashboardReadyCoordinator.onDashboardReady()
     }
 
     private fun publishPostReadyDashboardRefresh() {
@@ -387,6 +401,7 @@ open class MainActivity :
         // Auto-show the guided setup walkthrough once for a genuinely fresh install (decision in
         // OnboardingFlow; completion is persisted there, so it shows at most once).
         setupGuideController.maybeAutoShow()
+        startupMaintenanceScheduler?.scheduleAfterDashboardReady()
         StartupTrace.mark("dashboard_ready_post_work_end")
     }
 
@@ -428,34 +443,15 @@ open class MainActivity :
         // frame (the "black screen on resume" report). Paired with onPause()'s onPause() below.
         webView?.onResume()
         broadcastCoordinator.register(this)
-        if (dashboardPublisher?.isPageReady() == true) {
-            publishDeviceList()
-            publishStorageSummary()
-            publishAppState()
-        } else {
-            StartupTrace.mark("resume_dashboard_publish_skipped_not_ready")
-        }
-        reportAppVisibility(true)
-        maybeAutoConnect(AutoConnectController.TRIGGER_APP_RESUME, null)
-        if (postReadyDashboardRefreshPending) {
-            mainHandler.removeCallbacks(postReadyDashboardRefreshRunnable)
-            mainHandler.postDelayed(postReadyDashboardRefreshRunnable, POST_READY_REFRESH_DELAY_MS)
-        }
-        // M2: on every foreground entry, fire a one-shot alert for any tracked maintenance item that
-        // has newly gone overdue. Off the UI thread; failures must never crash a resume.
-        submitBackground {
-            try {
-                maintenanceDueNotifier.checkOnAppOpen()
-            } catch (ex: RuntimeException) {
-                Log.w(TAG, "maintenance-due check failed", ex)
-            }
-        }
+        appResumePublisher?.onResume(dashboardPublisher?.isPageReady() == true)
+        dashboardReadyCoordinator.onResume()
     }
 
     override fun onPause() {
         reportAppVisibility(false)
         isActivityResumed = false
-        mainHandler.removeCallbacks(postReadyDashboardRefreshRunnable)
+        dashboardReadyCoordinator.onPause()
+        startupMaintenanceScheduler?.cancelPending()
         // Suspend the WebView renderer/JS timers while backgrounded so chromium releases its drawing
         // surface cleanly; onResume() above brings it back. Called before super.onPause() to mirror
         // the standard Activity<->WebView lifecycle pairing.
@@ -465,6 +461,8 @@ open class MainActivity :
     }
 
     override fun onDestroy() {
+        dashboardReadyCoordinator.dispose()
+        startupMaintenanceScheduler?.cancelPending()
         backgroundExecutor.shutdownNow()
         troubleshooter?.shutdown()
         backupController?.dispose()
@@ -490,6 +488,8 @@ open class MainActivity :
         dashboardPublisher = null
         autoConnectController = null
         eventNotificationPrefs = null
+        startupMaintenanceScheduler = null
+        appResumePublisher = null
         super.onDestroy()
     }
 
@@ -651,6 +651,11 @@ open class MainActivity :
         }
 
         troubleshooter?.clearPendingTestConnectionStop()
+        when (action) {
+            ObdService.ACTION_CONNECT -> StartupTrace.mark("obd_connect_requested")
+            ObdService.ACTION_SCAN -> StartupTrace.mark("obd_scan_requested")
+            ObdService.ACTION_TPMS_SCAN -> StartupTrace.mark("obd_detail_probe_requested")
+        }
 
         val service = Intent(this, ObdService::class.java)
         service.action = action
@@ -660,7 +665,9 @@ open class MainActivity :
         if (name != null) {
             service.putExtra(ObdService.EXTRA_NAME, name)
         }
-        if (detailStage != null) {
+        if (detailStage != null && action == ObdService.ACTION_SCAN) {
+            service.putExtra(ObdService.EXTRA_SCAN_PROFILE, detailStage)
+        } else if (detailStage != null) {
             service.putExtra(ObdService.EXTRA_DETAIL_STAGE, detailStage)
         }
         try {

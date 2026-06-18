@@ -255,6 +255,8 @@ app_metric_rows = [
     ("appFirstFrameMs", "js:actions_first_frame", "App mark: first dashboard frame completed"),
     ("appDashboardReadyProbeMs", "dashboard_ready_content_description", "App mark: native ready probe set"),
     ("appDashboardReadyNativeCompleteMs", "dashboard_ready_native_complete", "App mark: native ready callback returned"),
+    ("obdFirstUsefulSampleMs", "obd_first_useful_sample_read", "OBD mark: first useful sample decoded"),
+    ("obdFirstTelemetryBroadcastMs", "obd_first_telemetry_broadcast", "OBD mark: first useful sample broadcast"),
 ]
 
 critical_marks = [
@@ -279,6 +281,22 @@ critical_marks = [
     "storage_summary_read_start",
     "storage_summary_read_end",
     "storage_summary_publish_end",
+    "startup_maintenance_scheduled",
+    "startup_maintenance_start",
+    "startup_maintenance_end",
+    "startup_maintenance_skipped_active_session",
+    "startup_maintenance_skipped_store_unavailable",
+    "startup_maintenance_failed",
+    "obd_connect_requested",
+    "obd_scan_requested",
+    "obd_detail_probe_requested",
+    "obd_socket_open_start",
+    "obd_socket_open_end",
+    "obd_socket_open_failed",
+    "obd_elm_init_start",
+    "obd_elm_init_end",
+    "obd_first_useful_sample_read",
+    "obd_first_telemetry_broadcast",
 ]
 
 span_defs = [
@@ -299,6 +317,13 @@ span_defs = [
     ("Ready native completion", "dashboard_ready_bridge_start", "dashboard_ready_native_complete"),
     ("Storage summary read", "storage_summary_read_start", "storage_summary_read_end"),
     ("Storage summary publish", "storage_summary_publish_start", "storage_summary_publish_end"),
+    ("Startup maintenance", "startup_maintenance_start", "startup_maintenance_end"),
+    ("OBD request to socket open", "obd_connect_requested", "obd_socket_open_start"),
+    ("OBD socket open", "obd_socket_open_start", "obd_socket_open_end"),
+    ("OBD ELM init", "obd_elm_init_start", "obd_elm_init_end"),
+    ("OBD connect to first useful sample", "obd_connect_requested", "obd_first_useful_sample_read"),
+    ("OBD socket open to first useful sample", "obd_socket_open_start", "obd_first_useful_sample_read"),
+    ("OBD sample read to telemetry broadcast", "obd_first_useful_sample_read", "obd_first_telemetry_broadcast"),
 ]
 
 span_rows = []

@@ -17,6 +17,20 @@ internal class VoltBridgeConnections(
         startSelectedDeviceAction(address, name, ObdService.ACTION_SCAN, MSG_PICK_VALID_ADAPTER)
     }
 
+    fun scanProfile(
+        address: String?,
+        name: String?,
+        profile: String?,
+    ) {
+        startSelectedDeviceAction(
+            address,
+            name,
+            ObdService.ACTION_SCAN,
+            MSG_PICK_VALID_ADAPTER,
+            DiagnosticScanProfile.fromWireName(profile).wireName,
+        )
+    }
+
     fun detailProbe(
         address: String?,
         name: String?,
@@ -109,6 +123,7 @@ internal class VoltBridgeConnections(
         name: String?,
         action: String,
         invalidMessage: String,
+        profile: String? = null,
     ) {
         val cleanAddress = bridgeSafe(address, BRIDGE_MAX_ADDRESS_LEN)
         val cleanName = bridgeSafe(name, BRIDGE_MAX_NAME_LEN)
@@ -118,7 +133,11 @@ internal class VoltBridgeConnections(
                 activity.publishStatus("blocked", invalidMessage, true)
                 return@runOnUiThread
             }
-            activity.startObdService(action, cleanAddress, cleanName)
+            if (profile == null) {
+                activity.startObdService(action, cleanAddress, cleanName)
+            } else {
+                activity.startObdService(action, cleanAddress, cleanName, profile)
+            }
         }
     }
 

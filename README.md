@@ -47,6 +47,7 @@ The Android project owns the full test and benchmark workflow. From
 ./gradlew verifyActiveApp                                # full local PR gate
 ./gradlew verifyPerformance                              # dashboard + Android perf guards
 ./gradlew verifyStartupPerformanceOptional --no-configuration-cache
+bash tools/perf-local.sh --device <adb-serial-or-ip:port> # safe local benchmark wrapper
 ```
 
 Optional local benchmarks can run against an already-connected device without
@@ -55,13 +56,16 @@ installing, uninstalling, or clearing app data:
 ```sh
 bash tools/benchmark-adb-startup-local.sh <adb-serial-or-ip:port>
 bash tools/benchmark-adb-tabs-local.sh <adb-serial-or-ip:port>
+bash tools/generate-synthetic-db-local.sh build/reports/local/synthetic-1m.db
 bash tools/benchmark-real-db-local.sh /path/to/volttracker_obd_poc.db
 bash tools/device-baseline-local.sh <adb-serial-or-ip:port>
 ```
 
 Reports are written under `mobile/android/build/reports/`. See
 [`mobile/android/docs/performance-contracts.md`](mobile/android/docs/performance-contracts.md)
-for metric definitions and
+for metric definitions,
+[`mobile/android/docs/performance-playbook.md`](mobile/android/docs/performance-playbook.md)
+for common local recipes, and
 [`mobile/android/docs/performance-baseline-history.md`](mobile/android/docs/performance-baseline-history.md)
 for the tracked startup/tab baseline snapshots.
 

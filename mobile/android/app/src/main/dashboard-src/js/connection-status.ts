@@ -195,6 +195,15 @@ function bluetoothSummary(permissions: NonNullable<VoltAppState["permissions"]>,
   return "";
 }
 
+function persistenceSummary(status: VoltStatus) {
+  const dropped = Number(status.persistenceDroppedTelemetryCount || 0);
+  const failed = Number(status.persistenceFailedTelemetryCount || 0);
+  const parts = [];
+  if (Number.isFinite(dropped) && dropped > 0) parts.push(`${dropped.toLocaleString()} queued writes dropped`);
+  if (Number.isFinite(failed) && failed > 0) parts.push(`${failed.toLocaleString()} writes failed`);
+  return parts.join("; ");
+}
+
 function connectionRows(status: VoltStatus): StatusRow[] {
   const state = dashboardState();
   const app: VoltAppState = state.appState || {};
@@ -221,6 +230,7 @@ function connectionRows(status: VoltStatus): StatusRow[] {
     ["Adapter", address ? `${adapterName} (${address})` : adapterName],
     ["Bluetooth", bluetoothSummary(app.permissions || {}, status)],
     ["Logging", logging],
+    ["Persistence", persistenceSummary(status)],
     ["GPS", gpsText(gps.state)],
     ["Last connected", last ? `${last.adapter || t("status.adapter.fallbackName")} · ${formatRelative(last.endMs || last.startMs)}` : ""]
   ];

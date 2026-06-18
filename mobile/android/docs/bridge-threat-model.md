@@ -22,10 +22,27 @@ and force-stop known competing OBD apps.
 | `clearStoredData()` | Destructive local SQLite delete. | Refuses while logging is active; shows a native Android confirmation; work happens on background executor; status is republished after completion. |
 | `shareBackup()` / `shareEncryptedBackup(passphrase)` | Exports full local database, including GPS/OBD history. | Refuses while logging is active; encrypted path requires passphrase; `BackupController` shows a disclosure before sharing. |
 | `restoreBackup()` / `restoreEncryptedBackup(passphrase)` | Replaces or merges local database content. | Refuses while logging is active; restore file is staged, size-capped, schema-checked, migrated, then user chooses merge/replace. |
+| `exportDebugBundle()` / `shareDiagnostics()` / `shareDiagnosticsDigest()` | Exports logs and troubleshooting data that can contain vehicle/runtime details. | Diagnostics exports are user-triggered, redacted/budgeted by native code, shared through the Android share sheet, and covered by privacy-scan rules. |
+| `exportTripGpx(routeKey)` / `exportTripCsv(routeKey)` / `exportAllTripsCsv()` / `exportChargeSessionsCsv(rate)` | Exports plaintext route/charge history. | User-triggered from export affordances; paths use app cache + FileProvider; CSV writers formula-guard free text; docs disclose GPS/plaintext risk. |
+| `exportDetailedSignalLog(id)` / `exportDetailedSignalLogs()` / `deleteDetailedSignalLog(id)` | Exports or deletes detailed probe evidence. | IDs are parsed as positive numbers; unavailable stores return errors; deletes refresh dashboard state and report blocked status on invalid input. |
 | `forceStopPackage(packageName)` | Requests Android kill of another package. | Shows a native Android confirmation first; only allowlisted known OBD packages are stopped; rejects own package and uninstalled packages; user-triggered only. |
+| `deleteMaintenanceEntry(id)` | Deletes a user-authored maintenance-log row. | Positive-id validation; background write; status/storage republished after completion; invalid or missing rows produce a blocked status. |
 | `clearVehicleDtcCodes()` | Sends a real vehicle command through the remembered adapter. | Requires a remembered valid Bluetooth adapter address; shows a native Android confirmation; runs through the foreground service path. |
 | `openExternalSearch(dtc)` | Opens a browser to search a diagnostic code. | Truncates code input and URL-encodes the query; leaves the WebView. |
+| `startTestConnection()` | Starts a bounded adapter self-test through the service path. | Uses the remembered adapter, avoids replacing an active drive session, and self-stops after the test window. |
 | `logClientError(label, detail)` | Writes untrusted dashboard text into logcat. | Truncates inputs and token-bucket rate limits bursty callers. |
+
+## Reviewed Low-Risk Bridge Methods
+
+These method names match the same high-risk verb heuristic used by
+`BridgeThreatModelContractTest`, but their current behavior does not mutate
+storage, export private data, issue vehicle commands, or affect other apps.
+They still stay named here so a future behavior change forces a threat-model
+review instead of silently expanding the bridge.
+
+- `startupMark(name)` only emits a bounded local debug timing mark.
+- `openBluetoothSettings()` opens the Android Bluetooth settings screen.
+- `openSetupGuide()` opens the native first-run setup walkthrough.
 
 ## Review Rules
 

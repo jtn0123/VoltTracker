@@ -83,6 +83,9 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
+      - name: Privacy scan
+        working-directory: ${{ github.workspace }}
+        run: python3 mobile/android/tools/privacy-scan.py
       - name: Run unit tests
         # CI keeps the same checks as verifyActiveApp split into separate steps
         # so failures point at the exact lane and artifact uploads still run.
@@ -95,9 +98,11 @@ jobs:
         run: |
           python3 - <<'PY'
           import glob
+          import json
           import os
           import xml.etree.ElementTree as ET
           from collections import defaultdict
+          from pathlib import Path
 
           summary = os.environ.get("GITHUB_STEP_SUMMARY")
           if not summary:
@@ -154,6 +159,42 @@ jobs:
                   write_list(fh, slow_lines, 10)
           for name in flaky_cases:
               print(f"::warning title=Flaky unit test::{name} failed, then passed on retry")
+          report_dir = Path("build/reports/test-flakes")
+          report_dir.mkdir(parents=True, exist_ok=True)
+          payload = {
+              "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+              "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+              "sha": os.environ.get("GITHUB_SHA", ""),
+              "tests": tests,
+              "failures_or_errors": failures,
+              "skipped": skipped,
+              "failed_cases": failed_cases,
+              "passed_after_retry": flaky_cases,
+              "slow_cases_over_500ms": [
+                  {"name": name, "seconds": elapsed}
+                  for elapsed, name in sorted(slow, reverse=True)
+              ],
+          }
+          (report_dir / "unit-test-flakes.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+          md = [
+              "# Unit Test Flake Trend",
+              "",
+              f"- Passed after retry: `{len(flaky_cases)}`",
+              f"- Hard failed cases: `{len(failed_cases)}`",
+              "",
+          ]
+          if flaky_cases:
+              md.extend(["## Passed After Retry", ""])
+              md.extend(f"- `{name}`" for name in flaky_cases)
+              md.append("")
+          (report_dir / "unit-test-flakes.md").write_text("\n".join(md), encoding="utf-8")
+          max_flakes = int(os.environ.get("VOLTTRACKER_MAX_RETRY_FLAKES", "999"))
+          if len(flaky_cases) > max_flakes:
+              print(
+                  f"::error title=Flaky unit test budget::"
+                  f"{len(flaky_cases)} tests passed only after retry; budget is {max_flakes}"
+              )
+              raise SystemExit(1)
           PY
       # Spotless/Detekt/Lint run serially here ON PURPOSE rather than as parallel jobs:
       # each step is fast on the JVM/Gradle/Node caches this job has already paid for,
@@ -294,6 +335,13 @@ jobs:
         with:
           name: unit-test-report
           path: mobile/android/app/build/reports/tests/
+          if-no-files-found: ignore
+      - name: Upload unit flake trend
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unit-test-flake-trend
+          path: mobile/android/build/reports/test-flakes/
           if-no-files-found: ignore
       - name: Upload performance trend snapshot
         if: always()

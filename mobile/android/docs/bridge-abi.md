@@ -19,7 +19,7 @@ trims, and truncates. The bounds are `BRIDGE_MAX_ADDRESS_LEN=64`, `BRIDGE_MAX_NA
 `BRIDGE_MAX_LABEL_LEN=128`, `BRIDGE_MAX_STAGE_LEN=32`, `BRIDGE_MAX_DTC_LEN=16`,
 `BRIDGE_MAX_PASSPHRASE_LEN=256`, `BRIDGE_MAX_DETAIL_LEN=4096`. See `BridgeInput.kt`.
 
-> **Last synced: this table documents all 67 `@JavascriptInterface` methods** — the
+> **Last synced: this table documents all 68 `@JavascriptInterface` methods** — the
 > frozen `VOLT_BRIDGE_METHODS` contract in
 > `dashboard-tests/setup/voltbridge.fixture.js`. If that count changes, this table
 > has drifted: re-diff it against the fixture and `VoltBridge.kt` (plus its
@@ -35,6 +35,7 @@ trims, and truncates. The bounds are `BRIDGE_MAX_ADDRESS_LEN=64`, `BRIDGE_MAX_NA
 | `refreshDevices()` | — | void | — | Re-publishes device list + storage summary on UI thread. |
 | `connect(address, name)` | `String, String` | void | `safe(address, 64)`, `safe(name, 256)` | Remembers device, starts `ObdService` with `ACTION_CONNECT`. |
 | `scan(address, name)` | `String, String` | void | `safe(address, 64)`, `safe(name, 256)` | Remembers device, starts `ObdService` with `ACTION_SCAN`. |
+| `scanProfile(address, name, profile)` | `String, String, String` | void | `safe(address, 64)`, `safe(name, 256)`, `DiagnosticScanProfile.fromWireName(profile)` | Remembers device, starts `ObdService` with `ACTION_SCAN`, and passes an explicit profile such as `quick_dtc`, `battery`, or `full`. Unknown profile names fall back to `full`. |
 | `tpmsScan(address, name)` | `String, String` | void | `safe(address, 64)`, `safe(name, 256)` | Remembers device, starts the user-facing Detail Probe flow with `ACTION_TPMS_SCAN`; method name is retained for ABI stability. Forwards to `detailProbe` with the fixed `EnhancedPidProfiles.STAGE_TIRES` stage. |
 | `detailProbe(address, name, stage)` | `String, String, String` | void | `safe(address, 64)`, `safe(name, 256)`, `safe(stage, 32)` then `EnhancedPidProfiles.normalizeStage` | General Detail Probe entry point (`VoltBridgeConnections.detailProbe`). Remembers the device, then starts `ObdService` with `ACTION_TPMS_SCAN` for the given enhanced-PID stage; `publishStatus("blocked", …)` when the address is not a valid Bluetooth address. |
 | `getLastDevice()` | — | `String` (JSON object) | — | Returns `DeviceCatalog.getLastDeviceJson()`. |

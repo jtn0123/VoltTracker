@@ -17,6 +17,7 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.location.LocationManagerTracker
 import com.volttracker.obdpoc.location.LocationTracker
 import com.volttracker.obdpoc.widget.WidgetUpdater
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.ExecutorService
@@ -269,7 +270,11 @@ open class ObdService :
             ACTION_SCAN -> {
                 val address = intent.getStringExtra(EXTRA_ADDRESS)
                 activeName = adapterNameFrom(intent)
-                startObdSession(address, true)
+                startObdSession(
+                    address,
+                    true,
+                    DiagnosticScanProfile.fromWireName(intent.getStringExtra(EXTRA_SCAN_PROFILE)),
+                )
                 return START_STICKY
             }
             ACTION_TPMS_SCAN -> {
@@ -341,6 +346,7 @@ open class ObdService :
     private fun startObdSession(
         address: String?,
         scanMode: Boolean,
+        scanProfile: DiagnosticScanProfile = DiagnosticScanProfile.FULL,
     ) {
         startSession(
             SessionStartRequest(
@@ -354,7 +360,7 @@ open class ObdService :
                 refreshCompetingApps = true,
                 startLocationTracking = true,
             ) {
-                engine.runBluetoothLoop(address, scanMode)
+                engine.runBluetoothLoop(address, scanMode, false, scanProfile)
             },
         )
     }
@@ -684,6 +690,7 @@ open class ObdService :
         blocked: Boolean,
         extras: JSONObject?,
     ) {
+        val enrichedExtras = mergeStatusExtras(extras, recorder.persistenceHealthSnapshot())
         val status =
             StatusPayload(
                 state,
@@ -695,7 +702,7 @@ open class ObdService :
                 lastFailureClass,
                 lastVoltage,
                 competingAppsCsv,
-                extras,
+                enrichedExtras,
             )
         val payload = status.toJson()
         lastSessionState = state ?: ""
@@ -705,6 +712,32 @@ open class ObdService :
         recorder.persistStatus(state, detail, blocked, payload)
         maybeUpdateWidgetStatus(state)
         broadcast(BROADCAST_STATUS, payload)
+    }
+
+    private fun mergeStatusExtras(
+        extras: JSONObject?,
+        persistenceHealth: JSONObject?,
+    ): JSONObject? {
+        if (extras == null && persistenceHealth == null) {
+            return null
+        }
+        val merged = JSONObject()
+
+        fun copyFrom(source: JSONObject?) {
+            if (source == null) return
+            val keys = source.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                merged.put(key, source.get(key))
+            }
+        }
+        try {
+            copyFrom(extras)
+            copyFrom(persistenceHealth)
+        } catch (_: JSONException) {
+            // Static keys and primitive values are safe.
+        }
+        return merged
     }
 
     private fun broadcast(
@@ -897,6 +930,7 @@ open class ObdService :
         const val EXTRA_NAME = "name"
         const val EXTRA_JSON = "json"
         const val EXTRA_DETAIL_STAGE = "detail_stage"
+        const val EXTRA_SCAN_PROFILE = "scan_profile"
         private const val DEFAULT_ADAPTER_NAME = "OBD adapter"
         private const val WAKE_LOCK_TAG = "VoltTracker:ObdSession"
         private const val WIDGET_TELEMETRY_COALESCE_MS = 500L

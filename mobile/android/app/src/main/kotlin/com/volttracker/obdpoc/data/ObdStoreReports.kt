@@ -22,6 +22,14 @@ class ObdStoreReports(
     private val helper: VoltTrackerDb,
     private val trips: ObdStoreTrips,
 ) {
+    private val storageCountsCacheLock = Any()
+
+    @Volatile
+    private var storageCountsCache: CachedStorageCounts? = null
+
+    @Volatile
+    private var storageCountsCacheVersion = 0L
+
     fun getSession(sessionId: Long): ObdSessionRecord? =
         helper.readableDatabase
             .query(
@@ -774,6 +782,128 @@ class ObdStoreReports(
         return payload
     }
 
+    fun invalidateStorageCountsCache() {
+        synchronized(storageCountsCacheLock) {
+            storageCountsCacheVersion += 1L
+            storageCountsCache = null
+        }
+    }
+
+    private fun storageCountsProjection(
+        db: SQLiteDatabase,
+        databaseFile: File,
+    ): StorageCountsProjection {
+        val databaseBytes = databaseFile.length()
+        val cacheVersion = storageCountsCacheVersion
+        storageCountsCache?.takeIf { it.version == cacheVersion }?.projection?.let {
+            return it.copy(databaseBytes = databaseBytes)
+        }
+
+        val projection = readStorageCountsProjection(db, databaseFile)
+        synchronized(storageCountsCacheLock) {
+            if (storageCountsCacheVersion == cacheVersion) {
+                storageCountsCache = CachedStorageCounts(cacheVersion, projection)
+            }
+        }
+        return projection
+    }
+
+    private fun readStorageCountsProjection(
+        db: SQLiteDatabase,
+        databaseFile: File,
+    ): StorageCountsProjection {
+        // Total + useful telemetry counts in ONE scan of telemetry_samples (the millions-of-rows
+        // table) instead of two separate COUNT(*) passes — the dominant cost of this projection.
+        val (rawTelemetryCount, usefulTelemetryCount) = ObdStoreSupport.telemetryTotalAndUsefulCounts(db)
+        val latest =
+            db
+                .query(
+                    VoltTrackerDb.TABLE_SESSIONS,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "started_at_ms DESC",
+                    "1",
+                ).use { cursor ->
+                    if (cursor.moveToFirst()) ObdStoreSupport.readSession(cursor) else null
+                }
+        return StorageCountsProjection(
+            VoltTrackerDb.DATABASE_NAME,
+            databaseFile.length(),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_SESSIONS),
+            rawTelemetryCount,
+            usefulTelemetryCount,
+            maxOf(0L, rawTelemetryCount - usefulTelemetryCount),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_EVENTS),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES),
+            diagnosticCodeStatusCounts(db),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_VEHICLES),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_FIELD_CAPABILITIES),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_TRIP_SEGMENTS),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_CELL_SNAPSHOTS),
+            ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_EXPORTS),
+            latest,
+        )
+    }
+
+    private data class StorageCountsProjection(
+        val database: String,
+        val databaseBytes: Long,
+        val sessionCount: Long,
+        val rawTelemetryCount: Long,
+        val sampleCount: Long,
+        val emptyTelemetryCount: Long,
+        val eventCount: Long,
+        val adapterCount: Long,
+        val pidObservationCount: Long,
+        val diagnosticCodeCount: Long,
+        val diagnosticCodeStatusCounts: Map<String, Long>,
+        val locationSampleCount: Long,
+        val vehicleCount: Long,
+        val fieldCapabilityCount: Long,
+        val tripSegmentCount: Long,
+        val chargeSessionCount: Long,
+        val batterySnapshotCount: Long,
+        val cellSnapshotCount: Long,
+        val exportCount: Long,
+        val latestSession: ObdSessionRecord?,
+    ) {
+        fun toJson(): JSONObject =
+            JSONObject()
+                .put("database", database)
+                .put("databaseBytes", databaseBytes)
+                .put("sessionCount", sessionCount)
+                .put("rawTelemetryCount", rawTelemetryCount)
+                .put("sampleCount", sampleCount)
+                .put("emptyTelemetryCount", emptyTelemetryCount)
+                .put("eventCount", eventCount)
+                .put("adapterCount", adapterCount)
+                .put("pidObservationCount", pidObservationCount)
+                .put("diagnosticCodeCount", diagnosticCodeCount)
+                .put("diagnosticCodeStatusCounts", ObdStoreReportJson.statusCounts(diagnosticCodeStatusCounts))
+                .put("locationSampleCount", locationSampleCount)
+                .put("vehicleCount", vehicleCount)
+                .put("fieldCapabilityCount", fieldCapabilityCount)
+                .put("tripSegmentCount", tripSegmentCount)
+                .put("chargeSessionCount", chargeSessionCount)
+                .put("batterySnapshotCount", batterySnapshotCount)
+                .put("cellSnapshotCount", cellSnapshotCount)
+                .put("exportCount", exportCount)
+                .put("lastSessionId", latestSession?.id ?: JSONObject.NULL)
+    }
+
+    private data class CachedStorageCounts(
+        val version: Long,
+        val projection: StorageCountsProjection,
+    )
+
     companion object {
         private val CHARGE_SESSION_COLUMNS =
             arrayOf(
@@ -852,97 +982,6 @@ class ObdStoreReports(
             val atMs: Long,
             val soc: Double,
         )
-
-        private data class StorageCountsProjection(
-            val database: String,
-            val databaseBytes: Long,
-            val sessionCount: Long,
-            val rawTelemetryCount: Long,
-            val sampleCount: Long,
-            val emptyTelemetryCount: Long,
-            val eventCount: Long,
-            val adapterCount: Long,
-            val pidObservationCount: Long,
-            val diagnosticCodeCount: Long,
-            val diagnosticCodeStatusCounts: Map<String, Long>,
-            val locationSampleCount: Long,
-            val vehicleCount: Long,
-            val fieldCapabilityCount: Long,
-            val tripSegmentCount: Long,
-            val chargeSessionCount: Long,
-            val batterySnapshotCount: Long,
-            val cellSnapshotCount: Long,
-            val exportCount: Long,
-            val latestSession: ObdSessionRecord?,
-        ) {
-            fun toJson(): JSONObject =
-                JSONObject()
-                    .put("database", database)
-                    .put("databaseBytes", databaseBytes)
-                    .put("sessionCount", sessionCount)
-                    .put("rawTelemetryCount", rawTelemetryCount)
-                    .put("sampleCount", sampleCount)
-                    .put("emptyTelemetryCount", emptyTelemetryCount)
-                    .put("eventCount", eventCount)
-                    .put("adapterCount", adapterCount)
-                    .put("pidObservationCount", pidObservationCount)
-                    .put("diagnosticCodeCount", diagnosticCodeCount)
-                    .put("diagnosticCodeStatusCounts", ObdStoreReportJson.statusCounts(diagnosticCodeStatusCounts))
-                    .put("locationSampleCount", locationSampleCount)
-                    .put("vehicleCount", vehicleCount)
-                    .put("fieldCapabilityCount", fieldCapabilityCount)
-                    .put("tripSegmentCount", tripSegmentCount)
-                    .put("chargeSessionCount", chargeSessionCount)
-                    .put("batterySnapshotCount", batterySnapshotCount)
-                    .put("cellSnapshotCount", cellSnapshotCount)
-                    .put("exportCount", exportCount)
-                    .put("lastSessionId", latestSession?.id ?: JSONObject.NULL)
-        }
-
-        private fun storageCountsProjection(
-            db: SQLiteDatabase,
-            databaseFile: File,
-        ): StorageCountsProjection {
-            // Total + useful telemetry counts in ONE scan of telemetry_samples (the millions-of-rows
-            // table) instead of two separate COUNT(*) passes — the dominant cost of this projection.
-            val (rawTelemetryCount, usefulTelemetryCount) = ObdStoreSupport.telemetryTotalAndUsefulCounts(db)
-            val latest =
-                db
-                    .query(
-                        VoltTrackerDb.TABLE_SESSIONS,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        "started_at_ms DESC",
-                        "1",
-                    ).use { cursor ->
-                        if (cursor.moveToFirst()) ObdStoreSupport.readSession(cursor) else null
-                    }
-            return StorageCountsProjection(
-                VoltTrackerDb.DATABASE_NAME,
-                databaseFile.length(),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_SESSIONS),
-                rawTelemetryCount,
-                usefulTelemetryCount,
-                maxOf(0L, rawTelemetryCount - usefulTelemetryCount),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_EVENTS),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_ADAPTER_HISTORY),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES),
-                diagnosticCodeStatusCounts(db),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_VEHICLES),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_FIELD_CAPABILITIES),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_TRIP_SEGMENTS),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_CHARGE_SESSIONS),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_CELL_SNAPSHOTS),
-                ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_EXPORTS),
-                latest,
-            )
-        }
 
         private inline fun safeJson(block: () -> JSONObject?): JSONObject =
             try {

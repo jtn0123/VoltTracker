@@ -496,16 +496,32 @@ for target in targets:
     js_end_elapsed_values = []
     js_paint_values = []
     js_paint_elapsed_values = []
+    js_data_request_values = []
+    js_data_received_values = []
+    js_data_rendered_values = []
     app_ready_values = []
     start_mark = f"js:tab:{target}:start"
     end_mark = f"js:tab:{target}:end"
     paint_mark = f"js:tab:{target}:paint"
+    data_request_mark = f"js:{target}_data_request"
+    data_received_mark = f"js:{target}_data_received"
+    data_rendered_mark = f"js:{target}_data_rendered"
     for row in target_rows:
         events = marks_by_target_run.get((row["target"], row["run"]), [])
         first_by_mark = {}
         for event in events:
             first_by_mark.setdefault(event["mark"], event["elapsedMs"])
         app_ready_values.append(first_by_mark.get("dashboard_ready_content_description"))
+        tab_start_elapsed = first_by_mark.get(start_mark)
+        if tab_start_elapsed is not None:
+            for mark, values in [
+                (data_request_mark, js_data_request_values),
+                (data_received_mark, js_data_received_values),
+                (data_rendered_mark, js_data_rendered_values),
+            ]:
+                elapsed = first_by_mark.get(mark)
+                if elapsed is not None:
+                    values.append(elapsed - tab_start_elapsed)
         tab_started_at = None
         for event in events:
             if event["mark"] == start_mark:
@@ -534,6 +550,9 @@ for target in targets:
         "jsTabEndElapsedMs": stats(js_end_elapsed_values),
         "jsTabPaintMs": stats(js_paint_values),
         "jsTabPaintEndElapsedMs": stats(js_paint_elapsed_values),
+        "jsTabDataRequestMs": stats(js_data_request_values),
+        "jsTabDataReceivedMs": stats(js_data_received_values),
+        "jsTabDataRenderedMs": stats(js_data_rendered_values),
     }
 
 warnings = []
@@ -541,7 +560,7 @@ if previous:
     prev_targets = previous.get("targets", {})
     for target, item in target_summary.items():
         prev = prev_targets.get(target, {})
-        comparable_metrics = ["appDashboardReadyMs", "jsTabPaintMs", "jsTabPaintEndElapsedMs"]
+        comparable_metrics = ["appDashboardReadyMs", "jsTabPaintMs", "jsTabPaintEndElapsedMs", "jsTabDataRenderedMs"]
         if prev.get("tabSourceCounts") == item.get("tabSourceCounts"):
             comparable_metrics.extend(["tapToTabReadyMs", "hostStartToTabReadyMs"])
         for metric in comparable_metrics:
@@ -600,13 +619,14 @@ lines = [
     "",
     "This benchmark fresh-starts `com.volttracker.obdpoc`, waits for the dashboard-ready probe,",
     "taps each requested tab, and waits for the app-reported tab paint mark.",
+    "Data hydration columns use app marks from tab start to data request/receipt/render.",
     "It does not install, uninstall, clear data, or target any alternate package.",
     "The benchmark checks in-app `VoltStartup` marks before slower UiAutomator title polling.",
     "",
     "## Summary",
     "",
-    "| Target | Runs | Ready runs | Tab runs | App ready ms | JS switch ms | JS paint ms | App start -> tab paint ms | Host ready ms | Host tap -> tab ms | Host start -> tab ms | Ready source | Tab source |",
-    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
+    "| Target | Runs | Ready runs | Tab runs | App ready ms | JS switch ms | JS paint ms | Data request ms | Data received ms | Data rendered ms | App start -> tab paint ms | Host ready ms | Host tap -> tab ms | Host start -> tab ms | Ready source | Tab source |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
 ]
 
 for target in targets:
@@ -616,7 +636,9 @@ for target in targets:
     lines.append(
         f"| `{target}` | {item['runs']} | {item['successfulReadyRuns']} | {item['successfulTabRuns']} | "
         f"{fmt_stat(item['appDashboardReadyMs'])} | {fmt_stat(item['jsTabSwitchMs'])} | "
-        f"{fmt_stat(item['jsTabPaintMs'])} | {fmt_stat(item['jsTabPaintEndElapsedMs'])} | "
+        f"{fmt_stat(item['jsTabPaintMs'])} | {fmt_stat(item['jsTabDataRequestMs'])} | "
+        f"{fmt_stat(item['jsTabDataReceivedMs'])} | {fmt_stat(item['jsTabDataRenderedMs'])} | "
+        f"{fmt_stat(item['jsTabPaintEndElapsedMs'])} | "
         f"{fmt_stat(item['hostStartToDashboardReadyMs'])} | {fmt_stat(item['tapToTabReadyMs'])} | "
         f"{fmt_stat(item['hostStartToTabReadyMs'])} | "
         f"{ready_sources} | {tab_sources} |"

@@ -36,6 +36,12 @@ const ALLOWED_REMOTE_HOSTS = [
   'https://*.basemaps.cartocdn.com',
   'https://*.tile.openstreetmap.org',
 ];
+const EXACT_SOURCES = {
+  'script-src': ["'self'"],
+  'style-src': ["'self'", "'unsafe-inline'"],
+  'img-src': ["'self'", 'data:', ...ALLOWED_REMOTE_HOSTS],
+  'connect-src': ["'self'", ...ALLOWED_REMOTE_HOSTS],
+};
 
 function readDashboard(file) {
   return readFileSync(resolve(DASHBOARD, file), 'utf8');
@@ -78,7 +84,10 @@ describe('dashboard content-security-policy', () => {
     );
     expect(directives['default-src']).toEqual(["'self'"]);
     // No remote scripts, ever — first-party JS only.
-    expect(directives['script-src']).toEqual(["'self'"]);
+    expect(directives['script-src']).toEqual(EXACT_SOURCES['script-src']);
+    expect(directives['style-src']).toEqual(EXACT_SOURCES['style-src']);
+    expect(directives['img-src']).toEqual(EXACT_SOURCES['img-src']);
+    expect(directives['connect-src']).toEqual(EXACT_SOURCES['connect-src']);
     expect(directives['frame-ancestors']).toBeUndefined();
     expect(directives['base-uri']).toEqual(["'none'"]);
     expect(directives['form-action']).toEqual(["'none'"]);

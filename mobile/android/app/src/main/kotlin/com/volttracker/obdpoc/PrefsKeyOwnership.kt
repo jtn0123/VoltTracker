@@ -25,6 +25,7 @@ object PrefsKeyOwnership {
             // auto-scan throttle/toggle (auto_scan_*).
             Owner("event-notifications", listOf("notify_", "auto_scan_")),
             Owner("auto-connect", listOf("auto_connect_")),
+            Owner("startup-maintenance", listOf("startup_maintenance_")),
             // Bare activity-owned keys with no shared prefix (kept explicit so the test catches a
             // future bare key that accidentally collides with one of the prefixed namespaces).
             Owner("activity-misc", listOf("raw_retention_days")),

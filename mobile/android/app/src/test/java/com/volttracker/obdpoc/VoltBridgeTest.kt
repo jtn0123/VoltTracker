@@ -73,6 +73,19 @@ class VoltBridgeTest {
     }
 
     @Test
+    fun scanProfileMethodSignatureIsThreeStrings() {
+        val method =
+            VoltBridge::class.java.getMethod(
+                "scanProfile",
+                String::class.java,
+                String::class.java,
+                String::class.java,
+            )
+        assertEquals(Void.TYPE, method.returnType)
+        assertNotNull(method.getAnnotation(JavascriptInterface::class.java))
+    }
+
+    @Test
     fun tpmsScanMethodSignatureIsTwoStrings() {
         val method =
             VoltBridge::class.java.getMethod("tpmsScan", String::class.java, String::class.java)
@@ -313,6 +326,7 @@ class VoltBridgeTest {
                 "refreshDevices",
                 "connect",
                 "scan",
+                "scanProfile",
                 "tpmsScan",
                 "detailProbe",
                 "getLastDevice",

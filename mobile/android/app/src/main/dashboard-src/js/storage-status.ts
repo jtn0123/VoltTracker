@@ -168,6 +168,10 @@ import { prefs, units } from "./prefs";
     renderRealV2Ui();
     VD.renderMapIfLoaded();
     VD.updateValidationUi();
+    if (typeof VD.markTabData === "function" && typeof VD.markActiveTabDataRendered === "function") {
+      VD.markTabData(state.view, "received");
+      VD.markActiveTabDataRendered();
+    }
     if (!isDetails) {
       invalidateLazyRollups();
       loadRollupsForActiveView();

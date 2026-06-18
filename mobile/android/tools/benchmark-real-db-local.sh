@@ -11,6 +11,8 @@ if [[ ! -f "$db_path" ]]; then
   echo "database not found: $db_path" >&2
   exit 2
 fi
+db_dir="$(cd "$(dirname "$db_path")" && pwd)"
+db_path="$db_dir/$(basename "$db_path")"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 android_dir="$(cd "$script_dir/.." && pwd)"

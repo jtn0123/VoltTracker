@@ -200,6 +200,7 @@ object ObdProtocol {
         cleanCommand: String,
         response: String?,
     ): ParsedPidValue? {
+        ObdMode22ChargerParsers.parse(cleanCommand, response)?.let { return it }
         // Standard adapter/Mode-01 PIDs are handled in ObdKnownValueParserRegistry.standardParsers,
         // which runs BEFORE this fallback — so only manufacturer-specific Mode-22 PIDs reach here.
         when (cleanCommand) {
@@ -286,56 +287,6 @@ object ObdProtocol {
                 }?.let {
                     value("transmission temperature", it, "deg C", 0)
                 }
-            "22434F" -> return voltByteValue(
-                response,
-                cleanCommand,
-                1.0,
-                -40.0,
-            )?.let { bounded(it, TEMP_C_RANGE) }?.let {
-                value("hv battery temperature", it, "deg C", 0)
-            }
-            "224368" -> return voltByteValue(
-                response,
-                cleanCommand,
-                2.0,
-                0.0,
-            )?.let { bounded(it, AC_VOLTAGE_RANGE) }?.let {
-                value("charger ac voltage", it, "V", 0)
-            }
-            "224369" -> return voltByteValue(
-                response,
-                cleanCommand,
-                0.2,
-                0.0,
-            )?.let { bounded(it, AC_CURRENT_RANGE) }?.let {
-                value("charger ac current", it, "A", 1)
-            }
-            "22436B" -> return voltWordValue(
-                response,
-                cleanCommand,
-                2.0,
-                true,
-            )?.let { bounded(it, HV_VOLTAGE_RANGE) }?.let {
-                value("charger hv voltage", it, "V", 1)
-            }
-            "22436C" -> return voltWordValue(
-                response,
-                cleanCommand,
-                20.0,
-                true,
-            )?.let { bounded(it, CURRENT_A_RANGE) }?.let {
-                value("charger hv current", it, "A", 2)
-            }
-            "224373" -> return chargeModeValue(response, cleanCommand)
-            "22437D" -> return voltWordValue(response, cleanCommand, 0.1, false)?.let {
-                value("last charge energy", it, "Wh", 0)
-            }
-            "2243A5" -> return voltWordValue(response, cleanCommand, 1.0, false)?.let {
-                value("hv battery charge count", it, "count", 0)
-            }
-            "2243AF" -> return voltWordPercentValue(response, cleanCommand)?.let {
-                value("hv battery raw soc", it, "%", 2)
-            }
             "2241A3" -> return voltWordValue(response, cleanCommand, 10.0, false)
                 ?.let { bounded(it, CAPACITY_AH_RANGE) }
                 ?.let {
@@ -1071,18 +1022,6 @@ object ObdProtocol {
         return word
     }
 
-    private fun voltWordPercentValue(
-        response: String?,
-        command: String?,
-    ): Double? {
-        val payload = mode22Payload(response, command)
-        if (payload == null || payload.size < 2) {
-            return null
-        }
-        val word = payload[0] * 256 + payload[1]
-        return word * 100.0 / 65535.0
-    }
-
     // Gen2 Volt BECM cell-voltage scale for the aggregate min/max DIDs (224329 / 22432B). The old
     // 5/65535 value was a Bolt placeholder that put every real Volt read at ~0.44 V, so min/max cell
     // voltage (and the derived cell-balance view) decoded to null on every sample. A 0-5 V cell over
@@ -1160,26 +1099,6 @@ object ObdProtocol {
         }
     }
 
-    private fun chargeModeValue(
-        response: String?,
-        command: String?,
-    ): ParsedPidValue? {
-        val payload = mode22Payload(response, command)
-        if (payload == null || payload.size < 2) {
-            return null
-        }
-        val word = payload[0] * 256 + payload[1]
-        val text =
-            if (word == 0) {
-                "NOT_CHARGING"
-            } else if (word == 0xFFFF) {
-                "CHARGING"
-            } else {
-                "UNKNOWN"
-            }
-        return ParsedPidValue("charging mode", text, word.toDouble(), "")
-    }
-
     private fun chargeLevelValue(
         response: String?,
         command: String?,
@@ -1230,7 +1149,7 @@ object ObdProtocol {
         return ParsedPidValue(name, "RAW_$raw", raw.toDouble(), unit)
     }
 
-    private fun mode22Payload(
+    internal fun mode22Payload(
         response: String?,
         command: String?,
     ): IntArray? {
@@ -1327,15 +1246,15 @@ object ObdProtocol {
     private val RPM_RANGE = Range(0.0, 8_000.0)
     internal val TEMP_C_RANGE = Range(-50.0, 150.0)
     internal val AUX_VOLTAGE_RANGE = Range(0.0, 50.0)
-    private val HV_VOLTAGE_RANGE = Range(0.0, 500.0)
-    private val AC_VOLTAGE_RANGE = Range(0.0, 280.0)
-    private val AC_CURRENT_RANGE = Range(0.0, 80.0)
+    internal val HV_VOLTAGE_RANGE = Range(0.0, 500.0)
+    internal val AC_VOLTAGE_RANGE = Range(0.0, 280.0)
+    internal val AC_CURRENT_RANGE = Range(0.0, 80.0)
 
     // Odometer (mode-01 PID 01A6) is a 32-bit count of 0.1 km. Bound it like every other numeric
     // decoder so a corrupt/partial 4-byte frame can't surface a garbage mileage (the raw field tops
     // out near 4.29e8 km) that the maintenance "next due / overdue" logic would then trust.
     private val ODOMETER_KM_RANGE = Range(0.0, 2_000_000.0)
-    private val CURRENT_A_RANGE = Range(-500.0, 500.0)
+    internal val CURRENT_A_RANGE = Range(-500.0, 500.0)
 
     // Health bounds reject decode garbage, not bad news: a worn pack below 30 Ah or a faulted
     // cell below 3.0 V is exactly what long-term tracking exists to surface, so these floors sit
